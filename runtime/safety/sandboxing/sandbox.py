@@ -30,8 +30,10 @@ configuration change, not an API change.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -41,7 +43,7 @@ import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 
 _logger = logging.getLogger(__name__)
 
@@ -133,6 +135,20 @@ def default_egress_domains() -> tuple[str, ...]:
     """The pre-bundled dev-tool host allowlist for the "common domains"
     network tier (see ``SandboxPolicy.egress_allow_common``)."""
     return DEFAULT_EGRESS_DOMAINS
+
+
+SandboxMode = Literal["read-only", "workspace-write", "danger-full-access"]
+"""File-effect tier for a confined process (dsh vocabulary)."""
+
+SandboxEnforcement = Literal["full", "partial", "none"]
+"""How completely a backend governs the promised file effects.
+
+* ``full`` — every file effect in the tier is governed (Landlock/bwrap on
+  a current ABI, or a backend that fails closed on gaps).
+* ``partial`` — only a subset is governed (macOS Seatbelt scopes reads
+  loosely; older Landlock ABIs).
+* ``none`` — no kernel-level file-effect confinement (DirectBackend).
+"""
 
 
 _COMMERCIAL_DEPLOYMENT_MODES = frozenset(
@@ -228,6 +244,18 @@ class SandboxPolicy:
 
     extra_env: Mapping[str, str] = field(default_factory=dict)
     """Extra entries to inject (e.g. project-specific PYTHONPATH)."""
+
+    mode: SandboxMode = "workspace-write"
+    """File-effect tier, dsh-style:
+
+    * ``read-only`` — deny writes outside the required sinks (``/dev/null``
+      plus backend temp areas). The agent can read and execute but cannot
+      change the host.
+    * ``workspace-write`` — allow writes under the workspace and the
+      backend-defined temp area (the historical default).
+    * ``danger-full-access`` — no file-effect confinement (soft constraints
+      still apply).
+    """
 
     def env_for(self) -> dict[str, str]:
         env = {k: os.environ[k] for k in self.allowed_env if k in os.environ}
@@ -362,6 +390,15 @@ class Backend(Protocol):
         policy: SandboxPolicy,
     ) -> tuple[list[str], dict[str, str], Path]: ...
 
+    def enforcement(self, policy: SandboxPolicy) -> SandboxEnforcement:
+        """Report how completely this backend governs the policy tier.
+
+        ``full`` / ``partial`` only mean anything for confined tiers
+        (``read-only`` / ``workspace-write``); ``danger-full-access``
+        consumers bypass confinement entirely.
+        """
+        ...
+
 
 @dataclass(frozen=True)
 class BackendChoice:
@@ -390,6 +427,9 @@ class DirectBackend:
     ) -> tuple[list[str], dict[str, str], Path]:
         return argv, env, cwd
 
+    def enforcement(self, policy: SandboxPolicy) -> SandboxEnforcement:
+        return "none"
+
 
 @dataclass(frozen=True)
 class BubblewrapBackend:
@@ -402,6 +442,9 @@ class BubblewrapBackend:
     """
 
     executable: str = "bwrap"
+
+    def enforcement(self, policy: SandboxPolicy) -> SandboxEnforcement:
+        return "full"
 
     @staticmethod
     def available() -> bool:
@@ -451,7 +494,8 @@ class BubblewrapBackend:
         for parent in parents:
             if str(parent) != "/":
                 wrapped.extend(["--dir", str(parent)])
-        wrapped.extend(["--bind", str(workspace), str(workspace)])
+        workspace_flag = "--ro-bind" if policy.mode == "read-only" else "--bind"
+        wrapped.extend([workspace_flag, str(workspace), str(workspace)])
         wrapped.extend(["--chdir", str(run_cwd), "--"])
         wrapped.extend(argv)
         return wrapped, env, run_cwd
@@ -469,6 +513,12 @@ class SeatbeltBackend:
     """
 
     executable: str = "sandbox-exec"
+
+    def enforcement(self, policy: SandboxPolicy) -> SandboxEnforcement:
+        # Reads are intentionally unconfined (full read confinement breaks
+        # language runtimes without a curated framework allow-list), so the
+        # write/network guard is only a partial enforcement of the tier.
+        return "partial"
 
     @staticmethod
     def available() -> bool:
@@ -492,14 +542,17 @@ class SeatbeltBackend:
         if not sandbox_exec:
             raise SandboxViolation("seatbelt sandbox requested but sandbox-exec is not installed")
 
-        write_subpaths = [
-            workspace,
-            Path("/dev/null"),
-            Path("/tmp"),  # nosec B108 — sandbox write-allow rule target, not a temp file
-            Path("/private/tmp"),  # nosec B108 — sandbox write-allow rule target, not a temp file
-            Path("/var/tmp"),  # nosec B108 — sandbox write-allow rule target, not a temp file
-            Path(os.environ.get("TMPDIR", "/tmp")).expanduser().resolve(strict=False),  # nosec B108 — sandbox write-allow rule target
-        ]
+        if policy.mode == "read-only":
+            write_subpaths = [Path("/dev/null")]
+        else:
+            write_subpaths = [
+                workspace,
+                Path("/dev/null"),
+                Path("/tmp"),  # nosec B108 — sandbox write-allow rule target, not a temp file
+                Path("/private/tmp"),  # nosec B108 — sandbox write-allow rule target, not a temp file
+                Path("/var/tmp"),  # nosec B108 — sandbox write-allow rule target, not a temp file
+                Path(os.environ.get("TMPDIR", "/tmp")).expanduser().resolve(strict=False),  # nosec B108 — sandbox write-allow rule target
+            ]
         write_rules = "\n".join(
             f'  (subpath "{_sbpl_escape(str(path))}")' for path in _unique_paths(write_subpaths)
         )
@@ -516,6 +569,191 @@ class SeatbeltBackend:
             f"{network_rule}\n"
         )
         return [sandbox_exec, "-p", profile, *argv], env, run_cwd
+
+
+_LANDLOCK_WRAPPER = r"""
+# Landlock confinement wrapper (generated by LandlockBackend).
+#
+# Applies a deny-by-default filesystem ruleset through the Landlock LSM
+# syscalls (kernel >= 5.13), then execs the real command. Reads and
+# execution of the whole tree stay allowed (language runtimes need them);
+# writes are allowed only under the paths in OCTOPUS_LANDLOCK_SPEC, plus
+# the /dev/null sink the shells require.
+
+import ctypes
+import json
+import os
+import sys
+
+libc = ctypes.CDLL(None, use_errno=True)
+SYS_LANDLOCK_CREATE_RULESET = 444
+SYS_LANDLOCK_ADD_RULE = 445
+SYS_LANDLOCK_RESTRICT_SELF = 446
+LANDLOCK_RULE_PATH_BENEATH = 1
+
+# linux/landlock.h access rights (ABI v1 bits; ABI v2 adds REFER,
+# ABI v3 adds TRUNCATE - both handled below).
+EXECUTE = 1 << 0
+WRITE_FILE = 1 << 1
+READ_FILE = 1 << 2
+READ_DIR = 1 << 3
+REMOVE_DIR = 1 << 4
+REMOVE_FILE = 1 << 5
+MAKE_CHAR = 1 << 6
+MAKE_DIR = 1 << 7
+MAKE_REG = 1 << 8
+MAKE_SOCK = 1 << 9
+MAKE_FIFO = 1 << 10
+MAKE_BLOCK = 1 << 11
+MAKE_SYM = 1 << 12
+REFER = 1 << 13
+TRUNCATE = 1 << 14
+
+_READ = EXECUTE | READ_FILE | READ_DIR
+_WRITE = (
+    WRITE_FILE
+    | REMOVE_DIR
+    | REMOVE_FILE
+    | MAKE_CHAR
+    | MAKE_DIR
+    | MAKE_REG
+    | MAKE_SOCK
+    | MAKE_FIFO
+    | MAKE_BLOCK
+    | MAKE_SYM
+    | REFER
+    | TRUNCATE
+)
+
+
+class _Attr(ctypes.Structure):
+    _fields_ = [("handled_access_fs", ctypes.c_uint64)]
+
+
+class _RuleBeneath(ctypes.Structure):
+    _fields_ = [("allowed_access", ctypes.c_uint64), ("parent_fd", ctypes.c_int)]
+
+
+attr = _Attr(_READ | _WRITE)
+ruleset_fd = libc.syscall(
+    SYS_LANDLOCK_CREATE_RULESET, ctypes.byref(attr), ctypes.sizeof(attr), 0
+)
+if ruleset_fd < 0:
+    raise OSError(ctypes.get_errno(), "landlock_create_ruleset")
+
+
+def add_path_beneath(path, allowed):
+    try:
+        parent_fd = os.open(path, os.O_PATH)
+    except OSError:
+        return  # path absent at confine time; not a failure
+    try:
+        rule = _RuleBeneath(allowed, parent_fd)
+        rc = libc.syscall(
+            SYS_LANDLOCK_ADD_RULE,
+            ruleset_fd,
+            LANDLOCK_RULE_PATH_BENEATH,
+            ctypes.byref(rule),
+            0,
+        )
+        if rc != 0:
+            raise OSError(ctypes.get_errno(), "landlock_add_rule(" + path + ")")
+    finally:
+        os.close(parent_fd)
+
+
+add_path_beneath("/", _READ)
+add_path_beneath("/dev/null", WRITE_FILE | TRUNCATE)
+for path in json.loads(os.environ["OCTOPUS_LANDLOCK_SPEC"])["write_paths"]:
+    add_path_beneath(path, _READ | _WRITE)
+
+rc = libc.syscall(SYS_LANDLOCK_RESTRICT_SELF, ruleset_fd, 0)
+if rc != 0:
+    raise OSError(ctypes.get_errno(), "landlock_restrict_self")
+
+if "--" in sys.argv:
+    argv = sys.argv[sys.argv.index("--") + 1 :]
+else:
+    argv = sys.argv[1:]
+os.execvpe(argv[0], argv, os.environ)
+"""
+
+
+def _landlock_kernel_available() -> bool:
+    """True when the running Linux kernel exposes Landlock (>= 5.13)."""
+
+    if not sys.platform.startswith("linux"):
+        return False
+    try:
+        release = Path("/proc/sys/kernel/osrelease").read_text(encoding="utf-8").strip()
+    except OSError:
+        return False
+    match = re.match(r"(\d+)\.(\d+)", release)
+    if not match:
+        return False
+    major, minor = (int(part) for part in match.groups())
+    return (major, minor) >= (5, 13)
+
+
+@dataclass(frozen=True)
+class LandlockBackend:
+    """Linux kernel-native sandbox backend using the Landlock LSM.
+
+    Unlike ``bwrap`` this needs no setuid helper or user namespaces — the
+    ruleset is applied by the process itself before exec. Read/execute of
+    the whole tree stays allowed; writes are confined to the workspace plus
+    the runner's temp dirs (``workspace-write``) or to ``/dev/null`` only
+    (``read-only``). Network is outside Landlock's vocabulary, matching the
+    dsh sandbox seam (soft network hints still apply via the policy).
+    """
+
+    executable: str = sys.executable
+
+    @staticmethod
+    def available() -> bool:
+        return _landlock_kernel_available()
+
+    def enforcement(self, policy: SandboxPolicy) -> SandboxEnforcement:
+        return "full"
+
+    def transform(
+        self,
+        argv: list[str],
+        env: dict[str, str],
+        cwd: Path,
+        policy: SandboxPolicy,
+    ) -> tuple[list[str], dict[str, str], Path]:
+        workspace = policy.workspace.expanduser().resolve()
+        run_cwd = cwd.expanduser().resolve()
+        try:
+            run_cwd.relative_to(workspace)
+        except ValueError as exc:
+            raise SandboxViolation(f"cwd {run_cwd} escapes workspace {workspace}") from exc
+        if not _landlock_kernel_available():
+            raise SandboxViolation(
+                "landlock sandbox requested but the kernel does not expose Landlock (>= 5.13)"
+            )
+
+        write_paths: list[str] = []
+        if policy.mode != "read-only":
+            write_paths.append(str(workspace))
+            for key in (
+                "HOME",
+                "TMPDIR",
+                "TMP",
+                "TEMP",
+                "XDG_CACHE_HOME",
+                "XDG_CONFIG_HOME",
+                "XDG_DATA_HOME",
+            ):
+                value = env.get(key)
+                if value and value not in write_paths:
+                    write_paths.append(value)
+
+        wrapped_env = dict(env)
+        wrapped_env["OCTOPUS_LANDLOCK_SPEC"] = json.dumps({"write_paths": write_paths})
+        wrapped: list[str] = [self.executable, "-c", _LANDLOCK_WRAPPER, "--", *argv]
+        return wrapped, wrapped_env, run_cwd
 
 
 class SandboxViolation(Exception):
@@ -584,6 +822,7 @@ def select_process_backend(mode: str | None = None) -> BackendChoice:
       the soft policy already enforced by callers.
     * ``strict``: use a hard backend; reject execution if unavailable.
     * ``bwrap`` / ``bubblewrap`` / ``seatbelt``: require that backend.
+    * ``landlock``: require the Linux Landlock backend (kernel >= 5.13).
     """
 
     raw = (mode or os.environ.get("OCTOPUS_PROCESS_SANDBOX") or "auto").strip().lower()
@@ -602,16 +841,26 @@ def select_process_backend(mode: str | None = None) -> BackendChoice:
             "seatbelt sandbox requested but sandbox-exec is not available on this host"
         )
 
+    if raw == "landlock":
+        if LandlockBackend.available():
+            return BackendChoice(LandlockBackend(), "landlock", hard=True, strict=True)
+        raise SandboxViolation(
+            "landlock sandbox requested but the kernel does not expose Landlock (>= 5.13)"
+        )
+
     if raw in {"auto", "strict"}:
         strict = raw == "strict"
         if sys.platform.startswith("linux") and BubblewrapBackend.available():
             return BackendChoice(BubblewrapBackend(), "bwrap", hard=True, strict=strict)
+        if sys.platform.startswith("linux") and LandlockBackend.available():
+            return BackendChoice(LandlockBackend(), "landlock", hard=True, strict=strict)
         if SeatbeltBackend.available():
             return BackendChoice(SeatbeltBackend(), "seatbelt", hard=True, strict=strict)
         if strict:
             raise SandboxViolation(
                 "strict process sandbox requested but no hard backend is available "
-                "(install bwrap on Linux or use sandbox-exec on macOS)"
+                "(install bwrap on Linux, rely on Landlock >= 5.13, or use "
+                "sandbox-exec on macOS)"
             )
         _warn_soft_fallback_once()
         return BackendChoice(DirectBackend(), "direct", hard=False)
@@ -820,6 +1069,9 @@ __all__ = [
     "BackendChoice",
     "BubblewrapBackend",
     "DirectBackend",
+    "LandlockBackend",
+    "SandboxEnforcement",
+    "SandboxMode",
     "SandboxPolicy",
     "SandboxResult",
     "SandboxRunner",

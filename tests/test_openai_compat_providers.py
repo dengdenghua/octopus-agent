@@ -665,3 +665,142 @@ def test_split_inline_reasoning_leaves_ordinary_text_alone() -> None:
 def test_split_inline_reasoning_treats_an_unclosed_tag_as_reasoning() -> None:
     # A generation truncated mid-thought never reached an answer.
     assert split_inline_reasoning("<think>cut off here") == ("", "cut off here")
+
+
+# ═══════════════════════════════════════════════════════════
+# DeepSeek native thinking (V4): reasoning_effort off|high|max
+# ═══════════════════════════════════════════════════════════
+
+
+def test_deepseek_profile_uses_native_thinking_style() -> None:
+    profile = resolve_openai_compat_profile("https://api.deepseek.com/v1", "deepseek-v4-flash")
+    assert profile.id == "deepseek"
+    assert profile.thinking_request_style == "deepseek"
+
+
+def test_deepseek_native_effort_off_disables_thinking() -> None:
+    profile = resolve_openai_compat_profile("https://api.deepseek.com/v1", "deepseek-v4-flash")
+    normalized = normalize_openai_compat_payload(
+        {"model": "deepseek-v4-flash", "reasoning_effort": "off"},
+        profile=profile,
+    )
+    assert normalized["thinking"] == {"type": "disabled"}
+    assert "reasoning_effort" not in normalized
+
+
+def test_deepseek_native_effort_high_and_max_kept() -> None:
+    profile = resolve_openai_compat_profile("https://api.deepseek.com/v1", "deepseek-v4-flash")
+    for effort in ("high", "max"):
+        normalized = normalize_openai_compat_payload(
+            {"model": "deepseek-v4-flash", "reasoning_effort": effort},
+            profile=profile,
+        )
+        assert normalized["thinking"] == {"type": "enabled"}
+        assert normalized["reasoning_effort"] == effort
+
+
+def test_deepseek_maps_openai_efforts_into_native_vocab() -> None:
+    profile = resolve_openai_compat_profile("https://api.deepseek.com/v1", "deepseek-v4-flash")
+    for incoming, expected in (
+        ("minimal", "high"),
+        ("low", "high"),
+        ("medium", "high"),
+        ("high", "high"),
+        ("xhigh", "max"),
+        ("max", "max"),
+    ):
+        normalized = normalize_openai_compat_payload(
+            {"model": "deepseek-v4-flash", "reasoning_effort": incoming},
+            profile=profile,
+        )
+        assert normalized["reasoning_effort"] == expected, incoming
+        assert normalized["thinking"] == {"type": "enabled"}
+
+
+def test_deepseek_thinking_disabled_alone_stays_disabled() -> None:
+    profile = resolve_openai_compat_profile("https://api.deepseek.com/v1", "deepseek-v4-flash")
+    normalized = normalize_openai_compat_payload(
+        {"model": "deepseek-v4-flash", "thinking": {"type": "disabled"}},
+        profile=profile,
+    )
+    assert normalized["thinking"] == {"type": "disabled"}
+    assert "reasoning_effort" not in normalized
+
+
+def test_deepseek_unknown_effort_drops_effort_keeps_explicit_thinking() -> None:
+    profile = resolve_openai_compat_profile("https://api.deepseek.com/v1", "deepseek-v4-flash")
+    normalized = normalize_openai_compat_payload(
+        {
+            "model": "deepseek-v4-flash",
+            "reasoning_effort": "turbo",
+            "thinking": {"type": "enabled"},
+        },
+        profile=profile,
+    )
+    assert "reasoning_effort" not in normalized
+    assert normalized["thinking"] == {"type": "enabled"}
+
+
+def test_deepseek_style_not_applied_to_other_profiles() -> None:
+    generic = resolve_openai_compat_profile("https://proxy.example/v1", "some-model")
+    assert generic.thinking_request_style == "openai"
+    normalized = normalize_openai_compat_payload(
+        {"model": "some-model", "reasoning_effort": "off"},
+        profile=generic,
+    )
+    assert normalized["reasoning_effort"] == "off"  # OpenAI style passes through
+
+
+def test_custom_entry_can_select_deepseek_style() -> None:
+    base = resolve_openai_compat_profile("https://proxy.example/v1", "custom-model")
+    profile = apply_custom_openai_compat_profile(
+        {"thinking_request_style": "deepseek"},
+        base_profile=base,
+    )
+    assert profile.thinking_request_style == "deepseek"
+
+
+def test_deepseek_profile_keeps_full_compat_score() -> None:
+    profile = resolve_openai_compat_profile("https://api.deepseek.com/v1", "deepseek-v4-flash")
+    summary = describe_openai_compat_profile(profile)
+    # 94 == generic OpenAI score: native thinking no longer deducts the
+    # non-openai-style penalty (that would have made it 88), and the
+    # remaining 6 points are the shared defensive-retry strategy every
+    # profile carries, not a capability gap.
+    assert summary["compat_score"] == 94
+    assert "thinking:deepseek" in summary["normalization_hints"]
+
+
+def test_supported_efforts_follow_provider_capability_set() -> None:
+    from runtime.sensing.model_router.openai_compat_providers import (
+        apply_custom_openai_compat_profile,
+        effective_supported_efforts,
+        resolve_openai_compat_profile,
+    )
+
+    # DeepSeek only distinguishes off/high/max on the wire — the picker
+    # vocabulary collapses that to off/high/xhigh, dropping the low/medium
+    # tiers it would silently promote.
+    deepseek = resolve_openai_compat_profile(
+        "https://api.deepseek.com/v1",
+        "deepseek-v4-flash",
+    )
+    assert effective_supported_efforts(deepseek) == ("off", "high", "xhigh")
+
+    # MiniMax's thinking is fixed adaptive — no meaningful tier control.
+    minimax = resolve_openai_compat_profile(
+        "https://api.minimaxi.com/v1",
+        "minimax-m2",
+    )
+    assert effective_supported_efforts(minimax) == ()
+
+    # A generic OpenAI-style profile keeps the full default set (None).
+    generic = resolve_openai_compat_profile("https://proxy.example/v1", "mimo-pro")
+    assert effective_supported_efforts(generic) is None
+
+    # A custom entry that switches to DeepSeek style inherits its tiers.
+    custom = apply_custom_openai_compat_profile(
+        {"thinking_request_style": "deepseek"},
+        base_profile=generic,
+    )
+    assert effective_supported_efforts(custom) == ("off", "high", "xhigh")

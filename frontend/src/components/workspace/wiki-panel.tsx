@@ -47,7 +47,7 @@ export function WikiPanel() {
   const generate = useGenerateWiki(projectRoot);
   const update = useUpdateWiki(projectRoot);
 
-  const entries = docs.data?.docs ?? [];
+  const entries = useMemo(() => docs.data?.docs ?? [], [docs.data?.docs]);
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
     if (!normalized) return entries;

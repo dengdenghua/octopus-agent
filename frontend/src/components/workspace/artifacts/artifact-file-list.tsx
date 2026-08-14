@@ -1,6 +1,5 @@
 import { DownloadIcon, EyeIcon, LoaderIcon, PackageIcon } from "lucide-react";
 import { Suspense, useCallback, lazy, useMemo, useRef } from "react";
-import type { StreamdownProps } from "streamdown";
 
 import { Button } from "@/components/ui/button";
 import { artifactDisplayPath, urlOfArtifact } from "@/core/artifacts/utils";

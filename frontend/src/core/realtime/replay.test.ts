@@ -19,7 +19,7 @@ import {
   type Item,
   type Turn,
 } from "./items";
-import { itemStreamText, reduce, type ConversationEvent } from "./reducer";
+import { itemStreamText, reduce } from "./reducer";
 import {
   normalizeEvent,
   replayEvents,

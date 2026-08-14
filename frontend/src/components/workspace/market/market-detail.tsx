@@ -4,7 +4,6 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   buyMarketItem,
-  formatCount,
   type MarketItem,
 } from "@/components/workspace/market/market-data";
 import { getCommunityCredits } from "@/core/credits/ledger";

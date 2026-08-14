@@ -148,6 +148,33 @@ def custom_model_supports_thinking(model: str) -> bool:
     return False
 
 
+def custom_model_default_reasoning_effort(model: str) -> str | None:
+    """Operator-declared default reasoning effort for a custom model.
+
+    ``default_reasoning_effort`` on the ``custom_models.json`` entry:
+
+      - ``"off"`` | ``"high"`` | ``"max"`` — injected when the caller does
+        not specify an effort (DeepSeek-native vocabulary).
+      - ``"none"`` — disable injection for this model, even the built-in
+        name-pattern default.
+      - absent — leave to the built-in name patterns.
+
+    Returns ``None`` when absent or malformed, so callers fall through to
+    the built-in default rather than dropping the request.
+    """
+
+    entry = custom_model_entry_for(model)
+    if not isinstance(entry, dict):
+        return None
+    value = entry.get("default_reasoning_effort")
+    if value is None:
+        return None
+    normalized = str(value).strip().lower()
+    if normalized in {"off", "high", "max", "none"}:
+        return normalized
+    return None
+
+
 def model_context_window(model: str) -> int | None:
     """Return the input window for a custom model.
 
@@ -184,6 +211,7 @@ def _upstream_context_window(model: str) -> int | None:
 
 __all__ = [
     "custom_model_entry_for",
+    "custom_model_default_reasoning_effort",
     "custom_model_supports_thinking",
     "entry_matches_model",
     "model_context_window",

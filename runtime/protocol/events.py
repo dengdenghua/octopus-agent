@@ -104,6 +104,13 @@ class ServerMethod(StrEnum):
     # happened; this just makes it visible.
     TURN_GROUNDING = "turn/grounding"
 
+    # Workflow lifecycle
+    # Emitted when a workflow (multi-agent orchestration) completes, whether
+    # successfully or with an error. Payload includes workflow metadata, final
+    # status, agent count, and run ID. Frontend can show a notification and/or
+    # update the workbench state.
+    WORKFLOW_COMPLETED = "workflow/completed"
+
     # Generic item lifecycle
     ITEM_STARTED = "item/started"
     ITEM_COMPLETED = "item/completed"

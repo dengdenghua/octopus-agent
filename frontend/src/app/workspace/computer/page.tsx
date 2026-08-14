@@ -112,6 +112,7 @@ export default function ComputerAutomationPage() {
     [t.workspaceComputer],
   );
   const [status, setStatus] = useState<ComputerStatus | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
   const [screenshot, setScreenshot] = useState<ComputerScreenshot | null>(null);
   const [observationMode, setObservationMode] =
     useState<ObservationMode>("snapshot");
@@ -335,8 +336,16 @@ export default function ComputerAutomationPage() {
 
   const refreshStatus = useCallback(async () => {
     setBusy("status");
+    setStatusError(null);
+    let timeoutId: number | undefined;
     try {
-      const data = await getComputerStatus();
+      const timeout = new Promise<never>((_, reject) => {
+        timeoutId = window.setTimeout(
+          () => reject(new Error(tc("Connection timed out. Please retry."))),
+          8000,
+        );
+      });
+      const data = await Promise.race([getComputerStatus(), timeout]);
       const nextRuntimeState = getRuntimeState(data, tc);
       setStatus(data);
       addLog({
@@ -351,12 +360,14 @@ export default function ComputerAutomationPage() {
       });
     } catch (error) {
       swallow(error);
+      setStatusError(error instanceof Error ? error.message : tc("Unable to check this computer."));
       addLog({
         title: tc("Failed to read status"),
         detail: String(error),
         tone: "error",
       });
     } finally {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
       setBusy(null);
     }
   }, [addLog, tc]);
@@ -997,6 +1008,14 @@ export default function ComputerAutomationPage() {
       <WorkspaceBody>
         <div className="mx-auto flex size-full max-w-7xl flex-col gap-4 py-2">
           <section className="workspace-panel flex flex-col gap-4 p-5">
+            {statusError && (
+              <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-destructive/25 bg-destructive/8 px-3 py-2 text-sm">
+                <span className="min-w-0 text-destructive">{statusError}</span>
+                <Button size="sm" variant="outline" onClick={() => void refreshStatus()} disabled={busy !== null}>
+                  {tc("Retry")}
+                </Button>
+              </div>
+            )}
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex size-11 items-center justify-center rounded-lg bg-success text-white shadow-[var(--shadow-xs)]">
@@ -1054,8 +1073,12 @@ export default function ComputerAutomationPage() {
               />
               <StatusTile
                 label={tc("Confirmation mode")}
-                value={
-                  status?.mode ? tc("Preview, then confirm") : tc("Loading")
+                  value={
+                  statusError
+                    ? tc("Unavailable")
+                    : status?.mode
+                      ? tc("Preview, then confirm")
+                      : tc("Checking")
                 }
               />
               <StatusTile

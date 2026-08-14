@@ -946,7 +946,7 @@ export function useRealtimeThread(
   }, [
     args.threadId,
     args.clientFactory,
-    args.replayCache,
+    replayCache,
     applyEvent,
     persistTurnTelemetry,
   ]);

@@ -319,10 +319,10 @@ export function SubagentProcessView({
             "absolute bottom-6 right-6 z-10 flex items-center gap-2 rounded-full border border-border-default bg-background px-4 py-2.5 text-sm font-medium shadow-lg transition-all hover:scale-105 hover:shadow-xl",
             "animate-in fade-in slide-in-from-bottom-4 duration-300",
           )}
-          aria-label={t.agentWorkbenchPanel.scrollToBottom ?? "滚动到底部"}
+          aria-label={t.agentWorkbenchPanel?.scrollToBottom ?? "滚动到底部"}
         >
           <ArrowDownIcon className="size-4" />
-          <span>{t.agentWorkbenchPanel.viewLatestProgress ?? "查看最新进展"}</span>
+          <span>{t.agentWorkbenchPanel?.viewLatestProgress ?? "查看最新进展"}</span>
         </button>
       )}
     </div>

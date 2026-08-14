@@ -5,7 +5,9 @@ module can stay under the size budget. These guards inspect the *proposed
 final answer itself* — placeholder prose, fabricated citations, and a
 requested-but-undelivered output shape — rather than the trajectory.
 
-Leaf-ish module: depends only on re / react_types — must never import
+Leaf-ish module: depends only on re / react_types plus two sibling leaf
+modules (react_code_mode_guards for the shared tool-observation predicate,
+react_goal_analysis for the lookup classifier) — must never import
 react_guards.
 """
 
@@ -13,6 +15,11 @@ from __future__ import annotations
 
 import re
 
+from runtime.core.cerebrum.react_code_mode_guards import _has_successful_tool_observation
+from runtime.core.cerebrum.react_goal_analysis import (
+    _final_answer_requests_user_help,
+    _goal_requests_research_lookup,
+)
 from runtime.core.cerebrum.react_types import ReActStep
 
 
@@ -39,7 +46,10 @@ def _incomplete_final_answer_guard(final_answer: str) -> str | None:
     )
     evidence_action = re.search(
         r"\b(?:grep|read|inspect|check|verify|search|open)\b|"
-        r"(?:核对|核实|检查|读取|再读|查看|搜索|检索|调研|打开|确认|探清|摸清|摸透|理清|弄清|摸底|盘点|收集|拉取|采集|搜集|定位|查找|明确|梳理|审查|评估|开始|过一遍|逐项过)"
+        r"(?:核对|核实|检查|读取|再读|查看|搜索|检索|调研|打开|确认|探清|摸清|摸透|理清|弄清|摸底|盘点|收集|拉取|采集|搜集|定位|查找|明确|梳理|审查|评估|开始|过一遍|逐项过|"
+        # 看/扫 的意向式("看一下/看看/扫一遍")是"待办动作",不是已交付结论;但"看了/看过/
+        # 看见/看法"是过去式或名词,不能当证据动作(否则把已完成的报告误判成预告)。
+        r"看(?:一下|一眼|看|一遍|下)|扫(?:一遍|一眼))"
         r"(?:[^。.!！；;\n]{0,16})",
         visible,
         re.IGNORECASE,
@@ -91,7 +101,7 @@ def _incomplete_final_answer_guard(final_answer: str) -> str | None:
     # treat the bare word 结论 as a passed check and let a pure preparatory
     # promise through (regression: trn_514bd9600295430b "我这就开始…支撑结论").
     deferred_conclusion = re.search(
-        r"(?:支撑|支持|形成|得出|得到|给出|提炼|汇总|归纳|再给)"
+        r"(?:支撑|支持|形成|得出|得到|给出|提炼|汇总|归纳|再给|下)"
         r"[^。.!！；;\n]{0,12}(?:结论|结果|答案)|"
         r"(?:结论|结果|答案)(?:前|之前|就|再|待|尚未|还没|暂未)",
         visible,
@@ -309,6 +319,39 @@ def _ungrounded_external_fact_guard(steps: list[ReActStep], final_answer: str) -
     )
 
 
+def _research_missing_lookup_guard(
+    steps: list[ReActStep],
+    final_answer: str,
+    *,
+    goal: str,
+    tools_active: bool,
+) -> str | None:
+    """Reject a research/chat final that announces a lookup but ran no tools.
+
+    The non-code mirror of ``_code_mode_missing_inspection_tool_guard``: same
+    contract (the goal demands external evidence work, so a successful tool
+    observation is required), differing only in the goal vocabulary (lookup
+    verbs vs project inspection) and the tools-visible gate (any tools vs file
+    tools). A research turn answering a pure knowledge question from memory
+    legitimately runs zero tools, so the classifier is deliberately narrow.
+    """
+    if not tools_active:
+        return None
+    if not _goal_requests_research_lookup(goal):
+        return None
+    if _final_answer_requests_user_help(final_answer):
+        return None
+    if _has_successful_tool_observation(steps):
+        return None
+    return (
+        "The Final Answer announces an external lookup/search this turn never "
+        "actually performed. Execute the stated search/fetch/browser tool, use "
+        "its observation as evidence, and then answer with concrete findings. "
+        "Do not replace the lookup with a plan or a from-memory summary when "
+        "the request asked for current/external information."
+    )
+
+
 _CHINESE_COUNT_WORDS = {
     "二": 2,
     "两": 2,
@@ -384,5 +427,6 @@ __all__ = [
     "_fabricated_citation_guard",
     "_incomplete_final_answer_guard",
     "_requested_answer_item_count",
+    "_research_missing_lookup_guard",
     "_turn_fetched_external_content",
 ]

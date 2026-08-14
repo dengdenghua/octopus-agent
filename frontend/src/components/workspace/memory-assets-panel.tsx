@@ -266,7 +266,7 @@ export function MemoryAssetsPanel() {
     limit: 200,
   });
 
-  const items = assets.data?.items ?? [];
+  const items = useMemo(() => assets.data?.items ?? [], [assets.data?.items]);
   const summary = useMemo(
     () => ({
       total: items.length,

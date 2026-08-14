@@ -20,6 +20,7 @@ export function useEvolutionOverview() {
     queryFn: getEvolutionOverview,
     refetchInterval: 60_000,
     staleTime: 30_000,
+    retry: false,
   });
   return { data: data ?? null, isLoading, error, refetch };
 }
@@ -28,6 +29,7 @@ export function useLearningCurve(weeks?: number) {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: [...queryKeys.evolution.learningCurve, weeks],
     queryFn: () => getLearningCurve(weeks),
+    retry: false,
   });
   return { data: data ?? null, isLoading, error, refetch };
 }
@@ -36,6 +38,7 @@ export function useSkillPerformance() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: queryKeys.evolution.skills,
     queryFn: getSkillPerformance,
+    retry: false,
   });
   return { data: data ?? null, isLoading, error, refetch };
 }
@@ -44,6 +47,7 @@ export function useMemoryGrowth(days?: number) {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: [...queryKeys.evolution.memory, days],
     queryFn: () => getMemoryGrowth(days),
+    retry: false,
   });
   return { data: data ?? null, isLoading, error, refetch };
 }
@@ -52,6 +56,7 @@ export function useRecommendations() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: queryKeys.evolution.recommendations,
     queryFn: getRecommendations,
+    retry: false,
   });
   return { data: data ?? null, isLoading, error, refetch };
 }

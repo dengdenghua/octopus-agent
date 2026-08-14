@@ -101,24 +101,61 @@ export function EvolutionDashboard({ className }: { className?: string }) {
 
   if (firstError) {
     return (
-      <div className={cn("space-y-4", className)}>
-        <div
-          role="alert"
-          className="flex flex-col items-start justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive dark:text-destructive sm:flex-row sm:items-center"
-        >
-          <span>{t.evolutionDashboard.connectionFailed}</span>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="w-full border-destructive/40 bg-background/70 text-foreground sm:w-auto"
-            onClick={retryAll}
-          >
+      <section
+        role="alert"
+        className={cn(
+          "flex min-h-[440px] flex-col items-center justify-center rounded-xl border border-border-subtle bg-gradient-to-b from-muted/20 to-background px-6 py-12 text-center",
+          className,
+        )}
+      >
+        <span className="flex size-12 items-center justify-center rounded-xl border border-destructive/20 bg-destructive/5 text-destructive">
+          <BrainCircuitIcon className="size-5" aria-hidden="true" />
+        </span>
+        <h2 className="mt-4 text-base font-semibold text-foreground">
+          {t.evolutionDashboard.connectionFailed}
+        </h2>
+        <p className="mt-2 max-w-lg text-sm leading-6 text-muted-foreground">
+          {t.evolutionDashboard.noEvidenceDescription}
+        </p>
+        <div className="mt-5 grid w-full max-w-2xl gap-2 sm:grid-cols-3">
+          {[
+            {
+              icon: ActivityIcon,
+              title: t.evolutionDashboard.observeTasks,
+              description: t.evolutionDashboard.observeTasksDescription,
+            },
+            {
+              icon: BookOpenIcon,
+              title: t.evolutionDashboard.formSkills,
+              description: t.evolutionDashboard.formSkillsDescription,
+            },
+            {
+              icon: LightbulbIcon,
+              title: t.evolutionDashboard.proposeImprovements,
+              description: t.evolutionDashboard.proposeImprovementsDescription,
+            },
+          ].map((item) => (
+            <div
+              key={item.title}
+              className="rounded-lg border border-border-subtle bg-card/60 p-3 text-left"
+            >
+              <item.icon className="size-4 text-primary" aria-hidden="true" />
+              <p className="mt-2 text-xs font-semibold text-foreground">
+                {item.title}
+              </p>
+              <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                {item.description}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-5">
+          <Button type="button" onClick={retryAll}>
             <RefreshCwIcon className="mr-1.5 size-3.5" aria-hidden="true" />
             {t.evolutionDashboard.retryLoading}
           </Button>
         </div>
-      </div>
+      </section>
     );
   }
 
@@ -436,9 +473,7 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
           <div
             className={cn(
               "text-sm font-semibold tabular-nums",
-              delta >= 0
-                ? "text-success"
-                : "text-destructive",
+              delta >= 0 ? "text-success" : "text-destructive",
             )}
           >
             {delta >= 0 ? "+" : ""}

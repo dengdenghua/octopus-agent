@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from runtime.memory.threads.event_log import EventLog
 from runtime.platform.models import ParsedIntent
+from runtime.platform.models.llm import default_reasoning_effort
 from runtime.protocol import (
     ItemMarker,
     ItemStatus,
@@ -361,10 +362,40 @@ async def _drive_react(
         _journal_agent_id = getattr(session_agent, "agent_id", None)
         from runtime.execution.suckers.delegation_skills import (
             orchestration_progress_scope,
+            workflow_settlement_scope,
         )
 
         def _orchestration_progress(line: str) -> None:
             _safe_put({"type": "thinking_delta", "delta": line + "\n"})
+
+        def _workflow_settlement(payload: dict) -> None:
+            """Handle workflow completion and emit notification to client."""
+            try:
+                from runtime.protocol import ServerMethod
+
+                # Build notification payload
+                notification_payload = {
+                    "threadId": turn.thread_id,
+                    "workflowName": payload.get("workflowName", "workflow"),
+                    "workflowDescription": payload.get("workflowDescription", ""),
+                    "runId": payload.get("runId", ""),
+                    "stopReason": payload.get("stopReason", "unknown"),
+                    "success": payload.get("success", False),
+                    "agentsStarted": payload.get("agentsStarted", 0),
+                    "error": payload.get("error"),
+                }
+
+                # Schedule notification on the event loop (emitter.notify is async)
+                import asyncio
+
+                asyncio.create_task(
+                    emitter.notify(
+                        ServerMethod.WORKFLOW_COMPLETED,
+                        notification_payload,
+                    )
+                )
+            except Exception:  # noqa: BLE001 — notification is best-effort
+                pass
 
         with (
             session_scope(turn_session),
@@ -374,6 +405,7 @@ async def _drive_react(
             ),
             scoped_cancellation(cancel_source.token),
             orchestration_progress_scope(_orchestration_progress),
+            workflow_settlement_scope(_workflow_settlement),
         ):
             # Per-turn sub-agent lifecycle bridge. Launched once the react
             # boot yields ``react_started`` — the task_id it carries is the
@@ -433,8 +465,9 @@ async def _drive_react(
                         output_chunk_sink=_push_chunk,
                         planning_mode=_planning_mode,
                         model=model,
-                        reasoning_effort=(intent.user_context or {}).get(
-                            "reasoning_effort",
+                        reasoning_effort=(
+                            (intent.user_context or {}).get("reasoning_effort")
+                            or default_reasoning_effort(model)
                         ),
                         steering_drain=lambda: runtime._drain_turn_steering(turn.id),
                         on_auto_parallel_batch=_on_auto_parallel_batch,

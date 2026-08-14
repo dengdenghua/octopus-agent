@@ -31,8 +31,10 @@ class SubagentDefinition:
     system_prompt: str
     tools: tuple[str, ...] = ()
     model: str | None = None
+    backend: str | None = None
     source_path: str = ""
     scope: str = "project"
+    capabilities: tuple[str, ...] = ()
 
     def to_wire(self, *, include_prompt: bool = False) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -40,8 +42,10 @@ class SubagentDefinition:
             "description": self.description,
             "tools": list(self.tools),
             "model": self.model,
+            "backend": self.backend,
             "source_path": self.source_path,
             "scope": self.scope,
+            "capabilities": list(self.capabilities),
         }
         if include_prompt:
             out["system_prompt"] = self.system_prompt
@@ -68,6 +72,19 @@ class SubagentRegistry:
 
     def all_names(self) -> list[str]:
         return sorted(self._defs)
+
+    def supports(self, name: str, capability: str) -> bool:
+        """Whether a registered definition declares ``capability``.
+        Unknown names report False (fail closed)."""
+        definition = self._defs.get(name)
+        if definition is None:
+            return False
+        return capability in definition.capabilities
+
+    def capabilities_of(self, name: str) -> tuple[str, ...]:
+        """Declared capabilities of a registered definition."""
+        definition = self._defs.get(name)
+        return definition.capabilities if definition is not None else ()
 
 
 def _strip_quotes(value: str) -> str:
@@ -129,6 +146,27 @@ def _coerce_tools(value: Any) -> tuple[str, ...]:
     return ()
 
 
+def _coerce_capabilities(value: Any) -> tuple[str, ...]:
+    """Normalize a ``capabilities`` frontmatter value into a tuple of
+    canonical capability names (lowercase, deduplicated, order kept)."""
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        parts = [p.strip() for p in value.split(",") if p.strip()]
+    elif isinstance(value, list):
+        parts = [str(p).strip() for p in value if str(p).strip()]
+    else:
+        return ()
+    seen: set[str] = set()
+    out: list[str] = []
+    for part in parts:
+        key = part.lower()
+        if key and key not in seen:
+            seen.add(key)
+            out.append(key)
+    return tuple(out)
+
+
 def load_subagent_file(path: Path, *, scope: str) -> SubagentDefinition:
     text = path.read_text(encoding="utf-8")
     meta, body = _parse_frontmatter(text)
@@ -138,14 +176,18 @@ def load_subagent_file(path: Path, *, scope: str) -> SubagentDefinition:
     description = str(meta.get("description") or "").strip()
     model = meta.get("model")
     model_str = str(model).strip() if model not in (None, "") else None
+    backend = meta.get("backend")
+    backend_str = str(backend).strip() if backend not in (None, "") else None
     return SubagentDefinition(
         name=name,
         description=description,
         system_prompt=body,
         tools=_coerce_tools(meta.get("tools")),
         model=model_str,
+        backend=backend_str,
         source_path=str(path),
         scope=scope,
+        capabilities=_coerce_capabilities(meta.get("capabilities")),
     )
 
 

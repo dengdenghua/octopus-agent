@@ -179,6 +179,14 @@ export interface LiveToolEvent {
   /** Emoji avatar derived from role. Falls back to 🐙 for unknown
    * roles. */
   subagentAvatar?: string;
+  /** Authoritative role display name from the backend built-in role
+   * catalog (``BUILTIN_ROLES``), e.g. "Code Reviewer". Absent for
+   * free-form role labels the catalog doesn't recognise, in which case
+   * the frontend falls back to its own name mapping. */
+  subagentRoleDisplayName?: string;
+  /** Authoritative role responsibility blurb from ``BUILTIN_ROLES``.
+   * Same fallback semantics as ``subagentRoleDisplayName``. */
+  subagentRoleDescription?: string;
   /** Lifecycle marker. Synthesised events carry these instead of a
    * tool name, so panels can render the spawn moment + finish stats
    * without waiting for the first real tool call. */

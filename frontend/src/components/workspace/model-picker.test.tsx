@@ -32,7 +32,7 @@ const withRouter = withProviders;
 // MODELS includes octopus-mix (official) plus several custom models.
 // The picker opens on the category that contains the current selection.
 const MODELS: PickerModel[] = [
-  { name: "octopus-mix", display_name: "Octopus Mix", provider: "octopus" },
+  { name: "octopus-mix", display_name: "mix", provider: "octopus" },
   { name: "kimi-k2.5", display_name: "Kimi K2.5", model: "kimi" },
   { name: "minimax-m2.7", display_name: "MiniMax M2.7", model: "minimax" },
   { name: "glm-5", display_name: "GLM-5", model: "glm" },
@@ -74,7 +74,7 @@ describe("<ModelPicker />", () => {
     // No tab strip at all — every model is reachable without a category hop.
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
     for (const label of [
-      "Octopus Mix",
+      "mix",
       "Kimi K2.5",
       "GLM-5",
       "Claude Opus 4.6 (mirror)",
@@ -182,7 +182,97 @@ describe("<ModelPicker />", () => {
     expect(onReasoningEffortChange).toHaveBeenCalledWith("xhigh");
   });
 
-  it("selecting the official Octopus Mix row invokes onChange with its backend name", async () => {
+  it("only offers the effort tiers the selected model genuinely supports", async () => {
+    const user = userEvent.setup();
+    render(
+      withRouter(
+        <ModelPicker
+          models={[
+            {
+              name: "deepseek-v4",
+              model: "deepseek-v4",
+              display_name: "DeepSeek V4",
+              reasoning_efforts: ["off", "high", "xhigh"],
+            },
+          ]}
+          value="deepseek-v4"
+          onChange={vi.fn()}
+          reasoningEffort="medium"
+          onReasoningEffortChange={vi.fn()}
+        />,
+      ),
+    );
+
+    await user.click(screen.getByRole("button", { name: "选择模型" }));
+    const group = await screen.findByRole("radiogroup", {
+      name: "推理等级",
+    });
+    const radios = within(group).getAllByRole("radio");
+    // Only off / high / xhigh — the low/medium tiers DeepSeek collapses
+    // onto "high" on the wire are not offered.
+    expect(radios.map((r) => r.textContent)).toEqual(["关闭", "高", "超高"]);
+  });
+
+  it("hides the effort control when the model has no meaningful tiers", async () => {
+    const user = userEvent.setup();
+    render(
+      withRouter(
+        <ModelPicker
+          models={[
+            {
+              name: "minimax-m2",
+              model: "minimax-m2",
+              display_name: "MiniMax M2",
+              reasoning_efforts: [],
+            },
+          ]}
+          value="minimax-m2"
+          onChange={vi.fn()}
+          reasoningEffort="medium"
+          onReasoningEffortChange={vi.fn()}
+        />,
+      ),
+    );
+
+    await user.click(screen.getByRole("button", { name: "选择模型" }));
+    expect(
+      screen.queryByRole("radiogroup", { name: "推理等级" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a mapping hint when the current effort is not offered", async () => {
+    const user = userEvent.setup();
+    render(
+      withRouter(
+        <ModelPicker
+          models={[
+            {
+              name: "deepseek-v4",
+              model: "deepseek-v4",
+              display_name: "DeepSeek V4",
+              reasoning_efforts: ["off", "high", "xhigh"],
+            },
+          ]}
+          value="deepseek-v4"
+          onChange={vi.fn()}
+          reasoningEffort="medium"
+          onReasoningEffortChange={vi.fn()}
+        />,
+      ),
+    );
+
+    await user.click(screen.getByRole("button", { name: "选择模型" }));
+    const menu = await screen.findByTestId("model-picker-menu");
+    // "中" isn't offered for DeepSeek — it maps to "高" on the wire, and the
+    // UI surfaces that instead of silently rewriting it.
+    expect(within(menu).getByText(/将按.*高.*发送/)).toBeInTheDocument();
+    expect(within(menu).getByRole("radio", { name: "高" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+  });
+
+  it("selecting the official mix row invokes onChange with its backend name", async () => {
     const user = userEvent.setup();
     const { onChange } = setup("kimi-k2.5");
     await user.click(screen.getByRole("button", { name: "选择模型" }));
@@ -190,7 +280,7 @@ describe("<ModelPicker />", () => {
     const menu = await screen.findByRole("menu");
     const root = menu.parentElement ?? menu;
     const mixBtn = Array.from(root.querySelectorAll("button")).find((b) =>
-      (b.textContent ?? "").includes("Octopus Mix"),
+      (b.textContent ?? "").includes("mix"),
     );
     expect(mixBtn).toBeTruthy();
     await user.click(mixBtn!);
@@ -235,10 +325,10 @@ describe("<ModelPicker />", () => {
     expect(onChange).toHaveBeenCalledWith("claude-opus-4-6-mirror");
   });
 
-  it("trigger shows Octopus Mix label when that model is selected", () => {
+  it("trigger shows mix label when that model is selected", () => {
     setup("octopus-mix");
     expect(screen.getByRole("button", { name: "选择模型" })).toHaveTextContent(
-      "Octopus Mix",
+      "mix",
     );
   });
 
@@ -273,7 +363,7 @@ describe("<ModelPicker />", () => {
           models={[
             {
               name: "octopus-mix",
-              display_name: "Octopus Mix · 多模型协同",
+              display_name: "mix",
               provider: "octopus",
             },
             { name: "minimax-m2.5", display_name: "MiniMax M2.5" },
@@ -287,6 +377,6 @@ describe("<ModelPicker />", () => {
     const menu = await screen.findByRole("menu");
     const root = menu.parentElement ?? menu;
     // models advertises octopus-mix → it classifies as Official (not Custom)
-    expect(root.textContent ?? "").toContain("Octopus Mix");
+    expect(root.textContent ?? "").toContain("mix");
   });
 });

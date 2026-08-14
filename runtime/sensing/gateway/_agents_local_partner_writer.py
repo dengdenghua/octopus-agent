@@ -8,11 +8,24 @@ it in the agent registry.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 from runtime.execution.misc.agent_avatar import pixel_agent_avatar_svg
 
 from ._agents_local_partner_security import _cleanup_created_agent_dir, _require_safe_agent_id
+
+# Bundled brand logos, keyed by partner spec id (``{partner_id}.svg``).
+_PARTNER_LOGOS_DIR = Path(__file__).parent / "assets" / "partner_logos"
+
+
+def _partner_brand_logo(partner_id: str) -> str:
+    """Return the bundled brand-logo SVG for a partner, or the generated
+    pixel avatar as a fallback for partners without a bundled logo."""
+    logo_path = _PARTNER_LOGOS_DIR / f"{partner_id}.svg"
+    if logo_path.is_file():
+        return logo_path.read_text(encoding="utf-8")
+    return pixel_agent_avatar_svg(partner_id)
 
 
 def soul_template(*, alias: str, partner_name: str, command: str) -> str:
@@ -168,7 +181,7 @@ Before using the local partner command, understand the user's task and current w
                 )
             ),
         )
-        atomic_write_text(agent_dir / "avatar.svg", pixel_agent_avatar_svg(alias), newline=None)
+        atomic_write_text(agent_dir / "avatar.svg", _partner_brand_logo(str(spec["id"])), newline=None)
     except OSError:
         _cleanup_created_agent_dir(agent_dir, created=created_agent_dir)
         raise

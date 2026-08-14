@@ -503,11 +503,6 @@ export function WorkDirSelector({
     });
   }, [applyWorkDir, isMutedVariant, isPicking, workDir]);
 
-  const handleMenuToggle = useCallback(() => {
-    if (isPicking) return;
-    setShowMenu((v) => !v);
-  }, [isPicking]);
-
   const handleManualSubmit = useCallback(
     (event: FormEvent) => {
       event.preventDefault();

@@ -15,7 +15,6 @@ import {
 } from "@/components/ai-elements/chain-of-thought";
 import { Button } from "@/components/ui/button";
 import { DotProgress } from "@/components/workspace/swarm/dot-progress";
-import { emitAgentWorkbenchFocus } from "@/components/workspace/agent-workbench-events";
 import { useI18n } from "@/core/i18n/hooks";
 import { hasToolCalls } from "@/core/messages/utils";
 import { useRehypeSplitWordsIntoSpans } from "@/core/rehype";
@@ -108,9 +107,6 @@ export function SubtaskCard({
   // render." useCallback still guards against missing task inside.
   const handleHeaderClick = useCallback(() => {
     setCollapsed((c) => !c);
-    if (task) {
-      emitAgentWorkbenchFocus({ agentId: task.id });
-    }
   }, [task]);
 
   if (!task) {

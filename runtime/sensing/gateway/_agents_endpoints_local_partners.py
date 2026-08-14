@@ -12,16 +12,18 @@ tests) is preserved exactly.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 try:
-    from fastapi import HTTPException, Request
+    from fastapi import HTTPException, Request, Response
 
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     HTTPException = None  # type: ignore[assignment, misc]
     Request = None  # type: ignore[assignment, misc]
+    Response = None  # type: ignore[assignment, misc]
 
 from ._agents_endpoints_shared import _AuthActions
 from ._agents_helpers import _to_detail_wire
@@ -60,6 +62,10 @@ from .agents_models import (
 
 if TYPE_CHECKING:
     from ._agents_endpoints import _AgentsCtx
+
+
+# Bundled brand logos, keyed by partner spec id (``{partner_id}.svg``).
+_PARTNER_LOGOS_DIR = Path(__file__).parent / "assets" / "partner_logos"
 
 
 def _register_local_partners(
@@ -103,6 +109,24 @@ def _register_local_partners(
             for spec in _LOCAL_PARTNER_SPECS.values()
         ]
         return LocalPartnerDoctorResponse(**_local_partner_doctor_summary(partners))
+
+    @router.get("/api/agents/local-partners/{partner_id}/brand-avatar", include_in_schema=False)
+    def get_local_partner_brand_avatar(partner_id: str) -> Response:
+        """Serve the bundled brand logo for a local CLI partner.
+
+        Not auth-gated · like ``GET /api/agents/{id}/avatar``, these are UI
+        decoration rendered in <img> tags. The partner id is matched against
+        the spec registry first, so the filename is always a known slug with
+        no path-traversal surface.
+        """
+        if partner_id not in _LOCAL_PARTNER_SPECS:
+            raise HTTPException(404, f"unknown local partner: {partner_id}")
+        logo_path = _PARTNER_LOGOS_DIR / f"{partner_id}.svg"
+        try:
+            svg = logo_path.read_text(encoding="utf-8")
+        except OSError:
+            raise HTTPException(404, f"no brand avatar for partner: {partner_id}") from None
+        return Response(content=svg, media_type="image/svg+xml")
 
     @router.get("/api/agents/local-partners/{partner_id}/model")
     def get_local_partner_model(request: Request, partner_id: str) -> dict[str, Any]:

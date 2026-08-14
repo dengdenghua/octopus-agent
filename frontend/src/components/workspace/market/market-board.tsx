@@ -1,9 +1,6 @@
-import { SearchIcon, XIcon, PlusIcon } from "lucide-react";
+import { ClockIcon, SearchIcon, XIcon, PlusIcon } from "lucide-react";
 import { useMemo, useState } from "react";
-import {
-  MarketBalanceBar,
-  MarketGrid,
-} from "@/components/workspace/market/market-feed";
+import { MarketGrid } from "@/components/workspace/market/market-feed";
 import { MarketDetail } from "@/components/workspace/market/market-detail";
 import {
   MARKET_CATEGORIES,
@@ -38,8 +35,11 @@ export function MarketBoard() {
   const [detail, setDetail] = useState<MarketItem | null>(null);
   const [listOpen, setListOpen] = useState(false);
 
-  const items = useMemo(() => getMarketItems(), [version]);
-  const balance = useMemo(() => getCommunityCredits(), [version]);
+  // `version` is intentionally read so mutations can refresh the local store
+  // snapshot without pretending the store getter is a memo dependency.
+  void version;
+  const items = getMarketItems();
+  const balance = getCommunityCredits();
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -56,8 +56,8 @@ export function MarketBoard() {
 
   return (
     <>
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex flex-1 flex-wrap items-center gap-1.5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-1 [mask-image:linear-gradient(to_right,#000_calc(100%-1.25rem),transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {MARKET_CATEGORIES.map((cat) => {
             const isActive = cat.key === activeTab;
             return (
@@ -66,10 +66,10 @@ export function MarketBoard() {
                 type="button"
                 onClick={() => setActiveTab(cat.key)}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                  "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
                   isActive
-                    ? "bg-rose-500 text-white"
-                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                    ? "border-rose-300/60 bg-rose-500/10 text-rose-600 dark:border-rose-400/30 dark:text-rose-300"
+                    : "border-transparent bg-muted/35 text-muted-foreground hover:bg-muted/65 hover:text-foreground",
                 )}
               >
                 <span
@@ -81,8 +81,15 @@ export function MarketBoard() {
             );
           })}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <div className="relative w-48">
+        <div className="flex w-full shrink-0 items-center gap-2 lg:w-auto">
+          <span className="flex min-h-9 shrink-0 items-center gap-1 rounded-md border border-border-subtle bg-card px-2 text-xs text-muted-foreground">
+            <ClockIcon className="size-3.5" />
+            <strong className="text-sm tabular-nums text-foreground">
+              {balance}
+            </strong>
+            积分
+          </span>
+          <div className="relative min-w-0 flex-1 lg:w-52 lg:flex-none">
             <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
@@ -109,19 +116,15 @@ export function MarketBoard() {
           <button
             type="button"
             onClick={() => setListOpen(true)}
-            className="flex shrink-0 items-center gap-1 rounded-md bg-rose-500 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-rose-600"
+            className="flex min-h-9 shrink-0 items-center gap-1 rounded-md border border-border-default bg-background px-3 py-2 text-sm font-semibold text-foreground shadow-sm transition-colors hover:border-rose-300 hover:bg-rose-500/5 hover:text-rose-600"
           >
-            <PlusIcon className="size-4" />
+            <PlusIcon className="size-4 text-rose-500" />
             上架
           </button>
         </div>
       </div>
 
-      <div className="mt-3 rounded-xl border border-border-subtle bg-card">
-        <MarketBalanceBar balance={balance} />
-      </div>
-
-      <div className="mt-4 flex-1">
+      <div className="mt-3 flex-1 sm:mt-4">
         <MarketGrid
           items={filtered}
           onBuy={(item) => setDetail(item)}
@@ -213,7 +216,9 @@ export function ListModal({
           />
           <div className="mt-3 grid grid-cols-2 gap-3">
             <div>
-              <p className="mb-1.5 text-xs text-muted-foreground">售价（积分）</p>
+              <p className="mb-1.5 text-xs text-muted-foreground">
+                售价（积分）
+              </p>
               <input
                 type="number"
                 value={price}
@@ -246,7 +251,7 @@ export function ListModal({
                   type="button"
                   onClick={() => setCover(c)}
                   className={cn(
-                    "aspect-[3/4] overflow-hidden rounded-md ring-2 transition",
+                    "aspect-[4/3] overflow-hidden rounded-md ring-2 transition",
                     cover === c
                       ? "ring-rose-500"
                       : "ring-transparent hover:ring-border-default",

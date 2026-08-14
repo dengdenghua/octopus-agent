@@ -1769,10 +1769,16 @@ id 为稳定 call id,argumentsDelta 为原始 JSON 分片)。
 
 ### 尚未覆盖
 
-- settlement 通知事件桥、quiet/wakeup 独立调度器(当前 jobs 复用
-  subagent 报告车道的 wakeup/quiet/queued 三态)、permission-presets、
-  credential references/identity、ACP 协议、e2b 远端 SpillStore、
-  detached quiescence drain、replay 跨 writer wildcard。
+- settlement 通知事件桥(workflow/jobs 落 journal + 前端时间线)、
+  quiet/wakeup 独立调度器(当前 jobs 复用 subagent 报告车道的
+  wakeup/quiet/queued 三态)、credential references/identity、ACP 协议
+  (Agent Client Protocol 客户端↔agent,见 roadmap #6)、e2b 远端
+  SpillStore、detached quiescence drain、replay 跨 writer wildcard。
+- ~~permission-presets~~ **判不值得搬**(2026-08-14):dsh 的
+  permission-presets 只是把 sandbox/mode + approval/policy 两个旋钮打包成
+  命名预设(内置 workspace-write / danger-full-access) + 会话 pin +
+  日志,不是角色系统;我们已有沙箱档位(note 2)、approval 内置 profile
+  (``workspace_write`` 等)与前端双开关设置页,多角色体系远超它。
 
 ## 57. 动态工作流 — 模型编写编排脚本扇出子代理(dsh workflow 族)
 
@@ -1832,10 +1838,16 @@ JSON 值。新增 ``runtime/execution/workflow/`` 包 + 模型面
   ``provider`` 的 registry backend 路由(当前 provider→role);
   abort signal 桥接(技能契约无 signal);dsh 的 meta 展示卡
   (presentCall/presentResult 渲染)。
-- settlement 通知事件桥、quiet/wakeup 独立调度器(当前 jobs 复用
-  subagent 报告车道的 wakeup/quiet/queued 三态)、permission-presets、
-  credential references/identity、ACP 协议、e2b 远端 SpillStore、
-  detached quiescence drain、replay 跨 writer wildcard。
+- settlement 通知事件桥(workflow/jobs 落 journal + 前端时间线)、
+  quiet/wakeup 独立调度器(当前 jobs 复用 subagent 报告车道的
+  wakeup/quiet/queued 三态)、credential references/identity、ACP 协议
+  (Agent Client Protocol 客户端↔agent,见 roadmap #6)、e2b 远端
+  SpillStore、detached quiescence drain、replay 跨 writer wildcard。
+- ~~permission-presets~~ **判不值得搬**(2026-08-14):dsh 的
+  permission-presets 只是把 sandbox/mode + approval/policy 两个旋钮打包成
+  命名预设(内置 workspace-write / danger-full-access) + 会话 pin +
+  日志,不是角色系统;我们已有沙箱档位(note 2)、approval 内置 profile
+  (``workspace_write`` 等)与前端双开关设置页,多角色体系远超它。
 
 ## 用法速查
 

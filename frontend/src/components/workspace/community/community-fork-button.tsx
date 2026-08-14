@@ -63,7 +63,14 @@ export function CommunityForkButton({
       type="button"
       onClick={handleFork}
       disabled={forked || busy}
-      aria-label={forked ? "已复刻" : "复刻"}
+      aria-label={
+        forked
+          ? `已复刻 ${post.title}`
+          : post.priceCredits > 0
+            ? `复刻 ${post.title}，需要 ${post.priceCredits} 积分`
+            : `免费复刻 ${post.title}`
+      }
+      title={forked ? "已加入工作台" : post.priceCredits > 0 ? `复刻需要 ${post.priceCredits} 积分` : "免费加入工作台"}
       className={cn(
         "flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-bold transition-colors",
         forked

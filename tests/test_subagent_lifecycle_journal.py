@@ -79,6 +79,7 @@ def test_emit_lifecycle_writes_finished_event_to_journal() -> None:
         "files_touched": ["a.py", "b.py"],
         "error": None,
         "status": None,
+        "output": "调研完成：整理出三份定价策略报告",
     }
     with session_scope(_scoped_session_with_journal(journal)):
         _emit_subagent_lifecycle_event("subagent_finished", payload)
@@ -95,6 +96,7 @@ def test_emit_lifecycle_writes_finished_event_to_journal() -> None:
     assert decoded["files_touched"] == ["a.py", "b.py"]
     assert decoded["codename"] == "Spark-abc"
     assert decoded["ok"] is True
+    assert decoded["output"] == "调研完成：整理出三份定价策略报告"
 
 
 def test_emit_lifecycle_finished_marks_failure() -> None:
@@ -206,3 +208,53 @@ def test_emit_lifecycle_no_session_is_noop() -> None:
     # no ambient journal to inspect.
     _emit_subagent_lifecycle_event("subagent_spawned", {"role": "x"})
     _emit_subagent_lifecycle_event("subagent_finished", {"role": "x"})
+
+
+def test_bridge_spawn_event_carries_role_identity() -> None:
+    """The spawn event packs the backend built-in role catalog's
+    ``display_name`` / ``description`` (co-located with the tool
+    allowlist) so the frontend nameplate can derive from the same source
+    as the role's permissions — instead of a second frontend mapping."""
+    received: list[dict[str, Any]] = []
+
+    def _runner(prompt, *, subagent_name, context):
+        return "done"
+
+    orig = bridge._RUNNER
+    bridge._RUNNER = _runner
+    try:
+        bridge.call_subagent(
+            agent_id="researcher",
+            prompt="explore",
+            event_emitter=lambda e: received.append(e),
+        )
+    finally:
+        _restore_runner(orig)
+
+    spawn = next(e for e in received if e.get("type") == "subagent_spawned")
+    assert spawn["role_display_name"] == "Research Specialist"
+    assert spawn["role_description"]
+
+
+def test_bridge_spawn_event_empty_role_identity_for_unknown_role() -> None:
+    """A free-form role label that doesn't resolve to BUILTIN_ROLES gets
+    empty identity fields — the frontend falls back to its own mapping."""
+    received: list[dict[str, Any]] = []
+
+    def _runner(prompt, *, subagent_name, context):
+        return "done"
+
+    orig = bridge._RUNNER
+    bridge._RUNNER = _runner
+    try:
+        bridge.call_subagent(
+            agent_id="__nope__",
+            prompt="explore",
+            event_emitter=lambda e: received.append(e),
+        )
+    finally:
+        _restore_runner(orig)
+
+    spawn = next(e for e in received if e.get("type") == "subagent_spawned")
+    assert spawn["role_display_name"] == ""
+    assert spawn["role_description"] == ""

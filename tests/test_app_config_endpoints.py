@@ -282,6 +282,7 @@ class TestCustomModelsUpsert:
             "context_window": 256_000,
             "enable_1m_context": True,
             "supports_thinking": True,
+            "default_reasoning_effort": "high",
             "supports_vision": False,
             "supports_tool_use": True,
             "omit_sampling_parameters": True,
@@ -318,6 +319,7 @@ class TestCustomModelsUpsert:
         assert stored["claude-mirror"]["context_window"] == 256_000
         assert stored["claude-mirror"]["enable_1m_context"] is True
         assert stored["claude-mirror"]["supports_thinking"] is True
+        assert stored["claude-mirror"]["default_reasoning_effort"] == "high"
         assert stored["claude-mirror"]["supports_vision"] is False
         assert stored["claude-mirror"]["supports_tool_use"] is True
         assert stored["claude-mirror"]["omit_sampling_parameters"] is True
@@ -395,6 +397,58 @@ class TestCustomModelsUpsert:
         assert "default_headers" not in entry
         assert entry["default_header_names"] == []
         assert entry["has_default_headers"] is False
+
+    def test_default_reasoning_effort_roundtrip(
+        self,
+        client: TestClient,
+    ) -> None:
+        """default_reasoning_effort persists, survives partial PUTs,
+        is cleared by explicit null, and rejects malformed values."""
+        client.put(
+            "/api/config/custom-models/mid3",
+            json={
+                "name": "m3",
+                "provider": "openai",
+                "base_url": "https://x.test",
+                "api_key": "sk",
+                "model": "gpt-4",
+                "default_reasoning_effort": "high",
+            },
+        )
+        # Partial PUT without the field keeps the prior value.
+        client.put(
+            "/api/config/custom-models/mid3",
+            json={"name": "m3-renamed", "provider": "openai"},
+        )
+        listing = client.get("/api/config/custom-models").json()
+        entry = next(m for m in listing["models"] if m["id"] == "mid3")
+        assert entry["default_reasoning_effort"] == "high"
+
+        # Explicit null clears the declaration (back to built-in default).
+        client.put(
+            "/api/config/custom-models/mid3",
+            json={"default_reasoning_effort": None},
+        )
+        listing = client.get("/api/config/custom-models").json()
+        entry = next(m for m in listing["models"] if m["id"] == "mid3")
+        assert entry["default_reasoning_effort"] is None
+
+        # Malformed values never persist — the runtime would fall back
+        # to built-in defaults instead of sending garbage upstream.
+        client.put(
+            "/api/config/custom-models/mid4",
+            json={
+                "name": "m4",
+                "provider": "openai",
+                "base_url": "https://x.test",
+                "api_key": "sk",
+                "model": "gpt-4",
+                "default_reasoning_effort": "bogus",
+            },
+        )
+        listing = client.get("/api/config/custom-models").json()
+        entry = next(m for m in listing["models"] if m["id"] == "mid4")
+        assert entry["default_reasoning_effort"] is None
 
     def test_custom_model_list_never_echoes_header_secret_values(
         self,

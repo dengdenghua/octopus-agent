@@ -6,12 +6,14 @@ import {
   BrainIcon,
   DatabaseIcon,
   DnaIcon,
+  CompassIcon,
   MessageSquareIcon,
   MessageSquarePlusIcon,
   MoreHorizontalIcon,
   PencilIcon,
   SearchIcon,
   SettingsIcon,
+  UserRoundPenIcon,
   Trash2Icon,
 } from "lucide-react";
 
@@ -38,11 +40,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import {
-  emitAgentChanged,
-  emitOpenSettings,
-  eventBus,
-} from "@/core/events";
+import { useActiveAgentId } from "@/core/agents/active";
+import { emitAgentChanged, emitOpenSettings, eventBus } from "@/core/events";
 import { useI18n } from "@/core/i18n/hooks";
 import {
   useDeleteThread,
@@ -145,6 +144,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
     null,
   );
   const [renameValue, setRenameValue] = useState("");
+  const activeAgentId = useActiveAgentId();
   const workspaceDestinations = [
     {
       label: t.sidebar.navHR,
@@ -159,10 +159,22 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
       active: pathname.startsWith("/workspace/intelligence"),
     },
     {
+      label: t.sidebar.navAssistant,
+      to: "/workspace/realtime/octopus-assistant?agent=octopus",
+      icon: UserRoundPenIcon,
+      active: pathname.includes("octopus-assistant"),
+    },
+    {
       label: t.sidebar.navEvolution,
       to: "/workspace/evolution?surface=chat",
       icon: DnaIcon,
       active: pathname.startsWith("/workspace/evolution"),
+    },
+    {
+      label: t.sidebar.navCommunity,
+      to: "/workspace/community",
+      icon: CompassIcon,
+      active: pathname.startsWith("/workspace/community"),
     },
     {
       label: t.sidebar.navDatabase,
@@ -183,8 +195,9 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
     }
   }, [renameThread, threadToRename, renameValue]);
 
-  // The drawer is the global history surface, so it should not follow
-  // the footer agent filter.
+  // Conversation history belongs to the active role. Switching roles from
+  // the bottom-left picker opens a separate lane instead of exposing or
+  // continuing another role's conversations.
   const { data: threads = [] } = useThreads(
     {
       limit: 50,
@@ -193,7 +206,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
       select: ["thread_id", "updated_at", "values", "metadata"],
     },
     undefined,
-    null,
+    activeAgentId,
   );
 
   const filteredThreads = useMemo(() => {
@@ -422,10 +435,11 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
                             <span>{t.common.rename}</span>
                           </DropdownMenuItem>
                           <DropdownMenuItem
+                            variant="destructive"
                             disabled={deleteThread.isPending}
                             onSelect={() => void handleDelete(thread)}
                           >
-                            <Trash2Icon className="text-muted-foreground" />
+                            <Trash2Icon />
                             <span>{t.sidebar.deleteThreadTooltip}</span>
                           </DropdownMenuItem>
                         </DropdownMenuContent>

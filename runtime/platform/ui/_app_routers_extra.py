@@ -115,6 +115,16 @@ def mount_routers_b(
         # every boot — it's a no-op once any .md exists.
         with contextlib.suppress(Exception):
             seed_if_empty(_prompt_registry)
+        # dsh ctx.sessionTitle surface: expose the current session title as
+        # the {{ session_title }} prompt variable (best-effort; never fails
+        # assembly when no ambient session exists).
+        with contextlib.suppress(Exception):
+            from runtime.memory.threads.session_title import register_session_title_variable
+
+            register_session_title_variable(
+                _prompt_registry,
+                store_getter=lambda: getattr(ctx, "thread_store", None),
+            )
         app.include_router(
             create_prompts_router(
                 _prompt_registry,
@@ -334,6 +344,30 @@ def mount_routers_b(
                         exc,
                     )
 
+            # dsh auto-title: first-completed-turn title regeneration.
+            # A SessionTitleService rides the same thread store as the
+            # sidebar; when a model router exists we register an LLM
+            # provider so the first turn upgrades "New chat" to a real
+            # summary. Failures keep the fallback title and are logged —
+            # title generation must never break the turn lifecycle.
+            _session_titles: Any = None
+            if ctx.thread_store is not None:
+                try:
+                    from runtime.sensing.gateway.thread_state_router import (
+                        build_auto_title_service,
+                    )
+
+                    _session_titles = build_auto_title_service(
+                        ctx.thread_store,
+                        model_router=ctx.project_model_router,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logging.getLogger(__name__).warning(
+                        "session title auto-refresh unavailable: %s",
+                        exc,
+                    )
+                    _session_titles = None
+
             _realtime_runtime: Any = CerebrumRuntime(
                 stack=stack,
                 agent=None,  # resolved per turn from the registry
@@ -355,6 +389,7 @@ def mount_routers_b(
                 ),
                 project_store=ctx.project_store,
                 project_os_hooks=_project_os_hooks,
+                session_titles=_session_titles,
             )
         else:
             from runtime.sensing.gateway.realtime_echo import EchoRuntime

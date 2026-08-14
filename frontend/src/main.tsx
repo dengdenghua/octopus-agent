@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { HashRouter } from "react-router-dom";
 import {
@@ -11,9 +10,9 @@ import {
 import { AppRouter } from "./router";
 import { swallow } from "./core/utils/log";
 import { ThemeProvider } from "./components/theme-provider";
-import { I18nProvider, useI18nContext } from "./core/i18n/context";
+import { I18nProvider } from "./core/i18n/context";
 import { getLocaleFromCookie } from "./core/i18n/cookies";
-import { detectLocale, normalizeLocale, type Locale } from "./core/i18n/locale";
+import { detectLocale, normalizeLocale } from "./core/i18n/locale";
 import { enUS } from "./core/i18n/locales/en-US";
 import { AuthProvider } from "./providers/AuthProvider";
 import { AppearanceBootstrap } from "./hooks/use-appearance";

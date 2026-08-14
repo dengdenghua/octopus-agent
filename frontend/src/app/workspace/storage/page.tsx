@@ -42,7 +42,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import {
@@ -58,6 +58,7 @@ import {
   deleteNASSource,
   getNASBaseURL,
   getNASManifest,
+  getNASIndexJob,
   getNASPolicy,
   getVideoCoverURL,
   isNASAuthenticationError,
@@ -72,6 +73,7 @@ import {
   listNASModels,
   listNASSources,
   listNASDirectory,
+  NASRequestTimeoutError,
   openNASApp,
   revealNASApp,
   downloadNASModel,
@@ -212,6 +214,8 @@ const LIBRARY_KEYS = new Set<LibraryKey>([
 ]);
 
 const VISION_AUTO_DOWNLOAD_KEY = "octopus.storage.clip-autodownload.v1";
+const DOCUMENT_PAGE_SIZE = 60;
+const IMAGE_PAGE_SIZE = 96;
 
 function fill(template: string, vars: Record<string, string | number>): string {
   return Object.entries(vars).reduce(
@@ -338,59 +342,6 @@ function buildImageTopics(copy: StorageCopy): TopicItem[] {
   ];
 }
 
-function buildAppItems(copy: StorageCopy): AppItem[] {
-  return [
-    app(
-      "Finder",
-      copy.apps.typeSystemApp,
-      "/System/Applications/Finder.app",
-      copy.apps.statusRegistered,
-      FolderOpenIcon,
-      "blue",
-    ),
-    app(
-      "Preview",
-      copy.apps.typeImagePdf,
-      "/System/Applications/Preview.app",
-      copy.apps.statusRegistered,
-      ImageIcon,
-      "green",
-    ),
-    app(
-      "Office",
-      copy.apps.typeDocsSheets,
-      "/Applications",
-      copy.apps.statusPendingScan,
-      FileArchiveIcon,
-      "amber",
-    ),
-    app(
-      "Browser",
-      copy.apps.typeWebResources,
-      "/Applications",
-      copy.apps.statusRegistered,
-      AppWindowIcon,
-      "violet",
-    ),
-    app(
-      "Terminal",
-      copy.apps.typeSystemTool,
-      "/System/Applications/Utilities",
-      copy.apps.statusCallable,
-      ServerIcon,
-      "zinc",
-    ),
-    app(
-      "Downloads",
-      copy.apps.typeDownloadManager,
-      "~/Downloads",
-      copy.apps.statusFolder,
-      ArchiveIcon,
-      "blue",
-    ),
-  ];
-}
-
 function buildDocFiles(copy: StorageCopy): FileItem[] {
   return [
     file(
@@ -494,17 +445,6 @@ function topic(
   return { title, subtitle, count, status, icon, tone, covers };
 }
 
-function app(
-  name: string,
-  type: string,
-  path: string,
-  status: string,
-  icon: LucideIcon,
-  tone: string,
-): AppItem {
-  return { id: name, name, type, path, status, icon, tone };
-}
-
 function mapNASApp(item: NASApp, copy: StorageCopy): AppItem {
   const category =
     item.category === "system"
@@ -550,16 +490,6 @@ function formatModified(mtimeNs: number): string {
       })
         .format(date)
         .replaceAll("/", "-");
-}
-
-function formatMonth(mtimeNs: number): string {
-  const date = new Date(mtimeNs / 1_000_000);
-  return Number.isNaN(date.getTime())
-    ? ""
-    : new Intl.DateTimeFormat("zh-CN", {
-        year: "numeric",
-        month: "long",
-      }).format(date);
 }
 
 function formatSeconds(sec: number): string {
@@ -737,33 +667,32 @@ export default function StoragePage() {
   const refreshNAS = useCallback(async () => {
     try {
       setServiceError(null);
-      const [
-        nextManifest,
-        nextPolicy,
-        nextSources,
-        nextApps,
-        nextDocuments,
-        nextImages,
-        nextVideos,
-        nextAlbums,
-      ] = await Promise.all([
+      // Manifest, policy and sources define whether the knowledge service is
+      // usable.  Apps/media are optional capabilities; one unavailable lane
+      // must not make the whole knowledge base look offline.
+      const [nextManifest, nextPolicy, nextSources] = await Promise.all([
         getNASManifest(),
         getNASPolicy(),
         listNASSources(),
-        listNASApps(),
-        listNASFiles("document"),
-        listNASFiles("image"),
-        listNASFiles("video"),
-        listNASAlbums(),
       ]);
+      const [nextApps, nextDocuments, nextImages, nextVideos, nextAlbums] =
+        await Promise.allSettled([
+          listNASApps(),
+          listNASFiles("document"),
+          listNASFiles("image"),
+          listNASFiles("video"),
+          listNASAlbums(),
+        ]);
       setManifest(nextManifest);
       setPolicy(nextPolicy);
       setSources(nextSources);
-      setApps(nextApps);
-      setDocuments(nextDocuments);
-      setImages(nextImages);
-      setVideos(nextVideos);
-      setAlbums(nextAlbums);
+      setApps(nextApps.status === "fulfilled" ? nextApps.value : []);
+      setDocuments(
+        nextDocuments.status === "fulfilled" ? nextDocuments.value : [],
+      );
+      setImages(nextImages.status === "fulfilled" ? nextImages.value : []);
+      setVideos(nextVideos.status === "fulfilled" ? nextVideos.value : []);
+      setAlbums(nextAlbums.status === "fulfilled" ? nextAlbums.value : []);
       return true;
     } catch (error) {
       setManifest(null);
@@ -915,11 +844,27 @@ export default function StoragePage() {
 
   const startIndexing = async () => {
     setIsIndexing(true);
+    setServiceError(null);
     try {
-      await createNASIndexJob();
-      await refreshNAS();
+      const job = await createNASIndexJob();
+      toast.success("扫描任务已开始");
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        const current = await getNASIndexJob(job.job_id);
+        if (current.status === "complete") {
+          await refreshNAS();
+          toast.success("知识库扫描完成");
+          return;
+        }
+        if (current.status === "failed") {
+          throw new Error(current.message || "知识库扫描失败");
+        }
+        await delay(500);
+      }
+      throw new Error("扫描仍在后台运行，可稍后刷新查看结果");
     } catch (error) {
-      setServiceError(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      setServiceError(message);
+      toast.error(message);
     } finally {
       setIsIndexing(false);
     }
@@ -1048,6 +993,10 @@ export default function StoragePage() {
                   isReconnecting={isReconnecting}
                   onPickFolder={pickFolder}
                   onReconnect={() => void reconnectNAS()}
+                  onScan={() => void startIndexing()}
+                  onTogglePrivacy={() => void togglePrivacy()}
+                  isIndexing={isIndexing}
+                  policy={policy}
                   onRemoveSource={removeSource}
                 />
               ) : hasSearchResult ? (
@@ -1185,6 +1134,7 @@ function TopicCenterView({
 }) {
   const { t } = useI18n();
   const copy = t.storage;
+  const [overviewPreview, setOverviewPreview] = useState<FileItem | null>(null);
   if (activeLibrary === "docs") {
     return (
       <DocumentLibraryView
@@ -1194,7 +1144,6 @@ function TopicCenterView({
         runSearch={runSearch}
         isSearching={isSearching}
         manifest={manifest}
-        searchMessage={searchMessage}
       />
     );
   }
@@ -1226,120 +1175,67 @@ function TopicCenterView({
     );
   }
 
-  const docTopics = buildDocTopics(copy);
-  const imageTopics = buildImageTopics(copy);
-  const docFiles = buildDocFiles(copy);
-  const imageFiles = buildImageFiles(copy);
-  const topics = [...docTopics.slice(0, 2), ...imageTopics.slice(0, 2)];
-  const tabs = [
-    copy.overview.tabAll,
-    copy.overview.tabDocs,
-    copy.overview.tabImages,
-    copy.overview.tabRecent,
-  ];
-  const recentItems = [...docFiles.slice(0, 3), ...imageFiles.slice(0, 2)];
+  const recentItems = [...documents, ...images, ...videos]
+    .sort((left, right) => right.mtime_ns - left.mtime_ns)
+    .slice(0, 24)
+    .map(fileAssetToItem);
 
   return (
     <>
-      <div className="flex h-[52px] shrink-0 items-center justify-between gap-4 border-b border-border bg-muted/50 px-4">
-        <div className="flex items-center gap-6">
-          {tabs.map((tab, index) => (
-            <button
-              key={tab}
-              type="button"
-              className={cn(
-                "text-sm transition-colors",
-                index === 0
-                  ? "font-semibold text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {tab}
-            </button>
-          ))}
+      <div className="flex min-h-[52px] shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/50 px-4 py-2">
+        <div>
+          <div className="text-sm font-semibold">最近文件</div>
+          <div className="text-xs text-muted-foreground">
+            来自已授权目录的最近更新内容
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <ToolbarSearch
-            label={fill(copy.toolbar.searchIn, { label: activeMeta.label })}
-            query={query}
-            setQuery={setQuery}
-            runSearch={runSearch}
-            isSearching={isSearching}
-            manifest={manifest}
-          />
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label={copy.toolbar.scopeFilterAria}
-            className="rounded-full"
-          >
-            <ListFilterIcon className="size-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label={copy.toolbar.gridViewAria}
-            className="rounded-full"
-          >
-            <Grid3X3Icon className="size-4" />
-          </Button>
-        </div>
+        <ToolbarSearch
+          label={fill(copy.toolbar.searchIn, { label: activeMeta.label })}
+          query={query}
+          setQuery={setQuery}
+          runSearch={runSearch}
+          isSearching={isSearching}
+          manifest={manifest}
+        />
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[260px_minmax(420px,1fr)_320px] overflow-hidden">
-        <aside className="min-h-0 overflow-y-auto border-r border-border bg-muted/50 p-3">
-          <div className="mb-3 rounded-lg bg-card p-3 shadow-[var(--shadow-xs)] ring-1 ring-border">
-            <div className="text-sm font-semibold">
-              {copy.overview.indexingTitle}
-            </div>
-            <div className="mt-1 text-xs leading-5 text-muted-foreground">
-              {copy.overview.indexingDesc}
-            </div>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
-              <div className="h-full w-2/3 rounded-full bg-foreground" />
-            </div>
-          </div>
-          <div className="space-y-1">
-            {topics.map((topicItem, index) => (
-              <TopicNavRow
-                key={topicItem.title}
-                topic={topicItem}
-                active={index === 0}
-              />
-            ))}
-          </div>
-        </aside>
-
-        <main className="min-h-0 overflow-y-auto bg-card p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <div className="text-sm font-semibold">{tabs[0]}</div>
-              <div className="mt-0.5 text-xs text-muted-foreground">
-                {searchMessage || copy.overview.aggregateDesc}
+      <main className="min-h-0 flex-1 overflow-y-auto bg-card p-4">
+        {recentItems.length > 0 ? (
+          <>
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <div className="text-sm font-semibold">全部类型</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  {searchMessage || copy.overview.aggregateDesc}
+                </div>
               </div>
+              <Badge
+                variant="outline"
+                className="rounded-full border-border bg-card"
+              >
+                {copy.overview.localDatabaseBadge}
+              </Badge>
             </div>
-            <Badge
-              variant="outline"
-              className="rounded-full border-border bg-card"
-            >
-              {copy.overview.localDatabaseBadge}
-            </Badge>
+            <div className="grid gap-3 xl:grid-cols-2 2xl:grid-cols-3">
+              {recentItems.map((item) => (
+                <FileCard
+                  key={item.path}
+                  item={item}
+                  onPreview={() => setOverviewPreview(item)}
+                />
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="flex min-h-[320px] items-center justify-center text-sm text-muted-foreground">
+            授权文件夹并完成扫描后，最近文件会显示在这里
           </div>
-          <div className="grid gap-3 2xl:grid-cols-2">
-            {recentItems.map((item) => (
-              <FileCard key={item.path} item={item} />
-            ))}
-          </div>
-        </main>
-
-        <aside className="min-h-0 overflow-y-auto border-l border-border bg-muted/30 p-4">
-          <PreviewPanel
-            title={copy.overview.previewTitle}
-            subtitle={copy.overview.previewSubtitle}
-            item={docFiles[0]!}
-          />
-        </aside>
-      </div>
+        )}
+      </main>
+      <FilePreviewDialog
+        item={overviewPreview}
+        onClose={() => setOverviewPreview(null)}
+      />
     </>
   );
 }
@@ -1351,7 +1247,6 @@ function DocumentLibraryView({
   runSearch,
   isSearching,
   manifest,
-  searchMessage,
 }: {
   files: NASFileAsset[];
   query: string;
@@ -1359,11 +1254,12 @@ function DocumentLibraryView({
   runSearch: () => void;
   isSearching: boolean;
   manifest: NASManifest | null;
-  searchMessage: string | null;
 }) {
   const { t } = useI18n();
   const copy = t.storage;
   const [smartFilter, setSmartFilter] = useState<DocumentSmartFilter>("all");
+  const [visibleLimit, setVisibleLimit] = useState(DOCUMENT_PAGE_SIZE);
+  const [previewItem, setPreviewItem] = useState<FileItem | null>(null);
   const docFiles = useMemo(() => files.map(fileAssetToItem), [files]);
   const newestMtime = useMemo(
     () => files.reduce((latest, file) => Math.max(latest, file.mtime_ns), 0),
@@ -1380,6 +1276,8 @@ function DocumentLibraryView({
             assetSearchText(asset).includes(normalizedQuery)),
       );
   }, [docFiles, files, newestMtime, query, smartFilter]);
+  useEffect(() => setVisibleLimit(DOCUMENT_PAGE_SIZE), [query, smartFilter]);
+  const renderedDocFiles = visibleDocFiles.slice(0, visibleLimit);
   return (
     <>
       <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-muted px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
@@ -1423,21 +1321,46 @@ function DocumentLibraryView({
         </div>
       </div>
       <main className="min-h-0 flex-1 overflow-hidden bg-card">
-        <div className="grid grid-cols-[minmax(240px,1fr)_minmax(180px,280px)_92px_120px_104px] items-center gap-3 border-b border-border bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground">
+        <div className="grid grid-cols-[minmax(180px,1fr)_76px_104px] items-center gap-3 border-b border-border bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground lg:grid-cols-[minmax(220px,1fr)_minmax(140px,220px)_76px_104px] xl:grid-cols-[minmax(240px,1fr)_minmax(180px,280px)_92px_120px_104px]">
           <span>{copy.docs.colName}</span>
-          <span>{copy.docs.colLocation}</span>
+          <span className="hidden lg:block">{copy.docs.colLocation}</span>
           <span>{copy.docs.colSize}</span>
-          <span className="text-right">{copy.docs.colModified}</span>
+          <span className="hidden text-right xl:block">
+            {copy.docs.colModified}
+          </span>
           <span className="text-right">{copy.docs.colActions}</span>
         </div>
         <div className="min-h-0 overflow-y-auto">
-          {visibleDocFiles.length > 0 ? (
-            visibleDocFiles.map(({ item }) => (
-              <FileManagerRow key={item.path} item={item} />
+          {renderedDocFiles.length > 0 ? (
+            renderedDocFiles.map(({ item }) => (
+              <FileManagerRow
+                key={item.path}
+                item={item}
+                onPreview={() => setPreviewItem(item)}
+              />
             ))
           ) : (
             <div className="px-4 py-16 text-center text-sm text-muted-foreground">
               没有符合条件的文档
+            </div>
+          )}
+          {visibleDocFiles.length > renderedDocFiles.length && (
+            <div className="flex items-center justify-center border-t border-border/40 px-4 py-4">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  setVisibleLimit((current) => current + DOCUMENT_PAGE_SIZE)
+                }
+              >
+                再显示{" "}
+                {Math.min(
+                  DOCUMENT_PAGE_SIZE,
+                  visibleDocFiles.length - renderedDocFiles.length,
+                )}{" "}
+                项
+              </Button>
             </div>
           )}
         </div>
@@ -1445,6 +1368,10 @@ function DocumentLibraryView({
           {copy.docs.footerNote}
         </div>
       </main>
+      <FilePreviewDialog
+        item={previewItem}
+        onClose={() => setPreviewItem(null)}
+      />
     </>
   );
 }
@@ -1469,6 +1396,8 @@ function ImageLibraryView({
   const { t } = useI18n();
   const copy = t.storage;
   const [smartFilter, setSmartFilter] = useState<string>("all");
+  const [visibleLimit, setVisibleLimit] = useState(IMAGE_PAGE_SIZE);
+  const [previewItem, setPreviewItem] = useState<FileItem | null>(null);
   const imageFiles = useMemo(() => files.map(fileAssetToItem), [files]);
   const visibleImageFiles = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -1484,6 +1413,8 @@ function ImageLibraryView({
             assetSearchText(asset).includes(normalizedQuery)),
       );
   }, [files, imageFiles, query, smartFilter]);
+  useEffect(() => setVisibleLimit(IMAGE_PAGE_SIZE), [query, smartFilter]);
+  const renderedImageFiles = visibleImageFiles.slice(0, visibleLimit);
   return (
     <>
       <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-muted px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
@@ -1504,28 +1435,12 @@ function ImageLibraryView({
             isSearching={isSearching}
             manifest={manifest}
           />
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label={copy.toolbar.filterAria}
-            className="size-8 rounded-md"
-          >
-            <ListFilterIcon className="size-4" />
-          </Button>
           <Badge
             variant="outline"
             className="h-8 rounded-md border-border bg-card px-2.5 text-xs"
           >
             {copy.images.badgeAllImages}
           </Badge>
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label={copy.toolbar.gridViewAria}
-            className="size-8 rounded-md"
-          >
-            <Grid3X3Icon className="size-4" />
-          </Button>
         </div>
       </div>
       <main className="min-h-0 flex-1 overflow-y-auto bg-card px-4 py-4 lg:px-6">
@@ -1559,9 +1474,14 @@ function ImageLibraryView({
           </span>
         </div>
         <div className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-1">
-          {visibleImageFiles.length > 0 ? (
-            visibleImageFiles.map(({ item, asset }) => (
-              <ImageAssetTile key={item.path} item={item} asset={asset} />
+          {renderedImageFiles.length > 0 ? (
+            renderedImageFiles.map(({ item, asset }) => (
+              <ImageAssetTile
+                key={item.path}
+                item={item}
+                asset={asset}
+                onPreview={() => setPreviewItem(item)}
+              />
             ))
           ) : (
             <div className="col-span-full px-4 py-16 text-center text-sm text-muted-foreground">
@@ -1569,7 +1489,30 @@ function ImageLibraryView({
             </div>
           )}
         </div>
+        {visibleImageFiles.length > renderedImageFiles.length && (
+          <div className="flex justify-center py-5">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                setVisibleLimit((current) => current + IMAGE_PAGE_SIZE)
+              }
+            >
+              再显示{" "}
+              {Math.min(
+                IMAGE_PAGE_SIZE,
+                visibleImageFiles.length - renderedImageFiles.length,
+              )}{" "}
+              项
+            </Button>
+          </div>
+        )}
       </main>
+      <FilePreviewDialog
+        item={previewItem}
+        onClose={() => setPreviewItem(null)}
+      />
     </>
   );
 }
@@ -1632,6 +1575,9 @@ function VideoLibraryView({
   const [activeTab, setActiveTab] = useState<VideoTab>("videos");
   const [isIndexing, setIsIndexing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // 安全检查：确保 files 不是 undefined
+  const safeFiles = files || [];
   const [hasSearched, setHasSearched] = useState(false);
   const [isVideoSearching, setIsVideoSearching] = useState(false);
   const [searchHits, setSearchHits] = useState<NASVideoSearchHit[]>([]);
@@ -1645,16 +1591,16 @@ function VideoLibraryView({
     null,
   );
 
-  const videoFiles = useMemo(() => files.map(fileAssetToItem), [files]);
+  const videoFiles = useMemo(() => safeFiles.map(fileAssetToItem), [safeFiles]);
 
   const assetByVideoPath = useMemo(() => {
     const map = new Map<string, NASFileAsset>();
-    for (const asset of files) {
+    for (const asset of safeFiles) {
       map.set(asset.path, asset);
       map.set(basename(asset.path), asset);
     }
     return map;
-  }, [files]);
+  }, [safeFiles]);
 
   const resolveAsset = useCallback(
     (videoPath: string): NASFileAsset | null => {
@@ -1664,14 +1610,14 @@ function VideoLibraryView({
       if (byBase) return byBase;
       const lower = videoPath.toLowerCase();
       return (
-        files.find(
+        safeFiles.find(
           (asset) =>
             asset.path.toLowerCase().endsWith(lower) ||
             lower.endsWith(asset.path.toLowerCase()),
         ) ?? null
       );
     },
-    [assetByVideoPath, files],
+    [assetByVideoPath, safeFiles],
   );
 
   const loadFaces = useCallback(async () => {
@@ -1920,7 +1866,7 @@ function VideoLibraryView({
                       {copy.videos.summary}
                     </div>
                     <div className="overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-xs)]">
-                      {searchHits.map((hit, index) => {
+                      {searchHits.map((hit) => {
                         const video = resolveAsset(hit.video_path);
                         return (
                           <button
@@ -1940,7 +1886,9 @@ function VideoLibraryView({
                               variant="outline"
                               className="rounded-full border-border"
                             >
-                              {Math.round(hit.score * 100)}%
+                              {Math.round(
+                                Math.max(0, Math.min(1, hit.score)) * 100,
+                              )}
                             </Badge>
                           </button>
                         );
@@ -1989,7 +1937,9 @@ function VideoLibraryView({
                               variant="outline"
                               className="rounded-full border-border"
                             >
-                              {Math.round(hit.score * 100)}%
+                              {Math.round(
+                                Math.max(0, Math.min(1, hit.score)) * 100,
+                              )}
                             </Badge>
                           </button>
                         );
@@ -2220,11 +2170,12 @@ function VideoPlayerDialog({
   );
   const videoRef = useRef<HTMLVideoElement>(null);
   const current = target.hits[target.index];
+  const currentTimeSec = current?.timeSec;
 
   useEffect(() => {
     const el = videoRef.current;
-    if (el && current) el.currentTime = current.timeSec;
-  }, [target.index, current?.timeSec]);
+    if (el && currentTimeSec !== undefined) el.currentTime = currentTimeSec;
+  }, [target.index, currentTimeSec]);
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -2325,7 +2276,13 @@ function TopicNavRow({
   );
 }
 
-function FileCard({ item }: { item: FileItem }) {
+function FileCard({
+  item,
+  onPreview,
+}: {
+  item: FileItem;
+  onPreview?: () => void;
+}) {
   const Icon = item.icon;
   return (
     <div className="group flex min-h-20 items-center gap-3 rounded-lg border border-border bg-card p-3 text-left shadow-[var(--shadow-xs)] transition-colors hover:border-border hover:bg-muted/30">
@@ -2349,15 +2306,21 @@ function FileCard({ item }: { item: FileItem }) {
         <div>{item.kind}</div>
         <div className="mt-1">{item.size}</div>
       </div>
-      <QuickFileActions compact />
+      <QuickFileActions compact item={item} onPreview={onPreview} />
     </div>
   );
 }
 
-function FileManagerRow({ item }: { item: FileItem }) {
+function FileManagerRow({
+  item,
+  onPreview,
+}: {
+  item: FileItem;
+  onPreview: () => void;
+}) {
   const Icon = item.icon;
   return (
-    <div className="grid w-full grid-cols-[minmax(260px,1fr)_minmax(180px,260px)_100px_148px_112px] items-center gap-4 border-b border-border/40 px-4 py-3 text-left last:border-b-0 hover:bg-muted">
+    <div className="grid w-full grid-cols-[minmax(180px,1fr)_76px_104px] items-center gap-3 border-b border-border/40 px-3 py-3 text-left last:border-b-0 hover:bg-muted lg:grid-cols-[minmax(220px,1fr)_minmax(140px,220px)_76px_104px] xl:grid-cols-[minmax(240px,1fr)_minmax(180px,260px)_92px_120px_104px]">
       <span className="flex min-w-0 items-center gap-3">
         <span
           className={cn(
@@ -2369,16 +2332,16 @@ function FileManagerRow({ item }: { item: FileItem }) {
         </span>
         <span className="truncate text-sm font-medium">{item.name}</span>
       </span>
-      <span className="truncate text-xs text-muted-foreground">
+      <span className="hidden truncate text-xs text-muted-foreground lg:block">
         {item.path}
       </span>
       <span className="truncate text-xs text-muted-foreground">
         {item.size}
       </span>
-      <span className="truncate text-right text-xs text-muted-foreground">
+      <span className="hidden truncate text-right text-xs text-muted-foreground xl:block">
         {item.updated}
       </span>
-      <QuickFileActions />
+      <QuickFileActions item={item} onPreview={onPreview} />
     </div>
   );
 }
@@ -2386,9 +2349,11 @@ function FileManagerRow({ item }: { item: FileItem }) {
 function ImageAssetTile({
   item,
   asset,
+  onPreview,
 }: {
   item: FileItem;
   asset: NASFileAsset;
+  onPreview: () => void;
 }) {
   const Icon = item.icon;
   const imageUrl = useNASAsset(
@@ -2398,6 +2363,7 @@ function ImageAssetTile({
   return (
     <button
       type="button"
+      onClick={onPreview}
       title={`${item.name}\n${item.path}\n${item.size}\n${item.updated}`}
       className="group min-w-0 overflow-hidden rounded-lg bg-muted/40 text-left"
     >
@@ -2417,13 +2383,54 @@ function ImageAssetTile({
   );
 }
 
-function QuickFileActions({ compact = false }: { compact?: boolean }) {
+function QuickFileActions({
+  compact = false,
+  item,
+  onPreview,
+}: {
+  compact?: boolean;
+  item?: Pick<FileItem, "name" | "path">;
+  onPreview?: () => void;
+}) {
   const { t } = useI18n();
   const copy = t.storage;
+  const openPath = async (path: string) => {
+    if (window.octopus?.desktop) {
+      const result = await window.octopus.desktop.openItem(path);
+      if (!result.ok) throw new Error(result.error || "无法打开文件");
+      return;
+    }
+    throw new Error("请在 Octopus 桌面端打开本机文件");
+  };
+  const quoteInTask = () => {
+    if (!item) return;
+    window.location.hash =
+      "/workspace/realtime/octopus-assistant?agent=octopus";
+    window.setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent("octopus:open-file", {
+          detail: { path: item.path, sourceLabel: "知识库" },
+        }),
+      );
+    }, 350);
+  };
   const buttons = [
-    { label: copy.preview.actionPreview, icon: EyeIcon },
-    { label: copy.preview.actionQuote, icon: MessageSquarePlusIcon },
-    { label: copy.preview.actionLocate, icon: ExternalLinkIcon },
+    {
+      label: copy.preview.actionPreview,
+      icon: EyeIcon,
+      action: () => (onPreview ? onPreview() : item && openPath(item.path)),
+    },
+    {
+      label: copy.preview.actionQuote,
+      icon: MessageSquarePlusIcon,
+      action: quoteInTask,
+    },
+    {
+      label: copy.preview.actionLocate,
+      icon: ExternalLinkIcon,
+      action: () =>
+        item && openPath(item.path.replace(/[\\/][^\\/]+$/, "") || item.path),
+    },
   ];
   return (
     <span
@@ -2440,6 +2447,14 @@ function QuickFileActions({ compact = false }: { compact?: boolean }) {
             type="button"
             title={action.label}
             aria-label={action.label}
+            disabled={!item}
+            onClick={() => {
+              Promise.resolve(action.action()).catch((error) =>
+                toast.error(
+                  error instanceof Error ? error.message : "操作失败",
+                ),
+              );
+            }}
             className={cn(
               "grid place-items-center rounded-md text-muted-foreground transition-colors hover:bg-black/[0.06] hover:text-foreground",
               compact ? "size-7" : "size-8",
@@ -2450,6 +2465,40 @@ function QuickFileActions({ compact = false }: { compact?: boolean }) {
         );
       })}
     </span>
+  );
+}
+
+function FilePreviewDialog({
+  item,
+  onClose,
+}: {
+  item: FileItem | null;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog open={Boolean(item)} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-xl overflow-hidden p-0">
+        {item && (
+          <div className="flex max-h-[76vh] flex-col">
+            <div className="border-b border-border px-5 py-4">
+              <DialogTitle className="truncate pr-8 text-base font-semibold">
+                {item.name}
+              </DialogTitle>
+              <div className="mt-1 truncate text-xs text-muted-foreground">
+                {item.path}
+              </div>
+            </div>
+            <div className="min-h-0 overflow-y-auto bg-muted/25 p-5">
+              <PreviewPanel
+                title="文件预览"
+                subtitle="确认文件信息后，可直接引用到任务或打开原文件。"
+                item={item}
+              />
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -2465,6 +2514,25 @@ function PreviewPanel({
   const { t } = useI18n();
   const copy = t.storage;
   const Icon = item.icon;
+  const quoteInTask = () => {
+    window.location.hash =
+      "/workspace/realtime/octopus-assistant?agent=octopus";
+    window.setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent("octopus:open-file", {
+          detail: { path: item.path, sourceLabel: "知识库" },
+        }),
+      );
+    }, 350);
+  };
+  const openItem = async () => {
+    if (!window.octopus?.desktop) {
+      toast.error("请在 Octopus 桌面端打开本机文件");
+      return;
+    }
+    const result = await window.octopus.desktop.openItem(item.path);
+    if (!result.ok) toast.error(result.error || "无法打开文件");
+  };
   return (
     <div className="flex min-h-full flex-col">
       <div className="rounded-lg bg-card p-4 shadow-[var(--shadow-xs)] ring-1 ring-border">
@@ -2521,6 +2589,7 @@ function PreviewPanel({
         <Button
           variant="secondary"
           className="justify-start rounded-lg bg-card shadow-[var(--shadow-xs)]"
+          onClick={quoteInTask}
         >
           <FileSearchIcon className="size-4" />
           {copy.preview.quoteInChat}
@@ -2528,6 +2597,7 @@ function PreviewPanel({
         <Button
           variant="secondary"
           className="justify-start rounded-lg bg-card shadow-[var(--shadow-xs)]"
+          onClick={() => void openItem()}
         >
           <FolderOpenIcon className="size-4" />
           {copy.preview.openLocation}
@@ -2830,14 +2900,17 @@ function LocalDiskView({
   isSearching: boolean;
   manifest: NASManifest | null;
 }) {
-  const fallbackFolders = [
-    disk("Applications", "/Applications", "文件夹", "142 项", AppWindowIcon),
-    disk("Desktop", "~/Desktop", "文件夹", "12 项", FolderOpenIcon),
-    disk("Documents", "~/Documents", "文件夹", "326 项", FileTextIcon),
-    disk("Downloads", "~/Downloads", "文件夹", "58 项", ArchiveIcon),
-    disk("Pictures", "~/Pictures", "文件夹", "8,426 项", FileImageIcon),
-    disk("Public", "~/Public", "文件夹", "4 项", FolderIcon),
-  ];
+  const fallbackFolders = useMemo(
+    () => [
+      disk("Applications", "/Applications", "文件夹", "142 项", AppWindowIcon),
+      disk("Desktop", "~/Desktop", "文件夹", "12 项", FolderOpenIcon),
+      disk("Documents", "~/Documents", "文件夹", "326 项", FileTextIcon),
+      disk("Downloads", "~/Downloads", "文件夹", "58 项", ArchiveIcon),
+      disk("Pictures", "~/Pictures", "文件夹", "8,426 项", FileImageIcon),
+      disk("Public", "~/Public", "文件夹", "4 项", FolderIcon),
+    ],
+    [],
+  );
   const [currentPath, setCurrentPath] = useState("/");
   const [entries, setEntries] = useState<DiskItem[]>(fallbackFolders);
   const [isLoading, setIsLoading] = useState(false);
@@ -2864,7 +2937,11 @@ function LocalDiskView({
       } catch (error) {
         if (!cancelled) {
           setBrowseError(
-            error instanceof Error ? error.message : "目录读取失败",
+            error instanceof NASRequestTimeoutError
+              ? "本地服务连接超时，已显示常用位置。"
+              : error instanceof Error
+                ? error.message
+                : "目录读取失败",
           );
           if (currentPath === "/") setEntries(fallbackFolders);
         }
@@ -2876,7 +2953,7 @@ function LocalDiskView({
     return () => {
       cancelled = true;
     };
-  }, [currentPath]);
+  }, [currentPath, fallbackFolders]);
 
   const pathParts = currentPath.split("/").filter(Boolean);
   const goUp = () => {
@@ -3022,6 +3099,10 @@ function SourcesView({
   isReconnecting,
   onPickFolder,
   onReconnect,
+  onScan,
+  onTogglePrivacy,
+  isIndexing,
+  policy,
   onRemoveSource,
 }: {
   sources: NASSource[];
@@ -3032,6 +3113,10 @@ function SourcesView({
   isReconnecting: boolean;
   onPickFolder: () => void;
   onReconnect: () => void;
+  onScan: () => void;
+  onTogglePrivacy: () => void;
+  isIndexing: boolean;
+  policy: NASPolicy;
   onRemoveSource: (id: string) => Promise<void>;
 }) {
   return (
@@ -3058,16 +3143,28 @@ function SourcesView({
             variant="ghost"
             aria-label="扫描队列"
             className="size-8 rounded-md"
+            onClick={onScan}
+            disabled={!manifest || isIndexing}
           >
-            <RefreshCwIcon className="size-4" />
+            <RefreshCwIcon
+              className={cn("size-4", isIndexing && "animate-spin")}
+            />
           </Button>
           <Button
             size="sm"
             variant="ghost"
             aria-label="隐私策略"
             className="size-8 rounded-md"
+            onClick={onTogglePrivacy}
+            title={
+              policy.mode === "privacy" ? "切换为效率模式" : "切换为隐私模式"
+            }
           >
-            <ShieldCheckIcon className="size-4" />
+            {policy.mode === "privacy" ? (
+              <LockKeyholeIcon className="size-4" />
+            ) : (
+              <ShieldCheckIcon className="size-4" />
+            )}
           </Button>
         </div>
       </div>
@@ -3101,20 +3198,7 @@ function SourcesView({
         </div>
       )}
 
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-3 py-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          {["Documents", "Pictures", "Downloads", "Public/octopus"].map(
-            (item) => (
-              <button
-                key={item}
-                type="button"
-                className="rounded-md border border-border bg-card px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-              >
-                {item}
-              </button>
-            ),
-          )}
-        </div>
+      <div className="flex shrink-0 items-center justify-end gap-3 border-b border-border px-3 py-2">
         <div className="hidden shrink-0 items-center gap-2 md:flex">
           <Badge
             variant="outline"
@@ -3172,7 +3256,11 @@ function SourcesView({
                     ? "连接中"
                     : "重新连接"}
               </Button>
-              <Button variant="secondary" className="rounded-md bg-muted">
+              <Button
+                variant="secondary"
+                className="rounded-md bg-muted"
+                onClick={onTogglePrivacy}
+              >
                 <ShieldCheckIcon className="size-4" />
                 查看隐私策略
               </Button>
@@ -3194,7 +3282,9 @@ function SourcesView({
       <div className="shrink-0 border-t border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <span>隐私机制: 文件解析、OCR 与向量索引默认落在本机。</span>
-          <span>扫描队列: 等待扫描 0 · OCR 处理中 0 · 失败文件 0</span>
+          <span>
+            扫描状态: {isIndexing ? "正在更新索引…" : "当前无运行任务"}
+          </span>
         </div>
       </div>
     </main>
@@ -3223,6 +3313,23 @@ function SearchResultsView({
   onBack: () => void;
 }) {
   const hasHits = hits.length > 0;
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
+  useEffect(() => setSelectedPaths(new Set()), [hits]);
+  const quoteSelected = () => {
+    const selectedHits = hits.filter((hit) => selectedPaths.has(hit.path));
+    if (selectedHits.length === 0) return;
+    window.location.hash =
+      "/workspace/realtime/octopus-assistant?agent=octopus";
+    window.setTimeout(() => {
+      selectedHits.forEach((hit) => {
+        window.dispatchEvent(
+          new CustomEvent("octopus:open-file", {
+            detail: { path: hit.path, sourceLabel: "知识库" },
+          }),
+        );
+      });
+    }, 350);
+  };
   return (
     <>
       <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-muted/50 px-3 py-2 lg:h-[60px] lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:px-4 lg:py-0">
@@ -3258,21 +3365,43 @@ function SearchResultsView({
           <Button
             size="sm"
             className="h-9 shrink-0 rounded-lg bg-black px-3 text-white hover:bg-black/85"
-            disabled={!hasHits}
+            disabled={selectedPaths.size === 0}
+            onClick={quoteSelected}
           >
             <MessageSquarePlusIcon className="size-4" />
-            引用选中
+            引用选中{selectedPaths.size > 0 ? ` (${selectedPaths.size})` : ""}
           </Button>
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto bg-muted/50 p-5">
         {hasHits ? (
           <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-xs)] ring-1 ring-border">
-            {hits.map((hit) => (
+            {hits.map((hit, index) => (
               <div
                 key={hit.chunk_id}
                 className="flex w-full items-center gap-3 border-b border-border/40 px-4 py-3 text-left last:border-b-0 hover:bg-muted"
               >
+                <button
+                  type="button"
+                  aria-label={`选择 ${hit.title || basename(hit.path)}`}
+                  aria-pressed={selectedPaths.has(hit.path)}
+                  onClick={() =>
+                    setSelectedPaths((current) => {
+                      const next = new Set(current);
+                      if (next.has(hit.path)) next.delete(hit.path);
+                      else next.add(hit.path);
+                      return next;
+                    })
+                  }
+                  className={cn(
+                    "grid size-5 shrink-0 place-items-center rounded border text-[11px] transition-colors",
+                    selectedPaths.has(hit.path)
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-border bg-card hover:border-foreground/50",
+                  )}
+                >
+                  {selectedPaths.has(hit.path) ? "✓" : ""}
+                </button>
                 <FileSearchIcon className="size-5 shrink-0 text-primary" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">
@@ -3286,9 +3415,14 @@ function SearchResultsView({
                   </div>
                 </div>
                 <Badge variant="outline" className="rounded-full border-border">
-                  {Math.round(hit.score * 100)}%
+                  #{index + 1}
                 </Badge>
-                <QuickFileActions />
+                <QuickFileActions
+                  item={{
+                    name: hit.title || basename(hit.path),
+                    path: hit.path,
+                  }}
+                />
               </div>
             ))}
           </div>
@@ -3317,13 +3451,6 @@ function SearchResultsView({
                 }}
               >
                 查看授权目录
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                className="rounded-lg bg-muted"
-              >
-                切换隐私模式
               </Button>
             </div>
           </div>

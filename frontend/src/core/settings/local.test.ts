@@ -20,6 +20,7 @@ describe("local settings defaults", () => {
 
   it("provides safe personal-space defaults and normalizes invalid stored modes", () => {
     expect(getLocalSettings().personal_space).toEqual({
+      default_folder: "",
       default_mode: "general",
       remember_last_mode: true,
       custom_instructions: "",
@@ -29,6 +30,7 @@ describe("local settings defaults", () => {
       LOCAL_SETTINGS_KEY,
       JSON.stringify({
         personal_space: {
+          default_folder: "  /Users/example/Octopus  ",
           default_mode: "unknown",
           custom_instructions: "x".repeat(2100),
         },
@@ -36,6 +38,7 @@ describe("local settings defaults", () => {
     );
 
     const settings = getLocalSettings().personal_space;
+    expect(settings.default_folder).toBe("/Users/example/Octopus");
     expect(settings.default_mode).toBe("general");
     expect(settings.custom_instructions).toHaveLength(2000);
   });

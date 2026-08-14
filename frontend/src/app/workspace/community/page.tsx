@@ -57,6 +57,7 @@ export default function CommunityPage() {
   const [activeTab, setActiveTab] = useState("recommend");
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [sort, setSort] = useState<CommunitySort>("latest");
@@ -115,11 +116,17 @@ export default function CommunityPage() {
     async (tab: string, s: CommunitySort, reset: boolean) => {
       if (reset) setLoading(true);
       else setLoadingMore(true);
-      const res = await fetchCommunityFeed(tab, s, 0);
-      setPosts(res.posts);
-      setHasMore(res.hasMore);
-      setLoading(false);
-      setLoadingMore(false);
+      setLoadError(null);
+      try {
+        const res = await fetchCommunityFeed(tab, s, 0);
+        setPosts(res.posts);
+        setHasMore(res.hasMore);
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : "内容加载失败");
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     },
     [],
   );
@@ -128,14 +135,29 @@ export default function CommunityPage() {
     if (viewMode !== "community") return;
     let cancelled = false;
     setLoading(true);
-    void fetchCommunityFeed(fetchTopic, sort, 0).then((res) => {
-      if (cancelled) return;
-      setPosts(res.posts);
-      setHasMore(res.hasMore);
-      setLoading(false);
-    });
+    setLoadError(null);
+    const timeout = window.setTimeout(() => {
+      if (!cancelled) {
+        setLoading(false);
+        setLoadError("加载超时，请检查网络后重试");
+      }
+    }, 8000);
+    void fetchCommunityFeed(fetchTopic, sort, 0)
+      .then((res) => {
+        if (cancelled) return;
+        setPosts(res.posts);
+        setHasMore(res.hasMore);
+      })
+      .catch((error) => {
+        if (!cancelled) setLoadError(error instanceof Error ? error.message : "内容加载失败");
+      })
+      .finally(() => {
+        window.clearTimeout(timeout);
+        if (!cancelled) setLoading(false);
+      });
     return () => {
       cancelled = true;
+      window.clearTimeout(timeout);
     };
   }, [fetchTopic, sort, viewMode]);
 
@@ -241,8 +263,8 @@ export default function CommunityPage() {
                       <CompassIcon className="size-4 text-chart-3" />
                     )}
                   </div>
-                  <h1 className="text-lg font-bold">发现</h1>
-                  <div className="ml-2 flex items-center gap-1 rounded-md border border-border-default bg-background/60 p-0.5">
+                  <h1 className="hidden text-lg font-bold sm:block">发现</h1>
+                  <div className="flex items-center gap-1 rounded-md border border-border-default bg-background/60 p-0.5 sm:ml-2">
                     {(
                       [
                         { key: "community", label: "社区", icon: CompassIcon },
@@ -390,6 +412,8 @@ export default function CommunityPage() {
                     <CommunityFeed
                       posts={filtered}
                       loading={loading}
+                      error={loadError}
+                      onRetry={() => void load(fetchTopic, sort, true)}
                       hasMore={hasMore && !query.trim()}
                       onLoadMore={loadMore}
                       highlightKeyword={query.trim() || undefined}

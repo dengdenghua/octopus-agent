@@ -406,3 +406,48 @@ def requires_chromium() -> None:
     reason = _chromium_unavailable_reason()
     if reason is not None:
         pytest.skip(reason)
+
+
+# ═══════════════════════════════════════════════════════════
+# Snapshot testing (dsh-style keyless snapshots)
+#
+# `snapshot.match(name, data)` records under `--snapshot-update` /
+# `OCTOPUS_SNAPSHOT=record`, otherwise compares against the stored
+# transcript under `tests/snapshots/`. See tests/snapshot_utils.py.
+# ═══════════════════════════════════════════════════════════
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--snapshot-update",
+        action="store_true",
+        default=False,
+        help="record snapshots instead of comparing them",
+    )
+
+
+@pytest.fixture
+def snapshot(request):
+    from tests.snapshot_utils import Snapshotter
+
+    return Snapshotter(
+        request.node.nodeid,
+        update=request.config.getoption("--snapshot-update"),
+    )
+
+
+@pytest.fixture(autouse=True)
+def _isolate_subagent_sessions(tmp_path, monkeypatch):
+    """Give every test a private subagent session store.
+
+    ``call_subagent`` now creates a durable session per call (dsh
+    continuable port); without isolation the suite would write session
+    files into the live ``data/subagent_sessions/`` of this checkout.
+    """
+    from runtime.execution.subagents import sessions as _ss
+
+    store = _ss.SubagentSessionStore(base_dir=tmp_path / "subagent_sessions")
+    monkeypatch.setattr(_ss, "_default_base_dir", lambda: tmp_path / "subagent_sessions")
+    _ss.set_subagent_session_store(store)
+    yield
+    _ss.set_subagent_session_store(None)

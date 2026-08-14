@@ -257,6 +257,67 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
     });
   });
 
+  it("filters the default-effort dropdown to the model's capability set", async () => {
+    const user = userEvent.setup();
+    mockModelSettingsFetch({
+      models: [
+        {
+          id: "deepseek-entry",
+          name: "deepseek-entry",
+          display_name: "DeepSeek Entry",
+          models: ["deepseek-v4-pro"],
+          provider: "openai",
+          base_url: "https://api.deepseek.com/v1",
+          has_api_key: true,
+          supports_thinking: true,
+          reasoning_efforts: ["off", "high", "xhigh"],
+        },
+      ],
+    });
+
+    renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
+    await screen.findByText("DeepSeek Entry");
+    await user.click(
+      screen.getByRole("button", { name: "编辑: DeepSeek Entry" }),
+    );
+
+    // DeepSeek only distinguishes off/high/max on the wire — the dropdown
+    // should offer 跟随 / 关闭 / 高 / 最高 / 不注入, not 低/中.
+    const select = await screen.findByLabelText("默认推理等级");
+    const options = Array.from(select.querySelectorAll("option")).map(
+      (o) => o.textContent,
+    );
+    expect(options).toEqual(["跟随内置默认", "关闭", "高", "最高", "不注入默认"]);
+  });
+
+  it("hides the default-effort dropdown when the model has no tiers", async () => {
+    const user = userEvent.setup();
+    mockModelSettingsFetch({
+      models: [
+        {
+          id: "minimax-entry",
+          name: "minimax-entry",
+          display_name: "MiniMax Entry",
+          models: ["minimax-m2"],
+          provider: "openai",
+          base_url: "https://api.minimaxi.com/v1",
+          has_api_key: true,
+          supports_thinking: true,
+          reasoning_efforts: [],
+        },
+      ],
+    });
+
+    renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
+    await screen.findByText("MiniMax Entry");
+    await user.click(
+      screen.getByRole("button", { name: "编辑: MiniMax Entry" }),
+    );
+
+    await screen.findByLabelText("显示名称");
+    expect(screen.queryByLabelText("默认推理等级")).not.toBeInTheDocument();
+  });
+
   it("renders OpenAI-compatible diagnostics for a strict domestic provider", async () => {
     const user = userEvent.setup();
     mockModelSettingsFetch({

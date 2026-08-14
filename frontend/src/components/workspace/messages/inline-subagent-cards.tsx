@@ -5,9 +5,7 @@ import {
   Loader2Icon,
   XCircleIcon,
 } from "lucide-react";
-import { useMemo } from "react";
-
-import { emitAgentWorkbenchFocus } from "@/components/workspace/agent-workbench-events";
+import { useMemo, useState } from "react";
 import type { LiveToolEvent } from "@/components/workspace/live-tool-timeline";
 import type { AIMessage, Message, ToolMessage } from "@/core/api/types";
 import { isTeammateToolName } from "@/components/workspace/messages/action-display";
@@ -613,18 +611,17 @@ function LConnector() {
 
 function KimiStyleSubagentCard({
   agent,
-  onFocus,
 }: {
   agent: InlineSubagentInfo;
-  onFocus: (id: string) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const isRunning = agent.status === "running" || agent.status === "waiting";
   const isDone = agent.status === "done";
 
   return (
     <button
       type="button"
-      onClick={() => onFocus(agent.id)}
+      onClick={() => setExpanded((open) => !open)}
       className={cn(
         "group/agent-row flex w-full items-start gap-0 px-2.5 py-0.5 text-left transition-colors rounded",
         "hover:bg-background/60 dark:hover:bg-background/30",
@@ -680,6 +677,17 @@ function KimiStyleSubagentCard({
           <span className="ml-1.5 shrink-0">
             <StatusIndicator status={agent.status} progress={agent.progress} />
           </span>
+        )}
+
+        {expanded && (agent.summary || agent.error) && (
+          <div
+            className={cn(
+              "mt-1 whitespace-pre-wrap pl-3 text-xs leading-relaxed",
+              agent.error ? "text-destructive/80" : "text-muted-foreground",
+            )}
+          >
+            {agent.error || agent.summary}
+          </div>
         )}
 
         {/* Error message - subtle */}
@@ -827,10 +835,6 @@ export function InlineSubagentCards({
 
   if (agents.length === 0) return null;
 
-  const handleFocus = (agentId: string) => {
-    emitAgentWorkbenchFocus({ agentId });
-  };
-
   const runningCount = agents.filter((a) => a.status === "running" || a.status === "waiting").length;
   const errorCount = agents.filter((a) => a.status === "error").length;
   const allDone = runningCount === 0;
@@ -868,7 +872,6 @@ export function InlineSubagentCards({
             <KimiStyleSubagentCard
               key={agent.id}
               agent={agent}
-              onFocus={handleFocus}
             />
           ))}
         </div>

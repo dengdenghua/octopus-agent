@@ -423,9 +423,9 @@ export function useRenameThread() {
       threadId: string;
       title: string;
     }) => {
-      await apiClient.threads.updateState(threadId, {
-        values: { title },
-      });
+      // dsh session-title semantics: a user rename pins the title against
+      // automatic regeneration (source=user + title_pinned on the record).
+      await apiClient.threads.renameTitle(threadId, title);
     },
     onSuccess(_, { threadId, title }) {
       queryClient.setQueriesData(
@@ -449,6 +449,26 @@ export function useRenameThread() {
           });
         },
       );
+    },
+  });
+}
+
+export function useForkThread() {
+  const queryClient = useQueryClient();
+  const apiClient = getAPIClient();
+  return useMutation({
+    mutationFn: ({
+      threadId,
+      atMessageIndex,
+    }: {
+      threadId: string;
+      atMessageIndex?: number;
+    }) => apiClient.threads.forkThread(threadId, atMessageIndex),
+    onSuccess() {
+      queryClient.invalidateQueries({
+        queryKey: ["threads", "search"],
+        exact: false,
+      });
     },
   });
 }

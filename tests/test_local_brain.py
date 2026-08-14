@@ -101,7 +101,11 @@ def test_storage_start_returns_same_origin_proxy_without_storage_token(monkeypat
     from runtime.sensing.gateway import storage_supervisor
     from runtime.sensing.gateway.local_brain_router import create_local_brain_router
 
-    monkeypatch.setattr(storage_supervisor, "maybe_start_storage", lambda: "already_running")
+    monkeypatch.setattr(
+        storage_supervisor,
+        "maybe_start_storage",
+        lambda *, force=False: "already_running" if force else "disabled",
+    )
     monkeypatch.setattr(storage_skills, "storage_alive", lambda **_kwargs: True)
 
     app = FastAPI()

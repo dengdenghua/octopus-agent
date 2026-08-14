@@ -42,6 +42,29 @@ def test_disabled_does_not_spawn(monkeypatch) -> None:
     assert spawned["n"] == 0
 
 
+def test_explicit_user_start_bypasses_boot_autostart_gate(monkeypatch) -> None:
+    ss._proc = None
+    monkeypatch.delenv("OCTOPUS_STORAGE_AUTOSTART", raising=False)
+    monkeypatch.setattr(ss, "_already_up", lambda: False)
+    monkeypatch.setattr(
+        ss, "resolve_storage_command", lambda: ["/x/octopus-storage", "serve", "--port", "8767"]
+    )
+
+    class _FakeProc:
+        pid = 4242
+
+        def poll(self):
+            return None
+
+    monkeypatch.setattr(ss.subprocess, "Popen", lambda *_a, **_k: _FakeProc())
+    monkeypatch.setattr(
+        ss.threading, "Thread", lambda **_k: type("T", (), {"start": lambda self: None})()
+    )
+
+    assert ss.maybe_start_storage(force=True) == "started"
+    ss._proc = None
+
+
 def test_already_running_does_not_spawn(monkeypatch) -> None:
     monkeypatch.setenv("OCTOPUS_STORAGE_AUTOSTART", "1")
     monkeypatch.setattr(ss, "_already_up", lambda: True)

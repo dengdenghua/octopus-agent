@@ -2,7 +2,7 @@
  * Custom display name for the Octopus assistant (the global fixed role).
  *
  * The assistant's default name comes from the backend agent profile
- * (`agents/octopus/profile.jsonc` → "章鱼助手"). Users may override it to
+ * (`agents/octopus/profile.jsonc` → "Octopus"). Users may override it to
  * a personal nickname; the override lives in localStorage so it applies
  * instantly across every UI surface (welcome, header badge, sidebar entry)
  * without a backend restart.
@@ -12,7 +12,7 @@ import { swallow } from "@/core/utils/log";
 export const ASSISTANT_NAME_KEY = "octopus.assistant-name";
 
 /** Default assistant name — mirrors `agents/octopus/profile.jsonc`. */
-export const DEFAULT_ASSISTANT_NAME = "章鱼助手";
+export const DEFAULT_ASSISTANT_NAME = "Octopus";
 
 export function getAssistantDisplayName(): string {
   try {

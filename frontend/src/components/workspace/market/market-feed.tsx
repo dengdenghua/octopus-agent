@@ -3,6 +3,7 @@ import { BadgeCheckIcon, ClockIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   formatCount,
+  MARKET_CATEGORIES,
   type MarketItem,
 } from "@/components/workspace/market/market-data";
 
@@ -16,23 +17,43 @@ export function MarketCard({
   onBuy: (item: MarketItem) => void;
   onOpen?: (item: MarketItem) => void;
 }) {
+  const category = MARKET_CATEGORIES.find((entry) => entry.key === item.category);
+
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => onOpen?.(item)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" && onOpen) onOpen(item);
-      }}
-      className="group relative flex cursor-pointer flex-col overflow-hidden rounded-xl bg-card transition hover:shadow-sm"
+    <article
+      className="group/card relative flex flex-col overflow-hidden rounded-xl border border-border-subtle bg-card transition-[border-color,transform,box-shadow] duration-base hover:-translate-y-0.5 hover:border-border-default hover:shadow-[var(--shadow-sm)]"
     >
-      <div className="relative aspect-[3/4] w-full overflow-hidden bg-muted">
+      <button
+        type="button"
+        onClick={() => onOpen?.(item)}
+        aria-label={`查看 ${item.title}`}
+        className="relative aspect-[4/3] w-full overflow-hidden bg-muted text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/45"
+      >
         <img
           src={item.cover}
           alt={item.title}
           loading="lazy"
-          className="h-full w-full object-cover transition-transform duration-slow group-hover:scale-105"
+          className="h-full w-full object-cover transition-transform duration-slow group-hover/card:scale-[1.035]"
         />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/35 to-transparent" />
+        {category && (
+          <span className="absolute left-2.5 top-2.5 inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-black/40 px-2 py-1 text-[11px] font-medium text-white shadow-sm backdrop-blur-md">
+            <span
+              className="size-1.5 rounded-full"
+              style={{ backgroundColor: category.color }}
+            />
+            {category.label}
+          </span>
+        )}
+        <span className="absolute bottom-2 left-2.5 inline-flex max-w-[calc(100%-1.25rem)] items-center gap-1 rounded-full bg-black/45 px-2 py-1 text-[10px] text-white/90 backdrop-blur-sm sm:hidden">
+          <span
+            className="flex size-3.5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white"
+            style={{ backgroundColor: item.sellerColor }}
+          >
+            {item.sellerInitial}
+          </span>
+          <span className="truncate">{item.seller}</span>
+        </span>
         {item.sold && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/55">
             <span className="rotate-[-12deg] rounded border-2 border-white/80 px-4 py-1 text-sm font-bold tracking-widest text-white">
@@ -40,34 +61,49 @@ export function MarketCard({
             </span>
           </div>
         )}
-      </div>
-      <div className="flex flex-1 flex-col px-2.5 pb-2.5 pt-2">
-        <p className="line-clamp-2 text-[13px] font-medium leading-snug text-foreground">
+      </button>
+      <div className="flex flex-1 flex-col px-3 pb-3 pt-3 sm:px-3.5 sm:pb-3.5">
+        <button
+          type="button"
+          onClick={() => onOpen?.(item)}
+          className="line-clamp-2 min-h-9 text-left text-[13px] font-semibold leading-snug text-foreground transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 sm:min-h-0 sm:text-sm"
+        >
           {item.title}
+        </button>
+        <p className="mt-1 hidden min-h-9 text-xs leading-[1.45] text-muted-foreground sm:line-clamp-2">
+          {item.desc}
         </p>
-        <div className="mt-auto flex items-end justify-between gap-2 pt-2">
-          <span className="flex items-baseline gap-0.5 text-[15px] font-bold text-rose-500">
-            {item.price}
-            <span className="text-mini font-medium text-rose-400">积分</span>
-          </span>
+        <div className="mt-2.5 flex items-center justify-between gap-2 sm:mt-3 sm:gap-3">
+          <div className="flex items-baseline gap-1">
+            <span className="text-lg font-bold tracking-tight tabular-nums text-foreground sm:text-xl">
+              {item.price}
+            </span>
+            <span className="text-[11px] font-medium text-foreground/60">积分</span>
+          </div>
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onBuy(item);
-            }}
+            onClick={() => onBuy(item)}
             disabled={item.sold || item.mine}
             className={cn(
-              "flex items-center gap-1 rounded-md px-2 py-1 text-mini font-semibold transition-colors",
+              "flex min-h-9 min-w-0 items-center justify-center rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-[background-color,transform,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-offset-2 active:scale-[0.97] sm:min-h-8 sm:min-w-[5.25rem] sm:px-3",
               item.sold || item.mine
                 ? "cursor-default bg-muted text-muted-foreground/60"
-                : "bg-rose-500 text-white hover:bg-rose-600",
+                : "bg-rose-500 text-white shadow-sm hover:bg-rose-600 hover:shadow-md",
             )}
           >
-            {item.mine ? "我的" : item.sold ? "已售" : "立即购买"}
+            {item.mine ? (
+              "我的"
+            ) : item.sold ? (
+              "已售"
+            ) : (
+              <>
+                <span className="sm:hidden">购买</span>
+                <span className="hidden sm:inline">立即购买</span>
+              </>
+            )}
           </button>
         </div>
-        <div className="mt-1.5 flex items-center gap-1 text-mini text-muted-foreground">
+        <div className="mt-3 hidden items-center gap-1.5 border-t border-border-subtle pt-2.5 text-[11px] text-muted-foreground sm:flex">
           <span
             className="flex size-3.5 items-center justify-center rounded-full text-[9px] font-bold text-white"
             style={{ backgroundColor: item.sellerColor }}
@@ -77,7 +113,7 @@ export function MarketCard({
           <span className="min-w-0 flex-1 truncate">{item.seller}</span>
         </div>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -92,9 +128,10 @@ export function MarketGrid({
   onOpen?: (item: MarketItem) => void;
 }) {
   const cols = useMemo(() => {
-    if (items.length >= 8) return "grid-cols-4";
-    if (items.length >= 4) return "grid-cols-3";
-    return "grid-cols-2 sm:grid-cols-3";
+    if (items.length >= 8)
+      return "grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4";
+    if (items.length >= 4) return "grid-cols-2 xl:grid-cols-3";
+    return "grid-cols-1 min-[360px]:grid-cols-2 xl:grid-cols-3";
   }, [items.length]);
 
   if (items.length === 0) {
@@ -110,7 +147,7 @@ export function MarketGrid({
   }
 
   return (
-    <div className={cn("grid gap-3", cols)}>
+    <div className={cn("grid gap-3 sm:gap-4 xl:gap-5", cols)}>
       {items.map((item) => (
         <MarketCard key={item.id} item={item} onBuy={onBuy} onOpen={onOpen} />
       ))}

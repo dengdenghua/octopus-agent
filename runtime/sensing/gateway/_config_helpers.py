@@ -86,6 +86,34 @@ def _entry_route_ids(entry: dict[str, Any], fallback_id: str = "") -> list[str]:
     return route_ids
 
 
+def _entry_supported_efforts(entry: dict[str, Any], model: str) -> list[str] | None:
+    """UI effort tiers a custom model's resolved profile accepts, or None.
+
+    None → the full default set (off/low/medium/high/xhigh) — an ordinary
+    OpenAI-style model. Empty list → no meaningful effort control (adaptive /
+    unsupported thinking) and the picker hides it. Otherwise exactly the
+    tiers the provider genuinely maps on the wire.
+    """
+    if not str(entry.get("provider") or "openai").lower() in {
+        "openai",
+        "openai-compatible",
+        "openai_compat",
+        "custom",
+    }:
+        return None
+    from runtime.sensing.model_router.openai_compat_providers import (
+        apply_custom_openai_compat_profile,
+        effective_supported_efforts,
+        resolve_openai_compat_profile,
+    )
+
+    base_url = str(entry.get("base_url") or "")
+    base_profile = resolve_openai_compat_profile(base_url, model)
+    profile = apply_custom_openai_compat_profile(entry, base_profile=base_profile)
+    efforts = effective_supported_efforts(profile)
+    return list(efforts) if efforts is not None else None
+
+
 def _compat_diagnostic_for_entry(entry: dict[str, Any]) -> dict[str, Any]:
     provider = str(entry.get("provider") or "openai").lower()
     model_id = _entry_model_id(entry)
@@ -133,6 +161,7 @@ def _compat_diagnostic_for_entry(entry: dict[str, Any]) -> dict[str, Any]:
                 "normalization_hints": profile_summary["normalization_hints"],
                 "compatibility_notes": profile_summary["notes"],
                 "thinking_request_style": profile.thinking_request_style,
+                "supports_vision": profile.supports_vision,
                 "omit_sampling_parameters": profile.omit_sampling_parameters,
                 "drop_tool_choice": profile.drop_tool_choice,
                 "strict_tool_schema": profile.strict_tool_schema,
@@ -180,6 +209,10 @@ def _custom_model_wire_entry(entry: dict[str, Any]) -> dict[str, Any]:
     browser only needs presence + header names so users can see what is
     configured without receiving bearer tokens or route keys back over the
     wire.
+
+    ``supports_vision`` is inferred from the compat profile when the
+    profile explicitly declares support (True) or lack of support (False).
+    This overrides any user-set value to prevent capability mismatches.
     """
     header_names = _default_header_names(entry)
     safe = {k: v for k, v in entry.items() if k not in {"api_key", "default_headers"}}
@@ -193,6 +226,20 @@ def _custom_model_wire_entry(entry: dict[str, Any]) -> dict[str, Any]:
     safe["has_api_key"] = bool(entry.get("api_key"))
     safe["default_header_names"] = header_names
     safe["has_default_headers"] = bool(header_names)
+    if upstreams:
+        safe["reasoning_efforts"] = _entry_supported_efforts(entry, upstreams[0])
+
+    # Override supports_vision from compat profile if explicitly declared
+    from runtime.sensing.model_router.openai_compat_providers import (
+        resolve_openai_compat_profile,
+    )
+    base_url = str(entry.get("base_url") or "")
+    if upstreams and base_url:
+        profile = resolve_openai_compat_profile(base_url, upstreams[0])
+        # If profile explicitly declares vision support (True or False), use that
+        if profile.supports_vision is not None:
+            safe["supports_vision"] = profile.supports_vision
+
     return safe
 
 
@@ -238,5 +285,6 @@ __all__ = [
     "_entry_context_window",
     "_entry_model_id",
     "_entry_route_ids",
+    "_entry_supported_efforts",
     "_entry_upstreams",
 ]

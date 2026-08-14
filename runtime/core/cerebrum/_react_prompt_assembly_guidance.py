@@ -28,7 +28,6 @@ from runtime.core.cerebrum.react_context import (
 )
 from runtime.core.cerebrum.react_native import STRICT_EXPLICIT_READ_TOOL_NAMES
 from runtime.core.cerebrum.react_types import REACT_NO_TOOLS_NOTE
-from runtime.core.cerebrum.reply_styles import reply_style_prompt
 from runtime.core.cerebrum.todo_protocol import render_todo_protocol_guidance
 
 _logger = logging.getLogger(__name__)
@@ -36,15 +35,6 @@ _logger = logging.getLogger(__name__)
 
 def _assemble_core_guidance(state: _AssemblyState) -> None:
     """Approval gate + workspace / project / code-mode / cadence sections."""
-    # Claude-style reply decoration via the selectable reply-style registry
-    # (runtime/core/cerebrum/reply_styles.py). Default is the classic light
-    # emoji decoration, so behaviour is unchanged unless a user_context
-    # ``reply_style`` opts into another style (professional/friendly/...).
-    _style_prompt = reply_style_prompt(
-        state.user_context.get("reply_style") if isinstance(state.user_context, dict) else None
-    )
-    if _style_prompt:
-        state.system_parts.append(_style_prompt)
     if state.approval_provider is not None:
         # Approval-gate etiquette only means anything when a gate exists to
         # be tripped. Keeping it out of REACT_SYSTEM_PROMPT_BASE stops every

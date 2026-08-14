@@ -14,9 +14,17 @@ def _reasoning_effort_from_body(body: dict[str, Any]) -> str | None:
     if isinstance(context, dict):
         candidates.append(context.get("reasoning_effort"))
     for candidate in candidates:
+        if candidate is None:
+            continue
         normalized = normalize_reasoning_effort(candidate)
         if normalized:
             return normalized
+        # DeepSeek native vocabulary: ``off`` is a legitimate explicit
+        # disable. The OpenAI-style normalizer refuses it, so keep it for
+        # the deepseek profile's thinking normalization to turn into
+        # ``thinking: {type: disabled}``.
+        if str(candidate).strip().lower() in ("off", "disabled"):
+            return "off"
     return None
 
 

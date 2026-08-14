@@ -26,6 +26,7 @@ import {
   useLocalCliPartnerAgents,
   dedupeAgentsByName,
   dedupePersonaAgentsByDisplayName,
+  localCliPartnerVisualStatus,
 } from "@/core/agents";
 import type { Agent, LocalCliPartnerAgent } from "@/core/agents";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
@@ -241,10 +242,6 @@ export function AgentFooter() {
     () => footerAgents.filter(isLocalCliAgent),
     [footerAgents],
   );
-  const cliPartnerAgentNames = useMemo(
-    () => new Set(cliPartnerAgents.map((agent) => agent.name)),
-    [cliPartnerAgents],
-  );
   const cliPartnerRows = useMemo<LocalCliPartnerAgent[]>(() => {
     // Only render partners that are actually detected or already registered
     // — un-detected catalog entries should not occupy the dropdown as
@@ -273,7 +270,9 @@ export function AgentFooter() {
   //    之上，不应改变左下角的角色选择状态，因此忽略它
   // 3) localStorage 里用户最近选择的 agent
   // 4) 兜底 "general"
-  const effectiveUrlAgent = urlAgentName === "octopus" ? null : urlAgentName;
+  const isFreshTaskRoute = /^\/workspace\/realtime\/new(?:\/|$)/.test(pathname);
+  const effectiveUrlAgent =
+    isFreshTaskRoute && urlAgentName !== "octopus" ? urlAgentName : null;
   const effectiveName =
     lock?.agent ?? effectiveUrlAgent ?? activeName ?? "general";
 
@@ -343,29 +342,35 @@ export function AgentFooter() {
 
   const renderCliPartnerItem = (row: LocalCliPartnerAgent) => {
     const a = row.agent;
-    const isSelectable = row.detected && row.ready;
+    const isUsable = row.detected && row.ready && row.registered;
+    const isConnectable = row.detected && row.ready && !row.registered;
+    const isActionable = isUsable || isConnectable;
     const isActive = a.name === active?.name;
     const command =
       typeof a.capabilities?.local_partner_command === "string"
         ? a.capabilities.local_partner_command
         : "";
-    const statusText = row.detected
-      ? row.registered || cliPartnerAgentNames.has(a.name)
-        ? t.localAgentConnect.statusConnected
-        : t.localAgentConnect.statusDetected
-      : t.localAgentConnect.statusNotDetected;
+    const status = localCliPartnerVisualStatus(row, {
+      connected: t.localAgentConnect.statusConnected,
+      detected: t.localAgentConnect.statusDetected,
+      notDetected: t.localAgentConnect.statusNotDetected,
+    });
     return (
       <DropdownMenuItem
         key={a.name}
-        disabled={!isSelectable}
+        disabled={!isActionable}
         onSelect={() => {
-          if (isSelectable) selectAgent(a.name);
+          if (isUsable) {
+            selectAgent(a.name);
+          } else if (isConnectable) {
+            _navigate(`${agentLibraryHref()}&connect=local`);
+          }
         }}
         className={cn(
           "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs",
           "opacity-85 transition-colors focus:bg-muted/60 focus:text-foreground focus:opacity-100",
           isActive && "bg-muted/35 opacity-100",
-          !isSelectable && "opacity-45 focus:bg-transparent",
+          !isActionable && "opacity-45 focus:bg-transparent",
         )}
       >
         <AgentAvatar agent={a} className="size-8 rounded-lg text-xs" />
@@ -375,19 +380,19 @@ export function AgentFooter() {
           </span>
           <span className="truncate text-xs font-normal leading-tight text-muted-foreground">
             {row.detected
-              ? command || a.description || statusText
+              ? command || a.description || status.label
               : row.fixHint || t.localAgentConnect.noPartnersAvailable}
           </span>
         </span>
         <span
           className={cn(
             "shrink-0 rounded-md px-1.5 py-0.5 text-2xs font-medium",
-            row.detected
-              ? "bg-success/10 text-success"
-              : "bg-muted text-muted-foreground",
+            status.tone === "primary" && "bg-primary/10 text-primary",
+            status.tone === "warning" && "bg-warning/10 text-warning",
+            status.tone === "muted" && "bg-muted text-muted-foreground",
           )}
         >
-          {statusText}
+          {status.label}
         </span>
         {isActive && (
           <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">

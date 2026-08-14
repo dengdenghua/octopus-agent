@@ -60,6 +60,7 @@ import { BrowserTabPage } from "./agent-workbench-panel/browser-tab-page";
 import { AgentKanbanView } from "./agent-workbench-panel/agent-kanban-view";
 import type { WorkbenchRosterSeat } from "./agent-workbench-panel/helpers";
 import { useWorkbenchSelection } from "./agent-workbench-panel/use-workbench-selection";
+import { WorkbenchSnapshotCache } from "@/core/cache/workbench-snapshot-cache";
 
 // Re-export items that were exported from the original file
 export { hasAgentWorkbenchContent, __testing } from "./agent-workbench-utils";
@@ -166,6 +167,43 @@ function AgentWorkbenchPanelImpl({
   const { t } = useI18n();
   const { deriveAgentTiles, workbenchStatus } = useAgentWorkbenchI18n();
 
+  // IndexedDB 缓存实例（跨刷新持久化）
+  const snapshotCacheRef = useRef<WorkbenchSnapshotCache | null>(null);
+  const [cachedSnapshot, setCachedSnapshot] = useState<ReturnType<typeof useAgentWorkbenchSnapshot> | null>(null);
+  const enableCache = typeof window !== "undefined" &&
+    localStorage.getItem("octopus:cache-workbench") === "1";
+
+  // 初始化缓存
+  useEffect(() => {
+    if (enableCache && !snapshotCacheRef.current) {
+      snapshotCacheRef.current = new WorkbenchSnapshotCache();
+    }
+  }, [enableCache]);
+
+  // 页面加载时尝试从缓存恢复
+  useEffect(() => {
+    if (!enableCache || !threadId || cachedSnapshot) return;
+
+    const restoreFromCache = async () => {
+      try {
+        // 使用最后一个事件的时间戳作为 turnId
+        const lastEvent = events[events.length - 1];
+        if (!lastEvent) return;
+
+        const turnId = `turn_${lastEvent.startedAt}`;
+        const cached = await snapshotCacheRef.current?.load(threadId, turnId);
+        if (cached) {
+          console.log(`[WorkbenchCache] Restored snapshot from cache (${cached.events.length} events)`);
+          setCachedSnapshot(cached.snapshot);
+        }
+      } catch (error) {
+        console.warn("[WorkbenchCache] Failed to restore from cache:", error);
+      }
+    };
+
+    restoreFromCache();
+  }, [enableCache, threadId, events, cachedSnapshot]);
+
   const workbenchSnapshot = useAgentWorkbenchSnapshot(events, {
     deriveAgentTiles,
     hasAnswer,
@@ -175,6 +213,44 @@ function AgentWorkbenchPanelImpl({
     paused,
     workDir,
   });
+
+  // 如果缓存快照可用且事件匹配，优先使用缓存
+  const activeSnapshot = useMemo(() => {
+    if (cachedSnapshot && cachedSnapshot.fingerprint === workbenchSnapshot.fingerprint) {
+      console.log('[WorkbenchCache] Using cached snapshot');
+      return cachedSnapshot;
+    }
+    return workbenchSnapshot;
+  }, [cachedSnapshot, workbenchSnapshot]);
+
+  // 快照更新时保存到缓存
+  useEffect(() => {
+    if (!enableCache || !threadId || !workbenchSnapshot) return;
+
+    const saveToCache = async () => {
+      try {
+        // 使用最后一个事件的时间戳作为 turnId
+        const lastEvent = events[events.length - 1];
+        if (!lastEvent) return;
+
+        const turnId = `turn_${lastEvent.startedAt}`;
+        await snapshotCacheRef.current?.save(
+          threadId,
+          turnId,
+          workbenchSnapshot,
+          events
+        );
+        console.log(`[WorkbenchCache] Saved snapshot to cache (v${workbenchSnapshot.version})`);
+      } catch (error) {
+        console.warn("[WorkbenchCache] Failed to save to cache:", error);
+      }
+    };
+
+    // 防抖保存，避免频繁写入
+    const timer = setTimeout(saveToCache, 500);
+    return () => clearTimeout(timer);
+  }, [enableCache, threadId, workbenchSnapshot, events]);
+
   const {
     agentTiles,
     blocks,
@@ -184,7 +260,7 @@ function AgentWorkbenchPanelImpl({
     phases: snapshotPhases,
     visibleDiffEntries,
     evidence,
-  } = workbenchSnapshot;
+  } = activeSnapshot;
   const typedGroundingSources = useMemo<GroundingSource[]>(
     () =>
       evidence

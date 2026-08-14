@@ -50,6 +50,7 @@ except ImportError:  # pragma: no cover
     Request = None  # type: ignore[assignment,misc]
 
 from runtime.platform.models import ParsedIntent
+from runtime.platform.models.llm import default_reasoning_effort
 from runtime.sensing._fastapi_guard import require_fastapi
 
 # Re-export formatting helpers from openai_formatting.py so call
@@ -359,7 +360,9 @@ def create_openai_router(
         if stream_mode not in ("full", "values"):
             stream_mode = "full"
         requested_model = body.get("model", "octopus-agent")
-        reasoning_effort = _reasoning_effort_from_body(body)
+        reasoning_effort = _reasoning_effort_from_body(body) or default_reasoning_effort(
+            requested_model
+        )
         force_deep = _deep_requested(body)
 
         agent_id = body.get("agent")

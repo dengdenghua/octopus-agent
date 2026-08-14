@@ -9,6 +9,7 @@ import {
 } from "@/core/agents/assistant-naming";
 import { getBackendBaseURL } from "@/core/config";
 import { cn } from "@/lib/utils";
+import { AgentVisualGallery } from "./agent-visual-gallery";
 
 export function AgentWelcome({
   className,
@@ -35,6 +36,9 @@ export function AgentWelcome({
     setAssistantDisplayName(draft);
     setRenaming(false);
   };
+
+  // Check if agent has visual illustrations (for ECHO characters, etc.)
+  const hasVisuals = agent?.visual_urls && Object.keys(agent.visual_urls).length > 0;
 
   return (
     <div
@@ -114,6 +118,15 @@ export function AgentWelcome({
           </p>
         )}
       </div>
+
+      {/* Display character illustrations if available */}
+      {hasVisuals && (
+        <AgentVisualGallery
+          visualUrls={agent.visual_urls}
+          agentName={displayName}
+          className="mt-6 max-w-sm"
+        />
+      )}
     </div>
   );
 }

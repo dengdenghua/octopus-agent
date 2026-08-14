@@ -68,6 +68,21 @@ class TestCatalog:
         assert is_ephemeral_role("__nope__") is False
         assert is_ephemeral_role("") is False
 
+    def test_get_role_display_resolves_catalog_role(self):
+        from runtime.execution.suckers.ephemeral_agents import get_role_display
+
+        name, description = get_role_display("researcher")
+        assert name == "Research Specialist"
+        assert description
+
+    def test_get_role_display_normalizes_case_and_unknown_returns_none(self):
+        from runtime.execution.suckers.ephemeral_agents import get_role_display
+
+        assert get_role_display("Reviewer") == get_role_display("reviewer")
+        assert get_role_display("__nope__") is None
+        assert get_role_display("") is None
+        assert get_role_display(None) is None
+
 
 class TestDispatch:
     def test_routes_ephemeral_role_to_new_path(self):

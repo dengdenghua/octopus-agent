@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-ThinkingRequestStyle = Literal["openai", "none", "minimax_adaptive"]
+ThinkingRequestStyle = Literal["openai", "none", "minimax_adaptive", "deepseek"]
 
 
 @dataclass(frozen=True)
@@ -22,6 +22,13 @@ class OpenAICompatProviderProfile:
     base_url_markers: tuple[str, ...] = ()
     model_markers: tuple[str, ...] = ()
     thinking_request_style: ThinkingRequestStyle = "none"
+    # UI-vocabulary effort tiers this provider genuinely accepts on the wire.
+    # None → the full default set (off/low/medium/high/xhigh). Empty tuple →
+    # no meaningful tier control (adaptive/none), so the picker hides it.
+    # Otherwise only these tiers are offered, killing fake granularity where
+    # a provider collapses many OpenAI-style efforts onto one wire value.
+    supported_efforts: tuple[str, ...] | None = None
+    supports_vision: bool | None = None  # None = unknown, True = supports, False = no vision
     omit_sampling_parameters: bool = False
     drop_tool_choice: bool = False
     strict_tool_schema: bool = False
@@ -108,9 +115,14 @@ _PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
         display_name="DeepSeek",
         base_url_markers=("api.deepseek.com",),
         model_markers=("deepseek-", "deepseek/", "deepseek_"),
+        thinking_request_style="deepseek",
+        supported_efforts=("off", "high", "xhigh"),
+        supports_vision=False,  # DeepSeek does not support vision/image input
         compatibility_notes=(
-            "reasoning text may arrive as reasoning_content",
+            "native V4 thinking: reasoning_effort off|high|max, thinking:{type:disabled} to turn off",
+            "reasoning text arrives as reasoning_content",
             "some deployments prefer max_completion_tokens on retry",
+            "no vision support",
         ),
     ),
     OpenAICompatProviderProfile(
@@ -170,6 +182,7 @@ _PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
         base_url_markers=("api.minimaxi.com", "api.minimax.io", "api.minimax.chat"),
         model_markers=("minimax", "abab"),
         thinking_request_style="minimax_adaptive",
+        supported_efforts=(),
         strict_tool_schema=True,
         unsupported_request_fields=("parallel_tool_calls",),
         compatibility_notes=(
@@ -238,6 +251,28 @@ def known_openai_compat_profiles() -> tuple[OpenAICompatProviderProfile, ...]:
     return _PROFILES
 
 
+def effective_supported_efforts(
+    profile: OpenAICompatProviderProfile,
+) -> tuple[str, ...] | None:
+    """UI effort tiers a provider genuinely accepts, in picker vocabulary.
+
+    None → the full default set (off/low/medium/high/xhigh) — a plain
+    OpenAI-style profile that passes the effort through verbatim. Empty
+    tuple → no meaningful effort control (thinking is adaptive/fixed or
+    unsupported), so the picker hides the control entirely. Otherwise only
+    the listed tiers are offered.
+    """
+    if profile.supported_efforts is not None:
+        return profile.supported_efforts
+    # A custom entry that overrides thinking_request_style without an
+    # explicit supported_efforts still infers the right capability set.
+    if profile.thinking_request_style == "deepseek":
+        return ("off", "high", "xhigh")
+    if profile.thinking_request_style == "openai":
+        return None
+    return ()
+
+
 def openai_compat_profile_ids() -> tuple[str, ...]:
     return tuple(profile.id for profile in (GENERIC_OPENAI_PROFILE, *_PROFILES))
 
@@ -263,6 +298,9 @@ def describe_openai_compat_profile(
 ) -> dict[str, Any]:
     """Machine-readable summary for UI/API compatibility diagnostics."""
     normalization_hints: list[str] = []
+    supported_efforts = effective_supported_efforts(profile)
+    if supported_efforts is not None:
+        normalization_hints.append(f"efforts:{','.join(supported_efforts)}")
     if profile.thinking_request_style != "openai":
         normalization_hints.append(f"thinking:{profile.thinking_request_style}")
     if profile.omit_sampling_parameters:
@@ -286,6 +324,7 @@ def describe_openai_compat_profile(
         "id": profile.id,
         "display_name": profile.display_name,
         "compat_score": score,
+        "supported_efforts": list(supported_efforts) if supported_efforts is not None else None,
         "normalization_hints": normalization_hints,
         "notes": list(profile.compatibility_notes),
     }
@@ -293,7 +332,7 @@ def describe_openai_compat_profile(
 
 def _compatibility_score(profile: OpenAICompatProviderProfile) -> int:
     score = 100
-    if profile.thinking_request_style != "openai":
+    if profile.thinking_request_style in ("none", "minimax_adaptive"):
         score -= 6
     if profile.omit_sampling_parameters:
         score -= 10

@@ -193,7 +193,7 @@ function fileTypeInfo(ext: string): FileTypeInfo {
   };
 }
 
-function FileTypeBadge({ ext, size }: { ext: string; size?: number }) {
+function FileTypeBadge({ ext }: { ext: string }) {
   const { icon, bgClass, textClass } = fileTypeInfo(ext);
   return (
     <span

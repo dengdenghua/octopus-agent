@@ -390,8 +390,12 @@ const JSON_COMMAND_TOOL_FENCE_RE =
 const BARE_INTERNAL_TOOL_PAYLOAD_RE =
   /^\s*(?:fs_writer|fs_writen|fs_written|write_file|write_text_file|edit_text_file|str_replace|apply_patch)\s*(?:\n|\()\s*[\s\S]*$/i;
 const XML_TOOL_CALL_RE = /<tool_call>[\s\S]*?(?:<\/tool_call>|$)/gi;
+const SEED_TOOL_CALL_RE =
+  /<seed:tool_call\b[^>]*>[\s\S]*?(?:<\/seed:tool_call>|$)/gi;
 const XML_TOOL_INVOCATION_RE =
   /<tool_invocation\b[^>]*(?:\/>|>[\s\S]*?(?:<\/tool_invocation>|$))/gi;
+const XML_GENERIC_FUNCTION_CALL_RE =
+  /<function(?:=[^>\s]+|\b[^>]*)>[\s\S]*?(?:<\/function>|$)/gi;
 const XML_FUNCTION_CALL_RE =
   /<function=(?:fs_writer|fs_writen|fs_written|write_file|write_text_file|edit_text_file|str_replace|apply_patch|deep_research|web_search|search)>[\s\S]*?(?:<\/function>|$)/gi;
 const INTERNAL_CONTROL_TAG_LINE_RE =
@@ -517,8 +521,10 @@ export function stripInternalToolProtocol(content: string): string {
   const cleaned = content
     .replace(INTERNAL_TOOL_FENCE_RE, "")
     .replace(JSON_COMMAND_TOOL_FENCE_RE, "")
+    .replace(SEED_TOOL_CALL_RE, "")
     .replace(XML_TOOL_CALL_RE, "")
     .replace(XML_TOOL_INVOCATION_RE, "")
+    .replace(XML_GENERIC_FUNCTION_CALL_RE, "")
     .replace(XML_FUNCTION_CALL_RE, "")
     .replace(BARE_INTERNAL_TOOL_PAYLOAD_RE, "")
     .trim();

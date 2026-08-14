@@ -758,6 +758,7 @@ export function MessageList({
   mode,
   project,
   onSendFollowUp,
+  onAuthorizeNetwork,
 }: {
   className?: string;
   threadId: string;
@@ -787,6 +788,9 @@ export function MessageList({
   project?: string | null;
   /** Callback when user selects a follow-up suggestion */
   onSendFollowUp?: (prompt: string) => void;
+  /** Callback when the user authorizes network access from the
+   *  environment-blocked banner ("common domains" or "full"). */
+  onAuthorizeNetwork?: (tier: "common" | "full") => void;
 }) {
   const { t } = useI18n();
   const [settings] = useLocalSettings();
@@ -1551,6 +1555,7 @@ export function MessageList({
             !thread.isLoading && messages[messages.length - 1] === msg
           }
           isLastMessage={messages[messages.length - 1] === msg}
+          messageIndex={messages.indexOf(msg)}
           afterContent={afterContent}
         />
       </div>
@@ -1579,6 +1584,7 @@ export function MessageList({
             !thread.isLoading && messages[messages.length - 1] === msg
           }
           isLastMessage={messages[messages.length - 1] === msg}
+          messageIndex={messages.indexOf(msg)}
           afterContent={afterContent}
         />
       </>
@@ -1756,7 +1762,8 @@ export function MessageList({
             <ClarificationChoiceCard
               content={content}
               active={
-                !thread.isLoading && isLatestMessageGroup(groupedMessages, group)
+                !thread.isLoading &&
+                isLatestMessageGroup(groupedMessages, group)
               }
               messageId={message.id}
             />
@@ -2211,6 +2218,25 @@ export function MessageList({
                 {!isNetworkError && (
                   <div className="text-sm opacity-80">{errorBannerText}</div>
                 )}
+                {failureReceipt?.kind === "environment" &&
+                  onAuthorizeNetwork && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onAuthorizeNetwork("common")}
+                        className="rounded-md border border-warning/80 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/20 dark:border-warning/60 dark:hover:bg-warning/70"
+                      >
+                        {t.streaming.environmentBlockedAuthorizeCommon}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onAuthorizeNetwork("full")}
+                        className="rounded-md border border-warning/40 px-2.5 py-1 text-xs font-medium text-warning/90 transition-colors hover:bg-warning/10 dark:border-warning/50"
+                      >
+                        {t.streaming.environmentBlockedAuthorizeFull}
+                      </button>
+                    </div>
+                  )}
               </div>
             </div>
           )}

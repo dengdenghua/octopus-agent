@@ -89,6 +89,7 @@ function messageListTree({
   agentRoster = [],
   completedAgentOutput = false,
   showSenderName = false,
+  onAuthorizeNetwork,
 }: {
   thread: BaseStream<AgentThreadState>;
   liveToolEvents?: LiveToolEvent[];
@@ -110,6 +111,7 @@ function messageListTree({
     role?: string | null;
   }>;
   showSenderName?: boolean;
+  onAuthorizeNetwork?: (tier: "common" | "full") => void;
 }) {
   return (
     <SubtasksProvider>
@@ -125,6 +127,7 @@ function messageListTree({
           currentAgent={currentAgent}
           agentRoster={agentRoster}
           showSenderName={showSenderName}
+          onAuthorizeNetwork={onAuthorizeNetwork}
         />
       </ThreadProviders>
     </SubtasksProvider>
@@ -153,6 +156,7 @@ function renderMessageList(args: {
   }>;
   showSenderName?: boolean;
   completedAgentOutput?: boolean;
+  onAuthorizeNetwork?: (tier: "common" | "full") => void;
 }) {
   return renderWithProviders(messageListTree(args), {
     locale: args.locale ?? "en-US",
@@ -1795,5 +1799,46 @@ describe("MessageList stalled-run warning", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test("environment-blocked banner offers network authorization", () => {
+    const user = message("user-env", "human", "跑一下测试");
+    const failed: AIMessage = {
+      id: "assistant-env",
+      type: "ai",
+      content: "我已完成代码修改。",
+      additional_kwargs: {
+        agent_id: "general",
+        agent_display_name: "Eve",
+        error: {
+          message: "验证命令因环境受限未能执行 (网络不可用)",
+          info: {
+            failure_kind: "environment",
+            disposition: "failed",
+            code: "environment_blocked",
+          },
+        },
+      },
+    };
+    const onAuthorizeNetwork = vi.fn();
+    renderMessageList({
+      thread: mockThread({
+        messages: [user, failed],
+        error: new Error("turn failed"),
+      }),
+      mode: "code",
+      locale: "zh-CN",
+      onAuthorizeNetwork,
+    });
+
+    const commonButton = screen.getByText("授权「常用域名」并重试");
+    const fullButton = screen.getByText("授权完整网络并重试");
+    expect(commonButton).toBeInTheDocument();
+    expect(fullButton).toBeInTheDocument();
+
+    fireEvent.click(commonButton);
+    expect(onAuthorizeNetwork).toHaveBeenCalledWith("common");
+    fireEvent.click(fullButton);
+    expect(onAuthorizeNetwork).toHaveBeenCalledWith("full");
   });
 });

@@ -2,13 +2,14 @@ import type { Message } from "@/core/api/types";
 import "katex/dist/katex.min.css";
 import {
   FileIcon,
+  GitForkIcon,
   Loader2Icon,
   PencilIcon,
   RefreshCwIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
 } from "lucide-react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   memo,
   useCallback,
@@ -31,6 +32,7 @@ import { resolveArtifactURL } from "@/core/artifacts/utils";
 import { jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
+import { useForkThread } from "@/core/threads/hooks";
 import {
   extractContentFromMessage,
   extractTextFromMessage,
@@ -222,6 +224,7 @@ export const MessageListItem = memo(function MessageListItem({
   suppressReasoningPanel = false,
   enableClarificationActions = false,
   isLastMessage = true,
+  messageIndex,
   afterContent,
 }: {
   className?: string;
@@ -231,9 +234,12 @@ export const MessageListItem = memo(function MessageListItem({
   suppressReasoningPanel?: boolean;
   enableClarificationActions?: boolean;
   isLastMessage?: boolean;
+  messageIndex?: number;
   afterContent?: ReactNode;
 }) {
   const { t } = useI18n();
+  const navigate = useNavigate();
+  const forkThread = useForkThread();
   const isHuman = message.type === "human";
   const messageMetadata =
     message.type === "ai"
@@ -250,9 +256,7 @@ export const MessageListItem = memo(function MessageListItem({
   const showMessageActions =
     !isLoading &&
     (isHuman ||
-      (assistantIsSettledAnswer &&
-        clipboardText.length > 0 &&
-        isLastMessage));
+      (assistantIsSettledAnswer && clipboardText.length > 0 && isLastMessage));
   const params = useParams();
   const threadIdForFeedback = params.threadId ?? params.thread_id ?? null;
   const submitFeedback = useCallback(
@@ -310,7 +314,7 @@ export const MessageListItem = memo(function MessageListItem({
       {showMessageActions && (
         <div
           className={cn(
-            "flex items-center gap-1.5 text-muted-foreground",
+            "flex items-center gap-1.5 text-foreground/60",
             isHuman
               ? "pointer-events-none absolute top-full right-0 z-20 mt-0.5 w-auto justify-end rounded-lg bg-background/90 px-1 py-0.5 opacity-0 shadow-[var(--shadow-xs)] transition-opacity group-hover/conversation-message:pointer-events-auto group-hover/conversation-message:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100"
               : "mt-2 w-full",
@@ -322,29 +326,52 @@ export const MessageListItem = memo(function MessageListItem({
                 onClick={() => {
                   void submitFeedback("liked");
                 }}
-                className="inline-flex size-6 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-base hover:bg-success/10 hover:text-success dark:hover:text-success"
+                className="inline-flex size-7 items-center justify-center rounded-lg text-foreground/60 transition-all duration-base hover:bg-success/10 hover:text-success focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 dark:hover:text-success"
                 title={t.conversation.goodResponse}
                 aria-label={t.conversation.goodResponse}
               >
-                <ThumbsUpIcon className="size-3.5" />
+                <ThumbsUpIcon className="size-4" />
               </button>
               <button
                 onClick={() => {
                   void submitFeedback("disliked");
                 }}
-                className="inline-flex size-6 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-base hover:bg-destructive/10 hover:text-destructive dark:hover:text-destructive"
+                className="inline-flex size-7 items-center justify-center rounded-lg text-foreground/60 transition-all duration-base hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 dark:hover:text-destructive"
                 title={t.conversation.badResponse}
                 aria-label={t.conversation.badResponse}
               >
-                <ThumbsDownIcon className="size-3.5" />
+                <ThumbsDownIcon className="size-4" />
               </button>
             </>
           )}
           <CopyButton
             clipboardData={clipboardText}
             size="icon-sm"
-            className="size-6 rounded-lg border-0 bg-transparent p-0 text-muted-foreground/70 shadow-none transition-colors duration-base hover:bg-muted/60 hover:text-foreground focus-visible:ring-0"
+            className="size-7 rounded-lg border-0 bg-transparent p-0 text-foreground/60 shadow-none transition-colors duration-base hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/45"
           />
+          {threadIdForFeedback != null && messageIndex != null ? (
+            <button
+              onClick={() => {
+                forkThread.mutate(
+                  { threadId: threadIdForFeedback, atMessageIndex: messageIndex },
+                  {
+                    onSuccess: (result) => {
+                      toast.success(t.conversation.forkedThread);
+                      navigate(`/workspace/realtime/${result.thread_id}`);
+                    },
+                    onError: () => {
+                      toast.error(t.conversation.forkFailed);
+                    },
+                  },
+                );
+              }}
+              className="inline-flex size-7 items-center justify-center rounded-lg text-foreground/60 transition-all duration-base hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45"
+              title={t.conversation.forkFromHere}
+              aria-label={t.conversation.forkFromHere}
+            >
+              <GitForkIcon className="size-4" />
+            </button>
+          ) : null}
           {message.type === "ai" ? (
             <button
               onClick={() => {
@@ -354,11 +381,11 @@ export const MessageListItem = memo(function MessageListItem({
                   }),
                 );
               }}
-              className="inline-flex size-6 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-base hover:bg-muted/60 hover:text-foreground"
+              className="inline-flex size-7 items-center justify-center rounded-lg text-foreground/60 transition-all duration-base hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45"
               title={t.conversation.regenerateResponse}
               aria-label={t.conversation.regenerateResponse}
             >
-              <RefreshCwIcon className="size-3.5" />
+              <RefreshCwIcon className="size-4" />
             </button>
           ) : (
             <button

@@ -224,12 +224,14 @@ describe("LocalAgentConnectDialog", () => {
 
     await screen.findByText("CodeBuddy CLI");
     const image = document.querySelector<HTMLImageElement>(
-      'img[src*="/api/agents/local_codebuddy_cli/avatar"]',
+      'img[src*="/api/agents/local-partners/codebuddy-cli/brand-avatar"]',
     );
     expect(image).not.toBeNull();
     fireEvent.error(image!);
     expect(
-      document.querySelector('img[src*="/api/agents/local_codebuddy_cli/avatar"]'),
+      document.querySelector(
+        'img[src*="/api/agents/local-partners/codebuddy-cli/brand-avatar"]',
+      ),
     ).not.toBeInTheDocument();
   });
 });

@@ -4,10 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/harness";
 
-import {
-  normalizeSettingsSection,
-  SettingsDialog,
-} from "./settings-dialog";
+import { normalizeSettingsSection, SettingsDialog } from "./settings-dialog";
 
 vi.mock("@/providers/AuthProvider", () => ({
   useAuth: () => ({
@@ -30,10 +27,25 @@ describe("SettingsDialog", () => {
 
   it("maps legacy section ids to the new categories", () => {
     expect(normalizeSettingsSection("mcp")).toBe("tools");
-    expect(normalizeSettingsSection("personalSpace")).toBe("conversation");
+    expect(normalizeSettingsSection("personalSpace")).toBe("privacy");
+    expect(normalizeSettingsSection("session")).toBe("privacy");
     expect(normalizeSettingsSection("automation")).toBe("automationSecurity");
     expect(normalizeSettingsSection("sandbox")).toBe("automationSecurity");
     expect(normalizeSettingsSection("unknown")).toBe("appearance");
+  });
+
+  it("names merged categories after the personal-space features they contain", () => {
+    renderWithProviders(
+      <SettingsDialog open defaultSection="privacy" onOpenChange={vi.fn()} />,
+      { locale: "zh-CN" },
+    );
+
+    expect(
+      screen.getByRole("button", { name: "个人空间与安全" }),
+    ).toHaveAttribute("aria-current", "page");
+    expect(
+      screen.getByRole("button", { name: "记忆与个人规则" }),
+    ).toBeInTheDocument();
   });
 
   it("returns the content viewport to the top when switching sections", async () => {
@@ -69,6 +81,44 @@ describe("SettingsDialog", () => {
     expect(screen.getByRole("button", { name: "外观" })).not.toHaveAttribute(
       "aria-current",
     );
+  });
+
+  it("uses a soft overflow edge without narrow-screen paging buttons", () => {
+    renderWithProviders(
+      <SettingsDialog
+        open
+        defaultSection="appearance"
+        onOpenChange={vi.fn()}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    const scroller = screen.getByTestId("settings-section-scroll");
+    Object.defineProperties(scroller, {
+      clientWidth: { configurable: true, value: 320 },
+      scrollWidth: { configurable: true, value: 900 },
+      scrollLeft: { configurable: true, writable: true, value: 0 },
+    });
+    fireEvent.scroll(scroller);
+    expect(
+      screen.queryByRole("button", { name: "查看前面的设置" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "查看更多设置" }),
+    ).not.toBeInTheDocument();
+
+    Object.defineProperty(scroller, "scrollLeft", {
+      configurable: true,
+      writable: true,
+      value: 580,
+    });
+    fireEvent.scroll(scroller);
+    expect(
+      screen.queryByRole("button", { name: "查看前面的设置" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "查看更多设置" }),
+    ).not.toBeInTheDocument();
   });
 
   it("resizes one axis at a time from the keyboard handle", () => {

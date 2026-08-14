@@ -377,7 +377,7 @@ export function LocalAgentConnectDialog({
                 )
                 .map((partner) => {
                 const Icon = PARTNER_ICONS[partner.id] ?? BotIcon;
-                const avatarUrl = `/api/agents/${partner.agent_id}/avatar`;
+                const avatarUrl = `/api/agents/local-partners/${partner.id}/brand-avatar`;
                 const checked = selectedSet.has(partner.id);
                 const disabled =
                   !partner.detected ||

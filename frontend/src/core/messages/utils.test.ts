@@ -178,6 +178,22 @@ describe("public assistant text sanitization", () => {
       ),
     ).toBe("所有文件读取任务已完成。");
   });
+
+  it("removes unknown XML function envelopes before markdown rendering", () => {
+    expect(
+      stripInternalToolProtocol(
+        "已完成。\n<function=custom_lookup><parameter=query>secret trace</parameter></function>",
+      ),
+    ).toBe("已完成。");
+  });
+
+  it("removes leaked seed tool-call markers from persisted replies", () => {
+    expect(
+      stripInternalToolProtocol(
+        "我先检查文件。<seed:tool_call></seed:tool_call>",
+      ),
+    ).toBe("我先检查文件。");
+  });
 });
 
 describe("groupMessages", () => {

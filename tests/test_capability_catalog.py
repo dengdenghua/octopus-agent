@@ -132,6 +132,37 @@ def test_capability_catalog_filters_entries(tmp_path: Path) -> None:
     assert high["capabilities"][0]["id"] == "mobile:android_tap"
 
 
+def test_capability_catalog_respects_tool_scope() -> None:
+    """Scoped tools show up only when the catalog is built for that
+    scope (dsh per-agent capability isolation)."""
+    registry = _tool_registry()
+
+    async def _handler(_args: dict[str, Any]) -> dict[str, bool]:
+        return {"ok": True}
+
+    registry.register_tool(
+        "agent_secret",
+        "Agent-only helper.",
+        {
+            "type": "object",
+            "properties": {"x": {"type": "string"}},
+            "required": ["x"],
+        },
+        _handler,
+        scope="agent-a",
+    )
+
+    scoped = build_capability_catalog(tool_registry=registry, tool_scope="agent-a")
+    scoped_ids = {entry["id"] for entry in scoped["capabilities"]}
+    assert "tool:agent_secret" in scoped_ids
+    assert "tool:fetch_demo" in scoped_ids
+
+    global_catalog = build_capability_catalog(tool_registry=registry)
+    global_ids = {entry["id"] for entry in global_catalog["capabilities"]}
+    assert "tool:agent_secret" not in global_ids
+    assert "tool:fetch_demo" in global_ids
+
+
 def test_mobile_approval_risk_is_high_for_canonical_and_mcp_names() -> None:
     canonical = assess_approval_risk("android.tap")
     mcp_safe = assess_approval_risk("android_tap")

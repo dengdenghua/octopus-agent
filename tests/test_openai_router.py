@@ -1408,3 +1408,48 @@ def test_non_streaming_response_splits_inline_reasoning() -> None:
     assert content == "4"
     assert thinking == "weigh it"
     assert finish_reason == "stop"
+
+
+class TestDeepSeekNativeEffortWire:
+    def test_deepseek_off_serializes_thinking_disabled(self):
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        r = OpenAIModelRouter(base_url="https://api.deepseek.com/v1", client=fake)
+        r.call(
+            _req(model="deepseek-v4-flash").model_copy(
+                update={"enable_thinking": True, "reasoning_effort": "off"},
+            ),
+        )
+
+        payload = fake.calls[0]["json"]
+        # DeepSeek rejects "off" as an effort value; the native serialize is
+        # thinking:{type:disabled}, and the effort field must not go on the wire.
+        assert payload["thinking"] == {"type": "disabled"}
+        assert "reasoning_effort" not in payload
+
+    def test_deepseek_high_keeps_native_effort(self):
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        r = OpenAIModelRouter(base_url="https://api.deepseek.com/v1", client=fake)
+        r.call(
+            _req(model="deepseek-v4-flash").model_copy(
+                update={"enable_thinking": True, "reasoning_effort": "high"},
+            ),
+        )
+
+        payload = fake.calls[0]["json"]
+        assert payload["reasoning_effort"] == "high"
+        assert payload["thinking"] == {"type": "enabled"}
+
+    def test_off_on_generic_profile_omits_thinking_fields(self):
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
+        r.call(
+            _req(content="summarize").model_copy(
+                update={"enable_thinking": True, "reasoning_effort": "off"},
+            ),
+        )
+
+        payload = fake.calls[0]["json"]
+        # "off" is DeepSeek-native; a generic OpenAI-compatible endpoint
+        # must not receive an unknown effort value or an enabled envelope.
+        assert "reasoning_effort" not in payload
+        assert "thinking" not in payload

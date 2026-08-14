@@ -1,114 +1,129 @@
-import { FlaskConicalIcon, HammerIcon, SparklesIcon } from "lucide-react";
-
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { FolderOpenIcon, XIcon } from "lucide-react";
 import { useI18n } from "@/core/i18n/hooks";
 import { useLocalSettings } from "@/core/settings";
+import { pickLocalDirectory } from "@/core/workspace/pick-local-directory";
+import { basename } from "@/lib/path-utils";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
+import { toast } from "sonner";
 
 import { SettingsSection } from "./settings-section";
-
-type PersonalMode = "general" | "build" | "research";
-type ReplyStyleKey =
-  | "default"
-  | "professional"
-  | "friendly"
-  | "concise"
-  | "socratic";
 
 const COPY = {
   zh: {
     title: "个人空间",
-    description: "设置未绑定项目目录时的默认工作方式和长期偏好。",
-    defaultMode: "默认工作模式",
-    defaultModeDescription:
-      "新建个人任务时自动采用；仍可在输入框下方临时切换。",
-    remember: "记住输入框中的模式选择",
-    rememberDescription: "开启后，最近选择的模式会成为下一个个人任务的默认值。",
+    description: "管理个人空间的默认位置和专属工作规则。",
+    workspace: "个人空间文件夹",
+    workspaceDescription:
+      "选择个人空间任务默认使用的文件夹；临时选择项目时以项目文件夹为准。",
+    roleFolderDescription:
+      "它只作为根目录；各角色会自动使用以角色名称命名的独立子文件夹，界面统一显示为“个人空间”。",
+    roleFolderDescriptionCompact: "选择根目录；角色子文件夹自动按角色命名。",
+    chooseWorkspace: "选择文件夹",
+    clearWorkspace: "清除个人空间文件夹",
+    noWorkspace: "未设置（使用隔离工作区）",
+    chooseWorkspaceFailed: "选择文件夹失败，请重试",
     instructions: "自定义工作规则",
     instructionsDescription:
       "这些规则只加入个人空间任务，不影响绑定的项目目录。",
     placeholder:
       "例如：研究时优先中文来源；构建成果统一放进 outputs/；回答保持简洁……",
     count: (count: number) => `${count}/2000`,
-    modes: {
-      general: ["通用", "日常对话与灵活任务"],
-      build: ["构建", "产出可运行成果并验证"],
-      research: ["研究", "多源调研、核验与报告"],
-    },
   },
   en: {
     title: "Personal space",
-    description: "Choose defaults for tasks without a bound project folder.",
-    defaultMode: "Default work mode",
-    defaultModeDescription:
-      "Applied to new personal tasks; you can still switch in the composer.",
-    remember: "Remember composer mode changes",
-    rememberDescription:
-      "The latest selection becomes the default for the next personal task.",
+    description:
+      "Manage the personal space location and its custom work rules.",
+    workspace: "Personal space folder",
+    workspaceDescription:
+      "Choose the default folder for personal tasks. A selected project folder takes priority.",
+    roleFolderDescription:
+      "This is the root only. Each role gets a separate child folder named after that role; the UI still shows Personal space.",
+    roleFolderDescriptionCompact:
+      "Choose the root; role folders are named automatically.",
+    chooseWorkspace: "Choose folder",
+    clearWorkspace: "Clear personal space folder",
+    noWorkspace: "Not set (use isolated workspace)",
+    chooseWorkspaceFailed: "Could not choose a folder",
     instructions: "Custom work rules",
     instructionsDescription:
       "These rules apply only to personal space, never to bound projects.",
     placeholder:
       "For example: prefer primary sources; put build outputs in outputs/; keep replies concise…",
     count: (count: number) => `${count}/2000`,
-    modes: {
-      general: ["General", "Everyday conversation and flexible tasks"],
-      build: ["Build", "Create and verify runnable artifacts"],
-      research: ["Research", "Multi-source research and reports"],
-    },
   },
   ja: {
     title: "個人スペース",
-    description: "プロジェクト未接続時の既定の作業方法と継続設定を指定します。",
-    defaultMode: "既定の作業モード",
-    defaultModeDescription:
-      "新しい個人タスクに適用され、入力欄から一時的に変更できます。",
-    remember: "入力欄で選んだモードを記憶",
-    rememberDescription: "最後に選んだモードを次の個人タスクの既定値にします。",
+    description: "個人スペースの場所とカスタム作業ルールを管理します。",
+    workspace: "個人スペースフォルダー",
+    workspaceDescription:
+      "個人タスクの既定フォルダーを選択します。プロジェクトのフォルダーが優先されます。",
+    roleFolderDescription:
+      "ここはルートのみです。各ロールは名前付きの専用サブフォルダーを使い、画面では個人スペースと表示されます。",
+    roleFolderDescriptionCompact:
+      "ルートを選択すると、ロール別フォルダーが自動で作成されます。",
+    chooseWorkspace: "フォルダーを選択",
+    clearWorkspace: "個人スペースフォルダーをクリア",
+    noWorkspace: "未設定（分離ワークスペースを使用）",
+    chooseWorkspaceFailed: "フォルダーを選択できませんでした",
     instructions: "カスタム作業ルール",
     instructionsDescription:
       "個人スペースだけに適用され、接続済みプロジェクトには影響しません。",
     placeholder:
       "例：一次情報を優先する、成果物は outputs/ に置く、回答は簡潔にする…",
     count: (count: number) => `${count}/2000`,
-    modes: {
-      general: ["汎用", "日常の会話と柔軟なタスク"],
-      build: ["構築", "実行可能な成果物を作成・検証"],
-      research: ["研究", "複数ソースの調査とレポート"],
-    },
   },
   ko: {
     title: "개인 공간",
-    description:
-      "프로젝트 폴더가 연결되지 않은 작업의 기본 방식과 지속 설정을 지정합니다.",
-    defaultMode: "기본 작업 모드",
-    defaultModeDescription:
-      "새 개인 작업에 적용되며 입력창에서 임시로 변경할 수 있습니다.",
-    remember: "입력창의 모드 선택 기억",
-    rememberDescription:
-      "마지막 선택을 다음 개인 작업의 기본값으로 사용합니다.",
+    description: "개인 공간 위치와 사용자 지정 작업 규칙을 관리합니다.",
+    workspace: "개인 공간 폴더",
+    workspaceDescription:
+      "개인 작업의 기본 폴더를 선택합니다. 프로젝트 폴더가 우선됩니다.",
+    roleFolderDescription:
+      "이 폴더는 루트이며 역할마다 역할 이름의 전용 하위 폴더를 사용합니다. 화면에는 개인 공간으로 표시됩니다.",
+    roleFolderDescriptionCompact:
+      "루트를 선택하면 역할별 폴더 이름이 자동 지정됩니다.",
+    chooseWorkspace: "폴더 선택",
+    clearWorkspace: "개인 공간 폴더 지우기",
+    noWorkspace: "설정 안 함(격리된 작업 공간 사용)",
+    chooseWorkspaceFailed: "폴더를 선택할 수 없습니다",
     instructions: "사용자 지정 작업 규칙",
     instructionsDescription:
       "개인 공간에만 적용되며 연결된 프로젝트에는 영향을 주지 않습니다.",
     placeholder:
       "예: 1차 출처 우선, 결과물은 outputs/에 저장, 답변은 간결하게…",
     count: (count: number) => `${count}/2000`,
-    modes: {
-      general: ["일반", "일상 대화와 유연한 작업"],
-      build: ["빌드", "실행 가능한 결과물 생성 및 검증"],
-      research: ["리서치", "다중 출처 조사와 보고서"],
-    },
   },
 } as const;
 
-const MODE_OPTIONS = [
-  { id: "general" as const, icon: SparklesIcon },
-  { id: "build" as const, icon: HammerIcon },
-  { id: "research" as const, icon: FlaskConicalIcon },
-];
-
 export default function PersonalSpaceSettingsPage() {
+  const { locale } = useI18n();
+  const language = locale.slice(0, 2).toLowerCase();
+  const copy =
+    language === "zh"
+      ? COPY.zh
+      : language === "ja"
+        ? COPY.ja
+        : language === "ko"
+          ? COPY.ko
+          : COPY.en;
+  return (
+    <SettingsSection title={copy.title} description={copy.description}>
+      <div className="space-y-6">
+        <PersonalSpaceFolderSettings headingLevel="compact" />
+        <PersonalWorkRulesSettings headingLevel="compact" />
+      </div>
+    </SettingsSection>
+  );
+}
+
+export function PersonalSpaceFolderSettings({
+  headingLevel = "section",
+}: {
+  headingLevel?: "compact" | "section";
+} = {}) {
   const { locale, t } = useI18n();
   const language = locale.slice(0, 2).toLowerCase();
   const copy =
@@ -120,163 +135,145 @@ export default function PersonalSpaceSettingsPage() {
           ? COPY.ko
           : COPY.en;
   const [settings, setSettings] = useLocalSettings();
+  const [pickingWorkspace, setPickingWorkspace] = useState(false);
   const personal = settings.personal_space;
-  const context = settings.context as typeof settings.context & {
-    reply_style?: string;
-  };
-  const replyStyle: ReplyStyleKey =
-    context.reply_style === "professional" ||
-    context.reply_style === "friendly" ||
-    context.reply_style === "concise" ||
-    context.reply_style === "socratic"
-      ? context.reply_style
-      : "default";
-  const replyCopy = t.sandboxSettings;
 
-  const setMode = (default_mode: PersonalMode) => {
-    setSettings("personal_space", { default_mode });
-  };
-
-  const setReplyStyle = (next: ReplyStyleKey) => {
-    setSettings("context", { ...context, reply_style: next });
+  const chooseWorkspace = async () => {
+    setPickingWorkspace(true);
+    try {
+      const selected = await pickLocalDirectory(personal.default_folder);
+      if (selected) setSettings("personal_space", { default_folder: selected });
+    } catch {
+      toast.error(copy.chooseWorkspaceFailed);
+    } finally {
+      setPickingWorkspace(false);
+    }
   };
 
   return (
-    <SettingsSection title={copy.title} description={copy.description}>
-      <div className="space-y-6">
-        <section className="space-y-3" aria-labelledby="personal-default-mode">
-          <div>
-            <h3 id="personal-default-mode" className="text-sm font-medium">
-              {copy.defaultMode}
-            </h3>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              {copy.defaultModeDescription}
-            </p>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {MODE_OPTIONS.map(({ id, icon: Icon }) => {
-              const [label, description] = copy.modes[id];
-              const active = personal.default_mode === id;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  aria-pressed={active}
-                  aria-label={label}
-                  onClick={() => setMode(id)}
-                  className={cn(
-                    "rounded-xl border p-3 text-left transition-colors",
-                    active
-                      ? "border-primary/45 bg-primary/8 ring-1 ring-primary/15"
-                      : "border-border-default bg-card hover:bg-muted/40",
-                  )}
-                >
-                  <Icon
-                    className={cn(
-                      "mb-2 size-4",
-                      active ? "text-primary" : "text-muted-foreground",
-                    )}
-                  />
-                  <div className="text-sm font-medium">{label}</div>
-                  <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                    {description}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="space-y-3" aria-labelledby="personal-reply-style">
-          <div>
-            <h3 id="personal-reply-style" className="text-sm font-medium">
-              {replyCopy.replyStyleTitle}
-            </h3>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              {replyCopy.replyStyleDesc}
-            </p>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {(["default", "professional", "friendly", "concise", "socratic"] as const).map(
-              (id) => {
-                const active = replyStyle === id;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setReplyStyle(id)}
-                    disabled={active}
-                    aria-pressed={active}
-                    aria-label={`reply-style-${id}`}
-                    className={cn(
-                      "flex flex-col gap-2 rounded-xl border p-3 text-left transition-colors",
-                      active
-                        ? "border-primary/45 bg-primary/8 ring-1 ring-primary/15"
-                        : "border-border-default bg-card hover:bg-muted/40",
-                    )}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium">{replyCopy.replyStyle[id].label}</span>
-                      {active && (
-                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
-                          {replyCopy.activeTag}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs leading-snug text-muted-foreground">
-                      {replyCopy.replyStyle[id].description}
-                    </p>
-                  </button>
-                );
-              },
-            )}
-          </div>
-        </section>
-
-        <div className="flex items-center justify-between gap-4 rounded-xl border bg-card p-4">
-          <div className="min-w-0">
-            <p className="text-sm font-medium">{copy.remember}</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              {copy.rememberDescription}
-            </p>
-          </div>
-          <Switch
-            checked={personal.remember_last_mode}
-            onCheckedChange={(remember_last_mode) =>
-              setSettings("personal_space", { remember_last_mode })
-            }
-            aria-label={copy.remember}
-          />
-        </div>
-
-        <section className="space-y-3" aria-labelledby="personal-instructions">
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <h3 id="personal-instructions" className="text-sm font-medium">
-                {copy.instructions}
-              </h3>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                {copy.instructionsDescription}
-              </p>
-            </div>
-            <span className="shrink-0 text-xs text-muted-foreground">
-              {copy.count(personal.custom_instructions.length)}
-            </span>
-          </div>
-          <Textarea
-            value={personal.custom_instructions}
-            maxLength={2000}
-            rows={6}
-            placeholder={copy.placeholder}
-            aria-label={copy.instructions}
-            onChange={(event) =>
-              setSettings("personal_space", {
-                custom_instructions: event.target.value,
-              })
-            }
-          />
-        </section>
+    <section className="space-y-3" aria-labelledby="personal-workspace">
+      <div>
+        <h3
+          id="personal-workspace"
+          className={cn(
+            "text-foreground",
+            headingLevel === "section"
+              ? "text-base font-semibold"
+              : "text-sm font-medium",
+          )}
+        >
+          {copy.workspace}
+        </h3>
+        <p className="mt-1 hidden text-xs leading-5 text-muted-foreground sm:block">
+          {copy.workspaceDescription}
+        </p>
       </div>
-    </SettingsSection>
+      <div className="flex flex-col gap-3 rounded-lg border border-border-default bg-card/50 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+        <div className="flex min-w-0 items-start gap-2">
+          <FolderOpenIcon className="size-4 shrink-0 text-primary" />
+          <div className="min-w-0">
+            <p
+              className="truncate text-sm font-medium"
+              title={personal.default_folder || copy.noWorkspace}
+            >
+              {personal.default_folder
+                ? basename(personal.default_folder)
+                : copy.noWorkspace}
+            </p>
+            <p className="mt-1 max-w-xl text-xs leading-4 text-muted-foreground sm:leading-5">
+              <span className="sm:hidden">
+                {copy.roleFolderDescriptionCompact}
+              </span>
+              <span className="hidden sm:inline">
+                {copy.roleFolderDescription}
+              </span>
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 gap-2 self-start sm:self-auto">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => void chooseWorkspace()}
+            disabled={pickingWorkspace}
+          >
+            <FolderOpenIcon className="mr-1.5 size-3.5" />
+            {pickingWorkspace ? t.common.loading : copy.chooseWorkspace}
+          </Button>
+          {personal.default_folder && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() =>
+                setSettings("personal_space", { default_folder: "" })
+              }
+              aria-label={copy.clearWorkspace}
+              title={copy.clearWorkspace}
+            >
+              <XIcon className="size-3.5" />
+            </Button>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function PersonalWorkRulesSettings({
+  headingLevel = "section",
+}: {
+  headingLevel?: "compact" | "section";
+} = {}) {
+  const { locale } = useI18n();
+  const language = locale.slice(0, 2).toLowerCase();
+  const copy =
+    language === "zh"
+      ? COPY.zh
+      : language === "ja"
+        ? COPY.ja
+        : language === "ko"
+          ? COPY.ko
+          : COPY.en;
+  const [settings, setSettings] = useLocalSettings();
+  const personal = settings.personal_space;
+
+  return (
+    <section className="space-y-3" aria-labelledby="personal-instructions">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h3
+            id="personal-instructions"
+            className={cn(
+              "text-foreground",
+              headingLevel === "section"
+                ? "text-base font-semibold"
+                : "text-sm font-medium",
+            )}
+          >
+            {copy.instructions}
+          </h3>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {copy.instructionsDescription}
+          </p>
+        </div>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {copy.count(personal.custom_instructions.length)}
+        </span>
+      </div>
+      <Textarea
+        value={personal.custom_instructions}
+        maxLength={2000}
+        rows={5}
+        placeholder={copy.placeholder}
+        aria-label={copy.instructions}
+        onChange={(event) =>
+          setSettings("personal_space", {
+            custom_instructions: event.target.value,
+          })
+        }
+      />
+    </section>
   );
 }

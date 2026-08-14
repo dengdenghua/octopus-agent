@@ -84,6 +84,7 @@ export function ChatComposer({
   disabled,
   modelName,
   petMood = "idle",
+  showPet = true,
   mode = "react",
   threadId,
   workDir,
@@ -208,12 +209,6 @@ export function ChatComposer({
   const isBusy = disabled || uploadingMaterials || isUploading;
   const sendLabel = t.chatInputBox.send;
   const stopLabel = t.chatInputBox.stop;
-  const permissionLabel =
-    resolvedPermissionMode === "bypassPermissions"
-      ? t.chatInputBox.permissionFullAccess
-      : resolvedPermissionMode === "acceptEdits"
-        ? t.chatInputBox.permissionAcceptEdits
-        : t.chatInputBox.permissionConfirm;
   const parsedResearchUrls = useMemo(
     () => parseComposerUrls(researchUrlText),
     [researchUrlText],
@@ -857,11 +852,12 @@ export function ChatComposer({
         className,
       )}
     >
-      {petVisible && (
+      {showPet && petVisible && (
         <DesktopPetMascot
           mood={petMood}
           size="sm"
-          anchor={{ corner: "bottom-right", gap: { x: 19, y: -23 } }}
+          className="hidden opacity-90 transition-opacity duration-base group-focus-within:opacity-60 md:block"
+          anchor={{ corner: "top-right", gap: { x: -10, y: 72 } }}
         />
       )}
       <div className="relative">
@@ -993,7 +989,7 @@ export function ChatComposer({
               </DropdownMenuLabel>
               <DropdownMenuItem
                 data-testid="chat-insert-codex-plan"
-                onClick={() => insertCodexModeMarker("plan")}
+                onSelect={() => insertCodexModeMarker("plan")}
                 className="gap-2 rounded-lg text-sm"
               >
                 <MapIcon className="size-4" />
@@ -1001,7 +997,7 @@ export function ChatComposer({
               </DropdownMenuItem>
               <DropdownMenuItem
                 data-testid="chat-insert-codex-spec"
-                onClick={() => insertCodexModeMarker("spec")}
+                onSelect={() => insertCodexModeMarker("spec")}
                 className="gap-2 rounded-lg text-sm"
               >
                 <ClipboardCheckIcon className="size-4" />
@@ -1009,7 +1005,7 @@ export function ChatComposer({
               </DropdownMenuItem>
               <DropdownMenuItem
                 data-testid="chat-insert-codex-goal"
-                onClick={() => insertCodexModeMarker("goal")}
+                onSelect={() => insertCodexModeMarker("goal")}
                 className="gap-2 rounded-lg text-sm"
               >
                 <TargetIcon className="size-4" />
@@ -1017,7 +1013,7 @@ export function ChatComposer({
               </DropdownMenuItem>
               <DropdownMenuItem
                 data-testid="chat-insert-browser-surface"
-                onClick={() => insertBrowserSurfaceMarker("Browser")}
+                onSelect={() => insertBrowserSurfaceMarker("Browser")}
                 className="gap-2 rounded-lg text-sm"
               >
                 <MonitorIcon className="size-4" />
@@ -1025,7 +1021,7 @@ export function ChatComposer({
               </DropdownMenuItem>
               <DropdownMenuItem
                 data-testid="chat-insert-chrome-surface"
-                onClick={() => insertBrowserSurfaceMarker("Chrome")}
+                onSelect={() => insertBrowserSurfaceMarker("Chrome")}
                 className="gap-2 rounded-lg text-sm"
               >
                 <GlobeIcon className="size-4" />
@@ -1035,7 +1031,7 @@ export function ChatComposer({
               {canUseDeepResearch && (
                 <>
                   <DropdownMenuItem
-                    onClick={() => setResearchConfigOpen((open) => !open)}
+                    onSelect={() => setResearchConfigOpen((open) => !open)}
                     className="gap-2 rounded-lg text-sm"
                   >
                     <SlidersHorizontalIcon className="size-4" />
@@ -1046,7 +1042,7 @@ export function ChatComposer({
               )}
               {allowAgentModes && (
                 <DropdownMenuItem
-                  onClick={openResearchFilePicker}
+                  onSelect={openResearchFilePicker}
                   className="gap-2 rounded-lg text-sm"
                 >
                   <PaperclipIcon className="size-4" />
@@ -1054,14 +1050,14 @@ export function ChatComposer({
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem
-                onClick={() => contextFileInputRef.current?.click()}
+                onSelect={() => contextFileInputRef.current?.click()}
                 className="gap-2 rounded-lg text-sm"
               >
                 <PaperclipIcon className="size-4" />
                 {t.chatInputBox.file}
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => imageInputRef.current?.click()}
+                onSelect={() => imageInputRef.current?.click()}
                 className="gap-2 rounded-lg text-sm"
               >
                 <ImageIcon className="size-4" />

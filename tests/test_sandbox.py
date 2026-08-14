@@ -17,6 +17,7 @@ import pytest
 from runtime.safety.sandboxing.sandbox import (
     BubblewrapBackend,
     DirectBackend,
+    LandlockBackend,
     SandboxPolicy,
     SandboxRunner,
     SandboxViolation,
@@ -446,3 +447,193 @@ class TestProcessBackendSelection:
         assert str(workspace.resolve()) in argv[2]
         assert argv[-2:] == ["python", "-V"]
         assert cwd == workspace.resolve()
+
+
+# ═══════════════════════════════════════════════════════════
+# dsh-ported sandbox vocabulary: mode tiers + enforcement report
+# ═══════════════════════════════════════════════════════════
+
+
+class TestEnforcementReport:
+    def test_direct_backend_reports_none(self, workspace: Path) -> None:
+        backend = DirectBackend()
+        policy = SandboxPolicy(workspace=workspace)
+        assert backend.enforcement(policy) == "none"
+
+    def test_bwrap_reports_full(self, workspace: Path) -> None:
+        policy = SandboxPolicy(workspace=workspace)
+        assert BubblewrapBackend().enforcement(policy) == "full"
+
+    def test_seatbelt_reports_partial(self, workspace: Path) -> None:
+        policy = SandboxPolicy(workspace=workspace)
+        # macOS Seatbelt scopes reads loosely, so the write/network guard
+        # is only partial enforcement of the tier.
+        assert SeatbeltBackend().enforcement(policy) == "partial"
+
+    def test_landlock_reports_full(self, workspace: Path, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "runtime.safety.sandboxing.sandbox._landlock_kernel_available",
+            lambda: True,
+        )
+        policy = SandboxPolicy(workspace=workspace)
+        assert LandlockBackend().enforcement(policy) == "full"
+
+
+class TestReadOnlyMode:
+    def test_bwrap_read_only_mounts_workspace_ro(self, workspace: Path, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "shutil.which", lambda name: "/usr/bin/bwrap" if name == "bwrap" else None
+        )
+        argv, _env, _cwd = BubblewrapBackend().transform(
+            ["python", "-V"],
+            {},
+            workspace,
+            SandboxPolicy(workspace=workspace, mode="read-only"),
+        )
+        workspace_index = argv.index(str(workspace))
+        assert argv[workspace_index - 1] == "--ro-bind"
+
+    def test_bwrap_workspace_write_uses_rw_bind(self, workspace: Path, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "shutil.which", lambda name: "/usr/bin/bwrap" if name == "bwrap" else None
+        )
+        argv, _env, _cwd = BubblewrapBackend().transform(
+            ["python", "-V"],
+            {},
+            workspace,
+            SandboxPolicy(workspace=workspace, mode="workspace-write"),
+        )
+        workspace_index = argv.index(str(workspace))
+        assert argv[workspace_index - 1] == "--bind"
+
+    def test_seatbelt_read_only_keeps_only_null_sink(self, workspace: Path, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "shutil.which", lambda name: "/usr/bin/sandbox-exec" if name == "sandbox-exec" else None
+        )
+        argv, _env, _cwd = SeatbeltBackend().transform(
+            ["python", "-V"],
+            {},
+            workspace,
+            SandboxPolicy(workspace=workspace, mode="read-only"),
+        )
+        profile = argv[2]
+        assert str(workspace) not in profile
+        assert "/dev/null" in profile
+
+    def test_seatbelt_workspace_write_allows_workspace(self, workspace: Path, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "shutil.which", lambda name: "/usr/bin/sandbox-exec" if name == "sandbox-exec" else None
+        )
+        argv, _env, _cwd = SeatbeltBackend().transform(
+            ["python", "-V"],
+            {},
+            workspace,
+            SandboxPolicy(workspace=workspace, mode="workspace-write"),
+        )
+        profile = argv[2]
+        assert str(workspace) in profile
+
+
+class TestLandlockBackend:
+    def test_available_false_off_linux(self, monkeypatch) -> None:
+        monkeypatch.setattr(sys, "platform", "darwin")
+        assert LandlockBackend.available() is False
+
+    def test_transform_wraps_with_wrapper_and_write_paths(
+        self, workspace: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "runtime.safety.sandboxing.sandbox._landlock_kernel_available",
+            lambda: True,
+        )
+        policy = SandboxPolicy(workspace=workspace, mode="workspace-write")
+        argv, env, cwd = LandlockBackend().transform(
+            ["python", "-V"],
+            {"HOME": str(workspace / ".octopus-home"), "TMPDIR": str(workspace / ".octopus-tmp")},
+            workspace,
+            policy,
+        )
+        assert argv[0] == sys.executable
+        assert argv[1] == "-c"
+        assert "--" in argv
+        assert argv[argv.index("--") + 1 :] == ["python", "-V"]
+        spec = json.loads(env["OCTOPUS_LANDLOCK_SPEC"])
+        assert str(workspace) in spec["write_paths"]
+        assert spec["write_paths"][0] == str(workspace)
+
+    def test_transform_read_only_has_no_write_paths(self, workspace: Path, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "runtime.safety.sandboxing.sandbox._landlock_kernel_available",
+            lambda: True,
+        )
+        argv, env, _cwd = LandlockBackend().transform(
+            ["python", "-V"],
+            {},
+            workspace,
+            SandboxPolicy(workspace=workspace, mode="read-only"),
+        )
+        spec = json.loads(env["OCTOPUS_LANDLOCK_SPEC"])
+        assert spec["write_paths"] == []
+
+    def test_transform_rejects_cwd_escape(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "runtime.safety.sandboxing.sandbox._landlock_kernel_available",
+            lambda: True,
+        )
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        with pytest.raises(SandboxViolation):
+            LandlockBackend().transform(
+                ["python", "-V"],
+                {},
+                outside,
+                SandboxPolicy(workspace=workspace),
+            )
+
+    def test_transform_fails_closed_without_kernel(self, workspace: Path, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "runtime.safety.sandboxing.sandbox._landlock_kernel_available",
+            lambda: False,
+        )
+        with pytest.raises(SandboxViolation):
+            LandlockBackend().transform(
+                ["python", "-V"], {}, workspace, SandboxPolicy(workspace=workspace)
+            )
+
+
+class TestLandlockSelection:
+    def test_landlock_mode_selects_backend(self, monkeypatch) -> None:
+        monkeypatch.setenv("OCTOPUS_PROCESS_SANDBOX", "landlock")
+        monkeypatch.setattr(
+            "runtime.safety.sandboxing.sandbox._landlock_kernel_available",
+            lambda: True,
+        )
+        choice = select_process_backend()
+        assert choice.name == "landlock"
+        assert choice.hard is True
+
+    def test_landlock_mode_rejects_when_unavailable(self, monkeypatch) -> None:
+        monkeypatch.setenv("OCTOPUS_PROCESS_SANDBOX", "landlock")
+        monkeypatch.setattr(
+            "runtime.safety.sandboxing.sandbox._landlock_kernel_available",
+            lambda: False,
+        )
+        with pytest.raises(SandboxViolation):
+            select_process_backend()
+
+    def test_auto_falls_back_to_landlock_on_linux(
+        self,
+        monkeypatch,
+    ) -> None:
+        monkeypatch.setenv("OCTOPUS_PROCESS_SANDBOX", "auto")
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.setattr(BubblewrapBackend, "available", staticmethod(lambda: False))
+        monkeypatch.setattr(
+            "runtime.safety.sandboxing.sandbox._landlock_kernel_available",
+            lambda: True,
+        )
+        monkeypatch.setattr(SeatbeltBackend, "available", staticmethod(lambda: False))
+        choice = select_process_backend()
+        assert choice.name == "landlock"

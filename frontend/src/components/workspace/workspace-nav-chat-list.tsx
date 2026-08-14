@@ -87,10 +87,10 @@ function ProjectCollapsible({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" side="right">
                     <DropdownMenuItem
-                      className="text-destructive"
-                      onClick={() => onDeleteProject(project.id)}
+                      variant="destructive"
+                      onSelect={() => onDeleteProject(project.id)}
                     >
-                      <Trash2 className="mr-2 size-4" />
+                      <Trash2 />
                       {t.common.delete}
                     </DropdownMenuItem>
                   </DropdownMenuContent>

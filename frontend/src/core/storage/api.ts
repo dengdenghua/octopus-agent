@@ -107,6 +107,13 @@ export class NASRequestError extends Error {
   }
 }
 
+export class NASRequestTimeoutError extends Error {
+  constructor(public readonly path: string) {
+    super(`NAS ${path} timed out`);
+    this.name = "NASRequestTimeoutError";
+  }
+}
+
 export function isNASAuthenticationError(error: unknown): boolean {
   return error instanceof NASRequestError && error.status === 401;
 }
@@ -116,20 +123,35 @@ export function getNASBaseURL(): string {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${getNASBaseURL()}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders(),
-      ...(init?.headers ?? {}),
-    },
-  });
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new NASRequestError(path, response.status, text);
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 8_000);
+  const abortFromCaller = () => controller.abort();
+  init?.signal?.addEventListener("abort", abortFromCaller, { once: true });
+  try {
+    const response = await fetch(`${getNASBaseURL()}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders(),
+        ...(init?.headers ?? {}),
+      },
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new NASRequestError(path, response.status, text);
+    }
+    if (response.status === 204) return undefined as T;
+    return (await response.json()) as T;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new NASRequestTimeoutError(path);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+    init?.signal?.removeEventListener("abort", abortFromCaller);
   }
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
 }
 
 /**
@@ -238,6 +260,10 @@ export function createNASIndexJob(
     method: "POST",
     body: JSON.stringify({ source_ids: sourceIds, full_rescan: false }),
   });
+}
+
+export function getNASIndexJob(jobId: string): Promise<NASIndexJob> {
+  return request(`/v1/index/jobs/${encodeURIComponent(jobId)}`);
 }
 
 export function searchNAS(query: string): Promise<NASSearchResponse> {

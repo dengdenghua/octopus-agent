@@ -64,7 +64,6 @@ export default function SandboxSettingsPage() {
     sandbox_mode?: string;
     approval_policy?: string;
     network_access?: unknown;
-    reply_style?: string;
     guardian_review_enabled?: boolean;
     guardian_review_model?: string;
   };

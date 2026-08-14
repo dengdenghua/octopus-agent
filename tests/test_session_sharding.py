@@ -15,6 +15,50 @@ def _records(path: Path) -> list[dict]:
     ]
 
 
+def _write_thread_copy(
+    root: Path,
+    *,
+    thread_id: str,
+    agent: str,
+    created_at: str,
+    updated_at: str,
+    messages: list[dict],
+) -> Path:
+    path = root / "agents" / agent / "sessions" / f"{thread_id}.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    thread = {
+        "thread_id": thread_id,
+        "status": "idle",
+        "created_at": created_at,
+        "updated_at": updated_at,
+        "metadata": {"agent": agent},
+        "values": {"title": "hello", "messages": messages, "artifacts": []},
+    }
+    state = {
+        "values": thread["values"],
+        "next": [],
+        "metadata": thread["metadata"],
+        "checkpoint": {"id": agent, "checkpoint_id": agent, "ts": updated_at},
+        "checkpoint_id": agent,
+        "tasks": [],
+    }
+    path.write_text(
+        json.dumps({"type": "session_meta", "payload": {"id": thread_id, "agent": agent}})
+        + "\n"
+        + json.dumps(
+            {
+                "op": "upsert",
+                "thread_id": thread_id,
+                "thread": thread,
+                "state": state,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 # ─── session_meta header ────────────────────────────────────
 
 
@@ -48,6 +92,66 @@ def test_session_meta_ignored_on_reload(tmp_path: Path) -> None:
     thread = reloaded.get("thread-b")
     assert thread is not None
     assert thread["values"]["title"] == "Hello"
+
+
+def test_existing_thread_cannot_move_to_another_agent_shard(tmp_path: Path) -> None:
+    store = ThreadStateStore(per_agent_base=tmp_path)
+    store.ensure_thread("owned-thread", metadata={"agent": "local_opencode_cli"})
+
+    store.update_state(
+        "owned-thread",
+        values={"title": "Still OpenCode"},
+        metadata={"agent": "general", "agent_name": "general"},
+    )
+
+    thread = store.get("owned-thread")
+    assert thread is not None
+    assert thread["metadata"]["agent"] == "local_opencode_cli"
+    assert (
+        tmp_path
+        / "agents"
+        / "local_opencode_cli"
+        / "sessions"
+        / "owned-thread.jsonl"
+    ).exists()
+    assert not (
+        tmp_path / "agents" / "general" / "sessions" / "owned-thread.jsonl"
+    ).exists()
+
+
+def test_reload_repairs_conflicting_role_copies_to_original_owner(tmp_path: Path) -> None:
+    first_messages = [{"type": "human", "content": "hello"}]
+    latest_messages = [
+        *first_messages,
+        {"type": "ai", "content": "from opencode"},
+        {"type": "human", "content": "which model"},
+        {"type": "ai", "content": "wrong role response"},
+    ]
+    owner_path = _write_thread_copy(
+        tmp_path,
+        thread_id="mixed-thread",
+        agent="local_opencode_cli",
+        created_at="2026-08-13T15:05:58.000000Z",
+        updated_at="2026-08-13T15:05:59.000000Z",
+        messages=first_messages,
+    )
+    stale_path = _write_thread_copy(
+        tmp_path,
+        thread_id="mixed-thread",
+        agent="general",
+        created_at="2026-08-13T15:05:58.100000Z",
+        updated_at="2026-08-13T15:06:36.000000Z",
+        messages=latest_messages,
+    )
+
+    store = ThreadStateStore(per_agent_base=tmp_path)
+
+    repaired = store.get("mixed-thread")
+    assert repaired is not None
+    assert repaired["metadata"]["agent"] == "local_opencode_cli"
+    assert repaired["values"]["messages"] == latest_messages
+    assert owner_path.exists()
+    assert not stale_path.exists()
 
 
 def test_custom_session_origin_is_respected(tmp_path: Path) -> None:

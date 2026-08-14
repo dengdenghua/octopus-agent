@@ -38,6 +38,7 @@ export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
     auto_new_session_hours: 0,
   },
   personal_space: {
+    default_folder: "",
     default_mode: "general",
     remember_last_mode: true,
     custom_instructions: "",
@@ -92,6 +93,8 @@ export interface LocalSettings {
     auto_new_session_hours: number;
   };
   personal_space: {
+    /** Default folder used by new personal-space tasks. */
+    default_folder: string;
     /** Default operating contract for unbound personal-space tasks. */
     default_mode: "general" | "build" | "research";
     /** When enabled, a composer mode pick becomes the next task's default. */
@@ -141,6 +144,10 @@ function mergeLocalSettings(settings?: Partial<LocalSettings>): LocalSettings {
     personal_space: {
       ...DEFAULT_LOCAL_SETTINGS.personal_space,
       ...settings?.personal_space,
+      default_folder:
+        typeof settings?.personal_space?.default_folder === "string"
+          ? settings.personal_space.default_folder.trim()
+          : "",
       default_mode: personalMode,
       remember_last_mode:
         typeof settings?.personal_space?.remember_last_mode === "boolean"

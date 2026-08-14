@@ -209,6 +209,168 @@ describe("MessageGroup todo_write rendering", () => {
 });
 
 describe("MessageGroup reasoning grouping", () => {
+  it("coalesces native and raw reasoning into one disclosure", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "native-thinking",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          reasoning_content: "深度思考摘要",
+          reasoning_duration_ms: 22_800,
+          phase_id: "research-phase",
+        },
+      },
+      {
+        id: "read-readme",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "read-readme-call",
+            name: "read_file",
+            args: { path: "README.md" },
+          },
+        ],
+      },
+      {
+        id: "raw-thinking",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          reasoning_content: "我需要继续深入，当前阶段信息还不足够。",
+          phase_id: "research-phase",
+        },
+      },
+    ];
+
+    renderWithProviders(<MessageGroup messages={messages} />, {
+      locale: "zh-CN",
+    });
+
+    expect(
+      screen.getAllByTestId("process-timeline-event-thinking"),
+    ).toHaveLength(1);
+    expect(
+      screen.getByTestId("process-timeline-event-thinking"),
+    ).toHaveTextContent("深度思考");
+    expect(screen.getByText("README.md")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("thinking-row-toggle"));
+    expect(screen.getByTestId("thinking-row-content")).toHaveTextContent(
+      "深度思考摘要",
+    );
+    expect(screen.getByTestId("thinking-row-content")).toHaveTextContent(
+      "我需要继续深入，当前阶段信息还不足够。",
+    );
+  });
+
+  it("keeps reasoning from different structured phases separate", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "phase-a-thinking",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          reasoning_content: "第一阶段思考",
+          reasoning_duration_ms: 12_000,
+          phase_id: "phase-a",
+        },
+      },
+      {
+        id: "phase-b-thinking",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          reasoning_content: "第二阶段思考",
+          reasoning_duration_ms: 13_000,
+          phase_id: "phase-b",
+        },
+      },
+      {
+        id: "phase-tool",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "phase-tool-call",
+            name: "web_search",
+            args: { query: "phase boundary" },
+          },
+        ],
+      },
+    ];
+
+    renderWithProviders(<MessageGroup messages={messages} />, {
+      locale: "zh-CN",
+    });
+
+    expect(
+      screen.getAllByTestId("process-timeline-event-thinking"),
+    ).toHaveLength(2);
+  });
+
+  it("keeps an expanded disclosure open when streamed reasoning joins the same phase", () => {
+    const first: AIMessage = {
+      id: "stable-thinking-first",
+      type: "ai",
+      content: "",
+      additional_kwargs: {
+        reasoning_content: "先核对第一批证据。",
+        reasoning_duration_ms: 11_000,
+        phase_id: "stable-phase",
+      },
+    };
+    const nextMessages: AIMessage[] = [
+      first,
+      {
+        id: "stable-search",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "stable-search-call",
+            name: "web_search",
+            args: { query: "additional evidence" },
+          },
+        ],
+      },
+      {
+        id: "stable-thinking-second",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          reasoning_content: "再核对第二批证据。",
+          reasoning_duration_ms: 9_000,
+          phase_id: "stable-phase",
+        },
+      },
+    ];
+
+    const { rerender } = renderWithProviders(
+      <MessageGroup messages={[first]} />,
+      { locale: "zh-CN" },
+    );
+    fireEvent.click(screen.getByTestId("thinking-row-toggle"));
+    expect(screen.getByTestId("thinking-row-content")).toHaveAttribute(
+      "data-state",
+      "open",
+    );
+
+    rerender(<MessageGroup messages={nextMessages} />);
+
+    expect(
+      screen.getAllByTestId("process-timeline-event-thinking"),
+    ).toHaveLength(1);
+    expect(screen.getByTestId("thinking-row-content")).toHaveAttribute(
+      "data-state",
+      "open",
+    );
+    expect(screen.getByTestId("thinking-row-content")).toHaveTextContent(
+      "再核对第二批证据。",
+    );
+  });
+
   it("does not echo a public checkpoint as thinking when it carries completed tools", () => {
     const paths = ["a.py", "b.ts", "c.ts", "d.ts"];
     const messages: AIMessage[] = [
@@ -668,6 +830,8 @@ describe("MessageGroup reasoning grouping", () => {
 
     const detail = screen.getByTestId("thinking-row-content");
     expect(detail).toHaveAttribute("data-state", "open");
+    expect(row).toHaveTextContent("思考过程");
+    expect(row).not.toHaveTextContent("接下来：pop stash");
     expect(detail.firstElementChild).toHaveClass("whitespace-pre-wrap");
     expect(detail).toHaveTextContent("基线测试同样失败");
     expect(detail).toHaveTextContent("工作区改动已经恢复");

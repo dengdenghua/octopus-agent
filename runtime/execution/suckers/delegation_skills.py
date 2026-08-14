@@ -53,6 +53,7 @@ from ._delegation_skills_common import (
     _vote_note,
     _wrap_prompt_with_role_label,
     orchestration_progress_scope,
+    workflow_settlement_scope,
 )
 from ._delegation_skills_judge import (
     _run_cli_team,
@@ -728,6 +729,7 @@ __all__ = [
     "_vote_note",
     "_wrap_prompt_with_role_label",
     "orchestration_progress_scope",
+    "workflow_settlement_scope",
     # single-agent delegation
     "_call_agent",
     # parallel fan-out

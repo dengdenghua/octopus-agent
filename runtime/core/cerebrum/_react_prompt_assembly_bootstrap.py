@@ -74,6 +74,13 @@ def _resolve_turn_bootstrap(
     from runtime.platform.models.llm import normalize_reasoning_effort
 
     _reasoning_effort = normalize_reasoning_effort(reasoning_effort)
+    if _reasoning_effort is None and str(reasoning_effort or "").strip().lower() in (
+        "off",
+        "disabled",
+    ):
+        # DeepSeek native ``off`` is not an OpenAI-style effort tier; keep
+        # it so the deepseek profile can emit ``thinking:{type:disabled}``.
+        _reasoning_effort = "off"
 
     # Planning mode used to disable tool execution outright (the
     # model produced a plan, the user approved, then a follow-up turn

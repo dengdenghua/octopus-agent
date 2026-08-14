@@ -9,6 +9,7 @@ vi.mock("@/core/auth/api", () => ({
 
 import {
   dedupePersonaAgentsByDisplayName,
+  localCliPartnerVisualStatus,
   useLocalCliAgents,
   useLocalCliPartnerAgents,
 } from "./local-cli";
@@ -146,9 +147,9 @@ describe("useLocalCliAgents", () => {
     });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.partners.map((row) => row.agent.display_name)).toEqual(
-      ["Trae CLI", "Kimi CLI"],
-    );
+    expect(
+      result.current.partners.map((row) => row.agent.display_name),
+    ).toEqual(["Trae CLI", "Kimi CLI"]);
     expect(result.current.partners[0]).toMatchObject({
       detected: true,
       ready: true,
@@ -162,8 +163,50 @@ describe("useLocalCliAgents", () => {
       fixHint: "安装对应官方 CLI，并确认命令在 PATH 中。",
     });
     expect(result.current.partners[1]?.agent.avatar_url).toBe(
-      "/api/agents/local_kimi_cli/avatar",
+      "/api/agents/local-partners/kimi-cli/brand-avatar",
     );
+  });
+});
+
+describe("localCliPartnerVisualStatus", () => {
+  const labels = {
+    connected: "已接入",
+    detected: "已检测",
+    notDetected: "未检测",
+  };
+
+  it("does not call a registered but unready partner connected", () => {
+    expect(
+      localCliPartnerVisualStatus(
+        {
+          detected: true,
+          ready: false,
+          registered: true,
+          status: "model_unconfigured",
+        },
+        labels,
+      ),
+    ).toEqual({ label: "模型未配置", tone: "warning" });
+  });
+
+  it("distinguishes connectable from registered", () => {
+    expect(
+      localCliPartnerVisualStatus(
+        { detected: true, ready: true, registered: false, status: "ready" },
+        labels,
+      ).label,
+    ).toBe("可接入");
+    expect(
+      localCliPartnerVisualStatus(
+        {
+          detected: true,
+          ready: true,
+          registered: true,
+          status: "registered",
+        },
+        labels,
+      ).label,
+    ).toBe("已注册");
   });
 });
 

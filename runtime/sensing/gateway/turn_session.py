@@ -7,6 +7,30 @@ from pathlib import Path
 from typing import Any
 
 
+def thread_owner_agent_id(*, thread_id: str, store: Any) -> str:
+    """Return the immutable persona bound to an existing solo thread.
+
+    A role selection is allowed to choose the owner when the thread is first
+    created.  Later turns may arrive with stale browser state, but they must
+    not move the same conversation into another role's history or execute it
+    as another persona.
+    """
+    if store is None:
+        return ""
+    try:
+        existing = store.get(thread_id)
+    except (KeyError, AttributeError):
+        return ""
+    metadata = (existing or {}).get("metadata", {}) if existing else {}
+    if not isinstance(metadata, dict):
+        return ""
+    for key in ("owner_agent_id", "agent", "agent_name", "agent_id", "assistant_id"):
+        value = metadata.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
 def build_turn_metadata(
     *,
     thread_id: str,
@@ -50,10 +74,25 @@ def build_turn_metadata(
         "discuss",
     }
 
-    for key in ("team_id", "team_name", "project", "agent", "agent_name"):
+    for key in ("team_id", "team_name", "project"):
         value = config_meta.get(key) or ctx.get(key) or stored_meta.get(key)
         if isinstance(value, str) and value.strip():
             metadata[key] = value.strip()
+
+    # A thread's persona is chosen once, at creation.  In particular, do not
+    # let a stale ``context.agent_name`` disagree with persisted
+    # ``metadata.agent``: the snapshot writer normalises both names to
+    # ``agent``, so accepting both used to move one conversation between role
+    # shards on alternating turns.
+    stored_agent = thread_owner_agent_id(thread_id=thread_id, store=store)
+    if stored_agent:
+        metadata["agent"] = stored_agent
+        metadata["agent_name"] = stored_agent
+    else:
+        for key in ("agent", "agent_name"):
+            value = config_meta.get(key) or ctx.get(key)
+            if isinstance(value, str) and value.strip():
+                metadata[key] = value.strip()
 
     extra_ws: list[str] = []
     ew = stored_meta.get("extra_workspaces")
@@ -234,4 +273,4 @@ def build_turn_session(
     )
 
 
-__all__ = ["build_turn_metadata", "build_turn_session"]
+__all__ = ["build_turn_metadata", "build_turn_session", "thread_owner_agent_id"]

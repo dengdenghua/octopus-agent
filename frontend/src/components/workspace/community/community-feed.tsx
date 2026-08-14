@@ -25,6 +25,7 @@ import {
 import { CommunityPostDetail } from "./community-post-detail";
 import { CommunityForkButton } from "./community-fork-button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 
 const FAVORITES_KEY = "octopus.community.favorites.v1";
 const LIKES_KEY = "octopus.community.likes.v1";
@@ -108,9 +109,13 @@ export function CommunityFeed({
   following,
   onToggleFollow,
   onOpenProfile,
+  error,
+  onRetry,
 }: {
   posts: CommunityPost[];
   loading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
   /** 是否还有更多可加载（无限滚动哨兵）。 */
   hasMore?: boolean;
   onLoadMore?: () => void;
@@ -238,6 +243,19 @@ export function CommunityFeed({
             </div>
           </div>
         ))}
+      </div>
+    );
+  }
+
+  if (error && posts.length === 0) {
+    return (
+      <div role="alert" className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-destructive/30 bg-destructive/5 px-6 text-center">
+        <MessageCircleIcon className="size-6 text-destructive/70" />
+        <div>
+          <p className="text-sm font-medium">社区内容加载失败</p>
+          <p className="mt-1 text-xs text-muted-foreground">{error}</p>
+        </div>
+        {onRetry && <Button size="sm" variant="outline" onClick={onRetry}>重试</Button>}
       </div>
     );
   }
@@ -516,6 +534,11 @@ export function CommunityPostCard({
             className="size-full cursor-zoom-in object-cover transition-transform duration-slow group-hover:scale-[1.03]"
           />
         )}
+        {imageBroken && (
+          <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-xs text-white/80">
+            封面暂时无法加载
+          </div>
+        )}
 
         {/* 分类标签（左上角） */}
         <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/40 px-2 py-0.5 text-mini font-semibold text-white backdrop-blur-sm">
@@ -570,6 +593,7 @@ export function CommunityPostCard({
           <button
             type="button"
             onClick={handleAuthor}
+            aria-label={`查看作者 ${post.author}`}
             className="flex min-w-0 shrink-0 items-center gap-1.5"
           >
             <span
@@ -590,6 +614,7 @@ export function CommunityPostCard({
             <button
               type="button"
               onClick={handleFollow}
+              aria-label={`${isFollowing ? "取消关注" : "关注"} ${post.author}`}
               className={cn(
                 "shrink-0 rounded text-mini font-semibold transition-colors",
                 isFollowing
@@ -614,6 +639,7 @@ export function CommunityPostCard({
                 onOpenComments(post);
               }}
               aria-label="查看评论"
+              title={`查看 ${post.title} 的 ${formatCount(commentCount ?? post.commentsCount)} 条评论`}
               className="flex shrink-0 items-center gap-0.5 rounded p-0.5 text-xs tabular-nums text-muted-foreground transition-colors hover:text-foreground"
             >
               <MessageCircleIcon className="size-3 text-muted-foreground/60" />
@@ -626,6 +652,7 @@ export function CommunityPostCard({
               type="button"
               onClick={handleLike}
               aria-label={isLiked ? "取消点赞" : "点赞"}
+              title={isLiked ? "取消点赞" : "点赞"}
               className={cn(
                 "shrink-0 rounded p-0.5 transition-colors",
                 isLiked
@@ -648,6 +675,7 @@ export function CommunityPostCard({
               type="button"
               onClick={handleFavorite}
               aria-label={isFavorite ? "取消收藏" : "收藏"}
+              title={isFavorite ? "取消收藏" : "收藏"}
               className={cn(
                 "shrink-0 rounded p-0.5 transition-colors",
                 isFavorite

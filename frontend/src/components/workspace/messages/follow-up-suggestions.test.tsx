@@ -18,6 +18,7 @@ const SAMPLE_BUCKET = {
       title: "Fix CI",
       description: "Last 3 runs failed",
       prompt: "investigate CI failures",
+      locale: "en-US",
       status: "pending",
       source_turn_ids: ["t1"],
       created_at: "",
@@ -73,6 +74,34 @@ describe("FollowUpSuggestions", () => {
           (c[0] as string).endsWith("/api/ambient-suggestions/run"),
       );
       expect(runCall).toBeDefined();
+    });
+  });
+
+  it("uses the global locale for generated bubble content", async () => {
+    mockOnce({ added: 0, generated: 0, error: null });
+    mockOnce({
+      project_root: "/p",
+      generated_at: "",
+      enabled: true,
+      suggestions: [],
+    });
+    renderWithProviders(
+      <FollowUpSuggestions
+        project="/p"
+        agentId="coder"
+        isLoading={false}
+        onSelect={vi.fn()}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    await waitFor(() => {
+      const runCall = fetchMock.mock.calls.find(
+        (call) => (call[1] as RequestInit | undefined)?.method === "POST",
+      );
+      expect(runCall).toBeDefined();
+      const body = JSON.parse(String((runCall?.[1] as RequestInit)?.body));
+      expect(body.locale).toBe("zh-CN");
     });
   });
 

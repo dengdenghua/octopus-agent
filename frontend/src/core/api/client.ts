@@ -185,5 +185,37 @@ export class OctopusClient {
       params?: { limit?: number },
     ): Promise<ThreadState[]> =>
       this.post<ThreadState[]>(`/threads/${threadId}/history`, params),
+
+    renameTitle: (
+      threadId: string,
+      title: string,
+    ): Promise<SessionTitleSnapshot> =>
+      this.post<SessionTitleSnapshot>(`/threads/${threadId}/title/rename`, {
+        title,
+      }),
+
+    refreshTitle: (
+      threadId: string,
+      body?: { provider?: string; force?: boolean },
+    ): Promise<SessionTitleSnapshot> =>
+      this.post<SessionTitleSnapshot>(`/threads/${threadId}/title/refresh`, body ?? {}),
+
+    forkThread: (
+      threadId: string,
+      atMessageIndex?: number,
+    ): Promise<{ thread_id: string; seeded_messages: number }> =>
+      this.post<{ thread_id: string; seeded_messages: number }>(
+        `/threads/${threadId}/fork`,
+        atMessageIndex != null ? { at_message_index: atMessageIndex } : {},
+      ),
   };
+}
+
+export interface SessionTitleSnapshot {
+  title: string;
+  source: "fallback" | "provider" | "user";
+  pinned: boolean;
+  provider?: string | null;
+  model?: string | null;
+  updated_at?: string;
 }

@@ -392,8 +392,11 @@ export function RecentChatList() {
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => setThreadToDelete(thread)}>
-                <Trash2 className="text-muted-foreground" />
+              <DropdownMenuItem
+                variant="destructive"
+                onSelect={() => setThreadToDelete(thread)}
+              >
+                <Trash2 />
                 <span>{t.common.delete}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -458,10 +461,10 @@ export function RecentChatList() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" side="right">
                       <DropdownMenuItem
-                        className="text-destructive"
-                        onClick={() => setProjectToDelete(group.project!)}
+                        variant="destructive"
+                        onSelect={() => setProjectToDelete(group.project!)}
                       >
-                        <Trash2 className="mr-2 size-4" />
+                        <Trash2 />
                         {t.common.delete}
                       </DropdownMenuItem>
                     </DropdownMenuContent>

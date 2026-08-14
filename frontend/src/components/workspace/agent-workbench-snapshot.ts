@@ -26,6 +26,7 @@ import {
   inferWorkbenchCwd,
   workspaceFocusTabFromEvents,
 } from "./agent-workbench-utils";
+import { IncrementalSnapshotCalculator } from "./incremental-snapshot-calculator";
 
 export type AgentWorkbenchSnapshotOptions = {
   deriveAgentTiles: (events: LiveToolEvent[]) => AgentTile[];
@@ -66,6 +67,12 @@ export function useAgentWorkbenchSnapshot(
   options: AgentWorkbenchSnapshotOptions,
 ): AgentWorkbenchSnapshot {
   const previousRef = useRef<AgentWorkbenchSnapshot | null>(null);
+  const calculatorRef = useRef<IncrementalSnapshotCalculator | null>(null);
+
+  // 特性开关：启用增量计算
+  const useIncremental = typeof window !== "undefined" &&
+    localStorage.getItem("octopus:incremental-snapshot") === "1";
+
   const {
     deriveAgentTiles,
     hasAnswer,
@@ -75,16 +82,37 @@ export function useAgentWorkbenchSnapshot(
     runSettled,
     workDir,
   } = options;
+
   return useMemo(() => {
-    const candidate = buildAgentWorkbenchSnapshot(events, {
-      deriveAgentTiles,
-      hasAnswer,
-      isLoading,
-      paused,
-      runFailed,
-      runSettled,
-      workDir,
-    });
+    let candidate: AgentWorkbenchSnapshot;
+
+    if (useIncremental) {
+      // 增量计算路径
+      if (!calculatorRef.current) {
+        calculatorRef.current = new IncrementalSnapshotCalculator();
+      }
+      candidate = calculatorRef.current.compute(events, {
+        deriveAgentTiles,
+        hasAnswer,
+        isLoading,
+        paused,
+        runFailed,
+        runSettled,
+        workDir,
+      });
+    } else {
+      // 全量计算路径（原始逻辑）
+      candidate = buildAgentWorkbenchSnapshot(events, {
+        deriveAgentTiles,
+        hasAnswer,
+        isLoading,
+        paused,
+        runFailed,
+        runSettled,
+        workDir,
+      });
+    }
+
     const previous = previousRef.current;
     if (previous && previous.fingerprint === candidate.fingerprint) {
       return previous;
@@ -104,6 +132,7 @@ export function useAgentWorkbenchSnapshot(
     runFailed,
     runSettled,
     workDir,
+    useIncremental,
   ]);
 }
 

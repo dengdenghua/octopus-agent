@@ -421,6 +421,58 @@ export function AgentsTab({
     );
   }
 
+  if (loadError && agents.length === 0) {
+    return (
+      <section
+        role="alert"
+        className="flex min-h-[300px] flex-col items-center justify-center rounded-xl border border-border-subtle bg-gradient-to-b from-muted/20 to-background px-5 py-8 text-center sm:min-h-[360px] sm:px-6 sm:py-10"
+      >
+        <span className="flex size-10 items-center justify-center rounded-xl border border-destructive/20 bg-destructive/5 text-destructive sm:size-12">
+          <AlertCircleIcon className="size-5" aria-hidden="true" />
+        </span>
+        <h2 className="mt-3 max-w-sm text-base font-semibold text-foreground sm:mt-4">
+          {t.agentWorldUnified.loadAgentsFailed}
+        </h2>
+        <div className="mt-4 grid w-full max-w-sm grid-cols-2 gap-2 sm:mt-5 sm:flex sm:w-auto sm:max-w-none sm:flex-wrap sm:items-center sm:justify-center">
+          <Button
+            type="button"
+            className="min-w-0 px-2 text-xs sm:px-4 sm:text-sm"
+            onClick={onRetry}
+          >
+            {t.agentWorldUnified.retryAgents}
+          </Button>
+          <Button
+            type="button"
+            className="min-w-0 px-2 text-xs sm:px-4 sm:text-sm"
+            variant="outline"
+            onClick={onCreateAgent}
+          >
+            <PlusIcon className="mr-1.5 hidden size-4 sm:block" />
+            {t.agentWorld.newAgent}
+          </Button>
+          <Button
+            type="button"
+            className="min-w-0 px-2 text-xs sm:px-4 sm:text-sm"
+            variant="outline"
+            onClick={onImportAgent}
+          >
+            <ImportIcon className="mr-1.5 hidden size-4 sm:block" />
+            {t.agentWorld.importAgentPack}
+          </Button>
+          <Button
+            type="button"
+            className="min-w-0 px-2 text-xs sm:px-4 sm:text-sm"
+            variant="outline"
+            onClick={onConnectLocalPartner}
+          >
+            <BotIcon className="mr-1.5 hidden size-4 sm:block" />
+            {t.agentWorldUnified.connectLocalPartner}
+          </Button>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <div className="space-y-3">
       {loadError && (
@@ -1082,17 +1134,27 @@ export function AgentWorldUnified() {
   const fetchAgents = useCallback(async () => {
     setLoading(true);
     setAgentsLoadError(false);
+    let timeoutId: number | undefined;
     try {
-      const res = await listStoreAgents({
-        sort_by: "downloads",
-        page_size: 300,
-      });
+      const res = await Promise.race([
+        listStoreAgents({
+          sort_by: "downloads",
+          page_size: 300,
+        }),
+        new Promise<never>((_, reject) => {
+          timeoutId = window.setTimeout(
+            () => reject(new Error("Agent library request timed out")),
+            6_000,
+          );
+        }),
+      ]);
       setAgents(res.agents);
     } catch (e) {
       swallow(e);
       setAgents([]);
       setAgentsLoadError(true);
     } finally {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
       setLoading(false);
     }
   }, []);
@@ -1240,34 +1302,45 @@ export function AgentWorldUnified() {
       {!hudOnly && (
         <div className="relative flex-1 overflow-y-auto rounded-lg border border-border-default bg-card/70 px-3 py-3 shadow-[var(--shadow-xs)] md:px-4 md:py-4">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList variant="line" className="mb-3">
-              {SHOW_LOCAL_AGENT_LIBRARY && (
+            <div className="relative mb-3 max-w-full after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:w-7 after:bg-gradient-to-l after:from-card after:to-transparent md:after:hidden">
+              <TabsList
+                variant="line"
+                className="mb-0 w-full justify-start overflow-x-auto pr-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:pr-0"
+              >
+                {SHOW_LOCAL_AGENT_LIBRARY && (
+                  <TabsTrigger
+                    value="agents"
+                    className="h-8 gap-1.5 px-3 text-xs"
+                  >
+                    <BotIcon className="h-3.5 w-3.5" />
+                    {t.agentWorldUnified.roleLibrary}
+                  </TabsTrigger>
+                )}
                 <TabsTrigger
-                  value="agents"
+                  value="plugins"
                   className="h-8 gap-1.5 px-3 text-xs"
                 >
-                  <BotIcon className="h-3.5 w-3.5" />
-                  {t.agentWorldUnified.roleLibrary}
+                  <PuzzleIcon className="h-3.5 w-3.5" />
+                  {t.plugins.pageTitle}
                 </TabsTrigger>
-              )}
-              <TabsTrigger value="plugins" className="h-8 gap-1.5 px-3 text-xs">
-                <PuzzleIcon className="h-3.5 w-3.5" />
-                {t.plugins.pageTitle}
-              </TabsTrigger>
-              <TabsTrigger value="skills" className="h-8 gap-1.5 px-3 text-xs">
-                <BoxesIcon className="h-3.5 w-3.5" />
-                {t.plugins.tabSkillMarket}
-              </TabsTrigger>
-              {SHOW_ENTERPRISE_ASSETS && (
                 <TabsTrigger
-                  value="enterprise"
+                  value="skills"
                   className="h-8 gap-1.5 px-3 text-xs"
                 >
-                  <Building2Icon className="h-3.5 w-3.5" />
-                  {t.agentWorldUnified.enterprise}
+                  <BoxesIcon className="h-3.5 w-3.5" />
+                  {t.plugins.tabSkillMarket}
                 </TabsTrigger>
-              )}
-            </TabsList>
+                {SHOW_ENTERPRISE_ASSETS && (
+                  <TabsTrigger
+                    value="enterprise"
+                    className="h-8 gap-1.5 px-3 text-xs"
+                  >
+                    <Building2Icon className="h-3.5 w-3.5" />
+                    {t.agentWorldUnified.enterprise}
+                  </TabsTrigger>
+                )}
+              </TabsList>
+            </div>
 
             <TabsContent value="agents" className="mt-0">
               <Tabs defaultValue="local">

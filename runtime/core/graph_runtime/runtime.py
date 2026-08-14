@@ -771,7 +771,9 @@ class GraphRuntime:
                     "请规划替代方案完成剩余任务。"
                 ),
             )
-            new_graph = planner.plan(replan_intent)
+            # Extract user-selected model from base_args if available
+            user_model = base_args.get("user_model") if base_args else None
+            new_graph = planner.plan(replan_intent, model=user_model)
             if new_graph and hasattr(new_graph, "nodes") and new_graph.nodes:
                 replan_traj = self.run(
                     new_graph,

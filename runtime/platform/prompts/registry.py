@@ -41,7 +41,9 @@ This module is additive: a new ``PromptRegistry`` aimed at the
 from __future__ import annotations
 
 import logging
+import re
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -63,6 +65,27 @@ class _Entry:
     content: str
     mtime_ns: int
     path: Path
+
+
+@dataclass(frozen=True)
+class _Section:
+    """One contributed section of the system prompt (dsh PromptSection)."""
+
+    name: str
+    order: int
+    text: str | None = None
+    provider: Callable[[str | None], str] | None = None
+    complete: bool = False
+
+
+@dataclass(frozen=True)
+class _PromptContext:
+    """One dynamic runtime-context contribution (dsh PromptContext)."""
+
+    name: str
+    order: int
+    text: str | None = None
+    provider: Callable[[str | None], str] | None = None
 
 
 class PromptRegistry:
@@ -108,6 +131,17 @@ class PromptRegistry:
         #   (name, "variant")   → variant file entry
         self._cache: dict[tuple[str, str | None], _Entry] = {}
         self._scanned = False
+        # dsh-style assembly layer (additive; file-template API above
+        # stays untouched). Sections/contexts/variables register into a
+        # global layer or a named scope layer; the scoped layer shadows
+        # the global layer for assembles through that scope.
+        self._sections: dict[str, _Section] = {}
+        self._scoped_sections: dict[str, dict[str, _Section]] = {}
+        self._contexts: dict[str, _PromptContext] = {}
+        self._scoped_contexts: dict[str, dict[str, _PromptContext]] = {}
+        self._variables: dict[str, Callable[[str | None], str | None]] = {}
+        self._scoped_variables: dict[str, dict[str, Callable[[str | None], str | None]]] = {}
+        self._suppressed_context_scopes: set[str] = set()
 
     # ───────────────────────────────────────────────────────
     # Internal helpers
@@ -333,5 +367,235 @@ class PromptRegistry:
             # without forcing a full rescan.
             self._scanned = True
 
+    # ───────────────────────────────────────────────────────
+    # dsh-style assembly layer (order / complete / suppress /
+    # variables / scope shadow)
+    # ───────────────────────────────────────────────────────
+
+    def register_section(
+        self,
+        name: str,
+        *,
+        order: int = 0,
+        text: str | None = None,
+        provider: Callable[[str | None], str] | None = None,
+        complete: bool = False,
+        scope: str | None = None,
+    ) -> Callable[[], None]:
+        """Register an ordered prompt section (dsh ``PromptSection``).
+
+        Sections are concatenated in ascending ``order`` (convention:
+        -100 harness identity, 0 persona, 100-199 tool guidance).
+        ``text`` may contain ``{{variable}}`` references resolved at
+        assembly time; ``provider`` is evaluated per assembly with the
+        scope key. A ``complete`` section becomes the sole section —
+        more than one effective complete section fails the assembly.
+        Scoped registrations shadow global same-name sections.
+        Returns a disposer that removes the registration.
+        """
+        if text is None and provider is None:
+            raise ValueError(f"section {name!r} needs text or provider")
+        section = _Section(
+            name=name,
+            order=order,
+            text=text,
+            provider=provider,
+            complete=complete,
+        )
+        with self._lock:
+            layer = self._scoped_sections.setdefault(scope, {}) if scope else self._sections
+            if name in layer:
+                raise ValueError(f"section {name!r} is already registered")
+            layer[name] = section
+        return self._disposer(layer, name)
+
+    def register_context(
+        self,
+        name: str,
+        *,
+        order: int = 0,
+        text: str | None = None,
+        provider: Callable[[str | None], str] | None = None,
+        scope: str | None = None,
+    ) -> Callable[[], None]:
+        """Register dynamic runtime context (dsh ``PromptContext``).
+
+        Like sections, but suppressible via ``suppress_runtime_context``
+        and never allowed to be ``complete``.
+        """
+        if text is None and provider is None:
+            raise ValueError(f"context {name!r} needs text or provider")
+        ctx = _PromptContext(name=name, order=order, text=text, provider=provider)
+        with self._lock:
+            layer = self._scoped_contexts.setdefault(scope, {}) if scope else self._contexts
+            if name in layer:
+                raise ValueError(f"context {name!r} is already registered")
+            layer[name] = ctx
+        return self._disposer(layer, name)
+
+    def register_variable(
+        self,
+        name: str,
+        provider: Callable[[str | None], str | None],
+        *,
+        scope: str | None = None,
+    ) -> Callable[[], None]:
+        """Register a prompt variable (dsh ``variable``).
+
+        The provider is evaluated per assembly; returning ``None``
+        makes rendering any section that references the name fail.
+        Scoped values shadow globals.
+        """
+        with self._lock:
+            layer = self._scoped_variables.setdefault(scope, {}) if scope else self._variables
+            if name in layer:
+                raise ValueError(f"variable {name!r} is already registered")
+            layer[name] = provider
+        return self._disposer(layer, name)
+
+    def suppress_runtime_context(
+        self,
+        *,
+        scope: str | None = None,
+    ) -> Callable[[], None]:
+        """Suppress every dynamic runtime-context contribution in a
+        scope (dsh ``suppressRuntimeContext``). A global suppression
+        (no scope) applies to every scope; a scoped suppression only
+        shadows for that scope. Sections are never suppressed.
+        Returns a disposer that lifts the suppression."""
+        key = scope if scope is not None else ""
+        with self._lock:
+            self._suppressed_context_scopes.add(key)
+
+        def unsuppress() -> None:
+            with self._lock:
+                self._suppressed_context_scopes.discard(key)
+
+        return unsuppress
+
+    def assemble(
+        self,
+        *,
+        scope: str | None = None,
+        include_runtime_contexts: bool = True,
+    ) -> str:
+        """Assemble the effective system prompt for a scope
+        (dsh ``SystemPrompt.assemble``).
+
+        Scoped sections/contexts/variables shadow global ones. With no
+        effective ``complete`` section, contributions join in ascending
+        order; otherwise the complete section is restored as the sole
+        prompt. ``{{variable}}`` references are interpolated after
+        ordering; an unresolvable reference fails the assembly.
+        """
+        with self._lock:
+            sections = self._merged(self._sections, self._scoped_sections, scope)
+            complete = [s for s in sections.values() if s.complete]
+            if len(complete) > 1:
+                names = ", ".join(sorted(s.name for s in complete))
+                raise ValueError(f"more than one complete section: {names}")
+            if complete:
+                body = self._render_section(complete[0], scope)
+            else:
+                parts = [
+                    self._render_section(s, scope)
+                    for s in sorted(sections.values(), key=lambda s: (s.order, s.name))
+                ]
+                if include_runtime_contexts and not self._contexts_suppressed(scope):
+                    contexts = self._merged(self._contexts, self._scoped_contexts, scope)
+                    parts.extend(
+                        self._render_section(c, scope)
+                        for c in sorted(contexts.values(), key=lambda c: (c.order, c.name))
+                    )
+                body = "\n\n".join(part for part in parts if part)
+            return self.render(body, scope=scope)
+
+    def render(self, text: str, *, scope: str | None = None) -> str:
+        """Interpolate ``{{variable}}`` references (dsh variable
+        rendering). An unknown name or a ``None`` value fails loud."""
+        with self._lock:
+
+            def replace(match: re.Match[str]) -> str:
+                name = match.group(1)
+                provider = self._variable_provider(name, scope)
+                if provider is None:
+                    raise ValueError(f"prompt variable {name!r} is not registered")
+                value = provider(scope)
+                if value is None:
+                    raise ValueError(f"prompt variable {name!r} resolved to None")
+                return str(value)
+
+            return _VARIABLE_RE.sub(replace, text)
+
+    def sections(
+        self,
+        *,
+        scope: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Enumerate effective sections for a scope (debugging / UI)."""
+        with self._lock:
+            merged = self._merged(self._sections, self._scoped_sections, scope)
+            return [
+                {
+                    "name": s.name,
+                    "order": s.order,
+                    "complete": s.complete,
+                    "dynamic": s.provider is not None,
+                }
+                for s in sorted(merged.values(), key=lambda s: (s.order, s.name))
+            ]
+
+    # ── assembly internals ────────────────────────────────
+
+    @staticmethod
+    def _merged(
+        global_layer: dict[str, Any],
+        scoped_layers: dict[str, dict[str, Any]],
+        scope: str | None,
+    ) -> dict[str, Any]:
+        """Global entries (insertion order) then scoped shadows."""
+        if scope is None:
+            return dict(global_layer)
+        merged = dict(global_layer)
+        merged.update(scoped_layers.get(scope, {}))
+        return merged
+
+    def _render_section(
+        self,
+        section: _Section | _PromptContext,
+        scope: str | None,
+    ) -> str:
+        if section.text is not None:
+            return section.text
+        if section.provider is not None:
+            value = section.provider(scope)
+            return value if value is not None else ""
+        return ""
+
+    def _variable_provider(
+        self,
+        name: str,
+        scope: str | None,
+    ) -> Callable[[str | None], str | None] | None:
+        if scope is not None:
+            scoped = self._scoped_variables.get(scope, {}).get(name)
+            if scoped is not None:
+                return scoped
+        return self._variables.get(name)
+
+    def _contexts_suppressed(self, scope: str | None) -> bool:
+        key = scope if scope is not None else ""
+        return "" in self._suppressed_context_scopes or key in self._suppressed_context_scopes
+
+    @staticmethod
+    def _disposer(layer: dict[str, Any], name: str) -> Callable[[], None]:
+        def dispose() -> None:
+            layer.pop(name, None)
+
+        return dispose
+
 
 __all__ = ["PromptRegistry"]
+
+
+_VARIABLE_RE = re.compile(r"\{\{\s*([a-z][a-z0-9_]*)\s*\}\}")

@@ -18,13 +18,13 @@ import {
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 import { DotProgress } from "@/components/workspace/swarm/dot-progress";
+import { emitAgentWorkbenchFocus } from "../agent-workbench-events";
 
 import {
   agentPhaseDisplayTitle,
   deriveAgentPhases,
   progressForPhases,
 } from "../agent-phases";
-import { emitAgentWorkbenchFocus } from "../agent-workbench-events";
 import {
   type AgentRunState,
   agentRunAvatarAnimationClass,
@@ -56,6 +56,7 @@ type MessageAgentRow = {
    * was only a red tint, leaving no way to tell a network drop from a round
    * cap from a refused route. */
   error?: string;
+  summary?: string;
 };
 
 type TraceSectionKind = "thinking" | "action" | "verification";
@@ -116,6 +117,12 @@ export function ProcessTrace({
     ? progressForPhases(phaseState.phases, phaseState.currentPhase)
     : null;
   const showAgents = parallelAgents.length > 0;
+  const completedAgentCount = parallelAgents.filter(
+    (agent) => agent.status === "done",
+  ).length;
+  const failedAgentCount = parallelAgents.filter(
+    (agent) => agent.status === "error",
+  ).length;
   const showProcessBody = open;
   const hasSectionCards = sections.length > 0;
 
@@ -151,7 +158,11 @@ export function ProcessTrace({
         </span>
         <span className="shrink-0 text-xs text-muted-foreground">
           {showAgents
-            ? t.dispatchCard.parallelTasks(parallelAgents.length)
+            ? t.message.agentProgressSummary(
+                parallelAgents.length,
+                completedAgentCount,
+                failedAgentCount,
+              )
             : progress
               ? `${progress.current}/${progress.total}`
               : `${doneCount}/${totalCount}`}
@@ -248,18 +259,8 @@ function AgentClusterCard({
   agents: MessageAgentRow[];
   statusLabels: Record<MessageAgentRow["status"], string>;
 }) {
-  const { t } = useI18n();
   return (
-    <div className="px-1 py-1.5">
-      <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-        <NetworkIcon className="size-4 shrink-0 text-info" />
-        <span className="font-medium text-foreground">
-          {t.message.agentCluster}
-        </span>
-        <span className="ml-auto tabular-nums">
-          {t.dispatchCard.parallelTasks(agents.length)}
-        </span>
-      </div>
+    <div className="px-1 py-1">
       <div className="space-y-2">
         {agents.map((agent) => (
           <AgentClusterRow
@@ -280,13 +281,21 @@ function AgentClusterRow({
   agent: MessageAgentRow;
   statusLabel: string;
 }) {
+  const expanded = agent.status === "error";
   const progress = agentProgress(agent);
   const progressHue = agentRunHue(agent.status);
   return (
     <div className="group/agent-row relative">
       <button
         type="button"
-        onClick={() => emitAgentWorkbenchFocus({ agentId: agent.id })}
+        onClick={() =>
+          emitAgentWorkbenchFocus({
+            agentId: agent.id,
+            tab: "agent",
+            view: "screen",
+          })
+        }
+        aria-label={`${agent.name} · ${statusLabel}`}
         className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted/45"
       >
         <span
@@ -307,17 +316,43 @@ function AgentClusterRow({
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
+            <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+              {agent.label}
+            </span>
             <span className="truncate font-medium text-foreground">
               {agent.name}
             </span>
-            {agent.role && (
+            {agent.role &&
+              agent.role.trim().toLowerCase() !==
+                agent.name.trim().toLowerCase() && (
               <span className="hidden truncate text-xs text-muted-foreground sm:inline">
                 {agent.role}
               </span>
-            )}
-            <span className="sr-only">{statusLabel}</span>
+              )}
+            <DotProgress
+              progress={progress}
+              hue={progressHue}
+              cols={12}
+              rows={2}
+              className={cn(
+                "ml-1 shrink-0",
+                agentRunAvatarAnimationClass(agent.status),
+              )}
+            />
+            <span
+              className={cn(
+                "ml-auto shrink-0 text-xs",
+                agent.status === "error"
+                  ? "text-destructive"
+                  : agent.status === "done"
+                    ? "text-success"
+                    : "text-muted-foreground",
+              )}
+            >
+              {statusLabel}
+            </span>
           </div>
-          <div className="mt-1 flex items-end gap-2">
+          <div className="mt-1 flex items-center gap-2">
             <span
               className={cn(
                 "min-w-0 flex-1 truncate text-xs",
@@ -330,24 +365,21 @@ function AgentClusterRow({
               )}
               title={agent.error ?? undefined}
             >
-              {agent.error ?? agent.task}
+              {expanded && agent.error ? agent.task : (agent.error ?? agent.task)}
             </span>
-            <div className="flex shrink-0 flex-col items-end gap-1">
-              <span className="font-mono text-xs leading-none text-foreground">
-                {agent.label}
-              </span>
-              <DotProgress
-                progress={progress}
-                hue={progressHue}
-                cols={16}
-                rows={3}
-                className={cn(agentRunAvatarAnimationClass(agent.status))}
-              />
-            </div>
           </div>
+          {agent.error ? (
+            <div
+              className={cn(
+                "mt-2 whitespace-pre-wrap break-words rounded-md bg-muted/35 px-3 py-2 text-xs leading-5",
+                agent.error ? "text-destructive" : "text-foreground/80",
+              )}
+            >
+              {agent.error}
+            </div>
+          ) : null}
         </div>
       </button>
-      <AgentHoverPreview agent={agent} statusLabel={statusLabel} />
     </div>
   );
 }
@@ -707,10 +739,20 @@ function buildTraceSections(
 }
 
 function deriveMessageAgentRows(events: LiveToolEvent[]): MessageAgentRow[] {
+  // Lifecycle markers often carry a runtime UUID while subsequent activity
+  // carries the role/codename. Resolve every record to one stable human
+  // identity so one spawned agent cannot become two cards.
+  const runtimeIdToStableId = new Map<string, string>();
+  for (const event of events) {
+    if (!event.agentId || event.agentId === "__main__") continue;
+    const stableId = event.subagentCodename || event.subAgentRole;
+    if (stableId) runtimeIdToStableId.set(event.agentId, stableId);
+  }
   const byId = new Map<string, MessageAgentRow>();
   for (const event of events) {
     const id =
-      event.agentId ??
+      (event.agentId ? runtimeIdToStableId.get(event.agentId) : undefined) ??
+      event.subagentCodename ??
       (event.parentToolUseId && event.subAgentRole
         ? `${event.parentToolUseId}:${event.subAgentRole}`
         : undefined) ??
@@ -733,6 +775,19 @@ function deriveMessageAgentRows(events: LiveToolEvent[]): MessageAgentRow[] {
       event.thought ||
       existing?.prompt ||
       "";
+    const output =
+      typeof event.output === "string"
+        ? event.output
+        : firstString(event.output as Record<string, unknown> | undefined, [
+            "summary",
+            "result",
+            "output",
+            "answer",
+            "content",
+          ]);
+    const summary =
+      output || event.observation || event.thought || existing?.summary;
+    const terminalStatus = status === "done" || status === "error";
     byId.set(id, {
       id,
       name:
@@ -743,9 +798,11 @@ function deriveMessageAgentRows(events: LiveToolEvent[]): MessageAgentRow[] {
         id,
       label: existing?.label ?? String(byId.size + 1).padStart(2, "0"),
       status:
-        existing?.status === "running" || existing?.status === "waiting"
-          ? existing.status
-          : status,
+        terminalStatus
+          ? status
+          : existing?.status === "done" || existing?.status === "error"
+            ? existing.status
+            : status,
       task: existing?.task || prompt || event.name.replace(/[_-]+/g, " "),
       prompt: prompt || existing?.prompt,
       role: event.subAgentRole ?? existing?.role,
@@ -755,6 +812,7 @@ function deriveMessageAgentRows(events: LiveToolEvent[]): MessageAgentRow[] {
       // Keep the first cause seen: later events for the same lane (a spawn
       // echo, a trailing tool call) carry no error and would erase it.
       error: event.error ?? existing?.error,
+      summary,
     });
   }
   if (byId.size > 0) return Array.from(byId.values()).slice(0, 12);

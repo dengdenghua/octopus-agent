@@ -162,13 +162,17 @@ def _should_restart(
     return (now - last_restart) >= backoff_s
 
 
-def maybe_start_storage() -> str:
+def maybe_start_storage(*, force: bool = False) -> str:
     """Co-launch storage when opt-in + not already up + resolvable. Returns a
     status: ``disabled`` / ``already_running`` / ``not_found`` / ``started`` /
     ``error``. Non-blocking — readiness is logged from a background thread, so
     server boot is never delayed. Never raises. Ongoing supervision (restart on
     death) is the heartbeat's job — see start_storage_heartbeat()."""
-    if not _autostart_enabled():
+    # Service boot remains opt-in, but an explicit user action from the local
+    # UI is itself consent to start the bundled sibling service.  Keeping the
+    # same gate here made the UI's “重新连接” button a permanent no-op whenever
+    # OCTOPUS_STORAGE_AUTOSTART was unset.
+    if not force and not _autostart_enabled():
         return "disabled"
     try:
         if _already_up():

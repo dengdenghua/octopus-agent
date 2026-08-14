@@ -58,11 +58,13 @@ if FASTAPI_AVAILABLE:
         context_window: int | None = None
         enable_1m_context: bool = False
         supports_thinking: bool | None = None
+        default_reasoning_effort: str | None = None
         supports_vision: bool | None = None
         supports_tool_use: bool | None = None
         omit_sampling_parameters: bool | None = None
         compat_profile: str | None = None
         thinking_request_style: str | None = None
+        reasoning_efforts: list[str] | None = None
         drop_tool_choice: bool | None = None
         strict_tool_schema: bool | None = None
         max_temperature: float | None = None

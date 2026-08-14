@@ -51,6 +51,115 @@ import { ModelCookbook } from "@/components/workspace/model-cookbook";
 import { MixSettingsSection } from "./mix-settings-section";
 import { SettingsSection } from "./settings-section";
 
+// Per-model default reasoning effort, persisted via the custom-models
+// API. Mirrors the backend vocabulary (off | high | max | none) and
+// lets DeepSeek-style models default to deliberate thinking without
+// every caller having to pass it explicitly.
+type DefaultReasoningEffort = "off" | "high" | "max" | "none";
+
+// The picker's UI vocabulary (off/low/medium/high/xhigh) is broader than the
+// persisted default-effort vocabulary (off/high/max/none). Map a capability
+// set down to the settings vocabulary so the "default reasoning effort"
+// dropdown only offers tiers the model genuinely accepts on the wire.
+function defaultEffortsForCapability(
+  reasoningEfforts?: string[] | null,
+): DefaultReasoningEffort[] | null {
+  // No capability info → keep the full default set.
+  if (!reasoningEfforts) return null;
+  // Explicitly empty → no meaningful effort control (adaptive / unsupported
+  // thinking) → callers hide the whole dropdown.
+  if (reasoningEfforts.length === 0) return [];
+  const map: Record<string, DefaultReasoningEffort> = {
+    off: "off",
+    low: "high",
+    medium: "high",
+    high: "high",
+    xhigh: "max",
+    max: "max",
+  };
+  const out: DefaultReasoningEffort[] = [];
+  for (const tier of reasoningEfforts) {
+    const mapped = map[tier];
+    if (mapped && !out.includes(mapped)) out.push(mapped);
+  }
+  // "none" (no injection) is always a valid meta-option.
+  if (out.length === 0) return null;
+  return out;
+}
+
+/** Lightweight client-side mirror of the backend's OpenAI-compatible profile
+ *  resolution, used by the add-new form before an entry exists. Returns the
+ *  picker-vocabulary tiers (off/low/medium/high/xhigh), null for the full
+ *  default set, or [] when the profile has no meaningful effort control. */
+function clientSideReasoningEfforts(
+  baseUrl: string,
+  model: string,
+): string[] | null {
+  const url = (baseUrl || "").toLowerCase();
+  const m = (model || "").toLowerCase();
+  if (url.includes("api.deepseek.com") || m.startsWith("deepseek-") || m.includes("deepseek/")) {
+    return ["off", "high", "xhigh"];
+  }
+  if (url.includes("minimax") || m.startsWith("minimax") || m.startsWith("abab")) {
+    return [];
+  }
+  return null;
+}
+
+/** Capability-aware "default reasoning effort" select. Filters the options
+ *  to the tiers the resolved model profile genuinely accepts; hides entirely
+ *  when the model has no meaningful effort control (e.g. MiniMax adaptive).
+ *  ``reasoningEfforts`` is the picker vocabulary (off/low/medium/high/xhigh). */
+function DefaultEffortSelect({
+  value,
+  reasoningEfforts,
+  onChange,
+}: {
+  value: DefaultReasoningEffort | undefined;
+  reasoningEfforts?: string[] | null;
+  onChange: (v: DefaultReasoningEffort | undefined) => void;
+}) {
+  const { t } = useI18n();
+  const offered = defaultEffortsForCapability(reasoningEfforts);
+  // No meaningful tiers → no control to show.
+  if (offered && offered.length === 0) return null;
+  const options: DefaultReasoningEffort[] =
+    offered ?? ["off", "high", "max"];
+  const labelFor = (v: DefaultReasoningEffort) =>
+    v === "off"
+      ? t.settings.model.defaultReasoningEffortOff
+      : v === "high"
+        ? t.settings.model.defaultReasoningEffortHigh
+        : t.settings.model.defaultReasoningEffortMax;
+  return (
+    <div className="mt-3 flex items-center justify-between rounded-lg border border-border px-3 py-2">
+      <label
+        htmlFor="default-reasoning-effort"
+        className="text-xs text-muted-foreground"
+      >
+        {t.settings.model.defaultReasoningEffortLabel}
+      </label>
+      <select
+        id="default-reasoning-effort"
+        value={value ?? ""}
+        onChange={(e) => {
+          const v = e.target.value;
+          onChange(v === "" ? undefined : (v as DefaultReasoningEffort));
+        }}
+        className="rounded-md border border-input bg-transparent px-2 py-1 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      >
+        <option value="">{t.settings.model.defaultReasoningEffortFollow}</option>
+        {options.map((v) => (
+          <option key={v} value={v}>
+            {labelFor(v)}
+          </option>
+        ))}
+        <option value="none">{t.settings.model.defaultReasoningEffortNone}</option>
+      </select>
+    </div>
+  );
+}
+
 // ── Provider presets ────────────────────────────────────────────
 //
 // Each preset auto-fills base URL + protocol when selected. Optional
@@ -417,6 +526,7 @@ function parseHeadersText(text: string): Record<string, string> {
   }
   return out;
 }
+
 
 // Mirror of the backend base_url guard (config_router._validate_base_url)
 // for instant feedback before the network round-trip. Loopback / private
@@ -2479,6 +2589,12 @@ function EditModelForm({
   );
   const [baseUrl, setBaseUrl] = useState("");
   const [thinking, setThinking] = useState(false);
+  const [defaultReasoningEffort, setDefaultReasoningEffort] = useState<
+    DefaultReasoningEffort | undefined
+  >(undefined);
+  const [reasoningEfforts, setReasoningEfforts] = useState<
+    string[] | null | undefined
+  >(undefined);
   const [vision, setVision] = useState(false);
   // True when the last connection test confirmed the model has no
   // vision — the toggle is then locked off until a new test says
@@ -2536,6 +2652,15 @@ function EditModelForm({
         setModels(normalised.length > 0 ? normalised : [""]);
         setBaseUrl((d.base_url as string) || "");
         setThinking(!!d.supports_thinking);
+        setDefaultReasoningEffort(
+          (d.default_reasoning_effort as DefaultReasoningEffort | undefined) ??
+            undefined,
+        );
+        setReasoningEfforts(
+          Array.isArray(d.reasoning_efforts)
+            ? (d.reasoning_efforts as string[])
+            : undefined,
+        );
         setVision(!!d.supports_vision);
         setMillionContext(
           d.enable_1m_context === true ||
@@ -2616,6 +2741,7 @@ function EditModelForm({
     if (apiKey) body.api_key = apiKey;
     if (baseUrl) body.base_url = baseUrl;
     body.supports_thinking = thinking;
+    body.default_reasoning_effort = defaultReasoningEffort ?? null;
     body.supports_vision = vision;
     body.context_window = 256_000;
     body.enable_1m_context = millionContext;
@@ -2965,6 +3091,12 @@ function EditModelForm({
             </div>
           </div>
 
+          <DefaultEffortSelect
+            value={defaultReasoningEffort}
+            reasoningEfforts={reasoningEfforts}
+            onChange={setDefaultReasoningEffort}
+          />
+
           {/* Test status + buttons */}
           <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
             <div className="flex items-center gap-2 text-sm">
@@ -3066,6 +3198,9 @@ function AddModelForm({
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("https://api.openai.com/v1");
   const [thinking, setThinking] = useState(false);
+  const [defaultReasoningEffort, setDefaultReasoningEffort] = useState<
+    DefaultReasoningEffort | undefined
+  >(undefined);
   const [vision, setVision] = useState(false);
   // True when the last connection test confirmed the model has no
   // vision — the toggle is then locked off until a new test says
@@ -3237,6 +3372,7 @@ function AddModelForm({
             api_key: apiKey,
             models: cleanedModels,
             supports_thinking: thinking,
+            default_reasoning_effort: defaultReasoningEffort ?? null,
             supports_vision: vision,
             context_window: 256_000,
             enable_1m_context: millionContext,
@@ -3566,6 +3702,12 @@ function AddModelForm({
           </span>
         </div>
       </div>
+
+      <DefaultEffortSelect
+    value={defaultReasoningEffort}
+    reasoningEfforts={clientSideReasoningEfforts(baseUrl, models[0] || "")}
+    onChange={setDefaultReasoningEffort}
+  />
 
       {/* Test status + buttons */}
       <div className="flex flex-col gap-3 rounded-lg border border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">

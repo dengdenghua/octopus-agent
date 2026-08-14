@@ -53,6 +53,9 @@ export interface ChatInputBoxProps {
     "name" | "display_name" | "avatar_url" | "icon"
   > | null;
   petMood?: PetMood;
+  /** Render the in-page pet beside the composer. Existing conversations can
+   * hide it while preserving the user's global pet preference. */
+  showPet?: boolean;
   /** Show the workdir selector pill in the footer. Default false (chat
    * doesn't need a folder); pass true for code-flavored conversations
    * that read/edit local files. */

@@ -97,6 +97,9 @@ import {
 import { PlanPanel } from "@/components/workspace/plan-panel";
 import { AutomationSubscriptionPanel } from "@/components/workspace/automation/automation-subscription-panel";
 import { PetSettingsMenu } from "@/components/workspace/pet-settings-menu";
+import { AssistantSettingsMenu } from "@/components/workspace/assistant-settings-menu";
+import { StreamingDebugger } from "@/components/workspace/streaming-debugger";
+import { ContextCompressionIndicator } from "@/components/workspace/context-compression-indicator";
 import { Welcome } from "@/components/workspace/welcome";
 import {
   latestPersistedTodoEventsFromMessages,
@@ -194,7 +197,7 @@ import {
   extractCodeBlocks,
   hasPreviewableBlocks,
 } from "@/lib/extract-code-blocks";
-import { isAbsolutePath } from "@/lib/path-utils";
+import { isAbsolutePath, joinPath } from "@/lib/path-utils";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -246,6 +249,23 @@ type ThreadRouteState = {
 
 function normalizeWorkDirKey(path: string): string {
   return path.trim().replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+/** Keep role folders readable while preventing display names from escaping the root. */
+function personalRoleFolderName(
+  agent: { name?: string; display_name?: string | null } | null,
+  fallback: string,
+): string {
+  const raw =
+    agent?.display_name?.trim() ||
+    agent?.name?.trim() ||
+    fallback.trim() ||
+    "角色";
+  const safe = raw
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
+    .replace(/[. ]+$/g, "")
+    .trim();
+  return safe || "角色";
 }
 
 function rememberChatWorkDir(dir: string) {
@@ -1221,7 +1241,9 @@ function RealtimePageContent({
   // Work directory for Agent project/code state. Empty means the thread uses its
   // isolated personal coding workspace; selecting a local folder binds a user
   // project directory without mixing it with the separate Team workspace.
-  const [workDir, setWorkDir] = useState<string>(readRememberedChatWorkDir);
+  const [workDir, setWorkDir] = useState<string>(() =>
+    isNewThread ? "" : readRememberedChatWorkDir(),
+  );
   const localStartedThreadIdRef = useRef<string | null>(null);
   const handleWorkDirChange = useCallback((dir: string) => {
     setWorkDir(dir);
@@ -1907,6 +1929,15 @@ function RealtimePageContent({
       ? hintedWorkspacePath
       : workDir;
   const projectWorkspacePath = effectiveWorkDir.trim();
+  const personalWorkspaceRoot = !projectWorkspacePath
+    ? settings.personal_space.default_folder.trim()
+    : "";
+  const personalWorkspacePath = personalWorkspaceRoot
+    ? joinPath(
+        personalWorkspaceRoot,
+        personalRoleFolderName(displayAgent, effectiveAgentId),
+      )
+    : "";
   const isProjectCodeMode = !!projectWorkspacePath;
   // When user has explicitly selected a named agent (not default "general", not octopus)
   // via the footer selector, treat it as conversation mode rather than defaulting to code.
@@ -1929,7 +1960,7 @@ function RealtimePageContent({
   const codeModeUnlocked = true;
   // Local CLI partner: driven by spawning its own CLI, so
   // its model comes from the CLI's config, not the Octopus model picker.
-  const partnerCaps = activeAgent?.capabilities as
+  const partnerCaps = displayAgent?.capabilities as
     | { local_partner?: boolean; local_partner_id?: string }
     | undefined;
   const localPartnerIdByAgentId: Record<string, string> = {
@@ -1939,13 +1970,16 @@ function RealtimePageContent({
     local_qoder_cli: "qoder-cli",
     local_kimi_cli: "kimi-cli",
     local_codebuddy_cli: "codebuddy-cli",
+    local_opencode_cli: "opencode-cli",
+    local_hermes: "hermes",
   };
   const isLocalPartner =
-    activeAgentId.startsWith("local_") || Boolean(partnerCaps?.local_partner);
+    effectiveAgentId.startsWith("local_") ||
+    Boolean(partnerCaps?.local_partner);
   const partnerId = isLocalPartner
     ? String(
         partnerCaps?.local_partner_id ??
-          localPartnerIdByAgentId[activeAgentId] ??
+          localPartnerIdByAgentId[effectiveAgentId] ??
           "",
       )
     : "";
@@ -1953,7 +1987,7 @@ function RealtimePageContent({
   // Reset the override when switching to a different agent.
   useEffect(() => {
     setPartnerModel("");
-  }, [activeAgentId]);
+  }, [effectiveAgentId]);
   const projectSignals = useMemo(() => {
     if (!isProjectCodeMode || !projectDetection) return undefined;
     const signals = projectDetection.signals;
@@ -2094,7 +2128,12 @@ function RealtimePageContent({
     if (initialPrompt) setComposerSeed(initialPrompt);
   }, [initialPrompt]);
   useEffect(() => {
-    const selectedAgent = routeAgentName || queryAgentName || "general";
+    // Only a fresh-task route may select a persona. Historical thread URLs
+    // intentionally carry no agent query: their persisted owner is the source
+    // of truth and must not be overwritten by a localStorage/default fallback.
+    if (!isNewThread) return;
+    const selectedAgent = routeAgentName || queryAgentName;
+    if (!selectedAgent) return;
     // Octopus is the global assistant entry point — it sits ABOVE the
     // persona picker, not as a selectable role. Navigating to the assistant
     // thread MUST NOT mutate the footer's active persona, otherwise the
@@ -2115,7 +2154,7 @@ function RealtimePageContent({
     } catch (e) {
       swallow(e, "storage");
     }
-  }, [queryAgentName, routeAgentName]);
+  }, [isNewThread, queryAgentName, routeAgentName]);
   useEffect(() => {
     // 使用 effectiveAgentId 而非 resolvedThreadOwnerAgentId：octopus-assistant
     // 的存量 metadata 可能写的是 general，若据此派发会把 footer 的 active
@@ -2207,6 +2246,13 @@ function RealtimePageContent({
             : undefined,
         personal_workspace_enabled:
           !isProjectCodeMode && isCodingWorkspaceMode ? true : undefined,
+        // Personal space keeps one user-selected root while each role gets a
+        // readable, isolated child folder. The UI still presents this as
+        // personal space; only an explicitly picked folder is a project.
+        personal_workspace_path:
+          !isProjectCodeMode && isCodingWorkspaceMode
+            ? personalWorkspacePath || undefined
+            : undefined,
         capability_mode: isCodingWorkspaceMode ? "code" : undefined,
         code_mode: isCodingWorkspaceMode ? "solo" : undefined,
         // Project presets describe how to operate on a bound user project.
@@ -2305,6 +2351,7 @@ function RealtimePageContent({
       partnerId,
       partnerModel,
       personalMode,
+      personalWorkspacePath,
       projectAgentMode,
       projectModePreset,
       projectSignals,
@@ -2323,7 +2370,7 @@ function RealtimePageContent({
     thread,
     sendMessage,
     isUploading,
-    ,
+    allToolEvents,
     lastTurnToolEvents,
     realtimeApprovals,
   ] = useThreadStream(streamOptions);
@@ -2414,6 +2461,30 @@ function RealtimePageContent({
 
   useRegenerateHandler(thread, sendMessage, threadId);
   usePlanActionHandler(sendMessage, threadId);
+
+  // 「环境受限」横幅授权：点「授权并重试」先写线程级 network_access，等它落到
+  // settings.context 后再触发既有 regenerate —— 否则 sendMessage 的闭包仍拿着旧档。
+  const [pendingNetworkRegen, setPendingNetworkRegen] = useState<
+    "common" | "full" | null
+  >(null);
+  const handleAuthorizeNetwork = useCallback(
+    (tier: "common" | "full") => {
+      setPendingNetworkRegen(tier);
+      setSettings("context", {
+        ...settings.context,
+        network_access: tier,
+      });
+    },
+    [setSettings, settings.context],
+  );
+  useEffect(() => {
+    if (!pendingNetworkRegen) return;
+    if (settings.context.network_access !== pendingNetworkRegen) return;
+    setPendingNetworkRegen(null);
+    window.dispatchEvent(
+      new CustomEvent("octopus:regenerate", { detail: { threadId } }),
+    );
+  }, [pendingNetworkRegen, settings.context.network_access, threadId]);
 
   const previewBlocks = useMemo(() => {
     for (let i = thread.messages.length - 1; i >= 0; i--) {
@@ -3031,12 +3102,14 @@ function RealtimePageContent({
       const attachedFiles = message.files ?? [];
       const browserFiles = [...attachedFiles, ...images];
 
-      // Auto-new-session: when enabled and the current thread has been idle
-      // past the threshold, open a fresh thread and carry the text over.
+      // The auto-new-session preference belongs only to the fixed Assistant
+      // window. Project threads and role/personal-space threads keep their
+      // own continuity regardless of this setting.
       // Attachments can't travel through the hand-off, so we only auto-start
       // for text-only messages; everything else stays in the current thread.
       const autoNewSessionHours = settings.session?.auto_new_session_hours ?? 0;
       if (
+        isOctopusAssistant &&
         autoNewSessionHours > 0 &&
         message.text.trim().length > 0 &&
         browserFiles.length === 0 &&
@@ -3500,12 +3573,14 @@ function RealtimePageContent({
                     }
                   />
                   <div className="min-w-0 flex-1 flex items-center gap-2">
-                    <ThreadTitle
-                      threadId={threadId}
-                      thread={thread}
-                      title={headerThreadTitle}
-                      className="border-0 bg-transparent px-0 py-0 text-sm"
-                    />
+                    {!isOctopusAssistant && (
+                      <ThreadTitle
+                        threadId={threadId}
+                        thread={thread}
+                        title={headerThreadTitle}
+                        className="border-0 bg-transparent px-0 py-0 text-sm"
+                      />
+                    )}
                     {isOctopusAssistant && connectedChannels.length > 0 && (
                       <div className="flex items-center gap-1 shrink-0">
                         <span className="size-1.5 rounded-full bg-emerald-500" />
@@ -3582,6 +3657,7 @@ function RealtimePageContent({
                         <Settings2Icon className="size-4" />
                       </Button>
                     )}
+                    {isOctopusAssistant && <AssistantSettingsMenu />}
                     {isOctopusAssistant && <PetSettingsMenu />}
                     <RightPanelMenu
                       activePage={activeRightPanel}
@@ -3610,6 +3686,7 @@ function RealtimePageContent({
                   onOpenArtifact={openWorkbenchArtifact}
                   project={projectWorkspacePath || null}
                   onSendFollowUp={handleSendFollowUp}
+                  onAuthorizeNetwork={handleAuthorizeNetwork}
                   header={
                     realtimeApprovals.hasMoreTurns ? (
                       <LoadOlderTurnsBanner
@@ -3672,7 +3749,7 @@ function RealtimePageContent({
                     <div className="flex flex-col gap-2">
                       {isNewThread ? (
                         <Welcome
-                          agent={activeAgent}
+                          agent={displayAgent}
                           agentName={effectiveAgentId}
                         />
                       ) : null}
@@ -3692,7 +3769,7 @@ function RealtimePageContent({
                         resolveApproval={realtimeApprovals.resolveApproval}
                         className="-mb-1"
                       />
-                      <div className="pt-6">
+                      <div className="pt-3">
                         <ChatInputBox
                           key={composerSeed || "empty-composer"}
                           status={
@@ -3713,6 +3790,7 @@ function RealtimePageContent({
                           workDir={effectiveWorkDir}
                           displayAgent={composerDisplayAgent}
                           petMood={petMood}
+                          showPet={isNewThread}
                           showWorkDirSelector={!isOctopusAssistant}
                           onWorkDirChange={handleWorkDirChange}
                           lockWorkDirToThread={!isNewThread}
@@ -3894,6 +3972,16 @@ function RealtimePageContent({
             onRecordingChange={setRecIsRecording}
           />
         </ToolEffectsProvider>
+
+        {/* 流式调试面板 */}
+        <StreamingDebugger events={allToolEvents} />
+
+        {/* 上下文压缩进度指示器 */}
+        <ContextCompressionIndicator
+          isCompressing={isCompressingContext}
+          contextTokens={contextTokens}
+          maxContextTokens={maxContextTokens}
+        />
       </ThreadProviders>
     </SubtasksProvider>
   );

@@ -39,9 +39,10 @@ export function FollowUpSuggestions({
   baseUrl,
   className,
 }: FollowUpSuggestionsProps) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const { bucket, generate, setStatus } = useAmbientSuggestions(project, {
     baseUrl,
+    locale,
     auto: false, // Manual refresh only
   });
 
@@ -51,22 +52,28 @@ export function FollowUpSuggestions({
   const suggestions = useMemo(() => {
     if (!bucket?.suggestions) return [];
     return bucket.suggestions
-      .filter((s) => s.status === "pending" && !dismissed.has(s.id))
+      .filter(
+        (s) =>
+          s.locale === locale && s.status === "pending" && !dismissed.has(s.id),
+      )
       .slice(0, 3); // Max 3 chips, Trae-style
-  }, [bucket?.suggestions, dismissed]);
+  }, [bucket?.suggestions, dismissed, locale]);
 
-  // Auto-generate once per mount. The parent only renders this component
+  // Auto-generate once per project/agent/locale. The parent only renders this component
   // while the conversation is idle (see message-list.tsx), so mounting IS
   // the "conversation just finished" signal. We can't watch a loading→idle
   // transition here because the component is unmounted during loading.
-  const didGenerateRef = useRef(false);
+  const generatedKeyRef = useRef("");
   useEffect(() => {
-    if (!agentId || !project || didGenerateRef.current) return;
-    didGenerateRef.current = true;
-    generate(agentId, { turnWindow: 5 }).catch(() => {
+    const generationKey = `${project ?? ""}:${agentId ?? ""}:${locale}`;
+    if (!agentId || !project || generatedKeyRef.current === generationKey) {
+      return;
+    }
+    generatedKeyRef.current = generationKey;
+    generate(agentId, { turnWindow: 5, locale }).catch(() => {
       // Silently fail, suggestions are optional
     });
-  }, [agentId, project, generate]);
+  }, [agentId, project, locale, generate]);
 
   const handleSelect = useCallback(
     async (suggestion: AmbientSuggestion) => {
@@ -95,7 +102,7 @@ export function FollowUpSuggestions({
         className,
       )}
       role="group"
-      aria-label={t.followUpSuggestions?.title ?? "Follow-up suggestions"}
+      aria-label={t.followUpSuggestions.title}
     >
       {suggestions.map((suggestion) => (
         <button

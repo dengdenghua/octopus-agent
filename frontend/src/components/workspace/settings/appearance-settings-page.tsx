@@ -56,10 +56,7 @@ const TRANSLATIONS_BY_LOCALE: Record<Locale, Translations> = {
 export default function AppearanceSettingsPage() {
   const { t, locale, changeLocale } = useI18n();
   const { theme, setTheme, systemTheme } = useTheme();
-  const currentTheme = (theme ?? "system") as
-    | "system"
-    | "light"
-    | "dark";
+  const currentTheme = (theme ?? "system") as "system" | "light" | "dark";
   const [settings, setSetting] = useLocalSettings();
   const {
     cornerScale,
@@ -203,12 +200,12 @@ export default function AppearanceSettingsPage() {
   );
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <SettingsSection
         title={t.settings.appearance.themeTitle}
         description={t.settings.appearance.themeDescription}
       >
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-3 gap-2">
           {themeOptions.map((option) => (
             <ThemePreviewCard
               key={option.id}
@@ -224,7 +221,7 @@ export default function AppearanceSettingsPage() {
         </div>
       </SettingsSection>
 
-      <Separator />
+      <Separator className="my-1" />
 
       <SettingsSection
         title={t.settings.appearance.paletteTitle}
@@ -233,7 +230,9 @@ export default function AppearanceSettingsPage() {
         <div className="space-y-3">
           {paletteGroups.map((group) => (
             <div key={group.id} className="flex flex-wrap items-center gap-2">
-              <span className="w-10 shrink-0 text-xs text-muted-foreground">{group.label}</span>
+              <span className="w-10 shrink-0 text-xs text-muted-foreground">
+                {group.label}
+              </span>
               {group.options.map((option) => (
                 <PaletteSwatchButton
                   key={option.id}
@@ -280,7 +279,7 @@ export default function AppearanceSettingsPage() {
         </p>
       </SettingsSection>
 
-      <Separator />
+      <Separator className="my-1" />
 
       {/* Language / font size / detail level share one card: three one-line
           rows instead of three full sections with their own headings. */}
@@ -320,7 +319,11 @@ export default function AppearanceSettingsPage() {
           <Select
             value={settings.display.chat_font_size}
             onValueChange={(value) => {
-              if (value === "small" || value === "medium" || value === "large") {
+              if (
+                value === "small" ||
+                value === "medium" ||
+                value === "large"
+              ) {
                 setSetting("display", { chat_font_size: value });
               }
             }}
@@ -382,83 +385,83 @@ export default function AppearanceSettingsPage() {
 
       {/* Both step sliders sit side by side on wide screens. */}
       <div className="grid gap-6 lg:grid-cols-2">
-      <SettingsSection
-        title={t.settings.appearance.cornerRadiusTitle}
-        description={t.settings.appearance.cornerRadiusDescription}
-      >
-        <AppearanceStepSlider<CornerScale>
-          label={t.settings.appearance.cornerRadiusTitle}
-          value={cornerScale}
-          onChange={setCornerScale}
-          showHeader={false}
-          options={[
-            {
-              value: 0.5,
-              label: t.settings.appearance.cornerCrisp,
-              preview: "0.25rem",
-            },
-            {
-              value: 0.75,
-              label: t.settings.appearance.cornerSoft,
-              preview: "0.375rem",
-            },
-            {
-              value: 1,
-              label: t.settings.appearance.cornerDefault,
-              preview: "0.5rem",
-            },
-            {
-              value: 1.25,
-              label: t.settings.appearance.cornerRound,
-              preview: "0.625rem",
-            },
-            {
-              value: 1.5,
-              label: t.settings.appearance.cornerPill,
-              preview: "0.75rem",
-            },
-          ]}
-        />
-      </SettingsSection>
+        <SettingsSection
+          title={t.settings.appearance.cornerRadiusTitle}
+          description={t.settings.appearance.cornerRadiusDescription}
+        >
+          <AppearanceStepSlider<CornerScale>
+            label={t.settings.appearance.cornerRadiusTitle}
+            value={cornerScale}
+            onChange={setCornerScale}
+            showHeader={false}
+            options={[
+              {
+                value: 0.5,
+                label: t.settings.appearance.cornerCrisp,
+                preview: "0.25rem",
+              },
+              {
+                value: 0.75,
+                label: t.settings.appearance.cornerSoft,
+                preview: "0.375rem",
+              },
+              {
+                value: 1,
+                label: t.settings.appearance.cornerDefault,
+                preview: "0.5rem",
+              },
+              {
+                value: 1.25,
+                label: t.settings.appearance.cornerRound,
+                preview: "0.625rem",
+              },
+              {
+                value: 1.5,
+                label: t.settings.appearance.cornerPill,
+                preview: "0.75rem",
+              },
+            ]}
+          />
+        </SettingsSection>
 
-      <SettingsSection
-        title={t.settings.appearance.uiDensityTitle}
-        description={t.settings.appearance.uiDensityDescription}
-      >
-        <AppearanceStepSlider<Density>
-          label={t.settings.appearance.uiDensityTitle}
-          value={density}
-          onChange={setDensity}
-          showHeader={false}
-          options={[
-            {
-              value: "relaxed",
-              label: t.settings.appearance.densityRelaxed,
-              preview: "16px",
-            },
-            {
-              value: "comfortable",
-              label: t.settings.appearance.densityComfortable,
-              preview: "15px",
-            },
-            {
-              value: "compact",
-              label: t.settings.appearance.densityCompact,
-              preview: "14px",
-            },
-            {
-              value: "dense",
-              label: t.settings.appearance.densityDense,
-              preview: "13px",
-            },
-            {
-              value: "ultradense",
-              label: t.settings.appearance.densityUltraDense,
-              preview: "12.5px",
-            },
-          ]}
-        />
-      </SettingsSection>
+        <SettingsSection
+          title={t.settings.appearance.uiDensityTitle}
+          description={t.settings.appearance.uiDensityDescription}
+        >
+          <AppearanceStepSlider<Density>
+            label={t.settings.appearance.uiDensityTitle}
+            value={density}
+            onChange={setDensity}
+            showHeader={false}
+            options={[
+              {
+                value: "relaxed",
+                label: t.settings.appearance.densityRelaxed,
+                preview: "16px",
+              },
+              {
+                value: "comfortable",
+                label: t.settings.appearance.densityComfortable,
+                preview: "15px",
+              },
+              {
+                value: "compact",
+                label: t.settings.appearance.densityCompact,
+                preview: "14px",
+              },
+              {
+                value: "dense",
+                label: t.settings.appearance.densityDense,
+                preview: "13px",
+              },
+              {
+                value: "ultradense",
+                label: t.settings.appearance.densityUltraDense,
+                preview: "12.5px",
+              },
+            ]}
+          />
+        </SettingsSection>
       </div>
     </div>
   );
@@ -475,7 +478,7 @@ function SettingRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+    <div className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
       <div className="min-w-0 space-y-0.5">
         <div className="text-sm font-medium">{title}</div>
         <p className="text-xs leading-snug text-muted-foreground">
@@ -736,45 +739,40 @@ function ThemePreviewCard({
       ? "border-white/10 bg-[linear-gradient(180deg,#171717_0%,#101010_100%)]"
       : "border-border bg-muted/85";
   const previewCanvasClass =
-    previewMode === "dark"
-      ? "bg-neutral-900"
-      : "bg-white";
-  const activeDotClass =
-    previewMode === "dark"
-      ? "bg-success"
-      : "bg-success";
+    previewMode === "dark" ? "bg-neutral-900" : "bg-white";
+  const activeDotClass = previewMode === "dark" ? "bg-success" : "bg-success";
   return (
     <button
       type="button"
       onClick={() => onSelect(mode)}
       aria-pressed={active}
       className={cn(
-        "group flex h-full flex-col gap-3 rounded-lg border p-4 text-left transition-all",
+        "group flex h-full min-w-0 flex-col gap-2 rounded-lg border p-2 text-left transition-all sm:p-3",
         active
           ? "border-primary ring-primary/30 shadow-[var(--shadow-xs)] ring-2"
           : "hover:border-border hover:shadow-[var(--shadow-xs)]",
       )}
     >
-      <div className="flex items-start gap-3">
-        <div className="bg-muted rounded-lg p-2">
+      <div className="flex min-w-0 items-center gap-1.5 sm:items-start sm:gap-3">
+        <div className="hidden rounded-lg bg-muted p-1.5 sm:block">
           <Icon className="size-4" />
         </div>
-        <div className="space-y-1">
-          <div className="text-sm leading-none font-semibold">{label}</div>
-          <p className="text-muted-foreground text-xs leading-snug">
+        <div className="min-w-0 space-y-1">
+          <div className="truncate text-xs font-semibold leading-none sm:text-sm">{label}</div>
+          <p className="hidden text-xs leading-snug text-muted-foreground sm:block">
             {description}
           </p>
         </div>
       </div>
       <div
         className={cn(
-          "relative overflow-hidden rounded-lg border text-xs transition-colors",
+          "relative aspect-[4/3] overflow-hidden rounded-md border text-xs transition-colors sm:aspect-auto sm:rounded-lg",
           previewFrameClass,
         )}
       >
         <div
           className={cn(
-            "flex items-center gap-2 border-b px-3 py-2",
+            "flex items-center gap-1 border-b px-1.5 py-1.5 sm:gap-2 sm:px-3 sm:py-2",
             previewTopbarClass,
           )}
         >
@@ -782,21 +780,21 @@ function ThemePreviewCard({
           <div className="h-2 w-10 rounded-md bg-current/20" />
           <div className="h-2 w-6 rounded-md bg-current/15" />
         </div>
-        <div className="grid grid-cols-[32px_minmax(0,1fr)]">
+        <div className="grid h-full grid-cols-[18px_minmax(0,1fr)] sm:grid-cols-[32px_minmax(0,1fr)]">
           <div
             className={cn(
-              "flex min-h-[100px] flex-col gap-2 border-r px-2 py-3",
+              "flex min-h-12 flex-col gap-1 border-r px-1 py-1.5 sm:min-h-[72px] sm:gap-1.5 sm:px-2 sm:py-2",
               previewSidebarClass,
             )}
           >
-            <div className={cn("h-3 w-3 rounded-full", activeDotClass)} />
+            <div className={cn("size-2 rounded-full sm:size-3", activeDotClass)} />
             <div className="h-2 w-4 rounded-full bg-current/18" />
             <div className="h-2 w-4 rounded-full bg-current/14" />
             <div className="mt-auto h-2 w-4 rounded-full bg-current/12" />
           </div>
           <div
             className={cn(
-              "grid grid-cols-[1fr_92px] gap-3 px-3 py-3",
+              "grid grid-cols-1 gap-1 p-1.5 sm:grid-cols-[1fr_76px] sm:gap-2 sm:px-2.5 sm:py-2.5",
               previewCanvasClass,
             )}
           >
@@ -805,14 +803,14 @@ function ThemePreviewCard({
               <div className="h-2.5 w-1/2 rounded-md bg-current/10" />
               <div
                 className={cn(
-                  "h-[52px] rounded-lg border bg-current/5",
+                  "h-6 rounded-md border bg-current/5 sm:h-9 sm:rounded-lg",
                   previewIsDark
                     ? "border-white/10 bg-white/[0.03]"
                     : "border-border bg-white",
                 )}
               />
             </div>
-            <div className="space-y-2">
+            <div className="hidden space-y-2 sm:block">
               <div className="flex items-center gap-2">
                 <div className="h-8 w-8 rounded-lg bg-current/10" />
                 <div className="space-y-2">
@@ -823,9 +821,7 @@ function ThemePreviewCard({
               <div
                 className={cn(
                   "flex flex-col gap-1 rounded-lg border border-dashed p-2",
-                  previewIsDark
-                    ? "border-white/10"
-                    : "border-border",
+                  previewIsDark ? "border-white/10" : "border-border",
                 )}
               >
                 <div className="h-2 w-3/5 rounded-md bg-current/15" />

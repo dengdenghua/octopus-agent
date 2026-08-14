@@ -113,6 +113,7 @@ export interface UseThreadStreamRealtimeOptions {
 
 function reasoningEffortValue(value: unknown): ReasoningEffort | undefined {
   if (
+    value === "off" ||
     value === "minimal" ||
     value === "low" ||
     value === "medium" ||

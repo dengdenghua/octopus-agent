@@ -119,34 +119,45 @@ def _resolve_agent(runtime: CerebrumRuntime, params: TurnParams) -> Any:
     """Pick the agent for this turn.
 
     Lookup order:
-      1. Realtime input metadata (``agent_id`` / ``agent`` /
+      1. The persisted owner of an existing thread.
+      2. Realtime input metadata (``agent_id`` / ``agent`` /
          ``agent_name``), including the nested ``context`` bag the
          web UI sends on ``turn/start``.
-      2. The registry's match for that id, if any.
-      3. The default agent passed at construction time.
-      4. ``None``.
+      3. The registry's match for that id, if any.
+      4. The default agent passed at construction time.
+      5. ``None``.
+
+    The owner-first rule is a server-side isolation boundary.  Role switches
+    create a new thread; a stale or forged per-turn value cannot make an
+    existing conversation execute under a different persona.
     """
-    agent_id: str | None = None
-    for block in params.input:
-        md = block.get("metadata") if isinstance(block, dict) else None
-        if not isinstance(md, dict):
-            continue
-        candidates: list[Any] = [md.get("agent_id"), md.get("agent"), md.get("agent_name")]
-        context = md.get("context")
-        if isinstance(context, dict):
-            candidates.extend(
-                [
-                    context.get("agent_id"),
-                    context.get("agent"),
-                    context.get("agent_name"),
-                ]
+    from runtime.sensing.gateway.turn_session import thread_owner_agent_id
+
+    agent_id = thread_owner_agent_id(
+        thread_id=params.thread_id,
+        store=runtime._thread_store,
+    )
+    if not agent_id:
+        for block in params.input:
+            md = block.get("metadata") if isinstance(block, dict) else None
+            if not isinstance(md, dict):
+                continue
+            candidates: list[Any] = [md.get("agent_id"), md.get("agent"), md.get("agent_name")]
+            context = md.get("context")
+            if isinstance(context, dict):
+                candidates.extend(
+                    [
+                        context.get("agent_id"),
+                        context.get("agent"),
+                        context.get("agent_name"),
+                    ]
+                )
+            agent_id = next(
+                (value.strip() for value in candidates if isinstance(value, str) and value.strip()),
+                "",
             )
-        agent_id = next(
-            (value.strip() for value in candidates if isinstance(value, str) and value.strip()),
-            None,
-        )
-        if agent_id:
-            break
+            if agent_id:
+                break
     if agent_id and runtime._agent_registry is not None:
         try:
             if runtime._agent_registry.has(agent_id):
@@ -286,6 +297,8 @@ def _snapshot_to_thread_store(
     thread_id: str,
     log: EventLog,
     intent: ParsedIntent | None = None,
+    *,
+    session_titles: Any = None,
 ) -> None:
     """Flatten the realtime conversation into the legacy
     ``AgentThreadState`` shape and upsert it into ``ThreadStateStore``.
@@ -301,6 +314,11 @@ def _snapshot_to_thread_store(
     Failures here are swallowed: the realtime event log is the
     durable record; the legacy store is a derived cache for the
     sidebar.
+
+    ``session_titles`` (optional) is a ``SessionTitleService``; when
+    present, the first-completed-turn auto-title regeneration runs
+    after the snapshot, still inside the same swallowed try block so
+    a provider failure can never break the turn lifecycle.
     """
     store = runtime._thread_store
     if store is None:
@@ -373,6 +391,8 @@ def _snapshot_to_thread_store(
             metadata=metadata if metadata else None,
             status=thread_status,
         )
+        if session_titles is not None:
+            session_titles.maybe_auto_refresh(thread_id)
     except Exception as exc:  # noqa: BLE001
         # Not fatal (the realtime event log is the durable record), but a
         # swallowed snapshot write used to silently freeze thread status /

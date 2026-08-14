@@ -1,6 +1,25 @@
 import { getBackendBaseURL } from "@/core/config";
 import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
 
+async function evolutionFetch(
+  path: string,
+  init?: RequestInit,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 8_000);
+  const abortFromCaller = () => controller.abort();
+  init?.signal?.addEventListener("abort", abortFromCaller, { once: true });
+  try {
+    return await fetch(`${getBackendBaseURL()}${path}`, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeoutId);
+    init?.signal?.removeEventListener("abort", abortFromCaller);
+  }
+}
+
 export interface EvolutionOverview {
   skills: {
     total: number;
@@ -115,7 +134,7 @@ export interface CanaryState {
 }
 
 export async function getEvolutionOverview(): Promise<EvolutionOverview> {
-  const res = await fetch(`${getBackendBaseURL()}/api/evolution/overview`, {
+  const res = await evolutionFetch("/api/evolution/overview", {
     headers: authHeaders(),
   });
   if (!res.ok)
@@ -129,20 +148,17 @@ export async function getLearningCurve(
   const params = new URLSearchParams();
   if (weeks !== undefined) params.set("weeks", String(weeks));
   const qs = params.toString();
-  const url = `${getBackendBaseURL()}/api/evolution/learning-curve${qs ? `?${qs}` : ""}`;
-  const res = await fetch(url, { headers: authHeaders() });
+  const path = `/api/evolution/learning-curve${qs ? `?${qs}` : ""}`;
+  const res = await evolutionFetch(path, { headers: authHeaders() });
   if (!res.ok)
     throw new Error(`Failed to load learning curve: ${res.statusText}`);
   return (await res.json()) as LearningCurvePoint[];
 }
 
 export async function getSkillPerformance(): Promise<SkillPerformance[]> {
-  const res = await fetch(
-    `${getBackendBaseURL()}/api/evolution/skills/performance`,
-    {
-      headers: authHeaders(),
-    },
-  );
+  const res = await evolutionFetch("/api/evolution/skills/performance", {
+    headers: authHeaders(),
+  });
   if (!res.ok)
     throw new Error(`Failed to load skill performance: ${res.statusText}`);
   return (await res.json()) as SkillPerformance[];
@@ -154,20 +170,17 @@ export async function getMemoryGrowth(
   const params = new URLSearchParams();
   if (days !== undefined) params.set("days", String(days));
   const qs = params.toString();
-  const url = `${getBackendBaseURL()}/api/evolution/memory/growth${qs ? `?${qs}` : ""}`;
-  const res = await fetch(url, { headers: authHeaders() });
+  const path = `/api/evolution/memory/growth${qs ? `?${qs}` : ""}`;
+  const res = await evolutionFetch(path, { headers: authHeaders() });
   if (!res.ok)
     throw new Error(`Failed to load memory growth: ${res.statusText}`);
   return (await res.json()) as MemoryGrowthPoint[];
 }
 
 export async function getRecommendations(): Promise<Recommendation[]> {
-  const res = await fetch(
-    `${getBackendBaseURL()}/api/evolution/recommendations`,
-    {
-      headers: authHeaders(),
-    },
-  );
+  const res = await evolutionFetch("/api/evolution/recommendations", {
+    headers: authHeaders(),
+  });
   if (!res.ok)
     throw new Error(`Failed to load recommendations: ${res.statusText}`);
   return (await res.json()) as Recommendation[];

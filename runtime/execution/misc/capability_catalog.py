@@ -27,10 +27,11 @@ def build_capability_catalog(
     tool_registry: Any = None,
     mobile_skills_root: str | Path | None = None,
     include_mobile: bool = True,
+    tool_scope: str | None = None,
 ) -> dict[str, Any]:
     entries: list[dict[str, Any]] = []
     entries.extend(_runtime_skill_entries(registry))
-    entries.extend(_tool_registry_entries(tool_registry))
+    entries.extend(_tool_registry_entries(tool_registry, scope=tool_scope))
     if include_mobile:
         entries.extend(_mobile_mcp_entries(mobile_skills_root))
     entries = sorted(entries, key=_entry_sort_key)
@@ -127,11 +128,15 @@ def _runtime_skill_entries(registry: Any) -> list[dict[str, Any]]:
     return entries
 
 
-def _tool_registry_entries(tool_registry: Any) -> list[dict[str, Any]]:
+def _tool_registry_entries(
+    tool_registry: Any,
+    *,
+    scope: str | None = None,
+) -> list[dict[str, Any]]:
     if tool_registry is None:
         return []
     try:
-        schemas = list(tool_registry.get_all_tool_schemas())
+        schemas = list(tool_registry.get_all_tool_schemas(scope=scope))
     except Exception:
         return []
     providers_by_tool = _providers_by_tool(tool_registry)

@@ -32,6 +32,7 @@ from ._providers_data import (
     _sample_base_url_from_profile_markers,
     _sample_model_from_profile_markers,
     describe_openai_compat_profile,
+    effective_supported_efforts,
     known_openai_compat_profiles,
     openai_compat_profile_ids,
     resolve_openai_compat_profile,
@@ -314,7 +315,7 @@ def apply_custom_openai_compat_profile(
     updates: dict[str, Any] = {}
 
     thinking_style = entry.get("thinking_request_style")
-    if thinking_style in ("openai", "none", "minimax_adaptive"):
+    if thinking_style in ("openai", "none", "minimax_adaptive", "deepseek"):
         updates["thinking_request_style"] = thinking_style
 
     for field_name in (
@@ -758,10 +759,70 @@ def _normalize_thinking_fields(
         return
     if profile.thinking_request_style == "openai":
         return
+    if profile.thinking_request_style == "deepseek":
+        _normalize_deepseek_thinking(payload)
+        return
     if profile.thinking_request_style == "minimax_adaptive":
         payload.pop("reasoning_effort", None)
         payload["thinking"] = {"type": "adaptive"}
         return
+    payload.pop("reasoning_effort", None)
+    payload.pop("thinking", None)
+
+
+_DEEPSEEK_EFFORT_VOCAB = frozenset({"off", "high", "max"})
+"""DeepSeek's native reasoning_effort vocabulary (V4): off | high | max."""
+
+_DEEPSEEK_EFFORT_FALLBACKS = {
+    "minimal": "high",
+    "low": "high",
+    "medium": "high",
+    "high": "high",
+    "xhigh": "max",
+    "max": "max",
+}
+"""OpenAI-style efforts map into the DeepSeek vocabulary; only high/max keep
+thinking enabled, anything below high is promoted rather than dropped."""
+
+
+def _normalize_deepseek_thinking(payload: dict[str, Any]) -> None:
+    """DeepSeek-native thinking normalization (V4 wire contract).
+
+    * ``reasoning_effort: off`` → ``thinking: {type: disabled}`` and the
+      effort field is dropped (DeepSeek rejects ``off`` as an effort value).
+    * ``reasoning_effort: high|max`` (or an OpenAI-style effort mapped into
+      that vocabulary) → ``thinking: {type: enabled}`` with the effort kept.
+    * ``thinking: {type: disabled}`` alone → stays disabled.
+    * ``thinking: {type: enabled}`` alone → stays enabled without an effort.
+    """
+
+    thinking = payload.get("thinking")
+    effort_raw = payload.get("reasoning_effort")
+    effort = str(effort_raw or "").strip().lower() if effort_raw is not None else None
+
+    if effort == "off":
+        payload["thinking"] = {"type": "disabled"}
+        payload.pop("reasoning_effort", None)
+        return
+
+    if effort in _DEEPSEEK_EFFORT_VOCAB:
+        payload["thinking"] = {"type": "enabled"}
+        payload["reasoning_effort"] = effort
+        return
+
+    if effort in _DEEPSEEK_EFFORT_FALLBACKS:
+        payload["thinking"] = {"type": "enabled"}
+        payload["reasoning_effort"] = _DEEPSEEK_EFFORT_FALLBACKS[effort]
+        return
+
+    if isinstance(thinking, dict) and thinking.get("type") in ("enabled", "disabled"):
+        payload["thinking"] = {"type": thinking["type"]}
+        # An effort outside the native vocabulary is invalid on the wire;
+        # the explicit thinking flag wins and the effort is dropped.
+        payload.pop("reasoning_effort", None)
+        return
+
+    # Unknown effort/thinking shape: drop both rather than risk a 400.
     payload.pop("reasoning_effort", None)
     payload.pop("thinking", None)
 
@@ -940,6 +1001,7 @@ __all__ = [
     "apply_custom_openai_compat_profile",
     "audit_openai_compat_profile_catalog",
     "describe_openai_compat_profile",
+    "effective_supported_efforts",
     "extract_openai_compat_reasoning",
     "extract_openai_compat_usage",
     "known_openai_compat_profiles",

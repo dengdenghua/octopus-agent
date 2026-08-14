@@ -112,6 +112,46 @@ def test_upsert_dedupes_by_title(base_dir: Path, project: str) -> None:
     assert merged["source_turn_ids"] == ["t1", "t2"]
 
 
+def test_upsert_keeps_same_title_separate_across_locales(
+    base_dir: Path,
+    project: str,
+) -> None:
+    first = Suggestion(
+        id="",
+        project_root=project,
+        title="Review API",
+        description="English",
+        prompt="Review it",
+        locale="en-US",
+    )
+    second = Suggestion(
+        id="",
+        project_root=project,
+        title="Review API",
+        description="中文",
+        prompt="检查 API",
+        locale="zh-CN",
+    )
+    assert amb.upsert_many(project, [first], base_dir=base_dir) == 1
+    assert amb.upsert_many(project, [second], base_dir=base_dir) == 1
+    assert len(amb.read_bucket(project, base_dir=base_dir)["suggestions"]) == 2
+    zh_bucket = amb.read_bucket(project, base_dir=base_dir, locale="zh-CN")
+    assert [s["description"] for s in zh_bucket["suggestions"]] == ["中文"]
+
+
+def test_legacy_suggestion_defaults_to_english() -> None:
+    suggestion = Suggestion.from_dict(
+        {
+            "id": "legacy",
+            "project_root": "/p",
+            "title": "Old English title",
+            "prompt": "Continue",
+        }
+    )
+    assert suggestion is not None
+    assert suggestion.locale == "en-US"
+
+
 def test_mark_status_updates_timestamp(
     base_dir: Path,
     project: str,
@@ -299,6 +339,42 @@ def test_generate_merges_llm_output(
     assert "Fix tool_errors in CI path" in titles
 
 
+def test_generate_uses_requested_locale_in_prompt_and_bucket(
+    base_dir: Path,
+    project: str,
+    scored_turns: str,
+) -> None:
+    fake_llm = (
+        {
+            "suggestions": [
+                {
+                    "title": "检查失败的构建",
+                    "description": "最近的工具调用失败了。",
+                    "prompt": "请检查并修复构建失败。",
+                    "source_turn_ids": ["turn-1"],
+                }
+            ]
+        },
+        {"model": "mock/cheap"},
+    )
+    with patch(
+        "runtime.memory.learning.deep_evolution._llm_call_json",
+        return_value=fake_llm,
+    ) as llm:
+        result = amb.generate_suggestions(
+            project,
+            scored_turns,
+            base_dir=base_dir,
+            locale="zh-CN",
+        )
+
+    call = llm.call_args.kwargs
+    assert "Simplified Chinese" in call["system"]
+    assert "Response locale: zh-CN" in call["user"]
+    assert result["suggestions"][0]["locale"] == "zh-CN"
+    assert result["suggestions"][0]["title"] == "检查失败的构建"
+
+
 def test_generate_handles_llm_failure(
     base_dir: Path,
     project: str,
@@ -388,6 +464,45 @@ def test_get_returns_real_bucket_when_flag_on(
     assert body["enabled"] is True
     assert len(body["suggestions"]) == 1
     assert body["suggestions"][0]["title"] == "hi"
+
+
+def test_get_filters_suggestions_by_locale(
+    client: TestClient,
+    base_dir: Path,
+    project: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_FF_UI_AMBIENT_SUGGESTIONS", "1")
+    ff.reload()
+    amb.upsert_many(
+        project,
+        [
+            Suggestion(
+                id="",
+                project_root=project,
+                title="English",
+                description="",
+                prompt="Continue",
+                locale="en-US",
+            ),
+            Suggestion(
+                id="",
+                project_root=project,
+                title="中文",
+                description="",
+                prompt="继续",
+                locale="zh-CN",
+            ),
+        ],
+        base_dir=base_dir,
+    )
+
+    r = client.get(
+        "/api/ambient-suggestions",
+        params={"project": project, "locale": "zh-CN"},
+    )
+    assert r.status_code == 200
+    assert [s["title"] for s in r.json()["suggestions"]] == ["中文"]
 
 
 def test_run_endpoint_is_403_when_flag_off(

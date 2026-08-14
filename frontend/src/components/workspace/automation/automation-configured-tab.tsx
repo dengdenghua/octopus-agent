@@ -160,7 +160,11 @@ export function AutomationConfiguredTab() {
     if (keepAwake) {
       requestWakeLock();
       const onVisibility = () => {
-        if (document.visibilityState === "visible" && keepAwake && !wakeLockRef.current) {
+        if (
+          document.visibilityState === "visible" &&
+          keepAwake &&
+          !wakeLockRef.current
+        ) {
           requestWakeLock();
         }
       };
@@ -172,7 +176,9 @@ export function AutomationConfiguredTab() {
       };
     } else {
       releaseWakeLock();
-      return () => { cancelled = true; };
+      return () => {
+        cancelled = true;
+      };
     }
   }, [keepAwake]);
 
@@ -264,7 +270,10 @@ export function AutomationConfiguredTab() {
           <Skeleton className="codex-skeleton h-5 w-9 shrink-0 rounded-full" />
         </div>
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3 rounded-lg border border-border-default/50 bg-card/30 px-3 py-2.5">
+          <div
+            key={i}
+            className="flex items-center gap-3 rounded-lg border border-border-default/50 bg-card/30 px-3 py-2.5"
+          >
             <Skeleton className="codex-skeleton size-4 shrink-0 rounded-full" />
             <Skeleton className="codex-skeleton h-4 flex-1 rounded" />
             <Skeleton className="codex-skeleton h-4 w-10 shrink-0 rounded" />
@@ -356,18 +365,20 @@ export function AutomationConfiguredTab() {
                         variant="ghost"
                         size="icon"
                         className="size-7 rounded-md"
+                        aria-label={t.common.more}
+                        title={t.common.more}
                       >
                         <MoreHorizontalIcon className="size-3.5" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
-                        className="text-destructive focus:text-destructive"
-                        onClick={() =>
+                        variant="destructive"
+                        onSelect={() =>
                           setSubscriptionToDelete({ id: item.id, title })
                         }
                       >
-                        <Trash2Icon className="mr-2 size-3.5" />
+                        <Trash2Icon />
                         {t.intelligence.deleteSubscription}
                       </DropdownMenuItem>
                     </DropdownMenuContent>

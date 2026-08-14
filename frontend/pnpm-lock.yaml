@@ -137,6 +137,9 @@ importers:
       embla-carousel-react:
         specifier: ^8.6.0
         version: 8.6.0(react@19.2.6)
+      idb:
+        specifier: ^8.0.3
+        version: 8.0.3
       katex:
         specifier: ^0.16.28
         version: 0.16.45
@@ -3563,6 +3566,9 @@ packages:
   iconv-lite@0.6.3:
     resolution: {integrity: sha512-4fCk79wshMdzMp2rH06qWrJE4iolqLhCUH+OiuIgU++RB0+94NlDL81atO7GX55uUKueo0txHNtvEyI6D7WdMw==}
     engines: {node: '>=0.10.0'}
+
+  idb@8.0.3:
+    resolution: {integrity: sha512-LtwtVyVYO5BqRvcsKuB2iUMnHwPVByPCXFXOpuU96IZPPoPN6xjOGxZQ74pgSVVLQWtUOYgyeL4GE98BY5D3wg==}
 
   ignore@5.3.2:
     resolution: {integrity: sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g==}
@@ -9048,6 +9054,8 @@ snapshots:
   iconv-lite@0.6.3:
     dependencies:
       safer-buffer: 2.1.2
+
+  idb@8.0.3: {}
 
   ignore@5.3.2: {}
 

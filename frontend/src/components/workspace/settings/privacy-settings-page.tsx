@@ -32,6 +32,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { formatAiModeDevice, type AiModeDevice } from "./settings-resilience";
 import { getSettingsUxCopy } from "./settings-ux-copy";
+import { PersonalSpaceFolderSettings } from "./personal-space-settings-page";
 
 // ─── Local API types · narrow to what the UI actually uses ──────
 //
@@ -455,18 +456,20 @@ export default function PrivacySettingsPage() {
   const source = status?.source ?? "default";
 
   return (
-    <div className="flex flex-col gap-6 text-sm">
+    <div className="flex flex-col gap-4 text-sm sm:gap-6">
+      <PersonalSpaceFolderSettings />
+
       {/* ─── Identity Lock toggle ─── */}
       <div
         data-testid="identity-protection-section"
-        className="rounded-lg border border-border-default bg-card/50 p-5"
+        className="rounded-lg border border-border-default bg-card/50 p-4 sm:p-5"
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <h3 className="text-base font-semibold text-foreground">
               {copy.identityTitle}
             </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-xs leading-4 text-muted-foreground sm:leading-normal">
               {copy.identityDescription}
             </p>
           </div>
@@ -494,7 +497,7 @@ export default function PrivacySettingsPage() {
         </div>
 
         {statusLoadState === "ready" && status ? (
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs sm:mt-3">
             <span
               className={cn(
                 "rounded px-1.5 py-0.5 font-medium",
@@ -531,14 +534,14 @@ export default function PrivacySettingsPage() {
       {/* ─── AI mode (efficiency / privacy) ─── */}
       <div
         data-testid="ai-mode-section"
-        className="rounded-lg border border-border-default bg-card/50 p-5"
+        className="rounded-lg border border-border-default bg-card/50 p-4 sm:p-5"
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <h3 className="text-base font-semibold text-foreground">
               {t.privacySettings.aiModeTitle}
             </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-xs leading-4 text-muted-foreground sm:leading-normal">
               {(() => {
                 if (!aiMode) return t.privacySettings.aiModeDescScanning;
                 const recLabel =
@@ -570,7 +573,7 @@ export default function PrivacySettingsPage() {
 
         {aiModeLoadState === "ready" && aiMode ? (
           <>
-            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:mt-4 sm:gap-3">
               {aiMode.modes
                 .filter(
                   (opt) => opt.id === "efficiency" || opt.id === "privacy",
@@ -595,7 +598,7 @@ export default function PrivacySettingsPage() {
                       disabled={aiModeBusy}
                       aria-pressed={active}
                       className={cn(
-                        "flex flex-col gap-2 rounded-lg border p-4 text-left transition",
+                        "flex flex-col gap-1.5 rounded-lg border p-3 text-left transition sm:gap-2 sm:p-4",
                         active
                           ? "border-primary bg-primary/5 ring-1 ring-primary/40"
                           : "border-border-default hover:border-primary/40",
@@ -617,7 +620,7 @@ export default function PrivacySettingsPage() {
                           )}
                         </div>
                       </div>
-                      <p className="text-xs leading-snug text-muted-foreground">
+                      <p className="line-clamp-2 text-xs leading-snug text-muted-foreground sm:line-clamp-none">
                         {description}
                       </p>
                     </button>
@@ -636,226 +639,281 @@ export default function PrivacySettingsPage() {
             state={aiModeLoadState}
             copy={copy}
             onRetry={fetchAiMode}
+            compact
           />
         )}
       </div>
 
-      {/* ─── Path denylist (folders the agent can't read) ─── */}
-      <div
-        data-testid="path-denylist-section"
-        className="rounded-lg border border-border-default bg-card/50 p-5"
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1">
-            <h3 className="text-base font-semibold text-foreground">
-              {t.privacySettings.pathDenyTitle}
-            </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t.privacySettings.pathDenyDesc}
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => {
-              setNewPath("");
-              setShowAddPathDialog(true);
-            }}
-            disabled={denylistLoadState !== "ready"}
-          >
-            <PlusIcon className="mr-1 h-3 w-3" />{" "}
-            {t.privacySettings.addPathButton}
-          </Button>
-        </div>
-
-        {denylistLoadState === "ready" && denylist ? (
-          <div className="mt-4 rounded-lg border border-border-subtle divide-y divide-border/40">
-            {denylist.paths.length === 0 ? (
-              <div className="px-4 py-6 text-center text-xs text-muted-foreground">
-                {t.privacySettings.pathDenyEmpty}
-              </div>
-            ) : (
-              denylist.paths.map((p) => (
-                <div
-                  key={p}
-                  className="flex items-center justify-between gap-3 px-4 py-3"
-                >
-                  <code className="truncate font-mono text-xs text-foreground">
-                    {p}
-                  </code>
-                  <button
-                    type="button"
-                    aria-label={`${copy.removePathTitle}: ${p}`}
-                    className="shrink-0 rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => setPathToRemove(p)}
-                    disabled={denylistBusy}
-                  >
-                    <TrashIcon className="h-4 w-4" />
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-        ) : (
-          <SettingsStateNotice
-            state={denylistLoadState}
-            copy={copy}
-            onRetry={fetchDenylist}
-          />
-        )}
-      </div>
-
-      {/* ─── Constitution profile ─── */}
-      <div
-        data-testid="outbound-safety-section"
-        className="rounded-lg border border-border-default bg-card/50 p-5"
-      >
-        <h3 className="text-base font-semibold text-foreground">
-          {copy.profileTitle}
-        </h3>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {copy.profileDescription}{" "}
-          <a
-            href="https://github.com/dengdenghua/octopus-agent/blob/main/docs/constitution.md"
-            className="underline underline-offset-2"
-            target="_blank"
-            rel="noreferrer"
-          >
-            {copy.profileDocLabel}
-          </a>
-        </p>
-
-        {profileLoadState === "ready" && profile ? (
-          <>
-            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-              {profile.available.map((name) => {
-                const active = profile.profile === name;
-                return (
-                  <button
-                    key={name}
-                    type="button"
-                    onClick={() => setConstitutionProfile(name)}
-                    disabled={profileBusy || active}
-                    aria-pressed={active}
-                    className={cn(
-                      "flex flex-col gap-1 rounded-lg border p-3 text-left transition",
-                      active
-                        ? "border-primary bg-primary/5 ring-1 ring-primary/40"
-                        : "border-border-default hover:border-primary/40",
-                      profileBusy && "opacity-60 cursor-not-allowed",
-                    )}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium">
-                        {copy.profiles[name].label}
-                      </span>
-                      {active && (
-                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
-                          {copy.active}
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-muted-foreground leading-snug">
-                      {copy.profiles[name].description}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-border-default p-3">
-              <div className="min-w-0">
-                <div className="text-sm font-medium">{copy.judgeTitle}</div>
-                <div className="text-xs text-muted-foreground leading-snug">
-                  {copy.judgeDescription}
-                  {judgeLoadState === "ready" && judge && !judge.available && (
-                    <span className="mt-1 block text-warning">
-                      {copy.judgeUnavailable}
-                    </span>
-                  )}
-                </div>
-                {judgeLoadState !== "ready" && (
-                  <SettingsStateNotice
-                    state={judgeLoadState}
-                    copy={copy}
-                    onRetry={fetchJudge}
-                    compact
-                  />
-                )}
-              </div>
-              <Switch
-                aria-label={copy.judgeSwitchLabel}
-                checked={!!judge?.enabled}
-                disabled={
-                  judgeBusy || judgeLoadState !== "ready" || !judge?.available
-                }
-                onCheckedChange={(v) => setJudgeEnabled(v)}
-              />
-            </div>
-          </>
-        ) : (
-          <SettingsStateNotice
-            state={profileLoadState}
-            copy={copy}
-            onRetry={fetchProfile}
-          />
-        )}
-      </div>
-
-      {/* ─── Local private web-search backend (one-click SearXNG) ─── */}
-      <SearxngControl />
-
-      {/* ─── Alternative unlock paths ─── */}
-      <details className="group rounded-lg border border-border-subtle bg-muted/20 p-4">
-        <summary className="cursor-pointer list-none rounded text-xs font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
-          <span className="flex items-center justify-between gap-3">
+      <details className="group rounded-lg border border-border-default bg-card/35">
+        <summary className="cursor-pointer list-none rounded-lg px-5 py-4 outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+          <span className="flex items-center justify-between gap-4">
             <span>
-              <span className="block font-semibold">{copy.advancedTitle}</span>
-              <span className="mt-0.5 block font-normal text-muted-foreground">
-                {copy.advancedSummary}
+              <span className="block text-sm font-semibold text-foreground">
+                {locale.startsWith("zh")
+                  ? "高级隐私与安全"
+                  : locale.startsWith("ja")
+                    ? "高度なプライバシーと安全性"
+                    : locale.startsWith("ko")
+                      ? "고급 개인정보 보호 및 보안"
+                      : "Advanced privacy & safety"}
+              </span>
+              <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                {locale.startsWith("zh")
+                  ? "目录隔离、外发规则、语义审查与私有搜索。"
+                  : locale.startsWith("ja")
+                    ? "フォルダー分離、送信ルール、意味審査、プライベート検索。"
+                    : locale.startsWith("ko")
+                      ? "폴더 격리, 전송 규칙, 의미 검사 및 비공개 검색."
+                      : "Folder isolation, outbound rules, semantic review, and private search."}
               </span>
             </span>
-            <span
-              aria-hidden="true"
-              className="text-muted-foreground transition-transform group-open:rotate-90"
-            >
+            <span className="text-muted-foreground transition-transform group-open:rotate-90">
               ›
             </span>
           </span>
         </summary>
-        <div className="mt-3 border-t border-border-subtle pt-3">
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            {copy.advancedDescription}
-          </p>
-          <ul className="mt-2 space-y-1.5 text-xs text-muted-foreground/90">
-            <li>{copy.advancedEnvironment}</li>
-            <li>{copy.advancedTurn}</li>
-            <li>{copy.advancedApi}</li>
-          </ul>
+        <div className="space-y-4 border-t border-border-subtle p-4">
+          {/* ─── Path denylist (folders the agent can't read) ─── */}
+          <div
+            data-testid="path-denylist-section"
+            className="rounded-lg border border-border-default bg-card/50 p-5"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <h3 className="text-base font-semibold text-foreground">
+                  {t.privacySettings.pathDenyTitle}
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t.privacySettings.pathDenyDesc}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => {
+                  setNewPath("");
+                  setShowAddPathDialog(true);
+                }}
+                disabled={denylistLoadState !== "ready"}
+              >
+                <PlusIcon className="mr-1 h-3 w-3" />{" "}
+                {t.privacySettings.addPathButton}
+              </Button>
+            </div>
+
+            {denylistLoadState === "ready" && denylist ? (
+              <div className="mt-4 rounded-lg border border-border-subtle divide-y divide-border/40">
+                {denylist.paths.length === 0 ? (
+                  <div className="px-4 py-6 text-center text-xs text-muted-foreground">
+                    {t.privacySettings.pathDenyEmpty}
+                  </div>
+                ) : (
+                  denylist.paths.map((p) => (
+                    <div
+                      key={p}
+                      className="flex items-center justify-between gap-3 px-4 py-3"
+                    >
+                      <code className="truncate font-mono text-xs text-foreground">
+                        {p}
+                      </code>
+                      <button
+                        type="button"
+                        aria-label={`${copy.removePathTitle}: ${p}`}
+                        className="shrink-0 rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => setPathToRemove(p)}
+                        disabled={denylistBusy}
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : (
+              <SettingsStateNotice
+                state={denylistLoadState}
+                copy={copy}
+                onRetry={fetchDenylist}
+              />
+            )}
+          </div>
+
+          {/* ─── Constitution profile ─── */}
+          <div
+            data-testid="outbound-safety-section"
+            className="rounded-lg border border-border-default bg-card/50 p-5"
+          >
+            <h3 className="text-base font-semibold text-foreground">
+              {copy.profileTitle}
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {copy.profileDescription}{" "}
+              <a
+                href="https://github.com/dengdenghua/octopus-agent/blob/main/docs/constitution.md"
+                className="underline underline-offset-2"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {copy.profileDocLabel}
+              </a>
+            </p>
+
+            {profileLoadState === "ready" && profile ? (
+              <>
+                <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  {profile.available.map((name) => {
+                    const active = profile.profile === name;
+                    return (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => setConstitutionProfile(name)}
+                        disabled={profileBusy || active}
+                        aria-pressed={active}
+                        className={cn(
+                          "flex flex-col gap-1 rounded-lg border p-3 text-left transition",
+                          active
+                            ? "border-primary bg-primary/5 ring-1 ring-primary/40"
+                            : "border-border-default hover:border-primary/40",
+                          profileBusy && "opacity-60 cursor-not-allowed",
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-medium">
+                            {copy.profiles[name].label}
+                          </span>
+                          {active && (
+                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
+                              {copy.active}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground leading-snug">
+                          {copy.profiles[name].description}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-border-default p-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">{copy.judgeTitle}</div>
+                    <div className="text-xs text-muted-foreground leading-snug">
+                      {copy.judgeDescription}
+                      {judgeLoadState === "ready" &&
+                        judge &&
+                        !judge.available && (
+                          <span className="mt-1 block text-warning">
+                            {copy.judgeUnavailable}
+                          </span>
+                        )}
+                    </div>
+                    {judgeLoadState !== "ready" && (
+                      <SettingsStateNotice
+                        state={judgeLoadState}
+                        copy={copy}
+                        onRetry={fetchJudge}
+                        compact
+                      />
+                    )}
+                  </div>
+                  <Switch
+                    aria-label={copy.judgeSwitchLabel}
+                    checked={!!judge?.enabled}
+                    disabled={
+                      judgeBusy ||
+                      judgeLoadState !== "ready" ||
+                      !judge?.available
+                    }
+                    onCheckedChange={(v) => setJudgeEnabled(v)}
+                  />
+                </div>
+              </>
+            ) : (
+              <SettingsStateNotice
+                state={profileLoadState}
+                copy={copy}
+                onRetry={fetchProfile}
+              />
+            )}
+          </div>
+
+          {/* ─── Local private web-search backend (one-click SearXNG) ─── */}
+          <SearxngControl />
+
+          {/* ─── Alternative unlock paths ─── */}
+          <details className="group rounded-lg border border-border-subtle bg-muted/20 p-4">
+            <summary className="cursor-pointer list-none rounded text-xs font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+              <span className="flex items-center justify-between gap-3">
+                <span>
+                  <span className="block font-semibold">
+                    {copy.advancedTitle}
+                  </span>
+                  <span className="mt-0.5 block font-normal text-muted-foreground">
+                    {copy.advancedSummary}
+                  </span>
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="text-muted-foreground transition-transform group-open:rotate-90"
+                >
+                  ›
+                </span>
+              </span>
+            </summary>
+            <div className="mt-3 border-t border-border-subtle pt-3">
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {copy.advancedDescription}
+              </p>
+              <ul className="mt-2 space-y-1.5 text-xs text-muted-foreground/90">
+                <li>{copy.advancedEnvironment}</li>
+                <li>{copy.advancedTurn}</li>
+                <li>{copy.advancedApi}</li>
+              </ul>
+            </div>
+          </details>
         </div>
       </details>
 
-      <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1">
-            <h3 className="text-base font-semibold text-destructive">
+      <details className="group rounded-lg border border-destructive/20 bg-destructive/5">
+        <summary className="cursor-pointer list-none rounded-lg px-5 py-4 outline-none focus-visible:ring-2 focus-visible:ring-destructive/35">
+          <span className="flex items-center justify-between gap-4">
+            <span>
+              <span className="block text-sm font-semibold text-destructive">
+                {t.accountSettings.factoryResetTitle}
+              </span>
+              <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                {t.accountSettings.factoryResetDescription}
+              </span>
+            </span>
+            <span className="text-destructive/70 transition-transform group-open:rotate-90">
+              ›
+            </span>
+          </span>
+        </summary>
+        <div className="border-t border-destructive/15 p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <h3 className="text-base font-semibold text-destructive">
+                {t.accountSettings.factoryResetTitle}
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t.accountSettings.factoryResetDescription}
+              </p>
+            </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setShowFactoryResetDialog(true)}
+            >
               {t.accountSettings.factoryResetTitle}
-            </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t.accountSettings.factoryResetDescription}
-            </p>
+            </Button>
           </div>
-          <Button
-            variant="destructive"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => setShowFactoryResetDialog(true)}
-          >
-            {t.accountSettings.factoryResetTitle}
-          </Button>
         </div>
-      </div>
+      </details>
 
       <Dialog
         open={showAddPathDialog}
@@ -1024,35 +1082,43 @@ function SettingsStateNotice({
 }) {
   if (state === "ready") return null;
   const failed = state === "error";
+  if (!failed) {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        aria-label={copy.loading}
+        className={cn("mt-3 space-y-2", compact && "mt-2")}
+      >
+        <span className="block h-2.5 w-2/3 animate-pulse rounded-full bg-muted" />
+        {!compact ? (
+          <span className="block h-2.5 w-2/5 animate-pulse rounded-full bg-muted/70" />
+        ) : null}
+      </div>
+    );
+  }
   return (
     <div
-      role={failed ? "alert" : "status"}
+      role="alert"
       aria-live="polite"
       className={cn(
         "mt-3 flex items-center justify-between gap-3 rounded-lg border px-3 text-xs",
-        compact ? "py-2" : "py-3",
-        failed
-          ? "border-destructive/25 bg-destructive/5 text-destructive"
-          : "border-border-subtle bg-muted/25 text-muted-foreground",
+        compact ? "border-transparent bg-transparent px-0 py-1" : "py-3",
+        "border-destructive/25 bg-destructive/5 text-destructive",
       )}
     >
       <span className="flex min-w-0 items-center gap-2">
-        {failed ? null : (
-          <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin" />
-        )}
-        <span>{failed ? copy.loadFailed : copy.loading}</span>
+        <span>{copy.loadFailed}</span>
       </span>
-      {failed ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 shrink-0 px-2 text-xs"
-          onClick={() => void onRetry()}
-        >
-          {copy.retry}
-        </Button>
-      ) : null}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-7 shrink-0 px-2 text-xs"
+        onClick={() => void onRetry()}
+      >
+        {copy.retry}
+      </Button>
     </div>
   );
 }

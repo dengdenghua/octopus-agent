@@ -214,6 +214,7 @@ class CerebrumRuntime:
         project_store: Any = None,
         project_os_hooks: dict[str, Any] | None = None,
         task_supervisor: Any = None,
+        session_titles: Any = None,
     ) -> None:
         """Wire a CerebrumRuntime onto an existing octopus stack.
 
@@ -242,6 +243,10 @@ class CerebrumRuntime:
         compaction entirely. When ``summary_router`` is also
         provided, an LLM-backed summariser is wired in — otherwise the
         mechanical default (deterministic prose) is used.
+
+        ``session_titles`` (optional) is a ``SessionTitleService``; the
+        first-completed-turn auto-title regeneration (dsh auto-title)
+        runs against it after each thread-store snapshot.
         """
         self._stack = stack
         self._default_agent = agent
@@ -257,6 +262,9 @@ class CerebrumRuntime:
         # from that store; without this bridge, realtime conversations
         # would never appear in the history grouping (today / 7d / 30d).
         self._thread_store = thread_store
+        # Optional SessionTitleService for first-turn auto-title
+        # regeneration (dsh auto-title); None keeps the old behaviour.
+        self._session_titles = session_titles
         self._reflex_router = reflex_router
         self._trace_store = trace_store
         self._task_supervisor = task_supervisor
@@ -457,12 +465,13 @@ class CerebrumRuntime:
         """Pick the agent for this turn.
 
         Lookup order:
-          1. Realtime input metadata (``agent_id`` / ``agent`` /
+          1. The persisted owner of an existing thread.
+          2. Realtime input metadata (``agent_id`` / ``agent`` /
              ``agent_name``), including the nested ``context`` bag the
              web UI sends on ``turn/start``.
-          2. The registry's match for that id, if any.
-          3. The default agent passed at construction time.
-          4. ``None``.
+          3. The registry's match for that id, if any.
+          4. The default agent passed at construction time.
+          5. ``None``.
         """
         return _resolve_agent(self, params)
 
@@ -539,7 +548,13 @@ class CerebrumRuntime:
         durable record; the legacy store is a derived cache for the
         sidebar.
         """
-        _snapshot_to_thread_store(self, thread_id, log, intent=intent)
+        _snapshot_to_thread_store(
+            self,
+            thread_id,
+            log,
+            intent=intent,
+            session_titles=self._session_titles,
+        )
 
     async def _ensure_thread(self, thread_id: str, emitter: EventEmitter) -> EventLog:
         return await _ensure_thread(self, thread_id, emitter)

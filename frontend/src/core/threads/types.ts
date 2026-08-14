@@ -62,6 +62,7 @@ export interface AgentThreadState extends Record<string, unknown> {
 export interface AgentThread extends Thread<AgentThreadState> {}
 
 export type ReasoningEffort =
+  | "off"
   | "minimal"
   | "low"
   | "medium"
@@ -100,9 +101,4 @@ export interface AgentThreadContext extends Record<string, unknown> {
    * registries/mirrors), "full" (everything). Default "deny". Threaded
    * through to ``sandboxPolicy.networkAccess`` / ``egressAllowCommon``. */
   network_access?: "deny" | "common" | "full";
-  /** Reply personality module from the backend registry
-   * (runtime/core/cerebrum/reply_styles.py): default / professional /
-   * friendly / concise / socratic. Unset → backend "default" (classic
-   * emoji decoration). */
-  reply_style?: string;
 }

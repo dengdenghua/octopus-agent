@@ -11,6 +11,8 @@ import {
 import { AutomationConfiguredTab } from "./automation-configured-tab";
 import { AutomationHistoryTab } from "./automation-history-tab";
 import { AutomationTemplatesTab } from "./automation-templates-tab";
+import { AutomationCreateDialog } from "./automation-create-dialog";
+import type { AutomationTemplate } from "./automation-templates-tab";
 
 /**
  * 自动化 / 订阅面板 —— 复用现有自动化页面的「已配置 / 执行历史 / 任务模板」
@@ -24,6 +26,13 @@ export function AutomationSubscriptionPanel({
   onClose?: () => void;
 }) {
   const [activeTab, setActiveTab] = useState("configured");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [presetTemplate, setPresetTemplate] = useState<AutomationTemplate | null>(null);
+
+  const openCreate = (template: AutomationTemplate | null = null) => {
+    setPresetTemplate(template);
+    setCreateOpen(true);
+  };
 
   return (
     <div
@@ -85,10 +94,19 @@ export function AutomationSubscriptionPanel({
           </TabsContent>
 
           <TabsContent value="templates" className="mt-0">
-            <AutomationTemplatesTab compact />
+            <AutomationTemplatesTab
+              compact
+              onUseTemplate={openCreate}
+              onCreateCustom={() => openCreate()}
+            />
           </TabsContent>
         </Tabs>
       </div>
+      <AutomationCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        presetTemplate={presetTemplate}
+      />
     </div>
   );
 }

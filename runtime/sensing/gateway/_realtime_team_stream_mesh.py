@@ -132,7 +132,11 @@ async def _drive_swarm_mesh(
     def _plan() -> Any:
         scope, jctx = _session()
         with scope, jctx:
-            return runtime._stack.planner.plan(intent)
+            # Extract user-selected model from intent.user_context
+            user_model = None
+            if isinstance(intent.user_context, dict):
+                user_model = intent.user_context.get("model_name")
+            return runtime._stack.planner.plan(intent, model=user_model)
 
     def _run(graph: Any) -> Any:
         from runtime.core.graph_runtime import GraphRuntime

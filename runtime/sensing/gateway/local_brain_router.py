@@ -69,7 +69,7 @@ def create_local_brain_router(
         from runtime.execution.suckers.storage_skills import storage_alive
         from runtime.sensing.gateway.storage_supervisor import maybe_start_storage
 
-        status = maybe_start_storage()
+        status = maybe_start_storage(force=True)
         available = storage_alive(timeout=1.5)
         return {
             "ok": available,

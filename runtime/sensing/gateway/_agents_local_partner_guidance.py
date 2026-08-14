@@ -95,6 +95,12 @@ def _partner_guidance(
     elif partner_id == "codex-cli":
         if command:
             setup_hint = "使用 Codex CLI 自己的登录态、订阅权益和模型配置；Octopus 只负责派工。"
+    elif partner_id == "opencode-cli":
+        if command:
+            setup_hint = (
+                "使用 OpenCode CLI 自己的 Provider 登录态和模型配置；"
+                "Octopus 通过 `opencode run` 做一次性派工。"
+            )
 
     if command and headless_supported and not verify:
         argv = build_partner_argv(partner_id, command, "请只回复 OK，不要修改文件。")
@@ -103,7 +109,7 @@ def _partner_guidance(
     if ready and not setup_hint:
         setup_hint = "已可被 Octopus 自动派工；也可以打开原生 CLI 使用它自己的快捷指令。"
 
-    if partner_id in {"claude-code", "codex-cli", "codebuddy-cli"}:
+    if partner_id in {"claude-code", "codex-cli", "codebuddy-cli", "opencode-cli"}:
         interaction_hint = (
             "Octopus 这里是一次性派工入口，不是原生交互终端；"
             "`/model <模型名>` 可转成本次模型覆盖，`/login`、`/doctor`、`/clear` "
@@ -165,7 +171,7 @@ def _partner_command_hints(partner_id: str) -> list[dict[str, str]]:
             "behavior": "会话类命令不转发；在 Octopus 里请开启新任务或回原生 CLI。",
         },
     ]
-    if partner_id in {"claude-code", "codex-cli", "codebuddy-cli"}:
+    if partner_id in {"claude-code", "codex-cli", "codebuddy-cli", "opencode-cli"}:
         hints.insert(
             0,
             {
@@ -211,7 +217,7 @@ def _partner_diagnostic_items(
     """
     model_value = "CLI 默认"
     model_detail = "模型由该 CLI 自己的配置决定；Octopus 不使用全局模型列表覆盖它。"
-    if partner_id in {"claude-code", "codex-cli", "codebuddy-cli"}:
+    if partner_id in {"claude-code", "codex-cli", "codebuddy-cli", "opencode-cli"}:
         model_value = "可一次性覆盖"
         model_detail = "`/model <模型名>` 换行接任务时会转成本次 CLI 模型参数。"
     elif partner_id == "trae-cli":
@@ -222,7 +228,7 @@ def _partner_diagnostic_items(
         model_detail = "保留发现入口；稳定 prompt→stdout 参数明确后再启用自动派工。"
 
     account_detail = "桌面端账号、免费权益、企业授权不一定同步到 CLI。"
-    if partner_id in {"claude-code", "codex-cli"}:
+    if partner_id in {"claude-code", "codex-cli", "opencode-cli"}:
         account_detail = "使用该 CLI 自己的登录态、订阅权益和模型配置。"
     elif partner_id == "codebuddy-cli":
         account_detail = "首次运行原生 CodeBuddy CLI 登录/授权；桌面端权益不保证同步。"

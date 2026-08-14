@@ -236,7 +236,7 @@ export function CommandPalette() {
 
   return (
     <>
-      <CommandDialog
+      {open && <CommandDialog
         open={open}
         onOpenChange={setOpen}
         title={t.shortcuts.openCommandPalette}
@@ -290,7 +290,7 @@ export function CommandPalette() {
             })}
           </CommandGroup>
         </CommandList>
-      </CommandDialog>
+      </CommandDialog>}
 
       <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
         <DialogContent className="sm:max-w-md">

@@ -65,6 +65,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
@@ -102,7 +103,6 @@ import {
   buildConversationThreadSummaries,
   buildProjectThreadSummaries,
   buildThreadRunStatusByHref,
-  cleanDisplayText,
   isGeneratedTeamProjectName,
   isProjectThreadMode,
   mergeThreadRunStatus,
@@ -162,7 +162,7 @@ const CHAT_CAPABILITY_ROUTES: NavRoute[] = [
   {
     // 助手（octopus）是全局上层入口，放在「订阅」下方，避免与主任务入口混淆。
     to: "/workspace/realtime/octopus-assistant?agent=octopus",
-    label: "助手",
+    labelKey: "navAssistant",
     icon: UserRoundPenIcon,
   },
   {
@@ -175,7 +175,7 @@ const CHAT_CAPABILITY_ROUTES: NavRoute[] = [
 const COMMUNITY_ROUTES: NavRoute[] = [
   {
     to: "/workspace/community",
-    label: "发现社区",
+    labelKey: "navCommunity",
     icon: CompassIcon,
   },
 ];
@@ -514,8 +514,8 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
 
   // Conversation history stays scoped to the currently-active agent
   // so the left-bottom persona switch only affects the current chat lane.
-  // Project aggregation is intentionally handled separately below and
-  // stays global across agents within the same workspace.
+  // Solo project conversations follow the same role boundary below. Shared
+  // team sessions are queried separately and remain visible to the team.
   const activeAgentId = useActiveAgentId();
   const { data: rawConversationThreads } = useThreads(
     {
@@ -535,7 +535,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       select: ["thread_id", "updated_at", "values", "metadata"],
     },
     "code",
-    null,
+    activeAgentId,
   );
   const { data: rawTeamThreads } = useThreads(
     {
@@ -787,14 +787,13 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   );
 
   const byProject: Record<string, ThreadSummary[]> = {};
-  const explicitProjectThreadIdsByProject: Record<string, string[]> = {};
+  const threadIdsByProject: Record<string, string[]> = {};
   const ungroupedProjectThreads: ThreadSummary[] = [];
   for (const name of userProjects) byProject[name] = [];
   const rawThreadMap = new Map(mergedProjectRaw.map((r) => [r.thread_id, r]));
   for (const thread of projectThreads) {
     const raw = rawThreadMap.get(thread.id);
     const meta = (raw?.metadata ?? {}) as Record<string, unknown>;
-    const explicitProject = cleanDisplayText(meta["project"]);
     const project = projectNameForThread(
       thread,
       meta,
@@ -804,30 +803,19 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       ungroupedProjectThreads.push(thread);
       continue;
     }
-    if (explicitProject && project === explicitProject) {
-      (explicitProjectThreadIdsByProject[project] ??= []).push(thread.id);
-    }
+    (threadIdsByProject[project] ??= []).push(thread.id);
     (byProject[project] ??= []).push(thread);
   }
   const projectOrder = Object.keys(byProject).filter(
     (p) => (byProject[p]?.length ?? 0) > 0 || userProjects.includes(p),
   );
-  const deletableProjects = new Set<string>();
-  for (const project of Object.keys(explicitProjectThreadIdsByProject)) {
-    deletableProjects.add(project);
-  }
-  for (const project of userProjects) {
-    const hasExplicitThreads =
-      (explicitProjectThreadIdsByProject[project]?.length ?? 0) > 0;
-    const isEmptyUserProject = (byProject[project]?.length ?? 0) === 0;
-    if (hasExplicitThreads || isEmptyUserProject) {
-      deletableProjects.add(project);
-    }
-  }
+  // Every visible project group can be removed. Deleting a group means
+  // unclassifying its conversations; local folders and thread history stay.
+  const deletableProjects = new Set(projectOrder);
   const [deletingProject, setDeletingProject] = useState<string | null>(null);
 
   const deleteProject = async (project: string) => {
-    const threadIds = explicitProjectThreadIdsByProject[project] ?? [];
+    const threadIds = threadIdsByProject[project] ?? [];
     const next = readUserProjects().filter((p) => p !== project);
 
     if (threadIds.length === 0) {
@@ -842,7 +830,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       await Promise.all(
         threadIds.map((threadId) =>
           apiClient.threads.updateState(threadId, {
-            metadata: { project: "" },
+            metadata: { project: "", workspace_path: "" },
           }),
         ),
       );
@@ -861,6 +849,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
                   metadata: {
                     ...(thread.metadata ?? {}),
                     project: "",
+                    workspace_path: "",
                   },
                 }
               : thread,
@@ -1482,7 +1471,7 @@ export function WorkspaceSurfaceSwitch({
   const items = [
     {
       to: PRIMARY_WORKSPACE_ROUTE,
-      label: "Octopus",
+      label: t.desktop.header.brand,
       icon: BotIcon,
       value: "agent" as const,
       kind: "brand" as const,
@@ -1874,10 +1863,7 @@ function OngoingThreadsSection({
                   aria-current={active ? "page" : undefined}
                   title={`${statusLabel} · ${thread.title}`}
                 >
-                  <span
-                    aria-hidden="true"
-                    className="relative shrink-0"
-                  >
+                  <span aria-hidden="true" className="relative shrink-0">
                     <ThreadAvatar
                       agents={thread.agents}
                       className="size-5 shrink-0"
@@ -2010,32 +1996,69 @@ function ProjectGroup({
             </span>
           </CollapsibleTrigger>
           {deletable && (
-            <button
-              type="button"
-              title={t.sidebar.deleteProjectTooltip}
-              disabled={deleting}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                void handleDeleteProject(project);
-              }}
-              className={cn(
-                "absolute right-1 top-1/2 -translate-y-1/2 flex size-5 items-center justify-center rounded-lg text-muted-foreground/60 opacity-0 transition-opacity group-hover/project:opacity-100 hover:bg-destructive/10 hover:text-destructive",
-                deleting && "opacity-100 cursor-wait hover:bg-transparent",
-              )}
-            >
-              {deleting ? (
-                <span className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
-              ) : (
-                <Trash2Icon className="size-3" />
-              )}
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  title={t.common.more}
+                  aria-label={`${t.common.more}：${project}`}
+                  disabled={deleting}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  className={cn(
+                    "absolute right-0.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground/70 opacity-100 transition-[opacity,background-color,color] duration-fast sm:text-muted-foreground/60 sm:opacity-0",
+                    "sm:group-hover/project:opacity-100 sm:group-focus-within/project:opacity-100 hover:bg-muted/55 hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50 data-[state=open]:opacity-100",
+                    deleting && "cursor-wait opacity-100",
+                  )}
+                >
+                  {deleting ? (
+                    <span className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
+                  ) : (
+                    <MoreHorizontalIcon className="size-3.5" />
+                  )}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" side="right">
+                {threads[0] ? (
+                  <DropdownMenuItem
+                    onSelect={() => onOpenFiles(threads[0]!, project)}
+                  >
+                    <FolderIcon className="text-muted-foreground" />
+                    <span>{t.sidebar.openThreadFilesTooltip}</span>
+                  </DropdownMenuItem>
+                ) : null}
+                <DropdownMenuItem onSelect={() => setOpen((value) => !value)}>
+                  <ChevronRightIcon
+                    className={cn(
+                      "text-muted-foreground transition-transform",
+                      open && "rotate-90",
+                    )}
+                  />
+                  <span>
+                    {open
+                      ? t.sidebar.collapseSection(t.sidebar.sectionProjects)
+                      : t.sidebar.expandSection(t.sidebar.sectionProjects)}
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={deleting}
+                  onSelect={() => void handleDeleteProject(project)}
+                  variant="destructive"
+                >
+                  <Trash2Icon />
+                  <span>{t.sidebar.deleteProjectTooltip}</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
         <CollapsibleContent className="overflow-hidden">
           {/* Keep task content indented, but let the active/hover bar span
               the full project lane like TRAE's code sidebar. */}
-          <ul className="mt-0.5 space-y-px">
+          <ul className="mt-1 space-y-0.5">
             {visibleThreads.map((thread) => {
               const active =
                 activeWorkspaceThreadIdFromPathname(pathname) === thread.id;
@@ -2055,11 +2078,11 @@ function ProjectGroup({
                     aria-current={active ? "page" : undefined}
                     title={thread.title}
                     className={cn(
-                      "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-lg py-1 pl-3 pr-3 text-[13px] text-foreground/78 transition-[padding,background-color,color] duration-fast group-hover/thread:pr-[4.25rem] group-focus-within/thread:pr-[4.25rem]",
+                      "flex min-h-9 w-full min-w-0 items-center gap-2 rounded-lg py-1.5 pl-3 pr-3 text-[13px] text-foreground/78 transition-[padding,background-color,color] duration-fast group-hover/thread:pr-[4.25rem] group-focus-within/thread:pr-[4.25rem]",
                       "hover:bg-muted/40 hover:text-foreground",
                       "outline-none focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:ring-inset",
                       active &&
-                        "text-foreground bg-[color:color-mix(in_oklch,var(--sidebar-accent)_42%,transparent)]",
+                        "text-foreground bg-[color:color-mix(in_oklch,var(--sidebar-accent)_62%,transparent)] shadow-[inset_2px_0_0_color-mix(in_oklch,var(--primary)_60%,transparent)]",
                     )}
                   >
                     <span className="relative flex size-5 shrink-0 items-center justify-center">
@@ -2077,10 +2100,7 @@ function ProjectGroup({
                           />
                         </>
                       ) : (
-                        <ThreadRunStatusLight
-                          idle="queue"
-                          status={runStatus}
-                        />
+                        <ThreadRunStatusLight idle="queue" status={runStatus} />
                       )}
                     </span>
                     <span className="min-w-0 flex-1 truncate leading-tight">
@@ -2139,10 +2159,11 @@ function ProjectGroup({
                         <span>{t.common.rename}</span>
                       </DropdownMenuItem>
                       <DropdownMenuItem
+                        variant="destructive"
                         disabled={deleteThread.isPending}
                         onSelect={() => void handleDeleteThread(thread)}
                       >
-                        <Trash2Icon className="text-muted-foreground" />
+                        <Trash2Icon />
                         <span>{t.sidebar.deleteThreadTooltip}</span>
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -2310,7 +2331,12 @@ function SectionHeader({
               : t.sidebar.expandSection(label)
           }
           aria-expanded={open}
-          className="flex h-8 min-w-0 flex-1 items-center gap-1 rounded-lg text-left text-sm font-medium text-muted-foreground transition-colors hover:text-foreground outline-none"
+          className={cn(
+            "flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1 text-left text-sm font-medium transition-[background-color,color] outline-none focus-visible:ring-1 focus-visible:ring-ring/45",
+            open
+              ? "text-foreground/80"
+              : "text-muted-foreground hover:bg-muted/35 hover:text-foreground",
+          )}
         >
           {/* Implementation note. */}
           <ChevronRightIcon
@@ -2578,7 +2604,10 @@ function ChatsSection({
   }, [agentId, workspacePath]);
   const sectionLabel = label ?? tr.sidebar.sectionChats;
   const actionLabel = newActionLabel ?? tr.sidebar.actionNewTask;
-  const visibleLimit = 20;
+  // Keep the global history scannable. Project folders already retain the
+  // deeper archive, so the primary conversation section should surface only
+  // the most useful recent set instead of becoming a second waterfall.
+  const visibleLimit = 10;
   const displayedThreads = useMemo(() => {
     const activeId = activeWorkspaceThreadIdFromPathname(pathname);
     const current = activeId
@@ -2607,9 +2636,7 @@ function ChatsSection({
           })}
         />
         {open &&
-          (threads.length === 0 ? (
-            <EmptyHint>{emptyLabel ?? tr.sidebar.noChatsYet}</EmptyHint>
-          ) : (
+          (threads.length === 0 ? null : (
             <ul className="mt-0.5 space-y-px">
               {displayedThreads.map((t) => {
                 const active =
@@ -2674,10 +2701,11 @@ function ChatsSection({
                           <span>{tr.common.rename}</span>
                         </DropdownMenuItem>
                         <DropdownMenuItem
+                          variant="destructive"
                           disabled={deleteThread.isPending}
                           onSelect={() => void handleDeleteThread(t)}
                         >
-                          <Trash2Icon className="text-muted-foreground" />
+                          <Trash2Icon />
                           <span>{tr.sidebar.deleteThreadTooltip}</span>
                         </DropdownMenuItem>
                       </DropdownMenuContent>

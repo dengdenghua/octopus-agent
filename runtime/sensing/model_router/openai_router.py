@@ -447,10 +447,22 @@ class OpenAIModelRouter(Provider, ModelRouter):
         # Some compatible reasoning models deliberate by default even when
         # ``thinking`` is omitted.  Let callers bound that work without also
         # enabling a vendor-specific thinking envelope.
-        if request.reasoning_effort is not None:
-            payload["reasoning_effort"] = _openai_reasoning_effort(request.reasoning_effort)
-        if request.enable_thinking:
-            payload["thinking"] = {"type": "enabled"}
+        if (
+            request.reasoning_effort is not None
+            and str(request.reasoning_effort).strip().lower() == "off"
+        ):
+            # DeepSeek-native disable wins over any enable_thinking flag.
+            # Only the deepseek profile knows how to serialize it
+            # (thinking:{type:disabled} via normalize); for every other
+            # profile "off" simply means "no thinking fields" — emitting an
+            # unknown effort would 400 on strict endpoints.
+            if self._profile_for_model(model).thinking_request_style == "deepseek":
+                payload["reasoning_effort"] = "off"
+        else:
+            if request.reasoning_effort is not None:
+                payload["reasoning_effort"] = _openai_reasoning_effort(request.reasoning_effort)
+            if request.enable_thinking:
+                payload["thinking"] = {"type": "enabled"}
         return normalize_openai_compat_payload(
             payload,
             profile=self._profile_for_model(model),

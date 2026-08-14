@@ -447,6 +447,23 @@ def get_ephemeral_role_ids() -> frozenset[str]:
     return frozenset(BUILTIN_ROLES.keys())
 
 
+def get_role_display(role_id: str) -> tuple[str, str] | None:
+    """Return the built-in role's ``(display_name, description)``, or None.
+
+    The role label a sub-agent spawns under is a free-form string the model
+    invents (``researcher`` / ``critic`` / ``writer`` / …). Only the labels
+    that resolve to a ``BUILTIN_ROLES`` entry have an authoritative
+    display name and responsibility blurb — and those live here, co-located
+    with the role's ``tool_allowlist``, so the nameplate (角色卡) and the
+    tool permissions derive from the same source. Unknown labels return None
+    so callers fall back to their own display mapping.
+    """
+    role = BUILTIN_ROLES.get((role_id or "").strip().lower())
+    if role is None:
+        return None
+    return role.display_name, role.description
+
+
 # ═══════════════════════════════════════════════════════════
 # Runner abstraction
 # ═══════════════════════════════════════════════════════════

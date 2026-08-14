@@ -77,6 +77,8 @@ def _register_custom_models(router: Any, ctx: _ConfigCtx) -> None:
     register = ctx.register
     unregister_entry = ctx.unregister_entry
 
+    _default_reasoning_efforts = {"off", "high", "max", "none"}
+
     @router.put("/api/config/custom-models/{model_id}")
     def api_upsert_custom_model(
         model_id: str,
@@ -98,6 +100,16 @@ def _register_custom_models(router: Any, ctx: _ConfigCtx) -> None:
             default_headers = prev.get("default_headers") or {}
         if not isinstance(default_headers, dict):
             default_headers = {}
+        if "default_reasoning_effort" in body:
+            raw_effort = body["default_reasoning_effort"]
+            normalized_effort = (
+                str(raw_effort).strip().lower()
+                if raw_effort is not None
+                and str(raw_effort).strip().lower() in _default_reasoning_efforts
+                else None
+            )
+        else:
+            normalized_effort = prev.get("default_reasoning_effort")
         # Normalize ``models`` — explicit list wins, else fold the
         # legacy ``model`` + ``model_performance`` pair, else inherit
         # the prior list, else fall back to [model_id] so we never
@@ -155,6 +167,7 @@ def _register_custom_models(router: Any, ctx: _ConfigCtx) -> None:
                 if "supports_thinking" in body
                 else prev.get("supports_thinking", False)
             ),
+            "default_reasoning_effort": normalized_effort,
             # Vision capability is a THREE-state signal at runtime
             # (true / false / undeclared→None): only persist it when the
             # caller actually said something, so an entry created via the

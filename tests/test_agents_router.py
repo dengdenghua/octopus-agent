@@ -973,6 +973,26 @@ class TestLocalPartners:
         assert partners["openclaw"]["readiness_status"] == "missing"
         assert partners["openclaw"]["effective_status"] == "missing"
 
+    def test_local_partner_brand_avatar_serves_bundled_logo(self):
+        app = FastAPI()
+        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
+        client = TestClient(app)
+
+        r = client.get("/api/agents/local-partners/claude-code/brand-avatar")
+
+        assert r.status_code == 200
+        assert r.headers["content-type"].startswith("image/svg+xml")
+        assert r.text.lstrip().startswith("<svg")
+
+    def test_local_partner_brand_avatar_unknown_partner_is_404(self):
+        app = FastAPI()
+        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
+        client = TestClient(app)
+
+        r = client.get("/api/agents/local-partners/does-not-exist/brand-avatar")
+
+        assert r.status_code == 404
+
     def test_local_partners_doctor_summarizes_machine_readiness(
         self,
         tmp_path: Path,

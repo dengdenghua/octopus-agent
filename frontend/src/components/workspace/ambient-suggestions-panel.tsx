@@ -41,14 +41,16 @@ export function AmbientSuggestionsPanel({
   agentId,
   baseUrl,
 }: AmbientSuggestionsPanelProps) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const { bucket, loading, error, generate, setStatus } = useAmbientSuggestions(
     project,
-    { baseUrl },
+    { baseUrl, locale },
   );
   const [generating, setGenerating] = useState(false);
 
-  const suggestions = bucket?.suggestions ?? [];
+  const suggestions = (bucket?.suggestions ?? []).filter(
+    (suggestion) => suggestion.locale === locale,
+  );
   const pending = suggestions.filter((s) => s.status === "pending");
   const accepted = suggestions.filter((s) => s.status === "accepted");
   const dismissed = suggestions.filter((s) => s.status === "dismissed");

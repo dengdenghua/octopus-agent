@@ -26,7 +26,6 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   ArrowRightIcon,
-  MonitorIcon,
 } from "lucide-react";
 
 function getStatusIcon(status: SubtaskStatus) {
@@ -90,8 +89,15 @@ function MiniSubtaskRow({
         : undefined;
 
   const handleClick = () => {
-    emitAgentWorkbenchFocus({ agentId: task.id });
-    onClick?.();
+    if (onClick) {
+      onClick();
+      return;
+    }
+    emitAgentWorkbenchFocus({
+      agentId: task.id,
+      tab: "agent",
+      view: "screen",
+    });
   };
   const handleToggleIdentity = () => {
     setShowIdentity((v) => !v);
@@ -108,7 +114,7 @@ function MiniSubtaskRow({
           runState === "running"
             ? agentRunPanelClass("running")
             : "border-border bg-muted/30",
-          onClick && "cursor-pointer hover:bg-muted/50",
+          "cursor-pointer hover:bg-muted/50",
         )}
       >
         <button
@@ -249,14 +255,6 @@ export function SubtaskHoverPreview({
         : undefined;
   const handleViewProcess = (e: React.MouseEvent) => {
     e.stopPropagation();
-    emitAgentWorkbenchFocus({ agentId: task.id, tab: "agent", view: "summary" });
-  };
-  const handleViewComputer = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    // The per-agent computer view lives in the workbench "agent" tab: the
-    // focus handler selects this agent, and view:"screen" lands on its
-    // screen sub-view. The "browser" tab is the thread-global preview,
-    // not this agent's.
     emitAgentWorkbenchFocus({ agentId: task.id, tab: "agent", view: "screen" });
   };
   return (
@@ -342,14 +340,6 @@ export function SubtaskHoverPreview({
           >
             <ArrowRightIcon className="size-3" />
             {t.message.viewProcess}
-          </button>
-          <button
-            type="button"
-            onClick={handleViewComputer}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border-default bg-transparent px-3 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted/50"
-          >
-            <MonitorIcon className="size-3" />
-            {t.message.viewComputer}
           </button>
           {isCompleted && task.result && (
             <span className="ml-auto text-xs text-muted-foreground">

@@ -1066,22 +1066,36 @@ export function MessageGroup({
           )
         : false;
       // Deep-thinking heuristic per spec §思考块加耗时: distinguish deep vs
-      // normal thinking via duration (≥10s) or content length (≥500 chars).
+      // normal thinking via duration, step count, and total content length.
       // Deep thinking shows a SparklesIcon; normal shows a BrainIcon.
-      const isDeepThinking = isThinking
-        ? groupDurationMs >= 10_000 ||
-          coveredItems.some(
-            (coveredItem) =>
-              coveredItem.type === "reasoningGroup" &&
-              coveredItem.steps.length >= 8,
-          ) ||
-          coveredItems.some(
-            (coveredItem) =>
-              coveredItem.type === "reasoningGroup" &&
-              coveredItem.steps.some(
-                (step) => (step.reasoning?.length ?? 0) >= 500,
-              ),
+      // Optimized thresholds to avoid false positives:
+      // - Duration ≥15s AND steps ≥5 (sustained deep reasoning)
+      // - OR steps ≥15 (many reasoning steps)
+      // - OR total content ≥3000 chars (substantial reasoning chain)
+      const totalSteps = isThinking
+        ? coveredItems.reduce(
+            (sum, item) =>
+              sum + (item.type === "reasoningGroup" ? item.steps.length : 0),
+            0,
           )
+        : 0;
+      const totalContentLength = isThinking
+        ? coveredItems.reduce(
+            (sum, item) =>
+              sum +
+              (item.type === "reasoningGroup"
+                ? item.steps.reduce(
+                    (stepSum, step) => stepSum + (step.reasoning?.length ?? 0),
+                    0,
+                  )
+                : 0),
+            0,
+          )
+        : 0;
+      const isDeepThinking = isThinking
+        ? (groupDurationMs >= 15_000 && totalSteps >= 5) ||
+          totalSteps >= 15 ||
+          totalContentLength >= 3000
         : false;
       // Use action-display for human-readable verb + icon
       let actionVerb: string;
@@ -1145,9 +1159,10 @@ export function MessageGroup({
         factSummaryText = null;
         actionWorkbenchTab = "agent";
       } else {
-        actionVerb = summarizeReasoningGroup(item, t);
+        // reasoningGroup: actionVerb not used in isThinking display path
+        actionVerb = "";
         actionObject = "";
-        ActionIcon = WrenchIcon;
+        ActionIcon = isDeepThinking ? SparklesIcon : BrainIcon;
         factSummaryText = null;
         actionWorkbenchTab = "agent";
       }
@@ -1186,7 +1201,18 @@ export function MessageGroup({
 
       const summary =
         item.type === "reasoningGroup"
-          ? summarizeReasoningGroup(item, t)
+          ? // Unified metadata display for reasoning groups instead of text truncation
+            isDeepThinking
+            ? // Deep thinking: show "深度思考 · 思考了 X · N 条"
+              hasStoredDuration
+              ? `${t.messageGrouping.deepThinking ?? "深度思考"} · ${t.messageGrouping.thoughtFor ?? "思考了"} ${formatThinkingDuration(groupDurationMs)} · ${count} 条`
+              : `${t.messageGrouping.deepThinking ?? "深度思考"} · ${count} 条`
+            : // Normal thinking: show "思考 · N 条" or "思考 · X · N 条" if duration > 2s
+              hasStoredDuration && groupDurationMs >= 2000
+              ? `${t.messageGrouping.thinking ?? "思考"} · ${formatThinkingDuration(groupDurationMs)} · ${count} 条`
+              : count > 1
+                ? `${t.messageGrouping.thinking ?? "思考"} · ${count} 条`
+                : t.messageGrouping.thinking ?? "思考"
           : item.type === "actionCallbackGroup"
             ? summarizeActionGroup(item, t)
             : isAggregatedGroup
@@ -1278,6 +1304,14 @@ export function MessageGroup({
             <button
               type="button"
               onClick={() => {
+                // If thinking has expandable detail, toggle it inline first
+                if (hasThinkingDetail) {
+                  setExpandedThinkingRows((current) => ({
+                    ...current,
+                    [item.id]: !current[item.id],
+                  }));
+                }
+                // Always activate timeline and open workbench for full context
                 activateTimelineItem(timelineItemLinkageId(item), "chat");
                 emitOpenAgentWorkbench({
                   tab: actionWorkbenchTab,
@@ -1378,7 +1412,7 @@ export function MessageGroup({
                 <ActionIcon className="size-4 shrink-0 text-muted-foreground/75" />
               )}
               <span className="flex min-w-0 flex-1 items-center gap-1">
-                <span>
+                <span className="flex items-center gap-1">
                   {isThinking ? (
                     // Long, completed private reasoning gets a stable
                     // disclosure label so it cannot be mistaken for public
@@ -1405,6 +1439,15 @@ export function MessageGroup({
                     </FlipDisplay>
                   ) : (
                     <span>{processEventSummary || summary}</span>
+                  )}
+                  {hasThinkingDetail && (
+                    <ChevronRightIcon
+                      className={cn(
+                        "size-3 shrink-0 transition-all opacity-0 group-hover/process-row:opacity-100",
+                        expandedThinkingRows[item.id] ? "rotate-90" : "",
+                      )}
+                      aria-hidden="true"
+                    />
                   )}
                 </span>
                 {isThinking &&
@@ -1445,37 +1488,6 @@ export function MessageGroup({
                 <span className="sr-only" data-testid="live-process-strip" />
               )}
             </button>
-            {hasThinkingDetail && (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setExpandedThinkingRows((current) => ({
-                    ...current,
-                    [item.id]: !current[item.id],
-                  }));
-                }}
-                className="shrink-0 p-0.5 text-muted-foreground/55 transition-colors hover:text-muted-foreground"
-                aria-label={
-                  expandedThinkingRows[item.id]
-                    ? t.agentWorkbenchPages.collapse
-                    : t.agentWorkbenchPages.expandDetails
-                }
-                title={
-                  expandedThinkingRows[item.id]
-                    ? t.agentWorkbenchPages.collapse
-                    : t.agentWorkbenchPages.expandDetails
-                }
-                data-testid="thinking-row-toggle"
-              >
-                <ChevronRightIcon
-                  className={cn(
-                    "size-3 transition-transform",
-                    expandedThinkingRows[item.id] ? "rotate-90" : "",
-                  )}
-                />
-              </button>
-            )}
             {isAggregatedGroup && (
               <button
                 type="button"
@@ -2619,6 +2631,21 @@ function compactReasoningSummary(
     return t?.messageGrouping.reasoningFallback ?? "Summarize public progress";
   if (normalized.length <= max) return normalized;
   return `${normalized.slice(0, max).trimEnd()}...`;
+}
+
+/**
+ * Format thinking duration in a human-readable compact form.
+ * Examples: "2.3s", "15.8s", "1m 23s"
+ */
+function formatThinkingDuration(durationMs: number): string {
+  if (durationMs < 1000) return `${durationMs}ms`;
+  const seconds = durationMs / 1000;
+  if (seconds < 60) return `${seconds.toFixed(1)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.floor(seconds % 60);
+  return remainingSeconds > 0
+    ? `${minutes}m ${remainingSeconds}s`
+    : `${minutes}m`;
 }
 
 /**

@@ -56,6 +56,35 @@ def _emit_orchestration_progress(line: str) -> None:
         callback(line)
 
 
+# ── Workflow completion notification ──────────────────────
+# Similar to orchestration progress, but for workflow settlement events.
+# The realtime gateway can install a callback here to emit a
+# ``workflow/completed`` notification when a workflow finishes.
+_WORKFLOW_SETTLEMENT: _ContextVar[_Callable[[dict[str, Any]], None] | None] = _ContextVar(
+    "workflow_settlement_emitter",
+    default=None,
+)
+
+
+@contextlib.contextmanager
+def workflow_settlement_scope(callback: _Callable[[dict[str, Any]], None]):
+    """Install a settlement callback for workflows run inside the scope."""
+    token = _WORKFLOW_SETTLEMENT.set(callback)
+    try:
+        yield
+    finally:
+        _WORKFLOW_SETTLEMENT.reset(token)
+
+
+def _emit_workflow_settlement(payload: dict[str, Any]) -> None:
+    """Emit a workflow completion event (dsh ``settlement`` analog)."""
+    callback = _WORKFLOW_SETTLEMENT.get()
+    if callback is None:
+        return
+    with contextlib.suppress(Exception):
+        callback(payload)
+
+
 # ── Role visibility policy ────────────────────────────────
 # ``arbiter`` is internal (used by team-vote dispatcher).
 # ``researcher`` / ``debugger`` / ``explorer`` / ``reviewer`` exist in

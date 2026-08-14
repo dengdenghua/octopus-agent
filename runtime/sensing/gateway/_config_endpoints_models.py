@@ -18,6 +18,7 @@ from runtime.sensing.gateway._config_helpers import (
     _entry_1m_enabled,
     _entry_context_window,
     _entry_model_id,
+    _entry_supported_efforts,
 )
 from runtime.sensing.gateway._config_models import (
     CustomModelsList,
@@ -193,6 +194,7 @@ def _register_models(router: Any, ctx: _ConfigCtx) -> None:
                     ),
                     "compat_profile": e.get("compat_profile"),
                     "thinking_request_style": e.get("thinking_request_style"),
+                    "reasoning_efforts": _entry_supported_efforts(e, variant),
                     "drop_tool_choice": e.get("drop_tool_choice"),
                     "strict_tool_schema": e.get("strict_tool_schema"),
                     "max_temperature": e.get("max_temperature"),
@@ -220,11 +222,12 @@ def _register_models(router: Any, ctx: _ConfigCtx) -> None:
             {
                 "id": MIX_MODEL_ID,
                 "name": MIX_MODEL_ID,
-                "display_name": "Octopus Mix · 多模型协同",
+                "display_name": "mix",
                 "provider": "octopus",
                 "supports_thinking": True,
                 "supports_vision": False,
                 "supports_tool_use": True,
+                "reasoning_efforts": None,
             },
         ]
         return {"models": mix_presets + custom}

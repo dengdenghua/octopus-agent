@@ -67,4 +67,21 @@ def resolve_local_command(command: str) -> str | None:
     return None
 
 
-__all__ = ["resolve_local_command"]
+def which_command(commands: list[str]) -> tuple[str | None, str | None]:
+    """Probe candidate commands; return (name, path) for the first match."""
+    for command in commands:
+        expanded = os.path.expanduser(command)
+        if expanded != command or "/" in command or "\\" in command:
+            try:
+                candidate = Path(expanded)
+                if candidate.is_file() and os.access(candidate, os.X_OK):
+                    return str(candidate), str(candidate.resolve())
+            except OSError:
+                continue
+        path = resolve_local_command(command)
+        if path:
+            return command, path
+    return None, None
+
+
+__all__ = ["resolve_local_command", "which_command"]

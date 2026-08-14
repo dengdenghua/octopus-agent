@@ -27,7 +27,16 @@ function normalizeImageSrc(src: string): string {
 }
 
 function needsAuthenticatedFetch(src: string): boolean {
+  // Public endpoints that don't require authentication
+  const publicPaths = [
+    "/api/agents/",  // Agent metadata and visuals
+  ];
+
   if (src.startsWith("/api/")) {
+    // Check if it's a public path
+    if (publicPaths.some(path => src.startsWith(path))) {
+      return false;
+    }
     return true;
   }
 
@@ -38,7 +47,14 @@ function needsAuthenticatedFetch(src: string): boolean {
   try {
     const url = new URL(src);
     const backend = new URL(getBackendBaseURL());
-    return url.origin === backend.origin && url.pathname.startsWith("/api/");
+    if (url.origin === backend.origin && url.pathname.startsWith("/api/")) {
+      // Check if it's a public path
+      if (publicPaths.some(path => url.pathname.startsWith(path))) {
+        return false;
+      }
+      return true;
+    }
+    return false;
   } catch (e) {
     swallow(e);
     return false;

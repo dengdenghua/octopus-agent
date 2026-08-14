@@ -64,19 +64,6 @@ vi.mock("sonner", () => ({
 
 import LoginPage from "./page";
 
-function expectTextContentIncludes(text: string) {
-  expect(
-    screen.getByText((_, node) => elementOwnsText(node, text)),
-  ).toBeInTheDocument();
-}
-
-function elementOwnsText(node: Element | null, text: string): boolean {
-  if (!node?.textContent?.includes(text)) return false;
-  return Array.from(node.children).every(
-    (child) => !child.textContent?.includes(text),
-  );
-}
-
 function renderPage() {
   // Test strings reference zh-CN copy, so prime the I18nProvider with
   // zh-CN. The harness also pre-seeds the `locale` cookie so the

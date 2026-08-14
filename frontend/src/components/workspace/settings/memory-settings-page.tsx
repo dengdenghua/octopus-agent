@@ -59,6 +59,7 @@ import { formatTimeAgo } from "@/core/utils/datetime";
 import { cn } from "@/lib/utils";
 
 import { SettingsSection } from "./settings-section";
+import { PersonalWorkRulesSettings } from "./personal-space-settings-page";
 import { getMemoryLoadErrorCopy } from "./settings-resilience";
 
 const LazyStreamdown = lazy(
@@ -709,6 +710,9 @@ export default function MemorySettingsPage() {
         title={t.settings.memory.title}
         description={t.settings.memory.description}
       >
+        <div className="mb-8 border-b border-border-subtle pb-8">
+          <PersonalWorkRulesSettings />
+        </div>
         {isLoading ? (
           <div className="text-muted-foreground text-sm">
             {t.common.loading}

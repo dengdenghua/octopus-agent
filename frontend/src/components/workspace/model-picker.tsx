@@ -19,6 +19,9 @@ export interface PickerModel {
   model?: string | null;
   supports_thinking?: boolean;
   supports_vision?: boolean;
+  /** UI effort tiers this model genuinely accepts. undefined/null = full
+   *  default set; [] = no meaningful effort control (picker hides it). */
+  reasoning_efforts?: ReasoningEffort[] | null;
   [key: string]: unknown;
 }
 
@@ -37,23 +40,58 @@ interface OfficialMeta {
 const MIX_META: OfficialMeta = {
   key: "octopus-mix",
   id: "octopus-mix",
-  displayName: "Octopus Mix",
+  displayName: "mix",
   multiplier: "Mix",
   recommended: true,
 };
 
 const REASONING_EFFORT_OPTIONS: ReasoningEffort[] = [
+  "off",
   "low",
   "medium",
   "high",
   "xhigh",
 ];
 
+/** Rough strength scale used to map an unsupported effort onto the nearest
+ *  tier a provider genuinely accepts (the wire value may differ). */
+const EFFORT_STRENGTH: Record<ReasoningEffort, number> = {
+  off: 0,
+  minimal: 1,
+  low: 2,
+  medium: 3,
+  high: 4,
+  xhigh: 5,
+  max: 6,
+};
+
+function resolveEffectiveEffort(
+  current: ReasoningEffort,
+  offered: ReasoningEffort[],
+): ReasoningEffort {
+  if (offered.includes(current)) return current;
+  const base = EFFORT_STRENGTH[current] ?? 0;
+  // Prefer the smallest offered tier at or above the selection (the backend
+  // promotes below-high efforts for DeepSeek-style providers); otherwise the
+  // largest offered tier.
+  let candidate: ReasoningEffort | undefined;
+  for (const tier of offered) {
+    if ((EFFORT_STRENGTH[tier] ?? 0) >= base) {
+      candidate = tier;
+      break;
+    }
+  }
+  if (candidate) return candidate;
+  return offered[offered.length - 1] ?? "high";
+}
+
 function reasoningEffortLabel(
   effort: ReasoningEffort,
   t: Translations,
 ): string {
   switch (effort) {
+    case "off":
+      return t.inputBox.reasoningEffortOff;
     case "minimal":
       return t.inputBox.reasoningEffortMinimal;
     case "low":
@@ -72,14 +110,23 @@ function reasoningEffortLabel(
 function ReasoningEffortSetting({
   value,
   disabled,
+  efforts,
   onChange,
 }: {
   value?: ReasoningEffort;
   disabled?: boolean;
+  efforts?: ReasoningEffort[] | null;
   onChange: (effort: ReasoningEffort) => void;
 }) {
   const { t } = useI18n();
-  const current = value === "max" ? "xhigh" : (value ?? "medium");
+  const rawCurrent = value === "max" ? "xhigh" : (value ?? "medium");
+  // An explicitly empty set means this model has no meaningful effort control
+  // (adaptive / unsupported thinking) — hide it rather than show fake tiers.
+  if (efforts && efforts.length === 0) return null;
+  const offered =
+    efforts && efforts.length > 0 ? efforts : REASONING_EFFORT_OPTIONS;
+  const effective = resolveEffectiveEffort(rawCurrent, offered);
+  const mapped = effective !== rawCurrent;
   const title = t.inputBox.reasoningEffort;
 
   return (
@@ -89,16 +136,25 @@ function ReasoningEffortSetting({
           {title}
         </span>
         <span className="text-xs text-muted-foreground">
-          {t.inputBox.reasoningEffortCurrent(reasoningEffortLabel(current, t))}
+          {t.inputBox.reasoningEffortCurrent(reasoningEffortLabel(effective, t))}
         </span>
       </div>
+      {mapped && (
+        <div className="mb-1 px-1 text-[11px] text-muted-foreground/70">
+          {t.inputBox.reasoningEffortMapped(
+            reasoningEffortLabel(rawCurrent, t),
+            reasoningEffortLabel(effective, t),
+          )}
+        </div>
+      )}
       <div
         role="radiogroup"
         aria-label={title}
-        className="grid grid-cols-4 gap-0.5 rounded-md bg-muted/35 p-0.5"
+        className="grid gap-0.5 rounded-md bg-muted/35 p-0.5"
+        style={{ gridTemplateColumns: `repeat(${offered.length}, minmax(0, 1fr))` }}
       >
-        {REASONING_EFFORT_OPTIONS.map((effort) => {
-          const selected = effort === current;
+        {offered.map((effort) => {
+          const selected = effort === effective;
           return (
             <button
               key={effort}
@@ -372,6 +428,7 @@ export function ModelPicker({
           <ReasoningEffortSetting
             value={reasoningEffort}
             disabled={reasoningEffortDisabled}
+            efforts={selected?.reasoning_efforts}
             onChange={onReasoningEffortChange}
           />
         )}

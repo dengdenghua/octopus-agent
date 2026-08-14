@@ -30,6 +30,42 @@ export interface LocalCliPartnerAgent {
   fixHint?: string | null;
 }
 
+export interface LocalCliPartnerVisualStatus {
+  label: string;
+  tone: "primary" | "warning" | "muted";
+}
+
+export function localCliPartnerVisualStatus(
+  row: Pick<
+    LocalCliPartnerAgent,
+    "detected" | "ready" | "registered" | "status"
+  >,
+  labels: { connected: string; detected: string; notDetected: string },
+): LocalCliPartnerVisualStatus {
+  if (!row.detected) {
+    return { label: labels.notDetected, tone: "muted" };
+  }
+  if (!row.ready) {
+    if (row.status === "model_unconfigured") {
+      return { label: "模型未配置", tone: "warning" };
+    }
+    if (
+      row.status === "launcher_only" ||
+      row.status === "headless_unsupported"
+    ) {
+      return { label: "仅可手动", tone: "warning" };
+    }
+    return {
+      label: row.registered ? "已接入 · 需修复" : labels.detected,
+      tone: "warning",
+    };
+  }
+  if (row.registered) {
+    return { label: "已注册", tone: "primary" };
+  }
+  return { label: "可接入", tone: "primary" };
+}
+
 const PARTNER_LABEL: Record<string, string> = {
   "claude-code": "Claude Code",
   "codex-cli": "Codex CLI",
@@ -74,7 +110,7 @@ function partnerToAgent(p: DetectedPartner): Agent {
     display_name: label,
     description: `本机 ${label} · 用你的订阅，在隔离 worktree 里跑、共享团队黑板`,
     icon: PARTNER_ICON[p.partner_id] ?? "🖥️",
-    avatar_url: `/api/agents/${p.agent_id}/avatar`,
+    avatar_url: `/api/agents/local-partners/${p.partner_id}/brand-avatar`,
     model: null,
     tool_groups: null,
     capabilities: {
@@ -104,7 +140,7 @@ function localPartnerToAgent(
       partner.id === "claude-code"
         ? "CC"
         : (partner.icon ?? PARTNER_ICON[partnerId] ?? "CLI"),
-    avatar_url: `/api/agents/${partner.agent_id}/avatar`,
+    avatar_url: `/api/agents/local-partners/${partnerId}/brand-avatar`,
     model: null,
     tool_groups: null,
     capabilities: {
@@ -202,7 +238,7 @@ export function useLocalCliPartnerAgents(): {
           agent: localPartnerToAgent(partner, detected),
           partnerId: partner.id,
           detected: Boolean(detected || partner.detected),
-          ready: Boolean(partner.ready ?? detected),
+          ready: Boolean(partner.ready),
           registered: Boolean(partner.registered),
           status: partner.effective_status || partner.status || "missing",
           fixHint: partner.fix_hint,

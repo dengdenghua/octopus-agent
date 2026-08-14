@@ -30,6 +30,6 @@
     "local_partner": true,
     "local_partner_id": "codex-cli",
     "local_partner_command": "codex",
-    "local_partner_executable": "codex"
+    "local_partner_executable": "/Applications/ChatGPT.app/Contents/Resources/codex"
   }
 }

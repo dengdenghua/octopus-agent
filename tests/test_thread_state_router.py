@@ -232,3 +232,81 @@ def test_thread_state_enforces_explicit_tenant_metadata() -> None:
         ).status_code
         == 404
     )
+
+
+def test_session_title_rename_endpoint_pins() -> None:
+    client = _client()
+    thread_id = client.post("/api/threads", json={}).json()["thread_id"]
+
+    response = client.post(
+        f"/api/threads/{thread_id}/title/rename",
+        json={"title": "  手工   标题 "},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["title"] == "手工 标题"
+    assert payload["source"] == "user"
+    assert payload["pinned"] is True
+
+    state = client.get(f"/api/threads/{thread_id}/state").json()
+    assert state["values"]["title"] == "手工 标题"
+    assert state["metadata"]["title_source"] == "user"
+    assert state["metadata"]["title_pinned"] is True
+
+
+def test_session_title_rename_endpoint_validates() -> None:
+    client = _client()
+    thread_id = client.post("/api/threads", json={}).json()["thread_id"]
+
+    assert (
+        client.post(f"/api/threads/{thread_id}/title/rename", json={}).status_code == 400
+    )
+    assert (
+        client.post(
+            f"/api/threads/{thread_id}/title/rename", json={"title": "   "}
+        ).status_code
+        == 400
+    )
+    assert (
+        client.post("/api/threads/missing/title/rename", json={"title": "x"}).status_code
+        == 404
+    )
+
+
+def test_session_title_refresh_endpoint_uses_provider() -> None:
+    from runtime.memory.threads.session_title import SessionTitleService
+
+    store = ThreadStateStore()
+    thread_id = store.create(values={"title": "New chat"})["thread_id"]
+    service = SessionTitleService(store)
+    service.register_provider("llm", lambda _thread: "auto title", model="deepseek-v4")
+    app = FastAPI()
+    app.include_router(
+        create_thread_state_router(store=store, session_titles=service)
+    )
+    client = TestClient(app)
+
+    response = client.post(f"/api/threads/{thread_id}/title/refresh", json={})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["title"] == "auto title"
+    assert payload["source"] == "provider"
+    assert payload["provider"] == "llm"
+    assert payload["model"] == "deepseek-v4"
+
+
+def test_session_title_refresh_respects_pin() -> None:
+    store = ThreadStateStore()
+    thread_id = store.create(values={"title": "New chat"})["thread_id"]
+    store.update_state(
+        thread_id,
+        values={"title": "pinned"},
+        metadata={"title_source": "user", "title_pinned": True},
+    )
+    app = FastAPI()
+    app.include_router(create_thread_state_router(store=store))
+    client = TestClient(app)
+    response = client.post(f"/api/threads/{thread_id}/title/refresh", json={})
+    assert response.status_code == 200
+    assert response.json()["title"] == "pinned"
+    assert response.json()["source"] == "user"

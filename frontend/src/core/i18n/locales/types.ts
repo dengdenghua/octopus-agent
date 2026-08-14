@@ -112,6 +112,7 @@ export interface Translations {
     reasoningMode: string;
     reasoningModeDescription: string;
     reasoningEffort: string;
+    reasoningEffortOff: string;
     reasoningEffortMinimal: string;
     reasoningEffortMinimalDescription: string;
     reasoningEffortLow: string;
@@ -123,6 +124,7 @@ export interface Translations {
     reasoningEffortXHigh: string;
     reasoningEffortMax: string;
     reasoningEffortCurrent: (label: string) => string;
+    reasoningEffortMapped: (current: string, effective: string) => string;
     searchModels: string;
     surpriseMe: string;
     surpriseMePrompt: string;
@@ -471,6 +473,9 @@ export interface Translations {
     executeCommandWith: (cmd: string) => string;
     planStep: string;
     think: string;
+    thinking: string;
+    deepThinking: string;
+    thoughtFor: string;
     hideProcessReplay: string;
     processReplay: string;
     replayNSteps: (n: number) => string;
@@ -539,9 +544,7 @@ export interface Translations {
       aggregateOther: (count: number) => string;
     };
     thinkingDuration: (value: string) => string;
-    thinking: string;
     thinkingProcess: string;
-    deepThinking: string;
   };
 
   // Trace generator (swarm simulation label bag)
@@ -1156,6 +1159,8 @@ export interface Translations {
     visibilityPanelTitle: string;
     visibilityPanelEmpty: string;
     visibilityStep: string;
+    scrollToBottom: string;
+    viewLatestProgress: string;
   };
 
   // Diagnostics page
@@ -1494,6 +1499,8 @@ export interface Translations {
     navKnowledgeGraph: string;
     navReflex: string;
     navIntelligence: string;
+    navAssistant: string;
+    navCommunity: string;
     navMcp: string;
     navEvolution: string;
     navPlugins: string;
@@ -2381,6 +2388,9 @@ export interface Translations {
     retry: string;
     editResend: string;
     regenerateResponse: string;
+    forkFromHere: string;
+    forkedThread: string;
+    forkFailed: string;
     goodResponse: string;
     badResponse: string;
     feedbackThanks: string;
@@ -2462,6 +2472,8 @@ export interface Translations {
     workspaceWriteRequired: string;
     verificationRequired: string;
     environmentBlocked: string;
+    environmentBlockedAuthorizeCommon: string;
+    environmentBlockedAuthorizeFull: string;
     blockedOnUser: string;
     streamEndpointUnavailable: string;
     iteration: (count: number) => string;
@@ -3107,6 +3119,12 @@ export interface Translations {
       diagnose: string;
       port: string;
       thinkingLabel: string;
+      defaultReasoningEffortLabel: string;
+      defaultReasoningEffortFollow: string;
+      defaultReasoningEffortOff: string;
+      defaultReasoningEffortHigh: string;
+      defaultReasoningEffortMax: string;
+      defaultReasoningEffortNone: string;
       visionLabel: string;
       visionDetected: string;
       visionNotSupported: string;
@@ -6032,6 +6050,9 @@ export interface Translations {
     threshold: string;
     contextFull: string;
     autoCompressed: string;
+    title: string;
+    description: string;
+    tip: string;
   };
 
   // Reflex page (app/workspace/reflex/page.tsx)

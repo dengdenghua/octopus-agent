@@ -65,7 +65,7 @@ def create_ambient_suggestions_router(
     router = APIRouter()
 
     @router.get("/api/ambient-suggestions")
-    def list_suggestions(project: str) -> dict[str, Any]:
+    def list_suggestions(project: str, locale: str | None = None) -> dict[str, Any]:
         from runtime.memory import ambient_suggestions as _amb
         from runtime.platform import feature_flags as _ff
 
@@ -79,7 +79,7 @@ def create_ambient_suggestions_router(
                 "suggestions": [],
                 "enabled": False,
             }
-        bucket = _amb.read_bucket(proj, base_dir=base_dir)
+        bucket = _amb.read_bucket(proj, base_dir=base_dir, locale=locale)
         bucket["enabled"] = True
         return bucket
 
@@ -93,6 +93,7 @@ def create_ambient_suggestions_router(
             raise HTTPException(400, "agent_id is required")
         model = payload.get("model")
         turn_window = int(payload.get("turn_window") or 15)
+        locale = str(payload.get("locale") or "en-US")
         title_lookup_raw = payload.get("title_lookup")
         title_lookup: dict[str, str] | None = None
         if isinstance(title_lookup_raw, dict):
@@ -107,6 +108,7 @@ def create_ambient_suggestions_router(
             model=model if isinstance(model, str) and model else None,
             base_dir=base_dir,
             title_lookup=title_lookup,
+            locale=locale,
         )
 
     @router.patch("/api/ambient-suggestions/{suggestion_id}")

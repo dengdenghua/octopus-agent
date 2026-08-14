@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const REASONING_EFFORT_OPTIONS: ReasoningEffort[] = [
+  "off",
   "low",
   "medium",
   "high",
@@ -20,6 +21,8 @@ const REASONING_EFFORT_OPTIONS: ReasoningEffort[] = [
 function effortLabel(effort: ReasoningEffort, locale: string): string {
   const zh = locale === "zh-CN";
   switch (effort) {
+    case "off":
+      return zh ? "关闭" : "Off";
     case "minimal":
       return zh ? "极低" : "Minimal";
     case "low":
