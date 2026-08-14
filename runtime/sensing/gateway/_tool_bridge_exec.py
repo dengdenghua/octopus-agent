@@ -28,6 +28,8 @@ from runtime.execution.tool_engine import (
     normalize_tool_result,
     output_signals_error,
 )
+from runtime.execution.tool_engine.tool_output_pruner import TOOL_RESULT_PRUNE_ENABLED
+from runtime.execution.tool_engine.tool_output_spill import TOOL_RESULT_SPILL_ENABLED
 from runtime.sensing.model_router.models import ToolCall
 
 from ._tool_bridge_policy import TOOL_OUTPUT_MAX_CHARS
@@ -102,6 +104,9 @@ def _execute_tool_call(
                     step,
                     origin="native",
                     max_chars=TOOL_OUTPUT_MAX_CHARS,
+                    prune_middle=TOOL_RESULT_PRUNE_ENABLED,
+                    spill_oversized=TOOL_RESULT_SPILL_ENABLED,
+                    spill_tool_name=normalized.name,
                 )
                 reason = step.result.error_type or step.result.status
                 return (result.rendered or f"({reason})", True)
@@ -132,6 +137,9 @@ def _execute_tool_call(
         output,
         origin="native",
         max_chars=TOOL_OUTPUT_MAX_CHARS,
+        prune_middle=TOOL_RESULT_PRUNE_ENABLED,
+        spill_oversized=TOOL_RESULT_SPILL_ENABLED,
+        spill_tool_name=normalized.name,
     )
     return (result.rendered, result.is_error)
 
