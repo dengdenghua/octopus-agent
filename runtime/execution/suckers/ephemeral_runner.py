@@ -104,6 +104,110 @@ EPHEMERAL_MAX_ROUNDS_BY_ROLE: dict[str, int] = {
 EPHEMERAL_TOKEN_BUDGET: int = 0
 
 
+# ── Child→parent report tool (dsh ``tool-subagent-report``) ──────────────
+# Installed into every continuable in-process child's tool surface (i.e. when
+# ``call.context["subagent_session_id"]`` is present): the child can deliver
+# self-contained findings to its direct parent MID-round, not only via the
+# transcript the bridge pulls afterwards. Roots, one-shot children, remote
+# providers, and agentless executions never see the registration (dsh scope).
+
+REPORT_TOOL_GUIDANCE = (
+    "Deliver your result with the report tool before you finish: call it once "
+    "with a self-contained answer. The agent that started you shares your "
+    "workspace but does not automatically receive your transcript, tool "
+    'output, or reasoning, so a closing remark such as "done" leaves it '
+    "nothing it can use. Report earlier as well whenever a partial finding "
+    "changes what that agent should do next; reporting never ends your turn."
+)
+
+
+def _report_tool_spec() -> Any:
+    """The ``report`` tool definition (dsh ``tool-subagent-report``)."""
+    from runtime.platform.models.llm import ToolSpec
+
+    return ToolSpec(
+        name="report",
+        description=(
+            "Report selected content to the agent that started you. Call this "
+            "once before you finish, with a self-contained final result, and "
+            "earlier for progress or findings that change what that agent "
+            "does next. That agent shares your workspace but does not "
+            "automatically receive your transcript, tool output, or "
+            "reasoning, so finishing your work is not itself a result. "
+            "Reporting does not end your turn or finish your work, and only "
+            "your direct parent receives it. A failed call may still have "
+            "arrived, so do not blindly repeat it."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "output": {
+                    "type": "string",
+                    "description": (
+                        "Actionable content for your parent; summarize "
+                        "conclusions and reference relevant shared paths."
+                    ),
+                }
+            },
+            "required": ["output"],
+            "additionalProperties": False,
+        },
+    )
+
+
+def _handle_report_tool(
+    tc: Any,
+    session_id: str,
+    *,
+    delivery: str = "wakeup",
+) -> tuple[str, bool]:
+    """Deliver one ``report`` tool call to the child's report lane.
+
+    Best-effort + at-least-once like dsh: a storage failure returns an error
+    result to the child (which must not blindly repeat — the report may still
+    have arrived), but never crashes the child round.
+    """
+    args = getattr(tc, "input", None) or {}
+    content = args.get("output") if isinstance(args, dict) else None
+    if not isinstance(content, str) or not content.strip():
+        return (
+            '(report failed) parameter "output" must be a non-empty string '
+            "with the content to deliver.",
+            True,
+        )
+    try:
+        from runtime.execution.subagents.sessions import (
+            get_subagent_session_store,
+        )
+
+        store = get_subagent_session_store()
+        if store is None:
+            return "(report failed) subagent session store unavailable.", True
+        session = store.append_report(
+            session_id,
+            content=content,
+            delivery="wakeup" if delivery != "quiet" else "quiet",
+        )
+        if session is None:
+            return f"(report failed) no subagent session {session_id!r}.", True
+    except ValueError as exc:
+        return f"(report failed) {exc}", True
+    except Exception as exc:  # noqa: BLE001 — never crash the child round
+        _log.warning(
+            "report tool failed for session %s: %s: %s",
+            session_id,
+            type(exc).__name__,
+            exc,
+        )
+        return f"(report failed) {type(exc).__name__}: {exc}", True
+    message_id = f"report-{len(session.reports) - 1}"
+    return (
+        f"Report delivered (messageId={message_id}). "
+        "A failed call may still have arrived, so do not blindly repeat it.",
+        False,
+    )
+
+
 class EphemeralRoundCapExceeded(RuntimeError):
     """Raised when the ephemeral sub-agent loop hits its round cap.
 
@@ -395,6 +499,23 @@ def make_llm_ephemeral_runner(
             resp = router.call(req)
             return str(getattr(resp, "text", None) or "")
 
+        # Child→parent report lane (dsh ``tool-subagent-report``): a
+        # continuable in-process child gets the ``report`` tool plus its
+        # usage guidance so it can deliver findings to its direct parent
+        # mid-round. Only exposed when the bridge stamped a session id;
+        # roots / one-shot children / remote providers never see it.
+        report_session_id = call.context.get("subagent_session_id") if call.context else None
+        report_delivery = (
+            str(call.context.get("subagent_report_delivery") or "wakeup")
+            if call.context
+            else "wakeup"
+        )
+        if report_session_id:
+            tool_specs = list(tool_specs) + [_report_tool_spec()]
+            call.composed_system_prompt = (
+                f"{call.composed_system_prompt}\n\n## report tool\n{REPORT_TOOL_GUIDANCE}"
+            )
+
         # Pull the optional event_emitter injected by the bridge.
         # It's a plain Callable[[dict], None] — fire-and-forget.
         _ctx_emitter = call.context.get("event_emitter") if call.context else None
@@ -628,10 +749,17 @@ def make_llm_ephemeral_runner(
                     },
                 )
                 _sub_tool_t0 = time.monotonic()
-                output, is_error = _execute_tool_in_subagent(
-                    registry,
-                    tc,
-                )
+                if getattr(tc, "name", "") == "report" and report_session_id:
+                    output, is_error = _handle_report_tool(
+                        tc,
+                        report_session_id,
+                        delivery=report_delivery,
+                    )
+                else:
+                    output, is_error = _execute_tool_in_subagent(
+                        registry,
+                        tc,
+                    )
                 _duration_ms = int((time.monotonic() - _sub_tool_t0) * 1000)
                 _emit_sub_tool_event(
                     "sub_tool_end",

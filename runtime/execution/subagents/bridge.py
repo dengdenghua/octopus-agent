@@ -12,7 +12,7 @@ import logging
 import os
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any
 
 from runtime.protocol.text_limits import MAX_SUBAGENT_MISSION_CHARS
@@ -128,6 +128,8 @@ def call_subagent(
     workspace_path: str = "",
     output_schema: dict[str, Any] | None = None,
     schema_max_retries: int = 1,
+    requires_capabilities: Iterable[str] | None = None,
+    continue_session_id: str | None = None,
     **_kw: Any,
 ) -> dict[str, Any]:
     """Invoke a subagent and return a structured result.
@@ -164,6 +166,18 @@ def call_subagent(
     schema_max_retries :
         How many extra attempts to grant when ``output_schema`` is set and the
         first reply doesn't validate. Ignored when ``output_schema`` is None.
+    requires_capabilities :
+        Capabilities the chosen subagent must declare. Checked BEFORE any
+        runner work starts; a missing capability fails loud with the declared
+        set instead of being accepted-then-ignored (dsh fail-loud rule).
+        Registry-backed definitions only — ephemeral roles are not checked.
+    continue_session_id :
+        Durable subagent session to continue (dsh ``continuable``). When set,
+        the prior transcript is injected into the prompt and the new turn is
+        appended to the same session; an unknown session fails loud BEFORE any
+        runner work. When omitted, a fresh session is created (best-effort)
+        and its id is attached to the result as ``session_id`` so the caller
+        can continue this subagent later.
     """
     agent_id = agent_id or role or name
     prompt = prompt or task or message or query
@@ -181,6 +195,23 @@ def call_subagent(
             "success": False,
             "error": "prompt is required",
         }
+
+    required = tuple(requires_capabilities or ())
+    if required and _REGISTRY is not None and _REGISTRY.has(agent_id):
+        definition = _REGISTRY.get(agent_id)
+        missing = [cap for cap in required if cap not in definition.capabilities]
+        if missing:
+            declared = ", ".join(definition.capabilities) or "none"
+            return {
+                "agent_id": agent_id,
+                "output": "",
+                "success": False,
+                "error": (
+                    f"subagent {agent_id!r} lacks required capability(ies): "
+                    f"{', '.join(missing)} · declared: {declared}"
+                ),
+                "capability_error": "missing_required_capability",
+            }
 
     # Capture the ambient parent Session before entering the timeout worker.
     # ContextVars do not propagate into ThreadPoolExecutor threads, but the
@@ -280,6 +311,42 @@ def call_subagent(
         if context is None:
             context = {}
         context.setdefault("thread_id", _memory_thread_id)
+
+    # Durable session continuation (dsh continuable subagents). Unknown
+    # session ids fail loud before any runner work; the transcript of a
+    # known session is injected so the child continues instead of
+    # re-researching from scratch.
+    _active_session: dict[str, Any] = {"session": None, "session_id": None}
+    try:
+        from runtime.execution.subagents.sessions import (
+            get_subagent_session_store,
+        )
+    except ImportError:  # pragma: no cover - sessions module absent
+        get_subagent_session_store = None  # type: ignore[assignment]
+    _session_store = get_subagent_session_store() if get_subagent_session_store else None
+    if continue_session_id:
+        loaded = _session_store.get(continue_session_id) if _session_store else None
+        if loaded is None:
+            return {
+                "agent_id": agent_id,
+                "output": "",
+                "success": False,
+                "error": f"unknown subagent session {continue_session_id!r}",
+                "session_error": "unknown_session",
+                "session_id": continue_session_id,
+            }
+        _active_session["session"] = loaded
+        _active_session["session_id"] = loaded.session_id
+        transcript = _session_store.transcript_prompt(loaded) if _session_store is not None else ""
+        if transcript:
+            prompt = prompt + "\n\n" + transcript
+    elif _session_store is not None:
+        created = _session_store.create(
+            agent_id=agent_id,
+            thread_id=_memory_thread_id,
+        )
+        _active_session["session"] = created
+        _active_session["session_id"] = created.session_id
 
     # ── Prompt-injection taint inheritance ──
     # call_subagent's body runs in the spawning parent's thread, but the
@@ -426,10 +493,21 @@ def call_subagent(
             scope_token = _current_session.set(run_session)
         try:
             with scoped_cancellation(_child_source.token):
+                # Child→parent report lane (dsh ``tool-subagent-report``):
+                # stamp the continuable session id into the dispatch context
+                # so the in-process runner can expose the child's ``report``
+                # tool. Only present when a durable session exists; one-shot
+                # children and remote providers never see it.
+                dispatch_context = context
+                if _active_session["session_id"]:
+                    dispatch_context = {
+                        **(context or {}),
+                        "subagent_session_id": _active_session["session_id"],
+                    }
                 return _dispatch(
                     agent_id=agent_id,
                     prompt=prompt,
-                    context=context,
+                    context=dispatch_context,
                     timeout_s=timeout_s,
                     session=run_session,
                     event_emitter=_tracking_emitter,
@@ -634,6 +712,44 @@ def call_subagent(
                 rounds=_rounds_state["max_round"],
                 error=result.get("error", ""),
             )
+        # Durable session: attach the session id to every augmented result
+        # (so the caller can continue even after a rejection) and append the
+        # turn for calls that actually ran.
+        if _active_session["session_id"]:
+            result["session_id"] = _active_session["session_id"]
+            if result.get("status") != "rejected":
+                from runtime.execution.subagents.sessions import (
+                    get_subagent_session_store,
+                )
+
+                _session_store = get_subagent_session_store()
+                if _session_store is not None:
+                    _session_store.append_turn(
+                        _active_session["session_id"],
+                        prompt=prompt,
+                        output=result.get("output", ""),
+                        success=ok,
+                        rounds=_rounds_state["max_round"],
+                        error=result.get("error", ""),
+                    )
+                    # Child→parent report lane (dsh ``tool-subagent-report``):
+                    # a continuable child's transcript is NOT automatically
+                    # visible to the parent, so undelivered reports are
+                    # attached to the result and acked once delivered.
+                    _pending = _session_store.pending_reports(_active_session["session_id"])
+                    if _pending:
+                        result["pending_reports"] = [
+                            {
+                                "index": index,
+                                "content": report.content,
+                                "delivery": report.delivery,
+                            }
+                            for index, report in _pending
+                        ]
+                        result["reports_prompt"] = _session_store.reports_prompt(
+                            _session_store.get(_active_session["session_id"])
+                        )
+                        _session_store.mark_reports_delivered(_active_session["session_id"])
         try:
             from runtime.memory.learning.subagent_review import (
                 queue_subagent_review_candidate,
@@ -929,6 +1045,13 @@ def _dispatch(
                 merged_context["model_name"] = cheap
         if event_emitter is not None:
             merged_context["event_emitter"] = event_emitter
+        if definition.backend:
+            partner_result = _dispatch_partner(definition, prompt, timeout_s)
+            if partner_result is not None:
+                return partner_result
+            # The partner exists but has no stable headless invocation yet —
+            # fall back to the in-process loop (dsh provider vocabulary: an
+            # unsupported provider degrades to the default transport).
         return run_ephemeral_definition(
             EphemeralRoleDef(
                 id=definition.name,
@@ -1019,4 +1142,77 @@ def _dispatch(
         "output": str(output) if output is not None else "",
         "success": True,
         "error": None,
+    }
+
+
+def _dispatch_partner(
+    definition: Any,
+    prompt: str,
+    timeout_s: int,
+) -> dict[str, Any] | None:
+    """Route a registry-backed subagent to an external CLI backend (dsh provider).
+
+    ``backend`` on a subagent definition names a LocalPartner spec id
+    (``claude-code`` / ``codex-cli`` / ``openclaw`` / ``trae-cli`` / ...) or
+    its ``agent_id`` alias (``local_claude_code`` ...). The run is best-effort
+    and never raises: unknown backend, missing executable, non-zero exit and
+    timeout all become structured results. Returns ``None`` only when the
+    partner has no stable headless invocation (``unsupported``) so the caller
+    falls back to the in-process loop.
+    """
+    from runtime.execution.agents.local_partner_bridge import run_local_partner
+    from runtime.execution.agents.local_partner_discovery import which_command
+    from runtime.execution.agents.local_partner_specs import LOCAL_PARTNER_SPECS
+
+    spec = LOCAL_PARTNER_SPECS.get(definition.backend)
+    if spec is None:
+        spec = next(
+            (
+                candidate
+                for candidate in LOCAL_PARTNER_SPECS.values()
+                if candidate.get("agent_id") == definition.backend
+            ),
+            None,
+        )
+    if spec is None:
+        return {
+            "agent_id": definition.name,
+            "output": "",
+            "success": False,
+            "error": f"unknown subagent backend {definition.backend!r}",
+            "backend": definition.backend,
+        }
+    partner_id = spec["id"]
+    command, _path = which_command(list(spec.get("commands") or []))
+    if command is None:
+        return {
+            "agent_id": definition.name,
+            "output": "",
+            "success": False,
+            "error": f"backend {partner_id!r} executable not found on this machine",
+            "backend": partner_id,
+        }
+    result = run_local_partner(
+        partner_id=partner_id,
+        command=command,
+        prompt=prompt,
+        timeout=float(timeout_s) if timeout_s else 300.0,
+        model=definition.model,
+    )
+    if result.unsupported:
+        return None
+    base: dict[str, Any] = {
+        "agent_id": definition.name,
+        "output": result.output,
+        "backend": partner_id,
+        "command": command,
+    }
+    if result.ok:
+        return {**base, "success": True}
+    return {
+        **base,
+        "success": False,
+        "error": result.error or result.raw_error or f"{partner_id} exited non-zero",
+        "failure_kind": result.failure_kind,
+        "timed_out": result.timed_out,
     }
