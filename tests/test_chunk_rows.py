@@ -226,3 +226,33 @@ def test_inmemory_journal_never_packs() -> None:
         journal.write(_chunk(delta))
     assert len(journal) == 3
     assert all(e.event_type == "assistant/chunk" for e in journal.read_all())
+
+
+class TestReasoningLanePacking:
+    def test_reasoning_delta_packs_into_rows(self, tmp_path: Path) -> None:
+        journal = JSONLJournal(tmp_path / "j.jsonl")
+        for delta in ("a", "b", "c", "d"):
+            journal.write(_chunk(delta, kind="reasoning-delta"))
+        journal.write(UserMessageEvent(text="flush"))
+
+        lines = (tmp_path / "j.jsonl").read_text().strip().splitlines()
+        assert len(lines) == 2
+        restored = journal.read_all()
+        assert [e.delta for e in restored[:4]] == ["a", "b", "c", "d"]
+        assert all(e.kind == "reasoning-delta" for e in restored[:4])
+
+    def test_mixed_kind_breaks_run(self, tmp_path: Path) -> None:
+        journal = JSONLJournal(tmp_path / "j.jsonl")
+        for delta in ("a", "b", "c"):
+            journal.write(_chunk(delta, kind="reasoning-delta"))
+        for delta in ("d", "e", "f"):
+            journal.write(_chunk(delta, kind="text-delta"))
+        journal.write(UserMessageEvent(text="flush"))
+
+        lines = (tmp_path / "j.jsonl").read_text().strip().splitlines()
+        assert len(lines) == 3  # reasoning row + text row + flush
+        restored = journal.read_all()
+        assert [e.kind for e in restored[:-1]] == [
+            "reasoning-delta", "reasoning-delta", "reasoning-delta",
+            "text-delta", "text-delta", "text-delta",
+        ]

@@ -44,15 +44,17 @@ def _emit_assistant_chunk(
     iteration: int,
     delta: str,
     task_id: Any = None,
+    kind: str = "text-delta",
 ) -> None:
-    """Best-effort mirror of one loop ``text_delta`` as ``assistant/chunk``.
+    """Best-effort mirror of one loop chunk event as ``assistant/chunk``.
 
-    The react loop streams the user-visible final answer through
-    ``text_delta`` events; this journals each fragment so the
-    assistant's streamed text is reconstructable from the log alone
-    (dsh session-log invariant). No journal on ``stack`` → no-op;
-    write failures are swallowed — telemetry loss never breaks the
-    loop.
+    The react loop streams the final answer through ``text_delta``
+    events and private reasoning through ``thinking_delta`` events;
+    this journals each fragment so the streamed lanes are
+    reconstructable from the log alone (dsh session-log invariant,
+    ``assistant/chunk`` with dsh ``StreamChunk`` kinds). No journal
+    on ``stack`` → no-op; write failures are swallowed — telemetry
+    loss never breaks the loop.
     """
     if not delta:
         return
@@ -64,6 +66,7 @@ def _emit_assistant_chunk(
             iteration=iteration,
             delta=delta,
             task_id=task_id,
+            kind=kind,
         )
 
 

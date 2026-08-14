@@ -141,3 +141,44 @@ def test_assert_logged_assistant_reconstructs_roundtrip() -> None:
         journal,
         [AssistantChunkStream(iteration=1, text="hi there", chunk_count=2)],
     )
+
+
+def test_emit_reasoning_delta_writes_kind() -> None:
+    journal = InMemoryJournal()
+    _emit_assistant_chunk(
+        _stack_with(journal),
+        iteration=2,
+        delta="推理片段",
+        kind="reasoning-delta",
+    )
+
+    events = journal.read_all()
+    assert len(events) == 1
+    ev = events[0]
+    assert isinstance(ev, AssistantChunkEvent)
+    assert ev.kind == "reasoning-delta"
+    assert ev.delta == "推理片段"
+
+
+def test_derive_separates_reasoning_lane_by_default() -> None:
+    journal = InMemoryJournal()
+    journal.write_assistant_chunk(iteration=1, delta="可见答案")
+    journal.write_assistant_chunk(
+        iteration=1, delta="私密推理", kind="reasoning-delta"
+    )
+
+    # Default kind="text-delta" keeps the visible reply lane only.
+    streams = derive_assistant_stream(journal)
+    assert streams == [
+        AssistantChunkStream(iteration=1, text="可见答案", chunk_count=1)
+    ]
+
+    reasoning = derive_assistant_stream(journal, kind="reasoning-delta")
+    assert reasoning == [
+        AssistantChunkStream(iteration=1, text="私密推理", chunk_count=1)
+    ]
+
+    everything = derive_assistant_stream(journal, kind=None)
+    assert everything == [
+        AssistantChunkStream(iteration=1, text="可见答案私密推理", chunk_count=2)
+    ]

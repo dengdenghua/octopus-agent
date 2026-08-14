@@ -127,13 +127,17 @@ def derive_assistant_stream(
     journal: Journal,
     *,
     iteration: int | None = None,
+    kind: str | None = "text-delta",
 ) -> list[AssistantChunkStream]:
     """Reconstruct the parent's streamed reply from ``assistant/chunk`` rows.
 
     The dsh session-log invariant applied to the main turn: the
-    user-visible assistant text is recoverable from the append-only
-    journal alone, in journal order, grouped by iteration. Iterations
-    that streamed no text contribute nothing.
+    streamed lanes are recoverable from the append-only journal alone,
+    in journal order, grouped by iteration. ``kind`` selects the dsh
+    ``StreamChunk`` lane — ``"text-delta"`` (the visible reply) by
+    default, ``"reasoning-delta"`` for the private reasoning lane,
+    ``None`` for everything. Iterations that streamed no matching
+    chunks contribute nothing.
     """
 
     chunks: dict[int, list[str]] = {}
@@ -143,6 +147,9 @@ def derive_assistant_stream(
             continue
         # ``getattr`` guards against an untyped fallback row (unknown
         # event_type decodes to the base JournalEvent).
+        event_kind = getattr(event, "kind", "text-delta") or "text-delta"
+        if kind is not None and event_kind != kind:
+            continue
         event_iter = int(getattr(event, "iteration", 0) or 0)
         if iteration is not None and event_iter != iteration:
             continue

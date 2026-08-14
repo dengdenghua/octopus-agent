@@ -390,6 +390,13 @@ def _phase_6b_model_stream(
                                 _thought_stream_open,
                             )
                             if _thought_delta:
+                                _emit_assistant_chunk(
+                                    stack,
+                                    iteration=i + 1,
+                                    delta=_thought_delta,
+                                    task_id=react_task_id,
+                                    kind="reasoning-delta",
+                                )
                                 yield {
                                     "type": "thinking_delta",
                                     "delta": _thought_delta,
@@ -534,6 +541,13 @@ def _phase_6b_model_stream(
                         )
                         break
                     thinking_parts.append(evt.delta)
+                    _emit_assistant_chunk(
+                        stack,
+                        iteration=i + 1,
+                        delta=evt.delta or "",
+                        task_id=react_task_id,
+                        kind="reasoning-delta",
+                    )
                     yield {
                         "type": "thinking_delta",
                         "delta": evt.delta,

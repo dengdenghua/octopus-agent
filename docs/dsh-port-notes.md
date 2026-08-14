@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 二十九个差距点已落地为可测试代码(1-29 节)
+**状态**: 三十个差距点已落地为可测试代码(1-30 节)
 
 ---
 
@@ -900,10 +900,42 @@ delta 打包成一行存储、读时无损展开。本轮把这套存储编码�
   journal/sse/resume/subagent/audit/realtime/checkpoint 1522 项通过,
   ruff/invariant 干净。
 
+### 已收口
+
+- ``reasoning-delta`` 泳道:第 30 节已落地(thinking_delta 逐块落盘,
+  打包层直接复用);``tool-call-delta`` 暂无生产者——我们的模型路由
+  器不流式工具参数,工具调用以完整块到达,无增量可记。
+- goal 分页/流式 surface、title provider 优先级链、远端 SpillStore
+  (e2b)——仍待补。
+## 30. reasoning-delta 泳道 (`thinking_delta` → journal)
+
+第 28/29 节闭合了可见文本泳道;dsh 的 ``assistant/chunk`` 还有
+``reasoning-delta``(推理块)与 ``tool-call-delta``(工具参数流)两条
+泳道。我们确实流式产出推理文本(react loop 的 ``thinking_delta``),
+但从未落盘;工具参数则没有增量流(路由器以完整块到达),无增量可记。
+本轮把推理泳道接上:
+
+- ``react_loop_controls._emit_assistant_chunk`` 新增 ``kind`` 参数
+  (默认 ``"text-delta"``),透传给 ``write_assistant_chunk``。
+- ``react_model_stream`` 两处 ``thinking_delta`` 发射点(thought 区域
+  提取流、provider thinking 透传流)先落 journal
+  ``kind="reasoning-delta"`` 再 yield——私密推理与可见文本同属
+  ``assistant/chunk``,靠 ``kind`` 区分泳道(dsh ``StreamChunk``
+  语义)。
+- ``derive_assistant_stream`` 新增 ``kind`` 过滤(默认
+  ``"text-delta"`` 保持「用户可见回复」语义;``"reasoning-delta"``
+  取推理泳道;``None`` 取全部)——审计可按泳道重建。
+- 打包层零改动复用:``classify_chunk`` 的 ``assistant/chunk`` 白名单
+  已含 ``kind``,uniform kind 的 run 自动打包、混合 kind 自动断 run。
+- 测试:``test_assistant_chunk_event.py`` 新增 3 用例(kind 写入、
+  推导按泳道分离、kind=None 全量);``test_chunk_rows.py`` 新增 2
+  用例(reasoning run 打包、混合 kind 断 run);react 全量回归 1360
+  项通过,ruff/invariant 干净。
+
 ### 尚未覆盖(dsh 有而这里没有)
 
-- ``reasoning-delta`` / ``tool-call-delta`` 泳道:推理块与工具参数流
-  尚未逐块落盘(第 28 节遗留);打包层已就绪,事件模型补上即可复用。
+- ``tool-call-delta`` 泳道:无生产者(工具调用完整块到达,不流式参数
+  片段);若未来接入增量工具参数流,事件模型与打包层已就绪。
 - goal 分页/流式 surface、title provider 优先级链、远端 SpillStore
   (e2b)。
 ## 用法速查
