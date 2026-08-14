@@ -1,0 +1,34 @@
+# config/dev.yaml - 开发环境配置
+# 继承 base.yaml 并覆盖特定项
+
+extends: base.yaml
+
+name: octopus-dev
+
+# 开发环境使用更大的预算
+budget:
+  max_tokens: 100000
+  max_usd: 2.00
+  max_latency_ms: 600000
+
+# 开发环境启用持久化
+journal_file: data/dev_journal.jsonl
+
+# 开发环境启用学习
+learn:
+  learn_from_journal: data/dev_rules.jsonl
+  learn_memories_from_journal: data/dev_memories.jsonl
+  learn_kg_from_journal: data/dev_kg.jsonl
+
+# 开发环境使用本地认证
+local_auth:
+  enabled: true
+  allow_any_username: true
+  jwt_secret: dev-secret-key-32-chars-minimum-required
+  jwt_expire_seconds: 86400  # 1 day
+
+# 开发环境允许客户端绕过审批（仅单用户）
+safety:
+  allow_client_approval_bypass: true
+  enable_trust_signal: false
+  enable_llm_judge: false

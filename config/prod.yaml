@@ -1,0 +1,52 @@
+# config/prod.yaml - 生产环境配置
+# 继承 base.yaml 并应用生产级配置
+
+extends: base.yaml
+
+name: octopus-prod
+
+# 生产环境使用更强大的模型
+planner:
+  type: llm
+  model: claude-sonnet-4-6
+  max_nodes: 20
+
+# 生产环境预算
+budget:
+  max_tokens: 200000
+  max_usd: 5.00
+  max_latency_ms: 1800000  # 30 min
+
+# 生产环境启用所有持久化
+journal_file: /var/log/octopus/prod_journal.jsonl
+
+learn:
+  learn_from_journal: /var/lib/octopus/prod_rules.jsonl
+  learn_memories_from_journal: /var/lib/octopus/prod_memories.jsonl
+  learn_kg_from_journal: /var/lib/octopus/prod_kg.jsonl
+
+# 生产环境使用 Oct 认证网关
+# ⚠️ 注意：启用 oct 时必须设置环境变量 OCT_JWT_SECRET（32+ 字符）
+oct:
+  enabled: false  # 改为 true 前请先设置 OCT_JWT_SECRET 环境变量
+  base_url: https://api.octoapk.com
+  default_model: claude-sonnet-4-6
+  jwt_secret: null  # 生产环境从环境变量读取: export OCT_JWT_SECRET=xxx
+  mock_mode: false
+
+# 生产环境安全配置
+safety:
+  allow_client_approval_bypass: false  # 生产禁用
+  enable_trust_signal: true
+  enable_llm_judge: true
+
+# 生产环境执行配置
+execution:
+  deployment_mode: production
+  process_sandbox: strict
+
+# 生产环境免疫系统增强
+immunity:
+  attack_threshold: 2  # 更严格
+  enable_adaptive: true
+  adaptive_quarantine_threshold: 0.6  # 更敏感

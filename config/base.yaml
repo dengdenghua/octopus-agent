@@ -1,0 +1,101 @@
+# config/base.yaml - 基础配置模板
+# 其他配置可以通过 extends: base.yaml 继承此配置
+
+name: octopus-base
+version_compat: "0.2"
+preset: null  # 手动配置
+
+# 基础规划器配置
+planner:
+  type: llm
+  model: claude-haiku-4-5-20251001
+  mock_response: null
+  max_nodes: 10
+
+# 基础预算配置
+budget:
+  max_tokens: 50000
+  max_usd: 0.50
+  max_latency_ms: 300000
+  model_iteration_timeout_s: 120
+  convergence_max_tokens: 2000
+
+# 基础免疫系统配置
+immunity:
+  trusted_sources:
+    - "skill://public/*"
+    - "mcp://anthropic/*"
+  self_whitelist:
+    - "cerebrum"
+    - "ganglia"
+    - "arms/*"
+    - "react_loop"
+    - "react_arm"
+  unknown_policy: quarantine
+  attack_threshold: 3
+  attack_window_seconds: 3600
+  enable_adaptive: true
+  adaptive_window_size: 200
+  adaptive_quarantine_threshold: 0.7
+
+# 基础安全配置
+safety:
+  allow_client_approval_bypass: false
+  disabled_guards: []
+  enable_trust_signal: false
+  enable_llm_judge: false
+  guard_overrides: {}
+
+# 基础执行配置
+execution:
+  deployment_mode: local
+  process_sandbox: auto
+
+# 基础学习配置
+learn:
+  learn_from_journal: null
+  min_hits: 3
+  max_rules: 30
+  learn_memories_from_journal: null
+  learn_kg_from_journal: null
+  kg_max_triples: 15
+  rewrite_from_journal: null
+  rewrite_min_confidence: 0.7
+  rewrite_min_severity: mid
+  assess_recipe_from_journal: null
+
+# 其他基础配置
+journal_file: null
+enable_web_skills: true
+default_arm_id: code_arm
+mcp_servers: []
+intel_sources: []
+
+# 进化配置
+evolve:
+  strategy: inherit
+  model: null
+  base_url: null
+  api_key_env: null
+
+# 认证配置
+oct:
+  enabled: false
+  base_url: https://api.octoapk.com
+  default_model: qwen3.5-flash
+  request_timeout_seconds: 15
+  llm_timeout_seconds: 120
+  mock_mode: false
+  jwt_secret: null
+  jwt_expire_seconds: 2592000
+  jwt_issuer: octopus-agent
+
+local_auth:
+  enabled: false
+  allow_any_username: false
+  allowed_usernames: []
+  jwt_secret: null
+  jwt_expire_seconds: 604800
+  jwt_issuer: octopus-agent
+  actor_prefix: "local:"
+  default_roles: [user, local]
