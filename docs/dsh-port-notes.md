@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 四十七个差距点已落地为可测试代码(1-47 节)
+**状态**: 四十八个差距点已落地为可测试代码(1-48 节)
 
 ---
 
@@ -749,8 +749,7 @@ revision 的下一个轮次」,但 journal 一直没有 dsh 的 ``user/message``
 - host 自动补全接线:我们实现了 ``list_candidates`` 与 subagent store
   适配,但没有把 resolver 接到宿主端的提及自动补全/mention 解析管线
   (dsh 由 host 解析 mentions 后调 ``prepare``)。
-- 取消信号:我们省略了 dsh 的 ``AbortSignal`` 取消边界;长读 surface
-  时如需可中断再补。
+- 取消信号:已由第 48 节收口(``SESSION_REFERENCE_CANCELLED`` 取消边界)。
 ## 28. 回合级 transcript 逐事件桥 (`sub_text_delta` → journal)
 
 dsh session 日志的不变式是「模型可见即入日志」:回合内流式细节也逐
@@ -859,8 +858,7 @@ dsh session 日志的不变式是「模型可见即入日志」:回合内流式�
 - 前端自动补全弹层:解析/注入面已接好,但宿主 UI 的「键入
   ``@session:`` 时弹出候选」没有做——那属于前端 host 侧,需要的话再搬
   dsh 的 candidate autocomplete 交互。
-- 取消信号:沿用的 ``AbortSignal`` 取消边界仍未移植;长读 surface 如需
-  可中断再补。
+- 取消信号:已由第 48 节收口(``SESSION_REFERENCE_CANCELLED`` 取消边界)。
 
 ## 31. chunk 存储压缩 (`runtime/memory/journal/_chunk_rows.py`)
 
@@ -1427,6 +1425,35 @@ octopus 自造的 ``@session:<id>`` 语法,缺 dsh 的宿主无关 canonical URI
   本节的 ``format_session_reference_mention`` 已就绪,弹层 UI 待前端
   接入;非 subagent store 的 ``list_candidates``/``read_surface`` 适配器
   同理是纯接入点。
+
+## 48. 会话引用取消边界 (`SESSION_REFERENCE_CANCELLED`)
+
+dsh 的 resolver 把 ``AbortSignal`` 作为一等边界:``listCandidates`` /
+``prepare`` 入口先 ``assertNotCancelled``,异步 surface 读取用
+``settleWithCancellation`` 竞速取消,取消统一抛
+``SessionReferenceError('session reference preparation was cancelled',
+'SESSION_REFERENCE_CANCELLED')``。我们此前完全省略了取消信号。本轮
+复用现有 ``runtime/safety/approval/cancellation.py`` 的 ambient token,
+补上同步侧的等价边界:
+
+- ``_assert_not_cancelled()``:读 ``current_cancellation_token()``,已
+  取消即抛 ``SessionReferenceError("session reference preparation was
+  cancelled", "SESSION_REFERENCE_CANCELLED", cause=OperationCancelled)``
+  ——错误消息与 code 与 dsh 逐字一致。
+- ``list_candidates`` 入口检查(limit 校验之后,dsh 同序):宿主自动
+  补全拆毁时,候选列表立即失败而不是白跑排序。
+- ``prepare`` 三处检查:normalize 非空后、每次 ``read_surface`` 之前
+  (sync 版 ``settleWithCancellation`` 竞速守卫)、全部读取之后渲染
+  frame 之前(dsh 的第二个 ``assertNotCancelled``)——中途取消会停在
+  下一次读取前,不产生半截 frame。
+- 未设置 token 时 ambient 默认 ``CancellationToken.none()``(永不取消),
+  全部既有路径零行为变化;``resolve_mentions`` 委托 ``prepare`` 自动
+  继承边界。
+- 测试:``tests/test_session_reference.py`` 新增 5 用例(list_candidates
+  取消即抛且不读 store、未取消行为不变、prepare 读取前取消不触发
+  read_surface、读取中途取消停在首个引用、读取后取消在渲染前拦截);
+  reference/projection/subagent/report/journal/goal 关联 135 项全绿,
+  ruff/invariant 干净。
 
 ## 用法速查
 

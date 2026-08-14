@@ -17,6 +17,10 @@ from runtime.execution.tool_engine.session_reference import (
     normalize_references,
     render_reference_prompt,
 )
+from runtime.safety.approval.cancellation import (
+    CancellationSource,
+    scoped_cancellation,
+)
 
 
 def _surface(session_id: str, body: str = "") -> list[dict]:
@@ -98,6 +102,28 @@ def test_list_candidates_invalid_limit() -> None:
     resolver = SessionReferenceResolver()
     with pytest.raises(SessionReferenceError):
         resolver.list_candidates(target_id="x", sessions=_records(), limit=0)
+
+
+def test_list_candidates_cancelled_raises() -> None:
+    resolver = SessionReferenceResolver()
+    source = CancellationSource()
+    source.cancel(reason="autocomplete torn down")
+    with scoped_cancellation(source.token), pytest.raises(SessionReferenceError) as exc:
+        resolver.list_candidates(target_id="x", sessions=_records())
+    assert exc.value.code == "SESSION_REFERENCE_CANCELLED"
+    assert "cancelled" in str(exc.value)
+
+
+def test_list_candidates_uncancelled_unchanged() -> None:
+    resolver = SessionReferenceResolver()
+    source = CancellationSource()
+    with scoped_cancellation(source.token):
+        out = resolver.list_candidates(
+            target_id="target-id",
+            sessions=_records(),
+            target_cwd="/repo",
+        )
+    assert [c.session_id for c in out] == ["abc123", "ghi789", "def456"]
 
 
 # ─── normalize_references ──────────────────────────────────────────────────
@@ -229,6 +255,72 @@ def test_prepare_read_failure() -> None:
             read_surface=_boom,
         )
     assert exc.value.code == "SESSION_REFERENCE_READ_FAILED"
+
+
+def test_prepare_cancelled_before_reads_raises() -> None:
+    resolver = SessionReferenceResolver()
+    source = CancellationSource()
+    source.cancel(reason="client disconnected")
+
+    def _never_called(sid: str) -> list[dict]:
+        raise AssertionError("read_surface must not run when cancelled")
+
+    with scoped_cancellation(source.token), pytest.raises(SessionReferenceError) as exc:
+        resolver.prepare(
+            target_id="t",
+            content=[],
+            references=[SessionReferenceInput(session_id="s1")],
+            read_surface=_never_called,
+        )
+    assert exc.value.code == "SESSION_REFERENCE_CANCELLED"
+
+
+def test_prepare_cancelled_during_reads_raises() -> None:
+    """A token tripped mid-loop must stop the remaining reads (sync
+    equivalent of dsh ``settleWithCancellation`` racing the batch)."""
+    resolver = SessionReferenceResolver()
+    source = CancellationSource()
+    calls: list[str] = []
+
+    def _cancelling_surface(sid: str) -> list[dict]:
+        calls.append(sid)
+        if len(calls) == 1:
+            source.cancel(reason="request aborted")
+        return _surface(sid)
+
+    with scoped_cancellation(source.token), pytest.raises(SessionReferenceError) as exc:
+        resolver.prepare(
+            target_id="t",
+            content=[],
+            references=[
+                SessionReferenceInput(session_id="s1"),
+                SessionReferenceInput(session_id="s2"),
+            ],
+            read_surface=_cancelling_surface,
+        )
+    assert exc.value.code == "SESSION_REFERENCE_CANCELLED"
+    assert calls == ["s1"]
+
+
+def test_prepare_cancelled_after_reads_raises() -> None:
+    """The post-read assertion mirrors dsh's second ``assertNotCancelled``
+    before rendering the frame."""
+    resolver = SessionReferenceResolver()
+    source = CancellationSource()
+
+    def _surface_then_cancel(sid: str) -> list[dict]:
+        result = _surface(sid)
+        source.cancel(reason="turn aborted")
+        return result
+
+    with scoped_cancellation(source.token), pytest.raises(SessionReferenceError) as exc:
+        resolver.prepare(
+            target_id="t",
+            content=[],
+            references=[SessionReferenceInput(session_id="s1")],
+            read_surface=_surface_then_cancel,
+        )
+    assert exc.value.code == "SESSION_REFERENCE_CANCELLED"
 
 
 def test_invalid_config_rejected() -> None:

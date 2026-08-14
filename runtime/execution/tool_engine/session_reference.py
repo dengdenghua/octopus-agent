@@ -36,6 +36,11 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, is_dataclass
 from typing import Any
 
+from runtime.safety.approval.cancellation import (
+    OperationCancelled,
+    current_cancellation_token,
+)
+
 from .session_projection import (
     ReferencedSessionData,
     ReferenceRetentionStats,
@@ -62,6 +67,25 @@ _PROMPT_PREFIX = (
 _PROMPT_SUFFIX = "\n</referenced-sessions>"
 
 SessionReferenceErrorCode = str
+
+
+def _assert_not_cancelled() -> None:
+    """dsh ``assertNotCancelled``: fail fast when the ambient request
+    cancellation token has been tripped.
+
+    The resolver is synchronous, so this mirrors dsh's pre-read assertion
+    plus its ``settleWithCancellation`` race guard: the host checks once
+    at entry and again around each surface read, and a tripped token
+    raises dsh's ``SESSION_REFERENCE_CANCELLED`` instead of starting (or
+    continuing) an expensive read.
+    """
+    token = current_cancellation_token()
+    if token.is_cancelled:
+        raise SessionReferenceError(
+            "session reference preparation was cancelled",
+            "SESSION_REFERENCE_CANCELLED",
+            cause=OperationCancelled(token.reason or "cancelled"),
+        )
 
 
 class SessionReferenceError(RuntimeError):
@@ -270,6 +294,7 @@ class SessionReferenceResolver:
                 "candidate limit must be a positive integer",
                 "SESSION_REFERENCE_INVALID_REFERENCE",
             )
+        _assert_not_cancelled()
         needle = query.strip().lower()
         records = [record for record in sessions if record.session_id != target_id]
         if needle:
@@ -389,8 +414,10 @@ class SessionReferenceResolver:
         inputs = normalize_references(target_id, references, self._max_references)
         if not inputs:
             return PreparedReferencedMessage(content=content)
+        _assert_not_cancelled()
         rendered: list[tuple[ReferencedSessionData, ReferenceRetentionStats]] = []
         for input_ in inputs:
+            _assert_not_cancelled()
             try:
                 snapshot = read_surface(input_.session_id)
             except Exception as exc:  # noqa: BLE001 - host store may raise
@@ -411,6 +438,7 @@ class SessionReferenceResolver:
                     "SESSION_REFERENCE_BUDGET_EXCEEDED",
                 )
             rendered.append(retained)
+        _assert_not_cancelled()
         prompt = render_reference_prompt([data for data, _stats in rendered])
         references_payload = [
             {
