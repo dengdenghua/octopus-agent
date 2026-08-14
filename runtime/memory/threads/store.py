@@ -13,11 +13,22 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from .feedback import FeedbackStore, FeedbackType, MessageFeedback
+from .session_export import export_thread_to_markdown
 from .session_index import SessionIndex, entry_from_thread
+from .session_search import SearchResult, SessionSearchIndex
 
 logger = logging.getLogger(__name__)
 
 _PATH_SEGMENT_RE = re.compile(r'[<>:"/\\|?*\x00-\x1F]')
+
+
+class ForkUnavailableError(RuntimeError):
+    """The anchor's turn is still open; dsh ``fork-unavailable``.
+
+    Raised instead of silently clipping to an earlier turn so the caller
+    can surface a distinct error to the user.
+    """
 
 
 def _utc_now_iso() -> str:
@@ -73,6 +84,8 @@ class ThreadStateStore:
         per_agent_base: str | Path | None = None,
         dated_layout: bool = False,
         index_enabled: bool = True,
+        search_enabled: bool = True,
+        feedback_enabled: bool = True,
         session_origin: str = "octopus",
     ) -> None:
         self._threads: dict[str, dict[str, Any]] = {}
@@ -111,11 +124,26 @@ class ThreadStateStore:
             if index_path is not None:
                 self._index = SessionIndex(index_path)
 
+        # Full-text search index (DSH P2: session-query)
+        self._search: SessionSearchIndex | None = None
+        if search_enabled:
+            search_path = self._resolve_search_path()
+            if search_path is not None:
+                self._search = SessionSearchIndex(search_path)
+
+        # Feedback store (DSH P2: feedback system)
+        self._feedback: FeedbackStore | None = None
+        if feedback_enabled:
+            feedback_base = self._resolve_feedback_base()
+            if feedback_base is not None:
+                self._feedback = FeedbackStore(feedback_base)
+
         # Load existing records
         if self._path is not None and self._path.exists():
             self._load_from(self._path)
         if self._per_agent_base is not None:
             self._load_from_per_agent_tree()
+        self._repair_conflicting_agent_copies_locked()
 
         # Backfill the index from in-memory state on first boot. The
         # index is authoritative AFTER first write; before then we
@@ -130,6 +158,22 @@ class ThreadStateStore:
             return self._per_agent_base / "data" / "sessions" / "session_index.jsonl"
         if self._path is not None:
             return self._path.with_name("session_index.jsonl")
+        return None
+
+    def _resolve_search_path(self) -> Path | None:
+        """Resolve path for FTS5 search database (DSH P2)."""
+        if self._per_agent_base is not None:
+            return self._per_agent_base / "data" / "sessions" / "search.db"
+        if self._path is not None:
+            return self._path.with_suffix(".search.db")
+        return None
+
+    def _resolve_feedback_base(self) -> Path | None:
+        """Resolve base path for feedback storage (DSH P2)."""
+        if self._per_agent_base is not None:
+            return self._per_agent_base / "data" / "sessions"
+        if self._path is not None:
+            return self._path.parent
         return None
 
     def _index_file_for(self, target: Path) -> str:
@@ -212,6 +256,119 @@ class ThreadStateStore:
             self._append_upsert(thread, state)
             return _deepcopy(thread)
 
+    def fork_thread(
+        self,
+        thread_id: str,
+        *,
+        at_message_index: int | None = None,
+        title: str | None = None,
+    ) -> dict[str, Any]:
+        """Fork a new thread from a completed-turn prefix (dsh ``sessions.fork``).
+
+        The cut boundary is the first completed turn at or after
+        ``at_message_index`` (a message's fork button passes its index, so
+        the fork includes that whole turn); an omitted or out-of-range
+        anchor falls back to the source's last completed turn. A turn is
+        ``open`` when it is the last turn and has no assistant message yet
+        (no snapshot has been written for it) — anchoring on an open turn
+        raises :class:`ForkUnavailableError` instead of clipping to an
+        earlier turn. When no completed turn exists the seed is empty and
+        the child behaves like a fresh thread.
+
+        The child inherits the source metadata (agent / team / owner /
+        tenant / workspace) and the source title, and records its lineage
+        as ``metadata.parent_thread_id`` + ``metadata.parent_message_index``
+        (the last included source message index, ``-1`` for an empty seed).
+        Only conversation history is transferred — artifacts and live state
+        are not copied (dsh: "the seed transfers conversation history only").
+        """
+        with self._lock:
+            source = self._threads.get(thread_id)
+            if source is None:
+                raise KeyError(thread_id)
+            source_values = source.get("values") if isinstance(source.get("values"), dict) else {}
+            messages = source_values.get("messages") or []
+            if not isinstance(messages, list):
+                messages = []
+            humans = [
+                idx
+                for idx, msg in enumerate(messages)
+                if isinstance(msg, dict) and msg.get("type") == "human"
+            ]
+
+            cut = self._resolve_fork_cut(messages, humans, at_message_index)
+            seed = messages[: cut + 1] if cut >= 0 else []
+
+            now = _utc_now_iso()
+            child = {
+                "thread_id": uuid4().hex,
+                "status": "idle",
+                "created_at": now,
+                "updated_at": now,
+                "metadata": _deepcopy(source.get("metadata") or {}),
+                "values": _default_values({}),
+            }
+            lineage = child["metadata"]
+            lineage["parent_thread_id"] = source["thread_id"]
+            lineage["parent_message_index"] = cut
+            src_title = source_values.get("title")
+            child["values"]["messages"] = _deepcopy(seed)
+            child["values"]["title"] = (
+                title.strip()
+                if isinstance(title, str) and title.strip()
+                else src_title or "New chat"
+            )
+            state = self._make_state(child)
+            self._threads[child["thread_id"]] = child
+            self._history[child["thread_id"]] = [state]
+            self._append_upsert(child, state)
+            return _deepcopy(child)
+
+    @staticmethod
+    def _resolve_fork_cut(
+        messages: list[dict[str, Any]],
+        humans: list[int],
+        at_message_index: int | None,
+    ) -> int:
+        """Return the last source message index to seed (``-1`` = empty)."""
+        if not humans:
+            return -1
+
+        anchor: int | None = None
+        if at_message_index is not None and 0 <= at_message_index < len(messages):
+            anchor = at_message_index
+
+        if anchor is not None:
+            # Turn containing the anchor = the human message at/before it.
+            turn_human = 0
+            for idx in humans:
+                if idx <= anchor:
+                    turn_human = idx
+                else:
+                    break
+            next_human = next((idx for idx in humans if idx > turn_human), None)
+            if next_human is None:
+                # The anchor is inside the last turn.
+                if not any(
+                    isinstance(msg, dict) and msg.get("type") == "ai"
+                    for msg in messages[turn_human + 1 :]
+                ):
+                    raise ForkUnavailableError(
+                        "anchor turn is still open; no completed turn to fork"
+                    )
+                return len(messages) - 1
+            return next_human - 1
+
+        # No anchor: cut at the end of the last completed turn.
+        last_human = humans[-1]
+        if any(
+            isinstance(msg, dict) and msg.get("type") == "ai" for msg in messages[last_human + 1 :]
+        ):
+            return len(messages) - 1
+        # Last turn is open (queued prompt without a snapshot): fall back to
+        # the previous completed turn; empty seed when none exists.
+        return last_human - 1 if len(humans) >= 2 else -1
+
     def get(self, thread_id: str) -> dict[str, Any] | None:
         with self._lock:
             thread = self._threads.get(thread_id)
@@ -286,6 +443,16 @@ class ThreadStateStore:
             merged_metadata = _deepcopy(thread.get("metadata", {}))
             if metadata:
                 merged_metadata.update(_deepcopy(metadata))
+            # Persona is a thread-creation property, not mutable turn state.
+            # Keeping it stable also keeps the append-only session in one
+            # ``agents/<owner>/sessions`` shard. Role switching must create a
+            # new thread instead of moving an existing conversation.
+            owner_agent_id = self._agent_id_for(thread)
+            if owner_agent_id:
+                merged_metadata["agent"] = owner_agent_id
+                for key in ("agent_name", "agent_id", "assistant_id"):
+                    if key in merged_metadata:
+                        merged_metadata[key] = owner_agent_id
             thread["values"] = merged_values
             thread["metadata"] = merged_metadata
             thread["updated_at"] = _utc_now_iso()
@@ -321,12 +488,12 @@ class ThreadStateStore:
     def _agent_id_for(self, thread: dict[str, Any]) -> str | None:
         """Extract a stable agent_id from a thread's metadata (if any).
 
-        Metadata keys we try, in order: ``agent`` · ``agent_id`` ·
-        ``assistant_id``. We filter out the ``lead_agent`` placeholder
+        Metadata keys we try, in order: ``agent`` · ``agent_name`` ·
+        ``agent_id`` · ``assistant_id``. We filter out the ``lead_agent`` placeholder
         (used by the OpenAI-compat gateway when no persona is bound).
         """
         meta = thread.get("metadata") or {}
-        for key in ("agent", "agent_id", "assistant_id"):
+        for key in ("agent", "agent_name", "agent_id", "assistant_id"):
             value = meta.get(key)
             if isinstance(value, str) and value and value != "lead_agent":
                 return value
@@ -436,6 +603,10 @@ class ThreadStateStore:
             )
             if entry is not None:
                 self._index.upsert(entry)
+
+        # Update search index (DSH P2: session-query)
+        if self._search is not None:
+            self._update_search_index(thread)
 
     def _cleanup_stale_paths_if_promoted(self, thread: dict[str, Any]) -> None:
         """If a thread just gained an agent tag and is about to be
@@ -694,6 +865,114 @@ class ThreadStateStore:
                 for jsonl in self._canonical_session_files(sess):
                     self._load_from(jsonl, implied_team_id=implied_team_id)
 
+    def _repair_conflicting_agent_copies_locked(self) -> None:
+        """Prefer the thread's original role when stale copies disagree.
+
+        Older clients could send a different ``agent_name`` on a later turn,
+        producing two files with the same thread id in different role folders.
+        File traversal order then decided which conversation appeared after a
+        restart.  The earliest ``created_at`` identifies the original role;
+        move the fullest/latest conversation back there and remove the stale
+        duplicate so future reads and sidebar filters are deterministic.
+        """
+        if self._per_agent_base is None:
+            return
+        agents_root = self._per_agent_base / "agents"
+        if not agents_root.exists():
+            return
+
+        candidates: dict[str, list[tuple[str, Path, dict[str, Any]]]] = {}
+        for agent_dir in agents_root.iterdir():
+            if not agent_dir.is_dir():
+                continue
+            sessions = agent_dir / "sessions"
+            if not sessions.exists():
+                continue
+            for path in self._canonical_session_files(sessions):
+                thread = self._latest_thread_from_file(path)
+                if thread is None:
+                    continue
+                candidates.setdefault(path.stem, []).append((agent_dir.name, path, thread))
+
+        for thread_id, copies in candidates.items():
+            if len(copies) < 2:
+                continue
+            owner_agent, owner_path, owner_thread = min(
+                copies,
+                key=lambda item: (
+                    str(item[2].get("created_at") or "9999"),
+                    str(item[2].get("updated_at") or "9999"),
+                ),
+            )
+            latest_thread = max(copies, key=lambda item: str(item[2].get("updated_at") or ""))[2]
+            repaired = _deepcopy(latest_thread)
+            repaired_meta = repaired.setdefault("metadata", {})
+            repaired_meta["agent"] = owner_agent
+            for key in ("agent_name", "agent_id", "assistant_id"):
+                if key in repaired_meta:
+                    repaired_meta[key] = owner_agent
+            state = self._make_state(repaired)
+            state["metadata"] = _deepcopy(repaired_meta)
+
+            # Rebuild one canonical file under the original owner. This is a
+            # startup migration of an already-corrupt duplicate set, not a
+            # normal append; all source files remain recoverable until the
+            # replacement has been flushed successfully.
+            owner_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = owner_path.with_suffix(owner_path.suffix + ".repair")
+            tmp_path.write_text(
+                json.dumps(self._session_meta(repaired), ensure_ascii=False)
+                + "\n"
+                + json.dumps(
+                    {
+                        "op": "upsert",
+                        "thread_id": thread_id,
+                        "thread": repaired,
+                        "state": state,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            tmp_path.replace(owner_path)
+            for _agent, path, _thread in copies:
+                if path == owner_path:
+                    continue
+                with contextlib.suppress(OSError):
+                    path.unlink()
+            logger.warning(
+                "thread-store: repaired conflicting role copies for %s; owner=%s, removed=%d",
+                thread_id,
+                owner_agent,
+                len(copies) - 1,
+            )
+            self._threads[thread_id] = repaired
+            self._history[thread_id] = [state]
+            if self._index is not None:
+                entry = entry_from_thread(
+                    repaired,
+                    file_path=self._index_file_for(owner_path),
+                )
+                if entry is not None:
+                    self._index.upsert(entry)
+
+    @staticmethod
+    def _latest_thread_from_file(path: Path) -> dict[str, Any] | None:
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return None
+        for line in reversed(lines):
+            try:
+                record = json.loads(line)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            thread = record.get("thread") if isinstance(record, dict) else None
+            if isinstance(thread, dict):
+                return thread
+        return None
+
     def _canonical_session_files(self, sess_root: Path) -> list[Path]:
         """Return one canonical jsonl per thread under a session root.
 
@@ -716,3 +995,225 @@ class ThreadStateStore:
             if candidate_is_flat or jsonl > current:
                 chosen[thread_id] = jsonl
         return sorted(chosen.values())
+
+    # ─── Search and export (DSH P2: session-query) ───────────
+
+    def _update_search_index(self, thread: dict[str, Any]) -> None:
+        """Update the FTS5 search index for a thread."""
+        if self._search is None:
+            return
+
+        thread_id = thread.get("thread_id")
+        if not isinstance(thread_id, str):
+            return
+
+        values = thread.get("values", {})
+        title = values.get("title", "Untitled")
+        messages = values.get("messages", [])
+
+        agent_id = self._agent_id_for(thread)
+        team_id = self._team_id_for(thread)
+        created_at = thread.get("created_at")
+        updated_at = thread.get("updated_at")
+
+        self._search.index_thread(
+            thread_id=thread_id,
+            title=str(title),
+            messages=messages,
+            agent_id=agent_id,
+            team_id=team_id,
+            created_at=created_at,
+            updated_at=updated_at,
+        )
+
+    def search_threads(
+        self,
+        query: str,
+        *,
+        agent_id: str | None = None,
+        team_id: str | None = None,
+        after: str | None = None,
+        before: str | None = None,
+        limit: int = 50,
+    ) -> list[SearchResult]:
+        """Search threads by content (DSH P2: session-query).
+
+        Args:
+            query: Search query (supports FTS5 syntax)
+            agent_id: Filter by agent
+            team_id: Filter by team
+            after: ISO date, threads updated after this
+            before: ISO date, threads updated before this
+            limit: Max results (default 50)
+
+        Returns:
+            List of SearchResult, ordered by relevance
+        """
+        if self._search is None:
+            return []
+
+        return self._search.search(
+            query,
+            agent_id=agent_id,
+            team_id=team_id,
+            after=after,
+            before=before,
+            limit=limit,
+        )
+
+    def export_thread_markdown(self, thread_id: str) -> str | None:
+        """Export a thread to Markdown format (DSH P2: session-query).
+
+        Args:
+            thread_id: Thread identifier
+
+        Returns:
+            Markdown string with YAML frontmatter, or None if thread not found
+        """
+        with self._lock:
+            thread = self._threads.get(thread_id)
+            if thread is None:
+                return None
+
+            values = thread.get("values", {})
+            title = values.get("title", "Untitled")
+            messages = values.get("messages", [])
+
+            agent_id = self._agent_id_for(thread)
+            team_id = self._team_id_for(thread)
+            created_at = thread.get("created_at")
+            updated_at = thread.get("updated_at")
+
+            return export_thread_to_markdown(
+                thread_id=thread_id,
+                title=str(title),
+                messages=messages,
+                agent_id=agent_id,
+                team_id=team_id,
+                created_at=created_at,
+                updated_at=updated_at,
+            )
+
+    def delete_thread(self, thread_id: str) -> None:
+        """Delete a thread (DSH P2: enhanced with search index cleanup).
+
+        Removes from in-memory cache, session index, and search index.
+        The on-disk JSONL file is left intact for audit/recovery.
+        """
+        with self._lock:
+            if thread_id in self._threads:
+                del self._threads[thread_id]
+            if thread_id in self._history:
+                del self._history[thread_id]
+
+            if self._index is not None:
+                self._index.delete(thread_id)
+
+            if self._search is not None:
+                self._search.delete_thread(thread_id)
+
+    # ─── Feedback (DSH P2: feedback system) ──────────────
+
+    def add_message_feedback(
+        self,
+        thread_id: str,
+        message_index: int,
+        feedback_type: FeedbackType,
+        *,
+        tags: list[str] | None = None,
+        comment: str = "",
+        user_id: str | None = None,
+    ) -> MessageFeedback | None:
+        """Add feedback for a message (DSH P2: feedback system).
+
+        Args:
+            thread_id: Thread identifier
+            message_index: Zero-based index of the message
+            feedback_type: "thumbs_up" or "thumbs_down"
+            tags: Optional list of tags (e.g., ["helpful"], ["inaccurate", "too_verbose"])
+            comment: Optional free-form comment
+            user_id: Optional user identifier
+
+        Returns:
+            The recorded MessageFeedback, or None if feedback is disabled
+        """
+        if self._feedback is None:
+            return None
+
+        return self._feedback.add_feedback(
+            thread_id=thread_id,
+            message_index=message_index,
+            feedback_type=feedback_type,
+            tags=tags,
+            comment=comment,
+            user_id=user_id,
+        )
+
+    def get_message_feedback(
+        self, thread_id: str, message_index: int | None = None
+    ) -> list[MessageFeedback]:
+        """Get feedback for a thread or specific message (DSH P2: feedback system).
+
+        Args:
+            thread_id: Thread identifier
+            message_index: Optional message index to filter by
+
+        Returns:
+            List of MessageFeedback, in chronological order
+        """
+        if self._feedback is None:
+            return []
+
+        if message_index is not None:
+            return self._feedback.get_message_feedback(thread_id, message_index)
+
+        return self._feedback.get_feedback(thread_id)
+
+    def get_feedback_stats(self, thread_id: str) -> dict[str, Any]:
+        """Get feedback statistics for a thread (DSH P2: feedback system).
+
+        Returns:
+            Dictionary with counts:
+            - total: Total feedback count
+            - thumbs_up: Positive feedback count
+            - thumbs_down: Negative feedback count
+            - tags: Dict of tag -> count
+            - messages_with_feedback: List of message indices with any feedback
+        """
+        if self._feedback is None:
+            return {
+                "total": 0,
+                "thumbs_up": 0,
+                "thumbs_down": 0,
+                "tags": {},
+                "messages_with_feedback": [],
+            }
+
+        return self._feedback.get_stats(thread_id)
+
+    def export_rlhf_dataset(
+        self,
+        output_path: str | Path,
+        *,
+        min_feedback_count: int = 1,
+        feedback_type_filter: FeedbackType | None = None,
+    ) -> int:
+        """Export all feedback as RLHF training dataset (DSH P2: feedback system).
+
+        Args:
+            output_path: Path to write JSONL dataset
+            min_feedback_count: Only include threads with at least this many feedbacks
+            feedback_type_filter: Only include specific feedback type (optional)
+
+        Returns:
+            Number of feedback entries exported
+        """
+        if self._feedback is None:
+            return 0
+
+        return self._feedback.export_rlhf_dataset(
+            output_path,
+            min_feedback_count=min_feedback_count,
+            feedback_type_filter=feedback_type_filter,
+        )
+
