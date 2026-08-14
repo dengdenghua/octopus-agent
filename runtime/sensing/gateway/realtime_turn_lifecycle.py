@@ -140,6 +140,56 @@ def _close_turn(
     log.turn_completed(thread_id, turn.id, turn.status, error)
 
 
+def _resolve_session_reference_mentions(
+    text: str,
+    thread_id: str,
+) -> tuple[str, str | None]:
+    """dsh host mention seam: resolve ``@session:`` / ``@subagent:`` /
+    canonical ``dsh-session:`` mentions in a realtime user prompt.
+
+    Returns ``(clean_text, frame)`` — mention tokens replaced by their
+    readable labels plus the rendered referenced-sessions frame when any
+    mention resolved (``None`` otherwise). Best-effort: a missing store,
+    read failure, or budget error leaves the prompt untouched so mention
+    resolution can never break a turn.
+    """
+    if not text:
+        return text, None
+    if (
+        "@session:" not in text
+        and "@subagent:" not in text
+        and "dsh-session:" not in text
+    ):
+        return text, None
+    try:
+        from runtime.execution.subagents.sessions import (
+            get_subagent_session_store,
+        )
+
+        store = get_subagent_session_store()
+        if store is None:
+            return text, None
+        resolved = store.resolve_session_mentions(
+            text,
+            target_id=thread_id,
+            strip_mentions=True,
+        )
+        clean = resolved.content
+        if isinstance(clean, str) and clean.strip():
+            text = clean
+        frame: str | None = None
+        if resolved.additional_context is not None:
+            content = resolved.additional_context.get("content")
+            if isinstance(content, list) and content and isinstance(content[0], dict):
+                frame_text = content[0].get("text")
+                if isinstance(frame_text, str) and frame_text.strip():
+                    frame = frame_text
+        return text, frame
+    except Exception:  # noqa: BLE001 — mention resolution is best-effort
+        _logger.debug("session-reference mention resolution skipped", exc_info=True)
+        return text, None
+
+
 async def _start_turn(
     runtime: CerebrumRuntime,
     params: dict[str, Any],
@@ -396,6 +446,17 @@ async def _start_turn(
             )
             return turn
 
+        # ── PHASE 3.5 · session-reference mention resolution (dsh host
+        # mention seam) ──
+        # Resolve @session: / @subagent: / canonical dsh-session: mentions
+        # into a read-only referenced-sessions frame. The frame is injected
+        # into the model's user context (never the sidebar text); any
+        # failure degrades to the raw prompt.
+        text, session_reference_frame = _resolve_session_reference_mentions(
+            text,
+            thread_id,
+        )
+
         # Record the user's message as a first-class turn item so
         # ``_flatten_turns_to_messages`` and the realtime adapter
         # both see a HumanMessage anchor. Without this the sidebar
@@ -429,6 +490,15 @@ async def _start_turn(
             allow_client_auto_approve=runtime._allow_client_auto_approve,
             conversation_messages=conversation_messages,
         )
+        if session_reference_frame is not None:
+            intent = intent.model_copy(
+                update={
+                    "user_context": {
+                        **intent.user_context,
+                        "session_reference_context": session_reference_frame,
+                    }
+                }
+            )
         _inject_cowork_turn_plan(
             runtime,
             thread_id=thread_id,

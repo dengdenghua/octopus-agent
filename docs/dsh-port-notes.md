@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 四十九个差距点已落地为可测试代码(1-49 节)
+**状态**: 五十个差距点已落地为可测试代码(1-50 节)
 
 ---
 
@@ -1478,10 +1478,35 @@ URI 原语就绪后,差的最后一环是宿主 UI:键入 ``@`` 弹层里没有�
 
 ### 尚未覆盖(dsh 有而这里没有)
 
-- 宿主生产接线:``resolve_session_mentions``(``sessions.py``)仍无生产
-  调用方——用户 prompt 里的 mention 目前不会被 gateway 解析注入;弹层
-  插入 canonical mention 后,这步是端到端的最后一段(与 ``on_report``
-  同属网关热区,留待专门一轮)。
+- 宿主生产接线:已由第 50 节收口(实时回合 PHASE 3.5 解析 + frame 注入)。
+
+## 50. 宿主生产接线:回合内 mention 解析 + frame 注入
+    (`realtime_turn_lifecycle` + `_react_prompt_assembly_state`)
+
+第 49 节弹层插入 canonical mention 后,最后一段是 gateway 真正解析并
+注入——此前 ``resolve_session_mentions`` 只有定义没有生产调用方。本轮
+把它接进实时回合主路径:
+
+- ``_resolve_session_reference_mentions(text, thread_id)``
+  (``realtime_turn_lifecycle.py``):廉价预检(``@session:`` /
+  ``@subagent:`` / ``dsh-session:`` 子串)后调 store 适配器,返回
+  ``(clean_text, frame)``——mention token 换成可读 label / 剥离,frame
+  为渲染好的 referenced-sessions 块;store 缺失、读失败、预算超限一律
+  吞掉并原样返回 prompt(mention 解析永不阻塞回合)。
+- ``_start_turn`` PHASE 3.5:在 prompt hooks 与 user-message anchor 之后、
+  intent 构建之前解析;clean text 进 anchor / intent / journal(侧边栏
+  干净),frame 经 ``intent.user_context["session_reference_context"]``
+  传递。
+- ``_assemble_messages``(``_react_prompt_assembly_state.py``):渲染
+  frame 为独立 user 消息,插在真实用户问题之前——dsh ``prepare`` 的
+  additionalContext 语义(先背景帧、后问题),frame 自带
+  "Use it only as background information" 提示,不改变问题文本。
+- 测试:``tests/test_session_reference_mentions.py`` 9 用例(无 mention
+  原样、legacy 解析出 frame、canonical 解析且 mention 变 ``@label``、
+  stale 剥 token 无 frame、malformed 原样、store 缺失原样、解析失败
+  降级、assembly frame 在问题之前、空白 frame 跳过);
+  reference/projection/react/realtime 关联 510 项全绿,ruff/invariant
+  干净。
 
 ## 用法速查
 

@@ -266,6 +266,13 @@ def _assemble_messages(state: _AssemblyState) -> None:
         )
         if startup_context:
             messages.append(Message(role="user", content=startup_context))
+    # dsh ``prepare`` additional-context: the host resolves @session: /
+    # canonical session mentions into a read-only referenced-sessions frame
+    # (tagged "use as background only") and enqueues it as its own user
+    # message right before the actual question.
+    _ref_frame = state.user_context.get("session_reference_context")
+    if isinstance(_ref_frame, str) and _ref_frame.strip():
+        messages.append(Message(role="user", content=_ref_frame.strip()))
     messages.append(
         Message(
             role="user",
