@@ -139,6 +139,24 @@ def _close_turn(
             log.item_completed(thread_id, turn.id, item)
     log.turn_completed(thread_id, turn.id, turn.status, error)
 
+    # dsh ``Stop``: fired when a full agent turn completes, successfully or
+    # not (notification-type hook — post-hoc audit / metrics). Every path
+    # out of a turn funnels through this helper, so a single dispatch here
+    # covers normal, error, cancel, and interrupt endings. Best-effort:
+    # hook failures must never break the turn lifecycle.
+    try:
+        from runtime.platform.process.session import current_session
+        from runtime.safety.hooks.runner import dispatch_stop
+
+        dispatch_stop(
+            thread_id=thread_id,
+            success=getattr(turn, "status", None) is TurnStatus.COMPLETED,
+            step_count=len(getattr(turn, "items", None) or []),
+            session=current_session(),
+        )
+    except Exception:  # noqa: BLE001 — notification is best-effort
+        _logger.debug("dispatch_stop skipped", exc_info=True)
+
 
 def _resolve_session_reference_mentions(
     text: str,
@@ -405,7 +423,16 @@ async def _start_turn(
 
         # ── PHASE 3 · prompt hooks + user message anchor ───────────
         from runtime.platform.process.session import current_session
-        from runtime.safety.hooks.runner import dispatch_user_prompt
+        from runtime.safety.hooks.runner import (
+            dispatch_session_start,
+            dispatch_user_prompt,
+        )
+
+        # dsh ``SessionStart``: fired once per bound turn session, before
+        # the prompt hook, so per-user context hooks load first. Best-effort
+        # by contract — a failing hook degrades to pass_through and never
+        # raises into the turn.
+        dispatch_session_start(thread_id=thread_id, session=current_session())
 
         prompt_decision = dispatch_user_prompt(
             prompt_text=text,

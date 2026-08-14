@@ -5027,3 +5027,89 @@ def test_producer_thread_cancelled_when_consumer_disconnects(
         "producer thread was not cancelled after consumer disconnect — "
         "cancel_source not tripped on teardown"
     )
+
+
+def test_full_turn_dispatches_session_start_and_stop(
+    gateway: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """dsh ``SessionStart`` / ``Stop``: a complete turn fires both hooks.
+
+    The gateway must dispatch ``session_start`` once at turn entry and
+    ``stop`` with success=True at the single exit funnel, regardless of
+    how the turn ended.
+    """
+    import runtime.safety.hooks.runner as hook_runner
+
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    def _record(name: str) -> Any:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            calls.append((name, kwargs))
+            return None
+
+        return wrapper
+
+    monkeypatch.setattr(hook_runner, "dispatch_session_start", _record("session_start"))
+    monkeypatch.setattr(hook_runner, "dispatch_stop", _record("stop"))
+
+    client, _ = gateway
+    _set_script([{"type": "text_delta", "delta": "ok"}, {"type": "react_completed"}])
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-hooks-ok",
+                "input": [{"type": "text", "text": "go"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    assert out["response"].result["turn"]["status"] == "completed"
+    assert [name for name, _ in calls] == ["session_start", "stop"]
+    assert calls[0][1]["thread_id"] == "th-hooks-ok"
+    stop_kwargs = calls[1][1]
+    assert stop_kwargs["success"] is True
+    assert stop_kwargs["thread_id"] == "th-hooks-ok"
+
+
+def test_failed_turn_dispatches_stop_with_success_false(
+    gateway: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """dsh ``Stop``: an error-ending turn still fires the stop hook, with
+    success=False so downstream audit/metrics hooks can tell them apart.
+    """
+    import runtime.safety.hooks.runner as hook_runner
+
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    def _record(name: str) -> Any:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            calls.append((name, kwargs))
+            return None
+
+        return wrapper
+
+    monkeypatch.setattr(hook_runner, "dispatch_session_start", _record("session_start"))
+    monkeypatch.setattr(hook_runner, "dispatch_stop", _record("stop"))
+
+    client, _ = gateway
+    _set_script(
+        [
+            {"type": "text_delta", "delta": "partial "},
+            {"type": "react_error", "kind": "RuntimeError", "message": "boom", "iteration": 1},
+        ]
+    )
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-hooks-err",
+                "input": [{"type": "text", "text": "go"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    assert out["response"].result["turn"]["status"] == "failed"
+    assert [name for name, _ in calls] == ["session_start", "stop"]
+    assert calls[1][1]["success"] is False
+    assert calls[1][1]["thread_id"] == "th-hooks-err"

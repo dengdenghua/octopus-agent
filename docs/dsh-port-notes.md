@@ -1565,9 +1565,13 @@ dsh 的 hooks 家族把 Claude Code / Codex 的 ``hooks.json`` 方言桥接到
   500 字符截断带省略号)/durationMs,按 handler_id 配对;仅当钩子携带
   运行时 session 且绑定 journal 时写入(dsh ``session && turn`` 守卫),
   纯 log-only 不参与 surface 投影。
-- ``dispatch_stop`` / ``dispatch_session_start`` 仍无生产调用方(网关
-  生命周期接线,与 ``on_report`` 同属热区);桥已注册处理器,触发点
-  接通即生效。
+- ``dispatch_stop`` / ``dispatch_session_start`` 生产接线已收口:回合
+  驱动在 PHASE 3 入口先发 ``SessionStart``(每个绑定回合会话一次,先于
+  prompt 钩子,按 dsh 契约 best-effort);``_close_turn`` 单点出口发
+  ``Stop``(正常/错误/取消/中断全部汇聚该处,success 按
+  ``TurnStatus.COMPLETED``,step_count 按 items 数,best-effort 吞失败,
+  钩子异常绝不阻断回合生命周期)。``tests/test_realtime_cerebrum.py``
+  新增 2 用例覆盖完整回合(success=True)与错误回合(success=False)两路。
 - detached 运行链的 quiescence drain(dsh ``createDetachedRuns``)。
 
 ## 52. goal 时间线分页读取(`page_goal_timeline`)
@@ -1622,9 +1626,9 @@ dsh 的 hooks 家族把 Claude Code / Codex 的 ``hooks.json`` 方言桥接到
 
 - **真实回合撬起**(生产接线终点):回调只到达宿主,宿主(网关)要
   真正开新父回合,仍需持有该线程的活动连接/发射器并调度一个新回合;
-  属于网关连接生命周期接线热区(与 ``dispatch_stop`` /
-  ``dispatch_session_start`` 同区),与并行开发中的实时网关文件
-  重叠,留待独立的回合调度器接入时一并接通。回调接口已定
+  属于网关连接生命周期接线热区(``dispatch_stop`` /
+  ``dispatch_session_start`` 同区已收口),与并行开发中的实时网关
+  文件重叠,留待独立的回合调度器接入时一并接通。回调接口已定
   ``(session_id, report)``,接入方只需 ``register_thread_wake_handler``。
 - 事件桥层的 settlement 通知(子代理结束时通知父代理)仍待独立的
   事件桥接层。
