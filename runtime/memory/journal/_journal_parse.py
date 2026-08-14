@@ -23,6 +23,7 @@ from ._journal_models import (
     ReflexHitEvent,
     SkillProposalDecisionEvent,
     StepEvent,
+    SubSessionSummaryEvent,
     SubTextDeltaEvent,
     SubToolEndEvent,
     SubToolStartEvent,
@@ -67,6 +68,7 @@ _EVENT_CLASSES: dict[str, type[JournalEvent]] = {
     "sub_tool_start": SubToolStartEvent,
     "sub_tool_end": SubToolEndEvent,
     "sub_text_delta": SubTextDeltaEvent,
+    "sub_session_summary": SubSessionSummaryEvent,
     "browser_artifact": BrowserArtifactEvent,
 }
 

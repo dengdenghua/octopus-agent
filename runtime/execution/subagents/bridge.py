@@ -732,6 +732,24 @@ def call_subagent(
                         rounds=_rounds_state["max_round"],
                         error=result.get("error", ""),
                     )
+                    # Journal the turn's completion (dsh session-log
+                    # invariant): a resume path can report the session's
+                    # effort/outcome without replaying every chunk. Best-
+                    # effort — telemetry loss never breaks the bridge.
+                    try:
+                        from runtime.execution.suckers._ephemeral_events import (
+                            _emit_sub_session_summary,
+                        )
+
+                        _emit_sub_session_summary(
+                            _active_session["session_id"],
+                            agent_id=agent_id,
+                            rounds=_rounds_state["max_round"],
+                            success=ok,
+                            error=result.get("error", "") or "",
+                        )
+                    except Exception:  # noqa: BLE001
+                        pass
                     # Child→parent report lane (dsh ``tool-subagent-report``):
                     # a continuable child's transcript is NOT automatically
                     # visible to the parent, so undelivered reports are

@@ -252,6 +252,50 @@ def derive_subagent_streams(
     ]
 
 
+@dataclass(frozen=True)
+class SessionSummary:
+    """One completed sub-agent session turn's outcome, rebuilt from the journal."""
+
+    session_id: str
+    agent_id: str
+    rounds: int
+    success: bool
+    error: str
+
+
+def derive_session_summaries(
+    journal: Journal,
+    *,
+    session_id: str | None = None,
+) -> list[SessionSummary]:
+    """Reconstruct each sub-agent session turn's completion from the journal.
+
+    Reads ``SubSessionSummaryEvent`` rows in journal order, optionally
+    narrowed to one ``session_id``. Complements ``derive_subagent_streams``
+    and ``surface_events_from_journal``: the prose lanes give the text, this
+    gives the structured effort/outcome a resume path needs without replaying
+    every chunk (dsh session-log invariant).
+    """
+
+    summaries: list[SessionSummary] = []
+    for event in journal.read_all():
+        if event.event_type != "sub_session_summary":
+            continue
+        event_session = getattr(event, "session_id", "") or ""
+        if session_id is not None and event_session != session_id:
+            continue
+        summaries.append(
+            SessionSummary(
+                session_id=event_session,
+                agent_id=getattr(event, "agent_id", "") or "",
+                rounds=int(getattr(event, "rounds", 0) or 0),
+                success=bool(getattr(event, "success", True)),
+                error=getattr(event, "error", "") or "",
+            )
+        )
+    return summaries
+
+
 def assert_logged_stream_reconstructs(
     journal: Journal,
     expected: list[SubagentRoundStream],

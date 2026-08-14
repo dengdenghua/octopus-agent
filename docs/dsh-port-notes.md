@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 三十六个差距点已落地为可测试代码(1-36 节)
+**状态**: 三十七个差距点已落地为可测试代码(1-37 节)
 
 ---
 
@@ -1087,6 +1087,39 @@ report 泳道,「父回合是否在跑」由调度器外部决定,预算只管�
 - 会话关闭/汇总事件:dsh 还会落 session 级生命周期与 token 汇总行,
   我们只有 user prompt 与流式散文;如需 resume 时给出「该会话此前用了
   多少 token / 是否 close」可再补。
+
+## 37. 会话级 turn 汇总行进 journal + resume 汇总派生
+
+第 33/36 节把 subagent 会话的散文(user/message + sub_text_delta)落进了
+journal,但结构化「这轮用了多少轮次、成没成功、报了什么错」仍只存在
+turn store。本轮补上 dsh 的会话结果面:每完成一轮 turn 落一条
+``sub_session_summary`` 行,resume 不必逐 chunk 重放也能给出会话的努力/
+结果概览:
+
+- ``_journal_models.py``:``SubSessionSummaryEvent``(event_type
+  ``sub_session_summary``,字段 ``session_id`` / ``agent_id`` / ``rounds`` /
+  ``success`` / ``error``),``JournalEventType`` 同步登记;JSONL 回环无损。
+- ``_journal_parse.py`` 注册;``__init__.py`` / ``journal.py`` 导出。
+- ``_ephemeral_events.py``:新增 ``_emit_sub_session_summary(session_id,
+  *, agent_id, rounds, success, error)``——沿用 current_session→journal
+  查找,空 session_id(一次性/远端子进程)跳过,best-effort 不打断。
+- ``bridge.py``:在 ``append_turn`` 之后(``status != "rejected"`` 分支内)
+  以懒导入调用一次,携带 ``agent_id`` / ``max_round`` / ``ok`` /
+  ``error``——与用户消息、流式散文同一会话日志,三行合成一个会话的完整
+  故事。
+- ``derive.py``:``derive_session_summaries(journal, *, session_id=None)``
+  按日志顺序重建每轮完成记录(``SessionSummary``),可按会话过滤,与
+  ``derive_subagent_streams`` / ``surface_events_from_journal`` 互补。
+- 测试:``tests/test_sub_text_delta_event.py`` 新增 3 用例(事件注册+JSONL
+  回环、emit helper 落带字段行、按会话过滤派生),全套 21 用例通过;
+  journal/ephemeral/session/reference/goal 回归 183 项通过,ruff/invariant
+  干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- token/cost 汇总:目前汇总行只有轮次与成败,没有实际 token/成本——
+  dsh 会在会话日志里带 usage 行;若 resume 要报「此前花了多少 token」,
+  需从模型响应/成本记账里取数再补一列。
 
 ## 用法速查
 

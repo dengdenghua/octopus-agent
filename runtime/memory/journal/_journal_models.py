@@ -47,6 +47,7 @@ JournalEventType = Literal[
     "sub_tool_start",
     "sub_tool_end",
     "sub_text_delta",
+    "sub_session_summary",
     "browser_artifact",
     "goal_change",
     "user/message",
@@ -417,6 +418,25 @@ class SubTextDeltaEvent(JournalEvent):
     round: int = 0
     delta: str = ""
     parent_tool_use_id: str | None = None
+
+
+class SubSessionSummaryEvent(JournalEvent):
+    """One completed turn's outcome row for a durable sub-agent session.
+
+    Complementary to the per-chunk ``sub_text_delta`` and per-prompt
+    ``user/message`` rows: it records the structured completion facts a
+    resume path needs without replaying every chunk — ``rounds`` spent,
+    whether the turn succeeded, and any error. ``session_id`` correlates it
+    to the durable session (dsh session-log invariant: the session's story,
+    including its outcome, is reconstructable from the log alone).
+    """
+
+    event_type: Literal["sub_session_summary"] = "sub_session_summary"
+    session_id: str = ""
+    agent_id: str = ""
+    rounds: int = 0
+    success: bool = True
+    error: str = ""
 
 
 class BrowserArtifactEvent(JournalEvent):

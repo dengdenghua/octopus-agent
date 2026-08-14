@@ -52,6 +52,7 @@ from ._journal_models import (
     ReflexHitEvent,
     SkillProposalDecisionEvent,
     StepEvent,
+    SubSessionSummaryEvent,
     SubTextDeltaEvent,
     SubToolEndEvent,
     SubToolStartEvent,
@@ -104,6 +105,7 @@ __all__ = [
     "CurriculumGoalDecisionEvent",
     "McpProposalDecisionEvent",
     "ProtocolDriftDecisionEvent",
+    "SubSessionSummaryEvent",
     "SubTextDeltaEvent",
     "SubToolStartEvent",
     "SubToolEndEvent",
@@ -467,7 +469,6 @@ class JSONLJournal(Journal):
         else:
             for _entry, event in run:
                 self._append_event_locked(event)
-
 
     def _mirror_trace_event(self, event: JournalEvent) -> None:
         if self._trace_store is None:

@@ -13,18 +13,22 @@ from pathlib import Path
 from typing import Any
 
 from runtime.execution.suckers._ephemeral_events import (
+    _emit_sub_session_summary,
     _emit_sub_text_delta,
     _emit_sub_user_message,
 )
 from runtime.memory.journal import (
     InMemoryJournal,
     JSONLJournal,
+    SubSessionSummaryEvent,
     SubTextDeltaEvent,
 )
 from runtime.memory.journal._journal_parse import _EVENT_CLASSES
 from runtime.memory.journal.derive import (
+    SessionSummary,
     SubagentRoundStream,
     assert_logged_stream_reconstructs,
+    derive_session_summaries,
     derive_subagent_streams,
 )
 from runtime.platform.process.session import Session, session_scope
@@ -349,3 +353,56 @@ def test_surface_pure_journal_feeds_projection() -> None:
     assert [item["role"] for item in data.conversation] == ["user", "assistant"]
     assert data.conversation[0]["text"] == "日志问题"
     assert data.conversation[1]["text"] == "日志结论"
+
+
+def test_sub_session_summary_registered_and_roundtrips(tmp_path: Path) -> None:
+    journal = JSONLJournal(tmp_path / "journal.jsonl")
+    journal.write(
+        SubSessionSummaryEvent(
+            session_id="dddddddddddddddddddddddddddddddd",
+            agent_id="researcher",
+            rounds=3,
+            success=False,
+            error="round cap",
+        )
+    )
+    ev = journal.read_all()[0]
+    assert isinstance(ev, SubSessionSummaryEvent)
+    assert ev.session_id == "dddddddddddddddddddddddddddddddd"
+    assert ev.rounds == 3
+    assert ev.success is False
+    assert ev.error == "round cap"
+
+
+def test_emit_sub_session_summary_writes_row() -> None:
+    journal = InMemoryJournal()
+    sid = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    with session_scope(_scoped_session_with_journal(journal)):
+        _emit_sub_session_summary(sid, agent_id="critic", rounds=2, success=True)
+        _emit_sub_session_summary("", agent_id="critic", rounds=1)  # skipped
+
+    events = journal.read_all()
+    assert len(events) == 1
+    assert events[0].event_type == "sub_session_summary"
+    assert events[0].session_id == sid
+    assert events[0].agent_id == "critic"
+    assert events[0].rounds == 2
+    assert events[0].success is True
+
+
+def test_derive_session_summaries_filters_by_session() -> None:
+    journal = InMemoryJournal()
+    sid1 = "11112222333344445555666677778888"
+    sid2 = "88887777666655554444333322221111"
+    journal.write(SubSessionSummaryEvent(session_id=sid1, agent_id="r", rounds=3, success=True))
+    journal.write(
+        SubSessionSummaryEvent(session_id=sid2, agent_id="c", rounds=1, success=False, error="x")
+    )
+    journal.write(SubSessionSummaryEvent(session_id=sid1, agent_id="r", rounds=5, success=True))
+
+    all_summaries = derive_session_summaries(journal)
+    assert [(s.session_id, s.rounds) for s in all_summaries] == [(sid1, 3), (sid2, 1), (sid1, 5)]
+    filtered = derive_session_summaries(journal, session_id=sid2)
+    assert filtered == [
+        SessionSummary(session_id=sid2, agent_id="c", rounds=1, success=False, error="x")
+    ]

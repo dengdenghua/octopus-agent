@@ -25,6 +25,7 @@ __all__ = [
     "_emit_sub_text_delta",
     "_emit_sub_tool_event",
     "_emit_subagent_lifecycle_event",
+    "_emit_sub_session_summary",
     "_emit_sub_user_message",
     "_safe_ctx_emit",
 ]
@@ -154,6 +155,64 @@ def _emit_sub_user_message(session_id: str, text: str) -> None:
                 task_id=meta.get("task_id"),
                 session_id=session_id,
                 text=text,
+            )
+        )
+    except (OSError, TypeError, ValueError):  # noqa: BLE001
+        # Mirroring is best-effort; never break the runner.
+        pass
+
+
+def _emit_sub_session_summary(
+    session_id: str,
+    *,
+    agent_id: str = "",
+    rounds: int = 0,
+    success: bool = True,
+    error: str = "",
+) -> None:
+    """Best-effort journal of one sub-agent session turn's completion.
+
+    Writes a ``SubSessionSummaryEvent`` row (rounds spent, success, error)
+    correlated to ``session_id`` so a resume path can report the session's
+    effort/outcome without replaying every chunk — the dsh session-log
+    invariant extended to the turn's outcome. Silently no-ops when no
+    journal is bound or the write fails; one-shot/remote children pass an
+    empty ``session_id`` and are skipped.
+    """
+    if not session_id:
+        return
+    try:
+        from runtime.platform.process.session import current_session
+
+        sess = current_session()
+    except (ImportError, TypeError, AttributeError, OSError):  # noqa: BLE001
+        return
+    if sess is None:
+        return
+    meta = getattr(sess, "metadata", None) or {}
+    if not isinstance(meta, dict):
+        return
+    journal = meta.get("journal")
+    if journal is None:
+        try:
+            stack = meta.get("stack")
+            if stack is not None:
+                journal = getattr(stack, "journal", None)
+        except (AttributeError, TypeError):  # noqa: BLE001
+            journal = None
+    if journal is None:
+        return
+    try:
+        from runtime.memory.journal._journal_models import SubSessionSummaryEvent
+
+        journal.write(
+            SubSessionSummaryEvent(
+                task_id=meta.get("task_id"),
+                session_id=session_id,
+                agent_id=agent_id,
+                rounds=int(rounds or 0),
+                success=bool(success),
+                error=error or "",
             )
         )
     except (OSError, TypeError, ValueError):  # noqa: BLE001
