@@ -70,6 +70,11 @@ ATOMIC_SKILL_NAMES: frozenset[str] = frozenset(
         "bb_read",
         "bb_write",
         "bb_keys",
+        # jobs · in-memory registry reads/writes, no I/O. ``job_output``
+        # (wait may block) and ``call_agent_background`` (spawns a worker
+        # thread) stay non-atomic.
+        "job_list",
+        "job_kill",
         # NOTE: ``call_agent`` used to live here. That was wrong:
         # subagents are isolated Agent/Task dispatches, not per-step
         # atomic skills. Team-chat delegates via ``[ROUTE TO: <id>]``;

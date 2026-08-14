@@ -72,6 +72,9 @@ from runtime.execution.suckers.delegation_skills import (
 from runtime.execution.suckers.fs_search_skills import (
     register_fs_search_skills as _register_fs_search,
 )
+from runtime.execution.suckers.jobs_skills import (
+    register_jobs_skills as _register_jobs,
+)
 from runtime.execution.suckers.kimi_compat_skills import (
     register_kimi_compat_skills as _register_kimi_compat,
 )
@@ -285,6 +288,15 @@ _CATALOG: dict[str, dict[str, Any]] = {
     # ``workflow`` runs a model-authored orchestration script that fans out
     # subagents (agent/phase/log/parallel/pipeline) and returns a JSON value.
     "workflow": {"group": "workflow", "atomic": False},
+    # ── jobs (dsh background tasks) ─────────────────────────
+    # ``call_agent_background`` starts one subagent in the background and
+    # returns a job id; ``job_list`` / ``job_output`` / ``job_kill`` are the
+    # generic controls over the process-local job registry. The parent is
+    # notified in-session when a job settles.
+    "call_agent_background": {"group": "jobs", "atomic": False},
+    "job_list": {"group": "jobs", "atomic": True},
+    "job_output": {"group": "jobs", "atomic": False},
+    "job_kill": {"group": "jobs", "atomic": True},
     # ── blackboard (turn-scoped shared state for multi-agent) ─
     # Substrate for parallel sub-agents to exchange findings.
     # Atomic-safe (no I/O outside in-process dict).
@@ -408,6 +420,7 @@ _GROUP_REGISTRARS: dict[str, Callable[[SkillRegistry], Any]] = {
     "ask_user": _register_ask_user_question,
     "delegation": _register_delegation,
     "workflow": _register_workflow,
+    "jobs": _register_jobs,
     "blackboard": _register_blackboard,
     "kimi_compat": _register_kimi_compat,
     "skill_library": _register_skill_library,
@@ -441,6 +454,7 @@ LOCAL_SKILL_GROUPS: frozenset[str] = frozenset(
         "ask_user",
         "delegation",
         "workflow",
+        "jobs",
         "blackboard",
         "skill_library",
         "code_intel",
@@ -652,6 +666,7 @@ _SYSTEM_GROUPS: frozenset[str] = frozenset(
         "agent_meta",
         "delegation",
         "workflow",
+        "jobs",
         "blackboard",
         "skill_library",
         "code_intel",

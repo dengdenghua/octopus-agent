@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 五十七个差距点已落地为可测试代码(1-57 节)
+**状态**: 五十八个差距点已落地为可测试代码(1-58 节)
 
 ---
 
@@ -1769,10 +1769,10 @@ id 为稳定 call id,argumentsDelta 为原始 JSON 分片)。
 
 ### 尚未覆盖
 
-- jobs 后台任务、settlement 通知事件桥、quiet/wakeup 独立调度器、
-  permission-presets、credential references/identity、ACP 协议、
-  e2b 远端 SpillStore、detached quiescence drain、replay 跨 writer
-  wildcard。
+- settlement 通知事件桥、quiet/wakeup 独立调度器(当前 jobs 复用
+  subagent 报告车道的 wakeup/quiet/queued 三态)、permission-presets、
+  credential references/identity、ACP 协议、e2b 远端 SpillStore、
+  detached quiescence drain、replay 跨 writer wildcard。
 
 ## 57. 动态工作流 — 模型编写编排脚本扇出子代理(dsh workflow 族)
 
@@ -1832,10 +1832,10 @@ JSON 值。新增 ``runtime/execution/workflow/`` 包 + 模型面
   ``provider`` 的 registry backend 路由(当前 provider→role);
   abort signal 桥接(技能契约无 signal);dsh 的 meta 展示卡
   (presentCall/presentResult 渲染)。
-- jobs 后台任务、settlement 通知事件桥、quiet/wakeup 独立调度器、
-  permission-presets、credential references/identity、ACP 协议、
-  e2b 远端 SpillStore、detached quiescence drain、replay 跨 writer
-  wildcard。
+- settlement 通知事件桥、quiet/wakeup 独立调度器(当前 jobs 复用
+  subagent 报告车道的 wakeup/quiet/queued 三态)、permission-presets、
+  credential references/identity、ACP 协议、e2b 远端 SpillStore、
+  detached quiescence drain、replay 跨 writer wildcard。
 
 ## 用法速查
 
@@ -1849,3 +1849,57 @@ JSON 值。新增 ``runtime/execution/workflow/`` 包 + 模型面
 OCTOPUS_PROCESS_SANDBOX=landlock python -m runtime ...   # Linux
 OCTOPUS_PROCESS_SANDBOX=strict python -m runtime ...     # 无后端则拒绝执行
 ```
+## 58. 后台任务族 — jobs 注册表 + subagent 生产者 + 三控制技能 (dsh ``packages/jobs``)
+
+### 已落地
+
+- ``runtime/execution/jobs/types.py`` — JobStatus/JobOutcome/JobHooks/
+  JobStart/JobSnapshot(每次读都是新投影,从不外借活状态)/JobRead;
+  ``to_public()`` 即 dsh ``PublicJobSnapshot``(剔除 owner/reported)。
+- ``runtime/execution/jobs/registry.py`` — ``LocalJobRegistry`` 忠实移植:
+  - ``start()`` 先 preflight(kind/label 非空、outputLimitBytes 正整、
+    controller 已挂载、owner 并发上限默认 10),再 ``run()``,最后注册;
+    ``run()`` 抛错不留任何注册;``done`` reject 视为 producer 违规
+    → ``failed``。
+  - 访问篱笆:owned job 只有 ``owner == caller`` 可访问;unowned 开放。
+  - ``kill()`` 先调 ``cancel`` 再改状态——cancel 抛错则生命周期与
+    通知状态都不变;成功则 ``stopping`` + ``reported=true``。
+  - ``read()``:流式读消耗游标;终态幂等读 ``output``;终态读取标
+    ``reported=true``。``wait(id, timeout_ms)`` 超时返回当前快照
+    (超时是成功不是错误);settlement 时有 waiter → job 先标
+    ``reported=true`` 再通知(防自杀式通知链)。
+  - ``settle()`` first-wins:设终态 → 释放 waiters → markSettled →
+    notifyChanged → 最后通知 per-job ``notify`` 钩子 + ``onJobDone``
+    监听者(每个监听者容错隔离)。
+  - ``dispose_owned(owner)/dispose_all()``:先 ``reported=true`` →
+    ``cancel(reason)`` → ``stopping`` → 通知 → 等全部 settled → 删除
+    → 通知 changed;cancel 抛错 force-fail 记录并报「work may be
+    orphaned」。线程安全(RLock + ``call_soon_threadsafe``)——settle
+    常来自 worker 线程。
+- ``runtime/execution/jobs/subagent_producer.py`` — 后台子代理生产者
+  (dsh one-shot background 路径):worker 线程跑 ``call_subagent``,
+  终态输出;``cancel`` 协作式(子代理不中断,结束后按 killed 结算);
+  完成通知经 ``SubagentSessionStore.append_report(..., delivery='wakeup')``
+  复用第 53/56 节报告车道——父忙则 queued 注入、闲则开回合、预算耗尽
+  降级 quiet;``reported`` 标志保证只发一次。
+- ``runtime/execution/suckers/jobs_skills.py`` — 模型面四技能:
+  ``call_agent_background``(起子代理立即返回 job id)、``job_list``、
+  ``job_output``(可选 wait,默认 30s/上限 10min)、``job_kill``;
+  注册时 ``attach_controller``;模块级单例 ``get/set_jobs_registry()``
+  (workflow_skill 模式)。``parent_job_key()`` = 父 thread_id
+  (无 thread 退 agent_id,再退 unowned)。
+- 接线:all_skills 三处同步(registrar/LOCAL/_SYSTEM)+ _CATALOG 四条目;
+  ``job_list``/``job_kill`` 进 ``ATOMIC_SKILL_NAMES``(内存读写,无 I/O)。
+- 测试:``tests/test_jobs_registry.py`` 22 例——注册/列表/owner 隔离/
+  preflight/并发上限/流式游标/终态幂等读/kill 先 cancel 后停/cancel
+  抛错状态不变/first-wins/等待超时 vs 结算/通知抑制/done 拒绝/监听者
+  容错/dispose owned+all/kind 计数器;``tests/test_jobs_skills.py``
+  9 例——注册、三控制技能、wait 超时、全链路(真线程 + 完成通知落
+  报告车道)。ruff + invariant 干净,关联回归 30+ 项全绿。
+
+### 尚未覆盖
+
+- subagent 后台 job 的流式输出(当前终态输出;dsh one-shot 亦如此,
+  stream 留给 bash 类生产者);busy-owner 注入的 jobs 专属调度器
+  (当前复用 report 车道语义);job 完成事件进 journal/前端时间线;
+  ``outputLimitBytes`` 截断在模型面尚未接线(注册表已支持)。
