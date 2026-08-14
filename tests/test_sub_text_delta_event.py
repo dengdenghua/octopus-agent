@@ -34,6 +34,7 @@ from runtime.memory.journal.derive import (
     SubagentRoundStream,
     assert_logged_stream_reconstructs,
     derive_session_summaries,
+    derive_session_usage,
     derive_subagent_streams,
 )
 from runtime.platform.process.session import Session, session_scope
@@ -458,3 +459,39 @@ def test_subagent_session_scope_ambient_context() -> None:
     with subagent_session_scope("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"):
         assert current_subagent_session_id() == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     assert current_subagent_session_id() == ""
+
+
+def test_derive_session_usage_surfaces_per_call_spend() -> None:
+    journal = InMemoryJournal()
+    sid = "11112222333344445555666677778888"
+    other = "88887777666655554444333322221111"
+    journal.write(
+        TokenUsageEvent(
+            session_id=sid,
+            iteration=1,
+            input_tokens=100,
+            output_tokens=30,
+            cost_usd=0.001,
+            model="deepseek-v4",
+        )
+    )
+    journal.write(TokenUsageEvent(session_id=sid, iteration=2, input_tokens=50, output_tokens=10))
+    journal.write(
+        TokenUsageEvent(session_id=other, iteration=1, input_tokens=900, output_tokens=900)
+    )
+    journal.write(TokenUsageEvent(session_id="", iteration=1, input_tokens=1, output_tokens=1))
+
+    all_usage = derive_session_usage(journal)
+    assert len(all_usage) == 4
+
+    filtered = derive_session_usage(journal, session_id=sid)
+    assert [(u.iteration, u.input_tokens, u.output_tokens, u.cost_usd) for u in filtered] == [
+        (1, 100, 30, 0.001),
+        (2, 50, 10, 0.0),
+    ]
+    assert filtered[0].session_id == sid
+    assert filtered[0].model == "deepseek-v4"
+
+    other_usage = derive_session_usage(journal, session_id=other)
+    assert [(u.input_tokens, u.output_tokens) for u in other_usage] == [(900, 900)]
+    assert derive_session_usage(journal, session_id=sid + "nope") == []

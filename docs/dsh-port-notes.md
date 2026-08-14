@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 四十五个差距点已落地为可测试代码(1-45 节)
+**状态**: 四十六个差距点已落地为可测试代码(1-46 节)
 
 ---
 
@@ -1253,7 +1253,9 @@ ceiling 可 gate),但会话日志里没有任何 usage 行。本轮把 dsh 的
 
 - 回合内逐行 usage 事件:我们只落回合结束的汇总行,不落每次模型
   调用的独立 usage 事件行(token_usage 行带归因但消费方只看汇总);
-  dsh 的 token-meter 逐次事件流若要精确到调用粒度可再补。
+  dsh 的 token-meter 逐次事件流若要精确到调用粒度可再补。(消费面
+  已由第 46 节收口:``derive_session_usage`` 从同一份日志给出逐调用
+  粒度。)
 
 ## 42. goal 流式 surface:增量投影缓存 + as-of 水位
     (`goals/projection.py`)
@@ -1370,6 +1372,27 @@ store 重建表面事件(Q/A 对)——而第 36/41 节已经把会话的真实�
   非 subagent 专用):第 27/30 节已建 resolver + host mention 接线,
   通用 URI 解码仍留作后续。
 
+## 46. 逐次调用 usage 消费面(`derive_session_usage`)
+
+第 41 节给回合汇总行带上了累计 token/成本,但每次模型调用的独立
+``token_usage`` 行虽然带归因落进 journal,消费方只看汇总——resume 想
+精确到调用粒度(哪次调用花了多少、用什么模型)没有入口。本轮补上
+dsh token-meter 的消费面,让调用级数据从同一份日志可读:
+
+- ``derive.py``:新增 ``SessionUsageRecord``(frozen dataclass,字段
+  ``session_id`` / ``iteration`` / ``input_tokens`` / ``output_tokens`` /
+  ``cost_usd`` / ``model`` / ``task_id``)与
+  ``derive_session_usage(journal, *, session_id=None)``——按日志顺序
+  重建每次模型调用的 spend,可按会话过滤;无归因行(父回合/一次性/
+  远程)在按会话过滤时跳过,legacy 行按空 session 兼容。与
+  ``derive_session_summaries`` 互补:汇总行给回合级总量,这个给底层
+  逐调用泳道。
+- 测试:``tests/test_sub_text_delta_event.py`` 新增 1 用例(逐调用行
+  完整带出、按会话过滤、他人会话与无归因行隔离、未知会话返回空);
+  journal/usage-attribution/session/reference/goal/invariants 共 151 项
+  通过,ruff/invariant 干净。
+
+## 用法速查
 ## 用法速查
 
 ```bash

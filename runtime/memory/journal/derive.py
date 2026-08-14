@@ -302,6 +302,60 @@ def derive_session_summaries(
     return summaries
 
 
+@dataclass(frozen=True)
+class SessionUsageRecord:
+    """One model call's token/cost spend for a sub-agent session.
+
+    The dsh token-meter granularity a resume path needs when it wants to
+    report spend at call level rather than the turn-level total carried by
+    ``SessionSummary``. Rebuilt from a ``token_usage`` journal row.
+    """
+
+    session_id: str
+    iteration: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    model: str
+    task_id: str = ""
+
+
+def derive_session_usage(
+    journal: Journal,
+    *,
+    session_id: str | None = None,
+) -> list[SessionUsageRecord]:
+    """Reconstruct per-call token/cost spend from ``token_usage`` rows.
+
+    One record per model call (dsh token-meter), optionally narrowed to one
+    ``session_id``. Unattributed rows (parent turns, one-shot/remote
+    children) are skipped when filtering by session; legacy rows without the
+    attribution field default to an empty session id. Complements
+    ``derive_session_summaries``: the summaries give the turn-level totals,
+    this gives the underlying per-call lane from the same log.
+    """
+
+    records: list[SessionUsageRecord] = []
+    for event in journal.read_all():
+        if getattr(event, "event_type", "") != "token_usage":
+            continue
+        event_session = getattr(event, "session_id", "") or ""
+        if session_id is not None and event_session != session_id:
+            continue
+        records.append(
+            SessionUsageRecord(
+                session_id=event_session,
+                iteration=int(getattr(event, "iteration", 0) or 0),
+                input_tokens=int(getattr(event, "input_tokens", 0) or 0),
+                output_tokens=int(getattr(event, "output_tokens", 0) or 0),
+                cost_usd=float(getattr(event, "cost_usd", 0.0) or 0.0),
+                model=getattr(event, "model", "") or "",
+                task_id=str(getattr(event, "task_id", "") or ""),
+            )
+        )
+    return records
+
+
 def assert_logged_stream_reconstructs(
     journal: Journal,
     expected: list[SubagentRoundStream],
