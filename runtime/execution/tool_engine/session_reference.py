@@ -310,34 +310,57 @@ class SessionReferenceResolver:
     ) -> PreparedReferencedMessage:
         """Host-side mention wiring (dsh host mention-parse → ``prepare``).
 
-        Scans ``@session:<id>`` / ``@subagent:<id>`` mentions in a host
+        Scans canonical ``dsh-session:`` URIs (dsh ``uri.ts`` mentions,
+        rendered as ``@[label](dsh-session:...)`` or bare URIs) AND the
+        legacy ``@session:<id>`` / ``@subagent:<id>`` tokens in a host
         prompt, resolves the referenced sessions (capped at
         ``max_references`` in first-mention order), reads each surface, and
         projects them into one aggregated context frame. Stale mentions
         (ids not in ``sessions``) and self-references are skipped rather
         than failing the turn — a mention is a convenience seam, not a hard
         contract; read/budget failures still propagate as
-        ``SessionReferenceError``.
+        ``SessionReferenceError``. A malformed canonical URI is likewise
+        skipped (the strict primitive still fails loudly for direct callers).
 
         Returns ``PreparedReferencedMessage`` with ``content`` = the prompt
         (mentions stripped when ``strip_mentions``) and, when any reference
         resolved, ``additional_context`` carrying the rendered frame and
         ``session-reference`` provenance for the host to inject.
         """
-        ids = extract_session_mentions(prompt)
-        if not ids:
+        from runtime.execution.tool_engine.session_reference_uri import (
+            parse_session_reference_text,
+        )
+
+        canonical: list[dict[str, Any]] = []
+        scanned_text = prompt
+        try:
+            parsed = parse_session_reference_text(prompt or "")
+            canonical = parsed.references
+            scanned_text = parsed.text
+        except SessionReferenceError:
+            # Malformed canonical URI in a host prompt → skip the canonical
+            # lane entirely; the legacy seam still runs on the raw text.
+            scanned_text = prompt
+        ids = extract_session_mentions(scanned_text)
+        if not canonical and not ids:
             return PreparedReferencedMessage(content=prompt)
         known = {record.session_id for record in sessions} if sessions else None
         resolved: list[SessionReferenceInput] = []
-        for session_id in ids:
+        seen: set[str] = set()
+        for session_id, label in [(r["session_id"], r.get("label")) for r in canonical] + [
+            (session_id, None) for session_id in ids
+        ]:
+            if session_id in seen:
+                continue  # dedupe across lanes (canonical first wins)
+            seen.add(session_id)
             if session_id == target_id:
                 continue  # self-reference → skip (host-friendly)
             if known is not None and session_id not in known:
                 continue  # stale mention → skip
-            resolved.append(SessionReferenceInput(session_id=session_id))
+            resolved.append(SessionReferenceInput(session_id=session_id, label=label))
             if len(resolved) >= self._max_references:
                 break
-        content = _strip_session_mentions(prompt) if strip_mentions else prompt
+        content = _strip_session_mentions(scanned_text) if strip_mentions else scanned_text
         if not resolved:
             return PreparedReferencedMessage(content=content)
         return self.prepare(

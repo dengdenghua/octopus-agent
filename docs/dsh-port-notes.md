@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 四十六个差距点已落地为可测试代码(1-46 节)
+**状态**: 四十七个差距点已落地为可测试代码(1-47 节)
 
 ---
 
@@ -1370,7 +1370,8 @@ store 重建表面事件(Q/A 对)——而第 36/41 节已经把会话的真实�
 
 - 通用 ``@session-reference`` resolver 面(任意 session URI → 投影注入,
   非 subagent 专用):第 27/30 节已建 resolver + host mention 接线,
-  通用 URI 解码仍留作后续。
+  URI 编解码与 mention 解析已由第 47 节收口;非 subagent store 适配器
+  是纯接入点(resolver 本身 store 无关)。
 
 ## 46. 逐次调用 usage 消费面(`derive_session_usage`)
 
@@ -1392,7 +1393,41 @@ dsh token-meter 的消费面,让调用级数据从同一份日志可读:
   journal/usage-attribution/session/reference/goal/invariants 共 151 项
   通过,ruff/invariant 干净。
 
-## 用法速查
+## 47. canonical session URI + mention 解析面 (`session_reference_uri.py`)
+
+第 27/30 节建了 resolver 与 host mention 接线,但 mention 载体一直是
+octopus 自造的 ``@session:<id>`` 语法,缺 dsh 的宿主无关 canonical URI。
+本轮把 dsh ``uri.ts`` 整体搬过来:
+
+- ``encode_session_reference_uri(session_id)``:任意 session id → canonical
+  ``dsh-session:<base64url(JSON)>``(lossless,任何不透明 id 都可编);
+  ``decode_session_reference_uri(uri)`` 严格解码——scheme/载荷字符集/
+  JSON 类型(必须非空字符串)/canonical 复编码逐一校验,坏 URI 抛
+  ``SESSION_REFERENCE_INVALID_REFERENCE``(与 dsh 逐字一致,带 cause)。
+- ``format_session_reference_mention(session_id, label=None)``:宿主无关
+  Markdown mention ``@[label](uri)``,label 转义 ``\\`` 与 ``]``;
+  ``parse_session_reference_text(text)``:一次扫描把显式 mention 与裸
+  canonical URI 替换为可读 ``@label``,返回结构化引用(按出现顺序,
+  去重前),显式 mention 的坏 URI 严格失败(dsh 语义)。
+- 接线(``resolve_mentions``):canonical 泳道与 legacy ``@session:``/
+  ``@subagent:`` 泳道并存——canonical 先解析(重复 id 先到先赢),
+  stale/自引用照旧跳过,host 提示里的 malformed canonical URI 整条
+  canonical 泳道降级跳过(mention 是便利接缝,不是硬契约),legacy
+  不受影响。
+- 测试:``tests/test_session_reference_uri.py`` 新增 12 用例(编解码
+  回环含中文/空格、非 canonical 拒绝、坏形状拒绝(错误 scheme/空
+  载荷/坏字符/JSON 数字/空串)、mention 转义、解析顺序与裸 URI、
+  label 反转义、malformed 严格失败、resolve_mentions canonical 解析/
+  双泳道混合/stale+自引用跳过/malformed 降级/canonical-only);
+  reference/projection/subagent 关联 109 项全绿,ruff/invariant 干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 前端自动补全弹层渲染 canonical mention:第 39 节后端候选端点 +
+  本节的 ``format_session_reference_mention`` 已就绪,弹层 UI 待前端
+  接入;非 subagent store 的 ``list_candidates``/``read_surface`` 适配器
+  同理是纯接入点。
+
 ## 用法速查
 
 ```bash
