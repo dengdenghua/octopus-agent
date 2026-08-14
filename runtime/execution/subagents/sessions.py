@@ -247,6 +247,65 @@ class SubagentSessionStore:
             self._memory[session.session_id] = session
             return _copy_session(session)
 
+    def surface_events(self, session_id: str) -> list[dict[str, Any]]:
+        """The dsh surface-event shape for one session (session-reference input).
+
+        Mirrors dsh ``sessionQuery.readSurface`` for a subagent session: the
+        user/assistant turns are surfaced as ``user/message`` +
+        ``assistant/message`` events so ``session_reference.prepare`` can
+        project them. An unknown session returns an empty surface.
+        """
+        session = self.get(session_id)
+        if session is None:
+            return []
+        return _surface_events_from_turns(session)
+
+    def list_reference_candidates(
+        self,
+        *,
+        target_id: str,
+        query: str = "",
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """List subagent sessions as reference candidates (dsh listCandidates).
+
+        Returns candidate dicts (``session_id`` / ``label`` / ``created_at``)
+        for sessions other than ``target_id``, ranked by the resolver's
+        working-directory affinity and filtered by an optional
+        case-insensitive id / label substring.
+        """
+        from runtime.execution.tool_engine.session_reference import (
+            SessionReferenceRecord,
+            SessionReferenceResolver,
+        )
+
+        records: list[SessionReferenceRecord] = []
+        with self._lock:
+            for session in self._memory.values():
+                records.append(
+                    SessionReferenceRecord(
+                        session_id=session.session_id,
+                        label=session.agent_id or session.session_id,
+                        created_at=int(session.created_at[:10].replace("-", ""))
+                        if len(session.created_at) >= 10
+                        else None,
+                    )
+                )
+        resolver = SessionReferenceResolver()
+        return [
+            {
+                "sessionId": candidate.session_id,
+                "label": candidate.label,
+                "createdAt": candidate.created_at,
+            }
+            for candidate in resolver.list_candidates(
+                target_id=target_id,
+                sessions=records,
+                query=query,
+                limit=limit,
+            )
+        ]
+
     def append_turn(
         self,
         session_id: str,

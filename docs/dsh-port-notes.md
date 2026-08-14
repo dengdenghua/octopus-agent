@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 二十六个差距点已落地为可测试代码(1-26 节)
+**状态**: 二十七个差距点已落地为可测试代码(1-27 节)
 
 ---
 
@@ -709,6 +709,46 @@ revision 的下一个轮次」,但 journal 一直没有 dsh 的 ``user/message``
 - 回合级 transcript 逐事件桥:sub_tool_start/sub_text_delta 等回合内
   子事件还没喂 session 日志;目前 step/tool 粒度是有的,回合内流式
   细节仍是调用方直接拼 prompt,未全部入日志。
+## 27. session-reference resolver (`tool_engine/session_reference.py`)
+
+第 24 节落地了 dsh 的投影算法,但只有 subagent 续会话一个调用点,没有
+「引用解析面」。本轮把 dsh 的 ``@dsh-session-reference`` 服务层整体搬
+过来,在投影之上加一层:
+
+- `SessionReferenceResolver`:``list_candidates`` 按工作目录亲和度排序
+  (dsh ``candidateRank``:同 cwd 0、无 cwd 1、异 cwd 2),并按大小写
+  不敏感的 session-id / cwd / label 子串过滤、限长;``prepare`` 做
+  引用标准化 → 逐源读 surface → 逐源投影(``retain_session_reference``,
+  预算不够抛 ``SESSION_REFERENCE_BUDGET_EXCEEDED``)→ 渲染聚合 frame。
+- 标准化与错误码:``normalize_references`` 拒绝自引用、去重、封顶
+  (``max_references``,默认 3);``SessionReferenceError`` 携带 dsh 稳定
+  错误码(INVALID_CONFIG / INVALID_REFERENCE / SELF_REFERENCE /
+  TOO_MANY / READ_FAILED / BUDGET_EXCEEDED)。
+- 渲染契约:``render_reference_prompt`` 输出
+  ``## Referenced sessions ... <referenced-sessions> JSON </referenced-sessions>``
+  frame,JSON 经 ``stringify_tag_safe_json``(每个 ``<`` 转义),源文本
+  永远拼不出 framing 标签;``prepare`` 返回 detached content +
+  ``additional_context``(source 溯源 + content)。
+- 配置:``max_references``(≤3)、``candidate_limit``(默认 50)、
+  ``max_reference_bytes``(默认 64KiB);非法配置构造即报错,坏配置在
+  启动失败而非每次引用变错误。
+- 适配器:``SubagentSessionStore.surface_events(session_id)`` 暴露 dsh
+  surface 形状、``list_reference_candidates(...)`` 用 resolver 排候选,
+  让 subagent 会话可被 resolver 消费(resolver 本身 store 无关,任何
+  持久会话面都能接)。
+- 测试:``tests/test_session_reference.py`` 19 用例(候选排序/过滤/限长、
+  标准化去重/自引用/超限/非法、prepare 无引用/frame 渲染/tag 转义/
+  自引用/预算超限/读失败、非法配置、render 形状、subagent store 适配);
+  回归 reference/subagent/session/projection/spill/report 744 项通过,
+  ruff/invariant 干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- host 自动补全接线:我们实现了 ``list_candidates`` 与 subagent store
+  适配,但没有把 resolver 接到宿主端的提及自动补全/mention 解析管线
+  (dsh 由 host 解析 mentions 后调 ``prepare``)。
+- 取消信号:我们省略了 dsh 的 ``AbortSignal`` 取消边界;长读 surface
+  时如需可中断再补。
 ## 用法速查
 
 ```bash
