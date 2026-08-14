@@ -11,41 +11,49 @@ from __future__ import annotations
 from typing import Any
 
 
-def _extract_timeout_events(steps: list[dict[str, Any]]) -> list[tuple[str, bool]]:
+def _extract_timeout_events(steps: list[Any]) -> list[tuple[str, bool]]:
     """Extract (tool_name, did_timeout) from trajectory steps.
 
-    Returns a list of all tool calls that completed, with a boolean indicating
-    whether they timed out.
+    Accepts dict-style steps (unit-test fixtures) and ``ReActStep`` objects
+    (production trajectory). Returns a list of all tool calls that completed,
+    with a boolean indicating whether they timed out.
     """
-    events = []
+    events: list[tuple[str, bool]] = []
     for step in steps:
-        action = step.get("action", "")
-        observation = step.get("observation")
+        if isinstance(step, dict):
+            action = str(step.get("action", "") or "")
+            observation = step.get("observation")
+            action_blocks = [action] if action else []
+        else:
+            action = getattr(step, "action", "") or ""
+            observation = getattr(step, "observation", None)
+            action_blocks = list(getattr(step, "actions", None) or ([action] if action else []))
 
-        if not action or observation is None:
+        if not action_blocks or observation is None:
             continue
 
-        # Parse tool name
-        action_text = action.strip()
-        if action_text.startswith("Action:"):
-            action_text = action_text[7:].strip()
-
-        paren_idx = action_text.find("(")
-        if paren_idx == -1:
-            continue
-
-        tool_name = action_text[:paren_idx].strip()
-
-        # Check if the observation indicates a timeout
         obs_str = str(observation).lower()
-        did_timeout = (
-            "timed out" in obs_str
-            or "timeout" in obs_str
-            or "exceeded" in obs_str
-            and "time" in obs_str
-        )
+        for action_text in action_blocks:
+            # Parse tool name
+            action_text = action_text.strip()
+            if action_text.startswith("Action:"):
+                action_text = action_text[7:].strip()
 
-        events.append((tool_name, did_timeout))
+            paren_idx = action_text.find("(")
+            if paren_idx == -1:
+                continue
+
+            tool_name = action_text[:paren_idx].strip()
+
+            # Check if the observation indicates a timeout
+            did_timeout = (
+                "timed out" in obs_str
+                or "timeout" in obs_str
+                or "exceeded" in obs_str
+                and "time" in obs_str
+            )
+
+            events.append((tool_name, did_timeout))
 
     return events
 

@@ -33,38 +33,55 @@ def _normalize_tool_args(args: dict[str, Any]) -> str:
     return ", ".join(parts)
 
 
-def _extract_tool_calls(steps: list[dict[str, Any]]) -> list[tuple[str, str]]:
+def _extract_tool_calls(steps: list[Any]) -> list[tuple[str, str]]:
     """Extract (tool_name, normalized_args) from trajectory steps.
 
-    Returns a list in chronological order of all tool calls that completed
-    (successful or failed — both count as "the model tried this").
+    Accepts dict-style steps (unit-test fixtures) and ``ReActStep`` objects
+    (production trajectory). Returns a list in chronological order of all
+    tool calls that completed (successful or failed — both count as "the
+    model tried this").
     """
-    calls = []
+    calls: list[tuple[str, str]] = []
     for step in steps:
-        action = step.get("action", "")
-        observation = step.get("observation")
+        if isinstance(step, dict):
+            action = str(step.get("action", "") or "")
+            observation = step.get("observation")
+            args_dict: Any = step.get("tool_input", {})
+            action_blocks = [action] if action else []
+        else:
+            # Production ReActStep: use per-action blocks when present so
+            # multi-action steps are attributed individually.
+            action = getattr(step, "action", "") or ""
+            observation = getattr(step, "observation", None)
+            args_dict = None
+            action_blocks = list(getattr(step, "actions", None) or ([action] if action else []))
 
-        # Parse action for tool name + args
-        # Format: "Action: tool_name(args...)" or "tool_name(args...)"
-        if not action:
+        if not action_blocks or observation is None:
             continue
 
-        action_text = action.strip()
-        if action_text.startswith("Action:"):
-            action_text = action_text[7:].strip()
+        for action_text in action_blocks:
+            # Parse action for tool name + args
+            # Format: "Action: tool_name(args...)" or "tool_name(args...)"
+            action_text = action_text.strip()
+            if action_text.startswith("Action:"):
+                action_text = action_text[7:].strip()
 
-        # Extract tool name (before first parenthesis)
-        paren_idx = action_text.find("(")
-        if paren_idx == -1:
-            continue
+            # Extract tool name (before first parenthesis)
+            paren_idx = action_text.find("(")
+            if paren_idx == -1:
+                continue
 
-        tool_name = action_text[:paren_idx].strip()
+            tool_name = action_text[:paren_idx].strip()
 
-        # Only count calls that actually executed (have observation)
-        if observation is not None:
-            # Try to extract structured args if available
-            args_dict = step.get("tool_input", {})
-            normalized_args = _normalize_tool_args(args_dict)
+            if args_dict is not None:
+                # Dict-style steps carry structured tool_input.
+                normalized_args = _normalize_tool_args(args_dict)
+            else:
+                # ReActStep does not retain structured input; use the raw
+                # argument text from the action string as the signature.
+                closing = action_text.rfind(")")
+                arg_text = action_text[paren_idx + 1 : closing] if closing > paren_idx else ""
+                normalized_args = _normalize_tool_args(arg_text)
             calls.append((tool_name, normalized_args))
 
     return calls

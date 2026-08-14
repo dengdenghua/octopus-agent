@@ -6,13 +6,13 @@ that detect when the model is stuck in a loop calling the same tool repeatedly.
 
 from __future__ import annotations
 
-import pytest
-
 from runtime.core.cerebrum.react_repeat_tool_guards import (
     _consecutive_same_tool_guard,
+    _extract_tool_calls,
     _normalize_tool_args,
     _repeat_tool_reminder_guard,
 )
+from runtime.core.cerebrum.react_types import ReActStep
 
 
 class TestNormalizeToolArgs:
@@ -48,8 +48,16 @@ class TestRepeatToolReminderGuard:
 
     def test_no_repetition(self):
         steps = [
-            {"action": "read_file(foo.py)", "observation": "content", "tool_input": {"path": "foo.py"}},
-            {"action": "read_file(bar.py)", "observation": "content", "tool_input": {"path": "bar.py"}},
+            {
+                "action": "read_file(foo.py)",
+                "observation": "content",
+                "tool_input": {"path": "foo.py"},
+            },
+            {
+                "action": "read_file(bar.py)",
+                "observation": "content",
+                "tool_input": {"path": "bar.py"},
+            },
             {"action": "exec_shell(ls)", "observation": "output", "tool_input": {"command": "ls"}},
         ]
         result = _repeat_tool_reminder_guard(steps, None)
@@ -57,9 +65,21 @@ class TestRepeatToolReminderGuard:
 
     def test_three_identical_calls_fires(self):
         steps = [
-            {"action": "read_file(foo.py)", "observation": "content", "tool_input": {"path": "foo.py"}},
-            {"action": "read_file(foo.py)", "observation": "content", "tool_input": {"path": "foo.py"}},
-            {"action": "read_file(foo.py)", "observation": "content", "tool_input": {"path": "foo.py"}},
+            {
+                "action": "read_file(foo.py)",
+                "observation": "content",
+                "tool_input": {"path": "foo.py"},
+            },
+            {
+                "action": "read_file(foo.py)",
+                "observation": "content",
+                "tool_input": {"path": "foo.py"},
+            },
+            {
+                "action": "read_file(foo.py)",
+                "observation": "content",
+                "tool_input": {"path": "foo.py"},
+            },
         ]
         result = _repeat_tool_reminder_guard(steps, None, threshold=3)
         assert result is not None
@@ -100,8 +120,16 @@ class TestRepeatToolReminderGuard:
     def test_ignores_steps_without_observation(self):
         steps = [
             {"action": "read_file(foo.py)", "observation": None},  # No observation = didn't execute
-            {"action": "read_file(foo.py)", "observation": "content", "tool_input": {"path": "foo.py"}},
-            {"action": "read_file(foo.py)", "observation": "content", "tool_input": {"path": "foo.py"}},
+            {
+                "action": "read_file(foo.py)",
+                "observation": "content",
+                "tool_input": {"path": "foo.py"},
+            },
+            {
+                "action": "read_file(foo.py)",
+                "observation": "content",
+                "tool_input": {"path": "foo.py"},
+            },
         ]
         # Only 2 actually executed
         result = _repeat_tool_reminder_guard(steps, None, threshold=3)
@@ -112,9 +140,21 @@ class TestRepeatToolReminderGuard:
         # after char 200, they'll normalize to the same signature
         long_base = "x" * 200  # Exactly at truncation boundary
         steps = [
-            {"action": "write_file(f)", "observation": "ok", "tool_input": {"content": long_base + "aaa"}},
-            {"action": "write_file(f)", "observation": "ok", "tool_input": {"content": long_base + "bbb"}},
-            {"action": "write_file(f)", "observation": "ok", "tool_input": {"content": long_base + "ccc"}},
+            {
+                "action": "write_file(f)",
+                "observation": "ok",
+                "tool_input": {"content": long_base + "aaa"},
+            },
+            {
+                "action": "write_file(f)",
+                "observation": "ok",
+                "tool_input": {"content": long_base + "bbb"},
+            },
+            {
+                "action": "write_file(f)",
+                "observation": "ok",
+                "tool_input": {"content": long_base + "ccc"},
+            },
         ]
         result = _repeat_tool_reminder_guard(steps, None, threshold=3)
         # These should be detected as similar because content is truncated at 200 chars
@@ -150,7 +190,11 @@ class TestConsecutiveSameToolGuard:
         steps = [
             {"action": "read_file(a.py)", "observation": "x", "tool_input": {"path": "a.py"}},
             {"action": "read_file(a.py)", "observation": "x", "tool_input": {"path": "a.py"}},
-            {"action": "exec_shell(ls)", "observation": "x", "tool_input": {"command": "ls"}},  # Breaks streak
+            {
+                "action": "exec_shell(ls)",
+                "observation": "x",
+                "tool_input": {"command": "ls"},
+            },  # Breaks streak
             {"action": "read_file(a.py)", "observation": "x", "tool_input": {"path": "a.py"}},
         ]
         result = _consecutive_same_tool_guard(steps, None, threshold=3)
@@ -214,3 +258,77 @@ class TestIntegration:
         # Consecutive should NOT fire (interleaved)
         consecutive = _consecutive_same_tool_guard(steps, None, threshold=3)
         assert consecutive is None
+
+
+class TestReActStepCompatibility:
+    """Production trajectory steps are ReActStep objects, not dicts."""
+
+    @staticmethod
+    def _step(action: str, observation: str = "x") -> ReActStep:
+        return ReActStep(
+            iteration=0,
+            thought="",
+            action=action,
+            observation=observation,
+            actions=[action],
+        )
+
+    def test_react_step_repetition_detected(self):
+        steps = [
+            self._step("read_file(foo.py)"),
+            self._step("read_file(foo.py)"),
+            self._step("read_file(foo.py)"),
+        ]
+        result = _repeat_tool_reminder_guard(steps, None, threshold=3)
+        assert result is not None
+        assert "read_file" in result
+        assert "3 times" in result
+
+    def test_react_step_different_args_not_false_positive(self):
+        steps = [
+            self._step("read_file(a.py)"),
+            self._step("read_file(b.py)"),
+            self._step("read_file(c.py)"),
+        ]
+        result = _repeat_tool_reminder_guard(steps, None, threshold=3)
+        assert result is None
+
+    def test_react_step_consecutive_fires(self):
+        steps = [
+            self._step("exec_shell(ls)"),
+            self._step("exec_shell(ls)"),
+            self._step("exec_shell(ls)"),
+        ]
+        result = _consecutive_same_tool_guard(steps, None, threshold=3)
+        assert result is not None
+        assert "3 times in a row" in result
+
+    def test_react_step_multi_action_blocks(self):
+        steps = [
+            ReActStep(
+                iteration=0,
+                thought="",
+                action="read_file(a.py); exec_shell(ls)",
+                observation="x",
+                actions=["read_file(a.py)", "exec_shell(ls)"],
+            ),
+            ReActStep(
+                iteration=1,
+                thought="",
+                action="read_file(a.py); exec_shell(ls)",
+                observation="x",
+                actions=["read_file(a.py)", "exec_shell(ls)"],
+            ),
+            ReActStep(
+                iteration=2,
+                thought="",
+                action="read_file(a.py); exec_shell(ls)",
+                observation="x",
+                actions=["read_file(a.py)", "exec_shell(ls)"],
+            ),
+        ]
+        calls = _extract_tool_calls(steps)
+        assert ("read_file", "a.py") in calls
+        assert ("exec_shell", "ls") in calls
+        result = _repeat_tool_reminder_guard(steps, None, threshold=3)
+        assert result is not None
