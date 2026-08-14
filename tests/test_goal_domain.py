@@ -577,3 +577,143 @@ def test_subscribe_isolates_failing_listener() -> None:
     svc.create("仍要落地")
     assert len(good) == 1
     assert good[0].operation == "create"
+
+
+# ─── scope-filtered dispatch + journal event bridge ───────────────────────
+
+
+def test_subscribe_filters_by_agent_scope() -> None:
+    from runtime.memory.goals import GoalChanged
+
+    svc = GoalService(InMemoryJournal(), agent_id="agent-a", conversation_id="conv-1")
+    all_: list[GoalChanged] = []
+    agent_a: list[GoalChanged] = []
+    agent_b: list[GoalChanged] = []
+    conv_1: list[GoalChanged] = []
+
+    svc.subscribe(all_.append)  # wildcard
+    svc.subscribe(agent_a.append, agent_id="agent-a")
+    svc.subscribe(agent_b.append, agent_id="agent-b")
+    svc.subscribe(conv_1.append, conversation_id="conv-1")
+
+    svc.create("目标A")
+
+    assert len(all_) == 1
+    assert all_[0].agent_id == "agent-a"
+    assert all_[0].conversation_id == "conv-1"
+    assert len(agent_a) == 1
+    assert len(agent_b) == 0  # different agent scope filtered out
+    assert len(conv_1) == 1
+
+
+def test_unscoped_service_does_not_feed_scoped_listener() -> None:
+    from runtime.memory.goals import GoalChanged
+
+    svc = GoalService(InMemoryJournal())  # no agent/conversation scope
+    scoped: list[GoalChanged] = []
+    svc.subscribe(scoped.append, agent_id="agent-a")
+    svc.create("无主目标")
+    assert scoped == []
+
+
+def test_journal_bridge_cross_writer_dispatch() -> None:
+    from runtime.memory.goals import GoalChanged
+    from runtime.sensing.gateway.streaming_journal import StreamingJournal
+
+    journal = StreamingJournal(InMemoryJournal())
+    svc_a = GoalService(journal, agent_id="agent-a")
+    svc_b = GoalService(journal, agent_id="agent-b")
+    heard_a: list[GoalChanged] = []
+    heard_b: list[GoalChanged] = []
+
+    svc_a.subscribe(heard_a.append)
+    svc_b.subscribe(heard_b.append)
+
+    # writer A's mutation broadcasts to BOTH services through the journal.
+    created = svc_a.create("共享目标", max_goal_rounds=3)
+
+    assert len(heard_a) == 1  # own write, no duplicate
+    assert heard_a[0].agent_id == "agent-a"
+    assert heard_a[0].ref == created.goal.ref
+    # B hears A's mutation via the journal bridge, carrying A's scope.
+    assert len(heard_b) == 1
+    assert heard_b[0].agent_id == "agent-a"
+
+
+def test_journal_bridge_scope_filter_across_writers() -> None:
+    from runtime.memory.goals import GoalChanged
+    from runtime.sensing.gateway.streaming_journal import StreamingJournal
+
+    journal = StreamingJournal(InMemoryJournal())
+    svc_a = GoalService(journal, agent_id="agent-a")
+    svc_b = GoalService(journal, agent_id="agent-b")
+    svc_a.subscribe(lambda c: None, agent_id="agent-b")  # only cares about agent-b
+
+    svc_a.create("A 的目标")
+    # A's own create is agent-a, so A's agent-b-filtered listener is skipped.
+    # B writing does not disturb A either (no agent-b write here).
+    heard: list[GoalChanged] = []
+    svc_b.subscribe(heard.append, agent_id="agent-b")
+    svc_b.create("B 的目标")
+    assert len(heard) == 1
+    assert heard[0].agent_id == "agent-b"
+
+
+def test_journal_bridge_does_not_double_notify_own_write() -> None:
+    from runtime.memory.goals import GoalChanged
+    from runtime.sensing.gateway.streaming_journal import StreamingJournal
+
+    journal = StreamingJournal(InMemoryJournal())
+    svc = GoalService(journal, agent_id="agent-a")
+    seen: list[GoalChanged] = []
+    svc.subscribe(seen.append)
+    svc.create("目标")
+    assert [c.operation for c in seen] == ["create"]
+
+
+def test_subscribe_replay_delivers_committed_events_in_order() -> None:
+    from runtime.memory.goals import GoalChanged
+
+    svc = GoalService(InMemoryJournal(), agent_id="agent-a")
+    svc.create("已有目标")
+    svc.pause()
+
+    heard: list[GoalChanged] = []
+    svc.subscribe(heard.append, replay=True)  # late / after-restart consumer
+    assert [c.operation for c in heard] == ["create", "pause"]
+    assert all(c.agent_id == "agent-a" for c in heard)
+
+    # Without replay, a fresh subscriber sees nothing already committed.
+    fresh: list[GoalChanged] = []
+    svc.subscribe(fresh.append)
+    assert fresh == []
+
+
+def test_subscribe_replay_respects_scope_filter() -> None:
+    from runtime.memory.goals import GoalChanged
+
+    svc = GoalService(InMemoryJournal(), agent_id="agent-a")
+    svc.create("目标A")
+
+    mine: list[GoalChanged] = []
+    other: list[GoalChanged] = []
+    svc.subscribe(mine.append, agent_id="agent-a", replay=True)
+    svc.subscribe(other.append, agent_id="agent-b", replay=True)
+    assert len(mine) == 1
+    assert other == []
+
+
+def test_journal_bridge_skips_malformed_goal_event() -> None:
+    from runtime.memory.goals import GoalChanged
+    from runtime.memory.journal._journal_models import GoalChangeEvent
+    from runtime.sensing.gateway.streaming_journal import StreamingJournal
+
+    journal = StreamingJournal(InMemoryJournal())
+    svc = GoalService(journal, agent_id="agent-a")
+    heard: list[GoalChanged] = []
+    svc.subscribe(heard.append)
+
+    # A malformed goal_change event must not break the bridge for later events.
+    journal.write(GoalChangeEvent(change={"kind": "goal/change", "operation": "bogus"}))
+    svc.create("好目标")
+    assert [c.operation for c in heard] == ["create"]
