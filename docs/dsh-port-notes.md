@@ -682,9 +682,13 @@ dsh 的 ``@dsh-session-reference`` 在把**别的会话**的上下文注入当�
 
 - 忙碌 owner 语义已由第 34 节收口;当时缺的「owner 忙碌判定」现在是
   ``mark_owner_busy/mark_owner_idle`` 显式状态。
-- 弱引用生命周期:dsh 的 ``spentWakes`` 是 ``WeakMap``(session 替换即
-  满预算);我们用 ``dict`` 按 session_id 记,会话结束由调用方决定是否
-  清除。
+- 弱引用生命周期已收口:dsh 的 ``spentWakes`` 是 ``WeakMap``(session
+  替换即满预算)。``_memory`` 现在是 LRU 有界缓存
+  (``max_cached_sessions``,默认 1024),逐出会话时同步删除其唤醒预算
+  条目 —— 之后冷加载即「同 session 替换」,预算全新
+  (``spentWakes.get(owner) ?? 0`` 语义)。逐出不影响可达性:线程报告
+  汇总与 mention 候选都会回读磁盘持久副本,跨进程重启的未交付报告
+  也能被回合启动浮现。
 ## 26. durable ``user/message`` journal 事件 (`runtime/memory/journal/`)
 
 第 15 节留下的最后一块缺环:fold 早就能校验「goal 来源消息必须是当前
@@ -1583,7 +1587,6 @@ dsh 的 hooks 家族把 Claude Code / Codex 的 ``hooks.json`` 方言桥接到
   cursor 空页);goal projection/domain/invariant 共 80 项通过,
   ruff/invariant 干净。
 
-## 用法速查
 ## 用法速查
 
 ```bash

@@ -25,6 +25,7 @@ import os
 import re
 import tempfile
 import threading
+from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
@@ -56,6 +57,11 @@ QUEUED_REPORT_INJECT_MAX_CHARS = 1500
 # budget. Without it a chatty child could spin an unbounded chain of parent
 # turns between human inputs.
 DEFAULT_MAX_CONSECUTIVE_WAKES = 3
+# Bound on the live-session cache (dsh ``spentWakes`` WeakMap analog):
+# sessions evicted here drop their spent-wake entry, so a later cold load is
+# a session replacement that starts with a full budget. Discovery methods
+# (thread reports, mention candidates) still reach the durable copies.
+DEFAULT_MAX_CACHED_SESSIONS = 1024
 
 
 def _utc_now_iso() -> str:
@@ -182,13 +188,16 @@ class SubagentSessionStore:
         *,
         on_report: Callable[[str, SubagentReport], None] | None = None,
         max_consecutive_wakes: int | None = None,
+        max_cached_sessions: int | None = None,
     ) -> None:
         self._base_dir: Path | None = None
         if base_dir is not None:
             self._base_dir = Path(base_dir)
         else:
             self._base_dir = _default_base_dir()
-        self._memory: dict[str, SubagentSession] = {}
+        # Live-session cache (LRU): the weak-reference set for the wake
+        # budget, mirroring dsh ``spentWakes`` keyed by the exact Agent.
+        self._memory: OrderedDict[str, SubagentSession] = OrderedDict()
         self._lock = threading.RLock()
         # Optional wakeup hook (dsh ``reportDelivery: 'wakeup'``): called with
         # (session_id, report) after a report lands so a parent scheduler can
@@ -209,7 +218,25 @@ class SubagentSessionStore:
                 "must be a non-negative integer"
             )
         self._max_consecutive_wakes = budget
+        cache_bound = (
+            DEFAULT_MAX_CACHED_SESSIONS
+            if max_cached_sessions is None
+            else max_cached_sessions
+        )
+        if (
+            not isinstance(cache_bound, int)
+            or isinstance(cache_bound, bool)
+            or cache_bound <= 0
+        ):
+            raise ValueError(
+                f"SubagentSessionStore: max_cached_sessions ({cache_bound!r}) "
+                "must be a positive integer"
+            )
+        self._max_cached_sessions = cache_bound
         # Per-session spent wakes since the parent last claimed a human turn.
+        # Entries live exactly as long as their session is cached (dsh
+        # ``spentWakes`` WeakMap): eviction drops the entry, so a replacement
+        # session starts with a full budget.
         self._spent_wakes: dict[str, int] = {}
         # Parent owners currently mid-turn (dsh ``agent.status === 'running'``).
         # Live state only — a store restart always starts owners idle, matching
@@ -229,6 +256,86 @@ class SubagentSessionStore:
             return None
         return self._base_dir / f"{session_id}.json"
 
+    def _touch_locked(self, session_id: str) -> None:
+        """Mark one cached session most-recently-used (LRU refresh)."""
+        with contextlib.suppress(KeyError):
+            self._memory.move_to_end(session_id)
+
+    def _store_locked(self, session: SubagentSession) -> None:
+        """Cache a session as recently used, evicting the coldest entry.
+
+        The cache is the live-reference set for the wake budget (dsh
+        ``spentWakes`` WeakMap analog): evicting a session also drops its
+        spent-wake entry, so a later cold load is a session replacement
+        that starts with a full budget (dsh ``spentWakes.get(owner) ?? 0``).
+        Owner busy state is turn-scoped and outlives the cache
+        (mark_owner_idle clears it).
+        """
+        self._memory[session.session_id] = session
+        self._memory.move_to_end(session.session_id)
+        while len(self._memory) > self._max_cached_sessions:
+            oldest_id, _ = self._memory.popitem(last=False)
+            self._spent_wakes.pop(oldest_id, None)
+
+    def _disk_sessions_locked(self) -> list[SubagentSession]:
+        """Durable sessions on disk that are not currently cached.
+
+        The bounded cache evicts cold sessions, so discovery must still
+        reach the durable copies: thread report surfacing and mention
+        candidates read these back without warming the cache. Best-effort
+        — unreadable files are skipped. Sorted by filename for
+        determinism.
+        """
+        if self._base_dir is None or not self._base_dir.is_dir():
+            return []
+        loaded: list[SubagentSession] = []
+        try:
+            for path in sorted(self._base_dir.iterdir()):
+                if path.suffix != ".json" or path.name.startswith("."):
+                    continue
+                session_id = path.stem
+                if not _VALID_SESSION_ID_RE.fullmatch(session_id):
+                    continue
+                if session_id in self._memory:
+                    continue
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                    session = (
+                        SubagentSession.from_dict(data)
+                        if isinstance(data, dict)
+                        else None
+                    )
+                except (OSError, ValueError, TypeError):
+                    continue
+                if session is not None and session.session_id == session_id:
+                    loaded.append(session)
+        except OSError:
+            pass
+        return loaded
+
+    def _reference_records_locked(self) -> list[Any]:
+        """Candidate records from cached + durable sessions (dsh listCandidates)."""
+        from runtime.execution.tool_engine.session_reference import (
+            SessionReferenceRecord,
+        )
+
+        records: list[SessionReferenceRecord] = []
+        seen: set[str] = set()
+        for session in list(self._memory.values()) + self._disk_sessions_locked():
+            if session.session_id in seen:
+                continue
+            seen.add(session.session_id)
+            records.append(
+                SessionReferenceRecord(
+                    session_id=session.session_id,
+                    label=session.agent_id or session.session_id,
+                    created_at=int(session.created_at[:10].replace("-", ""))
+                    if len(session.created_at) >= 10
+                    else None,
+                )
+            )
+        return records
+
     def create(self, *, agent_id: str, thread_id: str = "") -> SubagentSession:
         now = _utc_now_iso()
         session = SubagentSession(
@@ -239,7 +346,7 @@ class SubagentSessionStore:
             updated_at=now,
         )
         with self._lock:
-            self._memory[session.session_id] = session
+            self._store_locked(session)
             self._spent_wakes.pop(session.session_id, None)
             self._owner_busy.discard(session.session_id)
             self._write_locked(session)
@@ -249,6 +356,7 @@ class SubagentSessionStore:
         with self._lock:
             cached = self._memory.get(session_id)
             if cached is not None:
+                self._touch_locked(session_id)
                 return _copy_session(cached)
             path = self._path_for(session_id)
             if path is None or not path.exists():
@@ -261,7 +369,7 @@ class SubagentSessionStore:
                 return None
             if session is None or not session.session_id:
                 return None
-            self._memory[session.session_id] = session
+            self._store_locked(session)
             return _copy_session(session)
 
     def surface_events(self, session_id: str) -> list[dict[str, Any]]:
@@ -292,22 +400,11 @@ class SubagentSessionStore:
         case-insensitive id / label substring.
         """
         from runtime.execution.tool_engine.session_reference import (
-            SessionReferenceRecord,
             SessionReferenceResolver,
         )
 
-        records: list[SessionReferenceRecord] = []
         with self._lock:
-            for session in self._memory.values():
-                records.append(
-                    SessionReferenceRecord(
-                        session_id=session.session_id,
-                        label=session.agent_id or session.session_id,
-                        created_at=int(session.created_at[:10].replace("-", ""))
-                        if len(session.created_at) >= 10
-                        else None,
-                    )
-                )
+            records = self._reference_records_locked()
         resolver = SessionReferenceResolver()
         return [
             {
@@ -347,7 +444,7 @@ class SubagentSessionStore:
                 )
             )
             session.updated_at = _utc_now_iso()
-            self._memory[session.session_id] = session
+            self._store_locked(session)
             self._write_locked(session)
             return _copy_session(session)
 
@@ -425,7 +522,7 @@ class SubagentSessionStore:
             )
             session.reports.append(report)
             session.updated_at = _utc_now_iso()
-            self._memory[session.session_id] = session
+            self._store_locked(session)
             self._write_locked(session)
             delivered = _copy_session(session)
         # A wake fires only when the report actually woke the parent (budget
@@ -535,10 +632,12 @@ class SubagentSessionStore:
         """Undelivered reports for every session a thread owns.
 
         Returns ``(session_id, index, report)`` triples, oldest first per
-        session, across the sessions this process has seen. The realtime
-        gateway surfaces these at turn start so a parent's next wake claims
-        every parked report (dsh ``inject`` consumed at the next pre-step),
-        not only the ones for the exact session it continues.
+        session; sessions are ordered by creation time (``created_at``,
+        ``session_id`` tiebreak) so the view is deterministic across cache
+        recency and process restarts. The realtime gateway surfaces these
+        at turn start so a parent's next wake claims every parked report
+        (dsh ``inject`` consumed at the next pre-step), not only the ones
+        for the exact session it continues.
         """
         if not thread_id:
             return []
@@ -548,6 +647,12 @@ class SubagentSessionStore:
                 for session in self._memory.values()
                 if session.thread_id == thread_id
             ]
+            sessions.extend(
+                session
+                for session in self._disk_sessions_locked()
+                if session.thread_id == thread_id
+            )
+            sessions.sort(key=lambda session: (session.created_at, session.session_id))
         pending: list[tuple[str, int, SubagentReport]] = []
         for session in sessions:
             start = max(0, session.reports_delivered_up_to)
@@ -574,7 +679,7 @@ class SubagentSessionStore:
                 up_to_index + 1,
             )
             session.updated_at = _utc_now_iso()
-            self._memory[session.session_id] = session
+            self._store_locked(session)
             self._write_locked(session)
             return _copy_session(session)
 
@@ -619,22 +724,11 @@ class SubagentSessionStore:
         are skipped, read/budget failures raise ``SessionReferenceError``.
         """
         from runtime.execution.tool_engine.session_reference import (
-            SessionReferenceRecord,
             SessionReferenceResolver,
         )
 
-        records: list[SessionReferenceRecord] = []
         with self._lock:
-            for session in self._memory.values():
-                records.append(
-                    SessionReferenceRecord(
-                        session_id=session.session_id,
-                        label=session.agent_id or session.session_id,
-                        created_at=int(session.created_at[:10].replace("-", ""))
-                        if len(session.created_at) >= 10
-                        else None,
-                    )
-                )
+            records = self._reference_records_locked()
         kwargs: dict[str, Any] = {}
         if max_references is not None:
             kwargs["max_references"] = max_references

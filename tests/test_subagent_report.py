@@ -196,6 +196,35 @@ def test_refill_wake_budget_unknown_session_is_noop(tmp_path: Path) -> None:
     store.refill_wake_budget("not-a-real-session")  # no raise
 
 
+# ─── weak-reference wake budget lifecycle (dsh spentWakes WeakMap) ───────
+
+
+def test_evicted_session_starts_with_fresh_wake_budget(tmp_path: Path) -> None:
+    woke: list[str] = []
+    store = SubagentSessionStore(
+        base_dir=tmp_path / "sessions",
+        max_consecutive_wakes=1,
+        max_cached_sessions=1,
+        on_report=lambda session_id, report: woke.append(session_id),
+    )
+    first = store.create(agent_id="researcher", thread_id="th-parent")
+    store.create(agent_id="coder", thread_id="th-other")  # evicts first
+
+    # The first wake spends the only budget token…
+    delivered = store.append_report(first.session_id, content="r1", delivery="wakeup")
+    assert delivered is not None and delivered.reports[-1].delivery == "wakeup"
+    # …and the second, on the still-cached session, is downgraded to quiet.
+    delivered = store.append_report(first.session_id, content="r2", delivery="wakeup")
+    assert delivered.reports[-1].delivery == "quiet"
+
+    # Eviction drops the spent-wake entry (dsh WeakMap): the next cold load
+    # is a session replacement with a full budget, so it wakes again.
+    store.create(agent_id="writer", thread_id="th-other")  # evicts first
+    delivered = store.append_report(first.session_id, content="r3", delivery="wakeup")
+    assert delivered is not None and delivered.reports[-1].delivery == "wakeup"
+    assert woke == [first.session_id, first.session_id]
+
+
 def test_invalid_wake_budget_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         SubagentSessionStore(base_dir=tmp_path / "sessions", max_consecutive_wakes=-1)
@@ -203,6 +232,15 @@ def test_invalid_wake_budget_rejected(tmp_path: Path) -> None:
         SubagentSessionStore(base_dir=tmp_path / "sessions", max_consecutive_wakes=2.5)
     with pytest.raises(ValueError):
         SubagentSessionStore(base_dir=tmp_path / "sessions", max_consecutive_wakes=True)
+
+
+def test_invalid_cache_bound_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ValueError):
+        SubagentSessionStore(base_dir=tmp_path / "sessions", max_cached_sessions=0)
+    with pytest.raises(ValueError):
+        SubagentSessionStore(base_dir=tmp_path / "sessions", max_cached_sessions=1.5)
+    with pytest.raises(ValueError):
+        SubagentSessionStore(base_dir=tmp_path / "sessions", max_cached_sessions=True)
 
 
 def test_zero_wake_budget_never_wakes(tmp_path: Path) -> None:
@@ -619,6 +657,48 @@ def test_pending_thread_reports_lists_undelivered_across_sessions(
         (first.session_id, 1),
         (second.session_id, 0),
     ]
+
+
+def test_pending_thread_reports_reads_durable_sessions_across_instances(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    session = store.create(agent_id="researcher", thread_id="th-parent")
+    store.append_report(session.session_id, content="r1", delivery="quiet")
+
+    fresh = SubagentSessionStore(
+        base_dir=tmp_path / "sessions",
+        max_cached_sessions=1,
+    )
+    pending = fresh.pending_thread_reports("th-parent")
+    assert [(sid, index, report.content) for sid, index, report in pending] == [
+        (session.session_id, 0, "r1"),
+    ]
+
+
+def test_evicted_sessions_stay_discoverable(tmp_path: Path) -> None:
+    store = SubagentSessionStore(
+        base_dir=tmp_path / "sessions",
+        max_cached_sessions=1,
+    )
+    first = store.create(agent_id="researcher", thread_id="th-parent")
+    store.append_report(first.session_id, content="r1", delivery="quiet")
+    other = store.create(agent_id="coder", thread_id="th-other")  # evicts first
+
+    pending = store.pending_thread_reports("th-parent")
+    assert [(sid, index, report.content) for sid, index, report in pending] == [
+        (first.session_id, 0, "r1"),
+    ]
+
+    candidates = store.list_reference_candidates(target_id=other.session_id)
+    assert [c["sessionId"] for c in candidates] == [first.session_id]
+
+    out = store.resolve_session_mentions(
+        f"use @session:{first.session_id}",
+        target_id=other.session_id,
+    )
+    assert out.content == "use"
+    assert out.additional_context is not None
 
 
 def test_inject_report_into_thread_public_seam(
