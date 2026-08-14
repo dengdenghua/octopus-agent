@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 三十四个差距点已落地为可测试代码(1-34 节)
+**状态**: 三十六个差距点已落地为可测试代码(1-36 节)
 
 ---
 
@@ -1007,9 +1007,86 @@ report 泳道,「父回合是否在跑」由调度器外部决定,预算只管�
   step 边界直接消费;我们没有 per-step inbox,``queued`` 报告实际靠
   ``pending_reports``/``reports_prompt`` 在父进程下一次续会话或新回合
   读到(近似、不保证同回合可见)。
-- 生产接线:``mark_owner_busy/mark_owner_idle`` 与 ``on_report`` 唤醒钩子
-  一样由调度器负责调用(目前默认 store 未接钩子,wakeup 只落盘不真的
-  撬回合);父回合起止处调用这两个方法是接线方的职责。
+- 生产接线已由第 35 节收口:线程级 busy/idle 与人工输入 refill 已接进
+  父回合生命周期;``on_report`` 唤醒钩子仍未接——「空闲 owner 开新回合」
+  需要网关在持有连接/emitter 时才可安全实现,当前 wakeup 只落盘不真撬
+  回合,待接入回合调度器。
+## 35. 调度器生产接线:线程级 owner 状态 + 人工输入 refill
+
+第 34 节把 busy/idle 语义搬进 store,但生产没人调用:``wakeup`` 报告只
+落盘不真撬回合,预算 refill 只有测试在调。本轮把 owner 状态接进父回合
+生命周期——busy/idle 由 react 驱动标记,refill 由网关在人工回合开始时
+触发,store 增加线程级 API 支撑:
+
+- ``mark_thread_busy(thread_id)`` / ``mark_thread_idle(thread_id)``:
+  线程级 owner 状态(``_busy_threads``,纯内存、空 id no-op)。与
+  session 级 ``mark_owner_busy`` 并存,``append_report`` 任一命中即按
+  ``queued`` 处理;线程级对「回合中新建的会话」同样生效(dsh owner 是
+  生命周期对象,不是某一具体子会话)。
+- ``stream_react_loop`` 改为薄包装器:原实现改名
+  ``_stream_react_loop_impl``,公开入口进入时
+  ``mark_thread_busy(thread_id)``,退出时(正常/异常/生成器提前 close)
+  ``mark_thread_idle(thread_id)``——``return (yield from ...)`` 保住
+  ``ReActResult``,``try/finally`` 保证任何退出路径都清 busy。所有父
+  回合驱动(CLI/controller/realtime gateway)都经此入口。
+- 网关 ``_start_turn`` 在解析出 ``thread_id`` 后 best-effort 调用
+  ``refill_thread_wake_budget(thread_id)``(dsh ``agent/inbox/claimed`` +
+  ``source.kind==='user'``:人工输入进回合即重置该线程全部会话的唤醒
+  预算),懒加载 + 异常吞掉,存储缺失绝不阻塞回合。
+- ``refill_thread_wake_budget(thread_id)``:重置该线程名下所有在内存
+  会话的 ``_spent_wakes``(有预算的会话必然已被加载进内存,无需扫盘)。
+- 测试:``tests/test_subagent_report.py`` 新增 9 用例(线程 busy 全会话
+  排队、回合中新建会话也排队、线程 idle 恢复、空线程 no-op、线程 refill
+  全会话重置、未知线程 no-op、react 包装器忙/闲转换、生成器提前 close
+  清 busy);``tests/test_realtime_cerebrum.py`` 新增 1 用例(网关人工
+  回合 refill 预算,ws 端到端);react 全量 358 项 + 网关 95 项 +
+  report/ephemeral/session 183 项回归全绿,ruff/invariant 干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- ``on_report`` 唤醒钩子生产接线:空闲 owner 开新回合需要网关持有该
+  线程的活动连接/emitter 才能安全实现;当前 wakeup 报告在存储层语义
+  正确(预算、忙碌判定、queued 排队),但不会主动撬起新回合,待回合
+  调度器接入。
+- 回合内「下一步」注入(同第 34 节):``queued`` 报告等下一次续会话/
+  新回合读取,不保证同回合可见;steering 通道(``_turn_steering`` 队列)
+  是现成的注入位,但需要轮询报告泳道并喂给 react 的 step 边界。
+
+## 36. per-session ``user/message`` 进 journal + 纯 journal 投影
+
+第 33 节的 ``surface_events_from_journal`` 里,user 泳道仍靠调用方
+传 ``prompts``——因为 journal 的 ``user/message`` 只写父会话/goal
+维度,没有 subagent 会话关联。本轮补上最后一环,让投影的 user 泳道也
+来自日志,表面真正「纯 journal」:
+
+- ``_journal_models.py``:``UserMessageEvent`` 新增 ``session_id: str =
+  ""``(纯 schema 追加,旧事件按空串兼容);无 ``goal_source`` 的行 fold
+  依旧忽略,不会污染 goal 轮次记账。
+- ``_journal_base.py``:``write_user_message(text, *, goal_source=None,
+  session_id="")`` 透传 ``session_id``。
+- ``_ephemeral_events.py``:新增 ``_emit_sub_user_message(session_id,
+  text)``——best-effort 把会话的 user prompt 作为 ``user/message`` 行
+  落盘(带 ``session_id``),沿用 current_session→journal 查找;空
+  session_id(一次性/远端子进程)直接跳过,telemetry 损失绝不打断 runner。
+- ``ephemeral_runner.py``:单发与 agentic 两条路径在 ``call.role.id``
+  解析处各调用一次 ``_emit_sub_user_message(session_id, call.user_prompt)``
+  ——每个可续会话的每轮 turn 先落 user prompt,再逐 chunk 落散文。
+- ``derive.py``:重写 ``surface_events_from_journal``——按日志写入顺序
+  逐事件把该会话的 ``user/message`` 与 ``sub_text_delta`` 交错成 dsh
+  surface(一轮 turn 自然呈现「prompt → 散文」);只有当日志里没有该会话
+  的 ``user/message`` 行(旧会话/一次性)才回退到 ``prompts`` 参数 +
+  按 round 交错。
+- 测试:``tests/test_sub_text_delta_event.py`` 新增 5 用例(emit helper
+  落带 session_id 的 user/message 行、``write_user_message`` 透传
+  session_id、纯 journal user 泳道优先于 prompts、多轮交错且不泄其它
+  会话、纯 journal 桥→投影端到端),全套 18 用例通过;journal/ephemeral/
+  session/reference/goal 回归 179+ 项通过,ruff/invariant 干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 会话关闭/汇总事件:dsh 还会落 session 级生命周期与 token 汇总行,
+  我们只有 user prompt 与流式散文;如需 resume 时给出「该会话此前用了
+  多少 token / 是否 close」可再补。
 
 ## 用法速查
 

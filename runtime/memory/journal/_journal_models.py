@@ -301,9 +301,14 @@ class UserMessageEvent(JournalEvent):
     when the message continues an active goal; the goal fold validates
     it as the exact next admitted round. Messages without a source are
     plain transcript entries the fold ignores.
+
+    ``session_id`` correlates a message to a durable sub-agent session
+    (empty for parent/goal-level messages); a session-scoped message is
+    still source-less, so the goal fold keeps ignoring it.
     """
 
     event_type: Literal["user/message"] = "user/message"
+    session_id: str = ""
     text: str = ""
     goal_source: dict[str, Any] | None = None
 

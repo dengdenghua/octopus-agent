@@ -10,6 +10,8 @@ Contains:
       event (start/end) to the active stream queue AND the genome journal.
     * ``_emit_subagent_lifecycle_event`` — best-effort push of a sub-agent
       lifecycle event (spawned/finished) to the genome journal.
+    * ``_emit_sub_user_message`` — best-effort journal of a session's
+      user prompt as a ``user/message`` row correlated to its session.
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ __all__ = [
     "_emit_sub_text_delta",
     "_emit_sub_tool_event",
     "_emit_subagent_lifecycle_event",
+    "_emit_sub_user_message",
     "_safe_ctx_emit",
 ]
 
@@ -103,6 +106,54 @@ def _emit_sub_text_delta(
                 round=int(round),
                 delta=delta,
                 parent_tool_use_id=meta.get("_active_parent_tool_use_id") or None,
+            )
+        )
+    except (OSError, TypeError, ValueError):  # noqa: BLE001
+        # Mirroring is best-effort; never break the runner.
+        pass
+
+
+def _emit_sub_user_message(session_id: str, text: str) -> None:
+    """Best-effort journal of one sub-agent session's user prompt.
+
+    Records the durable prompt a continuable session was started with as a
+    ``user/message`` row correlated to ``session_id``, so a session's
+    surface user lane is reconstructable from the log alone — the dsh
+    session-log invariant. Silently no-ops when no journal is bound or the
+    write fails; telemetry loss never breaks the runner. One-shot / remote
+    children pass an empty ``session_id`` and are skipped.
+    """
+    if not session_id:
+        return
+    try:
+        from runtime.platform.process.session import current_session
+
+        sess = current_session()
+    except (ImportError, TypeError, AttributeError, OSError):  # noqa: BLE001
+        return
+    if sess is None:
+        return
+    meta = getattr(sess, "metadata", None) or {}
+    if not isinstance(meta, dict):
+        return
+    journal = meta.get("journal")
+    if journal is None:
+        try:
+            stack = meta.get("stack")
+            if stack is not None:
+                journal = getattr(stack, "journal", None)
+        except (AttributeError, TypeError):  # noqa: BLE001
+            journal = None
+    if journal is None:
+        return
+    try:
+        from runtime.memory.journal._journal_models import UserMessageEvent
+
+        journal.write(
+            UserMessageEvent(
+                task_id=meta.get("task_id"),
+                session_id=session_id,
+                text=text,
             )
         )
     except (OSError, TypeError, ValueError):  # noqa: BLE001

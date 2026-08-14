@@ -14,6 +14,7 @@ from typing import Any
 
 from runtime.execution.suckers._ephemeral_events import (
     _emit_sub_text_delta,
+    _emit_sub_user_message,
 )
 from runtime.memory.journal import (
     InMemoryJournal,
@@ -252,3 +253,99 @@ def test_surface_events_from_journal_feeds_projection() -> None:
     assert data.conversation[0]["text"] == "问题"
     assert data.conversation[1]["text"] == "结论"
     assert stats.original_messages == 2
+
+
+def test_emit_sub_user_message_writes_session_row() -> None:
+    journal = InMemoryJournal()
+    sid = "77777777777777777777777777777777"
+    with session_scope(_scoped_session_with_journal(journal)):
+        _emit_sub_user_message(sid, "问题prompt")
+        # Empty session id (one-shot / remote child) is skipped.
+        _emit_sub_user_message("", "不该落盘")
+
+    events = journal.read_all()
+    assert len(events) == 1
+    assert events[0].event_type == "user/message"
+    assert events[0].session_id == sid
+    assert events[0].text == "问题prompt"
+    assert events[0].goal_source is None  # goal fold keeps ignoring it
+
+
+def test_write_user_message_session_id(tmp_path: Path) -> None:
+    from runtime.memory.journal import JSONLJournal
+
+    journal = JSONLJournal(tmp_path / "journal.jsonl")
+    sid = "88888888888888888888888888888888"
+    journal.write_user_message("prompt", session_id=sid)
+
+    ev = journal.read_all()[0]
+    assert ev.session_id == sid
+    assert ev.text == "prompt"
+
+
+def test_surface_uses_journal_user_lane_not_prompts() -> None:
+    from runtime.memory.journal.derive import surface_events_from_journal
+
+    journal = InMemoryJournal()
+    sid = "99999999999999999999999999999999"
+    journal.write(SubTextDeltaEvent(session_id=sid, role_id="researcher", round=1, delta="A"))
+    journal.write_user_message("日志里的问题", session_id=sid)
+    journal.write(SubTextDeltaEvent(session_id=sid, role_id="researcher", round=1, delta="B"))
+
+    surface = surface_events_from_journal(journal, session_id=sid, prompts=["fallback不该用"])
+    # The journal user lane wins over the caller-supplied prompts.
+    assert surface[0]["type"] == "assistant/message"
+    assert surface[0]["data"]["message"]["content"][0]["text"] == "A"
+    assert surface[1]["type"] == "user/message"
+    assert surface[1]["data"]["content"][0]["text"] == "日志里的问题"
+    assert surface[2]["type"] == "assistant/message"
+    assert surface[2]["data"]["message"]["content"][0]["text"] == "B"
+    assert "fallback不该用" not in str(surface)
+
+
+def test_surface_pure_journal_multi_turn_interleave() -> None:
+    from runtime.memory.journal.derive import surface_events_from_journal
+
+    journal = InMemoryJournal()
+    sid = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    other = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    journal.write_user_message("p1", session_id=sid)
+    journal.write(SubTextDeltaEvent(session_id=sid, role_id="r", round=1, delta="a1"))
+    journal.write(SubTextDeltaEvent(session_id=sid, role_id="r", round=1, delta="a2"))
+    journal.write_user_message("p2", session_id=sid)
+    journal.write(SubTextDeltaEvent(session_id=sid, role_id="r", round=2, delta="b1"))
+    # A different session's user message must not leak in.
+    journal.write_user_message("别处的", session_id=other)
+    journal.write(SubTextDeltaEvent(session_id=other, role_id="r", round=1, delta="X"))
+
+    surface = surface_events_from_journal(journal, session_id=sid)
+    assert [e["type"] for e in surface] == [
+        "user/message",
+        "assistant/message",
+        "user/message",
+        "assistant/message",
+    ]
+    assert surface[0]["data"]["content"][0]["text"] == "p1"
+    assert surface[1]["data"]["message"]["content"][0]["text"] == "a1a2"
+    assert surface[2]["data"]["content"][0]["text"] == "p2"
+    assert surface[3]["data"]["message"]["content"][0]["text"] == "b1"
+
+
+def test_surface_pure_journal_feeds_projection() -> None:
+    from runtime.execution.tool_engine.session_projection import (
+        retain_session_reference,
+    )
+    from runtime.memory.journal.derive import surface_events_from_journal
+
+    journal = InMemoryJournal()
+    sid = "cccccccccccccccccccccccccccccccc"
+    journal.write_user_message("日志问题", session_id=sid)
+    journal.write(SubTextDeltaEvent(session_id=sid, role_id="r", round=1, delta="日志结论"))
+
+    surface = surface_events_from_journal(journal, session_id=sid)
+    retained = retain_session_reference(surface, session_id=sid, label="researcher", max_bytes=4096)
+    assert retained is not None
+    data, _stats = retained
+    assert [item["role"] for item in data.conversation] == ["user", "assistant"]
+    assert data.conversation[0]["text"] == "日志问题"
+    assert data.conversation[1]["text"] == "日志结论"

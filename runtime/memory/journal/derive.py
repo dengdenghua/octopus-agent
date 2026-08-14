@@ -306,6 +306,25 @@ def assert_logged_history_reconstructs(
         assert block["input"] == call.args
 
 
+def _user_surface(text: str) -> dict[str, Any]:
+    """One dsh ``user/message`` surface event."""
+    return {
+        "type": "user/message",
+        "data": {
+            "source": {"kind": "user"},
+            "content": [{"type": "text", "text": text}],
+        },
+    }
+
+
+def _assistant_surface(text: str) -> dict[str, Any]:
+    """One dsh ``assistant/message`` surface event."""
+    return {
+        "type": "assistant/message",
+        "data": {"message": {"content": [{"type": "text", "text": text}]}},
+    }
+
+
 def surface_events_from_journal(
     journal: Journal,
     *,
@@ -314,44 +333,55 @@ def surface_events_from_journal(
 ) -> list[dict[str, Any]]:
     """Build a dsh surface for one sub-agent session from real journal events.
 
-    The dsh session-log invariant applied to the reference seam: the
-    assistant lane is reconstructed from the session's journaled
-    ``sub_text_delta`` rows (per-chunk fidelity) instead of the in-memory
-    turn store; the user lane comes from ``prompts`` because the journal
-    has no per-session ``user/message`` rows today (parent-level user
-    messages carry a conversation id, not a session id). Rounds interleave
-    with prompts (turn ``i``'s prompt pairs with round ``i+1``'s prose);
-    extra prompts or streams beyond the other side are still emitted so no
-    text is dropped.
+    Walks the append-only log in order and projects the session's
+    ``user/message`` + ``sub_text_delta`` rows into the dsh surface shape,
+    interleaved exactly as they were written (a turn journals its prompt,
+    then its streamed prose). When the log has no per-session ``user/message``
+    rows yet (older sessions / one-shot children), the user lane falls back
+    to ``prompts`` and interleaves with the assistant streams by round.
 
-    Returns events in the dsh surface shape consumable by
-    ``retain_session_reference`` — ``user/message`` + ``assistant/message``.
+    Returns events consumable by ``retain_session_reference`` —
+    ``user/message`` + ``assistant/message``.
     """
+    events: list[dict[str, Any]] = []
+    pending: list[str] = []
+    journal_user_count = 0
+    for event in journal.read_all():
+        etype = getattr(event, "event_type", "")
+        event_session = getattr(event, "session_id", "") or ""
+        if etype == "user/message":
+            if event_session != session_id:
+                continue
+            if pending:
+                events.append(_assistant_surface("".join(pending)))
+                pending = []
+            text = (getattr(event, "text", "") or "").strip()
+            if text:
+                journal_user_count += 1
+                events.append(_user_surface(text))
+        elif etype == "sub_text_delta":
+            if event_session != session_id:
+                continue
+            pending.append(getattr(event, "delta", "") or "")
+    if pending:
+        events.append(_assistant_surface("".join(pending)))
+
+    if journal_user_count:
+        # Both lanes came from the log — a pure-journal surface.
+        return events
+
+    # Fallback: no per-session user rows — take the user lane from the
+    # caller and interleave with the assistant streams by round.
     streams_by_round = {
         stream.round: stream for stream in derive_subagent_streams(journal, session_id=session_id)
     }
     prompts_list = list(prompts or [])
     num_rounds = max(len(prompts_list), max(streams_by_round, default=0))
-    events: list[dict[str, Any]] = []
+    fallback: list[dict[str, Any]] = []
     for index in range(num_rounds):
-        if index < len(prompts_list):
-            prompt = (prompts_list[index] or "").strip()
-            if prompt:
-                events.append(
-                    {
-                        "type": "user/message",
-                        "data": {
-                            "source": {"kind": "user"},
-                            "content": [{"type": "text", "text": prompt}],
-                        },
-                    }
-                )
+        if index < len(prompts_list) and (prompts_list[index] or "").strip():
+            fallback.append(_user_surface(prompts_list[index].strip()))
         stream = streams_by_round.get(index + 1)
         if stream is not None and stream.text:
-            events.append(
-                {
-                    "type": "assistant/message",
-                    "data": {"message": {"content": [{"type": "text", "text": stream.text}]}},
-                }
-            )
-    return events
+            fallback.append(_assistant_surface(stream.text))
+    return fallback

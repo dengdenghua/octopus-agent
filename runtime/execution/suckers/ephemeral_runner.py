@@ -64,6 +64,7 @@ from typing import Any
 from runtime.execution.suckers._ephemeral_events import (
     _emit_sub_text_delta,
     _emit_sub_tool_event,
+    _emit_sub_user_message,
     _emit_subagent_lifecycle_event,
     _safe_ctx_emit,
 )
@@ -434,6 +435,7 @@ def make_llm_ephemeral_runner(
             # parent gateway can render live.
             _ctx_emitter_single = call.context.get("event_emitter") if call.context else None
             _ctx_session_id_single = call.context.get("subagent_session_id") if call.context else ""
+            _emit_sub_user_message(_ctx_session_id_single, call.user_prompt)
             stream_fn_single = getattr(router, "call_stream", None)
             if callable(stream_fn_single):
                 accumulated = ""
@@ -536,6 +538,9 @@ def make_llm_ephemeral_runner(
         # It's a plain Callable[[dict], None] — fire-and-forget.
         _ctx_emitter = call.context.get("event_emitter") if call.context else None
         _ctx_session_id = call.context.get("subagent_session_id") if call.context else ""
+        # Journal the session's user prompt (dsh session-log invariant) so
+        # the surface user lane is reconstructable from the log alone.
+        _emit_sub_user_message(_ctx_session_id, call.user_prompt)
 
         # Role-specific round cap (align with Claude Code depth for research tasks)
         max_rounds = EPHEMERAL_MAX_ROUNDS_BY_ROLE.get(call.role.id, EPHEMERAL_MAX_ROUNDS)

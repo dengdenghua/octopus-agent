@@ -743,16 +743,20 @@ class Journal:
         text: str,
         *,
         goal_source: dict[str, Any] | None = None,
+        session_id: str = "",
     ) -> None:
         """Append one human message (dsh ``user/message``).
 
         ``goal_source`` (optional dsh ``GoalMessageSource``) lets the goal
         fold count this message as the next admitted continuation round.
+        ``session_id`` (optional) correlates the message to a durable
+        sub-agent session; the goal fold ignores source-less rows either way.
         """
         self.write(
             UserMessageEvent(
                 text=text,
                 goal_source=goal_source,
+                session_id=session_id,
                 agent_id=current_agent_id(),
                 conversation_id=current_conversation_id(),
             )
