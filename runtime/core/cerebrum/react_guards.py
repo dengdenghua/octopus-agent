@@ -105,6 +105,10 @@ from runtime.core.cerebrum.react_parsing import (
     _detect_shell_injection_in_payload,
     _detect_unsafe_deser_in_payload,
 )
+from runtime.core.cerebrum.react_repeat_tool_guards import (  # noqa: F401 — re-exported
+    _consecutive_same_tool_guard,
+    _repeat_tool_reminder_guard,
+)
 from runtime.core.cerebrum.react_security_guards import (  # noqa: F401 — re-exported for backward compatibility
     _dynamic_exec_guard,
     _magic_number_guard,
@@ -124,6 +128,10 @@ from runtime.core.cerebrum.react_test_quality_guards import (  # noqa: F401 — 
     _undocumented_skip_guard,
     _weak_test_assertion_guard,
 )
+from runtime.core.cerebrum.react_timeout_guards import (  # noqa: F401 — re-exported
+    _consecutive_timeout_guard,
+    _timeout_policy_guard,
+)
 from runtime.core.cerebrum.react_todo_protocol_guards import (  # noqa: F401 — re-exported for react_in_flight_nudges / react_loop / tests
     _completion_phrase_without_todo_guard,
     _looks_like_completion_phrase,
@@ -142,14 +150,6 @@ from runtime.core.cerebrum.react_verification_guards import (  # noqa: F401 — 
     _signature_changed_without_typecheck_guard,
     _unverified_write_followup_guard,
     _wire_schema_change_without_compat_test_guard,
-)
-from runtime.core.cerebrum.react_repeat_tool_guards import (  # noqa: F401 — re-exported
-    _consecutive_same_tool_guard,
-    _repeat_tool_reminder_guard,
-)
-from runtime.core.cerebrum.react_timeout_guards import (  # noqa: F401 — re-exported
-    _consecutive_timeout_guard,
-    _timeout_policy_guard,
 )
 
 
