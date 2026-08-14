@@ -76,6 +76,9 @@ class _LoopState:
     file_inspection_tools_visible: bool = False
     read_only_turn: bool = False
     no_tool_turn: bool = False
+    # ── guard · dsh repeat-tool-reminder (advisory, never vetoes) ──
+    repeat_guard: Any = None
+    guard_notices: list = field(default_factory=list)
     # ── convo · shared references (mutated in place, never re-synced) ──
     steps: list = field(default_factory=list)
     executed_beak_steps: list = field(default_factory=list)

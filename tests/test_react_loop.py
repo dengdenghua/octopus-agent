@@ -9225,3 +9225,177 @@ def test_react_action_block_leaked_into_answer_is_rejected() -> None:
     )
     assert not _looks_like_observation_echo("ReAct 协议包含 Thought/Action/Observation 三个块。")
     assert not _looks_like_observation_echo("The Action field in the ReAct schema is required.")
+
+
+
+
+# ─── dsh repeat-tool-reminder integration ──────────────────────
+
+
+def test_repeat_guard_injects_gentle_reminder_mid_turn() -> None:
+    router = _CapturingRouter(
+        [
+            'Thought: step 1\nAction: echo({"text": "ping"})',
+            'Thought: step 2\nAction: echo({"text": "ping"})',
+            'Thought: step 3\nAction: list_cwd({"path": "."})',
+            "Final Answer: 完成,先重复后换用列目录,任务结束。",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("ping then list")
+    intent.user_context["repeat_tool_reminder"] = {"thresholds": [2, 4]}
+    events, result = _drain(
+        stream_react_loop(stack, intent, agent=None, max_iterations=6)
+    )
+
+    assert result is not None and result.success
+    # The gentle reminder rides the third model request — right after the
+    # second echo observation, before the next model call.
+    third_request = "\n".join(
+        str(message.content) for message in router.requests[2].messages
+    )
+    assert "REPEAT-CALL REMINDER" in third_request
+    assert "You are repeating the exact same tool call" in third_request
+    # A different tool resets the chain — no detailed/escalated tier. The
+    # gentle reminder stays as retained history (dsh semantics), but the
+    # detailed form must never appear.
+    for request in router.requests[3:]:
+        joined = "\n".join(str(message.content) for message in request.messages)
+        assert joined.count("REPEAT-CALL REMINDER") == 1
+        assert "Repeated tool call detected:" not in joined
+    echo_starts = [
+        event
+        for event in events
+        if event.get("type") == "tool_start" and event.get("tool_name") == "echo"
+    ]
+    assert len(echo_starts) == 2
+
+
+def test_repeat_guard_detailed_escalation_never_blocks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Isolate this guard from the pre-existing final-answer loop guards
+    # (threshold 3): the point here is that OUR advisory guard alone delays
+    # nothing and blocks nothing.
+    monkeypatch.setenv(
+        "OCTOPUS_DISABLED_GUARDS",
+        "consecutive-same-tool guard,repeat-tool-reminder guard",
+    )
+    router = _CapturingRouter(
+        [
+            'Thought: step 1\nAction: echo({"text": "ping"})',
+            'Thought: step 2\nAction: echo({"text": "ping"})',
+            'Thought: step 3\nAction: echo({"text": "ping"})',
+            'Thought: step 4\nAction: echo({"text": "ping"})',
+            "Final Answer: 完成,四次 echo 均成功执行,任务结束。",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("ping four times")
+    intent.user_context["repeat_tool_reminder"] = {"thresholds": [2, 4]}
+    events, result = _drain(
+        stream_react_loop(stack, intent, agent=None, max_iterations=6)
+    )
+
+    assert result is not None and result.success
+    echo_starts = [
+        event
+        for event in events
+        if event.get("type") == "tool_start" and event.get("tool_name") == "echo"
+    ]
+    assert len(echo_starts) == 4
+    # Detailed tier (4th consecutive call) names the tool and the run length.
+    fourth_request = "\n".join(
+        str(message.content) for message in router.requests[3].messages
+    )
+    assert "REPEAT-CALL REMINDER" in fourth_request
+    fifth_request = "\n".join(
+        str(message.content) for message in router.requests[4].messages
+    )
+    assert "Repeated tool call detected:" in fifth_request
+    assert "tool: echo" in fifth_request
+    assert "consecutive_calls: 4" in fifth_request
+
+
+def test_repeat_guard_coexists_with_final_answer_loop_guards() -> None:
+    router = _CapturingRouter(
+        [
+            'Thought: step 1\nAction: echo({"text": "ping"})',
+            'Thought: step 2\nAction: echo({"text": "ping"})',
+            'Thought: step 3\nAction: echo({"text": "ping"})',
+            "Final Answer: 完成,三次 echo 结果一致,任务结束。",
+            "Final Answer: 完成,三次 echo 结果一致,任务结束。",
+            "Final Answer: 完成,三次 echo 结果一致,任务结束。",
+            "Final Answer: 完成,三次 echo 结果一致,任务结束。",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    events, result = _drain(
+        stream_react_loop(stack, _intent("ping three times"), agent=None, max_iterations=5)
+    )
+
+    # All three identical calls executed — our advisory guard never blocked.
+    echo_starts = [
+        event
+        for event in events
+        if event.get("type") == "tool_start" and event.get("tool_name") == "echo"
+    ]
+    assert len(echo_starts) == 3
+    # The mid-turn gentle reminder landed before the model tried to finish…
+    fourth_request = "\n".join(
+        str(message.content) for message in router.requests[3].messages
+    )
+    assert "REPEAT-CALL REMINDER" in fourth_request
+    # …and the pre-existing hard guard still blocked the final answer.
+    assert result is not None
+    assert result.terminated_reason == "guard_impasse"
+
+
+def test_repeat_guard_config_through_user_context() -> None:
+    router = _CapturingRouter(
+        [
+            'Thought: step 1\nAction: echo({"text": "ping"})',
+            'Thought: step 2\nAction: echo({"text": "ping"})',
+            'Thought: step 3\nAction: list_cwd({"path": "."})',
+            "Final Answer: 完成,任务结束。",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("ping then list")
+    intent.user_context["repeat_tool_reminder"] = {
+        "thresholds": [2, 4],
+        "exclude": ["echo"],
+    }
+    events, result = _drain(
+        stream_react_loop(stack, intent, agent=None, max_iterations=6)
+    )
+
+    assert result is not None and result.success
+    for request in router.requests:
+        joined = "\n".join(str(message.content) for message in request.messages)
+        assert "REPEAT-CALL REMINDER" not in joined
+
+
+def test_repeat_guard_disabled_through_user_context() -> None:
+    router = _CapturingRouter(
+        [
+            'Thought: step 1\nAction: echo({"text": "ping"})',
+            'Thought: step 2\nAction: echo({"text": "ping"})',
+            'Thought: step 3\nAction: list_cwd({"path": "."})',
+            "Final Answer: 完成,任务结束。",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("ping then list")
+    intent.user_context["repeat_tool_reminder"] = {
+        "thresholds": [2, 4],
+        "enabled": False,
+    }
+    events, result = _drain(
+        stream_react_loop(stack, intent, agent=None, max_iterations=6)
+    )
+
+    assert result is not None and result.success
+    for request in router.requests:
+        joined = "\n".join(str(message.content) for message in request.messages)
+        assert "REPEAT-CALL REMINDER" not in joined

@@ -78,6 +78,48 @@ from runtime.safety.validation.prompt_injection import (
 _logger = logging.getLogger(__name__)
 
 
+def _observe_repeat_guard(state: _LoopState, tool_name: str, arguments: Any) -> None:
+    """Advance the advisory repeat-call chain for one attempted call.
+
+    dsh ``repeat-tool-reminder`` observes at post-execute (denied calls flow
+    through the same waterfall); our deny fast paths return before the end of
+    the phase, so we observe at attempt time instead — a model hammering a
+    denied call is exactly the loop worth breaking. Best-effort: a guard
+    failure must never break the turn.
+    """
+    guard = getattr(state, "repeat_guard", None)
+    if guard is None:
+        return
+    try:
+        reminder = guard.observe(
+            tool_name,
+            arguments,
+            agent_key=state.thread_id or "default",
+        )
+    except Exception:  # noqa: BLE001 — advisory; never break the turn
+        _logger.debug("repeat-tool guard observe skipped", exc_info=True)
+        return
+    if reminder:
+        state.guard_notices.append(reminder)
+
+
+def _flush_guard_notices(state: _LoopState, messages: Any) -> None:
+    """Append queued guard reminders to the model context immediately.
+
+    Used on the approval-denied fast paths (which skip PHASE 6g), so the
+    nudge still lands before the next model call — dsh's post-execute
+    ``additionalContexts`` timing. Notices are drained (never duplicated).
+    """
+    notices = getattr(state, "guard_notices", None)
+    if not notices:
+        return
+    from runtime.platform.models.llm import Message
+
+    for notice in notices:
+        messages.append(Message(role="user", content=notice))
+    notices.clear()
+
+
 def _latest_human_intent(messages: Any) -> str:
     """Most recent human message text — the only trusted authorization
     evidence for the guardian review (codex policy_template Evidence
@@ -354,6 +396,21 @@ def _phase_6d_dispatch_and_observe(
                 step.action_results = _parallel_results
                 tool_ok = all(r.get("ok") for r in _parallel_results)
                 _parallel_handled = True
+                # dsh repeat-tool-reminder: observe each parallel attempt
+                # (args re-parsed from the action text; the dispatcher
+                # already deduplicated identical calls within the batch).
+                if state.repeat_guard is not None:
+                    for _r_idx, _r in enumerate(_parallel_results):
+                        _r_parsed = _parse_action(step.actions[_r_idx])
+                        _r_name = _r.get("tool_name") or (
+                            _r_parsed[0] if _r_parsed else ""
+                        )
+                        _r_args = (
+                            _r_parsed[1]
+                            if _r_parsed is not None and isinstance(_r_parsed[1], dict)
+                            else {}
+                        )
+                        _observe_repeat_guard(state, _r_name, _r_args)
 
         if not _parallel_handled and not step.observation:
             will_attempt_tool = tool_action_requested
@@ -366,6 +423,10 @@ def _phase_6d_dispatch_and_observe(
                     call_id = uuid.uuid4().hex[:12]
                     action_args = parsed[1] if isinstance(parsed[1], dict) else {}
                     _input_preview = action_args
+                    # dsh repeat-tool-reminder: observe at attempt time so
+                    # denied/rejected calls count too (a model hammering a
+                    # denied call is exactly the loop worth breaking).
+                    _observe_repeat_guard(state, resolved_name, action_args)
                     _tool_started_at = time.monotonic()
                     yield tool_lifecycle_event_to_react_event(
                         normalize_tool_lifecycle_event(
@@ -490,6 +551,7 @@ def _phase_6d_dispatch_and_observe(
                             "请换一种方式或询问用户。"
                         )
                         _record_rejected_step(steps, messages, step, observation)
+                        _flush_guard_notices(state, messages)
                         return _LoopControl.NEXT_ITERATION
                     if (
                         _approval_action in {"ask", "confirm"}
@@ -536,6 +598,7 @@ def _phase_6d_dispatch_and_observe(
                                 "(工具被用户拒绝) 用户拒绝了此操作，请换一种方式或询问用户。"
                             )
                             _record_rejected_step(steps, messages, step, observation)
+                            _flush_guard_notices(state, messages)
                             return _LoopControl.NEXT_ITERATION
                     if output_chunk_sink is not None:
                         from runtime.core.cerebrum.tool_output_sink import push_sink

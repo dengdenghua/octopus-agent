@@ -463,6 +463,16 @@ def _phase_6g_housekeeping(state: _LoopState, *, i: int, max_iterations: int) ->
                 )
             )
 
+        # dsh repeat-tool-reminder: fold queued guard notices into the model
+        # context right after this step's tool results, before the next LLM
+        # round (the deny fast paths flushed theirs via
+        # ``_flush_guard_notices``; this drain covers every other exit).
+        _guard_notices = getattr(state, "guard_notices", None)
+        if _guard_notices:
+            for _guard_notice in _guard_notices:
+                messages.append(Message(role="user", content=_guard_notice))
+            _guard_notices.clear()
+
         messages = _compress_context(
             messages,
             max_tokens=context_budget_tokens_for_model(effective_model),

@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 五十三个差距点已落地为可测试代码(1-53 节)
+**状态**: 五十四个差距点已落地为可测试代码(1-54 节)
 
 ---
 
@@ -1633,7 +1633,52 @@ dsh 的 hooks 家族把 Claude Code / Codex 的 ``hooks.json`` 方言桥接到
 - 事件桥层的 settlement 通知(子代理结束时通知父代理)仍待独立的
   事件桥接层。
 
+
+## 54. 顾问式防循环 guard(`runtime/safety/guards/repeat_tool_reminder.py`)
+
+dsh ``repeat-tool-reminder`` 的忠实移植(原实现 ``guard/repeat-tool-reminder``
+~233 行核心):**顾问式**防循环——不是模型可见工具,不进工具列表,不拦截
+不改写任何调用,只观察每个 agent 的工具调用流,对「同工具 + 规范化后
+同参数」的连续调用计数,在配置的重复次数上注入**渐进提醒**;是否换方法、
+换参数还是收尾,决策完全留给模型。
+
+- **链语义**(逐字 dsh):链键是 ``(tool_name, canonical arguments)``,
+  canonical 为 deep key-sort + 序列化(键序不同视为相同);``include`` /
+  ``exclude`` 为 ``*`` 通配谓词,**未跟踪调用对链透明**(既不计数也不
+  重置——记账类工具夹在循环里不能洗掉计数);按 agent 独立链(本实现
+  每回合一个 guard 实例,天然按 agent/回合隔离);**被拒调用也计数**
+  (观察点在审批门之前);用户插话重置链;纯内存态,恢复会话从新链开始。
+- **提醒分级**:第一个阈值给温和版(通用提示),后续阈值给详细版
+  (tool 名 + 连续次数 + canonical 参数预览,``arguments_preview_chars``
+  默认 500 截断并带 ``… (+N more chars)`` 省略标记——只限提醒文本,
+  检测始终用完整串);文本带 ``[REPEAT-CALL REMINDER]`` 前缀标记,防止
+  模型把注入的 user 角色消息误读成真实用户消息(dsh 用 source kind
+  标注,我们的 ``Message`` 无 source 字段,用文本标记等效)。
+- **生产接线**:``react_loop`` 每回合构建一个 guard;PHASE 6d 单动作路径
+  在解析出 ``resolved_name + action_args`` 后**先于审批门**观察(审批
+  拒绝快速路径也计数,且经 ``_flush_guard_notices`` 直接把提醒注入
+  messages——dsh post-execute additionalContexts 的时序,跳过 6g 也不丢);
+  并行派发路径在结果返回后逐条观察;PHASE 6g 在 Observation 消息之后
+  折叠队列提醒(工具结果之后、下轮模型调用之前);live steering 用户
+  插话触发 ``reset()``。
+- **配置与开关**:``user_context["repeat_tool_reminder"]`` 支持
+  ``enabled`` / ``thresholds`` / ``include`` / ``exclude`` /
+  ``arguments_preview_chars``(默认 [3,5,8] 全工具跟踪);服务端
+  ``OCTOPUS_REPEAT_TOOL_REMINDER=0`` 全局关。dsh 对部署配置 fail-loud;
+  我们同样 fail-loud 校验,但客户端 user_context 配置非法时**降级默认并
+  告警**——客户端可控输入不能成为回合崩溃面(有意偏离,笔记留痕)。
+- **与既有防重 guard 的关系**:``react_repeat_tool_guards.py`` 的
+  「P1 parity」是 final-answer 期的硬检查(threshold=3 / 窗口 5,驳回
+  收尾至 guard_impasse);本 guard 是回合中期的顾问式渐进提醒,两者
+  分层共存(中期先软提醒,收尾期硬把关),集成测试覆盖共存场景。
+- 测试:``tests/test_repeat_tool_reminder.py`` 18 例(阈值分级、规范化、
+  通配、透明性、按 agent 隔离、reset、截断边界、fail-loud 校验、构建器
+  开关)+ ``tests/test_react_loop.py`` 5 例集成(温和提醒 mid-turn 注入、
+  详细升级且零拦截、与硬 guard 共存、exclude、disabled);react_loop
+  全量 360 项通过,ruff/invariant 干净。
+
 ## 用法速查
+
 
 ```bash
 # 快照

@@ -92,6 +92,9 @@ from runtime.platform.models import ParsedIntent, Step, TaskId
 from runtime.platform.models.llm import Message
 from runtime.platform.models.rescue_policy import next_custom_model_fallback
 from runtime.safety.approval.approval_gate import ApprovalProvider
+from runtime.safety.guards.repeat_tool_reminder import (
+    build_repeat_tool_reminder,
+)
 
 if TYPE_CHECKING:
     from runtime.execution.agents.base import Agent
@@ -592,6 +595,16 @@ def _stream_react_loop_impl(
                 "react_loop accepted %d priority user follow-up(s) at a safe boundary",
                 count,
             )
+            # dsh guard semantics: a user interjection changes the context;
+            # repetition across it is not a loop. Reset the repeat-call chain.
+            _repeat_guard = state.repeat_guard
+            if _repeat_guard is not None:
+                try:
+                    _repeat_guard.reset(
+                        agent_key=state.thread_id or "default",
+                    )
+                except Exception:  # noqa: BLE001 — advisory; never break the turn
+                    _logger.debug("repeat-tool guard reset skipped", exc_info=True)
         return count
 
     from runtime.platform.models.llm import (
@@ -704,7 +717,13 @@ def _stream_react_loop_impl(
     # Reference-typed fields share objects with the locals above;
     # constant scalars are snapshotted here and per-iteration scalars
     # are synced at each extracted-phase call site (currently 6c).
+    # dsh repeat-tool-reminder: one advisory guard per turn (fresh chain
+    # per turn; user follow-ups reset it via _append_pending_live_steering).
+    _repeat_guard = build_repeat_tool_reminder(
+        getattr(intent, "user_context", None) or None,
+    )
     state = _LoopState(
+        repeat_guard=_repeat_guard,
         stack=stack,
         goal=_effective_goal,
         executor=executor,
