@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 五十六个差距点已落地为可测试代码(1-56 节)
+**状态**: 五十七个差距点已落地为可测试代码(1-57 节)
 
 ---
 
@@ -1769,10 +1769,73 @@ id 为稳定 call id,argumentsDelta 为原始 JSON 分片)。
 
 ### 尚未覆盖
 
-- workflow 编排(dsh ``packages/workflow``)、jobs 后台任务、settlement
-  通知事件桥、quiet/wakeup 独立调度器、permission-presets、credential
-  references/identity、ACP 协议、e2b 远端 SpillStore、detached
-  quiescence drain、replay 跨 writer wildcard。
+- jobs 后台任务、settlement 通知事件桥、quiet/wakeup 独立调度器、
+  permission-presets、credential references/identity、ACP 协议、
+  e2b 远端 SpillStore、detached quiescence drain、replay 跨 writer
+  wildcard。
+
+## 57. 动态工作流 — 模型编写编排脚本扇出子代理(dsh workflow 族)
+
+dsh ``packages/workflow`` 四件套(seam / worker-thread 引擎 /
+``tool-workflow`` / ``tool-ralph``)的核心移植:模型用一门**受限脚本
+词汇**编写编排,``agent()`` 扇出子代理,``phase()``/``log()`` 汇报
+进度,``parallel()``/``pipeline()`` 组合并发,脚本 ``return`` 一个
+JSON 值。新增 ``runtime/execution/workflow/`` 包 + 模型面
+``workflow`` 技能(``suckers/workflow_skill.py``)。
+
+- **契约层**(``types.py`` / ``meta.py`` / ``realm.py``):seam 词汇
+  (meta/result/stop-reason/run-info/agent-info/error-code 全量)、
+  ``validate_meta`` 逐条报违反(META_INVALID,含未知字段)、AST 契约
+  校验(SCRIPT_PARSE 同步抛出:禁 import/class/生成器/async 迭代,属性
+  访问仅放行非 dunder 名,``x.__class__`` 类内省静态拒绝;顶层
+  ``meta = {...}`` 语句给指向性报错)。执行 globals 只挂
+  ``agent/phase/log/parallel/pipeline`` + ``args``,``__builtins__``
+  钉死为白名单(无 open/import/eval/getattr/vars/type)。
+- **执行**(``worker.py`` + ``protocol.py``):每 run 一个**子进程**
+  (``python -m runtime.execution.workflow.worker``),stdin/stdout
+  JSONL 协议;脚本经 ``async def __workflow_main()`` 包装后受限
+  exec,钩子即 async RPC。子进程边界是真正的隔离层,AST 契约是词汇
+  层——与 dsh「worker 只是 containment 非安全边界」的立场一致但更
+  硬(进程+AST 双保险)。
+- **引擎**(``engine.py``):``start()`` 同步校验(meta/脚本解析/限额/
+  cap 上限)后返回 holder-owned ``WorkflowRun``,``result`` 永不
+  reject;``cancel(reason)`` 有界宽限后 force-settle 并终止进程;
+  ``dispose()`` 幂等。同步切片超时(默认 5s,首个协议行前无输出即
+  杀进程,对应 dsh vm syncTimeoutMs)、AGENT_CAP/ITEM_CAP/并发槽
+  FIFO、RESULT_UNSERIALIZABLE、``agent-started``/``agent-response``
+  双消息让子代理开始即发 agent-start 事件(进度真实)。worker 意外
+  死亡以 host 观测的 agentsStarted 降级 settle。
+- **失败纪律**:``WorkflowError.fatal`` + ``is_fatal_workflow_error``
+  ——``parallel()``/``pipeline()`` 对致命错误(坏选项/限额/基础设施
+  故障)整体重抛,普通子代理失败与普通 stage 抛错只把**该项**置
+  ``None``;``agent()`` 普通失败返回 None(脚本 filter),基础设施
+  故障(``AGENT_START``)致命。``provider`` 选项映射 octopus 子代理
+  role、``model`` 映射子代理 model、``schema`` 走 call_subagent
+  structured output。
+- **模型面**:``workflow`` 技能(``skill://public/workflow``,group
+  ``workflow``,system 类),输入 ``script/meta/args/max_total_agents``,
+  输出 ``{runId, agentsStarted, result}``;进度经
+  ``_emit_orchestration_progress`` 流入既有编排进度泳道。注册进
+  ``all_skills`` 目录(_CATALOG / _GROUP_REGISTRARS / LOCAL /
+  SYSTEM 四处同步)。
+- 测试:``tests/test_workflow_engine.py`` 25 例——同步校验 4、词汇
+  happy path(phase/log/parallel/pipeline/args/事件序列)、schema 子
+  代理、普通失败→None、致命经 parallel 传播、parallel/pipeline 单项
+  null、双限额、并发槽峰值、RESULT_UNSERIALIZABLE、取消(中途/提前)
+  、同步超时、observer 容错、dispose 幂等、技能注册/校验错误、
+  真实 call_subagent 桥。ruff + invariant 干净,关联回归 100+ 项全绿。
+
+### 尚未覆盖
+
+- tool-ralph(fixed fresh-agent 循环)与 workflow 事件落 journal/前端
+  时间线(进度泳道已有,结构化 workflow/* 记录待接);脚本跨
+  ``provider`` 的 registry backend 路由(当前 provider→role);
+  abort signal 桥接(技能契约无 signal);dsh 的 meta 展示卡
+  (presentCall/presentResult 渲染)。
+- jobs 后台任务、settlement 通知事件桥、quiet/wakeup 独立调度器、
+  permission-presets、credential references/identity、ACP 协议、
+  e2b 远端 SpillStore、detached quiescence drain、replay 跨 writer
+  wildcard。
 
 ## 用法速查
 

@@ -94,6 +94,9 @@ from runtime.execution.suckers.skill_library_skills import (
 from runtime.execution.suckers.web_skills import (
     register_web_skills as _register_web,
 )
+from runtime.execution.suckers.workflow_skill import (
+    register_workflow_skills as _register_workflow,
+)
 from runtime.execution.suckers.write_skills import (
     register_code_quality_skills as _register_code_quality,
 )
@@ -279,6 +282,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
     # to each other. Counts as 1 against the per-turn delegation
     # budget regardless of N.
     "call_agent_parallel": {"group": "delegation", "atomic": False},
+    # ``workflow`` runs a model-authored orchestration script that fans out
+    # subagents (agent/phase/log/parallel/pipeline) and returns a JSON value.
+    "workflow": {"group": "workflow", "atomic": False},
     # ── blackboard (turn-scoped shared state for multi-agent) ─
     # Substrate for parallel sub-agents to exchange findings.
     # Atomic-safe (no I/O outside in-process dict).
@@ -401,6 +407,7 @@ _GROUP_REGISTRARS: dict[str, Callable[[SkillRegistry], Any]] = {
     "agent_meta": _register_agent_meta,
     "ask_user": _register_ask_user_question,
     "delegation": _register_delegation,
+    "workflow": _register_workflow,
     "blackboard": _register_blackboard,
     "kimi_compat": _register_kimi_compat,
     "skill_library": _register_skill_library,
@@ -433,6 +440,7 @@ LOCAL_SKILL_GROUPS: frozenset[str] = frozenset(
         "agent_meta",
         "ask_user",
         "delegation",
+        "workflow",
         "blackboard",
         "skill_library",
         "code_intel",
@@ -643,6 +651,7 @@ _SYSTEM_GROUPS: frozenset[str] = frozenset(
         "mode",
         "agent_meta",
         "delegation",
+        "workflow",
         "blackboard",
         "skill_library",
         "code_intel",
