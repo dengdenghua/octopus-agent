@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from .tool_output_pruner import ToolResultPrunePolicy, prune_tool_result_text
+from .tool_output_spill import maybe_spill_text
+
 ToolCallOrigin = Literal["native", "react_compat", "planner_compat", "direct"]
 ToolLifecycleKind = Literal["tool_start", "tool_end"]
 
@@ -241,8 +244,26 @@ def output_signals_error(output: Any) -> bool:
     return bool(isinstance(status, str) and status.lower() in ("error", "failed", "failure"))
 
 
-def render_tool_output(output: Any, *, max_chars: int | None = None) -> str:
-    """Render arbitrary tool output into a bounded string."""
+def render_tool_output(
+    output: Any,
+    *,
+    max_chars: int | None = None,
+    prune_middle: bool = False,
+    prune_policy: ToolResultPrunePolicy | None = None,
+    spill_oversized: bool = False,
+    spill_tool_name: str | None = None,
+) -> str:
+    """Render arbitrary tool output into a bounded string.
+
+    ``prune_middle`` (off by default) applies dsh-style head/marker/tail
+    pruning before the legacy ``max_chars`` head truncation, so callers can opt
+    into keeping both ends of a long tool result instead of only the head.
+    ``spill_oversized`` (off by default) applies the dsh spill policy first:
+    an over-cap plain-text result is saved to a session-scoped spill file and
+    replaced with a bounded head/tail preview plus a locator, so the model can
+    read the full output on demand instead of losing the middle. When the
+    spill replacement fits the cap, the pruner below is a no-op.
+    """
     if isinstance(output, str):
         rendered = output
     else:
@@ -252,6 +273,23 @@ def render_tool_output(output: Any, *, max_chars: int | None = None) -> str:
             rendered = json.dumps(output, ensure_ascii=False, default=str)
         except (TypeError, ValueError):
             rendered = repr(output)
+
+    if spill_oversized:
+        # The call-site gate (``TOOL_RESULT_SPILL_ENABLED``) already applied the
+        # master switch; inside the render funnel the policy is explicitly on so
+        # the switch lives in exactly one place.
+        spilled = maybe_spill_text(
+            rendered,
+            tool_name=spill_tool_name or "tool",
+            enabled=True,
+        )
+        if spilled is not None:
+            rendered = spilled
+
+    if prune_middle:
+        pruned = prune_tool_result_text(rendered, policy=prune_policy)
+        if pruned is not None:
+            rendered = pruned
 
     if max_chars is not None and max_chars >= 0 and len(rendered) > max_chars:
         rendered = (
@@ -269,6 +307,10 @@ def normalize_tool_result(
     error_type: str | None = None,
     origin: ToolCallOrigin = "direct",
     max_chars: int | None = None,
+    prune_middle: bool = False,
+    prune_policy: ToolResultPrunePolicy | None = None,
+    spill_oversized: bool = False,
+    spill_tool_name: str | None = None,
 ) -> NormalizedToolResult:
     """Convert tool output into the shared result envelope."""
     normalized_call = normalize_tool_call(call, origin=origin)
@@ -278,7 +320,14 @@ def normalize_tool_result(
         id=normalized_call.id,
         name=normalized_call.name,
         output=output,
-        rendered=render_tool_output(output, max_chars=max_chars),
+        rendered=render_tool_output(
+            output,
+            max_chars=max_chars,
+            prune_middle=prune_middle,
+            prune_policy=prune_policy,
+            spill_oversized=spill_oversized,
+            spill_tool_name=spill_tool_name,
+        ),
         is_error=bool(is_error),
         status=status,
         error_type=error_type,
@@ -292,6 +341,10 @@ def normalize_step_tool_result(
     origin: ToolCallOrigin = "direct",
     max_chars: int | None = None,
     fallback_call: Any | None = None,
+    prune_middle: bool = False,
+    prune_policy: ToolResultPrunePolicy | None = None,
+    spill_oversized: bool = False,
+    spill_tool_name: str | None = None,
 ) -> NormalizedToolResult:
     """Convert an execution ``Step`` into the shared result envelope."""
     action = getattr(step, "action", None) or fallback_call
@@ -304,6 +357,10 @@ def normalize_step_tool_result(
         error_type=getattr(result, "error_type", None),
         origin=origin,
         max_chars=max_chars,
+        prune_middle=prune_middle,
+        prune_policy=prune_policy,
+        spill_oversized=spill_oversized,
+        spill_tool_name=spill_tool_name,
     )
 
 

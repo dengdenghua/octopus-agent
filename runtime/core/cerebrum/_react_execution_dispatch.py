@@ -33,6 +33,16 @@ _VERIFY_SKILLS = frozenset(
 )
 TOOL_OBSERVATION_MAX_CHARS = 16000
 
+# dsh tool-result pruner master switch lives in tool_output_pruner.py;
+# this local alias keeps the react-loop call sites (and their tests) on
+# one name while the native tool bridge shares the same flag.
+from runtime.execution.tool_engine.tool_output_pruner import (  # noqa: E402
+    TOOL_RESULT_PRUNE_ENABLED as TOOL_RESULT_PRUNE_MIDDLE,
+)
+from runtime.execution.tool_engine.tool_output_spill import (  # noqa: E402
+    TOOL_RESULT_SPILL_ENABLED,
+)
+
 
 def _output_indicates_command_failure(output: Any) -> bool:
     """Return True when a command-like tool ran but the command failed."""
@@ -245,6 +255,9 @@ def _execute_action_via_beak(
         origin="react_compat",
         max_chars=TOOL_OBSERVATION_MAX_CHARS,
         fallback_call=call,
+        prune_middle=TOOL_RESULT_PRUNE_MIDDLE,
+        spill_oversized=TOOL_RESULT_SPILL_ENABLED,
+        spill_tool_name=skill_name,
     )
     status = normalized_result.status
     output = normalized_result.output
@@ -257,6 +270,9 @@ def _execute_action_via_beak(
             error_type="non_zero_exit",
             origin="react_compat",
             max_chars=TOOL_OBSERVATION_MAX_CHARS,
+            prune_middle=TOOL_RESULT_PRUNE_MIDDLE,
+            spill_oversized=TOOL_RESULT_SPILL_ENABLED,
+            spill_tool_name=skill_name,
         )
         return (
             "(tool failed) status=command_failed error=non_zero_exit\n"
