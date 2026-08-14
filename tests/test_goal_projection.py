@@ -16,6 +16,7 @@ from runtime.memory.goals import (
     GoalService,
     GoalTimelineEntry,
     derive_goal_timeline,
+    page_goal_timeline,
 )
 from runtime.memory.journal import InMemoryJournal, Journal
 from runtime.memory.journal._journal_models import GoalChangeEvent
@@ -244,12 +245,8 @@ def test_timeline_scopes_across_writers() -> None:
     svc_a.create("A 的目标")
     svc_b.create("B 的目标")
 
-    assert [e.objective for e in derive_goal_timeline(journal, agent_id="agent-a")] == [
-        "A 的目标"
-    ]
-    assert [e.objective for e in derive_goal_timeline(journal, agent_id="agent-b")] == [
-        "B 的目标"
-    ]
+    assert [e.objective for e in derive_goal_timeline(journal, agent_id="agent-a")] == ["A 的目标"]
+    assert [e.objective for e in derive_goal_timeline(journal, agent_id="agent-b")] == ["B 的目标"]
     assert len(derive_goal_timeline(journal)) == 2
 
 
@@ -285,3 +282,55 @@ def test_timeline_tombstone_without_create_still_archives() -> None:
     assert entries[0].final_phase == "cleared"
     assert entries[0].final_revision == 3
     assert entries[0].cleared_at == 100
+
+
+def test_timeline_pages_with_cursor_and_limit() -> None:
+    journal = InMemoryJournal()
+    svc = GoalService(journal)
+    for i in range(5):
+        svc.create(f"目标-{i}")
+        svc.complete()
+
+    page1 = page_goal_timeline(journal, limit=2)
+    assert [e.objective for e in page1["entries"]] == ["目标-0", "目标-1"]
+    assert page1["has_more"] is True
+    assert page1["next_cursor"] == page1["entries"][-1].goal_id
+
+    page2 = page_goal_timeline(journal, cursor=page1["next_cursor"], limit=2)
+    assert [e.objective for e in page2["entries"]] == ["目标-2", "目标-3"]
+    assert page2["has_more"] is True
+
+    page3 = page_goal_timeline(journal, cursor=page2["next_cursor"], limit=2)
+    assert [e.objective for e in page3["entries"]] == ["目标-4"]
+    assert page3["has_more"] is False
+    assert page3["next_cursor"] is None
+
+    # limit clamped to [1, 200]
+    assert len(page_goal_timeline(journal, limit=9999)["entries"]) == 5
+    assert len(page_goal_timeline(journal, limit=0)["entries"]) == 1
+    assert len(page_goal_timeline(journal, limit=-3)["entries"]) == 1
+
+
+def test_timeline_pages_respect_scope_and_unknown_cursor() -> None:
+    journal = StreamingJournal(InMemoryJournal())
+    svc_a = GoalService(journal, agent_id="agent-a")
+    svc_b = GoalService(journal, agent_id="agent-b")
+    for i in range(3):
+        svc_a.create(f"A-{i}")
+        svc_a.complete()
+    svc_b.create("B-唯一")
+    svc_b.complete()
+
+    # Scope filter applies to paging.
+    scoped = page_goal_timeline(journal, agent_id="agent-a", limit=2)
+    assert [e.objective for e in scoped["entries"]] == ["A-0", "A-1"]
+    assert scoped["has_more"] is True
+    assert [e.objective for e in page_goal_timeline(journal, agent_id="agent-b")["entries"]] == [
+        "B-唯一"
+    ]
+
+    # An unknown cursor yields an empty page (caller restarted / log changed).
+    empty = page_goal_timeline(journal, cursor="missing-goal-id", limit=2)
+    assert empty["entries"] == []
+    assert empty["has_more"] is False
+    assert empty["next_cursor"] is None

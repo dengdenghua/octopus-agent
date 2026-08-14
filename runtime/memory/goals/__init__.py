@@ -32,6 +32,7 @@ from .projection import (
     GoalProjectionCache,
     GoalTimelineEntry,
     derive_goal_timeline,
+    page_goal_timeline,
 )
 from .service import GoalChanged, GoalService
 
@@ -48,6 +49,7 @@ __all__ = [
     "GoalChanged",
     "GoalService",
     "derive_goal_timeline",
+    "page_goal_timeline",
     "GoalSnapshot",
     "apply_goal_change",
     "apply_goal_event",

@@ -147,6 +147,47 @@ def derive_goal_timeline(
     return [GoalTimelineEntry(**by_id[goal_id]) for goal_id in order]
 
 
+def page_goal_timeline(
+    journal: Any,
+    *,
+    agent_id: str | None = None,
+    conversation_id: str | None = None,
+    cursor: str | None = None,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Paged view over ``derive_goal_timeline`` (dsh paged goal surface).
+
+    The full timeline is derived once (the archive is inherently an O(n)
+    scan — a goal's identity spans the whole log), but the *response* is
+    bounded: callers page by ``cursor`` (the last ``goal_id`` served,
+    exclusive) instead of receiving every archived goal at once. Useful for
+    large logs / many goals, matching dsh's paged/streamed goal surface.
+
+    ``limit`` is clamped to [1, 200]. Returns ``{entries, next_cursor,
+    has_more}``; ``next_cursor`` is ``None`` when there is no next page.
+    """
+
+    entries = derive_goal_timeline(
+        journal,
+        agent_id=agent_id,
+        conversation_id=conversation_id,
+    )
+    try:
+        limit_int = max(1, min(int(limit), 200))
+    except (TypeError, ValueError):
+        limit_int = 20
+    if cursor is not None:
+        index = next((i for i, e in enumerate(entries) if e.goal_id == cursor), None)
+        entries = entries[index + 1 :] if index is not None else []
+    page = entries[:limit_int]
+    has_more = len(entries) > limit_int
+    return {
+        "entries": page,
+        "next_cursor": page[-1].goal_id if has_more else None,
+        "has_more": has_more,
+    }
+
+
 class GoalProjectionCache:
     """Seed-once, advance-incrementally fold of one scope's goal changes."""
 
@@ -256,4 +297,10 @@ class GoalProjectionCache:
         )
 
 
-__all__ = ["GoalProjection", "GoalProjectionCache", "GoalTimelineEntry", "derive_goal_timeline"]
+__all__ = [
+    "GoalProjection",
+    "GoalProjectionCache",
+    "GoalTimelineEntry",
+    "derive_goal_timeline",
+    "page_goal_timeline",
+]

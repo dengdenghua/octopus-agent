@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 五十一个差距点已落地为可测试代码(1-51 节)
+**状态**: 五十二个差距点已落地为可测试代码(1-52 节)
 
 ---
 
@@ -1319,7 +1319,8 @@ durable tombstone 与 history。本轮从 append-only ``goal_change`` 行
 ### 尚未覆盖(dsh 有而这里没有)
 
 - 目标历史的分页读取:时间线目前全量派生,大日志多目标时无分页游标;
-  单会话目标数量天然有限,列为后续。
+  单会话目标数量天然有限,列为后续。(已由第 52 节收口:
+  ``page_goal_timeline`` 提供 cursor 分页读面。)
 
 ## 44. 回合内注入 per-turn 预算(防报告刷屏的生产收口)
 
@@ -1560,6 +1561,29 @@ dsh 的 hooks 家族把 Claude Code / Codex 的 ``hooks.json`` 方言桥接到
   接通即生效。
 - detached 运行链的 quiescence drain(dsh ``createDetachedRuns``)。
 
+## 52. goal 时间线分页读取(`page_goal_timeline`)
+
+第 43 节的时间线归档全量派生、无分页游标,大日志多目标时客户端一次
+拿到全部历史目标(23/32/42 都提过的「goal 分页/流式 surface」)。本轮
+补上 dsh 语义的分页读面:
+
+- ``goals/projection.page_goal_timeline(journal, *, agent_id=None,
+  conversation_id=None, cursor=None, limit=20)``:内部复用
+  ``derive_goal_timeline``(归档本质上是对全日志的一次 O(n) 扫描——
+  一个目标的身份横跨整份日志,无法提前截断),但**响应体有界**:调用方
+  用 ``cursor``(上一页最后一个 ``goal_id``,exclusive)翻页,返回
+  ``{entries, next_cursor, has_more}``。
+- 边界:``limit`` 钳到 [1,200];未知 cursor 返回空页(调用方重启/日志
+  已变,不 crash);scope 过滤与 ``derive_goal_timeline`` 一致(按
+  agent/conversation);``next_cursor`` 在无下一页时为 ``None``。
+- 导出:``projection.__all__`` 与 ``goals/__init__.py`` 均增
+  ``page_goal_timeline``。
+- 测试:``tests/test_goal_projection.py`` 新增 2 用例(5 目标按 limit=2
+  三页翻完、has_more/next_cursor 语义、limit 钳制、scope 过滤、未知
+  cursor 空页);goal projection/domain/invariant 共 80 项通过,
+  ruff/invariant 干净。
+
+## 用法速查
 ## 用法速查
 
 ```bash
