@@ -1558,8 +1558,13 @@ dsh 的 hooks 家族把 Claude Code / Codex 的 ``hooks.json`` 方言桥接到
 
 ### 尚未覆盖(dsh 有而这里没有)
 
-- ``hook/invoked`` + ``hook/result`` 会话日志事件:dsh 把每次钩子调用
-  落进 session 日志(带 stderr 摘要截断);我们尚未写事件行。
+- ``hook/invoked`` + ``hook/result`` 会话日志事件已收口:每次外部
+  command 钩子运行都会落一对日志行 —— invoked 带 point/dialect/
+  handler_id/matcher(``codex:PreToolUse:N`` 计数器保证并发不撞),result
+  带 decision(解析决策,无则 ``pass``)/exitCode/stderrSummary(trim +
+  500 字符截断带省略号)/durationMs,按 handler_id 配对;仅当钩子携带
+  运行时 session 且绑定 journal 时写入(dsh ``session && turn`` 守卫),
+  纯 log-only 不参与 surface 投影。
 - ``dispatch_stop`` / ``dispatch_session_start`` 仍无生产调用方(网关
   生命周期接线,与 ``on_report`` 同属热区);桥已注册处理器,触发点
   接通即生效。

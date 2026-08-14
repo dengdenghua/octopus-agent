@@ -52,6 +52,8 @@ JournalEventType = Literal[
     "goal_change",
     "user/message",
     "assistant/chunk",
+    "hook/invoked",
+    "hook/result",
 ]
 
 
@@ -396,6 +398,49 @@ class AssistantChunkEvent(JournalEvent):
     iteration: int = 0
     kind: str = "text-delta"
     delta: str = ""
+
+
+class HookInvokedEvent(JournalEvent):
+    """One external command hook invocation (dsh ``hook/invoked``).
+
+    Log-only audit row, not a surface event: names the hook point
+    (``PreToolUse`` / ``Stop`` / …), the bridge dialect that ran it, and a
+    stable ``handler_id`` that correlates it with the paired
+    :class:`HookResultEvent`. ``matcher`` is omitted when the hook matched
+    all (dsh omits the field for match-all). ``turn_id`` ties the pair to
+    the runtime turn whose lifecycle fired the hook; ``session_id`` is the
+    runtime session id from the hook payload.
+    """
+
+    event_type: Literal["hook/invoked"] = "hook/invoked"
+    session_id: str = ""
+    turn_id: str = ""
+    point: str = ""
+    dialect: str = ""
+    handler_id: str = ""
+    matcher: str | None = None
+
+
+class HookResultEvent(JournalEvent):
+    """The durable outcome paired with :class:`HookInvokedEvent` (dsh
+    ``hook/result``).
+
+    ``decision`` is the decoded hook decision, ``stop`` when the hook asked
+    to halt, else ``pass`` (dsh ``appendHookResult``); ``exit_code`` is
+    omitted when the process never produced one (infra fault / timeout);
+    ``stderr_summary`` is trimmed and capped at the bridge's
+    ``stderrSummaryMaxChars``; ``duration_ms`` is the wall-clock run time.
+    """
+
+    event_type: Literal["hook/result"] = "hook/result"
+    session_id: str = ""
+    turn_id: str = ""
+    point: str = ""
+    handler_id: str = ""
+    decision: str = ""
+    exit_code: int | None = None
+    stderr_summary: str | None = None
+    duration_ms: int = 0
 
 
 class SubTextDeltaEvent(JournalEvent):

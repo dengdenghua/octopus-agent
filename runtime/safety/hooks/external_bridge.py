@@ -33,7 +33,9 @@ import logging
 import os
 import re
 import subprocess
+import time
 from dataclasses import dataclass
+from itertools import count
 from pathlib import Path
 from typing import Any, Literal
 
@@ -55,6 +57,9 @@ HookDialect = Literal["claude-code", "codex"]
 DEFAULT_HOOK_TIMEOUT_S = 600.0
 # dsh ``BLOCKING_EXIT_CODE`` — exit 2 blocks with stderr as the reason.
 BLOCKING_EXIT_CODE = 2
+# dsh ``DEFAULT_STDERR_SUMMARY_MAX_CHARS`` — cap for the durable
+# ``hook/result`` stderr summary (both bridges' config default).
+DEFAULT_STDERR_SUMMARY_MAX_CHARS = 500
 
 _EVENT_TYPES = {
     "UserPromptSubmit": UserPromptSubmitEvent,
@@ -87,12 +92,34 @@ class ExternalHookOutput:
     """Neutral decoded outcome of one hook run (dsh ``HookOutput``)."""
 
     decision: str | None = None  # "allow" | "deny" | "ask" | "block" | "approve"
+    exit_code: int | None = None
     reason: str = ""
     modified_prompt: str | None = None
     modified_input: dict[str, Any] | None = None
     additional_directives: str | None = None
     stdout: str = ""
     stderr_summary: str = ""
+
+
+# One stable per-invocation id so a ``hook/invoked``/``hook/result`` pair
+# correlates in the log (dsh ``nextHandlerId``). ``itertools.count`` next()
+# is atomic, so concurrent hook runs never collide.
+_handler_counter = count(1)
+
+
+def _next_handler_id(point: str, dialect: HookDialect) -> str:
+    return f"{dialect}:{point}:{next(_handler_counter)}"
+
+
+def summarize_stderr(stderr: str, max_chars: int = DEFAULT_STDERR_SUMMARY_MAX_CHARS) -> str | None:
+    """Trimmed stderr for ``hook/result``; ``None`` when blank, capped with
+    an ellipsis when over (dsh ``summarizeStderr``)."""
+    text = (stderr or "").strip()
+    if not text:
+        return None
+    if len(text) > max_chars:
+        return text[:max_chars] + "…"
+    return text
 
 
 # ── Matchers (dsh ``matcherDiagnostic`` / ``matchesMatcher``) ──────────────
@@ -147,22 +174,27 @@ def parse_hook_output(
     if exit_code == BLOCKING_EXIT_CODE:
         return ExternalHookOutput(
             decision="block",
+            exit_code=exit_code,
             reason=trimmed_err or "hook blocked (exit 2)",
             stdout=trimmed_out,
             stderr_summary=trimmed_err,
         )
     if exit_code != 0:
         # Non-blocking infra / script error (dsh keeps the turn alive).
-        return ExternalHookOutput(stdout=trimmed_out, stderr_summary=trimmed_err)
+        return ExternalHookOutput(
+            exit_code=exit_code,
+            stdout=trimmed_out,
+            stderr_summary=trimmed_err,
+        )
     if not trimmed_out:
-        return ExternalHookOutput()
+        return ExternalHookOutput(exit_code=exit_code, stderr_summary=trimmed_err)
     try:
         parsed = json.loads(trimmed_out)
     except json.JSONDecodeError:
         # Malformed JSON on a clean exit = no structured output (lenient).
-        return ExternalHookOutput(stdout=trimmed_out)
+        return ExternalHookOutput(exit_code=exit_code, stdout=trimmed_out)
     if not isinstance(parsed, dict):
-        return ExternalHookOutput(stdout=trimmed_out)
+        return ExternalHookOutput(exit_code=exit_code, stdout=trimmed_out)
 
     # Legacy top-level decision is approve/block ONLY; permissionDecision
     # (allow/deny/ask) overrides it when present.
@@ -185,6 +217,7 @@ def parse_hook_output(
         directives = None
     return ExternalHookOutput(
         decision=decision,
+        exit_code=exit_code,
         reason=reason,
         modified_prompt=modified_prompt,
         modified_input=modified_input,
@@ -410,6 +443,83 @@ def _decision_from_output(
     return HookDecision.pass_through()
 
 
+def _journal_hook_pair(
+    *,
+    session: Any,
+    point: str,
+    dialect: HookDialect,
+    handler_id: str,
+    matcher: str,
+    output: ExternalHookOutput,
+    duration_ms: int,
+) -> None:
+    """Best-effort dsh ``hook/invoked`` + ``hook/result`` journal rows.
+
+    The pair is log-only (never a surface event) and written only when the
+    hook's runtime session carries a bound journal — dsh's
+    ``session && opts.turn !== undefined`` guard. ``turn_id`` ties the pair
+    to the runtime turn whose lifecycle fired the hook; stderr is trimmed
+    and capped at ``DEFAULT_STDERR_SUMMARY_MAX_CHARS``; an absent process
+    exit stays omitted. Never raises — telemetry loss must not break hooks.
+    """
+    journal = None
+    meta: dict[str, Any] = {}
+    session_id = ""
+    turn_id = ""
+    if session is not None:
+        session_id = str(
+            getattr(session, "session_id", "")
+            or getattr(session, "id", "")
+            or ""
+        )
+        turn_id = str(getattr(session, "turn_id", "") or "")
+        meta = getattr(session, "metadata", None) or {}
+        if not isinstance(meta, dict):
+            meta = {}
+        journal = meta.get("journal")
+        if journal is None:
+            stack = meta.get("stack")
+            if stack is not None:
+                journal = getattr(stack, "journal", None)
+    if journal is None:
+        return
+    try:
+        from runtime.memory.journal._journal_models import (
+            HookInvokedEvent,
+            HookResultEvent,
+        )
+
+        journal.write(
+            HookInvokedEvent(
+                task_id=meta.get("task_id"),
+                session_id=session_id,
+                turn_id=turn_id,
+                point=point,
+                dialect=dialect,
+                handler_id=handler_id,
+                matcher=matcher or None,
+            )
+        )
+        journal.write(
+            HookResultEvent(
+                task_id=meta.get("task_id"),
+                session_id=session_id,
+                turn_id=turn_id,
+                point=point,
+                handler_id=handler_id,
+                decision=output.decision or "pass",
+                exit_code=output.exit_code,
+                stderr_summary=summarize_stderr(
+                    output.stderr_summary,
+                    DEFAULT_STDERR_SUMMARY_MAX_CHARS,
+                ),
+                duration_ms=duration_ms,
+            )
+        )
+    except (OSError, TypeError, ValueError):  # noqa: BLE001 — best-effort
+        pass
+
+
 def _make_handler(spec: ExternalHookSpec):
     def handler(event: Any) -> HookDecision | None:
         if spec.event in _MATCHER_EVENTS and spec.matcher:
@@ -417,11 +527,24 @@ def _make_handler(spec: ExternalHookSpec):
             if not matches_matcher(spec.matcher, tool_name, spec.dialect):
                 return None
         payload = build_payload(event, spec.event)
+        session = getattr(event, "session", None)
+        handler_id = _next_handler_id(spec.event, spec.dialect)
+        started = time.monotonic()
         output = run_external_hook(
             spec.command,
             payload,
             dialect=spec.dialect,
             timeout_s=spec.timeout_s,
+        )
+        duration_ms = int(round((time.monotonic() - started) * 1000))
+        _journal_hook_pair(
+            session=session,
+            point=spec.event,
+            dialect=spec.dialect,
+            handler_id=handler_id,
+            matcher=spec.matcher,
+            output=output,
+            duration_ms=duration_ms,
         )
         return _decision_from_output(output, event, spec)
 
@@ -486,6 +609,7 @@ def register_external_hooks(
 __all__ = [
     "BLOCKING_EXIT_CODE",
     "DEFAULT_HOOK_TIMEOUT_S",
+    "DEFAULT_STDERR_SUMMARY_MAX_CHARS",
     "ExternalHookOutput",
     "ExternalHookSpec",
     "build_payload",
@@ -497,4 +621,5 @@ __all__ = [
     "parse_hook_output",
     "register_external_hooks",
     "run_external_hook",
+    "summarize_stderr",
 ]

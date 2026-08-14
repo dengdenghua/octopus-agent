@@ -14,6 +14,7 @@ from runtime.safety.hooks.events import (
 )
 from runtime.safety.hooks.external_bridge import (
     BLOCKING_EXIT_CODE,
+    DEFAULT_STDERR_SUMMARY_MAX_CHARS,
     build_payload,
     discover_external_hook_paths,
     load_external_hooks,
@@ -23,6 +24,7 @@ from runtime.safety.hooks.external_bridge import (
     parse_hook_output,
     register_external_hooks,
     run_external_hook,
+    summarize_stderr,
 )
 from runtime.safety.hooks.registry import HookRegistry, get_global_registry
 
@@ -363,3 +365,152 @@ def test_discovery_env_var(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     reg = HookRegistry()
     assert register_external_hooks(registry=reg, paths=None) == 1
     assert reg.handlers_for(UserPromptSubmitEvent)
+
+
+# ─── hook/invoked + hook/result journal pair (dsh appendHookInvoked/Result) ─
+
+
+def test_summarize_stderr_trims_caps_and_blank() -> None:
+    assert summarize_stderr("") is None
+    assert summarize_stderr("   \n ") is None
+    assert summarize_stderr("ok") == "ok"
+    assert summarize_stderr("  ok  ") == "ok"
+    assert summarize_stderr("x" * (DEFAULT_STDERR_SUMMARY_MAX_CHARS + 10)) == (
+        "x" * DEFAULT_STDERR_SUMMARY_MAX_CHARS + "…"
+    )
+
+
+def test_hook_journal_pair_written_for_registered_hook(tmp_path: Path) -> None:
+    from runtime.memory.journal import InMemoryJournal
+    from runtime.memory.journal._journal_models import (
+        HookInvokedEvent,
+        HookResultEvent,
+    )
+    from runtime.platform.process.session import Session
+
+    journal = InMemoryJournal()
+    session = Session(metadata={"journal": journal}, turn_id="turn-9")
+    script = "import sys; print('noise', file=sys.stderr)"
+    path = _write_config(
+        tmp_path,
+        {
+            "PreToolUse": [
+                {
+                    "matcher": "exec_shell",
+                    "hooks": [{"type": "command", "command": _hook_cmd(script)}],
+                }
+            ]
+        },
+    )
+    reg = HookRegistry()
+    assert register_external_hooks(registry=reg, paths=[(path, "codex")]) == 1
+    handlers = reg.handlers_for(PreToolUseEvent)
+    assert len(handlers) == 1
+    handlers[0](PreToolUseEvent(session=session, sucker_id="exec_shell", args={}))
+
+    rows = journal.read_all()
+    assert [e.event_type for e in rows] == ["hook/invoked", "hook/result"]
+    invoked = rows[0]
+    result = rows[1]
+    assert isinstance(invoked, HookInvokedEvent)
+    assert isinstance(result, HookResultEvent)
+    assert invoked.point == "PreToolUse"
+    assert invoked.dialect == "codex"
+    assert invoked.turn_id == "turn-9"
+    assert invoked.matcher == "exec_shell"
+    assert invoked.handler_id.startswith("codex:PreToolUse:")
+    assert result.handler_id == invoked.handler_id
+    assert result.point == "PreToolUse"
+    assert result.decision == "pass"
+    assert result.exit_code == 0
+    assert result.stderr_summary == "noise"
+    assert result.duration_ms >= 0
+
+
+def test_hook_journal_pair_skipped_without_session(tmp_path: Path) -> None:
+    from runtime.memory.journal import InMemoryJournal
+    from runtime.safety.hooks.events import PreToolUseEvent
+
+    journal = InMemoryJournal()
+    path = _write_config(
+        tmp_path,
+        {"PreToolUse": [{"hooks": [{"type": "command", "command": "true"}]}]},
+    )
+    reg = HookRegistry()
+    assert register_external_hooks(registry=reg, paths=[(path, "codex")]) == 1
+    reg.handlers_for(PreToolUseEvent)[0](
+        PreToolUseEvent(session=None, sucker_id="exec_shell", args={})
+    )
+    assert journal.read_all() == []
+
+
+def test_hook_journal_pair_block_decision_and_stderr_cap(tmp_path: Path) -> None:
+    from runtime.memory.journal import InMemoryJournal
+    from runtime.memory.journal._journal_models import HookResultEvent
+    from runtime.platform.process.session import Session
+    from runtime.safety.hooks.events import PostToolUseEvent
+
+    journal = InMemoryJournal()
+    session = Session(metadata={"journal": journal})
+    script = "import sys; sys.stderr.write('x' * 600); sys.exit(2)"
+    path = _write_config(
+        tmp_path,
+        {"PostToolUse": [{"hooks": [{"type": "command", "command": _hook_cmd(script)}]}]},
+    )
+    reg = HookRegistry()
+    assert register_external_hooks(registry=reg, paths=[(path, "codex")]) == 1
+    reg.handlers_for(PostToolUseEvent)[0](
+        PostToolUseEvent(session=session, sucker_id="exec_shell", args={}, output="o")
+    )
+
+    rows = journal.read_all()
+    assert [e.event_type for e in rows] == ["hook/invoked", "hook/result"]
+    assert rows[0].matcher is None  # match-all omits the matcher field
+    result = rows[1]
+    assert isinstance(result, HookResultEvent)
+    assert result.decision == "block"
+    assert result.exit_code == BLOCKING_EXIT_CODE
+    assert result.stderr_summary == "x" * DEFAULT_STDERR_SUMMARY_MAX_CHARS + "…"
+
+
+def test_hook_journal_events_registered_and_roundtrip(tmp_path: Path) -> None:
+    from runtime.memory.journal import JSONLJournal
+    from runtime.memory.journal._journal_models import (
+        HookInvokedEvent,
+        HookResultEvent,
+    )
+    from runtime.memory.journal._journal_parse import _EVENT_CLASSES
+
+    assert _EVENT_CLASSES["hook/invoked"] is HookInvokedEvent
+    assert _EVENT_CLASSES["hook/result"] is HookResultEvent
+    journal = JSONLJournal(tmp_path / "journal.jsonl")
+    journal.write(
+        HookInvokedEvent(
+            session_id="sess-1",
+            turn_id="turn-1",
+            point="PreToolUse",
+            dialect="codex",
+            handler_id="codex:PreToolUse:1",
+            matcher="exec_shell",
+        )
+    )
+    journal.write(
+        HookResultEvent(
+            session_id="sess-1",
+            turn_id="turn-1",
+            point="PreToolUse",
+            handler_id="codex:PreToolUse:1",
+            decision="pass",
+            exit_code=0,
+            stderr_summary="ok",
+            duration_ms=12,
+        )
+    )
+    rows = journal.read_all()
+    assert isinstance(rows[0], HookInvokedEvent)
+    assert isinstance(rows[1], HookResultEvent)
+    assert rows[0].matcher == "exec_shell"
+    assert rows[1].handler_id == "codex:PreToolUse:1"
+    assert rows[1].decision == "pass"
+    assert rows[1].exit_code == 0
+    assert rows[1].duration_ms == 12
