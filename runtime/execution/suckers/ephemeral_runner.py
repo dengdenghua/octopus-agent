@@ -201,8 +201,17 @@ def _handle_report_tool(
         )
         return f"(report failed) {type(exc).__name__}: {exc}", True
     message_id = f"report-{len(session.reports) - 1}"
+    effective = session.reports[-1].delivery if session.reports else "quiet"
+    if effective == "quiet":
+        note = (
+            "Delivered to the parent's report lane, but queued quietly: "
+            "the parent was not woken (the consecutive-wake budget is spent). "
+            "Do not keep reporting — the parent will read this on its next turn."
+        )
+    else:
+        note = "The parent has been woken to read this."
     return (
-        f"Report delivered (messageId={message_id}). "
+        f"Report delivered (messageId={message_id}). {note} "
         "A failed call may still have arrived, so do not blindly repeat it.",
         False,
     )

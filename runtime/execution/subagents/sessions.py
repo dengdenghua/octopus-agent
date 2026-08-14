@@ -44,6 +44,15 @@ MAX_REPORTS_PROMPT_CHARS = 4000
 TRANSCRIPT_PROJECTION_ENABLED = os.environ.get("OCTOPUS_SESSION_REFERENCE_BOUNDED", "0") != "0"
 MAX_TRANSCRIPT_PROJECTION_BYTES = 16000
 
+# dsh ``tool-jobs`` bounded consecutive-wake budget: how many wakeup reports
+# may open a parent turn in a row before the lane goes quiet. Mirrors dsh
+# ``maxConsecutiveWakes`` (default 3): a completion on an idle owner wakes it
+# only while the budget is unspent; once exhausted, further reports are
+# queued as ``quiet`` until the parent claims a human turn and refills the
+# budget. Without it a chatty child could spin an unbounded chain of parent
+# turns between human inputs.
+DEFAULT_MAX_CONSECUTIVE_WAKES = 3
+
 
 def _utc_now_iso() -> str:
     return datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z"
@@ -166,6 +175,7 @@ class SubagentSessionStore:
         base_dir: str | Path | None = None,
         *,
         on_report: Callable[[str, SubagentReport], None] | None = None,
+        max_consecutive_wakes: int | None = None,
     ) -> None:
         self._base_dir: Path | None = None
         if base_dir is not None:
@@ -178,6 +188,23 @@ class SubagentSessionStore:
         # (session_id, report) after a report lands so a parent scheduler can
         # plan a turn. Best-effort — a failing hook never breaks the report.
         self._on_report = on_report
+        # Bounded consecutive-wake budget (dsh ``tool-jobs.maxConsecutiveWakes``).
+        # A wakeup report only opens a parent turn while this budget is unspent;
+        # exhausted wakes drop the report to ``quiet`` until a human turn refills
+        # it. A fraction never names a turn; ``Infinity`` would be unbounded.
+        budget = (
+            DEFAULT_MAX_CONSECUTIVE_WAKES
+            if max_consecutive_wakes is None
+            else max_consecutive_wakes
+        )
+        if not isinstance(budget, int) or isinstance(budget, bool) or budget < 0:
+            raise ValueError(
+                f"SubagentSessionStore: max_consecutive_wakes ({budget!r}) "
+                "must be a non-negative integer"
+            )
+        self._max_consecutive_wakes = budget
+        # Per-session spent wakes since the parent last claimed a human turn.
+        self._spent_wakes: dict[str, int] = {}
 
     def _path_for(self, session_id: str) -> Path | None:
         if self._base_dir is None:
@@ -197,6 +224,7 @@ class SubagentSessionStore:
         )
         with self._lock:
             self._memory[session.session_id] = session
+            self._spent_wakes.pop(session.session_id, None)
             self._write_locked(session)
         return session
 
@@ -281,8 +309,12 @@ class SubagentSessionStore:
 
         ``delivery`` mirrors dsh ``reportDelivery``: ``wakeup`` (default)
         schedules a parent turn via the optional ``on_report`` hook, ``quiet``
-        only adds context the parent sees on its next wake. An empty content
-        is rejected (dsh requires a self-contained result).
+        only adds context the parent sees on its next wake. A ``wakeup`` report
+        still opens a parent turn only while the consecutive-wake budget is
+        unspent (dsh ``maxConsecutiveWakes``); once exhausted it is persisted
+        as ``quiet`` so a chatty child cannot spin an unbounded chain of parent
+        turns. An empty content is rejected (dsh requires a self-contained
+        result).
         """
         if not isinstance(content, str) or not content.strip():
             raise ValueError("subagent report content must be non-empty")
@@ -290,21 +322,44 @@ class SubagentSessionStore:
             session = self.get(session_id)
             if session is None:
                 return None
+            effective_delivery = "wakeup" if delivery != "quiet" else "quiet"
+            wakes = self._spent_wakes.get(session_id, 0)
+            if effective_delivery == "wakeup":
+                if wakes >= self._max_consecutive_wakes:
+                    effective_delivery = "quiet"
+                else:
+                    # The budget is spent the moment we decide to wake — a
+                    # concurrent or repeated report must not re-wake the parent.
+                    # Mirrors dsh ``spentWakes.set(owner, spent + 1)``.
+                    self._spent_wakes[session_id] = wakes + 1
             report = SubagentReport(
                 content=content.strip(),
-                delivery="wakeup" if delivery != "quiet" else "quiet",
+                delivery=effective_delivery,
             )
             session.reports.append(report)
             session.updated_at = _utc_now_iso()
             self._memory[session.session_id] = session
             self._write_locked(session)
             delivered = _copy_session(session)
-        if self._on_report is not None:
+        # A wake fires only when the report actually woke the parent (budget
+        # allowed) — a budget-exhausted downgrade stays quiet.
+        if effective_delivery == "wakeup" and self._on_report is not None:
             try:
                 self._on_report(session_id, report)
             except Exception:  # noqa: BLE001 — notification is best-effort
                 logger.warning("subagent report wakeup hook failed", exc_info=True)
         return delivered
+
+    def refill_wake_budget(self, session_id: str) -> None:
+        """Refill the consecutive-wake budget when the parent claims a human turn.
+
+        dsh refills ``spentWakes`` on ``agent/inbox/claimed`` for a human
+        ``user`` message: a parent that just took real input may be woken again
+        a fresh budget's worth of times. No-op for unknown sessions.
+        """
+        with self._lock:
+            if session_id in self._memory or self._path_for(session_id) is not None:
+                self._spent_wakes.pop(session_id, None)
 
     def pending_reports(
         self,
@@ -509,6 +564,7 @@ def get_subagent_session_store() -> SubagentSessionStore | None:
 
 
 __all__ = [
+    "DEFAULT_MAX_CONSECUTIVE_WAKES",
     "SubagentReport",
     "SubagentSession",
     "SubagentSessionStore",

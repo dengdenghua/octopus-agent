@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 二十四个差距点已落地为可测试代码(1-24 节)
+**状态**: 二十五个差距点已落地为可测试代码(1-25 节)
 
 ---
 
@@ -643,6 +643,43 @@ dsh 的 ``@dsh-session-reference`` 在把**别的会话**的上下文注入当�
 - checkpoint 事件源:当前只把 subagent turn 拍成 dsh surface 事件形状;
   若 executor 主路径也走会话面,应把真实 session journal 事件直接喂给
   投影,而非从 turn 重建。
+## 25. report 唤醒预算 (`subagents/sessions.py` + `suckers/ephemeral_runner.py`)
+
+第 21 节把 ``report`` 工具接进了进程内 runner,但每次 ``wakeup`` 报告都会
+无条件触发父进程唤醒钩子 —— 一个爱汇报的子代理可以在两条人工输入之间
+无限地撬起父回合,形成失控链。dsh 的 ``tool-jobs`` 调度器用
+``maxConsecutiveWakes``(默认 3)约束「每 owner 在最近一次人工输入后由
+插件撬起的连续回合数」,本轮把预算搬过来:
+
+- ``SubagentSessionStore(max_consecutive_wakes=...)``:新增连续唤醒预算
+  (默认 ``DEFAULT_MAX_CONSECUTIVE_WAKES = 3``,``0`` 表示永不唤醒;
+  负值/小数/bool 在构造时报错 —— 坏配置该在启动失败,而不是把每次
+  报告变成错误)。
+- ``append_report(delivery="wakeup")`` 在预算内才真正唤醒:决定唤醒的
+  那一刻(持锁、原子)就把预算扣掉(dsh ``spentWakes.set`` 语义),
+  预算耗尽后该报告降级持久化为 ``quiet``,只排队、不撬父回合;
+  ``quiet`` 报告从不消耗预算。
+- ``refill_wake_budget(session_id)``:父进程认领到人工输入后重置预算
+  (dsh ``agent/inbox/claimed`` + ``source.kind==='user'`` 语义),未知
+  session 为 no-op;``create`` 建新会话时预算也是全新的。
+- runner 反馈闭环:``_handle_report_tool`` 现在把**实际生效**的 delivery
+  告诉子代理 —— 被降级为 quiet 时明确提示「父进程未被唤醒、别继续
+  重复汇报,父进程会在下一回合读到」,避免子代理盲重复。
+- 测试:``tests/test_subagent_report.py`` 新增 7 用例(默认值、连续预算
+  上限与降级、quiet 不耗预算、refill 重置、未知 session no-op、非法
+  预算拒绝、零预算永不唤醒);既有 18 用例与
+  ``tests/test_ephemeral_report_tool.py`` 全部保持绿;回归
+  subagent/ephemeral/session/projection/spill 752 项通过,ruff/invariant
+  干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 忙碌 owner 语义:dsh 区分 owner 空闲(``followup`` 唤醒)与忙碌
+  (``inject`` 排队);我们只有 report 泳道,父回合是否在跑由调度器外部
+  决定,预算只管「连续唤醒次数」,不管 owner 忙碌状态。
+- 弱引用生命周期:dsh 的 ``spentWakes`` 是 ``WeakMap``(session 替换即
+  满预算);我们用 ``dict`` 按 session_id 记,会话结束由调用方决定是否
+  清除。
 ## 用法速查
 
 ```bash
