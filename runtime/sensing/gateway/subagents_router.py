@@ -12,7 +12,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 try:
-    from fastapi import APIRouter, HTTPException, Request
+    from fastapi import APIRouter, HTTPException, Query, Request
     from fastapi.responses import StreamingResponse
 
     FASTAPI_AVAILABLE = True
@@ -20,6 +20,7 @@ except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment,misc]
     HTTPException = None  # type: ignore[assignment,misc]
+    Query = None  # type: ignore[assignment,misc]
     Request = None  # type: ignore[assignment,misc]
     StreamingResponse = None  # type: ignore[assignment,misc]
 
@@ -54,6 +55,14 @@ class SubagentDispatchRequest(BaseModel):
     # Use "tool_allowlist_mode": "all" to grant the full sub-agent
     # tool catalog (caller is asserting it trusts the role for this turn).
     extra_tools: list[str] | None = None
+    # Capabilities the chosen subagent must declare before any runner
+    # work starts; a missing one fails the dispatch loudly (dsh
+    # fail-loud rule) instead of being accepted-then-ignored.
+    requires_capabilities: list[str] | None = None
+    # Durable subagent session to continue (dsh continuable). When set,
+    # the prior transcript is injected and the new turn appends to the same
+    # session; unknown session ids fail loudly before any runner work.
+    continue_session_id: str | None = None
 
 
 _MIN_DISPATCH_TIMEOUT_S = 1
@@ -142,6 +151,38 @@ def create_subagents_router(
         items.sort(key=lambda item: (item["scope"] != "project", item["name"]))
         return {"subagents": items}
 
+    @router.get("/api/subagents/sessions")
+    def list_subagent_sessions(
+        request: Request,
+        query: str = "",
+        target: str = "",
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """List durable sub-agent sessions as mention-autocomplete candidates.
+
+        Backs the host's ``@session:<id>`` / ``@subagent:<id>`` autocomplete
+        (dsh host candidate seam): returns the store's ranked candidates
+        (``sessionId`` / ``label`` / ``createdAt``) filtered by an optional
+        substring ``query``, excluding ``target``. ``limit`` is clamped to
+        [1, 200]. Best-effort — an unavailable store returns an empty list.
+        """
+        _auth(request)  # AUTH-OK: actor-agnostic candidate discovery
+        from runtime.execution.subagents.sessions import get_subagent_session_store
+
+        store = get_subagent_session_store()
+        if store is None:
+            return {"candidates": []}
+        try:
+            limit_int = max(1, min(int(limit), 200))
+        except (TypeError, ValueError):
+            limit_int = 50
+        candidates = store.list_reference_candidates(
+            target_id=target or "",
+            query=query or "",
+            limit=limit_int,
+        )
+        return {"candidates": candidates}
+
     @router.get("/api/subagents/{name}")
     def get_subagent(request: Request, name: str) -> dict[str, Any]:
         _auth(request)  # AUTH-OK: actor-agnostic — subagent definitions are global
@@ -181,6 +222,8 @@ def create_subagents_router(
             context=ctx,
             timeout_s=timeout_s,
             timeout_seconds=float(timeout_s),
+            requires_capabilities=body.requires_capabilities,
+            continue_session_id=body.continue_session_id,
         )
         if not result.get("success"):
             raise HTTPException(400, result.get("error") or "subagent failed")
@@ -243,6 +286,8 @@ def create_subagents_router(
                     timeout_s=timeout_s,
                     timeout_seconds=float(timeout_s),
                     event_emitter=_emitter,
+                    requires_capabilities=body.requires_capabilities,
+                    continue_session_id=body.continue_session_id,
                 )
                 event_queue.put({"type": "result", **result})
             except Exception as exc:  # noqa: BLE001 — surface as terminal event

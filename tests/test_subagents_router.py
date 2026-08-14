@@ -228,3 +228,54 @@ def test_stream_dispatch_preserves_trace_context_in_events(
     assert events[0]["trace"] == {"thread_id": "thread-1", "turn_id": "turn-1"}
     result = next(event for event in events if event.get("type") == "result")
     assert result["trace"] == {"thread_id": "thread-1", "turn_id": "turn-1"}
+
+
+def test_list_subagent_session_candidates(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    from runtime.execution.subagents.sessions import SubagentSessionStore
+
+    store = SubagentSessionStore(base_dir=tmp_path / "s")
+    s1 = store.create(agent_id="researcher", thread_id="t1")
+    s2 = store.create(agent_id="writer", thread_id="t2")
+    monkeypatch.setattr(
+        "runtime.execution.subagents.sessions.get_subagent_session_store",
+        lambda: store,
+    )
+
+    response = _client().get("/api/subagents/sessions")
+    assert response.status_code == 200
+    ids = [c["sessionId"] for c in response.json()["candidates"]]
+    assert s1.session_id in ids
+    assert s2.session_id in ids
+
+
+def test_list_subagent_session_candidates_query_and_target(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from runtime.execution.subagents.sessions import SubagentSessionStore
+
+    store = SubagentSessionStore(base_dir=tmp_path / "s")
+    s1 = store.create(agent_id="researcher", thread_id="t1")
+    s2 = store.create(agent_id="writer", thread_id="t2")
+    monkeypatch.setattr(
+        "runtime.execution.subagents.sessions.get_subagent_session_store",
+        lambda: store,
+    )
+
+    # target excludes one session; query filters by id substring.
+    response = _client().get(
+        "/api/subagents/sessions",
+        params={"target": s1.session_id, "query": s2.session_id[:8]},
+    )
+    assert response.status_code == 200
+    ids = [c["sessionId"] for c in response.json()["candidates"]]
+    assert s1.session_id not in ids
+    assert s2.session_id in ids
+
+    # Missing store → empty candidates, still 200.
+    monkeypatch.setattr(
+        "runtime.execution.subagents.sessions.get_subagent_session_store",
+        lambda: None,
+    )
+    response = _client().get("/api/subagents/sessions")
+    assert response.status_code == 200
+    assert response.json()["candidates"] == []

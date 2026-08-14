@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 三十八个差距点已落地为可测试代码(1-38 节)
+**状态**: 三十九个差距点已落地为可测试代码(1-39 节)
 
 ---
 
@@ -1161,6 +1161,30 @@ turn store。本轮补上 dsh 的会话结果面:每完成一轮 turn 落一条
   进程续会话时会读到。
 - 注入上限:每次 queued 报告都会注入(与 dsh 每个完成通知都 inject
   一致),靠报告工具引导与单条截断防刷屏,没有 per-turn 注入次数预算。
+
+## 39. host 会话候选 API 端点(subagent mention 自动补全后端面)
+
+第 30 节落地了 resolver 的 ``list_candidates`` 与 host ``resolve_mentions``,
+但「前端键入 ``@session:`` 时弹候选」那条路还没接——缺一个后端候选源。
+本轮把 dsh 的 host candidate seam 以 REST 端点补上(纯后端 + 测试,前端
+后续可直接消费,不碰并行进程在改的 UI 组件):
+
+- ``subagents_router.py``:新增 ``GET /api/subagents/sessions``——返回
+  ``{"candidates": [{sessionId, label, createdAt}, ...]}``,由
+  ``SubagentSessionStore.list_reference_candidates`` 按工作目录亲和度
+  排名,支持可选 ``query`` 子串过滤与 ``target`` 排除;``limit`` 钳制到
+  [1, 200];store 不可用返回空列表(200)。路由注册在
+  ``/api/subagents/{name}`` 之前,避免被 path 参数吞掉。
+- 复用现有鉴权(_auth),与 ``list_subagents`` 同为 actor-agnostic 候选
+  发现。
+- 测试:``tests/test_subagents_router.py`` 新增 2 用例(候选列出、
+  query/target 过滤 + store 缺失降级),router 全套 7 用例通过;
+  ruff/invariant 干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 前端交互层:弹候选/选后插入 ``@session:<id>`` token 的 UI 还没做
+  (dsh 的 host autocomplete);端点已就绪,前端可接。
 
 ## 用法速查
 
