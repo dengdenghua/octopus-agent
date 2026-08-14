@@ -1,0 +1,514 @@
+# DeepSeek Harness 移植笔记
+
+**日期**: 2026-08-14
+**来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
+**状态**: 二十个差距点已落地为可测试代码(1-20 节)
+
+---
+
+## 背景
+
+对比 dsh 与 Octopus-Agent 后确认的三个真实差距:
+
+1. **会话日志推导式架构** — dsh 的不变式是「模型可见即入日志」,模型历史、转录、resume 全部从 append-only 会话日志推导。
+2. **OS 级沙箱档位与报告** — dsh 有 read-only / workspace-write / danger-full-access 三档文件效应策略,并如实报告 enforcement 完整度 (full/partial);我们已有 bwrap/Seatbelt 后端但没有档位与报告。
+3. **快照测试文化** — dsh 用 keyless snapshot(真实可运行示例的转录)做回归,我们只有 OpenAPI 快照。
+
+---
+
+## 1. 会话日志推导式 (`runtime/memory/journal/derive.py`)
+
+- `derive_model_messages(journal, *, task_id, user_intent, max_steps)` — 从 `StepEvent` 重建 assistant `tool_use` + user `tool_result` 消息序列,工具结果按 anthropic router 的语义扁平化。
+- `assert_logged_history_reconstructs(...)` — round-trip 断言:写入日志的 step 能推导回相同的 tool_use id / name / input。
+- 用途:审计、resume、测试"模型看到的就是日志记的"。
+- 已知限制:user intent 尚无日志事件类型,由调用方传入;后续新增 `user_message` 事件后可完全自洽。
+
+## 2. 沙箱档位与 enforcement (`runtime/safety/sandboxing/sandbox.py`)
+
+- `SandboxPolicy.mode`: `read-only` | `workspace-write` | `danger-full-access`(默认保持 workspace-write,兼容现有调用)。
+- `Backend.enforcement(policy) -> "full" | "partial" | "none"`:
+  - DirectBackend → none;BubblewrapBackend → full;SeatbeltBackend → partial(读不限制);LandlockBackend → full。
+- read-only 档:bwrap 工作区改 `--ro-bind`;Seatbelt 只保留 `/dev/null` 写;Landlock 无写路径。
+- **LandlockBackend**(新增,Linux 内核 ≥ 5.13):ctypes 直调 landlock syscalls,deny-by-default 文件效应规则,无需 bwrap/setuid;`OCTOPUS_PROCESS_SANDBOX=landlock` 或 auto 回退链 bwrap → landlock → seatbelt。
+- macOS 无法执行 Landlock,transform 逻辑已单测;真实内核执行留待 Linux CI。
+
+## 3. 快照测试基建 (`tests/snapshot_utils.py` + `tests/conftest.py`)
+
+- fixture `snapshot.match(name, data, *, scrub_keys, rebase_map)`:
+  - 默认 compare:`tests/snapshots/<nodeid>.<name>.json`,漂移时报告首个差异路径。
+  - record:`pytest --snapshot-update` 或 `OCTOPUS_SNAPSHOT=record`。
+- 稳定化:ISO 时间戳 / UUID / git SHA → 占位符;耗时与哈希类字段默认剔除;路径前缀可 rebase 为 `{workdir}`。
+- 首个示例:`tests/test_snapshot_bugfix_demo.py` — 确定性 bugfix demo 的 journal 转录 + step 序列快照。
+
+
+---
+
+## 4. DeepSeek 原生 thinking 适配 (`runtime/sensing/model_router/`)
+
+把 dsh 的 DeepSeek 一等公民支持搬进 OpenAI 兼容层,不再走通用降级:
+
+- deepseek profile 标记 `thinking_request_style="deepseek"`,兼容分不再按"非 OpenAI 风格"扣分(94,与 generic 持平;原生风格之前的扣分已移除)。
+- **请求归一化**(`openai_compat_providers._normalize_deepseek_thinking`):
+  - `reasoning_effort: off` → `thinking: {type: disabled}`(DeepSeek 拒绝 `off` 作为 effort 值,必须显式关闭);
+  - `high` / `max` → `thinking: {type: enabled}` + 原值保留;
+  - OpenAI 风格 effort(minimal/low/medium/xhigh)自动映射进 DeepSeek 词汇(低档升到 high、xhigh 升到 max),不会 400;
+  - 未知 effort 丢弃,显式 thinking 优先。
+- **响应侧**(已有,复用):`reasoning_content` 提取 + `<think>` 标签分割 + 流式 reasoning 通道。
+- 配置:自定义入口 `thinking_request_style: deepseek` 可选。
+- 用法:调用方照常传 `reasoning_effort`(任意风格),DeepSeek 路由自动归一化;想关 thinking 传 `reasoning_effort: off`。
+
+### 默认 effort 选择器(已落地)
+
+- `default_reasoning_effort(model)`(`runtime/platform/models/llm.py`):内置名称模式给
+  `deepseek-v4*` / `deepseek-reasoner` 默认 `high`(V4 默认思考),其余模型无默认。
+- 配置覆盖:`custom_models.json` 条目可声明 `default_reasoning_effort: off|high|max`,
+  `none` 表示禁用注入(连内置默认一起关)。
+- 注入点:`/v1/chat/completions` gateway 与 realtime 流式驱动,调用方不传时自动补默认;
+  显式传入(包括 `off`)永远优先。
+- `off` 保真链路:gateway 放行 `off` → react bootstrap 保留 → openai_router 对 deepseek
+  profile 直发 `off`(normalize 转 `thinking:{type:disabled}`),对非 deepseek profile
+  不发任何 thinking 字段,避免把 `off` 误映射成 `high` 或 400。
+
+## 5. 工具输出契约 + 四阶段管线 (`runtime/execution/arms/tool_registry.py`)
+
+把 dsh 的 ToolDefinition 契约搬进 MCP 风格注册表,全部字段可选、向后兼容:
+
+- **canonical 输出契约**:`output_schema`(JSON Schema,成功值强制校验,含 required /
+  标量类型 / 字符串数组)+ `render(args, value)` 纯投影——宿主始终拿到规范值,
+  模型侧通过 `materialize(result, args)` 拿到投影;`get_tool_schema()` 是显式白名单,
+  output/timeout/并发/render/finalize 等宿主字段绝不泄漏进模型请求,
+  `get_tool_metadata()` 单独暴露宿主元数据。
+- **四阶段管线**:`on_pre_execute`(allow/deny/ask 决策链,deny 短路,ask 无审批回调
+  转拒绝)→ `on_execute`(around-dispatch wrapper 链 + `timeout_ms` 协作超时,
+  `asyncio.wait_for` 取消,超时标记 `` timed out ``)→ `on_post_execute`
+  (accept/replace/block,block 短路)→ `on_result`(最终观察)。
+  旧 `on_will_call_tool` / `on_did_call_tool` emit 钩子原样保留。
+- **最后一英里**:`finalize_content(result)` 每个归一化结果(含失败路径)恰好执行一次,
+  返回 `None` 保留原内容。
+- **显式并发**:`is_concurrency_safe(args)` 纯分类器,`concurrency_safe_tools()` 供批处理
+  层枚举;同步/异步回调都支持(`_maybe_await`)。
+- 测试:`tests/test_tool_registry_pipeline.py`(25 用例:白名单、决策链、超时、改写/阻止、
+  契约校验、投影、finalize、并发声明、旧钩子兼容)。
+
+## 6. Per-agent Scope 隔离 (`tool_registry.py` + `capability_catalog.py`)
+
+dsh `scope.md` 的「全局层 + scope 层 shadow」语义:
+
+- `register_tool(..., scope=...)` 把工具注册进命名 scope 层;同 scope 重名拒绝,
+  与全局同名允许(shadow 是特性)。
+- 解析(`_resolve_tool`)/ 可见集(`tool_names_for`)/ schema 白名单
+  (`get_tool_schema`/`get_all_tool_schemas`)/ 调用(`call_tool`)/ 投影/并发查询
+  全部接受 `scope`;scope 层 shadow 全局层,合并序 = 全局插入序 + scope 层。
+- `dispose_scope(scope)` 整层回收,全局不受影响;无 scope 时行为与旧契约完全一致。
+- 能力目录接入:`build_capability_catalog(..., tool_scope=...)` 按 agent 过滤工具,
+  UI 可按 agent 查看其能力集。
+- 测试:scope 6 用例(可见性、shadow、合并序、回收、重名)+ catalog 1 用例。
+
+## 7. Prompt section 有序组装 (`runtime/platform/prompts/registry.py`)
+
+dsh `system-prompt.md` 的组装语义,加在既有文件模板注册表之上(additive):
+
+- `register_section(name, order, text|provider, complete=False, scope=...)`:
+  有序注册(约定 -100 身份 / 0 persona / 100-199 工具),`complete` 整段覆盖
+  (多个 effective complete 使组装失败, fail loud);provider 按 scope 求值。
+- `register_context(...)`:动态运行时上下文,拼接在 sections 之后;
+  `suppress_runtime_context(scope=...)` 抑制(全局抑制对所有 scope 生效,scoped 只对本 scope),
+  sections 永不被抑制。
+- `register_variable(name, provider, scope=...)`:`{{variable}}` 插值,
+  未注册或求值为 None → 组装失败;scoped 变量 shadow 全局。
+- `assemble(scope=...)`:全局 + scope 层合并(scoped shadow 全局),
+  order 升序拼接;`sections(scope=...)` 枚举有效集合。
+- 文件模板 API(`get`/`set`/`list`/热重载)完全不动。
+- 测试:`tests/test_prompt_registry_assembly.py`(19 用例:排序、complete、变量、
+  抑制、scope shadow、兼容性)。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- "会话标题等用途强制 off"的部署锁——需要调用方 purpose 概念,后续可加。
+- executor 主路径(`ToolExecutor.execute_step`)尚未接入 render/materialize 投影——
+  先落在注册表层,skill 引擎侧复用 `_validate_output` 语义即可。
+
+## 8. Subagent fail-loud 能力检查 (`subagents/registry.py` + `subagents/bridge.py`)
+
+dsh 的 subagent 声明式能力模型(前端在规划 subagent 时按能力路由,后端对不满足
+能力要求的调用立即报错,而不是把子代理放进场后再失败):
+
+- `SubagentDefinition.capabilities: tuple[str, ...]`:frontmatter `capabilities:`
+  声明(逗号字符串或 YAML 列表,小写去重保序),`to_wire()` 透出给前端可见。
+- `SubagentRegistry.supports(name, capability)` / `capabilities_of(name)`;
+  未注册名字 `supports` 返回 False(fail closed)。
+- `call_subagent(..., requires_capabilities=...)`:校验时机在 prompt 非空检查之后、
+  任何 runner 工作之前——缺能力直接返回
+  `{success: False, capability_error: "missing_required_capability", ...}`,
+  错误信息带「声明了哪些 / 缺哪些」,不触发 runner、不产生副作用。
+- 仅对 registry 后端的定义检查;ephemeral roles(临时角色)不检查,保持低摩擦。
+- HTTP 层:`SubagentDispatchRequest.requires_capabilities` 透传到 dispatch 与
+  dispatch/stream 两个端点。
+- 测试:`tests/test_subagent_capabilities.py`(9 用例:frontmatter 解析/归一化、
+  registry 查询、缺能力 fail-loud 不触发 runner、声明能力放行、未注册 agent 跳过、
+  无要求 noop)。
+
+## 9. 会话标题原语 (`runtime/memory/threads/session_title.py`)
+
+dsh `ctx.sessionTitle` 的「fallback → provider → user 钉住」阶梯语义:
+
+- `normalize_title()`:空白折叠为单空格,空/纯空白标题抛 `TitleInvalidError`
+  (dsh `title-invalid`);`derive_fallback_title()`:首条 human 消息截 60 字
+  作为 fallback(与既有 realtime 侧 57+… 约定一致)。
+- `SessionTitleService(store)`:状态落在线程记录上
+  (`values.title` 展示 + `metadata.title_source/title_pinned/title_provider/
+  title_model/title_updated_at` 持久事实),重启不丢,search/sort 可用。
+  `get()` 对老线程惰性推导;未记录 source 但已有 `values.title` 的旧数据
+  视为 fallback,失败的 refresh 不会把它冲掉。
+- `rename(thread_id, title)`:用户改名 = 钉住(source=user, pinned=True),
+  自动再生停止调度,直到 `force` refresh。
+- `refresh(..., provider=, model=, force=)`:provider 词汇表
+  (`register_provider(name, fn, model=)`,重名 fail loud);未指定时取首个
+  注册 provider;无 provider 退化为 fallback;provider 返回 None/空/抛异常
+  一律保留当前标题(latest-wins + failure keep)。provenance 记录
+  provider id + model id(dsh `SessionTitleModelProvenance`)。
+- 模型可见面:`register_session_title_variable(registry, store_getter=)`
+  把 `{{ session_title }}` 注册进 prompt registry(取 ambient session 的
+  thread_id;无环境时渲染 "New chat",绝不让组装失败);在
+  `_app_routers_extra.py` 装配 PromptRegistry 后挂载。
+- HTTP:`POST /api/threads/{id}/title/rename`(400 空标题 / 404 未知线程)与
+  `POST /api/threads/{id}/title/refresh`(body 可选 `provider`/`force`);
+  `create_thread_state_router` 新增可选 `session_titles=` 注入。
+- 测试:`tests/test_session_title.py`(25 用例:规范化、fallback 推导与截断、
+  rename 钉住与持久化、refresh 走 provider/指定 provider/未知 provider、
+  failure keep、pin 尊重与 force、provider 注册表、prompt 变量渲染与兜底)
+  + `tests/test_thread_state_router.py` 新增 4 个端点用例。
+
+## 10. 活会话 fork (`ThreadStateStore.fork_thread` + 消息级入口)
+
+dsh `sessions.fork` 的「已完成回合前缀」语义:
+
+- 回合边界:每条 human 消息开启一个回合;回合「完成」= 其后存在 assistant
+  快照(我们的 store 只在回合完成后写快照,天然对应 dsh 的 `turn/end`)。
+- `fork_thread(thread_id, *, at_message_index=, title=)`:锚点落在该回合
+  内即包含整个回合;锚点越界/缺省回退到最后已完成回合;锚点命中未完成
+  回合抛 `ForkUnavailableError`(HTTP 409 `fork-unavailable`),绝不静默
+  裁剪;无任何已完成回合时种子为空(等价 fresh spawn)。
+- 子线程继承源 metadata(agent/team/owner/tenant)与源标题,记录血缘
+  `metadata.parent_thread_id` + `parent_message_index`(最后包含的源消息
+  下标,-1 为空种子);只转移会话历史,不复制 artifacts(dsh:"seed
+  transfers conversation history only");消息深拷贝,子线程改动不污染源。
+- HTTP:`POST /api/threads/{thread_id}/fork`(body 可选
+  `at_message_index`),返回 `{thread_id, seeded_messages}`。
+- 前端闭环:消息操作栏新增「从这里派生新会话」按钮
+  (`message-list-item.tsx` + `message-list.tsx` 传 `messageIndex`),
+  `api.client.ts` 增 `forkThread`/`renameTitle`/`refreshTitle`;
+  `useForkThread` hook;`useRenameThread` 从裸 `updateState` 切换到
+  `/title/rename`(获得钉住语义,与第 9 节闭环);4 语言 i18n。
+- 测试:`tests/test_thread_fork.py`(17 用例:切分边界、空种子、锚点越界
+  回退、open 回合 409、血缘/title/深拷贝、持久化重载、端点 200/400/404/409)
+  + 前端 vitest 97 过、tsc 干净。
+
+## 11. Subagent 多 provider 后端 (`registry.backend` + `bridge._dispatch_partner`)
+
+dsh 的 subagent provider 词表(spawn / fork / acp / claude-code / codex ...
+换 provider 只换传输、执行契约不变):
+
+- `SubagentDefinition.backend`:frontmatter `backend:` 声明(如
+  `claude-code` / `codex-cli` / `openclaw` / `trae-cli`,或 `agent_id` 别名
+  `local_claude_code`),`to_wire()` 透出。
+- `_dispatch_partner()`:registry 后端定义带 backend 时走外部 CLI 驱动
+  (`run_local_partner` + `which_command` 解析本机可执行文件),结果映射为
+  call_subagent 统一结构 `{success, output, error, backend, command,
+  failure_kind, timed_out}`;未知 backend / 可执行文件缺失 → 结构化失败;
+  partner 无稳定 headless 调用(`unsupported`)→ 返回 None 回退到进程内
+  ephemeral 环(dsh:unsupported provider 降级默认传输)。全程不抛异常。
+- 分层修正:本地伙伴 specs(`local_partner_specs.py`)与命令解析
+  (`local_partner_discovery.which_command`)下沉到 execution 层,
+  sensing.gateway 保留兼容再导出——subagent 派发不再依赖上层网关,
+  import-direction ratchet 保持绿色。
+- 模型透传:`definition.model` 作为 CLI 模型覆盖参数。
+- 测试:`tests/test_subagent_backend.py`(10 用例:frontmatter 解析、
+  to_wire、成功/失败/超时映射、agent_id 别名、unsupported 回退、未知
+  backend、缺可执行文件、call_subagent 端到端路由)。
+
+## 12. Subagent continuable 会话 (`subagents/sessions.py`)
+
+dsh ``continuable`` 子代理的存储半场:durable child transcript + 继续投喂:
+
+- `SubagentSessionStore`:每会话一个 JSONL 文件(原子写 tmp+rename),
+  惰性建目录;目录不可用/不可写自动降级内存,调用方永不因持久化失败
+  崩溃;会话 id 为 32 位 hex,非法 id 查询返回 None(路径穿越安全)。
+- `create(agent_id, thread_id)` / `get(session_id)` / `append_turn(...)`
+  / `transcript_prompt(session)`:transcript 渲染为受限 markdown 前缀
+  (6 回合 / ~6KB,大输出截断),供续聊调用注入。
+- `call_subagent(..., continue_session_id=)`:已知会话把前文注入 prompt、
+  新回合追加同一会话;未知会话在**任何 runner 工作前** fail-loud
+  (`session_error: "unknown_session"`);未传时最佳努力创建新会话并把
+  `session_id` 附到结果,rejected(未真正运行)的调用不写回合。
+- HTTP:`SubagentDispatchRequest.continue_session_id` 透传 dispatch /
+  dispatch/stream 两个端点。
+- 测试隔离:`tests/conftest.py` 新增 autouse fixture,每个测试私有
+  session store(tmp_path),不污染真实 `data/subagent_sessions/`。
+- 测试:`tests/test_subagent_sessions.py`(12 用例:create/get 往返、跨实例
+  持久化、transcript 边界/截断、非法 id、目录降级、创建+记录回合、续聊
+  注入前文、未知会话 fail-loud 不触发 runner)。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 子代理**进程内真实回合级 transcript**(我们只记 Q/A 对,不捕获中间
+  tool 步骤)——需要动 ephemeral runner 的消息构造,风险高,暂缓。
+- 后台 continuable 的 settlement 通知(子代理结束时通知父代理)——需要
+  事件桥接层配合,列为后续。
+
+## 13. Tool-result 中段修剪 (`tool_engine/tool_output_pruner.py`)
+
+dsh ``compaction-tool-result-pruner`` 的确定性 head/middle/tail 修剪:
+超预算工具结果改写为「有界 head + 固定标记 + 有界 tail」,而不是只留头部。
+头部与尾部都保留(错误和最终答案通常在尾部),原始完整内容仍留在
+append-only 日志里,剪的只是渲染面。
+
+- `ToolResultPrunePolicy`(frozen dataclass):`threshold_chars=8192 /
+  head_chars=4096 / tail_chars=1024`,marker 与 dsh 逐字一致
+  `\n\n[... tool result middle pruned ...]\n\n`;构造时校验
+  head+marker+tail ≤ threshold(同 dsh resolveConfig)。
+- `prune_tool_result_text(text, *, policy=None, ...)`:预算内返回
+  **None**(调用方保留原文);超预算返回 head+marker+tail。不变量:
+  结果严格小于输入、剪后 ≤ threshold(因此二次 pass 是 no-op)、按
+  Unicode code point 计数/切片(emoji 不会被劈开)。
+- 接线(默认关,行为零变化):`render_tool_output(..., prune_middle=True,
+  prune_policy=)` → `normalize_tool_result` / `normalize_step_tool_result`
+  透传同一开关;先中段剪、再走既有 max_chars 头部兜底。
+- 测试:`tests/test_tool_output_pruner.py`(11 用例:预算内 no-op、精确
+  预算、head+marker+tail 精确构成、严格更小、二次 pass no-op、emoji
+  边界、自定义预算、tail=0、非法预算拒绝、render/normalize 开关接线)。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 主循环默认开启:`_tool_bridge_exec` 仍用旧的头部截断,prune 开关
+  未点亮(避免动主路径的高风险面);接入点已备好,`prune_middle=True`
+  一行即可开启,留给性能/上下文预算实测后决定默认值。
+- dsh 的 shadow-price 记账(每次修剪在日志里补一条定价事件,消费方可
+  无状态扣除)——我们尚无 token meter 事件桥,列为后续。
+## 14. 会话标题自动再生接线 (auto-title)
+
+第 9 节的标题原语只有端点与变量,缺 dsh ``ctx.sessionTitle`` 的
+「首回合完成后自动生成」闭环。本轮补上触发链路:
+
+- `SessionTitleService.maybe_auto_refresh(thread_id)`:每个线程**至多自动
+  尝试一次**——用户钉住(title_source=user)、已 provider 生成、无注册
+  provider、或已尝试过(无论成败)一律不动;尝试前先持久化
+  `metadata.title_auto_attempted=True`,所以失败的 provider 不会在之后
+  每个回合被反复调用,成功/失败都只付一次代价。
+- realtime 接线:`CerebrumRuntime(..., session_titles=)` 可选注入;
+  `_snapshot_to_thread_store`(每回合结束统一落点,completed/failed/
+  interrupted 都走这里)在快照写完后调用 `maybe_auto_refresh`,仍在
+  同一个 swallowed try 块内——标题生成失败绝不影响回合生命周期。
+- 装配:`thread_state_router.build_auto_title_service(store, model_router=)`
+  可测试 helper——有 thread_store + model router 时注册 ``llm`` 标题
+  provider(首条 human 消息前 400 字 + 60 token 短标题生成,复用
+  projectos 的默认小模型),无 router 返回无 provider 的 service;
+  `_app_routers_extra.py` 在构造 realtime runtime 时调用它并注入,
+  任何异常都优雅降级为 fallback,装配失败只记 warning。
+- 测试:`tests/test_session_title_auto.py`(7 用例:快照触发一次、无
+  service 保持旧行为、runtime wrapper 透传、helper 无 store/无 router、
+  llm provider 生成与首条消息取材、无 human 消息不调 router)+
+  `tests/test_session_title.py` 新增 5 个 maybe_auto_refresh 用例
+  (成功一次、钉住尊重、无 provider no-op、失败不重试、显式 refresh
+  仍可强制)。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 标题 provider 的**优先级/模型选择**(dsh 允许每个 provider 声明自己的
+  model 与强度;我们目前只注册一个 ``llm`` provider,模型复用 projectos
+  默认值)——有真实多模型配置后可扩展 register_provider 词汇表。
+- 回合中途的标题热更新(我们只在回合结束时刷新,回合内标题保持
+  fallback)——dsh 是「首回合完成后」语义,当前实现与其一致,无需追平。
+## 15. Goal 域 — CAS 守卫的 durable 目标生命周期 (`runtime/memory/goals/`)
+
+dsh ``@deepseek-ai/dsh-goal`` 的完整移植:目标是一等公民的持久化对象,
+严格 phase 状态机(``active / paused / blocked / complete``),每一次变更
+必须把当前 revision **精确 +1**(compare-and-swap 守卫),回放 append-only
+变更日志推导当前投影;stale 或畸形变更在 fold 时 fail-loud,绝不静默。
+
+- `domain.py`:``GoalSnapshot``(id/revision/objective/phase/maxGoalRounds/
+  blockedReason,构造时全量校验)、``GoalRef``、``GoalSnapshotChange``/
+  ``GoalClearChange``(to_dict 输出 dsh 原样字段,可无损落盘)、``FoldedGoal``;
+  错误码与 dsh 一致(GOAL_NOT_FOUND / GOAL_ALREADY_EXISTS /
+  GOAL_STALE_REVISION / GOAL_INVALID_OBJECTIVE / GOAL_INVALID_MAX_ROUNDS /
+  GOAL_INVALID_BLOCK_REASON / GOAL_INVALID_EDIT / GOAL_INVALID_TRANSITION)。
+- `fold.py`(纯函数,零 IO):``decode_goal_change`` 严格解码(精确字段集合、
+  schema 版本、updatedAt ≥ createdAt、blockedReason code 必须
+  lower-kebab-case、message 必须 normalized);``apply_goal_change`` 实现
+  CAS + 转移表——create 仅允许「无当前目标或当前已 complete、revision=1、
+  active、0 轮、goal id 不可复用」;edit 不得改 phase/blocked reason;
+  pause 仅 active→paused;resume 仅 paused/blocked→active 且
+  roundsStarted < maxGoalRounds;block 仅 active→blocked(必带 reason);
+  complete 不得重复;clear 留 tombstone 且 clearedAt ≥ updatedAt;
+  ``apply_goal_event`` 还校验 goal 来源的 user/message 必须是 active 目标
+  当前 revision 的「下一个轮次」且不超 maxGoalRounds;``fold_goal`` 从
+  事件序列重建投影。
+- `service.py`:``GoalService(journal)`` 提供 create/edit/pause/resume/
+  complete/block/clear 动词,每个操作写一条 ``goal_change`` 事件并返回
+  新鲜投影;进程内 RLock 串行,跨进程并发冲突由 fold 的 revision 守卫兜底
+  (第二个 stale 变更在下一次 fold 时 GOAL_STALE_REVISION)。
+- journal 接线:``GoalChangeEvent``(event_type="goal_change",change 原样
+  dict)+ ``JournalEventType``/``_EVENT_CLASSES``/``write_goal_change``,
+  JSONL 读写无损,重启重放可重建当前目标。
+- 测试:`tests/test_goal_domain.py`(31 用例:create 约束、CAS stale/
+  skip/wrong-id、转移表全分支、edit 边界、clear tombstone、严格解码、
+  blockedReason 校验、轮次记账、全序列 fold 重建、service 端到端、
+  JSONL 重放)。
+- 与既有目标的映射:本项目的 curriculum goal(``curriculum_goal_decision``
+  事件)仍是扁平决策流,没有 revision 生命周期;新 goal 域可作为
+  其升级路径——目标从「决策事件」变成「可暂停/阻塞/恢复/完成的
+  durable 对象」,后续可把 curriculum 决策接到 ``GoalService`` 上。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- dsh 的 ``goal/changed`` 实时事件广播(scope-filtered)——需要事件桥接
+  层配合,列为后续。
+- 轮次记账尚未接真实 human 消息事件(本项目 journal 没有 dsh 的
+  ``user/message`` 事件类型;fold 的校验已就位,接上即可启用)。
+## 16. Subagent report 闭环 (`subagents/sessions.py` + `bridge.py`)
+
+dsh ``tool-subagent-report`` 的「子→父」投递通道:continuable 子代理共享
+工作区,但父代理**不会自动收到** transcript/tool output/reasoning,所以
+结果必须显式 report(dsh 指引:结束前调用一次 report 携带 self-contained
+答案;部分发现改变父下一步时也可提前报;report 不结束子代理回合)。
+
+- `SubagentReport`(content / delivery / timestamp):delivery 对齐 dsh
+  ``reportDelivery``——``wakeup``(默认)触发父代理一次新回合,``quiet``
+  只加上下文等父下次醒来;空 content 拒绝(dsh 要求 self-contained)。
+- `SubagentSessionStore.append_report(session_id, *, content, delivery=)`:
+  追加到会话 JSONL 的 ``reports`` 列表(原子写),与 turns 并列;
+  ``on_report`` 可选构造回调 = wakeup 通知钩子,异常吞掉不破坏投递。
+- 投递指针:``reports_delivered_up_to`` 持久化在会话文件;``pending_reports``
+  返回未读 ``(index, report)``;``mark_reports_delivered`` 推进指针(默认
+  到最新、可指定 index、绝不倒退);``reports_prompt(session)`` 渲染未读
+  report 为受限 markdown 区块(≤4KB),供父代理上下文注入。
+- bridge 接线:`call_subagent` 的 durable 会话统一出口把未读 report 附到
+  结果(``pending_reports`` 列表 + ``reports_prompt`` 文本)并立即 ack,
+  下一次继续调用不再重复看到;老会话文件(无 reports 字段)兼容加载。
+- 测试:`tests/test_subagent_report.py`(10 用例:跨实例持久化、空 content
+  拒绝、pending/ack 指针、ack 不倒退、prompt 只渲染未读、长内容截断、
+  wakeup 回调与异常吞掉、legacy 兼容、bridge 附加与 ack)。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 进程内子代理 runner 注册真正的 ``report`` **工具**(子代理回合中主动
+  调用,而不是父代理在下次 call 时拉取)——需要动 ephemeral runner 的
+  消息构造,风险高,暂缓;当前实现是等价的「拉取 + ack」闭环。
+- ``quiet``/``wakeup`` 的调度器(父代理离线时 wakeup 排队)——需要
+  事件桥接层配合,列为后续。
+## 17. Tool-result pruner 接入主路径 (`core/cerebrum/_react_execution_dispatch.py`)
+
+第 13 点的 pruner 只有词汇表与 `_tool_bridge_exec` 的可选参数,主 loop
+(react 回合的工具观察)仍是旧的头部截断。本轮把 pruner 点亮到主路径:
+
+- `_execute_action_via_beak` 的两处渲染(`normalize_step_tool_result` 与
+  command_failed 分支的 `normalize_tool_result`)都传
+  ``prune_middle=TOOL_RESULT_PRUNE_MIDDLE``:工具输出超 8192 字符时,
+  模型看到的从「只留头部 16K」变成「头部 4096 + marker + 尾部 1024」,
+  错误与最终答案(通常在尾部)不再丢失;先中段剪、再走 16K 头部兜底。
+- 开关:`OCTOPUS_TOOL_PRUNE_MIDDLE=0` 恢复旧头部截断(env 在模块导入时
+  读取一次);默认开,对齐 dsh 的 compaction 默认值。
+- 测试:`tests/test_react_loop.py` 更新 truncation 用例为 dsh 语义
+  (head+marker+tail 精确构成),新增「开关关闭恢复旧行为」用例;主路径
+  450 项相关回归全绿。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- `_tool_bridge_exec`(realtime native tool 路径)仍未默认点亮——接入点
+  已备好(`prune_middle=True` 一行),与主路径同一开关可后续统一。
+- dsh 的 shadow-price 记账(每次修剪在日志里补定价事件)——尚无 token
+  meter 事件桥,列为后续。
+## 18. Pruner 开关统一 + native tool bridge 点亮
+
+第 17 点只点亮了 react 主路径;realtime native 路径(`_tool_bridge_exec`)
+仍是旧头部截断,且两处开关逻辑重复。本轮收口:
+
+- 主开关下沉到 `tool_output_pruner.TOOL_RESULT_PRUNE_ENABLED`(env
+  ``OCTOPUS_TOOL_PRUNE_MIDDLE`` 模块导入时读取一次,默认开);
+  react 主路径改名引用同一开关(保留本地别名
+  ``TOOL_RESULT_PRUNE_MIDDLE``,调用点与测试零改动)。
+- `_tool_bridge_exec` 两处渲染(`normalize_step_tool_result` +
+  `normalize_tool_result`)点亮 ``prune_middle=TOOL_RESULT_PRUNE_ENABLED``,
+  与 react 主路径同一开关:两条模型可见路径行为一致,超 8192 字符的
+  工具结果都变成 head+marker+tail。
+- 测试:`tests/test_tool_bridge_prune.py`(3 用例:bridge 默认走 pruner
+  head+marker+tail、开关关闭恢复头部截断、短输出原样);回归
+  react/golden-path/bridge 351 项全绿。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- shadow-price 记账(每次修剪在日志里补定价事件)——尚无 token meter
+  事件桥,列为后续。
+## 19. goal/changed 实时广播 (`goals/service.py`)
+
+dsh 的 ``goal/changed`` 事件桥:目标变更提交后广播给订阅者(scope-filtered,
+listener 失败被包含)。第 15 点的 GoalService 只有持久化与 fold,缺实时
+通知;本轮补上第一块事件桥:
+
+- `GoalChanged`(operation / ref / goal?):clear tombstone 只带 ref 不带
+  snapshot,与 dsh 载荷一致;ref 始终携带刚提交的 revision 身份。
+- `GoalService.subscribe(callback) -> unsubscribe`:每个成功提交的变更
+  (create/edit/pause/resume/complete/block/clear)在 journal 写入后通知
+  全部订阅者;退订按身份移除;listener 抛异常被记录并跳过,绝不影响
+  写入与其他订阅者(dsh「listener failures are contained」)。
+- 测试:`tests/test_goal_domain.py` 新增 2 用例(各操作载荷与 clear
+  tombstone 形状、退订生效、失败 listener 隔离)+ 既有 31 用例全绿。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- scope-filtered 分发(按 agent/会话过滤广播目标)——订阅粒度现在是
+  全局的,过滤留给调用方;dsh 的 scope 路由层复杂度高,暂缓。
+- journal 订阅桥(跨实例/重启后补发)——当前广播是进程内、仅
+  service 实例内;StreamingJournal 的 live fan-out 可后续接上。
+## 20. Tool-result spill 落盘取回 (`tool_engine/tool_output_spill.py`)
+
+dsh 的 spill 能力家族(`@deepseek-ai/dsh-spill` / `spill-local` /
+`spill-policy`):pruner 只剪中段,中段内容模型永远看不到;spill 把
+超限纯文本结果的**全文**存到会话私有 spill 文件,模型看到的是
+「有界 head/tail 预览 + 定位符 + 取回提示」,可随时用
+``read_file`` 按 offset/limit 读全文。第 13/17/18 点的 pruner 是
+「截断」,这一层是「落盘 + 可检索」,两者互补。
+
+- `encode_segment`:注入式安全段名编码(``~XXXX`` 转义,``.``/``..``
+  整体转义,空串 ``~``),防穿越;``save_text_spill`` 写入
+  ``<root>/session-<sha256前缀>/<随机hex>-<safeName>``,目录 0700、
+  ``O_EXCL`` + 0600 独占写,随机前缀防符号链接植入;缺省 root 为进程
+  私有 ``mkdtemp``(dsh ``privateRoot``)。
+- `maybe_spill_text`:策略层。跳过 ``read_file``(防
+  read→spill→read 循环);notice 字节成本**在 cap 内预留**(以最坏
+  省略计数定价),替换结果(预览 + 空行 + notice)永不超过
+  ``max_inline_bytes``;UTF-8 边界在两端裁剪处保留;notice 单独放不下
+  时保持内联,绝不发出超 cap 的替换。
+- 尽力而为:无会话 owner、存储失败(权限/ENOSPC)一律告警并保持
+  内联,spill 失败绝不把成功调用变成 isError。
+- 接入:`render_tool_output` 统一漏斗(spill 先于 pruner,替换后
+  ≤ cap 所以 pruner 变 no-op),react 主路径与 native tool bridge
+  两个调用点共用 ``TOOL_RESULT_SPILL_ENABLED`` 开关。
+- 默认关(对齐 dsh:`maxInlineBytes` 未配置时 policy 不注册);
+  ``OCTOPUS_TOOL_SPILL=1`` 开启,``OCTOPUS_TOOL_SPILL_MAX_INLINE_BYTES``
+  调 cap(默认 8192,与 pruner 阈值同),``OCTOPUS_TOOL_SPILL_ROOT``
+  指定落盘根目录。
+- 测试:`tests/test_tool_output_spill.py` 27 用例(段名编码防穿越、
+  私有会话目录、UTF-8 边界预览、notice 预算预留、read_file 跳过、
+  失败保持内联、两个调用点接线);回归 bridge/pruner/react 382 项全绿,
+  ruff/invariant 干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- dispatch-log 臂:对 durable 日志副本的同 cap 裁剪——我们没有
+  ``code-dispatch-log`` 事件,跳过。
+- 远端/云端 SpillStore 后端:当前只有本地文件系统实现,定位符对
+  同机消费方才有意义;e2b 等可移植执行世界列为后续。
+- 会话生命周期清理:spill 文件持久留存直到外部清理(与 dsh 相同,
+  续会话/分支会话仍可能引用)。
+## 用法速查
+
+```bash
+# 快照
+./.venv/bin/python -m pytest tests/test_snapshot_bugfix_demo.py --snapshot-update  # 记录
+./.venv/bin/python -m pytest tests/test_snapshot_bugfix_demo.py                     # 回放
+
+# 沙箱
+OCTOPUS_PROCESS_SANDBOX=landlock python -m runtime ...   # Linux
+OCTOPUS_PROCESS_SANDBOX=strict python -m runtime ...     # 无后端则拒绝执行
+```
