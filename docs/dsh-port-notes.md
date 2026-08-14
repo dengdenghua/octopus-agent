@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 三十九个差距点已落地为可测试代码(1-39 节)
+**状态**: 四十个差距点已落地为可测试代码(1-40 节)
 
 ---
 
@@ -1155,12 +1155,9 @@ turn store。本轮补上 dsh 的会话结果面:每完成一轮 turn 落一条
 
 ### 尚未覆盖(dsh 有而这里没有)
 
-- 注入的持久化可见性:live 注入只进 ``turn.items`` 与 steering 队列,
-  不写 EventLog(worker 线程写日志的线程安全未验证),所以重放/重连
-  客户端看不到这条注入;durable 侧仍由 ``pending_reports`` 兜底,父
-  进程续会话时会读到。
 - 注入上限:每次 queued 报告都会注入(与 dsh 每个完成通知都 inject
   一致),靠报告工具引导与单条截断防刷屏,没有 per-turn 注入次数预算。
+  (注入持久化可见性已由第 40 节收口。)
 
 ## 39. host 会话候选 API 端点(subagent mention 自动补全后端面)
 
@@ -1185,6 +1182,38 @@ turn store。本轮补上 dsh 的会话结果面:每完成一轮 turn 落一条
 
 - 前端交互层:弹候选/选后插入 ``@session:<id>`` token 的 UI 还没做
   (dsh 的 host autocomplete);端点已就绪,前端可接。
+
+## 40. 回合启动浮现全部待读报告 + 注入持久化(EventLog 可见)
+
+第 38 节的 live 注入只覆盖「回合正在跑」的窗口:报告排队时若父回合
+不活跃,要等父进程续会话才读;且注入只进 ``turn.items``,重放客户端
+看不到。本轮把 dsh 的「下次唤醒即消费」补全到这两个缺口:
+
+- 回合启动浮现(``realtime_turn_lifecycle._start_turn``):新回合在
+  ``_register_active_turn`` 之后、``turn_started`` 之前,枚举
+  ``store.pending_thread_reports(thread_id)``——该线程名下所有子代理
+  会话的未投递报告——逐个 ``inject_report_into_thread`` 注入;注入
+  成功即 ``mark_reports_delivered(up_to_index=index)``,同一条报告不会
+  在多次回合反复浮现;store 缺失/任何异常一律吞掉,永不阻塞回合。
+- 注入持久化(``_realtime_cerebrum_steering._inject_thread_steering``):
+  注入入队后同步把 ``item_completed`` 写进该线程 EventLog(append 有
+  锁保护,worker 线程可写),重放/重连客户端能看到这条注入;同时把
+  item.id 提前塞进 ``_turn_steering_seen``/``_turn_steering_notified``,
+  防止 steering sync 从日志行再投一次(双投防护);日志写失败
+  best-effort 吞掉,live 队列投递不受影响。
+- store 面(``sessions.py``):``_try_inject_queued_report`` 改名公开为
+  ``inject_report_into_thread``(返回是否真的入队);新增
+  ``pending_thread_reports(thread_id)`` 跨会话汇总未投递报告(按
+  ``reports_delivered_up_to`` 过滤,每会话由旧到新)。
+- 测试:``tests/test_realtime_cerebrum.py`` 新增 2 用例(注入写 durable
+  日志且不双投、ws 端到端回合启动浮现待读报告且 ack 后 pending 清空);
+  ``tests/test_subagent_report.py`` 新增 2 用例(跨会话 pending 汇总、
+  公开 seam);回归 report/realtime 139 + react 337 全绿,ruff/invariant
+  干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 注入上限:与第 38 节同一限制,per-turn 注入次数预算仍无。
 
 ## 用法速查
 

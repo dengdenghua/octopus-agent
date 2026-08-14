@@ -440,7 +440,7 @@ class SubagentSessionStore:
             # report into its steering queue so the next step sees it. The
             # durable copy is already persisted above — this is best-effort
             # and never blocks or fails the report.
-            _try_inject_queued_report(session.thread_id, report.content)
+            inject_report_into_thread(session.thread_id, report.content)
         return delivered
 
     def mark_owner_busy(self, session_id: str) -> None:
@@ -527,6 +527,34 @@ class SubagentSessionStore:
             return []
         start = max(0, session.reports_delivered_up_to)
         return [(index, report) for index, report in enumerate(session.reports) if index >= start]
+
+    def pending_thread_reports(
+        self,
+        thread_id: str,
+    ) -> list[tuple[str, int, SubagentReport]]:
+        """Undelivered reports for every session a thread owns.
+
+        Returns ``(session_id, index, report)`` triples, oldest first per
+        session, across the sessions this process has seen. The realtime
+        gateway surfaces these at turn start so a parent's next wake claims
+        every parked report (dsh ``inject`` consumed at the next pre-step),
+        not only the ones for the exact session it continues.
+        """
+        if not thread_id:
+            return []
+        with self._lock:
+            sessions = [
+                session
+                for session in self._memory.values()
+                if session.thread_id == thread_id
+            ]
+        pending: list[tuple[str, int, SubagentReport]] = []
+        for session in sessions:
+            start = max(0, session.reports_delivered_up_to)
+            for index, report in enumerate(session.reports):
+                if index >= start:
+                    pending.append((session.session_id, index, report))
+        return pending
 
     def mark_reports_delivered(
         self,
@@ -744,7 +772,7 @@ def _normalize_report_delivery(value: Any) -> Literal["wakeup", "quiet", "queued
     return "wakeup"
 
 
-def _try_inject_queued_report(thread_id: str, content: str) -> None:
+def inject_report_into_thread(thread_id: str, content: str) -> bool:
     """Best-effort dsh ``inject``: queue a report into the running turn.
 
     The realtime gateway keeps a thread→active-turn registry; when the
@@ -752,18 +780,21 @@ def _try_inject_queued_report(thread_id: str, content: str) -> None:
     loop drains it at the nearest step boundary. Missing gateway, no active
     turn, or any failure degrades to a no-op — the durable report stays in
     ``pending_reports`` for the next wake or continuation.
+
+    Returns True when the report was queued into an accepting running turn.
     """
     if not thread_id or not content:
-        return
+        return False
     try:
         from runtime.sensing.gateway._realtime_cerebrum_steering import (
             _inject_thread_steering,
         )
 
         text = _truncate(content, QUEUED_REPORT_INJECT_MAX_CHARS)
-        _inject_thread_steering(thread_id, f"[子代理报告] {text}")
+        return bool(_inject_thread_steering(thread_id, f"[子代理报告] {text}"))
     except Exception:  # noqa: BLE001 — injection is best-effort
         logger.debug("queued report injection failed", exc_info=True)
+        return False
 
 
 def _truncate(text: str, max_chars: int) -> str:
@@ -799,5 +830,6 @@ __all__ = [
     "SubagentSessionStore",
     "SubagentSessionTurn",
     "get_subagent_session_store",
+    "inject_report_into_thread",
     "set_subagent_session_store",
 ]

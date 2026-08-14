@@ -90,7 +90,24 @@ def _inject_thread_steering(thread_id: str, text: str) -> bool:
             # to a list is atomic under the GIL; the loop only reads this list
             # for steering sync, so a concurrent append is safe.
             active[0].items.append(item)
+        # Mark the id as already-seen so the steering sync cannot discover
+        # the durable log row below and deliver the same text twice.
+        seen = runtime._turn_steering_seen.get(turn_id)
+        if seen is not None:
+            seen.add(item.id)
+        notified = runtime._turn_steering_notified.get(turn_id)
+        if notified is not None:
+            notified.add(item.id)
         queue.put((item.id, item.text))
+    if active is not None and active[1] is not None:
+        # Durable mirror: replay/reconnect clients see the injection in the
+        # thread's event log (EventLog.append is lock-protected, so a worker
+        # thread may write). Live delivery already happened via the queue;
+        # the log write is best-effort and never blocks the report.
+        try:
+            active[1].item_completed(thread_id, turn_id, item)
+        except Exception:  # noqa: BLE001 — durability is best-effort
+            _logger.debug("steering injection log write failed", exc_info=True)
     return True
 
 

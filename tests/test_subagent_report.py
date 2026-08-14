@@ -588,6 +588,66 @@ def test_queued_report_injection_failure_never_breaks_report(
     assert delivered.reports[-1].delivery == "queued"
 
 
+# ─── turn-start surfacing (dsh inject consumed at next wake) ─────────────
+
+
+def test_pending_thread_reports_lists_undelivered_across_sessions(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    first = store.create(agent_id="researcher", thread_id="th-parent")
+    second = store.create(agent_id="coder", thread_id="th-parent")
+    other = store.create(agent_id="researcher", thread_id="th-other")
+    store.append_report(first.session_id, content="r1", delivery="quiet")
+    store.append_report(first.session_id, content="r2", delivery="quiet")
+    store.append_report(second.session_id, content="s1", delivery="quiet")
+    store.append_report(other.session_id, content="other", delivery="quiet")
+
+    pending = store.pending_thread_reports("th-parent")
+    assert [(sid, index, report.content) for sid, index, report in pending] == [
+        (first.session_id, 0, "r1"),
+        (first.session_id, 1, "r2"),
+        (second.session_id, 0, "s1"),
+    ]
+    assert store.pending_thread_reports("th-other")[0][2].content == "other"
+    assert store.pending_thread_reports("") == []
+    assert store.pending_thread_reports("th-missing") == []
+
+    store.mark_reports_delivered(first.session_id, up_to_index=0)
+    pending_after = store.pending_thread_reports("th-parent")
+    assert [(sid, index) for sid, index, _ in pending_after] == [
+        (first.session_id, 1),
+        (second.session_id, 0),
+    ]
+
+
+def test_inject_report_into_thread_public_seam(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from runtime.execution.subagents.sessions import (
+        QUEUED_REPORT_INJECT_MAX_CHARS,
+        inject_report_into_thread,
+    )
+
+    captured: list[tuple[str, str]] = []
+
+    def fake_inject(thread_id: str, text: str) -> bool:
+        captured.append((thread_id, text))
+        return True
+
+    monkeypatch.setattr(
+        "runtime.sensing.gateway._realtime_cerebrum_steering._inject_thread_steering",
+        fake_inject,
+    )
+    assert inject_report_into_thread("th-1", "内容") is True
+    assert captured == [("th-1", "[子代理报告] 内容")]
+    assert inject_report_into_thread("", "内容") is False
+    assert inject_report_into_thread("th-1", "") is False
+    assert len(captured) == 1
+    assert inject_report_into_thread("th-1", "长" * (QUEUED_REPORT_INJECT_MAX_CHARS + 50))
+    assert len(captured[1][1]) <= QUEUED_REPORT_INJECT_MAX_CHARS + len("[子代理报告] ")
+
+
 def test_legacy_session_without_reports_loads(tmp_path: Path) -> None:
     store = _store(tmp_path)
     session = store.create(agent_id="researcher", thread_id="th-1")

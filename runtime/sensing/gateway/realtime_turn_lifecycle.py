@@ -322,6 +322,24 @@ async def _start_turn(
     # arrives before our first poll.
     emitter.register_turn(turn.id)
     runtime._register_active_turn(turn, log)
+    # dsh inject-at-next-wake: a fresh parent turn claims every parked
+    # subagent report its thread owns, not just the ones for the exact
+    # session it continues. Best-effort: missing store or failures never
+    # block the turn, and each surfaced report is acked up to the index
+    # actually injected so repeated turns do not re-surface it.
+    try:
+        from runtime.execution.subagents.sessions import (
+            get_subagent_session_store,
+            inject_report_into_thread,
+        )
+
+        store = get_subagent_session_store()
+        if store is not None:
+            for session_id, index, report in store.pending_thread_reports(thread_id):
+                if inject_report_into_thread(thread_id, report.content):
+                    store.mark_reports_delivered(session_id, up_to_index=index)
+    except Exception:  # noqa: BLE001 — report surfacing is best-effort
+        _logger.debug("pending subagent report surfacing skipped", exc_info=True)
     try:
         evt = log.turn_started(thread_id, turn)
         runtime._active_turn_ids.add(turn.id)

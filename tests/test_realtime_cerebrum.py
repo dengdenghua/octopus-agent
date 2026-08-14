@@ -552,6 +552,114 @@ def test_drain_returns_injected_steering_text() -> None:
         _unregister_thread_turn("th-inject", runtime, "turn-1")
 
 
+def test_inject_writes_durable_log_and_never_delivers_twice() -> None:
+    from runtime.sensing.gateway._realtime_cerebrum_steering import (
+        _drain_turn_steering,
+        _inject_thread_steering,
+        _register_thread_turn,
+        _unregister_thread_turn,
+    )
+
+    class _CaptureLog:
+        def __init__(self) -> None:
+            self.writes: list[dict[str, Any]] = []
+
+        def item_completed(self, thread_id: str, turn_id: str, item: Any) -> None:
+            self.writes.append(
+                {"thread_id": thread_id, "turn_id": turn_id, "item": item}
+            )
+
+        def tail_events(self, offset: int) -> tuple[list[Any], int]:
+            events = []
+            for index in range(offset, len(self.writes)):
+                write = self.writes[index]
+                event = type(
+                    "_Event",
+                    (),
+                    {
+                        "event": "item_completed",
+                        "turn_id": write["turn_id"],
+                        "payload": {
+                            "item": write["item"].model_dump(by_alias=True, mode="json")
+                        },
+                    },
+                )()
+                events.append(event)
+            return events, len(self.writes)
+
+    runtime = _SteeringRuntime()
+    turn = _TurnLike()
+    log = _CaptureLog()
+    runtime._turn_steering["turn-1"] = runtime._queue_factory()
+    runtime._turn_steering_accepting["turn-1"] = True
+    runtime._active_turns["turn-1"] = (turn, log)
+    runtime._turn_steering_seen["turn-1"] = set()
+    runtime._turn_steering_notified["turn-1"] = set()
+    runtime._turn_steering_last_sync["turn-1"] = 0.0
+    runtime._turn_steering_log_offsets["turn-1"] = 0
+
+    _register_thread_turn("th-inject", runtime, "turn-1")
+    try:
+        assert _inject_thread_steering("th-inject", "报告文本") is True
+        assert len(log.writes) == 1
+        item = log.writes[0]["item"]
+        assert item.text == "报告文本"
+        assert item.id in runtime._turn_steering_seen["turn-1"]
+        assert item.id in runtime._turn_steering_notified["turn-1"]
+
+        # The steering sync discovers the durable row, but the seen-mark
+        # prevents a second delivery: exactly one drain, then empty.
+        assert _drain_turn_steering(runtime, "turn-1") == ["报告文本"]
+        assert _drain_turn_steering(runtime, "turn-1") == []
+    finally:
+        _unregister_thread_turn("th-inject", runtime, "turn-1")
+
+
+def test_turn_start_surfaces_pending_thread_reports(gateway: Any, tmp_path: Path) -> None:
+    from runtime.execution.subagents.sessions import (
+        SubagentSessionStore,
+        get_subagent_session_store,
+        set_subagent_session_store,
+    )
+
+    client, logs_root = gateway
+    store = SubagentSessionStore(base_dir=Path(logs_root) / "subagent_sessions")
+    previous = get_subagent_session_store()
+    set_subagent_session_store(store)
+    try:
+        first = store.create(agent_id="researcher", thread_id="th-surface")
+        second = store.create(agent_id="coder", thread_id="th-surface")
+        store.append_report(first.session_id, content="部分发现", delivery="quiet")
+        store.append_report(second.session_id, content="最终结论", delivery="quiet")
+
+        _set_script([{"type": "react_completed"}])
+        with client.websocket_connect("/api/realtime") as ws:
+            out = _drive(
+                ws,
+                {
+                    "threadId": "th-surface",
+                    "input": [{"type": "text", "text": "继续"}],
+                    "approvalPolicy": "never",
+                },
+            )
+
+        turn = out["response"].result["turn"]
+        steering = [
+            item
+            for item in turn["items"]
+            if item.get("type") == "steeringUserMessage"
+        ]
+        texts = [item["text"] for item in steering]
+        assert "[子代理报告] 部分发现" in texts
+        assert "[子代理报告] 最终结论" in texts
+        # Surfaced reports are claimed (acked) so the next turn does not
+        # re-inject them (dsh inbox claim semantics).
+        assert store.pending_reports(first.session_id) == []
+        assert store.pending_reports(second.session_id) == []
+    finally:
+        set_subagent_session_store(previous)
+
+
 def test_commentary_delta_maps_to_non_terminal_agent_message(gateway: Any) -> None:
     client, _ = gateway
     _set_script(
