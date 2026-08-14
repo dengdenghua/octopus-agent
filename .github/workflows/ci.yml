@@ -164,7 +164,7 @@ jobs:
       - name: pytest (with coverage)
         # Correctness signal: never gated behind the style ratchets above.
         if: always()
-        run: pytest --cov=runtime --cov=tools --cov-report=term --cov-fail-under=70
+        run: pytest --cov=runtime --cov=tools --cov-report=term --cov-fail-under=75
 
       - name: Large-corpus replay latency gate
         if: always()
