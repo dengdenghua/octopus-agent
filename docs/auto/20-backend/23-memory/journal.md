@@ -61,6 +61,7 @@ tier: "core"
 | `_journal_base.py` | — |
 | `_journal_models.py` | — |
 | `_journal_parse.py` | — |
+| `derive.py` | Project model-visible history from the journal (dsh session-log idea). |
 | `journal.py` | — |
 | `journal_context.py` | — |
 | `progress.py` | — |
@@ -102,12 +103,20 @@ tier: "core"
 | class | `class PreviewRefreshEvent(JournalEvent)` |  |
 | class | `class ReflexHitEvent(JournalEvent)` |  |
 | class | `class SkillProposalDecisionEvent(JournalEvent)` | Operator decision for a self-evolution skill proposal. |
+| class | `class GoalChangeEvent(JournalEvent)` | Durable CAS-guarded goal mutation (dsh ``goal/change``). |
 | class | `class CurriculumGoalDecisionEvent(JournalEvent)` | Operator decision for a journal-derived learning goal. |
 | class | `class McpProposalDecisionEvent(JournalEvent)` | Operator/vet decision for a suggested MCP capability. |
 | class | `class ProtocolDriftDecisionEvent(JournalEvent)` | Operator decision for a detected protocol drift event. |
 | class | `class SubToolStartEvent(JournalEvent)` | Emitted when a sub-agent begins a tool call. |
 | class | `class SubToolEndEvent(JournalEvent)` | Emitted when a sub-agent finishes a tool call. |
 | class | `class BrowserArtifactEvent(JournalEvent)` | A browser screenshot (or similar artifact) was produced. |
+
+### `derive.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def derive_model_messages(journal, task_id, user_intent, max_steps)` | Rebuild model-visible messages from the journal's ``StepEvent`` rows. |
+| func | `def assert_logged_history_reconstructs(journal, expected_steps, task_id)` | Assert the journal reconstructs the given steps — the round-trip. |
 
 ### `journal.py`
 
@@ -157,7 +166,7 @@ tier: "core"
 
 ## Who imports this
 
-**49** file(s) reference this package:
+**50** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
@@ -180,7 +189,8 @@ tier: "core"
   - `runtime/execution/swarm/runtime.py`
   - `runtime/execution/tool_engine/_executor_fileops.py`
   - _… and 2 more_
-- **`runtime/memory/`** · 3 file(s)
+- **`runtime/memory/`** · 4 file(s)
+  - `runtime/memory/goals/service.py`
   - `runtime/memory/hemolymph/composer.py`
   - `runtime/memory/learning/promotion_applier.py`
   - `runtime/memory/runtime_state/hub.py`

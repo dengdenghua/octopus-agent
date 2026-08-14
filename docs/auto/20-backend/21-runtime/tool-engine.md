@@ -46,8 +46,12 @@ tier: "core"
 | `effect_store.py` | Transactional cross-process coordination for tool side effects. |
 | `executor.py` | — |
 | `redis_effect_store.py` | Redis-backed, cross-host tool-effect receipts. |
+| `session_projection.py` | Byte-bounded projection of a session's conversation surface. |
 | `skill_gate.py` | Shared pre-execution safety gate for direct skill dispatch. |
+| `tool_output_pruner.py` | Deterministic head/middle/tail pruning for over-budget tool results. |
+| `tool_output_spill.py` | Session-scoped spill storage for oversized plain-text tool results. |
 | `tool_protocol.py` | — |
+| `tool_shadow_price.py` | Shadow-price accounting for tool-result pruning. |
 | `tool_taxonomy.py` | Unified tool identity layer · stable taxonomy for audit & grouping. |
 
 ## Key classes & functions
@@ -94,6 +98,20 @@ tier: "core"
 | --- | --- | --- |
 | class | `class RedisEffectStore` |  |
 
+### `session_projection.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class ProjectedItem` | One projected conversation unit (user or assistant text). |
+| class | `class ReferencedSessionData` | Snapshot data serialized into the model-facing reference. |
+| class | `class ReferenceRetentionStats` | Retention facts beside the projected snapshot. |
+| class | `class TruncatedText` | One message shortened to a byte budget with an exact omission count. |
+| func | `def is_compact_checkpoint_source(source)` | Whether a persisted message source identifies a compaction checkpoint. |
+| func | `def project_session_conversation(events)` | Project the user/assistant surface, excluding tools and injected context. |
+| func | `def stringify_tag_safe_json(value)` | Compact JSON with every ``<`` escaped as ``\u003c``. |
+| func | `def truncate_with_notice(text, max_output_bytes)` | Binary-search a head/tail truncation of ``text`` that fits the budget. |
+| func | `def retain_session_reference(events, session_id, label, max_bytes, cwd, captured_through_seq)` | Fit one projected session snapshot into an exact byte cap. |
+
 ### `skill_gate.py`
 
 | Kind | Symbol | Doc |
@@ -105,6 +123,29 @@ tier: "core"
 | func | `def antigen_for(skill)` |  |
 | class | `class GateBlock` | A definitive block verdict from :func:`gate_inner_dispatch`. |
 | func | `def gate_inner_dispatch(skill, args, caller, defer_taint_if_handled)` | Apply the executor's pre-execution safety gates to a skill that a meta-skill is about to dispatch DIRECTLY (``use_capability``, a forged com |
+
+### `tool_output_pruner.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def set_shadow_price_sink(sink)` | Install the shadow-price sink (``None`` disables emission). |
+| class | `class ToolResultPrunePolicy` | Character budgets for tool-result pruning. |
+| func | `def validate_prune_budgets(threshold_chars, head_chars, tail_chars, marker)` | Validate prune budgets the way dsh's ``resolveConfig`` does. |
+| func | `def prune_tool_result_text(text, policy, threshold_chars, head_chars, tail_chars, marker, tool_name, call_id)` | Return a pruned copy of ``text``, or ``None`` when it is within budget. |
+
+### `tool_output_spill.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class SpillRef` | A saved spill artifact: locator, byte length, and retrieval guidance. |
+| func | `def encode_segment(raw)` | Encode an arbitrary string as one safe path segment, injectively. |
+| func | `def session_spill_dir(root, session_key)` | The session-scoped directory: ``<root>/session-<sha256-prefix>``. |
+| func | `def default_spill_root()` | The default spill root: a private (0700) per-process temp directory. |
+| func | `def save_text_spill(session_key, content, suggested_name, root)` | Persist ``content`` to a session-scoped spill file and return its ref. |
+| func | `def head_tail_preview(text, budget_bytes)` | Return ``(preview, omitted_bytes)`` splitting budget across both ends. |
+| func | `def head_tail_preview_bytes(text, head_bytes, tail_bytes)` | Return ``(preview, omitted_bytes)`` keeping ``head_bytes + tail_bytes``. |
+| func | `def spill_notice(omitted_bytes, ref)` | The one-line spill notice (no preview, no leading blank line). |
+| func | `def maybe_spill_text(text, max_inline_bytes, session_key, tool_name, suggested_name, root, enabled)` | Spill ``text`` and return a bounded replacement, or ``None`` to keep inline. |
 
 ### `tool_protocol.py`
 
@@ -118,10 +159,20 @@ tier: "core"
 | func | `def tool_lifecycle_event_to_react_event(event)` | Render a lifecycle event using the existing ReAct stream shape. |
 | func | `def tool_lifecycle_event_to_trace_payload(event)` | Render a durable trace payload while preserving legacy aliases. |
 | func | `def output_signals_error(output)` | Return True when structured tool output reports failure. |
-| func | `def render_tool_output(output, max_chars)` | Render arbitrary tool output into a bounded string. |
-| func | `def normalize_tool_result(call, output, is_error, status, error_type, origin, max_chars)` | Convert tool output into the shared result envelope. |
-| func | `def normalize_step_tool_result(step, origin, max_chars, fallback_call)` | Convert an execution ``Step`` into the shared result envelope. |
+| func | `def render_tool_output(output, max_chars, prune_middle, prune_policy, spill_oversized, tool_name, call_id)` | Render arbitrary tool output into a bounded string. |
+| func | `def normalize_tool_result(call, output, is_error, status, error_type, origin, max_chars, prune_middle, prune_policy, spill_oversized, tool_name, call_id)` | Convert tool output into the shared result envelope. |
+| func | `def normalize_step_tool_result(step, origin, max_chars, fallback_call, prune_middle, prune_policy, spill_oversized, tool_name)` | Convert an execution ``Step`` into the shared result envelope. |
 | func | `def normalize_task_node_tool_call(node, resolved_args, node_index)` | Convert a planner ``TaskNode`` into the common tool-call protocol. |
+
+### `tool_shadow_price.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class PruneShadowPrice` | One shadowed prune: what the model no longer sees, heuristically priced. |
+| func | `def estimate_shadowed_tokens(chars_removed)` | Heuristic token price of a shadowed span (dsh fixed density). |
+| class | `class ShadowPriceLedger` | Process-level accumulation of shadow-price records (thread-safe). |
+| func | `def default_shadow_price_sink(price)` | Default sink: accumulate into the process ledger (never bills). |
+| func | `def shadow_price_ledger()` | The process-level shadow ledger used by the default sink. |
 
 ### `tool_taxonomy.py`
 
@@ -136,7 +187,7 @@ tier: "core"
 
 ## Who imports this
 
-**17** file(s) reference this package:
+**18** file(s) reference this package:
 
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
@@ -147,7 +198,8 @@ tier: "core"
   - `runtime/core/cerebrum/_react_execution_phase6d.py`
   - `runtime/core/cerebrum/react_parallel_dispatch.py`
   - `runtime/core/graph_runtime/runtime.py`
-- **`runtime/execution/`** · 4 file(s)
+- **`runtime/execution/`** · 5 file(s)
+  - `runtime/execution/subagents/sessions.py`
   - `runtime/execution/suckers/_ephemeral_tool_exec.py`
   - `runtime/execution/suckers/agent_meta_skills.py`
   - `runtime/execution/suckers/capability_skills.py`

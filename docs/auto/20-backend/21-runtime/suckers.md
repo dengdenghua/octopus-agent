@@ -346,6 +346,7 @@ Suckers = skill pool.
 | func | `def ultracode_token_budget()` | Server-side token grant for one ``audit.ultracode`` turn. |
 | func | `def compute_fingerprint(agent_id, prompt)` | Normalize and hash a delegation spec so repeated identical attempts (modulo whitespace / case) share the same fingerprint. |
 | func | `def check_absolute_cap(turn_id, budget)` | Check if we're under the spawn cap. |
+| func | `def remaining_flat_delegations(turn_id)` | Slots left under the flat per-turn cap (non-orchestration path). |
 | func | `def record_delegation(turn_id, fingerprint, succeeded, budget)` | Record a delegation attempt. |
 | func | `def bump_and_check(turn_id)` | Legacy compat shim: pre-check the absolute cap. |
 
@@ -382,6 +383,7 @@ Suckers = skill pool.
 | --- | --- | --- |
 | class | `class EphemeralRoleDef` | Everything needed to spin up an ephemeral sub-agent turn. |
 | func | `def get_ephemeral_role_ids()` | Stable view for dispatch lookup. |
+| func | `def get_role_display(role_id)` | Return the built-in role's ``(display_name, description)``, or None. |
 | class | `class EphemeralCall` | Everything the runner needs to execute a role turn. |
 | func | `def set_ephemeral_role_runner(runner)` | Install the runner that executes one ephemeral role turn. |
 | func | `def get_ephemeral_role_runner()` |  |
@@ -618,12 +620,14 @@ Suckers = skill pool.
 
 ## Who imports this
 
-**63** file(s) reference this package:
+**64** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
 - **`runtime/adapters/`** · 1 file(s)
   - `runtime/adapters/mcp_client/bridge.py`
+- **`runtime/cli_code.py/`** · 1 file(s)
+  - `runtime/cli_code.py`
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
 - **`runtime/cli_reflect.py/`** · 1 file(s)

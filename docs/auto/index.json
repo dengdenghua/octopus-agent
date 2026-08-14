@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "generated_at": "2026-08-12T20:18:04+00:00",
-  "files_analyzed": 46,
+  "generated_at": "2026-08-14T07:40:26+00:00",
+  "files_analyzed": 48,
   "tree": [
     {
       "type": "doc",
@@ -218,8 +218,18 @@
             },
             {
               "type": "doc",
+              "title": "CB CodeBuddy CLI 伙伴",
+              "path": "20-backend/26-agents/local_codebuddy_cli.md"
+            },
+            {
+              "type": "doc",
               "title": "CX Codex CLI 伙伴",
               "path": "20-backend/26-agents/local_codex_cli.md"
+            },
+            {
+              "type": "doc",
+              "title": "OC OpenCode CLI 伙伴",
+              "path": "20-backend/26-agents/local_opencode_cli.md"
             },
             {
               "type": "doc",

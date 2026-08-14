@@ -193,6 +193,8 @@ tier: "core"
 | class | `class ToolCallContext` | Context passed to tool call event handlers. |
 | class | `class ToolCallResult` | Result of a tool call. |
 | class | `class ToolProvider` | A group of tools registered under a single provider. |
+| class | `class PreToolDecision(StrEnum)` | Decision of a pre-execute gate (dsh ``tools/pre-execute``). |
+| class | `class PostToolDecision(StrEnum)` | Decision of a post-execute gate (dsh ``tools/post-execute``). |
 | class | `class ToolRegistry` | Registry for MCP-style tools. |
 | func | `def get_tool_registry()` | Get or create the global tool registry. |
 

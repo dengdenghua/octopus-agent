@@ -42,7 +42,7 @@ tier: "standard"
 | `_agents_local_partner_doctor.py` | Doctor-style readiness summary for LocalPartner. |
 | `_agents_local_partner_guidance.py` | UX guidance / command hints / diagnostics for the LocalPartner connect dialog. |
 | `_agents_local_partner_security.py` | Security primitives for LocalPartner detection + registration. |
-| `_agents_local_partner_specs.py` | Registry of supported LocalPartner CLI specs. |
+| `_agents_local_partner_specs.py` | Compatibility re-export — specs now live in the execution layer. |
 | `_agents_local_partner_writer.py` | SOUL.md template + agent writer for LocalPartner registration. |
 | `_channels_constructors.py` | — |
 | `_channels_models.py` | — |
@@ -107,6 +107,7 @@ tier: "standard"
 | `_tool_bridge_scoring.py` | Per-turn quality scoring + auto-evolution tick helpers. |
 | `_tool_bridge_session.py` | Session metadata + browser operation guidance helpers. |
 | `account_usage_router.py` | — |
+| `adaptive_delta_buffer.py` | 自适应流式事件批处理器 |
 | `agent_market_sources/financial-services/agent-plugins/model-builder/skills/dcf-model/scripts/validate_dcf.py` | DCF Model Validation Script Validates Excel DCF models for formula errors and common DCF mistakes |
 | `agent_market_sources/financial-services/agent-plugins/pitch-agent/skills/dcf-model/scripts/validate_dcf.py` | DCF Model Validation Script Validates Excel DCF models for formula errors and common DCF mistakes |
 | `agent_market_sources/financial-services/agent-plugins/pitch-agent/skills/ib-check-deck/scripts/extract_numbers.py` | Extract numerical values from presentation content for consistency checking. |
@@ -405,6 +406,13 @@ tier: "standard"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def create_account_usage_router(journal, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
+
+### `adaptive_delta_buffer.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class BufferMetrics` | 批处理缓冲区性能指标 |
+| class | `class AdaptiveDeltaBuffer` | 自适应批处理缓冲器 |
 
 ### `agent_market_sources/financial-services/agent-plugins/model-builder/skills/dcf-model/scripts/validate_dcf.py`
 
@@ -988,7 +996,7 @@ tier: "standard"
 | --- | --- | --- |
 | func | `def resolve_storage_command()` | Resolve the argv that launches ``octopus-storage serve``, or ``None`` if it can't be found. Priority: ``OCTOPUS_STORAGE_CMD`` (explicit) → t |
 | func | `def storage_status()` | Snapshot of storage liveness for a status endpoint / UI light. Returns the heartbeat-cached value when the heartbeat is running; otherwise p |
-| func | `def maybe_start_storage()` | Co-launch storage when opt-in + not already up + resolvable. Returns a status: ``disabled`` / ``already_running`` / ``not_found`` / ``starte |
+| func | `def maybe_start_storage(force)` | Co-launch storage when opt-in + not already up + resolvable. Returns a status: ``disabled`` / ``already_running`` / ``not_found`` / ``starte |
 | func | `def start_storage_heartbeat()` | Start the ongoing supervision heartbeat once (idempotent, daemon thread). |
 | func | `def stop_storage()` | Terminate the co-launched child (if we started one). Idempotent. |
 
@@ -1098,12 +1106,14 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def create_thread_state_router(store, logs_root, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
+| func | `def create_thread_state_router(store, logs_root, session_titles, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
+| func | `def build_auto_title_service(store, model_router)` | Wire a ``SessionTitleService`` for first-turn auto-title (dsh auto-title). |
 
 ### `turn_session.py`
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
+| func | `def thread_owner_agent_id(thread_id, store)` | Return the immutable persona bound to an existing solo thread. |
 | func | `def build_turn_metadata(thread_id, body, store)` | Merge per-turn context with persisted thread metadata. |
 | func | `def build_turn_session(actor, agent, thread_id, body, store)` | Assemble the per-turn ``Session`` object from request and state. |
 

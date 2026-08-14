@@ -64,6 +64,7 @@ tier: "core"
 | `plugin_auto_load.py` | Auto-activate pinned plugins/skill-packs from user mentions. |
 | `prompt_persistence.py` | — |
 | `react_action_outcomes.py` | Action outcome bookkeeping for the ReAct loop. |
+| `react_auto_verify.py` | Runtime-side auto-verification salvage for final-answer guard deadlocks. |
 | `react_browser_guards.py` | Browser-interaction and mixed-mode completion guards. |
 | `react_browser_iteration.py` | Browser-surface gating and per-task iteration limits for the ReAct loop. |
 | `react_checkpointing.py` | Periodic auto-checkpoint + distributed mirror for the ReAct loop. |
@@ -92,11 +93,13 @@ tier: "core"
 | `react_prompt_assembly.py` | PHASE 3 — system + volatile prompt assembly for the ReAct loop. |
 | `react_public_updates.py` | Public progress-update plumbing for the ReAct loop. |
 | `react_quiet_evidence.py` | Quiet-evidence accumulation for the ReAct loop's public narrative. |
+| `react_repeat_tool_guards.py` | Repeat tool call detection guards. |
 | `react_resume.py` | Resume/checkpoint-rebuild helpers for the ReAct loop. |
 | `react_security_detectors.py` | Security + quality detectors for ReAct trajectory steps. |
 | `react_security_guards.py` | Security + quality guards (post-step / pre-Final-Answer gates). |
 | `react_terminal.py` | Post-loop terminal handling + finalization for the ReAct loop. |
 | `react_test_quality_guards.py` | Test-quality guards: cheats that satisfy coverage letter, not spirit. |
+| `react_timeout_guards.py` | Tool timeout detection and policy guards. |
 | `react_todo_protocol_guards.py` | Todo-protocol and completion-phrase guards. |
 | `react_types.py` | — |
 | `react_verification_guards.py` | Verification-completeness guards for ReAct code-mode turns. |
