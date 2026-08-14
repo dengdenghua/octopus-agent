@@ -128,6 +128,13 @@ async def bridge_orchestrator_batch(
                     turn.items = [updated if item.id == updated.id else item for item in turn.items]
                     if terminal:
                         await _emit_completed(updated)
+                    elif updated.summary and updated.summary != existing.summary:
+                        # Live progress: re-broadcast item/started so the
+                        # frontend workbench streams the running summary on the
+                        # sub-agent tile instead of waiting for the terminal
+                        # item/completed snapshot. The reducer treats a second
+                        # item/started for an in-progress item as a replace.
+                        await _emit_started(updated)
             elif etype == "batch_complete":
                 break
     except Exception:  # noqa: BLE001 - bridge is best-effort, never breaks the turn

@@ -66,6 +66,7 @@ export function deriveAgentTilesFromEvents(
     const prompt =
       stringFromKeys(event.input, [
         "prompt",
+        "prompt_preview",
         "task",
         "description",
         "query",
@@ -103,6 +104,10 @@ export function deriveAgentTilesFromEvents(
         avatarForRole(event.subAgentRole),
       codename: event.subagentCodename ?? existing?.codename,
       role: event.subAgentRole ?? existing?.role,
+      roleDisplayName:
+        event.subagentRoleDisplayName ?? existing?.roleDisplayName,
+      roleDescription:
+        event.subagentRoleDescription ?? existing?.roleDescription,
       specIndex: existing?.specIndex,
       taskLabel: existing?.taskLabel,
       parentToolUseId: event.parentToolUseId ?? existing?.parentToolUseId,

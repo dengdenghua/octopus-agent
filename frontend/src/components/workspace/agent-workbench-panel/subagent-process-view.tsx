@@ -1,36 +1,196 @@
-import { BotIcon, MonitorIcon } from "lucide-react";
+import { useMemo, useRef, useEffect, useState } from "react";
+import { ArrowDownIcon } from "lucide-react";
 
+import type { AIMessage, Message, ToolMessage } from "@/core/api/types";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
-import { DotProgress } from "../swarm/dot-progress";
-import type { WorkBlock } from "../work-blocks";
-import { statusText, workBlockTitle } from "../work-blocks";
-import { blockIcon, compactDetail } from "../agent-workbench-utils";
-import { StatusGlyph } from "../agent-workbench-pages";
+import { useStreamingTextBuffer } from "@/hooks/use-streaming-text-buffer";
+
 import type { AgentTile } from "../agent-workbench-utils";
-import {
-  repairMojibakeText,
-  agentProgressPercent,
-} from "../agent-workbench-utils";
-import {
-  agentRunBadgeClass,
-  agentRunDotClass,
-  agentRunHue,
-} from "../agent-run-status";
+import { repairMojibakeText } from "../agent-workbench-utils";
+import type { LiveToolEvent } from "../live-tool-timeline";
+import type { WorkBlock } from "../work-blocks";
+import { MessageGroup } from "../messages/message-group";
+import { MessageListItem } from "../messages/message-list-item";
 import { ComputerScopeSwitch } from "./computer-scope-switch";
-import { AgentComputerStatusCard } from "./agent-computer-status-card";
-import {
-  agentStatusTextClass,
-  dockAgentStatusLabel,
-  workBlockLabelsFromI18n,
-} from "./helpers";
+
+function publicBlockOutput(block: WorkBlock): string {
+  const observation = block.event.observation?.trim();
+  if (observation) return repairMojibakeText(observation);
+  if (block.event.error?.trim()) return repairMojibakeText(block.event.error);
+  // Prefer a readable text channel inside an object payload over a raw
+  // JSON.stringify dump — same contract as subagentResultText. Fall back to
+  // the stringified snapshot only when the payload carries no text field.
+  const rawOutput = block.event.output;
+  if (rawOutput && typeof rawOutput === "object" && !Array.isArray(rawOutput)) {
+    const readable = firstRecordText(rawOutput, [
+      "output",
+      "summary",
+      "result",
+      "message",
+      "text",
+      "content",
+      "stdout",
+      "content_text",
+    ]);
+    if (readable) return repairMojibakeText(readable);
+  }
+  const output = block.outputText.trim();
+  if (output) return repairMojibakeText(output);
+  return "";
+}
+
+function firstRecordText(value: unknown, keys: string[]): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const record = value as Record<string, unknown>;
+  for (const key of keys) {
+    const entry = record[key];
+    if (typeof entry === "string" && entry.trim()) return entry.trim();
+  }
+  return "";
+}
+
+/** Readable final-answer text for a finished sub-agent event.
+ *
+ * Prefer explicit text channels (``observation``, ``result.output`` /
+ * ``summary`` / ``output_preview`` / ``result``). Never JSON-stringify the
+ * whole result envelope as a stand-in answer — that used to render the
+ * lifecycle metadata ({codename, role, agent_id, duration_s, ...}) as if it
+ * were the agent's verdict. */
+function subagentResultText(event: LiveToolEvent): string {
+  const observation = event.observation?.trim();
+  if (observation) return observation;
+  for (const bag of [event.input, event.output]) {
+    if (!bag || typeof bag !== "object" || Array.isArray(bag)) continue;
+    const text = firstRecordText(bag, [
+      "output",
+      "summary",
+      "output_preview",
+      "result",
+      "message",
+      "text",
+      "content",
+    ]);
+    if (text) return text;
+  }
+  return event.error?.trim() ?? "";
+}
+
+/**
+ * Project one selected sub-agent's event stream onto the exact message model
+ * used by the main conversation. MessageGroup then owns thinking/execution
+ * streaming, aggregation and disclosure state; this view owns only isolation.
+ */
+function subagentMessages(
+  agent: AgentTile,
+  blocks: WorkBlock[],
+): {
+  task: Message | null;
+  process: Message[];
+  answer: Message | null;
+} {
+  const taskText = repairMojibakeText(
+    agent.prompt ?? agent.task ?? agent.lastThought ?? "",
+  );
+  const task: Message | null = taskText
+    ? {
+        id: `subagent-${agent.id}-task`,
+        type: "human",
+        content: taskText,
+      }
+    : null;
+  const process: Message[] = [];
+  // Once the agent settles, a trailing block that never received a done event
+  // must not keep rendering as "running": fold its output into a real result
+  // row instead of leaving a half-open step.
+  const settled = agent.status !== "running";
+  let answerText = "";
+  let answerId = `subagent-${agent.id}-answer`;
+
+  for (const block of blocks) {
+    const event = block.event;
+    if (event.lifecycle === "spawned") continue;
+    if (event.lifecycle === "finished") {
+      const text = repairMojibakeText(
+        subagentResultText(event) || agent.resultSummary || agent.error || "",
+      );
+      if (text) {
+        answerText = text;
+        answerId = `${block.id}-answer`;
+      }
+      continue;
+    }
+
+    const callId = event.id || block.id;
+    const output = publicBlockOutput(block);
+    const thought = repairMojibakeText(
+      event.thought?.trim() || event.observation?.trim() || "",
+    );
+    const ai: AIMessage = {
+      id: `${block.id}-assistant`,
+      type: "ai",
+      content: "",
+      tool_calls: [
+        {
+          id: callId,
+          name: event.name,
+          args: {
+            ...(event.input ?? {}),
+            // Match the main conversation's realtime adapter contract: live
+            // execution output belongs to the active tool call until it ends.
+            ...(event.status === "running" && !settled && output
+              ? { output }
+              : {}),
+          },
+          parentItemId: event.parentToolUseId ?? null,
+        },
+      ],
+      additional_kwargs: {
+        ...(thought ? { reasoning_content: thought } : {}),
+        agent_id: agent.id,
+        agent_display_name: agent.codename ?? agent.name,
+      },
+    };
+    process.push(ai);
+
+    if (
+      event.status === "error" ||
+      (output && (event.status !== "running" || settled))
+    ) {
+      const tool: ToolMessage = {
+        id: `${block.id}-result`,
+        type: "tool",
+        tool_call_id: callId,
+        content: output || event.error || "",
+        status: event.status === "error" ? "error" : "success",
+      };
+      process.push(tool);
+    }
+  }
+
+  if (!answerText) {
+    answerText = repairMojibakeText(agent.resultSummary ?? agent.error ?? "");
+  }
+  const answer: Message | null = answerText
+    ? {
+        id: answerId,
+        type: "ai",
+        content: answerText,
+        additional_kwargs: {
+          agent_id: agent.id,
+          agent_display_name: agent.codename ?? agent.name,
+          ...(agent.status === "error" ? { response_state: "failed" } : {}),
+        },
+      }
+    : null;
+
+  return { task, process, answer };
+}
 
 export function SubagentProcessView({
   agent,
   blocks,
-  currentBlockId,
   onOpenMain,
-  onSelectBlock,
 }: {
   agent: AgentTile;
   blocks: WorkBlock[];
@@ -39,181 +199,132 @@ export function SubagentProcessView({
   onSelectBlock: (blockId: string) => void;
 }) {
   const { t } = useI18n();
-  const workBlockLabels = workBlockLabelsFromI18n(t);
-  const label = repairMojibakeText(agent.codename ?? agent.name ?? agent.label);
-  const progress = agentProgressPercent(agent.status) / 100;
-  const hue = agentRunHue(agent.status);
-  const brief = repairMojibakeText(
-    agent.prompt ?? agent.task ?? agent.lastThought ?? "",
+  const messages = useMemo(
+    () => subagentMessages(agent, blocks),
+    [agent, blocks],
+  );
+
+  // 智能滚动锚点：自动滚动到底部，除非用户主动向上滚动
+  const containerRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [showScrollFab, setShowScrollFab] = useState(false);
+
+  // 检测用户是否主动滚动离开底部
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+      setAutoScroll(isNearBottom);
+      setShowScrollFab(!isNearBottom && agent.status === "running");
+    };
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [agent.status]);
+
+  // 当有新消息且处于自动滚动模式时，滚动到底部
+  useEffect(() => {
+    if (autoScroll && agent.status === "running") {
+      messagesEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
+    }
+  }, [messages, autoScroll, agent.status]);
+
+  const handleScrollToBottom = () => {
+    setAutoScroll(true);
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  };
+  const isRunning = agent.status === "running";
+  const answerText =
+    typeof messages.answer?.content === "string"
+      ? messages.answer.content
+      : "";
+  // Reveal the final answer with the same typewriter buffer the main
+  // conversation uses. The sub-agent's verdict only materialises at the
+  // terminal finished marker (it isn't streamed token-by-token), so once the
+  // run settles we drain the burst smoothly instead of a hard flash-in.
+  // ``resetKey`` stays pinned to the agent so a live settle animates while a
+  // replay/history switch shows the full text instantly.
+  const answerDisplay = useStreamingTextBuffer({
+    targetText: answerText,
+    enabled: isRunning,
+    resetKey: agent.id,
+    targetIntervalMs: 32,
+    minCharsPerTick: 2,
+    maxCharsPerTick: 12,
+    backlogDivisor: 8,
+    fastDrainThreshold: 4,
+    maxFinishDelayMs: 420,
+  });
+  const hasConversation = Boolean(
+    messages.task || messages.process.length > 0 || messages.answer,
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-2xl flex-col">
-        <ComputerScopeSwitch
-          subLabel={`${t.agentWorkbench.kindAgent} ${agent.label}`}
-          onOpenMain={onOpenMain}
-        />
-        <section className="border-b border-border-default bg-background/85">
-          <div className="flex items-center justify-center border-b border-border-subtle px-3 py-2 text-sm font-medium text-muted-foreground">
-            {t.agentWorkbenchPanel.agentClusterIndependentProcess}
-          </div>
-          <div className="grid gap-4 p-4 sm:grid-cols-[8rem_1fr]">
-            <div className="border-b border-border-subtle pb-3 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4">
-              <div className="border-b border-border-default pb-1.5 font-mono text-sm font-semibold text-foreground">
-                {agent.label}
-              </div>
-              <div className="mt-7 flex size-20 items-center justify-center rounded-sm border border-border bg-background text-4xl">
-                {agent.avatar ? (
-                  <span aria-hidden="true">{agent.avatar}</span>
-                ) : (
-                  <BotIcon className="size-10 text-foreground" />
-                )}
-              </div>
-              <div className="mt-4 truncate text-sm font-semibold text-foreground">
-                {label}
-              </div>
-              <div className="mt-1 truncate text-xs text-muted-foreground">
-                {repairMojibakeText(agent.role ?? "Subagent")}
-              </div>
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+      <div
+        ref={containerRef}
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+      >
+        <div className="mx-auto flex w-full max-w-2xl flex-col">
+          <ComputerScopeSwitch
+            subLabel={`${t.agentWorkbench.kindAgent} ${agent.label}`}
+            onOpenMain={onOpenMain}
+          />
+          {!hasConversation ? (
+            <div className="flex min-h-48 items-center justify-center px-5 text-sm text-muted-foreground">
+              {t.agentWorkbenchPanel.waitingForSubagentOutput}
             </div>
-            <div className="min-w-0">
-              <div className="flex items-start gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-lg font-semibold text-foreground">
-                    {label}
-                  </div>
-                  <div className="mt-1 truncate text-sm text-muted-foreground">
-                    {repairMojibakeText(
-                      agent.role ??
-                        agent.taskLabel ??
-                        t.agentWorkbenchPanel.subAgent,
-                    )}
-                  </div>
-                </div>
-                <span
-                  className={cn(
-                    "inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium",
-                    agentRunBadgeClass(agent.status),
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "size-2 rounded-full",
-                      agentRunDotClass(agent.status),
-                    )}
-                  />
-                  {dockAgentStatusLabel(agent.status, t)}
-                </span>
-              </div>
-              <div className="mt-4 flex items-center gap-3">
-                <DotProgress
-                  progress={progress}
-                  hue={hue}
-                  cols={18}
-                  rows={3}
-                  className={cn(agent.status === "running" && "animate-pulse")}
+          ) : (
+            <div
+              className="space-y-3 px-5 py-4"
+              data-testid="subagent-main-conversation"
+            >
+              {messages.task ? (
+                <MessageListItem message={messages.task} isLastMessage={false} />
+              ) : null}
+              {messages.process.length > 0 ? (
+                <MessageGroup
+                  messages={messages.process}
+                  isLoading={isRunning}
+                  keepOpen={isRunning}
+                  codeMode
                 />
-                <span className="text-xs text-muted-foreground">
-                  {t.agentWorkbenchPanel.processRecords(agent.eventCount)}
-                </span>
-                {agent.iterationCount !== undefined && (
-                  <span className="text-xs text-muted-foreground">
-                    {t.agentWorkbenchPanel.iterationRounds(
-                      agent.iterationCount,
-                    )}
-                  </span>
-                )}
-              </div>
-              <div className="mt-4 max-h-36 overflow-y-auto whitespace-pre-wrap break-words border-l-2 border-border-default bg-muted/20 px-3 py-2 text-sm leading-6 text-foreground">
-                {brief || t.agentWorkbenchPanel.noTaskDescription}
-              </div>
+              ) : null}
+              {messages.answer ? (
+                <MessageListItem
+                  message={{ ...messages.answer, content: answerDisplay }}
+                  isLoading={isRunning}
+                  isLastMessage
+                />
+              ) : null}
+              <div ref={messagesEndRef} className="h-4" />
             </div>
-          </div>
-        </section>
-
-        {blocks.length === 0 ? (
-          <div className="flex min-h-32 items-center justify-center border-b border-border-subtle bg-muted/15 px-4 text-sm text-muted-foreground">
-            {t.agentWorkbenchPanel.waitingForSubagentOutput}
-          </div>
-        ) : (
-          <section className="border-b border-border-subtle bg-background/70">
-            <div className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground">
-              <MonitorIcon className="size-4" aria-hidden="true" />
-              {t.agentWorkbenchPanel.processReplay}
-              <span className="ml-auto text-xs font-normal">
-                {t.agentWorkbench.stepCount(blocks.length)}
-              </span>
-            </div>
-            <div className="divide-y divide-border/35">
-              {blocks.map((block, index) => {
-                const Icon = blockIcon(block.kind);
-                const active = currentBlockId === block.id;
-                const detail =
-                  block.outputText ||
-                  block.inputText ||
-                  block.subtitle ||
-                  workBlockTitle(block, workBlockLabels);
-                return (
-                  <button
-                    key={block.id}
-                    type="button"
-                    onClick={() => onSelectBlock(block.id)}
-                    className={cn(
-                      "flex w-full items-start gap-2 border-l-2 px-3 py-2 text-left transition-colors",
-                      active
-                        ? "border-l-primary bg-muted/30"
-                        : "border-l-transparent hover:bg-muted/25",
-                    )}
-                  >
-                    <span className="mt-0.5 w-5 shrink-0 font-mono text-xs text-muted-foreground">
-                      {index + 1}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex min-w-0 items-center gap-1.5">
-                        <StatusGlyph
-                          status={block.status}
-                          className="size-3.5"
-                        />
-                        <Icon className="size-3.5 shrink-0 text-muted-foreground" />
-                        <span className="truncate text-xs font-semibold text-foreground">
-                          {workBlockTitle(block, workBlockLabels)}
-                        </span>
-                        {block.subtitle && (
-                          <span className="max-w-[38%] shrink-0 truncate text-xs text-muted-foreground">
-                            {block.subtitle}
-                          </span>
-                        )}
-                      </div>
-                      {detail && (
-                        <div className="mt-1 line-clamp-2 text-xs leading-4 text-muted-foreground">
-                          {compactDetail(detail, 150)}
-                        </div>
-                      )}
-                    </div>
-                    <span className="shrink-0 text-xs text-muted-foreground/70">
-                      {statusText(block.status, {
-                        running: t.messageGrouping.liveProcessRunning,
-                        waiting_approval: t.messageGrouping.liveProcessWaiting,
-                        warning: t.messageGrouping.liveProcessDone,
-                        error: t.messageGrouping.liveProcessError,
-                        done: t.messageGrouping.liveProcessDone,
-                      })}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        )}
-        <AgentComputerStatusCard
-          avatar={agent.avatar}
-          label={label}
-          status={dockAgentStatusLabel(agent.status, t)}
-          statusClassName={agentStatusTextClass(agent.status)}
-          title={agent.label}
-        />
+          )}
+        </div>
       </div>
+
+      {/* 滚动到底部的悬浮按钮 */}
+      {showScrollFab && (
+        <button
+          type="button"
+          onClick={handleScrollToBottom}
+          className={cn(
+            "absolute bottom-6 right-6 z-10 flex items-center gap-2 rounded-full border border-border-default bg-background px-4 py-2.5 text-sm font-medium shadow-lg transition-all hover:scale-105 hover:shadow-xl",
+            "animate-in fade-in slide-in-from-bottom-4 duration-300",
+          )}
+          aria-label={t.agentWorkbenchPanel.scrollToBottom ?? "滚动到底部"}
+        >
+          <ArrowDownIcon className="size-4" />
+          <span>{t.agentWorkbenchPanel.viewLatestProgress ?? "查看最新进展"}</span>
+        </button>
+      )}
     </div>
   );
 }

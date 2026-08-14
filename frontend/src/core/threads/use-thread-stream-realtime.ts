@@ -231,6 +231,14 @@ function mcpItemToLiveEvent(
       typeof args.codename === "string" ? args.codename : undefined;
     const avatar = typeof args.avatar === "string" ? args.avatar : undefined;
     const role = typeof args.role === "string" ? args.role : undefined;
+    const roleDisplayName =
+      typeof args.role_display_name === "string"
+        ? args.role_display_name
+        : undefined;
+    const roleDescription =
+      typeof args.role_description === "string"
+        ? args.role_description
+        : undefined;
     const agentId =
       typeof args.agent_id === "string" ? args.agent_id : undefined;
     const parentToolUseId =
@@ -250,6 +258,8 @@ function mcpItemToLiveEvent(
       subAgentRole: role,
       subagentCodename: codename,
       subagentAvatar: avatar,
+      subagentRoleDisplayName: roleDisplayName,
+      subagentRoleDescription: roleDescription,
       parentToolUseId,
       input: { ...args },
     };
@@ -298,6 +308,17 @@ function mcpItemToLiveEvent(
       typeof result.error === "string" && result.error.trim()
         ? result.error.trim()
         : undefined;
+    // The bridge now carries the sub-agent's answer text on ``result.output``
+    // (it previously shipped only metadata). Surface it as ``observation`` so
+    // the workbench's sub-agent view can render a readable final message
+    // instead of falling back to the raw result envelope. Older snapshots
+    // without it simply leave ``observation`` unset.
+    const answerText =
+      typeof result.output === "string" && result.output.trim()
+        ? result.output.trim()
+        : typeof result.summary === "string" && result.summary.trim()
+          ? result.summary.trim()
+          : undefined;
     return {
       id: item.id,
       name: "subagent",
@@ -315,6 +336,7 @@ function mcpItemToLiveEvent(
       parentToolUseId,
       iterationCount,
       filesTouched,
+      observation: answerText,
       input: { ...result },
       output: result,
     };
@@ -842,9 +864,7 @@ export function liveToolEventsFromLastTurn(
     last,
     itemEvents.length + 1,
   );
-  const eventsWithPhase = phaseEvent
-    ? [...itemEvents, phaseEvent]
-    : itemEvents;
+  const eventsWithPhase = phaseEvent ? [...itemEvents, phaseEvent] : itemEvents;
   const events = [
     ...eventsWithPhase,
     ...conv.pendingApprovals.map((approval, index) =>
@@ -936,10 +956,8 @@ export function useThreadStreamRealtime(
           ?.permission_mode,
         // Explicit user opt-in only; when unset we pass undefined so the
         // mode's safe default (deny, or allow for full access) applies.
-        (context as
-          | { network_access?: NetworkAccessMode }
-          | null
-          | undefined)?.network_access,
+        (context as { network_access?: NetworkAccessMode } | null | undefined)
+          ?.network_access,
       ),
     [context],
   );

@@ -17,6 +17,8 @@ from __future__ import annotations
 import contextlib
 from typing import Any
 
+from runtime.protocol.text_limits import MAX_SUBAGENT_ANSWER_CHARS
+
 __all__ = [
     "_emit_sub_tool_event",
     "_emit_subagent_lifecycle_event",
@@ -222,6 +224,8 @@ def _emit_subagent_lifecycle_event(
                 "avatar": payload.get("avatar"),
                 "role": payload.get("role"),
                 "agent_id": payload.get("agent_id"),
+                "role_display_name": payload.get("role_display_name"),
+                "role_description": payload.get("role_description"),
                 "prompt_preview": payload.get("prompt_preview"),
                 "use_cheap_model": payload.get("use_cheap_model"),
                 "started_at": payload.get("started_at"),
@@ -262,10 +266,11 @@ def _emit_subagent_lifecycle_event(
                         "files_touched": payload.get("files_touched"),
                         "error": payload.get("error"),
                         "status": payload.get("status"),
+                        "output": payload.get("output"),
                     },
                     ensure_ascii=False,
                     default=str,
-                )[:1000]
+                )[:MAX_SUBAGENT_ANSWER_CHARS]
             except (TypeError, ValueError):
                 output_preview = ""
             ok = bool(payload.get("ok", True))

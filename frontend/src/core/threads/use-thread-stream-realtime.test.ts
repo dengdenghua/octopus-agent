@@ -646,6 +646,7 @@ describe("liveToolEventsFromConversation", () => {
             duration_s: 1.5,
             iteration_count: 3,
             files_touched: ["a.py", "b.py"],
+            output: "找到了三篇相关专利",
           },
           durationMs: 1500,
         }),
@@ -667,6 +668,10 @@ describe("liveToolEventsFromConversation", () => {
       iterationCount: 3,
       filesTouched: ["a.py", "b.py"],
     });
+    // The bridge now carries the answer text on result.output; it must be
+    // surfaced as observation so the workbench can render a readable final
+    // message instead of falling back to the raw result envelope.
+    expect(events[0]?.observation).toBe("找到了三篇相关专利");
   });
 
   it("marks a __subagent_finished__ event as error when ok is false", () => {
@@ -1305,9 +1310,7 @@ describe("useThreadStreamRealtime permissions", () => {
       result.current[1]("th-test", { text: "hello", files: [] });
     });
 
-    await waitFor(() =>
-      expect(result.current[0].error).toBeInstanceOf(Error),
-    );
+    await waitFor(() => expect(result.current[0].error).toBeInstanceOf(Error));
     // message-list keys its network styling off `.message`; wrapping
     // must keep the original text intact.
     expect(result.current[0].error?.message).toBe("websocket closed (1006)");

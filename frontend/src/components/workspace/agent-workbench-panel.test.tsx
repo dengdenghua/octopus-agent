@@ -3,6 +3,10 @@ import type { ReactElement } from "react";
 import { describe, expect, test, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/harness";
+import {
+  ThreadStreamingContext,
+  ThreadValuesContext,
+} from "@/components/workspace/messages/context";
 
 import {
   AgentWorkbenchPanel,
@@ -453,10 +457,13 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("协作")).not.toBeInTheDocument();
 
     fireEvent.click(codexSeat);
-    expect(screen.getByText("暂无独立进程活动")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "概要" })).toHaveClass(
+      "border-foreground/70",
+    );
+    expect(screen.queryByText("暂无独立进程活动")).not.toBeInTheDocument();
     expect(
-      screen.getByText("当该成员启动独立进程后，过程记录会显示在这里。"),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "执行画面" }),
+    ).not.toBeInTheDocument();
 
     const mainComputerButton = screen.getByRole("button", {
       name: "主电脑 · 等待中",
@@ -525,8 +532,18 @@ describe("<AgentWorkbenchPanel />", () => {
 
     fireEvent.click(writerSeat);
 
+    // Clicking a sub-role lands on its nameplate (工牌): the role's identity,
+    // not the turn's delegated brief.
     expect(screen.getAllByText("writer").length).toBeGreaterThan(0);
-    expect(screen.getByText("summary lane")).toBeInTheDocument();
+    expect(
+      screen.getByText("Drafts clear, well-structured prose and deliverables."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("summary lane")).not.toBeInTheDocument();
+
+    expect(
+      screen.getByRole("button", { name: "执行画面" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("summary lane")).not.toBeInTheDocument();
   });
 
   test("keeps the main workstation status independent from subagent failures", () => {
@@ -559,8 +576,13 @@ describe("<AgentWorkbenchPanel />", () => {
       screen.getByRole("button", { name: "查看 Review-03 独立进程" }),
     );
 
-    expect(screen.getByText("Agent 集群 - 独立进程")).toBeInTheDocument();
-    expect(screen.getAllByText("异常").length).toBeGreaterThan(0);
+    // Clicking a sub-role lands on its nameplate (工牌) first.
+    expect(screen.getByText("Agent 集群 - 创建助手")).toBeInTheDocument();
+
+    expect(
+      screen.getByRole("button", { name: "执行画面" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Agent 集群 - 独立进程")).not.toBeInTheDocument();
   });
 
   test("surfaces call_agent_parallel result outputs and failures", () => {
@@ -1287,14 +1309,16 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    // Summary page shows agent labels (codenames)
+    // Summary page shows agent labels (codenames) inside the roster section
     expect(
       screen.queryByRole("tab", { name: "\u5b50\u667a\u80fd\u4f53" }),
     ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /子智能体/ }));
     expect(screen.getAllByText("Spark-01").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Spark-02").length).toBeGreaterThan(0);
   });
 
-  test("shows the assistant badge only while the spawn event is focused", async () => {
+  test("shows the role card only when the user focuses a sub-agent", async () => {
     const spawn = event({
       id: "spawn-1",
       name: "subagent",
@@ -1310,9 +1334,13 @@ describe("<AgentWorkbenchPanel />", () => {
       <AgentWorkbenchPanel events={[spawn]} />,
     );
 
-    expect(screen.getByText("Agent 集群 - 创建助手")).toBeInTheDocument();
-    expect(screen.getAllByText("Spark-Design").length).toBeGreaterThan(0);
+    // The spawn event alone must not replace the summary with the role card.
+    expect(screen.queryByText("Agent 集群 - 创建助手")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "角色卡" }),
+    ).not.toBeInTheDocument();
 
+    // A later tool event still keeps the summary page normal.
     rerender(
       <AgentWorkbenchPanel
         events={[
@@ -1340,9 +1368,68 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(
       screen.queryByRole("tab", { name: /浏览器/ }),
     ).not.toBeInTheDocument();
+
+    // An explicit role focus intent lands on the role card (工牌).
+    rerender(
+      <AgentWorkbenchPanel
+        focusedAgentId="designer-a"
+        focusedAgentView="role"
+        focusedAgentNonce={1}
+        events={[
+          spawn,
+          event({
+            id: "read-1",
+            name: "read_file",
+            status: "running",
+            parentToolUseId: "parent-call-1",
+            subAgentRole: "designer",
+            startedAt: 2000,
+            input: { path: "design.md" },
+          }),
+        ]}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Agent 集群 - 创建助手")).toBeInTheDocument();
+    });
+    expect(screen.getAllByText("Spark-Design").length).toBeGreaterThan(0);
   });
 
-  test("opens the focused sub-agent independent process view", async () => {
+  test("shows the backend built-in role identity on the nameplate", async () => {
+    const spawn = event({
+      id: "spawn-1",
+      name: "subagent",
+      lifecycle: "spawned",
+      status: "running",
+      parentToolUseId: "parent-call-1",
+      agentId: "reviewer-a",
+      subAgentRole: "reviewer",
+      subagentCodename: "Spark-Review",
+      subagentRoleDisplayName: "Code Reviewer",
+      subagentRoleDescription:
+        "Scans a code change for bugs, security holes, performance issues, and maintainability smells.",
+    });
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        focusedAgentId="reviewer-a"
+        focusedAgentView="role"
+        focusedAgentNonce={1}
+        events={[spawn]}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Agent 集群 - 创建助手")).toBeInTheDocument();
+    });
+    // The backend catalog's display name wins over the frontend fallback map
+    // (which would render "Reviewer" for role="reviewer").
+    expect(screen.getByText("Code Reviewer")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Scans a code change for bugs, security holes/),
+    ).toBeInTheDocument();
+  });
+
+  test("shows only the focused sub-agent complete stream in the right workbench", async () => {
     renderWorkbench(
       <AgentWorkbenchPanel
         focusedAgentId="agent-2"
@@ -1379,6 +1466,8 @@ describe("<AgentWorkbenchPanel />", () => {
             agentId: "agent-2",
             subAgentRole: "writer",
             input: { path: "writer.md" },
+            observation: "正在读取 writer.md",
+            status: "running",
             startedAt: 2100,
           }),
         ]}
@@ -1386,9 +1475,163 @@ describe("<AgentWorkbenchPanel />", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("writer.md")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "执行画面" })).toHaveClass(
+        "border-foreground/70",
+      );
     });
+    expect(
+      screen.getByTestId("subagent-main-conversation"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("interleaved-process-timeline"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("live-exec-stream")).toHaveTextContent(
+      "正在读取 writer.md",
+    );
     expect(screen.queryByText("research.md")).not.toBeInTheDocument();
+    expect(screen.queryByText("子智能体对话")).not.toBeInTheDocument();
+  });
+
+  test("renders a readable answer for a finished sub-agent without dumping metadata JSON", async () => {
+    // Regression: the realtime bridge ships the sub-agent's answer text on
+    // result.output (not observation), and the result envelope only carries
+    // metadata (codename/role/duration_s/...). The process view must render the
+    // answer text, not a JSON.stringify of the envelope.
+    renderWorkbench(
+      <ThreadStreamingContext.Provider
+        value={{ streamingMessage: null, subgraphStreams: {} }}
+      >
+        <ThreadValuesContext.Provider value={{ values: {} as never }}>
+          <AgentWorkbenchPanel
+            focusedAgentId="researcher-a"
+            focusedAgentView="screen"
+            events={[
+              event({
+                id: "spawn-1",
+                name: "subagent",
+                lifecycle: "spawned",
+                status: "running",
+                agentId: "researcher-a",
+                subAgentRole: "researcher",
+                subagentCodename: "Spark-01",
+                startedAt: 1000,
+              }),
+              event({
+                id: "finish-1",
+                name: "subagent",
+                lifecycle: "finished",
+                status: "done",
+                agentId: "researcher-a",
+                subAgentRole: "researcher",
+                subagentCodename: "Spark-01",
+                startedAt: 2000,
+                output: {
+                  agent_id: "researcher-a",
+                  role: "researcher",
+                  codename: "Spark-01",
+                  avatar: "🔍",
+                  ok: true,
+                  duration_s: 2.5,
+                  iteration_count: 4,
+                  files_touched: ["reports/pricing.md"],
+                  output: "调研完成：整理出三份定价策略报告",
+                },
+              }),
+            ]}
+          ></AgentWorkbenchPanel>
+        </ThreadValuesContext.Provider>
+      </ThreadStreamingContext.Provider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "执行画面" })).toHaveClass(
+        "border-foreground/70",
+      );
+    });
+    expect(
+      screen.getByTestId("subagent-main-conversation"),
+    ).toBeInTheDocument();
+
+    // The real answer text is shown...
+    expect(
+      screen.getByText("调研完成：整理出三份定价策略报告"),
+    ).toBeInTheDocument();
+    // ...and the metadata envelope is NOT rendered as the answer.
+    expect(screen.queryByText(/"duration_s"/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/"iteration_count"/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/"agent_id"/)).not.toBeInTheDocument();
+  });
+
+  test("folds a trailing running step into a result once the sub-agent settles", async () => {
+    // The last tool block never received a done event, but the agent reached
+    // a terminal finished marker. The process view must stop showing a live
+    // running window and surface the step's output as a completed result.
+    renderWorkbench(
+      <ThreadStreamingContext.Provider
+        value={{ streamingMessage: null, subgraphStreams: {} }}
+      >
+        <ThreadValuesContext.Provider value={{ values: {} as never }}>
+          <AgentWorkbenchPanel
+            focusedAgentId="researcher-a"
+            focusedAgentView="screen"
+            events={[
+              event({
+                id: "spawn-1",
+                name: "subagent",
+                lifecycle: "spawned",
+                status: "running",
+                agentId: "researcher-a",
+                subAgentRole: "researcher",
+                subagentCodename: "Spark-01",
+                startedAt: 1000,
+              }),
+              event({
+                id: "read-1",
+                name: "read_file",
+                status: "running",
+                agentId: "researcher-a",
+                subAgentRole: "researcher",
+                input: { path: "report.md" },
+                output: "正在读取 report.md",
+                startedAt: 1500,
+              }),
+              event({
+                id: "finish-1",
+                name: "subagent",
+                lifecycle: "finished",
+                status: "done",
+                agentId: "researcher-a",
+                subAgentRole: "researcher",
+                subagentCodename: "Spark-01",
+                startedAt: 2000,
+                output: {
+                  agent_id: "researcher-a",
+                  role: "researcher",
+                  codename: "Spark-01",
+                  ok: true,
+                  duration_s: 1.2,
+                  iteration_count: 2,
+                  output: "调研完成",
+                },
+              }),
+            ]}
+          ></AgentWorkbenchPanel>
+        </ThreadValuesContext.Provider>
+      </ThreadStreamingContext.Provider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "执行画面" })).toHaveClass(
+        "border-foreground/70",
+      );
+    });
+    expect(
+      screen.getByTestId("subagent-main-conversation"),
+    ).toBeInTheDocument();
+    // Settled: no live typewriter window, but the step output is reachable.
+    expect(screen.queryByTestId("live-exec-stream")).not.toBeInTheDocument();
+    const conversation = screen.getByTestId("subagent-main-conversation");
+    expect(conversation.textContent).toContain("正在读取 report.md");
   });
 
   test("keeps the summary view when the focus intent asks for it", async () => {
@@ -1426,16 +1669,13 @@ describe("<AgentWorkbenchPanel />", () => {
     });
     expect(screen.queryByText("Agent 集群 - 独立进程")).not.toBeInTheDocument();
 
-    // The sub-agent was still selected: switching to the computer view lands
-    // straight on its independent process.
-    fireEvent.click(screen.getByRole("button", { name: "执行画面" }));
-    await waitFor(() => {
-      expect(screen.getByText("Agent 集群 - 独立进程")).toBeInTheDocument();
-    });
+    expect(
+      screen.getByRole("button", { name: "执行画面" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("writer.md")).toBeInTheDocument();
   });
 
-  test("consumes the focus intent once and stays on the main computer after snapshot churn", async () => {
+  test("keeps the focused sub-agent stream stable during snapshot churn", async () => {
     const focusEvents = [
       event({
         id: "agent-2-spawn",
@@ -1460,15 +1700,9 @@ describe("<AgentWorkbenchPanel />", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Agent 集群 - 独立进程")).toBeInTheDocument();
-    });
-
-    // User navigates back to the main computer while the run streams.
-    fireEvent.click(screen.getByTitle("切回主电脑"));
-    await waitFor(() => {
-      expect(
-        screen.queryByText("Agent 集群 - 独立进程"),
-      ).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "执行画面" })).toHaveClass(
+        "border-foreground/70",
+      );
     });
 
     // Streaming churn rebuilds agentTiles with a fresh identity; the stale
@@ -1491,9 +1725,15 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
     expect(screen.queryByText("Agent 集群 - 独立进程")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("subagent-main-conversation"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("interleaved-process-timeline"),
+    ).toBeInTheDocument();
   });
 
-  test("a bumped nonce re-applies a repeat focus intent for the same agent", async () => {
+  test("switches a repeated focus intent from summary to the sub-agent stream", async () => {
     const focusEvents = [
       event({
         id: "agent-2-spawn",
@@ -1529,9 +1769,7 @@ describe("<AgentWorkbenchPanel />", () => {
     });
     expect(screen.queryByText("Agent 集群 - 独立进程")).not.toBeInTheDocument();
 
-    // Same agent, second emission (查看电脑 right after 查看过程 on one row): the
-    // nonce bump makes it a fresh intent instead of being swallowed by the
-    // consume-once guard.
+    // A fresh explicit screen intent opens the selected agent's conversation.
     rerender(
       <AgentWorkbenchPanel
         focusedAgentId="agent-2"
@@ -1541,9 +1779,16 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
     await waitFor(() => {
-      expect(screen.getByText("Agent 集群 - 独立进程")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "执行画面" })).toHaveClass(
+        "border-foreground/70",
+      );
     });
-    expect(screen.getByText("writer.md")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("subagent-main-conversation"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("interleaved-process-timeline"),
+    ).toBeInTheDocument();
   });
 
   test("keeps main-agent transcript selections out of a duplicate workbench trace", async () => {
@@ -1685,7 +1930,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("执行日志")).not.toBeInTheDocument();
   });
 
-  test("keeps a manually selected replay frame while the snapshot updates", async () => {
+  test("renders every selected sub-agent frame as an independent conversation", async () => {
     const baseEvents = [
       event({
         id: "server-phases:turn-1",
@@ -1726,45 +1971,22 @@ describe("<AgentWorkbenchPanel />", () => {
         startedAt: 2100,
       }),
     ];
-    const { rerender } = renderWorkbench(
+    renderWorkbench(
       <AgentWorkbenchPanel focusedAgentId="agent-2" events={baseEvents} />,
     );
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: /history\.md/ }),
-      ).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /history\.md/ }));
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /history\.md/ })).toHaveClass(
-        "border-l-primary",
+      expect(screen.getByRole("button", { name: "执行画面" })).toHaveClass(
+        "border-foreground/70",
       );
     });
-
-    // A streaming delta rebuilds every snapshot object; the manual pick only
-    // resets when the block actually leaves the sub-agent's block list.
-    rerender(
-      <AgentWorkbenchPanel
-        focusedAgentId="agent-2"
-        events={[
-          ...baseEvents,
-          event({
-            id: "agent-2-step-3",
-            name: "read_file",
-            agentId: "agent-2",
-            subAgentRole: "writer",
-            status: "running",
-            input: { path: "next.md" },
-            startedAt: 2200,
-          }),
-        ]}
-      />,
-    );
-    expect(screen.getByRole("button", { name: /history\.md/ })).toHaveClass(
-      "border-l-primary",
-    );
+    expect(
+      screen.getByTestId("subagent-main-conversation"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("interleaved-process-timeline"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("子智能体对话")).not.toBeInTheDocument();
   });
 
   test("renders the deployed site in the browser tab once the run settles", () => {

@@ -15,6 +15,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from runtime.protocol.text_limits import MAX_SUBAGENT_MISSION_CHARS
+
 from ._bridge_identity import (
     _CODENAME_POOL,  # noqa: F401 — re-exported for test access via bridge._CODENAME_POOL
     _avatar_for_role,
@@ -241,6 +243,21 @@ def call_subagent(
     _role_label = (role or agent_id or "agent").strip().lower()
     _codename = _codename_for_role(_role_label)
     _avatar = _avatar_for_role(_role_label)
+    # Authoritative role identity from the built-in catalog (co-located with
+    # the role's tool allowlist). Free-form labels that don't resolve to a
+    # BUILTIN_ROLES entry leave these empty; the frontend falls back to its own
+    # role-name / description mapping. Lazy import mirrors `_dispatch` so the
+    # module load graph stays acyclic.
+    _role_display_name = ""
+    _role_description = ""
+    try:
+        from runtime.execution.suckers.ephemeral_agents import get_role_display
+
+        _role_display = get_role_display(_role_label)
+        if _role_display is not None:
+            _role_display_name, _role_description = _role_display
+    except Exception:  # noqa: BLE001 — identity enrichment is best-effort
+        pass
     _spawn_started_at = time.time()
 
     # ── Thread-scoped memory key ──
@@ -294,7 +311,9 @@ def call_subagent(
         "role": _role_label,
         "codename": _codename,
         "avatar": _avatar,
-        "prompt_preview": prompt[:120] if isinstance(prompt, str) else "",
+        "role_display_name": _role_display_name,
+        "role_description": _role_description,
+        "prompt_preview": (prompt[:MAX_SUBAGENT_MISSION_CHARS] if isinstance(prompt, str) else ""),
         "use_cheap_model": bool(use_cheap_model),
         "started_at": _spawn_started_at,
     }
@@ -646,6 +665,10 @@ def call_subagent(
             "files_touched": list(_files_touched),
             "error": result.get("error"),
             "status": result.get("status"),
+            # Carry the sub-agent's actual answer text so the workbench can
+            # render a readable final message instead of dumping the whole
+            # result envelope as JSON.
+            "output": result.get("output", ""),
         }
         _attach_trace_fields(_finish_event, _trace_context)
         _safe_emit(event_emitter, _finish_event)

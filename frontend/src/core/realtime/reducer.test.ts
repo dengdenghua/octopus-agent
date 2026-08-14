@@ -319,6 +319,57 @@ describe("reducer", () => {
     }
   });
 
+  it("replaces an in-progress subagent summary on a second item/started", () => {
+    // The orchestrator bridge re-broadcasts item/started with a growing
+    // summary so the workbench sub-agent view streams live instead of
+    // waiting for the terminal item/completed snapshot. The reducer must
+    // treat a second started-for-the-same-inProgress-item as a replace.
+    const turn = blankTurn("trn-1", "th");
+    const base = {
+      id: "sub-1",
+      type: "subagent",
+      status: "inProgress",
+      createdAt: T0_ISO,
+      subagentId: "task-1",
+      role: "researcher",
+      summary: "",
+    } as const;
+    const state = apply(
+      emptyConversation("th"),
+      { method: "turn/started", params: { threadId: "th", turn } },
+      {
+        method: "item/started",
+        params: { threadId: "th", turnId: "trn-1", item: base },
+      },
+      {
+        method: "item/started",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          item: { ...base, summary: "已找到 1 篇" },
+        },
+      },
+      {
+        method: "item/started",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          item: {
+            ...base,
+            summary: "已找到 1 篇，正在阅读",
+            status: "inProgress",
+          },
+        },
+      },
+    );
+    const item = state.turns[0].items.find((i) => i.id === "sub-1");
+    expect(item?.type).toBe("subagent");
+    if (item?.type === "subagent") {
+      expect(item.summary).toBe("已找到 1 篇，正在阅读");
+      expect(item.status).toBe("inProgress");
+    }
+  });
+
   it("buffers streamed deltas and materializes them into the completed snapshot", () => {
     const turn = blankTurn("trn-1", "th");
     const state = apply(
