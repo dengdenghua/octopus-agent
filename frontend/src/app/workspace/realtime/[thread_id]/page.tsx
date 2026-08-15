@@ -1301,8 +1301,15 @@ function RealtimePageContent({
       return;
     }
     if (!persistedThreadWorkspacePath) {
-      setWorkDir("");
-      rememberChatWorkDir("");
+      // A transient query failure (the thread is not persisted yet — e.g.
+      // the throwaway uuid /new still holds while the first turn is
+      // streaming) must NOT be read as "no bound workspace". Treating that
+      // 404 as empty wiped the user's bound folder and remembered workdir
+      // mid-conversation, which is the "bound but still lost" bug.
+      if (threadWorkspaceQuery.isSuccess) {
+        setWorkDir("");
+        rememberChatWorkDir("");
+      }
       return;
     }
     setWorkDir((current) => {
@@ -1320,6 +1327,8 @@ function RealtimePageContent({
     persistedThreadWorkspacePath,
     threadId,
     threadWorkspaceQuery.isPending,
+    threadWorkspaceQuery.isSuccess,
+    threadWorkspaceQuery.isError,
   ]);
 
   const { models } = useModels();
