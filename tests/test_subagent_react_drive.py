@@ -455,3 +455,62 @@ def test_bridge_flips_react_loop_default_inside_react_stack(monkeypatch) -> None
 
     assert captured.get("context", {}).get("react_loop_subagent") is False
     assert captured.get("context", {}).get("flip_subagent_thread") is False
+
+
+def test_react_loop_forwards_tool_events_to_emitter(monkeypatch) -> None:
+    """The react-loop path must mirror tool events onto the emitter (same
+    shape as the mini-loop) so the bridge's round tracking populates the
+    parent finish card's iteration count instead of reporting 0 rounds."""
+    import runtime.execution.subagents.react_drive as react_drive
+
+    def _scripted_loop(stack, intent, agent, **kwargs):  # noqa: ARG001
+        yield {
+            "type": "tool_start",
+            "tool_name": "web_search",
+            "tool_call_id": "c1",
+            "input": {"q": "leaks"},
+        }
+        yield {
+            "type": "tool_end",
+            "tool_name": "web_search",
+            "tool_call_id": "c1",
+            "status": "success",
+            "duration_ms": 12,
+            "output": "results",
+        }
+        yield {"type": "react_completed"}
+        from runtime.core.cerebrum.react_loop import ReActResult
+
+        return ReActResult(success=True, final_answer="done")
+
+    monkeypatch.setattr(react_drive, "stream_react_loop", _scripted_loop)
+
+    from runtime.platform.process.session import Session, _current_session
+
+    emitter = _CaptureEmitter()
+    sess = Session(
+        thread_id="child-3",
+        conversation_id="child-3",
+        metadata={"root_thread_id": "root-3", "thread_id": "child-3"},
+    )
+    token = _current_session.set(sess)
+    try:
+        react_drive.run_subagent_react_loop(
+            _FakeStack(None),
+            prompt="search",
+            role_id="researcher",
+            model="test-model",
+            thread_id="child-3",
+            emitter=emitter,
+        )
+    finally:
+        _current_session.reset(token)
+
+    starts = [e for e in emitter.events if e.get("type") == "sub_tool_start"]
+    ends = [e for e in emitter.events if e.get("type") == "sub_tool_end"]
+    assert len(starts) == 1, "expected one tool_start mirrored to the emitter"
+    assert starts[0]["round"] == 1
+    assert starts[0]["skill"] == "web_search"
+    assert len(ends) == 1
+    assert ends[0]["status"] == "success"
+    assert ends[0]["round"] == 1

@@ -92,6 +92,26 @@ class _SimpleToolCall:
         self.name = name
 
 
+def _tool_args_preview(event: dict[str, Any]) -> str:
+    """Best-effort 200-char preview of a react tool call's arguments.
+
+    Mirrors the mini-loop's ``args_preview`` on the emitter so the parent
+    timeline / round tracking sees the same shape. Never raises."""
+    try:
+        import json as _json
+
+        raw = event.get("input")
+        if raw is None:
+            raw = event.get("args")
+        if raw is None:
+            return ""
+        if isinstance(raw, str):
+            return raw[:200]
+        return _json.dumps(raw, ensure_ascii=False)[:200]
+    except (TypeError, ValueError):
+        return ""
+
+
 def run_subagent_react_loop(
     stack: Any,
     *,
@@ -119,6 +139,7 @@ def run_subagent_react_loop(
         _emit_sub_text_delta,
         _emit_sub_tool_event,
         _publish_to_bus,
+        _safe_ctx_emit,
     )
 
     intent = build_subagent_intent(
@@ -173,14 +194,39 @@ def run_subagent_react_loop(
                     tool_call=_react_tool_call(evt),
                     iteration=round_no,
                 )
+                _safe_ctx_emit(
+                    emitter,
+                    {
+                        "type": "sub_tool_start",
+                        "agent_id": role_id,
+                        "round": round_no,
+                        "skill": str(evt.get("tool_name") or ""),
+                        "tool_call_id": str(evt.get("tool_call_id") or ""),
+                        "args_preview": _tool_args_preview(evt),
+                    },
+                )
             elif kind == "tool_end":
+                _is_error = str(evt.get("status")) in ("error", "rejected", "failed")
                 _emit_sub_tool_event(
                     "sub_tool_end",
                     role_id=role_id,
                     tool_call=_react_tool_call(evt),
                     iteration=round_no,
-                    is_error=str(evt.get("status")) in ("error", "rejected", "failed"),
+                    is_error=_is_error,
                     duration_ms=evt.get("duration_ms"),
+                )
+                _safe_ctx_emit(
+                    emitter,
+                    {
+                        "type": "sub_tool_end",
+                        "agent_id": role_id,
+                        "round": round_no,
+                        "skill": str(evt.get("tool_name") or ""),
+                        "tool_call_id": str(evt.get("tool_call_id") or ""),
+                        "status": "failed" if _is_error else "success",
+                        "duration_ms": evt.get("duration_ms"),
+                        "output_preview": str(evt.get("output") or "")[:1000],
+                    },
                 )
             elif kind == "react_error":
                 failure = str(evt.get("message") or "react loop error")
