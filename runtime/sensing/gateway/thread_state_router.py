@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,77 @@ except ImportError:  # pragma: no cover
 from runtime.sensing._fastapi_guard import require_fastapi
 
 _logger = logging.getLogger(__name__)
+
+
+def _seed_child_realtime_log(
+    logs_root: Path | str | None,
+    parent_thread_id: str,
+    child_thread_id: str,
+    at_message_index: int | None,
+) -> None:
+    """Seed the child's realtime event log from the parent so the chat UI can
+    reconstruct the forked conversation.
+
+    Fork previously wrote only the legacy ``ThreadStateStore`` entry; the
+    realtime UI reconstructs visible messages from the per-thread JSONL event
+    log (``data/threads/<id>.jsonl``), which a fresh fork left empty — so a
+    forked thread rendered "no messages". Copy the parent's turns (rewriting
+    the thread id) up to the same cut the store snapshot used.
+    """
+    if not logs_root:
+        return
+    try:
+        from runtime.memory.threads._event_log_helpers import thread_log_path
+
+        parent_path = thread_log_path(logs_root, parent_thread_id)
+        child_path = thread_log_path(logs_root, child_thread_id)
+        if not parent_path.exists() or parent_path.stat().st_size <= 0:
+            return
+        from runtime.memory.threads.event_log import EventLog
+        from runtime.sensing.gateway.realtime_thread_history import (
+            _flatten_turns_to_messages,
+        )
+
+        keep_turn_ids: set[str] | None = None
+        if at_message_index is not None:
+            keep_turn_ids = set()
+            used = 0
+            for turn in EventLog(parent_path).replay():
+                msgs, _, _ = _flatten_turns_to_messages([turn])
+                keep_turn_ids.add(turn.id)
+                used += len(msgs)
+                if used > at_message_index:
+                    break
+        child_path.parent.mkdir(parents=True, exist_ok=True)
+        with child_path.open("a", encoding="utf-8") as out:
+            for line in parent_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                except (ValueError, TypeError):
+                    continue
+                if not isinstance(event, dict):
+                    continue
+                turn_id = event.get("turnId") or event.get("turn_id")
+                if (
+                    keep_turn_ids is not None
+                    and isinstance(turn_id, str)
+                    and turn_id not in keep_turn_ids
+                ):
+                    continue
+                event["threadId"] = child_thread_id
+                event.pop("thread_id", None)
+                event.pop("eventId", None)
+                out.write(json.dumps(event, ensure_ascii=False) + "\n")
+    except Exception:  # noqa: BLE001 — seeding is best-effort
+        _logger.warning(
+            "seed child realtime log for fork failed (%s → %s)",
+            parent_thread_id,
+            child_thread_id,
+            exc_info=True,
+        )
 
 
 def create_thread_state_router(
@@ -197,6 +269,8 @@ def create_thread_state_router(
         _require_store()
         if not hasattr(store, "search_threads"):
             raise HTTPException(501, "full-text search not enabled")
+        if not getattr(store, "search_enabled", True):
+            raise HTTPException(501, "full-text search not enabled")
         query = (q or "").strip()
         if not query:
             raise HTTPException(400, "query parameter 'q' is required")
@@ -273,6 +347,8 @@ def create_thread_state_router(
             raise HTTPException(404, f"thread not found: {thread_id}")
         if not hasattr(store, "add_message_feedback"):
             raise HTTPException(501, "feedback system not enabled")
+        if not getattr(store, "feedback_enabled", True):
+            raise HTTPException(501, "feedback system not enabled")
         message_index = body.get("message_index")
         feedback_type = body.get("feedback_type")
         tags = body.get("tags", [])
@@ -324,6 +400,8 @@ def create_thread_state_router(
             raise HTTPException(404, f"thread not found: {thread_id}")
         if not hasattr(store, "get_feedback_stats"):
             raise HTTPException(501, "feedback system not enabled")
+        if not getattr(store, "feedback_enabled", True):
+            raise HTTPException(501, "feedback system not enabled")
         try:
             stats = store.get_feedback_stats(thread_id)
         except Exception as exc:
@@ -346,6 +424,8 @@ def create_thread_state_router(
         if _get_owned_thread(thread_id, actor_id, tenant_id) is None:
             raise HTTPException(404, f"thread not found: {thread_id}")
         if not hasattr(store, "get_message_feedback"):
+            raise HTTPException(501, "feedback system not enabled")
+        if not getattr(store, "feedback_enabled", True):
             raise HTTPException(501, "feedback system not enabled")
         try:
             if message_index is not None:
@@ -532,6 +612,7 @@ def create_thread_state_router(
             raise HTTPException(404, f"thread not found: {thread_id}") from exc
         except ForkUnavailableError as exc:
             raise HTTPException(409, "fork-unavailable") from exc
+        _seed_child_realtime_log(logs_root, thread_id, child["thread_id"], at_index)
         values = child.get("values") if isinstance(child.get("values"), dict) else {}
         seeded = values.get("messages") or []
         return {

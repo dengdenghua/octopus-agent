@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import tempfile
-from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -20,6 +18,50 @@ except ImportError:
     TestClient = None  # type: ignore[assignment, misc]
 
 pytestmark = pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
+
+
+@pytest.fixture
+def _p2_env():
+    """Shared store + FastAPI client for the feedback / stats endpoints.
+
+    ``client`` and ``sample_thread`` both depend on this fixture so they share
+    the same store instance within a test.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        store = ThreadStateStore(
+            per_agent_base=tmpdir,
+            search_enabled=True,
+            feedback_enabled=True,
+        )
+        from fastapi import FastAPI
+
+        router = create_thread_state_router(store=store, require_auth=False)
+        app = FastAPI()
+        app.include_router(router)
+        client = TestClient(app)
+        yield store, client
+
+
+@pytest.fixture
+def client(_p2_env):
+    return _p2_env[1]
+
+
+@pytest.fixture
+def sample_thread(_p2_env):
+    """A thread with a few messages so message_index references stay valid."""
+    store, _ = _p2_env
+    thread = store.create(
+        metadata={},
+        values={
+            "messages": [
+                {"role": "user", "content": "How do I fix authentication bug?"},
+                {"role": "assistant", "content": "Check your JWT configuration."},
+                {"role": "user", "content": "Thanks, that helped!"},
+            ]
+        },
+    )
+    return thread["thread_id"]
 
 
 class TestFullTextSearch:
@@ -43,7 +85,7 @@ class TestFullTextSearch:
 
             # Create sample thread
             thread = store.create(
-                metadata={"owner_actor_id": "test_user"},
+                metadata={},
                 values={
                     "messages": [
                         {"role": "user", "content": "How do I fix authentication bug?"},
@@ -143,7 +185,7 @@ class TestExportMarkdown:
             client = TestClient(app)
 
             thread = store.create(
-                metadata={"owner_actor_id": "test_user"},
+                metadata={},
                 values={
                     "messages": [
                         {"role": "user", "content": "How do I fix authentication bug?"},
@@ -174,7 +216,8 @@ class TestExportMarkdown:
         content = response.text
         assert "---" in content  # YAML frontmatter
         assert "thread_id:" in content
-        assert "## User" in content or "## Assistant" in content
+        # Export headings carry a per-message index prefix (## Message N: Role).
+        assert "User" in content and "Assistant" in content
         assert "authentication" in content.lower()
 
     def test_export_nonexistent_thread(self, setup):

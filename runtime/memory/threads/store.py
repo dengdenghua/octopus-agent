@@ -1026,6 +1026,20 @@ class ThreadStateStore:
             updated_at=updated_at,
         )
 
+    @property
+    def search_enabled(self) -> bool:
+        """Whether the full-text search index is active (DSH P2: session-query).
+
+        The router uses this to return 501 instead of silently empty results
+        when the operator disabled search.
+        """
+        return self._search is not None
+
+    @property
+    def feedback_enabled(self) -> bool:
+        """Whether the feedback store is active (DSH P2: feedback system)."""
+        return self._feedback is not None
+
     def search_threads(
         self,
         query: str,
