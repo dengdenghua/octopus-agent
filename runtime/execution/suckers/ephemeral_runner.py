@@ -494,7 +494,15 @@ def make_llm_ephemeral_runner(
                 session_id=str(_ctx.get("subagent_session_id") or ""),
                 emitter=_ctx.get("event_emitter"),
                 max_iterations=_ctx.get("react_loop_max_iterations") or EPHEMERAL_MAX_ROUNDS,
-                conversation_messages=[{"role": "user", "content": call.user_prompt}],
+                # Carry the role persona + caller context into the react loop
+                # as system history so the child keeps its role/memory/mode
+                # (the mini-loop injected these via ``composed_system_prompt``).
+                # The trailing user message is the current goal the react loop
+                # consumes from ``intent.raw``.
+                conversation_messages=[
+                    {"role": "system", "content": call.composed_system_prompt},
+                    {"role": "user", "content": call.user_prompt},
+                ],
                 tool_allowlist=tuple(call.role.tool_allowlist or ()),
                 metadata=_ctx,
             )

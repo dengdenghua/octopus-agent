@@ -460,3 +460,32 @@ def test_call_agent_ignores_malformed_schema(mock_subagent, mock_builtins):
     _call_agent(agent_id="researcher", prompt="go", output_schema="not json {[")
 
     assert mock_subagent.call_args[1]["output_schema"] is None
+
+
+def test_call_agent_parallel_propagates_react_stack(mock_subagent, mock_builtins):
+    """ContextVars don't cross threads, so the parallel dispatcher must capture
+    the parent's react stack (in the calling thread) and inject it into every
+    worker's context — otherwise a parallel child can't be driven through the
+    main react loop."""
+    from runtime.execution.subagents._ambient import react_stack_scope
+    from runtime.execution.suckers.delegation_skills import _call_agent_parallel
+
+    mock_subagent.return_value = {
+        "agent_id": "researcher",
+        "output": "done",
+        "success": True,
+    }
+
+    fake_stack = object()
+    with react_stack_scope(fake_stack):
+        _call_agent_parallel(
+            specs=[
+                {"agent_id": "researcher", "prompt": "a"},
+                {"agent_id": "researcher", "prompt": "b"},
+            ],
+        )
+
+    assert mock_subagent.call_count == 2
+    for call in mock_subagent.call_args_list:
+        ctx = call.kwargs["context"]
+        assert ctx.get("react_stack") is fake_stack

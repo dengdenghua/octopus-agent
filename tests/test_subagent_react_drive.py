@@ -274,3 +274,70 @@ def test_runner_keeps_mini_loop_when_react_not_opted_in() -> None:
         context={},  # no react opt-in -> mini-loop single-shot
     )
     assert runner(call) == "mini-loop answer"
+
+
+def test_react_loop_carries_role_persona_to_the_model() -> None:
+    """The react-loop path must keep the role persona/context the mini-loop
+    injected via ``composed_system_prompt`` (role + caller history + memory),
+    otherwise the child loses its role after the flip to the main loop."""
+    from runtime.execution.suckers.ephemeral_agents import (
+        BUILTIN_ROLES,
+        EphemeralCall,
+    )
+    from runtime.execution.suckers.ephemeral_runner import make_llm_ephemeral_runner
+
+    class _CapturingRouter:
+        def __init__(self):
+            self.default_model = "test-model"
+            self.requests: list = []
+
+        def call(self, req):
+            self.requests.append(req)
+            return _FakeResponse(text="done")
+
+        def call_stream(self, req):
+            from runtime.sensing.model_router.models import (
+                CostEntry,
+                ModelResponse,
+                ModelStreamEvent,
+            )
+
+            self.requests.append(req)
+            yield ModelStreamEvent(type="text_delta", delta="done")
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(
+                    text="done",
+                    model="test-model",
+                    finish_reason="stop",
+                    cost=CostEntry(),
+                ),
+            )
+
+    router = _CapturingRouter()
+    runner = make_llm_ephemeral_runner(
+        router,
+        registry=None,
+        default_model="test-model",
+    )
+    persona = "ROLE_SYSTEM: reviewer scans diffs for bugs"
+    call = EphemeralCall(
+        role=BUILTIN_ROLES["reviewer"],
+        user_prompt="check this diff",
+        composed_system_prompt=persona,
+        caller_thread_id="t-1",
+        caller_agent_id="coder",
+        context={
+            "react_loop_subagent": True,
+            "react_stack": _FakeStack(router),
+        },
+    )
+    assert runner(call) == "done"
+    assert router.requests, "expected the react loop to call the model"
+    joined = "\n".join(
+        str(m.content)
+        for req in router.requests
+        for m in getattr(req, "messages", [])
+    )
+    assert persona in joined
+    assert "check this diff" in joined

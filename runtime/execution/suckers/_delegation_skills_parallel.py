@@ -243,6 +243,17 @@ def _call_agent_parallel(
 
     from runtime.execution.subagents import call_subagent
 
+    # ContextVars don't propagate across threads, so capture the parent's
+    # react stack HERE (parent thread) and hand it to each worker explicitly.
+    # This lets the ephemeral runner drive a parallel child through the MAIN
+    # react loop too. Ambient only — never persisted into session metadata.
+    try:
+        from runtime.execution.subagents._ambient import current_react_stack
+
+        _ambient_react_stack = current_react_stack()
+    except (ImportError, AttributeError):
+        _ambient_react_stack = None
+
     def _run_one(spec: dict[str, Any]) -> dict[str, Any]:
         # Bind parent session in this worker thread · ContextVars
         # don't propagate across threads automatically.
@@ -277,6 +288,8 @@ def _call_agent_parallel(
                 "subagent_route_decision": route_decision,
             }
         call_context = dict(spec.get("context") or {})
+        if call_context.get("react_stack") is None and _ambient_react_stack is not None:
+            call_context["react_stack"] = _ambient_react_stack
         call_context["subagent_route_decision"] = route_decision
         if orch_budget is not None and not orch_budget.try_charge():
             return {
