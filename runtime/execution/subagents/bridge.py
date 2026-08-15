@@ -578,6 +578,13 @@ def call_subagent(
         _extra_meta: dict[str, Any] = {}
         if _locked_root:
             _extra_meta["_locked_write_root"] = _locked_root
+        # Stamp the per-child codename onto the run Session so the typed
+        # event-bus helpers (which key lanes by codename) can attribute tool /
+        # conclude / fail events to the right sub-agent thread — even when
+        # several parallel children share the same role. Ambient per-call
+        # identity, read from ``session.metadata`` inside the child run.
+        if _codename:
+            _extra_meta["subagent_codename"] = _codename
         from runtime.platform.process.session import Session
 
         if session is not None and isinstance(session, Session):

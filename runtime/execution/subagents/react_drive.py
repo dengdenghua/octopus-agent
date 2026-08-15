@@ -115,6 +115,7 @@ def run_subagent_react_loop(
     the run.
     """
     from runtime.execution.suckers._ephemeral_events import (
+        _current_subagent_codename,
         _emit_sub_text_delta,
         _emit_sub_tool_event,
         _publish_to_bus,
@@ -185,19 +186,34 @@ def run_subagent_react_loop(
                 failure = str(evt.get("message") or "react loop error")
                 _publish_to_bus(
                     "sub_failed",
-                    {"role": role_id, "ok": False, "error": failure},
+                    {
+                        "role": role_id,
+                        "codename": _current_subagent_codename(),
+                        "ok": False,
+                        "error": failure,
+                    },
                 )
             elif kind == "react_cancelled":
                 failure = "sub-agent cancelled"
                 _publish_to_bus(
                     "sub_failed",
-                    {"role": role_id, "ok": False, "error": failure},
+                    {
+                        "role": role_id,
+                        "codename": _current_subagent_codename(),
+                        "ok": False,
+                        "error": failure,
+                    },
                 )
     except Exception as exc:  # noqa: BLE001 - surface as a sub-agent failure
         failure = f"{type(exc).__name__}: {exc}"
         _publish_to_bus(
             "sub_failed",
-            {"role": role_id, "ok": False, "error": failure},
+            {
+                "role": role_id,
+                "codename": _current_subagent_codename(),
+                "ok": False,
+                "error": failure,
+            },
         )
         return None
 
@@ -209,6 +225,7 @@ def run_subagent_react_loop(
             "sub_failed",
             {
                 "role": role_id,
+                "codename": _current_subagent_codename(),
                 "ok": False,
                 "error": reason,
                 "iteration_count": round_no,
@@ -220,6 +237,7 @@ def run_subagent_react_loop(
         "sub_concluded",
         {
             "role": role_id,
+            "codename": _current_subagent_codename(),
             "ok": True,
             "iteration_count": round_no,
         },

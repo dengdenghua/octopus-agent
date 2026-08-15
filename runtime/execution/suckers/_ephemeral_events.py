@@ -58,6 +58,30 @@ def _publish_to_bus(type: str, payload: dict) -> None:
         publish_subagent_event(type, payload)
 
 
+def _current_subagent_codename() -> str:
+    """Read the current child's codename off the bound run Session.
+
+    The bridge stamps ``subagent_codename`` on the child's session metadata
+    so the typed event bus (which keys lanes by codename) can attribute tool /
+    conclude / fail events to the right sub-agent thread — even when several
+    parallel children share the same role. Empty when unset (parent turns,
+    one-shot children) — the lane then falls back to the role, which is
+    graceful, never incorrect."""
+    try:
+        from runtime.platform.process.session import current_session
+
+        sess = current_session()
+    except (ImportError, TypeError, AttributeError, OSError):  # noqa: BLE001
+        return ""
+    if sess is None:
+        return ""
+    meta = getattr(sess, "metadata", None) or {}
+    if not isinstance(meta, dict):
+        return ""
+    codename = meta.get("subagent_codename") or ""
+    return str(codename)
+
+
 def _emit_sub_text_delta(
     role_id: str,
     round: int,
@@ -319,6 +343,7 @@ def _emit_sub_tool_event(
         kind,
         {
             "role": role_id,
+            "codename": _current_subagent_codename(),
             "iteration": iteration,
             "tool": payload.get("name") or "",
             "tool_call_id": payload.get("id") or "",
@@ -472,6 +497,7 @@ def _emit_subagent_lifecycle_event(
             _bus_type,
             {
                 "role": _bus_role,
+                "codename": _current_subagent_codename() or payload.get("codename") or "",
                 "ok": bool(payload.get("ok")),
                 "error": payload.get("error") or "",
                 "duration_s": payload.get("duration_s"),

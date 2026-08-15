@@ -341,3 +341,62 @@ def test_react_loop_carries_role_persona_to_the_model() -> None:
     )
     assert persona in joined
     assert "check this diff" in joined
+
+
+def test_bus_tool_and_conclude_events_carry_per_child_codename() -> None:
+    """Parallel children sharing a role must stay distinct lanes on the bus.
+
+    The typed event bus keys lanes by ``codename``; tool / conclude / fail
+    events are stamped with the child's codename read off the bound run
+    Session, so two same-role children render as two independent threads
+    instead of merging into one lane in the workbench substream.
+    """
+    from runtime.execution.subagents.event_bus import get_bus
+    from runtime.execution.subagents.react_drive import _SimpleToolCall
+    from runtime.execution.suckers._ephemeral_events import (
+        _emit_sub_tool_event,
+    )
+    from runtime.platform.process.session import Session, _current_session
+
+    sess = Session(
+        thread_id="child-1",
+        conversation_id="child-1",
+        metadata={
+            "root_thread_id": "root-codename",
+            "thread_id": "child-1",
+            "subagent_codename": "Spark-9f2",
+        },
+    )
+    token = _current_session.set(sess)
+    try:
+        _emit_sub_tool_event(
+            "sub_tool_start",
+            role_id="researcher",
+            tool_call=_SimpleToolCall(call_id="c1", name="web_search"),
+            iteration=1,
+        )
+        from runtime.execution.subagents.react_drive import run_subagent_react_loop
+
+        run_subagent_react_loop(
+            _FakeStack(_ScriptedRouter(["Final Answer: 完成了"])),
+            prompt="go",
+            role_id="researcher",
+            model="test-model",
+            thread_id="child-1",
+        )
+    finally:
+        _current_session.reset(token)
+
+    bus = get_bus("root-codename")
+    assert bus is not None
+    events = [e for e in bus.replay() if isinstance(e, dict)]
+    assert events, "expected bus events"
+    assert any(e.get("type") == "sub_concluded" for e in events), (
+        "expected a concluded event so the codename assertion is non-vacuous"
+    )
+    for ev in events:
+        payload = ev.get("payload") or {}
+        if ev.get("type") in ("sub_tool_start", "sub_concluded"):
+            assert payload.get("codename") == "Spark-9f2", (
+                f"{ev['type']} lost the child codename"
+            )

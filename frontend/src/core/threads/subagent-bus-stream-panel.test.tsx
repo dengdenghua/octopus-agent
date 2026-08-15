@@ -85,6 +85,21 @@ describe("SubAgentBusStreamPanel", () => {
     expect(screen.getAllByText("Spark-B").length).toBeGreaterThan(0);
   });
 
+  it("keeps same-role children as distinct lanes via their codename", () => {
+    // Two parallel researchers share the role but each has its own codename —
+    // they must render as two independent threads, not one merged lane.
+    const a = { ...spawnedEvent("Spark-9f2", "researcher"), id: "started:a" };
+    const b = { ...spawnedEvent("Spark-3aa", "researcher"), id: "started:b" };
+    mockedUse.mockReturnValue({
+      events: [a, b],
+      status: "live",
+      lastSeq: 2,
+    });
+    renderPanel("root-1");
+    expect(screen.getAllByText("Spark-9f2").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Spark-3aa").length).toBeGreaterThan(0);
+  });
+
   it("renders the error state when the stream is failing", () => {
     mockedUse.mockReturnValue({ events: [], status: "error", lastSeq: 0 });
     renderPanel("root-1");
