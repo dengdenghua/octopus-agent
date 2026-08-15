@@ -137,7 +137,9 @@ export function RegistryPluginsPanel() {
               const isBundle = Boolean(plugin.bundle?.ref);
               const done = isBundle
                 ? installed[slug] || localCodePluginIds.has(slug.toLowerCase())
-                : installed[slug] || localPluginNames.has(name.toLowerCase());
+                : installed[slug] ||
+                  localPluginNames.has(name.toLowerCase()) ||
+                  localCodePluginIds.has(slug.toLowerCase());
               const busy = installing[slug];
               return (
                 <RegistryAssetCard
