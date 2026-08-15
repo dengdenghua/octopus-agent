@@ -475,7 +475,7 @@ class TestParallelFailureRetry:
         planned = {"called": False}
 
         class _FakePlanner:
-            def plan(self, intent):
+            def plan(self, intent, *, model=None):
                 planned["called"] = True
                 # A valid ParsedIntent reached us — assert its shape.
                 assert intent.intent_type == "task"

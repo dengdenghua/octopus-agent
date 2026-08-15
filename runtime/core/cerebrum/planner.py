@@ -94,6 +94,7 @@ class StaticPlanner:
         intent: ParsedIntent,
         *,
         allowed_skills: list[str] | None = None,
+        model: str | None = None,
     ) -> TaskGraph:
         allow_set = set(allowed_skills) if allowed_skills is not None else None
 

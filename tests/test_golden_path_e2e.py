@@ -206,7 +206,7 @@ class TestReplanOnFailure:
         replanned: dict[str, Any] = {"called": False, "intent_ok": False}
 
         class _RecoveryPlanner:
-            def plan(self, intent):
+            def plan(self, intent, *, model=None):
                 replanned["called"] = True
                 # The replan path must hand us a VALID ParsedIntent
                 # (raw + intent_type populated) — not crash building it.
