@@ -24,6 +24,7 @@ const {
   ensureOptionalDeps,
 } = require("./backend-runtime.cjs");
 const petSidecar = require("./pet-sidecar.cjs");
+const desktopCore = require("./desktop-shell-core.cjs");
 
 const DEV_URL = process.env.ELECTRON_START_URL || "http://127.0.0.1:3000";
 const DESKTOP_DIR = path.join(os.homedir(), "Desktop");
@@ -48,7 +49,10 @@ if (app.isPackaged) {
   try {
     autoUpdater = require("electron-updater").autoUpdater;
   } catch (err) {
-    console.warn("[octopus] electron-updater not installed; auto-update disabled:", err.message);
+    console.warn(
+      "[octopus] electron-updater not installed; auto-update disabled:",
+      err.message,
+    );
   }
 }
 
@@ -98,7 +102,10 @@ function backendConfigPath() {
 
 function backendProgress({ stage, message }) {
   try {
-    mainWindow?.webContents.send("backend:bootstrap-progress", { stage, message });
+    mainWindow?.webContents.send("backend:bootstrap-progress", {
+      stage,
+      message,
+    });
   } catch {
     /* window may not exist yet */
   }
@@ -130,15 +137,11 @@ const journalFile = () =>
   path.join(app.getPath("userData"), "desktop-organizer-journal.json");
 
 function readJournal() {
-  try {
-    return JSON.parse(fs.readFileSync(journalFile(), "utf8"));
-  } catch {
-    return [];
-  }
+  return desktopCore.readJournalFile(journalFile());
 }
 
 function writeJournal(entries) {
-  fs.writeFileSync(journalFile(), JSON.stringify(entries, null, 2));
+  desktopCore.writeJournalFile(journalFile(), entries);
 }
 
 async function listDesktopItems() {
@@ -153,32 +156,21 @@ async function listDesktopItems() {
     } catch {
       continue;
     }
-    const ext = path.extname(name).replace(/^\./, "").toLowerCase();
-    const kind = st.isDirectory()
-      ? name.endsWith(".app")
-        ? "app"
-        : "folder"
-      : "file";
-    const subtitle = st.isDirectory()
-      ? new Date(st.mtimeMs).toLocaleDateString()
-      : `${(st.size / 1024).toFixed(0)} KB · ${new Date(st.mtimeMs).toLocaleDateString()}`;
-    items.push({ id: p, name, subtitle, path: p, kind, extension: ext });
+    items.push(desktopCore.buildDesktopItem(name, p, st));
   }
   return items;
 }
 
 function isDirectDesktopItem(candidate) {
-  const desktop = path.resolve(DESKTOP_DIR);
-  const resolved = path.resolve(String(candidate || ""));
-  return resolved !== desktop && path.dirname(resolved) === desktop;
+  return desktopCore.isDirectDesktopItem(candidate, DESKTOP_DIR);
 }
 
 async function moveDesktopItem(srcPath, destDir) {
-  const dest = path.isAbsolute(destDir)
-    ? destDir
-    : path.join(DESKTOP_DIR, destDir);
+  const resolved = desktopCore.resolveMoveTarget(srcPath, destDir, DESKTOP_DIR);
+  if (resolved.error) return { ok: false, error: resolved.error };
+  const target = resolved.target;
+  const dest = path.dirname(target);
   await fsp.mkdir(dest, { recursive: true });
-  const target = path.join(dest, path.basename(srcPath));
   if (fs.existsSync(target)) return { ok: true, skipped: true };
   await fsp.rename(srcPath, target);
   const journal = readJournal();
@@ -409,7 +401,8 @@ function registerIpc() {
       // dev mode: backend runs externally (pnpm dev:full); nothing to own here.
       return {
         ok: false,
-        reason: "backend runs externally in dev (pnpm dev:full); restart is only available in packaged builds",
+        reason:
+          "backend runs externally in dev (pnpm dev:full); restart is only available in packaged builds",
       };
     }
     try {
@@ -422,7 +415,10 @@ function registerIpc() {
   });
   handle("backend:ensureOptionalDeps", async (_e, group) => {
     if (!app.isPackaged) {
-      return { ok: false, reason: "optional deps are managed by dev tooling in dev mode" };
+      return {
+        ok: false,
+        reason: "optional deps are managed by dev tooling in dev mode",
+      };
     }
     try {
       await ensureOptionalDeps(group, backendProgress);
@@ -465,17 +461,26 @@ function registerIpc() {
 
   // pet sidecar (Godot desktop pet)
   const petEnabled = () => process.env.OCTOPUS_PET_DISABLED !== "1";
-  handle("pet:start", () => (petEnabled() ? petSidecar.startPet() : { ok: false, reason: "pet disabled" }));
+  handle("pet:start", () =>
+    petEnabled()
+      ? petSidecar.startPet()
+      : { ok: false, reason: "pet disabled" },
+  );
   handle("pet:stop", () => {
     petSidecar.stopPet();
     return { ok: true };
   });
-  handle("pet:isRunning", () => ({ ok: true, running: petSidecar.isPetRunning() }));
+  handle("pet:isRunning", () => ({
+    ok: true,
+    running: petSidecar.isPetRunning(),
+  }));
   handle("pet:sendEvent", (_e, state) => {
     if (!petEnabled()) return { ok: false, reason: "pet disabled" };
     const event = petSidecar.petEventForAgentState(state);
     if (!event) return { ok: false, reason: `unknown agent state: ${state}` };
-    const sent = petSidecar.sendPetEvent(event.type, { intensity: event.intensity });
+    const sent = petSidecar.sendPetEvent(event.type, {
+      intensity: event.intensity,
+    });
     return { ok: sent, running: petSidecar.isPetRunning() };
   });
   handle("pet:sendRaw", (_e, type, extra) => {
@@ -505,9 +510,13 @@ function registerIpc() {
       // The renderer only receives desktop entries from listItems(). Keep the
       // destructive bridge equally narrow so it cannot delete arbitrary paths.
       if (!isDirectDesktopItem(p)) {
-        return { ok: false, error: "Only direct items on the Desktop can be removed" };
+        return {
+          ok: false,
+          error: "Only direct items on the Desktop can be removed",
+        };
       }
-      if (!fs.existsSync(p)) return { ok: false, error: "Item no longer exists" };
+      if (!fs.existsSync(p))
+        return { ok: false, error: "Item no longer exists" };
       await shell.trashItem(p);
       return { ok: true };
     } catch (err) {
@@ -569,13 +578,20 @@ function registerIpc() {
       const exe = process.execPath; // path to the packaged Octopus.exe
       const entries = [
         ["HKCU\\Software\\Classes\\*\\shell\\Octopus", "Open with Octopus"],
-        ["HKCU\\Software\\Classes\\Directory\\shell\\Octopus", "Open with Octopus"],
+        [
+          "HKCU\\Software\\Classes\\Directory\\shell\\Octopus",
+          "Open with Octopus",
+        ],
       ];
       for (const [key, label] of entries) {
         spawnSync("reg", ["add", key, "/d", label, "/f"], { stdio: "ignore" });
-        spawnSync("reg", ["add", `${key}\\command`, "/d", `"${exe}" "%1"`, "/f"], {
-          stdio: "ignore",
-        });
+        spawnSync(
+          "reg",
+          ["add", `${key}\\command`, "/d", `"${exe}" "%1"`, "/f"],
+          {
+            stdio: "ignore",
+          },
+        );
       }
       return { ok: true };
     } catch (err) {
@@ -586,12 +602,20 @@ function registerIpc() {
     if (process.platform !== "win32") return { ok: true };
     try {
       const { spawnSync } = require("child_process");
-      spawnSync("reg", ["delete", "HKCU\\Software\\Classes\\*\\shell\\Octopus", "/f"], {
-        stdio: "ignore",
-      });
-      spawnSync("reg", ["delete", "HKCU\\Software\\Classes\\Directory\\shell\\Octopus", "/f"], {
-        stdio: "ignore",
-      });
+      spawnSync(
+        "reg",
+        ["delete", "HKCU\\Software\\Classes\\*\\shell\\Octopus", "/f"],
+        {
+          stdio: "ignore",
+        },
+      );
+      spawnSync(
+        "reg",
+        ["delete", "HKCU\\Software\\Classes\\Directory\\shell\\Octopus", "/f"],
+        {
+          stdio: "ignore",
+        },
+      );
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err.message };
@@ -896,7 +920,9 @@ if (!app.requestSingleInstanceLock()) {
           .then((visible) => {
             if (visible) maybeStartPet();
             else
-              console.log("[octopus] pet suppressed by settings (visible=false)");
+              console.log(
+                "[octopus] pet suppressed by settings (visible=false)",
+              );
           })
           .catch(() => maybeStartPet());
       });
