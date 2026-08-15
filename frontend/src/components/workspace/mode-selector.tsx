@@ -215,6 +215,11 @@ export function ModeSelector({
       onModeChange(storedMode);
     }
 
+    // Restore the audit intensity (标准 / 最高) alongside the mode so a
+    // refresh/restart doesn't snap it back to the default.
+    const storedIntensity = readStoredAuditIntensity(workDir);
+    if (storedIntensity) onAuditIntensityChange?.(storedIntensity);
+
     let cancelled = false;
     const doDetect = async () => {
       setDetecting(true);
@@ -239,7 +244,13 @@ export function ModeSelector({
     return () => {
       cancelled = true;
     };
-  }, [onDetectionChange, onManualOverrideChange, onModeChange, workDir]);
+  }, [
+    onAuditIntensityChange,
+    onDetectionChange,
+    onManualOverrideChange,
+    onModeChange,
+    workDir,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -551,7 +562,10 @@ export function ModeSelector({
                           <button
                             key={level}
                             type="button"
-                            onClick={() => onAuditIntensityChange?.(level)}
+                            onClick={() => {
+                              onAuditIntensityChange?.(level);
+                              writeStoredAuditIntensity(workDir, level);
+                            }}
                             className={cn(
                               "flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
                               active
@@ -610,6 +624,37 @@ function compactWorkspaceLabel(path: string): string {
 const MODE_OVERRIDE_STORAGE_KEY = "octopus:modeOverride";
 
 /**
+ * A persisted per-workspace override stores both the manual mode AND the
+ * audit intensity (标准 / 最高) so a refresh/restart restores the full choice
+ * instead of snapping the intensity back to its default. Legacy rows that
+ * stored a bare mode string are still read and migrated on write.
+ */
+type StoredModeEntry =
+  | AgentModeName
+  | { mode?: AgentModeName; auditIntensity?: AuditIntensity };
+
+function isValidMode(mode: unknown): mode is AgentModeName {
+  return mode === "develop" || mode === "audit" || mode === "uxui";
+}
+
+function isValidAuditIntensity(v: unknown): v is AuditIntensity {
+  return v === "standard" || v === "max";
+}
+
+function readStoredEntries(): Record<string, StoredModeEntry> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(MODE_OVERRIDE_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, StoredModeEntry>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (e) {
+    swallow(e);
+    return {};
+  }
+}
+
+/**
  * Read the persisted manual-mode override for a workspace path, if any.
  * Returns null when nothing is stored, the value is invalid, localStorage is
  * unavailable (SSR), or parsing throws.
@@ -617,25 +662,28 @@ const MODE_OVERRIDE_STORAGE_KEY = "octopus:modeOverride";
 export function readStoredModeOverride(
   workspacePath: string,
 ): AgentModeName | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(MODE_OVERRIDE_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Record<string, AgentModeName>;
-    const mode = parsed[workspacePath];
-    return mode === "develop" || mode === "audit" || mode === "uxui"
-      ? mode
-      : null;
-  } catch (e) {
-    swallow(e);
-    return null;
-  }
+  const entry = readStoredEntries()[workspacePath];
+  const mode = typeof entry === "string" ? entry : entry?.mode;
+  return isValidMode(mode) ? mode : null;
+}
+
+/**
+ * Read the persisted audit intensity (标准 / 最高) for a workspace path.
+ * Returns null when nothing is stored or the value is invalid.
+ */
+export function readStoredAuditIntensity(
+  workspacePath: string,
+): AuditIntensity | null {
+  const entry = readStoredEntries()[workspacePath];
+  if (typeof entry === "string") return null;
+  const intensity = entry?.auditIntensity;
+  return isValidAuditIntensity(intensity) ? intensity : null;
 }
 
 /**
  * Persist a manual-mode override for a workspace path under a single
- * `{ workspacePath: mode }` map. Safe to call on SSR / when localStorage is
- * unavailable — it no-ops.
+ * `{ workspacePath: mode }` map, preserving any stored audit intensity.
+ * Safe to call on SSR / when localStorage is unavailable — it no-ops.
  */
 export function writeStoredModeOverride(
   workspacePath: string,
@@ -643,11 +691,47 @@ export function writeStoredModeOverride(
 ): void {
   if (typeof window === "undefined") return;
   try {
-    const raw = window.localStorage.getItem(MODE_OVERRIDE_STORAGE_KEY);
-    const current = raw
-      ? (JSON.parse(raw) as Record<string, AgentModeName>)
-      : {};
-    current[workspacePath] = mode;
+    const current = readStoredEntries();
+    const existing = current[workspacePath];
+    const existingIntensity =
+      typeof existing === "object" ? existing.auditIntensity : undefined;
+    current[workspacePath] = {
+      mode,
+      ...(isValidAuditIntensity(existingIntensity)
+        ? { auditIntensity: existingIntensity }
+        : {}),
+    };
+    window.localStorage.setItem(
+      MODE_OVERRIDE_STORAGE_KEY,
+      JSON.stringify(current),
+    );
+  } catch (e) {
+    swallow(e);
+  }
+}
+
+/**
+ * Persist an audit-intensity override for a workspace path, preserving any
+ * stored mode. Safe to call on SSR / when localStorage is unavailable.
+ */
+export function writeStoredAuditIntensity(
+  workspacePath: string,
+  intensity: AuditIntensity,
+): void {
+  if (typeof window === "undefined") return;
+  try {
+    const current = readStoredEntries();
+    const existing = current[workspacePath];
+    const existingMode =
+      typeof existing === "string"
+        ? existing
+        : typeof existing === "object"
+          ? existing.mode
+          : undefined;
+    current[workspacePath] = {
+      ...(isValidMode(existingMode) ? { mode: existingMode } : {}),
+      auditIntensity: intensity,
+    };
     window.localStorage.setItem(
       MODE_OVERRIDE_STORAGE_KEY,
       JSON.stringify(current),
