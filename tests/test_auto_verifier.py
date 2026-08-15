@@ -174,3 +174,32 @@ def test_verification_repair_request_is_bounded_and_carries_failure_evidence(
     assert request["failures"][0]["command"] == failed.command
     assert "assert 1 == 2" in request["prompt"]
     assert "runtime will rerun" in request["prompt"]
+
+def test_agent_verification_request_is_bounded_and_carries_commands(tmp_path: Path) -> None:
+    plan = _plan(tmp_path)
+
+    request = auto_verifier.build_agent_verification_request(
+        plan,
+        attempt=99,
+        max_attempts=99,
+    )
+
+    assert request["schema"] == "octopus.verification_request.v1"
+    assert request["attempt"] == 2
+    assert request["max_attempts"] == 2
+    assert request["fresh_evidence_required"] is True
+    assert len(request["commands"]) == 3
+    assert request["commands"][0]["command"] == "python -m ruff check src.py"
+    assert "no verification step was recorded" in request["prompt"]
+    assert "python -m ruff check src.py" in request["prompt"]
+    assert "Do not claim success without fresh passing evidence" in request["prompt"]
+
+
+def test_agent_verification_request_handles_empty_plan(tmp_path: Path) -> None:
+    request = auto_verifier.build_agent_verification_request(
+        {"workspace": str(tmp_path), "targets": ["src.py"], "commands": []},
+        attempt=1,
+    )
+
+    assert request["commands"] == []
+    assert "pick the repository's test / lint / build" in request["prompt"]

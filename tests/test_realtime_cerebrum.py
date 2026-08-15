@@ -69,7 +69,14 @@ def _patch_react_loop(monkeypatch: pytest.MonkeyPatch) -> None:
             }
         )
         approval_provider = kwargs.get("approval_provider")
-        script = _SCRIPT[:]
+        if _SCRIPT_POP_ONCE:
+            # Consume the script on the first drive so a verification
+            # loop-back re-drive sees an empty stream instead of replaying
+            # the same events (which would double-emit file changes).
+            script = _SCRIPT[:]
+            _SCRIPT.clear()
+        else:
+            script = _SCRIPT[:]
         for event in script:
             if event.get("__approve__"):
                 # Translate into an approval round-trip using the
@@ -99,14 +106,17 @@ def _patch_react_loop(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 _SCRIPT: list[dict[str, Any]] = []
+_SCRIPT_POP_ONCE: bool = False
 _LAST_STREAM_ARGS: dict[str, Any] = {}
 _LAST_STREAM_KWARGS: dict[str, Any] = {}
 _LAST_SESSION: dict[str, Any] = {}
 
 
 def _set_script(events: list[dict[str, Any]]) -> None:
+    global _SCRIPT_POP_ONCE
     _SCRIPT.clear()
     _SCRIPT.extend(events)
+    _SCRIPT_POP_ONCE = False
     _LAST_STREAM_KWARGS.clear()
     _LAST_SESSION.clear()
 
@@ -4059,6 +4069,11 @@ def test_tool_end_with_diff_emits_file_change_item(gateway: Any) -> None:
             {"type": "react_completed"},
         ]
     )
+    # The unverified code change trips the agent-driven verification
+    # loop-back (one extra drive). Consume the script on the first drive so
+    # that loop-back does not replay the edit and double-emit the change.
+    global _SCRIPT_POP_ONCE
+    _SCRIPT_POP_ONCE = True
     with client.websocket_connect("/api/realtime") as ws:
         out = _drive(
             ws,

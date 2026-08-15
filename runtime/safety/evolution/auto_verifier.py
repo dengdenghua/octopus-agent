@@ -159,6 +159,61 @@ def build_verification_repair_request(
     }
 
 
+def build_agent_verification_request(
+    plan: dict[str, Any],
+    *,
+    attempt: int,
+    max_attempts: int = _MAX_REPAIR_ATTEMPTS,
+) -> dict[str, Any]:
+    """Build a bounded, run-the-plan prompt when code changed with no
+    recorded verification evidence.
+
+    This is the auto loop-back for the case where the auto-verifier could not
+    produce any evidence (sandbox didn't allow it, or no allowlisted command
+    fit) and the agent ended without running a verification step. Instead of
+    hard-ending with a manual ``verification required`` error, the agent is
+    asked to run the recommended commands itself with its own tools, fix
+    anything that fails, and only then conclude.
+    """
+
+    bounded_max = max(1, min(int(max_attempts), _MAX_REPAIR_ATTEMPTS))
+    bounded_attempt = max(1, min(int(attempt), bounded_max))
+    commands = [
+        {
+            "command": str(command.get("command") or "").strip(),
+            "kind": str(command.get("kind") or "manual"),
+            "target": str(command.get("target") or "").strip(),
+            "reason": str(command.get("reason") or "").strip(),
+        }
+        for command in (plan.get("commands") or [])
+        if isinstance(command, dict) and str(command.get("command") or "").strip()
+    ]
+    command_lines = "\n".join(
+        f"- [{command['kind']}] {command['command']}"
+        + (f" :: {command['reason']}" if command["reason"] else "")
+        for command in commands
+    ) or "- (no recommended command matched; pick the repository's test / lint / build)"
+    prompt = "\n".join(
+        [
+            f"Verification attempt {bounded_attempt}/{bounded_max}.",
+            "You changed code but no verification step was recorded before the final answer.",
+            "Run the recommended verification commands yourself, fix anything that fails, "
+            "and only then give the final answer. Do not claim success without fresh passing evidence.",
+            command_lines,
+        ]
+    )
+    return {
+        "schema": "octopus.verification_request.v1",
+        "attempt": bounded_attempt,
+        "max_attempts": bounded_max,
+        "workspace": str(plan.get("workspace") or ""),
+        "targets": [str(target) for target in plan.get("targets") or []],
+        "commands": commands,
+        "fresh_evidence_required": True,
+        "prompt": prompt,
+    }
+
+
 def _sandbox_allows_auto_verification(policy: dict[str, Any] | None) -> bool:
     if not isinstance(policy, dict):
         return False
@@ -340,6 +395,7 @@ def _record_decision(ranking: list[dict[str, Any]], selected_command: str) -> No
 
 
 __all__ = [
+    "build_agent_verification_request",
     "build_verification_repair_request",
     "run_highest_priority_verification",
     "run_verification_plan",

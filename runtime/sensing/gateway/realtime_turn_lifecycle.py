@@ -74,6 +74,14 @@ _logger = logging.getLogger(__name__)
 # the model for work that is genuinely still finishing.
 _BACKGROUND_VERIFY_WAIT_S = 180.0
 
+# Bounded number of agent-driven verification rounds the turn verifier runs
+# when code changed with no recorded verification evidence and the
+# auto-verifier could not produce any (sandbox didn't allow it, or no
+# allowlisted command fit). Each round asks the agent to run the recommended
+# commands itself and fix; one round is enough to close the loop without
+# burning budget on a model that keeps failing.
+_AGENT_VERIFY_ROUND_LIMIT = 1
+
 # Item markers that are one half of a deliberate pair: the spawn tile is
 # never completed, its sibling ``__subagent_finished__`` carries the outcome.
 # Sweeping these would emit a completion the frontend reads as a second,
@@ -1102,6 +1110,62 @@ async def _start_turn(
                     _code_change_paths(turn),
                     intent,
                 )
+
+            if not auto_items:
+                # ── Agent-driven verification loop-back ────────────
+                # Auto-verification produced no evidence (sandbox didn't
+                # allow it, or no allowlisted command fit) and the agent
+                # ended without recording a verification step. Instead of
+                # hard-ending with a manual "verification required" error,
+                # give the agent a bounded round to run the recommended
+                # commands itself, fix anything that fails, and report.
+                from runtime.safety.evolution.auto_verifier import (
+                    build_agent_verification_request,
+                )
+
+                agent_verify_attempt = 0
+                while agent_verify_attempt < _AGENT_VERIFY_ROUND_LIMIT:
+                    if not _turn_has_unverified_code_changes(turn):
+                        break
+                    agent_verify_attempt += 1
+                    verify_request = build_agent_verification_request(
+                        verification_plan,
+                        attempt=agent_verify_attempt,
+                    )
+                    verify_context = dict(intent.user_context or {})
+                    verify_context["verification_repair"] = verify_request
+                    verify_intent = intent.model_copy(
+                        update={
+                            "raw": verify_request["prompt"],
+                            "normalized_goal": verify_request["prompt"],
+                            "user_context": verify_context,
+                        }
+                    )
+                    await runtime._drive_react(
+                        turn,
+                        log,
+                        emitter,
+                        verify_intent,
+                        provider,
+                        agent,
+                        model=validated.model,
+                    )
+                    if turn.status in {
+                        TurnStatus.INTERRUPTED,
+                        TurnStatus.CANCELLED,
+                        TurnStatus.PAUSED,
+                        TurnStatus.FAILED,
+                    }:
+                        _close_turn(log, thread_id, turn)
+                        runtime._snapshot_to_thread_store(thread_id, log, intent)
+                        return turn
+                if not _turn_has_unverified_code_changes(turn):
+                    turn.status = TurnStatus.COMPLETED
+                    _close_turn(log, thread_id, turn)
+                    runtime._record_successful_turn_example(turn, intent=intent)
+                    await runtime._maybe_compact(thread_id, log, emitter)
+                    runtime._snapshot_to_thread_store(thread_id, log, intent)
+                    return turn
 
             if auto_items:
                 # ── Environment-blocked degrade ──────────────────────
