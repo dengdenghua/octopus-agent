@@ -145,7 +145,8 @@ export const koKR: Translations = {
     reasoningEffortXHigh: "초고",
     reasoningEffortMax: "최대",
     reasoningEffortCurrent: (label) => `현재 ${label}`,
-    reasoningEffortMapped: (current, effective) => `${effective}(으)로 전송됩니다`,
+    reasoningEffortMapped: (current, effective) =>
+      `${effective}(으)로 전송됩니다`,
     searchModels: "모델 검색...",
     surpriseMe: "랜덤 질문",
     surpriseMePrompt: "재미있는 질문을 해 줘",
@@ -1344,6 +1345,13 @@ export const koKR: Translations = {
     visibilityStep: "결정",
     scrollToBottom: "맨 아래로 스크롤",
     viewLatestProgress: "최신 진행 상황 보기",
+    subagentBusStreamTitle: "서브 에이전트 이벤트 스트림",
+    subagentBusStreamLive: "실시간",
+    subagentBusStreamConnecting: "연결 중…",
+    subagentBusStreamError: "스트림 오류 — 재연결 중",
+    subagentBusStreamEmpty: "아직 서브 에이전트 활동 없음",
+    subagentBusStreamEvents: (count) => `${count} 개 이벤트`,
+    substreamTab: "서브 스레드 이벤트 스트림",
   },
 
   diagnosticsPage: {

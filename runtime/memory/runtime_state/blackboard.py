@@ -73,6 +73,8 @@ class Blackboard:
         "_last_touched",
         "_overwrite_count",
         "_write_count",
+        "_claims",
+        "_pinned",
     )
 
     def __init__(self) -> None:
@@ -82,6 +84,8 @@ class Blackboard:
         self._last_touched: float = time.monotonic()
         self._overwrite_count: int = 0
         self._write_count: int = 0
+        self._claims: dict[str, str] = {}
+        self._pinned: set[str] = set()
 
     def write(self, key: str, value: Any, *, writer: str | None = None) -> None:
         with self._lock:
@@ -92,6 +96,45 @@ class Blackboard:
             if writer:
                 self._key_writers.setdefault(key, set()).add(writer)
             self._last_touched = time.monotonic()
+
+    def can_write(self, key: str, writer: str | None = None) -> tuple[bool, str]:
+        """Guard before a write: a pinned key is sealed; a claimed key is
+        only writable by its owner.
+
+        Returns ``(allowed, reason)``. ``reason`` is empty when allowed.
+        """
+        with self._lock:
+            if key in self._pinned:
+                return False, "pinned"
+            owner = self._claims.get(key)
+            if owner is not None and writer is not None and owner != writer:
+                return False, f"claimed_by:{owner}"
+            return True, ""
+
+    def claim(self, key: str, writer: str | None) -> tuple[bool, str]:
+        """Claim a slot for ``writer``.
+
+        A slot can be claimed once; re-claiming by the same writer is a
+        no-op success. Returns ``(ok, reason)``.
+        """
+        if not writer:
+            return False, "writer is required to claim"
+        with self._lock:
+            existing = self._claims.get(key)
+            if existing is not None and existing != writer:
+                return False, f"claimed_by:{existing}"
+            self._claims[key] = writer
+            self._last_touched = time.monotonic()
+            return True, ""
+
+    def pin(self, key: str) -> tuple[bool, str]:
+        """Seal a key as an immutable snapshot. Writes after pin are rejected."""
+        with self._lock:
+            if key not in self._data:
+                return False, "key_not_found"
+            self._pinned.add(key)
+            self._last_touched = time.monotonic()
+            return True, ""
 
     def read(self, key: str, default: Any = None) -> Any:
         with self._lock:
@@ -123,6 +166,8 @@ class Blackboard:
                 "writers_by_key": {
                     key: sorted(writers) for key, writers in self._key_writers.items()
                 },
+                "claimed_keys": dict(self._claims),
+                "pinned_keys": sorted(self._pinned),
             }
 
 

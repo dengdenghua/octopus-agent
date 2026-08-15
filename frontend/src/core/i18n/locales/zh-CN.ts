@@ -1318,6 +1318,13 @@ export const zhCN: Translations = {
     visibilityStep: "决策",
     scrollToBottom: "滚动到底部",
     viewLatestProgress: "查看最新进展",
+    subagentBusStreamTitle: "子智能体事件流",
+    subagentBusStreamLive: "实时",
+    subagentBusStreamConnecting: "连接中…",
+    subagentBusStreamError: "流异常 — 重连中",
+    subagentBusStreamEmpty: "暂无子智能体活动",
+    subagentBusStreamEvents: (count) => `${count} 条事件`,
+    substreamTab: "子线程事件流",
   },
 
   diagnosticsPage: {

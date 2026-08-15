@@ -549,6 +549,7 @@ def test_agentic_loop_stalls_on_repeated_tool_calls():
     whole round cap and surface an "exceeded round cap" error."""
     from runtime.execution.suckers.ephemeral_runner import (
         EPHEMERAL_STALL_ROUNDS,
+        EphemeralConvergedIncomplete,
         make_llm_ephemeral_runner,
     )
 
@@ -565,13 +566,17 @@ def test_agentic_loop_stalls_on_repeated_tool_calls():
     )
     call = _make_call(role_id="reviewer")
 
-    result = runner(call)
+    # The convergence guard is an explicit INCOMPLETE signal — it must never
+    # return partial work as a success. Expect a structured exception the
+    # bridge maps to success=False + partial.
+    with pytest.raises(EphemeralConvergedIncomplete) as ei:
+        runner(call)
 
     # Stops as soon as EPHEMERAL_STALL_ROUNDS consecutive rounds add no new
     # tool signature · long before the explorer-style round cap (15).
     rounds_run = len(router.call_log)
     assert rounds_run == EPHEMERAL_STALL_ROUNDS + 1
-    assert "已提前收敛" in result
+    assert "已提前收敛" in ei.value.partial_text
 
 
 def test_agentic_loop_does_not_stall_on_polling_tools():
@@ -1154,3 +1159,69 @@ class TestEphemeralInjectionTaintGate:
         assert is_error is False
         assert ran["exec"] is True
         assert "prompt_injection_taint" not in output
+
+
+class TestVerificationGate:
+    """The ephemeral runner refuses to conclude with unverified code."""
+
+    def _runner(self, router, registry):
+        from runtime.execution.suckers.ephemeral_runner import (
+            make_llm_ephemeral_runner,
+        )
+
+        return make_llm_ephemeral_runner(
+            router,
+            registry=registry,
+            default_model="m",
+        )
+
+    def test_write_without_verification_nudges_and_continues(self):
+        router = _ScriptedAgenticRouter(
+            script=[
+                [{"name": "edit_text_file", "input": {"path": "src/app.py"}}],
+                "I fixed the bug",
+                "That is the final answer",
+            ]
+        )
+        registry = _StubRegistry(
+            {"edit_text_file": lambda **kw: {"ok": True}}
+        )
+        runner = self._runner(router, registry)
+        call = _make_call(role_id="implementer")
+        call.context["tool_allowlist"] = ["edit_text_file"]
+
+        out = runner(call)
+
+        # The gate appended a verification nudge and forced one more round
+        # instead of concluding after "I fixed the bug".
+        assert "I fixed the bug" in out
+        assert len(router.call_log) == 3
+        # the round after the nudge received the verification prompt
+        assert "验证" in router.call_log[2].messages[-1].content
+
+    def test_write_followed_by_verification_does_not_nudge(self):
+        router = _ScriptedAgenticRouter(
+            script=[
+                [{"name": "edit_text_file", "input": {"path": "src/app.py"}}],
+                [{"name": "bash", "input": {"command": "python -m pytest"}}],
+                "All green",
+            ]
+        )
+        registry = _StubRegistry(
+            {
+                "edit_text_file": lambda **kw: {"ok": True},
+                "bash": lambda **kw: {"ok": True},
+            }
+        )
+        runner = self._runner(router, registry)
+        call = _make_call(role_id="implementer")
+        call.context["tool_allowlist"] = ["edit_text_file", "bash"]
+
+        out = runner(call)
+
+        assert "All green" in out
+        # No verification nudge was injected anywhere.
+        assert not any(
+            "验证" in req.messages[-1].content
+            for req in router.call_log
+        )

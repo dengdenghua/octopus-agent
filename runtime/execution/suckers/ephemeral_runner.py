@@ -277,6 +277,25 @@ class EphemeralRoundCapExceeded(RuntimeError):
         self.role_id = role_id
 
 
+class EphemeralConvergedIncomplete(RuntimeError):
+    """Raised when the convergence guard stops a sub-agent early because it
+    only repeated identical tool calls (a loop, not progress).
+
+    Carries the partial text produced so far. Callers must surface this as an
+    explicit ``success=False`` partial result — NOT as a success — so the
+    parent never mistakes a stalled partial run for a completed one.
+    """
+
+    def __init__(self, partial_text: str, rounds: int, role_id: str) -> None:
+        super().__init__(
+            f"sub-agent {role_id!r} converged early after {rounds} rounds "
+            f"with no new progress · {len(partial_text)} chars of partial output"
+        )
+        self.partial_text = partial_text
+        self.rounds = rounds
+        self.role_id = role_id
+
+
 _LENGTH_LIMIT_FINISH_REASONS = {
     "length",
     "max_tokens",
@@ -584,6 +603,11 @@ def make_llm_ephemeral_runner(
         accumulated_text = ""
         seen_tool_signatures: set[tuple[str, str]] = set()
         stall_rounds = 0
+        # Verification gate bookkeeping: every executed tool call (with its
+        # outcome) so the runner can refuse to conclude with unverified code,
+        # plus a once-per-run flag so we never loop the nudge forever.
+        executed_tools: list[dict[str, Any]] = []
+        verification_nudged = False
         for round_i in range(max_rounds):
             req = ModelRequest(
                 model=effective_model,
@@ -741,6 +765,33 @@ def make_llm_ephemeral_runner(
                         emitter=_ctx_emitter,
                     )
                     return accumulated_text + notice
+                # Verification gate: refuse to conclude with unverified code.
+                # If the sub-agent wrote/edited a code file and ran no
+                # verification after the last write, nudge it once to run
+                # tests / lint / typecheck and keep looping. The nudge fires
+                # at most once per run, so it can never deadlock the loop.
+                if not verification_nudged:
+                    from runtime.execution.suckers._ephemeral_verification import (
+                        verification_gate_nudge,
+                    )
+
+                    nudge = verification_gate_nudge(
+                        executed_tools,
+                        max_rounds=max_rounds,
+                        current_round=round_i,
+                    )
+                    if nudge:
+                        verification_nudged = True
+                        _emit_sub_text_delta(
+                            call.role.id,
+                            round_i + 1,
+                            "\n\n[验证门] " + nudge,
+                            session_id=_ctx_session_id,
+                            emitter=_ctx_emitter,
+                        )
+                        messages.append(Message(role="assistant", content=text))
+                        messages.append(Message(role="user", content=nudge))
+                        continue
                 return accumulated_text
 
             # Re-materialize the assistant turn (text + tool_use
@@ -813,6 +864,15 @@ def make_llm_ephemeral_runner(
                         registry,
                         tc,
                     )
+                # Record the executed call for the verification gate (write
+                # tools only count when they succeeded).
+                executed_tools.append(
+                    {
+                        "name": getattr(tc, "name", "") or "",
+                        "input": getattr(tc, "input", None) or {},
+                        "ok": not is_error,
+                    }
+                )
                 _duration_ms = int((time.monotonic() - _sub_tool_t0) * 1000)
                 _emit_sub_tool_event(
                     "sub_tool_end",
@@ -886,7 +946,11 @@ def make_llm_ephemeral_runner(
                             session_id=_ctx_session_id,
                             emitter=_ctx_emitter,
                         )
-                        return accumulated_text + notice
+                        raise EphemeralConvergedIncomplete(
+                            partial_text=accumulated_text + notice,
+                            rounds=round_i + 1,
+                            role_id=call.role.id,
+                        )
 
         # Hit the round cap. Raise so the bridge can surface a real
         # failure (success=false + error) instead of returning a
@@ -903,6 +967,7 @@ def make_llm_ephemeral_runner(
 __all__ = [
     "EPHEMERAL_MAX_ROUNDS",
     "EPHEMERAL_MAX_ROUNDS_BY_ROLE",
+    "EphemeralConvergedIncomplete",
     "EphemeralRoundCapExceeded",
     "_emit_subagent_lifecycle_event",
     "make_llm_ephemeral_runner",

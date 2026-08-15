@@ -145,7 +145,8 @@ export const jaJP: Translations = {
     reasoningEffortXHigh: "超高",
     reasoningEffortMax: "最大",
     reasoningEffortCurrent: (label) => `現在 ${label}`,
-    reasoningEffortMapped: (current, effective) => `${effective} として送信されます`,
+    reasoningEffortMapped: (current, effective) =>
+      `${effective} として送信されます`,
     searchModels: "モデルを検索...",
     surpriseMe: "おまかせ",
     surpriseMePrompt: "おまかせで質問してください",
@@ -1358,6 +1359,13 @@ export const jaJP: Translations = {
     visibilityStep: "判断",
     scrollToBottom: "最下部へスクロール",
     viewLatestProgress: "最新の進捗を表示",
+    subagentBusStreamTitle: "サブエージェントのイベントストリーム",
+    subagentBusStreamLive: "リアルタイム",
+    subagentBusStreamConnecting: "接続中…",
+    subagentBusStreamError: "ストリームエラー — 再接続中",
+    subagentBusStreamEmpty: "サブエージェントのアクティビティはまだありません",
+    subagentBusStreamEvents: (count) => `${count} 件のイベント`,
+    substreamTab: "サブスレッドのイベントストリーム",
   },
 
   diagnosticsPage: {

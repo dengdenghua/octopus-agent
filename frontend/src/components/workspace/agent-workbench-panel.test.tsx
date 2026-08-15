@@ -2155,6 +2155,16 @@ describe("<AgentWorkbenchPanel />", () => {
     );
   });
 
+  test("exposes the subagent event stream tab and selects it", () => {
+    renderWorkbench(<AgentWorkbenchPanel activeTab="substream" events={[]} />);
+
+    const tab = screen.getByRole("tab", {
+      name: /子线程事件流/,
+    });
+    expect(tab).toBeInTheDocument();
+    expect(tab).toHaveAttribute("aria-selected", "true");
+  });
+
   test("keeps the subagent tab hidden while preserving summary observability", () => {
     renderWorkbench(
       <AgentWorkbenchPanel

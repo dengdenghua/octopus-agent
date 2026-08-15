@@ -114,6 +114,7 @@ agents/**/*.jsonc.lock
 # (.octopus-browser-relay/ used to live at root; moved to
 # extensions/octopus-browser-relay/ — committed product surface)
 .octopus/archive/
+.octopus/artifacts/
 agents/*/workspace/
 benchmarks/results/
 skills_backup_*/

@@ -294,3 +294,47 @@ def test_list_subagent_session_candidates_query_and_target(
     response = _client().get("/api/subagents/sessions")
     assert response.status_code == 200
     assert response.json()["candidates"] == []
+
+
+def test_subagent_bus_sse_snapshot_replays_events() -> None:
+    """GET /api/subagents/stream/{root} with limit returns a bounded snapshot."""
+    from runtime.execution.subagents.event_bus import (
+        EVT_SUB_CONCLUDED,
+        EVT_SUB_STARTED,
+        publish_subagent_event,
+        reset_for_tests,
+    )
+
+    reset_for_tests()
+    try:
+        publish_subagent_event(
+            EVT_SUB_STARTED,
+            {"role": "researcher"},
+            thread_id="c",
+            root_thread_id="streamroot",
+        )
+        publish_subagent_event(
+            EVT_SUB_CONCLUDED,
+            {"role": "researcher", "ok": True},
+            thread_id="c",
+            root_thread_id="streamroot",
+        )
+        response = _client().get(
+            "/api/subagents/stream/streamroot", params={"limit": 2}
+        )
+        assert response.status_code == 200
+        types = []
+        for line in response.text.splitlines():
+            if line.startswith("data: "):
+                types.append(json.loads(line[6:]).get("type"))
+        assert types == ["sub_started", "sub_concluded", "done"]
+    finally:
+        reset_for_tests()
+
+
+def test_subagent_bus_sse_empty_root_returns_done() -> None:
+    response = _client().get(
+        "/api/subagents/stream/nope", params={"limit": 5}
+    )
+    assert response.status_code == 200
+    assert response.text.strip().endswith('{"type":"done"}')

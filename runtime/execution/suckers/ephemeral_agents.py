@@ -812,6 +812,29 @@ def is_ephemeral_role(agent_id: str) -> bool:
     return agent_id in BUILTIN_ROLES
 
 
+def _emit_incomplete_to_bus(role_id: str, partial_text: str, rounds: int, reason: str) -> None:
+    """Fire-and-forget mirror of an incomplete sub-agent outcome onto the
+    typed event bus so the Workbench can render it as an incomplete tile.
+    """
+    try:
+        from runtime.execution.subagents.event_bus import (
+            EVT_SUB_INCOMPLETE,
+            publish_subagent_event,
+        )
+
+        publish_subagent_event(
+            EVT_SUB_INCOMPLETE,
+            {
+                "role": role_id,
+                "reason": reason,
+                "rounds": rounds,
+                "partial_chars": len(partial_text),
+            },
+        )
+    except Exception:  # noqa: BLE001 · telemetry loss never breaks the runner
+        pass
+
+
 def run_ephemeral_definition(
     role: EphemeralRoleDef,
     user_prompt: str,
@@ -862,9 +885,32 @@ def run_ephemeral_definition(
         # a partial answer with explicit success=false so callers don't
         # silently accept "(exceeded round cap)" as a valid result.
         from runtime.execution.suckers.ephemeral_runner import (
+            EphemeralConvergedIncomplete,
             EphemeralRoundCapExceeded,
         )
 
+        if isinstance(exc, EphemeralConvergedIncomplete):
+            _log.warning(
+                "ephemeral converged early for role=%s · rounds=%d · partial_chars=%d",
+                role.id,
+                exc.rounds,
+                len(exc.partial_text),
+            )
+            _emit_incomplete_to_bus(role.id, exc.partial_text, exc.rounds, "converged_early")
+            return {
+                "agent_id": role.id,
+                "output": exc.partial_text,
+                "success": False,
+                "error": (
+                    f"sub-agent {role.id!r} converged early after {exc.rounds} "
+                    "rounds with no new progress. Partial output included."
+                ),
+                "ephemeral": True,
+                "round_cap_exceeded": False,
+                "converged_early": True,
+                "rounds_completed": exc.rounds,
+                "partial": True,
+            }
         if isinstance(exc, EphemeralRoundCapExceeded):
             _log.warning(
                 "ephemeral round cap hit for role=%s · rounds=%d · partial_chars=%d",
@@ -872,6 +918,7 @@ def run_ephemeral_definition(
                 exc.rounds,
                 len(exc.partial_text),
             )
+            _emit_incomplete_to_bus(role.id, exc.partial_text, exc.rounds, "round_cap")
             return {
                 "agent_id": role.id,
                 "output": exc.partial_text,

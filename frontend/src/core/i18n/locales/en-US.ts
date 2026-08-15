@@ -146,7 +146,8 @@ export const enUS: Translations = {
     reasoningEffortXHigh: "Ultra",
     reasoningEffortMax: "Max",
     reasoningEffortCurrent: (label) => `Current ${label}`,
-    reasoningEffortMapped: (current, effective) => `Will be sent as ${effective}`,
+    reasoningEffortMapped: (current, effective) =>
+      `Will be sent as ${effective}`,
     searchModels: "Search models...",
     surpriseMe: "Surprise",
     surpriseMePrompt: "Surprise me",
@@ -1378,6 +1379,13 @@ export const enUS: Translations = {
     visibilityStep: "Decision",
     scrollToBottom: "Scroll to bottom",
     viewLatestProgress: "View latest progress",
+    subagentBusStreamTitle: "Subagent event stream",
+    subagentBusStreamLive: "Live",
+    subagentBusStreamConnecting: "Connecting…",
+    subagentBusStreamError: "Stream error — reconnecting",
+    subagentBusStreamEmpty: "No subagent activity yet",
+    subagentBusStreamEvents: (count) => `${count} events`,
+    substreamTab: "Subagent event stream",
   },
 
   diagnosticsPage: {

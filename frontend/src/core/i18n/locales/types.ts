@@ -1161,6 +1161,13 @@ export interface Translations {
     visibilityStep: string;
     scrollToBottom: string;
     viewLatestProgress: string;
+    subagentBusStreamTitle: string;
+    subagentBusStreamLive: string;
+    subagentBusStreamConnecting: string;
+    subagentBusStreamError: string;
+    subagentBusStreamEmpty: string;
+    subagentBusStreamEvents: (count: number) => string;
+    substreamTab: string;
   };
 
   // Diagnostics page

@@ -109,6 +109,62 @@ def get_subagent_registry() -> SubagentRegistry | None:
     return _REGISTRY
 
 
+def _publish_bus_lifecycle(kind: str, event: dict, session: Any) -> None:
+    """Mirror sub-agent spawn/finish lifecycle onto the typed event bus.
+
+    The bus is what the Workbench subscribes to for an independent,
+    full-fidelity stream. Publishing here (in addition to the journal +
+    ``event_emitter``) means EVERY dispatch — including custom runners that
+    never touch the ephemeral runner's emit helpers — surfaces lifecycle on
+    the bus, keyed to the caller's thread lineage root.
+    """
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        from runtime.execution.subagents.event_bus import publish_subagent_event
+
+        meta = getattr(session, "metadata", None) or {}
+        if not isinstance(meta, dict):
+            meta = {}
+        thread_id = meta.get("thread_id") or getattr(session, "thread_id", None) or ""
+        root = meta.get("root_thread_id") or thread_id or ""
+        role = event.get("role") or event.get("agent_id") or ""
+        if kind == "subagent_spawned":
+            publish_subagent_event(
+                "sub_started",
+                {
+                    "role": role,
+                    "codename": event.get("codename") or "",
+                    "avatar": event.get("avatar") or "",
+                    "prompt_preview": (event.get("prompt_preview") or "")[:200],
+                    "started_at": event.get("started_at"),
+                },
+                thread_id=thread_id,
+                root_thread_id=root,
+            )
+        else:
+            ok = bool(event.get("ok"))
+            bus_type = (
+                "sub_concluded"
+                if ok and not event.get("error")
+                else "sub_failed"
+            )
+            publish_subagent_event(
+                bus_type,
+                {
+                    "role": role,
+                    "ok": ok,
+                    "error": event.get("error") or "",
+                    "duration_s": event.get("duration_s"),
+                    "iteration_count": event.get("iteration_count"),
+                    "files_touched": event.get("files_touched") or 0,
+                    "status": event.get("status") or "",
+                },
+                thread_id=thread_id,
+                root_thread_id=root,
+            )
+
+
 def call_subagent(
     agent_id: str = "",
     prompt: str = "",
@@ -399,6 +455,7 @@ def call_subagent(
     # a sub-agent tile from the spawn moment, independent of the
     # in-memory emitter being wired through to the realtime gateway.
     _safe_journal_emit(_spawn_event)
+    _publish_bus_lifecycle("subagent_spawned", _spawn_event, session)
     try:
         from runtime.safety.hooks import dispatch_subagent_start
 
@@ -497,16 +554,41 @@ def call_subagent(
             except ImportError:
                 denylist_token = None
         run_session = session
+        # Sub-agent threading identity: resolve the lineage + coordination
+        # roots (``root_thread_id`` for the event bus, ``blackboard_root_turn_id``
+        # for blackboard continuity) and stamp them on the run Session. The
+        # child KEEPS the parent's thread_id by default so journal/trace stays
+        # attributed to the main conversation; the independent-thread identity
+        # (flip_thread_id) is the explicit opt-in for full sub-agent threading.
+        _flip_thread = bool((context or {}).get("flip_subagent_thread", False))
+        _extra_meta: dict[str, Any] = {}
         if _locked_root:
-            import dataclasses
+            _extra_meta["_locked_write_root"] = _locked_root
+        from runtime.platform.process.session import Session
 
-            from runtime.platform.process.session import Session
-
-            base = session if isinstance(session, Session) else Session()
-            run_session = dataclasses.replace(
-                base,
-                metadata={**(base.metadata or {}), "_locked_write_root": _locked_root},
+        if session is not None and isinstance(session, Session):
+            from runtime.execution.subagents.threading import (
+                bind_subagent_session,
+                forge_subagent_thread,
             )
+
+            binding = forge_subagent_thread(
+                session,
+                agent_id=agent_id,
+                role=role,
+                persist=_flip_thread,
+            )
+            run_session = bind_subagent_session(
+                session,
+                binding,
+                extra_metadata=_extra_meta or None,
+                flip_thread_id=_flip_thread,
+            )
+        elif _locked_root:
+            # No ambient Session but a locked write root was requested:
+            # carry it on a bare Session so the ephemeral chokepoint still
+            # confines writes (original behaviour).
+            run_session = Session(metadata={"_locked_write_root": _locked_root})
         scope_token = None
         if run_session is not None:
             # Bind on THIS worker thread so blackboard skills see the parent's
@@ -835,6 +917,7 @@ def call_subagent(
         _attach_trace_fields(_finish_event, _trace_context)
         _safe_emit(event_emitter, _finish_event)
         _safe_journal_emit(_finish_event)
+        _publish_bus_lifecycle("subagent_finished", _finish_event, session)
         try:
             from runtime.safety.hooks import dispatch_subagent_stop
 

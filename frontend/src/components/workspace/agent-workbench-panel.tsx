@@ -4,6 +4,7 @@ import {
   DownloadIcon,
   GlobeIcon,
   PackageIcon,
+  RadioIcon,
   SparklesIcon,
   TerminalIcon,
 } from "lucide-react";
@@ -28,6 +29,7 @@ import { useArtifactContent } from "@/core/artifacts/hooks";
 import type { OutlineRound } from "@/core/threads/progress-outline";
 import type { GroundingSource } from "@/core/realtime/items";
 import { TerminalPanel } from "@/components/workspace/terminal-panel";
+import { SubAgentBusStreamPanel } from "@/core/threads/subagent-bus-stream-panel";
 import { ToolEffectDetailPanel } from "@/components/workspace/tool-effect-detail-panel";
 import { useArtifacts } from "@/components/workspace/artifacts/context";
 import { ArtifactLink } from "@/components/workspace/citations/artifact-link";
@@ -169,8 +171,11 @@ function AgentWorkbenchPanelImpl({
 
   // IndexedDB 缓存实例（跨刷新持久化）
   const snapshotCacheRef = useRef<WorkbenchSnapshotCache | null>(null);
-  const [cachedSnapshot, setCachedSnapshot] = useState<ReturnType<typeof useAgentWorkbenchSnapshot> | null>(null);
-  const enableCache = typeof window !== "undefined" &&
+  const [cachedSnapshot, setCachedSnapshot] = useState<ReturnType<
+    typeof useAgentWorkbenchSnapshot
+  > | null>(null);
+  const enableCache =
+    typeof window !== "undefined" &&
     localStorage.getItem("octopus:cache-workbench") === "1";
 
   // 初始化缓存
@@ -193,7 +198,9 @@ function AgentWorkbenchPanelImpl({
         const turnId = `turn_${lastEvent.startedAt}`;
         const cached = await snapshotCacheRef.current?.load(threadId, turnId);
         if (cached) {
-          console.log(`[WorkbenchCache] Restored snapshot from cache (${cached.events.length} events)`);
+          console.log(
+            `[WorkbenchCache] Restored snapshot from cache (${cached.events.length} events)`,
+          );
           setCachedSnapshot(cached.snapshot);
         }
       } catch (error) {
@@ -216,8 +223,11 @@ function AgentWorkbenchPanelImpl({
 
   // 如果缓存快照可用且事件匹配，优先使用缓存
   const activeSnapshot = useMemo(() => {
-    if (cachedSnapshot && cachedSnapshot.fingerprint === workbenchSnapshot.fingerprint) {
-      console.log('[WorkbenchCache] Using cached snapshot');
+    if (
+      cachedSnapshot &&
+      cachedSnapshot.fingerprint === workbenchSnapshot.fingerprint
+    ) {
+      console.log("[WorkbenchCache] Using cached snapshot");
       return cachedSnapshot;
     }
     return workbenchSnapshot;
@@ -238,9 +248,11 @@ function AgentWorkbenchPanelImpl({
           threadId,
           turnId,
           workbenchSnapshot,
-          events
+          events,
         );
-        console.log(`[WorkbenchCache] Saved snapshot to cache (v${workbenchSnapshot.version})`);
+        console.log(
+          `[WorkbenchCache] Saved snapshot to cache (v${workbenchSnapshot.version})`,
+        );
       } catch (error) {
         console.warn("[WorkbenchCache] Failed to save to cache:", error);
       }
@@ -425,7 +437,8 @@ function AgentWorkbenchPanelImpl({
     | "diff"
     | "terminal"
     | "browser"
-    | "artifacts" =
+    | "artifacts"
+    | "substream" =
     requestedActiveTab === "subagents" || requestedActiveTab === "plan"
       ? "agent"
       : requestedActiveTab;
@@ -451,8 +464,13 @@ function AgentWorkbenchPanelImpl({
         label: t.conversation.artifactsTitle,
         Icon: PackageIcon,
       },
+      {
+        id: "substream",
+        label: t.agentWorkbenchPanel.substreamTab,
+        Icon: RadioIcon,
+      },
     ],
-    [t.agentWorkbenchPages, t.conversation],
+    [t.agentWorkbenchPages, t.conversation, t.agentWorkbenchPanel],
   );
 
   // Auto-open a tab if it becomes the effective active tab
@@ -641,6 +659,8 @@ function AgentWorkbenchPanelImpl({
         threadId={threadId}
         currentTurnEntries={visibleDiffEntries}
       />
+    ) : effectiveActiveTab === "substream" ? (
+      <SubAgentBusStreamPanel rootThreadId={threadId} showAll />
     ) : (
       agentKanbanPage
     );

@@ -43,6 +43,21 @@ def _safe_ctx_emit(emitter: Any, event: dict) -> None:
         emitter(event)
 
 
+
+def _publish_to_bus(type: str, payload: dict) -> None:
+    """Fire-and-forget mirror of a sub-agent event onto the typed event bus.
+
+    Best-effort: no session / no coordination root → silent no-op. Telemetry
+    loss never breaks the runner. The bus is the substrate the Workbench
+    subscribes to for an independent, full-fidelity stream of a sub-agent
+    thread (see ``runtime.execution.subagents.event_bus``).
+    """
+    with contextlib.suppress(Exception):
+        from runtime.execution.subagents.event_bus import publish_subagent_event
+
+        publish_subagent_event(type, payload)
+
+
 def _emit_sub_text_delta(
     role_id: str,
     round: int,
@@ -294,6 +309,25 @@ def _emit_sub_tool_event(
         "sub_agent_role": role_id,
     }
     if kind == "sub_tool_end":
+        # Compute status for the bus mirror before we mutate ``payload``.
+        _bus_status = "error" if is_error else "success"
+        _bus_duration = int(duration_ms or 0) if duration_ms is not None else None
+    else:
+        _bus_status = ""
+        _bus_duration = None
+    _publish_to_bus(
+        kind,
+        {
+            "role": role_id,
+            "iteration": iteration,
+            "tool": payload.get("name") or "",
+            "tool_call_id": payload.get("id") or "",
+            "parent_tool_use_id": payload.get("parent_tool_use_id") or "",
+            "status": _bus_status,
+            "duration_ms": _bus_duration,
+        },
+    )
+    if kind == "sub_tool_end":
         # Truncate output preview · same 200-char cap as parent
         # loop's tool_end event so the SSE frame stays small.
         if output is not None:
@@ -415,6 +449,37 @@ def _emit_subagent_lifecycle_event(
     if journal is None:
         return
 
+    # Mirror onto the typed event bus (Workbench subscription stream).
+    _bus_role = str(payload.get("role") or payload.get("agent_id") or "")
+    if kind == "subagent_spawned":
+        _publish_to_bus(
+            "sub_started",
+            {
+                "role": _bus_role,
+                "codename": payload.get("codename") or "",
+                "avatar": payload.get("avatar") or "",
+                "prompt_preview": (payload.get("prompt_preview") or "")[:200],
+                "started_at": payload.get("started_at"),
+            },
+        )
+    elif kind == "subagent_finished":
+        _bus_type = (
+            "sub_concluded"
+            if payload.get("ok") and not payload.get("error")
+            else "sub_failed"
+        )
+        _publish_to_bus(
+            _bus_type,
+            {
+                "role": _bus_role,
+                "ok": bool(payload.get("ok")),
+                "error": payload.get("error") or "",
+                "duration_s": payload.get("duration_s"),
+                "iteration_count": payload.get("iteration_count"),
+                "files_touched": payload.get("files_touched") or 0,
+                "status": payload.get("status") or "",
+            },
+        )
     role_id = str(payload.get("role") or payload.get("agent_id") or "")
     parent_id = meta.get("_active_parent_tool_use_id") or None
     task_id_obj = meta.get("task_id")

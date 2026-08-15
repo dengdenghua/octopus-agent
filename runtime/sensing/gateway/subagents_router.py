@@ -339,8 +339,97 @@ def create_subagents_router(
                 "X-Accel-Buffering": "no",  # disable nginx buffering if proxied
             },
         )
+    @router.get("/api/subagents/stream/{root_thread_id}")
+    async def _subagents_bus_stream(
+        root_thread_id: str,
+        after_seq: int = Query(0, ge=0),
+        limit: int | None = Query(None, ge=1),
+    ) -> Any:
+        """Live SSE stream of the typed sub-agent event bus for a root thread.
+
+        Replays events after ``after_seq`` (0 = whole buffer), then pushes new
+        events as they land. The Workbench subscribes here for an independent,
+        full-fidelity stream of a sub-agent run. Pass ``limit`` for a bounded
+        snapshot instead of a long-lived subscription.
+        """
+        return _subagent_bus_endpoint(root_thread_id, after_seq, limit)
 
     return router
 
+
+async def _subagent_bus_sse(
+    root_thread_id: str,
+    after_seq: int,
+    limit: int | None,
+) -> Any:
+    """Generator: replay bus history, then live-stream new events.
+
+    ``limit`` (when set) turns this into a snapshot: it yields at most
+    ``limit`` replayed events then signals ``done`` and returns — no
+    long-lived subscription. Useful for late UIs and for tests.
+    """
+    import asyncio
+    import json
+
+    from runtime.execution.subagents.event_bus import get_bus
+
+    bus = get_bus(root_thread_id)
+    if bus is None:
+        yield 'data: {"type":"done"}\n\n'
+        return
+
+    for emitted, event in enumerate(bus.replay(after_seq=after_seq)):
+        if limit is not None and emitted >= limit:
+            break
+        try:
+            payload = json.dumps(event, ensure_ascii=False)
+        except (TypeError, ValueError):
+            payload = json.dumps({"type": "error", "error": "not-serializable"})
+        yield f"data: {payload}\n\n"
+
+    if limit is not None:
+        yield 'data: {"type":"done"}\n\n'
+        return
+
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[dict | None] = asyncio.Queue()
+
+    def _on_event(event: dict[str, Any]) -> None:
+        loop.call_soon_threadsafe(queue.put_nowait, event)
+
+    unsubscribe = bus.subscribe(_on_event)
+    try:
+        yield 'data: {"type":"subscribed"}\n\n'
+        while True:
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=15.0)
+            except TimeoutError:
+                yield ": keepalive\n\n"
+                continue
+            if event is None:
+                break
+            try:
+                payload = json.dumps(event, ensure_ascii=False)
+            except (TypeError, ValueError):
+                payload = json.dumps({"type": "error", "error": "not-serializable"})
+            yield f"data: {payload}\n\n"
+    finally:
+        unsubscribe()
+
+
+def _subagent_bus_endpoint(
+    root_thread_id: str,
+    after_seq: int,
+    limit: int | None,
+) -> Any:
+    """SSE endpoint for the typed sub-agent event bus."""
+    return StreamingResponse(
+        _subagent_bus_sse(root_thread_id, after_seq, limit),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # disable nginx buffering if proxied
+        },
+    )
 
 __all__ = ["SubagentDispatchRequest", "create_subagents_router"]
