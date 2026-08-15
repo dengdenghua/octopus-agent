@@ -2,4 +2,16 @@
 # Splitting one of these? Remove its line from this file so the
 # audit can lock in your win.
 
-runtime/sensing/gateway/_tool_bridge_loop.py	2216
+runtime/core/cerebrum/_react_execution_phase6d.py	1087
+runtime/core/cerebrum/react_loop.py	1180
+runtime/execution/subagents/bridge.py	1250
+runtime/execution/subagents/sessions.py	1109
+runtime/execution/suckers/lsp_skills.py	1148
+runtime/memory/threads/store.py	1233
+runtime/platform/ui/browser_router.py	1036
+runtime/safety/sandboxing/sandbox.py	1087
+runtime/sensing/gateway/_tool_bridge_loop.py	2281
+runtime/sensing/gateway/realtime_event_bridge.py	1229
+runtime/sensing/gateway/realtime_turn_lifecycle.py	1316
+runtime/sensing/model_router/openai_compat_providers.py	1016
+runtime/sensing/model_router/openai_router.py	1015
