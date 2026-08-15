@@ -60,7 +60,7 @@ describe("ChatsDrawer", () => {
       locale: "zh-CN",
     });
 
-    expect(screen.getByRole("link", { name: "角色" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "HUB" })).toHaveAttribute(
       "href",
       "/workspace/agents?surface=chat",
     );
