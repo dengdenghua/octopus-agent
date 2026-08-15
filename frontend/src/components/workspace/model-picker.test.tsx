@@ -332,6 +332,20 @@ describe("<ModelPicker />", () => {
     );
   });
 
+  it("keeps a stored-but-unavailable model instead of snapping to mix", () => {
+    // A thread override may point at a model the current catalog no longer
+    // advertises (removed/renamed custom model). The trigger must keep showing
+    // the stored value — silently swapping to models[0] (mix) would make the
+    // picker lie about what the thread actually uses after a reload.
+    setup("glm-5.3");
+    expect(screen.getByRole("button", { name: "选择模型" })).toHaveTextContent(
+      "glm-5.3",
+    );
+    expect(
+      screen.getByRole("button", { name: "选择模型" }),
+    ).not.toHaveTextContent("mix");
+  });
+
   it("supports a renderTrigger override", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

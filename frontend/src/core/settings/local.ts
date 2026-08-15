@@ -6,7 +6,13 @@ export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
     enabled: true,
   },
   context: {
-    model_name: "claude-opus",
+    // ``auto`` is the shared sentinel for "let the backend ModelRouter pick"
+    // (see model-picker.tsx and realtime_turn_lifecycle.py, which skips the
+    // model_name override for auto/default). Hardcoding a concrete model here
+    // pinned every fresh install to one vendor: a deployment whose provider
+    // only serves other model names rejected the turn with an HTTP 400 before
+    // the user ever opened the picker.
+    model_name: "auto",
     mode: "react",
     permission_mode: "default",
     execution_environment: "sandbox",
@@ -112,6 +118,15 @@ function mergeLocalSettings(settings?: Partial<LocalSettings>): LocalSettings {
   const persistedMode = (context as { mode?: unknown }).mode;
   if (persistedMode === "chat" || persistedMode === "swarm") {
     context.mode = "react";
+  }
+  // Legacy hardcoded default: bare ``claude-opus`` was never a deployable
+  // model id (real ones are versioned, e.g. claude-opus-4-7-20250805) — it was
+  // the old DEFAULT_LOCAL_SETTINGS value that pinned every install to one
+  // vendor and made providers serving other names reject the turn. Persisted
+  // copies must fall back to ``auto`` (router picks); an explicit versioned
+  // pick the user made in the picker is left untouched.
+  if ((context as { model_name?: unknown }).model_name === "claude-opus") {
+    context.model_name = "auto";
   }
   const rawPersonalMode = settings?.personal_space?.default_mode;
   const personalMode =

@@ -201,7 +201,10 @@ export function ChatComposer({
     [models],
   );
   const selectedModel =
-    pickerModels.find((m) => m.name === modelName) ?? pickerModels[0];
+    pickerModels.find((m) => m.name === modelName || m.model === modelName) ??
+    (modelName
+      ? { name: modelName, display_name: modelName }
+      : pickerModels[0]);
   const resolvedPermissionMode = normalizePermissionMode(permissionMode);
   const canUseDeepResearch =
     allowAgentModes && mode === "deep" && !!onDeepResearch;

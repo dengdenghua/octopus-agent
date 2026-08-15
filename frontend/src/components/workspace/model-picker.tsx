@@ -136,7 +136,9 @@ function ReasoningEffortSetting({
           {title}
         </span>
         <span className="text-xs text-muted-foreground">
-          {t.inputBox.reasoningEffortCurrent(reasoningEffortLabel(effective, t))}
+          {t.inputBox.reasoningEffortCurrent(
+            reasoningEffortLabel(effective, t),
+          )}
         </span>
       </div>
       {mapped && (
@@ -151,7 +153,9 @@ function ReasoningEffortSetting({
         role="radiogroup"
         aria-label={title}
         className="grid gap-0.5 rounded-md bg-muted/35 p-0.5"
-        style={{ gridTemplateColumns: `repeat(${offered.length}, minmax(0, 1fr))` }}
+        style={{
+          gridTemplateColumns: `repeat(${offered.length}, minmax(0, 1fr))`,
+        }}
       >
         {offered.map((effort) => {
           const selected = effort === effective;
@@ -263,23 +267,41 @@ export function ModelPicker({
   // ModelRouter middleware pick per-task". We resolve it to a synthetic
   // PickerModel so the trigger + highlighted row can render a label.
   const isAutoMode = (value ?? "").trim().toLowerCase() === "auto";
-  const selected = useMemo(
-    () =>
-      isAutoMode
-        ? {
-            name: "auto",
-            display_name: t.modelPicker.autoModelLabel,
-            description: t.modelPicker.autoModelDescription,
-          }
-        : (models.find((m) => m.name === value) ?? models[0]),
-    [
-      isAutoMode,
-      value,
-      models,
-      t.modelPicker.autoModelLabel,
-      t.modelPicker.autoModelDescription,
-    ],
-  );
+  const selected = useMemo(() => {
+    if (isAutoMode) {
+      return {
+        name: "auto",
+        display_name: t.modelPicker.autoModelLabel,
+        description: t.modelPicker.autoModelDescription,
+      };
+    }
+    if (value) {
+      const matched = models.find(
+        (m) =>
+          m.name === value ||
+          m.model === value ||
+          ("id" in m && m.id === value),
+      );
+      // A stored selection the current catalog no longer advertises (a
+      // removed/renamed custom model, or the list still loading) must stay
+      // visible as-is — silently snapping to the first row (Mix) would make
+      // the picker lie about what the thread actually uses after a reload.
+      return (
+        matched ?? {
+          name: value,
+          display_name: value,
+          unavailable: true,
+        }
+      );
+    }
+    return models[0];
+  }, [
+    isAutoMode,
+    value,
+    models,
+    t.modelPicker.autoModelLabel,
+    t.modelPicker.autoModelDescription,
+  ]);
 
   const officialMetas = useMemo(() => {
     // Surface the built-in Mix model in the Official tab only when the
@@ -301,7 +323,6 @@ export function ModelPicker({
       ) ?? null
     );
   }, [officialMetas, selected]);
-
 
   /**
    * One flat list, in the order the backend returned.
