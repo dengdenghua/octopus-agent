@@ -47,8 +47,10 @@ def test_every_react_commentary_event_declares_its_author() -> None:
     )
 
 
-def test_recovery_round_uses_a_shorter_default_deadline() -> None:
-    assert _stage_model_timeout_s(120.0, "recovery") == 60.0
+def test_recovery_round_keeps_the_full_default_allowance() -> None:
+    # Recovery no longer shrinks the base deadline: a slow provider that
+    # already overran its first round must not be cut off again seconds later.
+    assert _stage_model_timeout_s(120.0, "recovery") == 120.0
 
 
 def test_recovery_deadline_never_lengthens_the_base_timeout() -> None:

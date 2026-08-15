@@ -44,17 +44,29 @@ def _model_iteration_timeout_s(config_timeout_s: float | None = None) -> float:
 # ``_model_evidence_synthesis_timeout_s`` helpers into one stage-driven policy.
 _MODEL_STAGE_TIMEOUT_S: dict[str, tuple[float, float, float]] = {
     # stage -> (ceiling, lower clamp, upper clamp)
-    "recovery": (60.0, 10.0, 240.0),
-    "post_tool": (90.0, 10.0, 300.0),
-    "evidence_synthesis": (120.0, 15.0, 300.0),
+    # Ceilings are intentionally generous: long tasks with thinking models
+    # legitimately spend minutes on a single deep-reasoning round, and these
+    # hard caps used to silently override the operator's configured
+    # ``model_iteration_timeout_s`` (a normal round was clamped to 90s).
+    "recovery": (240.0, 15.0, 480.0),
+    "post_tool": (300.0, 15.0, 600.0),
+    "evidence_synthesis": (300.0, 15.0, 600.0),
 }
 
 
 def _reasoning_only_watchdog_s(*, has_tool_evidence: bool, recovery: bool) -> float | None:
-    """Bound post-tool private reasoning before it becomes an idle loop."""
+    """Bound post-tool private reasoning before it becomes an idle loop.
+
+    The stream deadline is inactivity-based (any emitted token is liveness), so
+    this watchdog is the only *total-thinking* bound: it stops a post-tool
+    model that streams reasoning forever without ever acting or answering.
+    The window is deliberately generous — long tasks with thinking models
+    legitimately reason for minutes — and only applies once the turn already
+    has tool evidence.
+    """
     if not has_tool_evidence:
         return None
-    return 30.0 if recovery else 45.0
+    return 480.0 if recovery else 600.0
 
 
 def _stage_model_timeout_s(base_timeout_s: float, stage: str) -> float:
@@ -62,16 +74,13 @@ def _stage_model_timeout_s(base_timeout_s: float, stage: str) -> float:
 
     ``stage`` is one of ``"recovery"`` / ``"post_tool"`` / ``"evidence_synthesis"``.
 
-    - recovery: a shorter ceiling for the no-extended-thinking convergence
-      retry. The first model round may legitimately spend time on deep
-      reasoning; once it has exceeded its deadline the recovery request is a
-      bounded direct-answer attempt, so granting it the full original allowance
-      could make one silent turn block for another two minutes.
-    - post_tool: a tighter ceiling once the turn already has executable
-      evidence.
-    - evidence_synthesis: a modest dedicated window for a normal
-      evidence-complete answer, keeping it well below the initial deep
-      reasoning allowance without treating it as a stall recovery.
+    - recovery: a generous ceiling for the convergence retry, so a slow
+      provider that already exceeded its original deadline isn't cut off again
+      after a few seconds of thinking.
+    - post_tool: an equally generous ceiling once the turn already has
+      executable evidence; deep-reasoning rounds here are what long tasks hit.
+    - evidence_synthesis: a dedicated window for a normal evidence-complete
+      answer, mirroring post_tool so final synthesis is never the bottleneck.
 
     Each ceiling is fixed by the stage, clamped to its range, and never
     lengthens the base timeout (nor tiny injected test deadlines).
@@ -90,13 +99,23 @@ def _iter_model_stream_with_deadline(
     request: Any,
     timeout_s: float,
     visible_started: Callable[[], Any],
+    any_activity_counts: bool = True,
 ) -> Generator[Any, None, None]:
-    """Pump a blocking model iterator through a hard wall-clock deadline.
+    """Pump a blocking model iterator through an inactivity deadline.
 
     Checking elapsed time inside ``for evt in call_stream(...)`` cannot stop a
     provider that sends no bytes at all: control never returns to the loop.
     A daemon pump keeps the synchronous router contract while the ReAct thread
-    waits on a bounded queue.  The copied context preserves actor/tracing data.
+    waits on a bounded queue. The deadline is an *inactivity* window: it fires
+    only when the stream has been silent for ``timeout_s`` (a genuinely hung
+    provider that sends nothing at all). By default any streamed event —
+    private ``thinking_delta`` reasoning OR visible text — counts as liveness
+    and keeps the window sliding, so a reasoning model still emitting tokens is
+    never judged slow on wall-clock. When ``any_activity_counts`` is false
+    (evidence-convergence rounds), only user-visible text counts as liveness so
+    a tools-disabled provider that streams reasoning forever while emitting
+    phantom actions is still bounded. The copied context preserves
+    actor/tracing data.
     """
     event_queue: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=64)
     stop_event = threading.Event()
@@ -167,6 +186,12 @@ def _iter_model_stream_with_deadline(
             except queue.Empty:
                 continue
             if kind == "event":
+                if any_activity_counts:
+                    # Any token is liveness: a model still streaming private
+                    # reasoning is actively working even before a visible
+                    # answer appears. Slide the inactivity window so
+                    # deep-thinking rounds aren't cut off mid-thought.
+                    deadline = time.monotonic() + timeout_s
                 yield value
             elif kind == "error":
                 raise value

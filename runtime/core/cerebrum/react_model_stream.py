@@ -299,6 +299,13 @@ def _phase_6b_model_stream(
                 req,
                 _iteration_timeout,
                 _visible_started,
+                # Normal rounds: any streamed thinking token is liveness, so a
+                # deep-reasoning model is never judged slow while it is still
+                # emitting. Evidence-convergence rounds keep the strict
+                # visible-text-only liveness so a tools-disabled provider that
+                # streams reasoning forever while emitting phantom actions is
+                # still bounded by the deadline.
+                any_activity_counts=_evidence_convergence_active is None,
             ):
                 if evt is _MODEL_STREAM_DEADLINE:
                     _iteration_soft_timed_out = True

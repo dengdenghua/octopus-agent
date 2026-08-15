@@ -2683,9 +2683,10 @@ def test_hidden_reasoning_timeout_retries_once_without_extended_thinking(monkeyp
             self.calls += 1
             self.requests.append(request)
             if self.calls == 1:
-                for _ in range(10):
-                    time.sleep(0.01)
-                    yield ModelStreamEvent(type="thinking_delta", delta="private deliberation")
+                # A genuinely hung provider: one token then silence. (Streaming
+                # private thinking now counts as liveness and would NOT stall.)
+                yield ModelStreamEvent(type="thinking_delta", delta="private deliberation")
+                time.sleep(0.5)
                 return
             text = "Final Answer: recovered from the stalled reasoning round"
             yield ModelStreamEvent(type="text_delta", delta=text)
@@ -2715,8 +2716,8 @@ def test_hidden_reasoning_timeout_retries_once_without_extended_thinking(monkeyp
     assert any(event["type"] == "commentary_delta" for event in events)
 
 
-def test_post_tool_model_round_uses_tighter_timeout() -> None:
-    assert _stage_model_timeout_s(120.0, "post_tool") == 90.0
+def test_post_tool_model_round_keeps_the_full_default_allowance() -> None:
+    assert _stage_model_timeout_s(120.0, "post_tool") == 120.0
     assert _stage_model_timeout_s(20.0, "post_tool") == 20.0
 
 
@@ -2735,9 +2736,10 @@ def test_hidden_reasoning_timeout_switches_to_backup_model(monkeypatch) -> None:
         def call_stream(self, request: Any):
             self.requests.append(request)
             if request.model == "test-model":
-                for _ in range(10):
-                    time.sleep(0.01)
-                    yield ModelStreamEvent(type="thinking_delta", delta="private")
+                # Genuinely hung: one token then silence (streaming thinking
+                # counts as liveness and is no longer a stall trigger).
+                yield ModelStreamEvent(type="thinking_delta", delta="private")
+                time.sleep(0.5)
                 return
             text = "Final Answer: backup completed the answer"
             yield ModelStreamEvent(type="text_delta", delta=text)
@@ -2798,9 +2800,10 @@ def test_post_tool_timeout_backup_reuses_evidence_and_finishes_plain_answer(
                 )
                 return
             if request.model == "test-model":
-                for _ in range(10):
-                    time.sleep(0.01)
-                    yield ModelStreamEvent(type="thinking_delta", delta="private")
+                # Genuinely hung: one token then silence (streaming thinking
+                # counts as liveness and is no longer a stall trigger).
+                yield ModelStreamEvent(type="thinking_delta", delta="private")
+                time.sleep(0.5)
                 return
             text = "组件在 `idle` 和 `streaming` 两个 phase 会直接返回 null。"
             yield ModelStreamEvent(type="text_delta", delta=text)
@@ -2926,15 +2929,12 @@ def test_silent_model_stream_is_interrupted_by_wall_clock_deadline(monkeypatch) 
     assert any(event["type"] == "commentary_delta" for event in events)
 
 
-def test_visible_stream_deadline_ignores_private_thinking_heartbeats() -> None:
+def test_stream_deadline_treats_private_thinking_as_liveness() -> None:
     from runtime.sensing.model_router.models import ModelStreamEvent
-
-    visible_state = {"chars": 0}
 
     class Router:
         def call_stream(self, request: Any):  # noqa: ARG002
-            yield ModelStreamEvent(type="text_delta", delta="visible")
-            for _ in range(100):
+            for _ in range(60):
                 time.sleep(0.005)
                 yield ModelStreamEvent(type="thinking_delta", delta="private")
 
@@ -2944,14 +2944,37 @@ def test_visible_stream_deadline_ignores_private_thinking_heartbeats() -> None:
         Router(),
         object(),
         0.03,
-        lambda: visible_state["chars"],
+        lambda: 0,  # never any visible answer text
     ):
         events.append(event)
-        if getattr(event, "type", "") == "text_delta":
-            visible_state["chars"] += len(event.delta)
+
+    # Private reasoning streaming counts as liveness: the inactivity window
+    # keeps sliding, so the deadline never fires while thinking flows.
+    assert events[-1] is not _MODEL_STREAM_DEADLINE
+    assert all(getattr(e, "type", "") == "thinking_delta" for e in events)
+    assert time.monotonic() - started_at >= 0.2  # outlived the old 0.03s wall-clock
+
+
+def test_stream_deadline_fires_on_true_silence() -> None:
+    from runtime.sensing.model_router.models import ModelStreamEvent
+
+    class Router:
+        def call_stream(self, request: Any):  # noqa: ARG002
+            yield ModelStreamEvent(type="thinking_delta", delta="private")
+            time.sleep(1.0)  # a genuinely hung provider: one token then silence
+
+    started_at = time.monotonic()
+    events = []
+    for event in _iter_model_stream_with_deadline(
+        Router(),
+        object(),
+        0.03,
+        lambda: 0,
+    ):
+        events.append(event)
 
     assert events[-1] is _MODEL_STREAM_DEADLINE
-    assert time.monotonic() - started_at < 0.2
+    assert 0.02 <= time.monotonic() - started_at < 0.15
 
 
 def test_repeated_hidden_reasoning_timeout_is_reported_as_failure(monkeypatch) -> None:

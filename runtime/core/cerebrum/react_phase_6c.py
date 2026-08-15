@@ -209,7 +209,14 @@ def _phase_6c_parse_and_guard(
             # "primary stalls → same fallback stalls → fail" loop.
             note_model_stall(str(state.effective_model or ""))
             _model_timeout_recoveries += 1
-            if _model_timeout_recoveries >= 2:
+            # Long tasks legitimately hit slow-but-working provider rounds. A
+            # stalled round that finally yields an action/final resets the
+            # counter below, so this break only fires after *consecutive* pure
+            # stalls (the provider really returned nothing inside its deadline).
+            # Scale the tolerance with the turn's iteration budget so a deep
+            # task isn't hard-capped after just two slow rounds.
+            _stall_break_threshold = max(2, min(6, state.iteration_limit // 5))
+            if _model_timeout_recoveries >= _stall_break_threshold:
                 if _evidence_convergence_active is not None:
                     # A provider can ignore tools=[] and finish a timed-out
                     # convergence round with another phantom tool call. That
