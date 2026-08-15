@@ -574,6 +574,35 @@ def test_agentic_loop_stalls_on_repeated_tool_calls():
     assert "已提前收敛" in result
 
 
+def test_agentic_loop_does_not_stall_on_polling_tools():
+    """Repeatedly polling a long-running background task (stable task_id) is
+    legitimate long-task work — the convergence guard must NOT truncate it
+    early; it keeps going until the round cap."""
+    from runtime.execution.suckers.ephemeral_runner import (
+        EphemeralRoundCapExceeded,
+        make_llm_ephemeral_runner,
+    )
+
+    script = [
+        [{"name": "read_background_output", "input": {"task_id": "bg_abc"}}]
+    ] * 10
+    router = _ScriptedAgenticRouter(script=script)
+    registry = _StubRegistry({"read_background_output": lambda **kw: {"ok": True}})
+    runner = make_llm_ephemeral_runner(
+        router,
+        registry=registry,
+        default_model="m",
+    )
+    call = _make_call(role_id="reviewer")
+    call.context["tool_allowlist"] = ["read_background_output"]
+
+    with pytest.raises(EphemeralRoundCapExceeded):
+        runner(call)
+
+    # The reviewer default cap (5) is reached without early convergence.
+    assert len(router.call_log) == 5
+
+
 class TestTokenBudget:
     def test_length_limited_text_continues_in_next_round(self):
         """A sub-agent that hits the provider output cap should not

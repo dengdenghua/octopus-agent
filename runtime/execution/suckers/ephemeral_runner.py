@@ -87,15 +87,15 @@ EPHEMERAL_MAX_ROUNDS: int = 5  # default for simple roles
 # Per-role overrides for roles that need deeper exploration/execution.
 # Target: align with Claude Code depth (20-30 rounds for research tasks).
 EPHEMERAL_MAX_ROUNDS_BY_ROLE: dict[str, int] = {
-    "researcher": 25,  # web_search + fetch + synthesize
-    "synthesizer": 12,  # gather sibling evidence + write/read-back artifact
-    "explorer": 15,  # file traversal + grep + read
-    "implementer": 30,  # edit + verify + test cycles
-    "debugger": 20,  # trace + hypothesis + verify
-    "architect": 15,  # read + analyze + design
-    "designer": 20,  # read + plan + decompose
-    "planner": 12,  # breakdown + estimate
-    # reviewer/arbiter/synthesizer stay at 5 (single-shot opinion)
+    "researcher": 40,  # web_search + fetch + synthesize (deep research)
+    "synthesizer": 20,  # gather sibling evidence + write/read-back artifact
+    "explorer": 35,  # file traversal + grep + read
+    "implementer": 50,  # edit + verify + test cycles
+    "debugger": 40,  # trace + hypothesis + verify
+    "architect": 25,  # read + analyze + design
+    "designer": 30,  # read + plan + decompose
+    "planner": 20,  # breakdown + estimate
+    # reviewer/arbiter stay at 5 (single-shot opinion)
 }
 
 # Legacy per-sub-agent token ceiling. Kept as a public constant for
@@ -111,6 +111,19 @@ EPHEMERAL_TOKEN_BUDGET: int = 0
 # converged instead of burning the whole round cap and surfacing a hard
 # "exceeded round cap" error to the user.
 EPHEMERAL_STALL_ROUNDS: int = 3
+
+# Tools that legitimately re-invoke the same signature while a long-running
+# background job is still working. Polling a stable task_id is real progress
+# for long tasks, so these rounds are exempt from the convergence guard and
+# must never be truncated as a "loop".
+POLLING_TOOL_NAMES = frozenset(
+    {
+        "read_background_output",
+        "read_shell_output",
+        "background_exec",
+        "kill_background_exec",
+    }
+)
 
 
 def _tool_call_signature(tool_call: Any) -> tuple[str, str]:
@@ -851,20 +864,29 @@ def make_llm_ephemeral_runner(
                 seen_tool_signatures.update(new_signatures)
                 stall_rounds = 0
             elif tool_calls:
-                stall_rounds += 1
-                if stall_rounds >= EPHEMERAL_STALL_ROUNDS:
-                    notice = (
-                        "\n\n[已提前收敛:连续多轮重复相同工具调用且无新进展,"
-                        "保留当前结果,停止继续探索]"
-                    )
-                    _emit_sub_text_delta(
-                        call.role.id,
-                        round_i + 1,
-                        notice,
-                        session_id=_ctx_session_id,
-                        emitter=_ctx_emitter,
-                    )
-                    return accumulated_text + notice
+                # Polling a long-running background job (stable task_id) is
+                # legitimate repeated work, not a loop — never let the
+                # convergence guard truncate it.
+                if any(
+                    str(getattr(tc, "name", "") or "") in POLLING_TOOL_NAMES
+                    for tc in tool_calls
+                ):
+                    stall_rounds = 0
+                else:
+                    stall_rounds += 1
+                    if stall_rounds >= EPHEMERAL_STALL_ROUNDS:
+                        notice = (
+                            "\n\n[已提前收敛:连续多轮重复相同工具调用且无新进展,"
+                            "保留当前结果,停止继续探索]"
+                        )
+                        _emit_sub_text_delta(
+                            call.role.id,
+                            round_i + 1,
+                            notice,
+                            session_id=_ctx_session_id,
+                            emitter=_ctx_emitter,
+                        )
+                        return accumulated_text + notice
 
         # Hit the round cap. Raise so the bridge can surface a real
         # failure (success=false + error) instead of returning a

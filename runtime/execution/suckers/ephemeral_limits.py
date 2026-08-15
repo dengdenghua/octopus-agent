@@ -6,14 +6,14 @@ from typing import Any
 
 EPHEMERAL_MAX_ROUNDS: int = 5
 EPHEMERAL_MAX_ROUNDS_BY_ROLE: dict[str, int] = {
-    "researcher": 25,
-    "synthesizer": 12,
-    "explorer": 15,
-    "implementer": 30,
-    "debugger": 20,
-    "architect": 15,
-    "designer": 20,
-    "planner": 12,
+    "researcher": 40,
+    "synthesizer": 20,
+    "explorer": 35,
+    "implementer": 50,
+    "debugger": 40,
+    "architect": 25,
+    "designer": 30,
+    "planner": 20,
 }
 
 # Compatibility constant: sub-agent budgets now inherit parent/session accounting.
