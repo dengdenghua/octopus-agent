@@ -470,13 +470,15 @@ class TestEnforcementReport:
         # is only partial enforcement of the tier.
         assert SeatbeltBackend().enforcement(policy) == "partial"
 
-    def test_landlock_reports_full(self, workspace: Path, monkeypatch) -> None:
+    def test_landlock_reports_partial(self, workspace: Path, monkeypatch) -> None:
         monkeypatch.setattr(
             "runtime.safety.sandboxing.sandbox._landlock_kernel_available",
             lambda: True,
         )
         policy = SandboxPolicy(workspace=workspace)
-        assert LandlockBackend().enforcement(policy) == "full"
+        # Reads are unconfined and network is outside Landlock's vocabulary,
+        # so like Seatbelt this is only partial enforcement of the tier.
+        assert LandlockBackend().enforcement(policy) == "partial"
 
 
 class TestReadOnlyMode:

@@ -714,7 +714,13 @@ class LandlockBackend:
         return _landlock_kernel_available()
 
     def enforcement(self, policy: SandboxPolicy) -> SandboxEnforcement:
-        return "full"
+        # Reads are intentionally unconfined and network is outside
+        # Landlock's vocabulary, so only the write confinement of the tier
+        # is actually enforced — reporting "full" would mislead operators
+        # into believing the process is fully confined (it can still read
+        # any file and exfiltrate over a bare socket). Same criterion as
+        # SeatbeltBackend, which reports "partial" for the same reason.
+        return "partial"
 
     def transform(
         self,
