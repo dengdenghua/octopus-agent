@@ -47,6 +47,8 @@ tier: "core"
 | `executor.py` | — |
 | `redis_effect_store.py` | Redis-backed, cross-host tool-effect receipts. |
 | `session_projection.py` | Byte-bounded projection of a session's conversation surface. |
+| `session_reference.py` | Cross-session reference resolver — dsh ``@dsh-session-reference`` service. |
+| `session_reference_uri.py` | Canonical session URI and inline mention encoding (dsh ``uri.ts``). |
 | `skill_gate.py` | Shared pre-execution safety gate for direct skill dispatch. |
 | `tool_output_pruner.py` | Deterministic head/middle/tail pruning for over-budget tool results. |
 | `tool_output_spill.py` | Session-scoped spill storage for oversized plain-text tool results. |
@@ -111,6 +113,31 @@ tier: "core"
 | func | `def stringify_tag_safe_json(value)` | Compact JSON with every ``<`` escaped as ``\u003c``. |
 | func | `def truncate_with_notice(text, max_output_bytes)` | Binary-search a head/tail truncation of ``text`` that fits the budget. |
 | func | `def retain_session_reference(events, session_id, label, max_bytes, cwd, captured_through_seq)` | Fit one projected session snapshot into an exact byte cap. |
+
+### `session_reference.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class SessionReferenceError(RuntimeError)` | Typed session-reference failure suitable for host protocol error mapping. |
+| class | `class SessionReferenceRecord` | One durable session surfaced to candidate discovery. |
+| class | `class SessionReferenceCandidate` | One host-facing candidate from exact session metadata. |
+| class | `class SessionReferenceInput` | One source session selected by a host (dsh ``SessionReferenceInput``). |
+| class | `class PreparedReferencedMessage` | Detached content plus the optional referenced-session context. |
+| func | `def candidate_rank(candidate_cwd, target_cwd)` | Working-directory affinity rank (dsh ``candidateRank``). |
+| func | `def normalize_references(target_id, references, max_references)` | Validate, dedupe, and cap source references (dsh ``normalizeReferences``). |
+| func | `def render_reference_prompt(data)` | Render the aggregated untrusted snapshot frame (dsh ``renderPrompt``). |
+| func | `def extract_session_mentions(prompt)` | Distinct referenced session ids from host mention tokens. |
+| class | `class SessionReferenceResolver` | Resolve session references into an aggregated durable context. |
+
+### `session_reference_uri.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class ParsedSessionReferenceText` | Result of extracting canonical mentions from plain text. |
+| func | `def encode_session_reference_uri(session_id)` | Encode any session-id string as a canonical lossless ``dsh-session:`` URI. |
+| func | `def decode_session_reference_uri(uri)` | Decode and canonicalize one session-reference URI (dsh strict). |
+| func | `def format_session_reference_mention(session_id, label)` | Render a host-neutral Markdown mention carrying the canonical URI. |
+| func | `def parse_session_reference_text(text)` | Extract Markdown mentions and bare canonical URIs from one text value. |
 
 ### `skill_gate.py`
 

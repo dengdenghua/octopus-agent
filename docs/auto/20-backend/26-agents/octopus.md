@@ -1,13 +1,13 @@
 ---
 type: "Agent"
-title: "🐙 章鱼助手 · `octopus`"
-description: "章鱼助手 · Octopus 本体的私人助手与秘书。接收所有远程 IM（钉钉 / 微信等）消息、订阅推送与项目进度，汇总结果并汇报；可代为委派其他 Agent 干活，是用户在整个 Octopus 里的唯一贴身入口。"
+title: "🐙 Octopus · `octopus`"
+description: "Octopus · Octopus 本体的私人助手与秘书。接收所有远程 IM（钉钉 / 微信等）消息、订阅推送与项目进度，汇总结果并汇报；可代为委派其他 Agent 干活，是用户在整个 Octopus 里的唯一贴身入口。"
 tags: ["backend", "agents"]
 tier: "standard"
 ---
-# 🐙 章鱼助手 · `octopus`
+# 🐙 Octopus · `octopus`
 
-> 章鱼助手 · Octopus 本体的私人助手与秘书。接收所有远程 IM（钉钉 / 微信等）消息、订阅推送与项目进度，汇总结果并汇报；可代为委派其他 Agent 干活，是用户在整个 Octopus 里的唯一贴身入口。
+> Octopus · Octopus 本体的私人助手与秘书。接收所有远程 IM（钉钉 / 微信等）消息、订阅推送与项目进度，汇总结果并汇报；可代为委派其他 Agent 干活，是用户在整个 Octopus 里的唯一贴身入口。
 
 **Agent dir**: `agents/octopus/`
 

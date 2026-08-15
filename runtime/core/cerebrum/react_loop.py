@@ -301,7 +301,7 @@ def _stream_react_loop_impl(
 
         if active_trace() is None:
             _visibility_token = set_active_trace(new_trace())
-    except ImportError:  # pragma: no cover — module is always present
+    except ImportError:  # pragma: no cover — module is always present  # noqa: BLE001 — visibility token is optional
         pass
     # PHASE 3→4.7 share a turn-scoped ContextVar trace. Wrap them in
     # try/finally so the token is reset even if a consumer closes the
@@ -380,7 +380,7 @@ def _stream_react_loop_impl(
             from runtime.core.cerebrum._visibility_trace import active_trace
 
             _visibility_trace = active_trace()
-        except ImportError:  # pragma: no cover — module is always present
+        except ImportError:  # pragma: no cover — module is always present  # noqa: BLE001 — optional tooling hook
             pass
         if _visibility_trace is None:
             # ``activation`` is normally not bound in this scope; the

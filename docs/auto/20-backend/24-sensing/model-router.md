@@ -92,6 +92,7 @@ tier: "standard"
 | class | `class OpenAICompatRetryPayload` |  |
 | class | `class OpenAICompatProfileProbe` |  |
 | func | `def known_openai_compat_profiles()` |  |
+| func | `def effective_supported_efforts(profile)` | UI effort tiers a provider genuinely accepts, in picker vocabulary. |
 | func | `def openai_compat_profile_ids()` |  |
 | func | `def resolve_openai_compat_profile(base_url, model)` |  |
 | func | `def describe_openai_compat_profile(profile)` | Machine-readable summary for UI/API compatibility diagnostics. |

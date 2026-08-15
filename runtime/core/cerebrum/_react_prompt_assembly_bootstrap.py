@@ -73,7 +73,7 @@ def _resolve_turn_bootstrap(
 
     from runtime.platform.models.llm import normalize_reasoning_effort
 
-    _reasoning_effort = normalize_reasoning_effort(reasoning_effort)
+    _reasoning_effort: str | None = normalize_reasoning_effort(reasoning_effort)
     if _reasoning_effort is None and str(reasoning_effort or "").strip().lower() in (
         "off",
         "disabled",

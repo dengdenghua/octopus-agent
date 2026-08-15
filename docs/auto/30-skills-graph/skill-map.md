@@ -36,6 +36,7 @@ tier: "standard"
 | `browser_upload` | browser |  | browser_interact | admin, general |
 | `browser_wait` | browser |  | browser_interact | admin, general |
 | `call_agent` | delegation |  | — | — |
+| `call_agent_background` | jobs |  | — | — |
 | `call_agent_parallel` | delegation |  | — | — |
 | `cancel_scheduled_task` | cron |  | — | — |
 | `code-quality` | agent_docs |  | — | — |
@@ -86,6 +87,9 @@ tier: "standard"
 | `grep_text` | fs_search | ✅ | — | admin, aoi, coder, desktop_operator, echo_eve, echo_kane, echo_leon, echo_luna, echo_mira_voss, echo_noah, echo_raven, echo_shion, echo_zero, ecommerce_mind, general, local_claude_code, local_codebuddy_cli, local_codex_cli, local_opencode_cli, market_researcher, octopus, registry_local_claude_code, registry_local_codex_cli, vibe_selling |
 | `hash_text` | builtin | ✅ | — | admin, aoi, coder, desktop_operator, echo_eve, echo_kane, echo_leon, echo_luna, echo_mira_voss, echo_noah, echo_raven, echo_shion, echo_zero, ecommerce_mind, general, local_claude_code, local_codebuddy_cli, local_codex_cli, local_opencode_cli, market_researcher, octopus, registry_local_claude_code, registry_local_codex_cli, vibe_selling |
 | `ipython` | shell |  | — | — |
+| `job_kill` | jobs | ✅ | — | admin, aoi, coder, desktop_operator, echo_eve, echo_kane, echo_leon, echo_luna, echo_mira_voss, echo_noah, echo_raven, echo_shion, echo_zero, ecommerce_mind, general, local_claude_code, local_codebuddy_cli, local_codex_cli, local_opencode_cli, market_researcher, octopus, registry_local_claude_code, registry_local_codex_cli, vibe_selling |
+| `job_list` | jobs | ✅ | — | admin, aoi, coder, desktop_operator, echo_eve, echo_kane, echo_leon, echo_luna, echo_mira_voss, echo_noah, echo_raven, echo_shion, echo_zero, ecommerce_mind, general, local_claude_code, local_codebuddy_cli, local_codex_cli, local_opencode_cli, market_researcher, octopus, registry_local_claude_code, registry_local_codex_cli, vibe_selling |
+| `job_output` | jobs |  | — | — |
 | `keyboard_press` | computer |  | desktop_operator | admin, desktop_operator, general |
 | `keyboard_type` | computer |  | desktop_operator | admin, desktop_operator, general |
 | `kg_query` | memory | ✅ | — | admin, aoi, coder, desktop_operator, echo_eve, echo_kane, echo_leon, echo_luna, echo_mira_voss, echo_noah, echo_raven, echo_shion, echo_zero, ecommerce_mind, general, local_claude_code, local_codebuddy_cli, local_codex_cli, local_opencode_cli, market_researcher, octopus, registry_local_claude_code, registry_local_codex_cli, vibe_selling |
@@ -145,5 +149,6 @@ tier: "standard"
 | `web_fetch` | web |  | ecommerce_mind, general, vibe_selling, web_read | admin, aoi, coder, echo_eve, echo_kane, echo_leon, echo_luna, echo_mira_voss, echo_noah, echo_raven, echo_shion, echo_zero, ecommerce_mind, general, local_claude_code, local_codebuddy_cli, local_codex_cli, local_opencode_cli, market_researcher, octopus, vibe_selling |
 | `web_search` | web |  | ecommerce_mind, general, vibe_selling, web_read | admin, aoi, coder, echo_eve, echo_kane, echo_leon, echo_luna, echo_mira_voss, echo_noah, echo_raven, echo_shion, echo_zero, ecommerce_mind, general, local_claude_code, local_codebuddy_cli, local_codex_cli, local_opencode_cli, market_researcher, octopus, vibe_selling |
 | `website_version_manager` | kimi_compat |  | — | — |
+| `workflow` | workflow |  | — | — |
 | `write_text_file` | fs_write |  | fs_writer, vibe_selling | admin, coder, general, local_claude_code, local_codebuddy_cli, local_codex_cli, local_opencode_cli, market_researcher, octopus, registry_local_claude_code, registry_local_codex_cli, vibe_selling |
 

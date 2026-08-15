@@ -361,7 +361,7 @@ tier: "core"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def stream_react_loop(stack, intent, agent, model, max_iterations, temperature, enable_tools, resume_task_id, thread_id, max_tokens_budget, max_usd_budget, approval_provider, output_chunk_sink, step_evaluator, planning_mode, reasoning_effort, steering_drain, on_auto_parallel_batch)` |  |
+| func | `def stream_react_loop(stack, intent, agent, model, max_iterations, temperature, enable_tools, resume_task_id, thread_id, max_tokens_budget, max_usd_budget, approval_provider, output_chunk_sink, step_evaluator, planning_mode, reasoning_effort, steering_drain, on_auto_parallel_batch)` | Drive one parent ReAct turn (see ``_stream_react_loop_impl``). |
 | func | `def run_react_loop(stack, intent, agent, model, max_iterations, temperature, enable_tools, resume_task_id, thread_id, max_tokens_budget, max_usd_budget, approval_provider)` |  |
 
 ### `react_loop_controls.py`

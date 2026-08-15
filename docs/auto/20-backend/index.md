@@ -34,21 +34,21 @@ graph LR
   platform[platform]
   sensing -- 131 --> platform
   safety -- 87 --> platform
-  execution -- 84 --> platform
+  execution -- 86 --> platform
   sensing -- 83 --> safety
   sensing -- 76 --> memory
-  sensing -- 69 --> execution
-  core -- 57 --> platform
-  memory -- 56 --> platform
-  execution -- 46 --> safety
+  sensing -- 72 --> execution
+  core -- 58 --> platform
+  memory -- 57 --> platform
+  execution -- 47 --> safety
   sensing -- 39 --> protocol
   sensing -- 32 --> adapters
   sensing -- 31 --> core
-  platform -- 29 --> safety
-  execution -- 26 --> memory
-  core -- 22 --> safety
-  safety -- 21 --> memory
-  core -- 20 --> execution
+  platform -- 30 --> safety
+  execution -- 29 --> memory
+  core -- 23 --> safety
+  core -- 22 --> execution
+  safety -- 22 --> memory
   platform -- 19 --> execution
   platform -- 19 --> sensing
   execution -- 16 --> core

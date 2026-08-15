@@ -62,13 +62,24 @@ ACTIVE_REDUCED_NOTIFICATIONS = {
     ServerMethod.ERROR.value,
 }
 
+# Server → client notifications the frontend consumes at the component level
+# (browser notification / timeline badges) rather than through the reducer.
+COMPONENT_NOTIFICATIONS = {
+    ServerMethod.WORKFLOW_COMPLETED.value,
+}
+
 
 def _read_frontend(path: str) -> str:
     return (FRONTEND_REALTIME / path).read_text(encoding="utf-8")
 
 
 def test_server_methods_are_partitioned_by_frontend_contract() -> None:
-    known = REQUEST_METHODS | RESERVED_NOT_EMITTED | ACTIVE_REDUCED_NOTIFICATIONS
+    known = (
+        REQUEST_METHODS
+        | RESERVED_NOT_EMITTED
+        | ACTIVE_REDUCED_NOTIFICATIONS
+        | COMPONENT_NOTIFICATIONS
+    )
     actual = {method.value for method in ServerMethod}
     assert actual == known
 

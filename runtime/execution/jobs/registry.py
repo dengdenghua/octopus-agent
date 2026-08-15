@@ -273,7 +273,7 @@ class LocalJobRegistry:
                 job.wait_resolvers.add(future)
             try:
                 await asyncio.wait_for(asyncio.shield(future), timeout_ms / 1000.0)
-            except TimeoutError:
+            except TimeoutError:  # noqa: BLE001 — wait timeout returns the current snapshot
                 pass
             finally:
                 with self._lock:
@@ -443,7 +443,7 @@ class LocalJobRegistry:
             if loop.is_closed():
                 return
             loop.call_soon_threadsafe(_set_future_result, future)
-        except RuntimeError:  # pragma: no cover — loop torn down mid-settle
+        except RuntimeError:  # noqa: BLE001 — loop torn down mid-settle
             pass
 
     def settle(self, job: _TrackedJob, outcome: JobOutcome) -> None:

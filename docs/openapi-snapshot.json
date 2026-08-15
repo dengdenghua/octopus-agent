@@ -1530,6 +1530,17 @@
             "title": "Default Header Names",
             "type": "array"
           },
+          "default_reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Reasoning Effort"
+          },
           "display_name": {
             "title": "Display Name",
             "type": "string"
@@ -1610,6 +1621,20 @@
           "provider": {
             "title": "Provider",
             "type": "string"
+          },
+          "reasoning_efforts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Efforts"
           },
           "strict_tool_schema": {
             "anyOf": [
@@ -5050,6 +5075,17 @@
             ],
             "title": "Context"
           },
+          "continue_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Continue Session Id"
+          },
           "extra_tools": {
             "anyOf": [
               {
@@ -5089,6 +5125,20 @@
           "prompt": {
             "title": "Prompt",
             "type": "string"
+          },
+          "requires_capabilities": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requires Capabilities"
           },
           "run_id": {
             "anyOf": [
@@ -12042,6 +12092,22 @@
             "schema": {
               "title": "Project",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Locale"
             }
           }
         ],
@@ -33761,6 +33827,72 @@
           }
         },
         "summary": "Dispatch Subagent Stream",
+        "tags": [
+          "subagents"
+        ]
+      }
+    },
+    "/api/subagents/sessions": {
+      "get": {
+        "description": "List durable sub-agent sessions as mention-autocomplete candidates.\n\nBacks the host's ``@session:<id>`` / ``@subagent:<id>`` autocomplete\n(dsh host candidate seam): returns the store's ranked candidates\n(``sessionId`` / ``label`` / ``createdAt``) filtered by an optional\nsubstring ``query``, excluding ``target``. ``limit`` is clamped to\n[1, 200]. Best-effort — an unavailable store returns an empty list.",
+        "operationId": "list_subagent_sessions_api_subagents_sessions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Query",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Target",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Subagent Sessions Api Subagents Sessions Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Subagent Sessions",
         "tags": [
           "subagents"
         ]

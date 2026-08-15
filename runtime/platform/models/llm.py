@@ -143,7 +143,7 @@ def model_supports_thinking(model_name: str) -> bool:
 _model_supports_thinking = model_supports_thinking
 
 
-def default_reasoning_effort(model_name: str) -> str | None:
+def default_reasoning_effort(model_name: str | None) -> str | None:
     """Per-model default reasoning effort (dsh-style per-provider default).
 
     Returns ``None`` when the model has no default — callers that do not

@@ -399,7 +399,7 @@ def _strip_react_protocol_blocks(text: str) -> str:
                 payload = "\n".join(lines[i:]).lstrip()
                 try:
                     _, consumed = json.JSONDecoder().raw_decode(payload)
-                except (json.JSONDecodeError, TypeError, ValueError):
+                except (json.JSONDecodeError, TypeError, ValueError):  # noqa: BLE001 — best-effort fragment parse
                     pass
                 else:
                     consumed_lines = payload[:consumed].count("\n") + 1

@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "generated_at": "2026-08-14T07:40:26+00:00",
+  "generated_at": "2026-08-15T05:06:00+00:00",
   "files_analyzed": 48,
   "tree": [
     {
@@ -238,7 +238,7 @@
             },
             {
               "type": "doc",
-              "title": "🐙 章鱼助手",
+              "title": "🐙 Octopus",
               "path": "20-backend/26-agents/octopus.md"
             },
             {
@@ -401,6 +401,11 @@
     {
       "from": "20-backend/22-safety/hooks.md",
       "to": "20-backend/21-runtime/suckers.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/22-safety/hooks.md",
+      "to": "20-backend/23-memory/journal.md",
       "type": "imports"
     },
     {

@@ -376,7 +376,7 @@ class WorkflowRun:
                     return
                 if sum(len(b) for b in self._stderr_buf) < _STDERR_CAP:
                     self._stderr_buf.append(chunk)
-        except (asyncio.CancelledError, OSError):
+        except (asyncio.CancelledError, OSError):  # noqa: BLE001 — shutdown is best-effort
             pass
 
     async def _wait_exit(self) -> None:
@@ -480,8 +480,8 @@ class WorkflowRun:
                 (encode_host_message(message) + "\n").encode("utf-8")
             )
             self._proc.stdin.flush()  # type: ignore[union-attr]
-        except (BrokenPipeError, OSError):
-            pass  # the worker is gone; the exit watcher settles the run
+        except (BrokenPipeError, OSError):  # noqa: BLE001 — worker is gone; exit watcher settles the run
+            pass
 
     # ── cancellation / disposal ───────────────────────────────
 

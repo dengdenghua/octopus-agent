@@ -13,7 +13,7 @@ from collections import Counter
 from typing import Any
 
 
-def _normalize_tool_args(args: dict[str, Any]) -> str:
+def _normalize_tool_args(args: dict[str, Any] | str) -> str:
     """Normalize tool arguments to a stable string for deduplication.
 
     Sorts keys, stringifies values, and truncates long strings to detect
@@ -88,7 +88,7 @@ def _extract_tool_calls(steps: list[Any]) -> list[tuple[str, str]]:
 
 
 def _repeat_tool_reminder_guard(
-    steps: list[dict[str, Any]],
+    steps: list[Any],
     final_answer: str | None,
     *,
     threshold: int = 3,
@@ -149,7 +149,7 @@ def _repeat_tool_reminder_guard(
 
 
 def _consecutive_same_tool_guard(
-    steps: list[dict[str, Any]],
+    steps: list[Any],
     final_answer: str | None,
     *,
     threshold: int = 3,

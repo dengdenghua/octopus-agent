@@ -30,12 +30,18 @@ tier: "standard"
 
 - `runtime/execution/tool_engine/executor.py:517`
 
-## `user_prompt` · 1 处
+## `session_start` · 2 处
 
-- `runtime/sensing/gateway/realtime_turn_lifecycle.py:328`
+- `runtime/sensing/gateway/realtime_turn_lifecycle.py:435`
+- `runtime/sensing/gateway/realtime_turn_lifecycle.py:443`
 
-## Defined but never dispatched
+## `stop` · 2 处
 
-- `session_start`
-- `stop`
+- `runtime/sensing/gateway/realtime_turn_lifecycle.py:151`
+- `runtime/sensing/gateway/realtime_turn_lifecycle.py:158`
+
+## `user_prompt` · 2 处
+
+- `runtime/sensing/gateway/realtime_turn_lifecycle.py:436`
+- `runtime/sensing/gateway/realtime_turn_lifecycle.py:445`
 

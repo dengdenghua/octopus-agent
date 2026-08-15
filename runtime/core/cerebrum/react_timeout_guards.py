@@ -59,7 +59,7 @@ def _extract_timeout_events(steps: list[Any]) -> list[tuple[str, bool]]:
 
 
 def _timeout_policy_guard(
-    steps: list[dict[str, Any]],
+    steps: list[Any],
     final_answer: str | None,
     *,
     threshold: int = 2,
@@ -128,7 +128,7 @@ def _timeout_policy_guard(
 
 
 def _consecutive_timeout_guard(
-    steps: list[dict[str, Any]],
+    steps: list[Any],
     final_answer: str | None,
     *,
     threshold: int = 2,

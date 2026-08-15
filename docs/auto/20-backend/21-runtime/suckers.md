@@ -105,6 +105,7 @@ Suckers = skill pool.
 | `image_album_skills.py` | Image album skills (local AI photo library). |
 | `image_search_backends.py` | Image-search provider backends for the kimi-compat skill group. |
 | `image_semantic_skills.py` | Image semantic-search skills (local image library). |
+| `jobs_skills.py` | Model-facing background-job skills (dsh ``tool-jobs`` port). |
 | `kg_skill.py` | — |
 | `kimi_compat_skills.py` | — |
 | `layers.py` | — |
@@ -126,6 +127,7 @@ Suckers = skill pool.
 | `verify_skills.py` | Project verification · detect project type and run checks. |
 | `video_album_skills.py` | Video album skills (local AI video library). |
 | `web_skills.py` | — |
+| `workflow_skill.py` | Model-facing ``workflow`` skill (dsh ``tool-workflow``). |
 | `write_skills.py` | — |
 
 ## Key classes & functions
@@ -149,6 +151,7 @@ Suckers = skill pool.
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def orchestration_progress_scope(callback)` | Install a progress callback for orchestrations run inside the scope. |
+| func | `def workflow_settlement_scope(callback)` | Install a settlement callback for workflows run inside the scope. |
 
 ### `_lsp_candidates.py`
 
@@ -462,6 +465,14 @@ Suckers = skill pool.
 | --- | --- | --- |
 | func | `def register_image_semantic_skills(registry)` |  |
 
+### `jobs_skills.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def get_jobs_registry()` | The process-wide background-job registry (default caps). |
+| func | `def set_jobs_registry(registry)` | Inject a custom registry (tests / deployment wiring). |
+| func | `def register_jobs_skills(registry)` | Register the jobs skill family. Returns the count registered. |
+
 ### `kg_skill.py`
 
 | Kind | Symbol | Doc |
@@ -606,6 +617,14 @@ Suckers = skill pool.
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def register_web_skills(registry)` |  |
+
+### `workflow_skill.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def get_workflow_engine()` | The process-wide workflow engine (deployment knobs defaulted). |
+| func | `def set_workflow_engine(engine)` | Inject a custom engine (tests / deployment wiring). |
+| func | `def register_workflow_skills(registry)` | Register the ``workflow`` skill. Returns the count registered. |
 
 ### `write_skills.py`
 

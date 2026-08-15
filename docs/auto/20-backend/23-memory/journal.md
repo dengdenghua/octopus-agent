@@ -13,6 +13,7 @@ tier: "core"
 
 ## Exports
 
+- `AssistantChunkEvent`
 - `BrowserArtifactEvent`
 - `BudgetEvent`
 - `BudgetBreakerResetEvent`
@@ -20,6 +21,8 @@ tier: "core"
 - `CurriculumGoalDecisionEvent`
 - `FileOpEvent`
 - `FileRollbackEvent`
+- `HookInvokedEvent`
+- `HookResultEvent`
 - `ImmuneEvent`
 - `InMemoryJournal`
 - `Journal`
@@ -35,7 +38,10 @@ tier: "core"
 - `ReflexHitEvent`
 - `ResumeInfo`
 - `SkillProposalDecisionEvent`
+- `SessionSummary`
 - `StepEvent`
+- `SubSessionSummaryEvent`
+- `SubTextDeltaEvent`
 - `SubToolEndEvent`
 - `SubToolStartEvent`
 - `TaskCheckpointEvent`
@@ -58,9 +64,11 @@ tier: "core"
 
 | Module | Summary |
 | --- | --- |
+| `_chunk_rows.py` | Lossless storage packing for delta-chunk runs (dsh ``chunk-rows``). |
 | `_journal_base.py` | — |
 | `_journal_models.py` | — |
 | `_journal_parse.py` | — |
+| `activity.py` | Best-effort journal mirrors for long-running orchestration activity. |
 | `derive.py` | Project model-visible history from the journal (dsh session-log idea). |
 | `journal.py` | — |
 | `journal_context.py` | — |
@@ -72,6 +80,17 @@ tier: "core"
 ## Key classes & functions
 
 > AST 自动提取 · 仅列公开顶层 class / function · 签名与真实代码一致。
+
+### `_chunk_rows.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def chunk_packing_enabled()` | Whether the JSONL writer may pack chunk runs. |
+| func | `def is_chunk_row(data)` | Whether a decoded JSONL line is a packed chunk row (not an event). |
+| func | `def classify_chunk(event)` | Classify a typed event for packing, or ``None`` (store verbatim). |
+| func | `def continues_chunk_run(prev, entry)` | Whether ``entry`` extends a run ending in ``prev``. |
+| func | `def pack_chunk_row(run)` | Build the storage row for a completed run (``len(run) >= MIN_RUN``). |
+| func | `def expand_chunk_row(data)` | Expand a chunk row back to the exact original event dicts. |
 
 ### `_journal_base.py`
 
@@ -104,19 +123,50 @@ tier: "core"
 | class | `class ReflexHitEvent(JournalEvent)` |  |
 | class | `class SkillProposalDecisionEvent(JournalEvent)` | Operator decision for a self-evolution skill proposal. |
 | class | `class GoalChangeEvent(JournalEvent)` | Durable CAS-guarded goal mutation (dsh ``goal/change``). |
+| class | `class UserMessageEvent(JournalEvent)` | Durable human message (dsh ``user/message``). |
 | class | `class CurriculumGoalDecisionEvent(JournalEvent)` | Operator decision for a journal-derived learning goal. |
 | class | `class McpProposalDecisionEvent(JournalEvent)` | Operator/vet decision for a suggested MCP capability. |
 | class | `class ProtocolDriftDecisionEvent(JournalEvent)` | Operator decision for a detected protocol drift event. |
 | class | `class SubToolStartEvent(JournalEvent)` | Emitted when a sub-agent begins a tool call. |
 | class | `class SubToolEndEvent(JournalEvent)` | Emitted when a sub-agent finishes a tool call. |
+| class | `class AssistantChunkEvent(JournalEvent)` | One streamed parent-reply chunk (dsh ``assistant/chunk``). |
+| class | `class HookInvokedEvent(JournalEvent)` | One external command hook invocation (dsh ``hook/invoked``). |
+| class | `class HookResultEvent(JournalEvent)` | The durable outcome paired with :class:`HookInvokedEvent` (dsh ``hook/result``). |
+| class | `class SubTextDeltaEvent(JournalEvent)` | One streamed role-prose chunk (dsh ``assistant/chunk``). |
+| class | `class SubSessionSummaryEvent(JournalEvent)` | One completed turn's outcome row for a durable sub-agent session. |
 | class | `class BrowserArtifactEvent(JournalEvent)` | A browser screenshot (or similar artifact) was produced. |
+| class | `class WorkflowStartEvent(JournalEvent)` | A model-authored orchestration script started (dsh workflow ``on_start``). ``run_id`` correlates every later row of the same run; the event  |
+| class | `class WorkflowProgressEvent(JournalEvent)` | One workflow narration row (dsh workflow observer): a phase, a log line, or an agent start/end. ``kind`` is one of ``phase`` / ``log`` / ``a |
+| class | `class WorkflowEndEvent(JournalEvent)` | A workflow run settled (dsh workflow ``on_end`` / settlement). |
+| class | `class JobChangeEvent(JournalEvent)` | One background-job lifecycle transition (dsh ``tool-jobs``): start, stop request, or terminal settlement. ``status`` mirrors the registry's  |
+
+### `activity.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def capture_attribution()` | Snapshot the ambient journal attribution for later writes (jobs that settle after the turn, worker-thread observers). |
+| func | `def write_workflow_start(run_id, name, description, task_id, agent_id, conversation_id)` | Journal a workflow run start (dsh workflow ``on_start``). |
+| func | `def write_workflow_progress(run_id, kind, text, agent_seq, agent_label, task_id, agent_id, conversation_id)` | Journal one workflow narration row (phase / log / agent lifecycle). |
+| func | `def write_workflow_end(run_id, stop_reason, agents_started, error, task_id, agent_id, conversation_id)` | Journal a workflow run settlement (dsh workflow ``on_end``). |
+| func | `def write_job_change(job_id, kind, label, status, detail, task_id, agent_id, conversation_id)` | Journal one background-job lifecycle transition (dsh ``tool-jobs``). |
 
 ### `derive.py`
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def derive_model_messages(journal, task_id, user_intent, max_steps)` | Rebuild model-visible messages from the journal's ``StepEvent`` rows. |
+| class | `class AssistantChunkStream` | One iteration's streamed parent-reply text, rebuilt from the journal. |
+| func | `def derive_assistant_stream(journal, iteration, kind)` | Reconstruct the parent's streamed reply from ``assistant/chunk`` rows. |
+| func | `def assert_logged_assistant_reconstructs(journal, expected, iteration)` | Assert the journal reconstructs the given streamed reply — round-trip. |
+| class | `class SubagentRoundStream` | One role's streamed prose for one round, rebuilt from the journal. |
+| func | `def derive_subagent_streams(journal, session_id, role_id)` | Reconstruct each role's streamed prose from ``SubTextDeltaEvent`` rows. |
+| class | `class SessionSummary` | One completed sub-agent session turn's outcome, rebuilt from the journal. |
+| func | `def derive_session_summaries(journal, session_id)` | Reconstruct each sub-agent session turn's completion from the journal. |
+| class | `class SessionUsageRecord` | One model call's token/cost spend for a sub-agent session. |
+| func | `def derive_session_usage(journal, session_id)` | Reconstruct per-call token/cost spend from ``token_usage`` rows. |
+| func | `def assert_logged_stream_reconstructs(journal, expected, session_id, role_id)` | Assert the journal reconstructs the given streamed prose — round-trip. |
 | func | `def assert_logged_history_reconstructs(journal, expected_steps, task_id)` | Assert the journal reconstructs the given steps — the round-trip. |
+| func | `def surface_events_from_journal(journal, session_id, prompts)` | Build a dsh surface for one sub-agent session from real journal events. |
 
 ### `journal.py`
 
@@ -166,7 +216,7 @@ tier: "core"
 
 ## Who imports this
 
-**50** file(s) reference this package:
+**55** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
@@ -182,14 +232,15 @@ tier: "core"
   - `runtime/core/cerebrum/llm_planner.py`
   - `runtime/core/cerebrum/resume_cli.py`
   - `runtime/core/graph_runtime/runtime.py`
-- **`runtime/execution/`** · 7 file(s)
+- **`runtime/execution/`** · 10 file(s)
+  - `runtime/execution/jobs/subagent_producer.py`
+  - `runtime/execution/subagents/sessions.py`
   - `runtime/execution/suckers/_ephemeral_events.py`
   - `runtime/execution/suckers/browser_act_skills.py`
   - `runtime/execution/suckers/registry.py`
-  - `runtime/execution/swarm/runtime.py`
-  - `runtime/execution/tool_engine/_executor_fileops.py`
-  - _… and 2 more_
-- **`runtime/memory/`** · 4 file(s)
+  - _… and 5 more_
+- **`runtime/memory/`** · 5 file(s)
+  - `runtime/memory/goals/projection.py`
   - `runtime/memory/goals/service.py`
   - `runtime/memory/hemolymph/composer.py`
   - `runtime/memory/learning/promotion_applier.py`
@@ -198,13 +249,13 @@ tier: "core"
   - `runtime/platform/config/builder.py`
   - `runtime/platform/ui/app.py`
   - `runtime/platform/ui/state.py`
-- **`runtime/safety/`** · 8 file(s)
+- **`runtime/safety/`** · 9 file(s)
+  - `runtime/safety/hooks/external_bridge.py`
   - `runtime/safety/recovery/intel_collector.py`
   - `runtime/safety/recovery/kg_updater.py`
   - `runtime/safety/recovery/memory_consolidator.py`
   - `runtime/safety/recovery/recipe_evaluator.py`
-  - `runtime/safety/recovery/rule_extractor.py`
-  - _… and 3 more_
+  - _… and 4 more_
 - **`runtime/sensing/`** · 19 file(s)
   - `runtime/sensing/gateway/_observability_journal.py`
   - `runtime/sensing/gateway/_observability_progress_stream.py`

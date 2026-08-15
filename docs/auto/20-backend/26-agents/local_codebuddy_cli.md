@@ -24,6 +24,7 @@ tier: "standard"
 - ✅ `local_partner_id`
 - ✅ `local_partner_command`
 - ✅ `local_partner_executable`
+- ✅ `local_partner_invocation`
 
 ## Affinity keywords（路由亲和度）
 

@@ -282,7 +282,7 @@ class SessionSearchIndex:
             try:
                 self._conn.execute("INSERT INTO threads_fts(threads_fts) VALUES('optimize')")
                 self._conn.commit()
-            except sqlite3.Error:
+            except sqlite3.Error:  # noqa: BLE001 — search is best-effort
                 pass
 
     def close(self) -> None:

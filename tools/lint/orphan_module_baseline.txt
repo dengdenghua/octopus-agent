@@ -9,6 +9,7 @@ runtime/execution/suckers/echo_skills.py
 runtime/execution/suckers/enterprise_skills.py
 runtime/execution/suckers/ephemeral_limits.py
 runtime/execution/suckers/memory_file_ops.py
+runtime/execution/workflow/worker.py
 runtime/memory/cowork/models.py
 runtime/platform/lifecycle/data_migration.py
 runtime/platform/lifecycle/demo.py

@@ -94,7 +94,7 @@ def _entry_supported_efforts(entry: dict[str, Any], model: str) -> list[str] | N
     unsupported thinking) and the picker hides it. Otherwise exactly the
     tiers the provider genuinely maps on the wire.
     """
-    if not str(entry.get("provider") or "openai").lower() in {
+    if str(entry.get("provider") or "openai").lower() not in {
         "openai",
         "openai-compatible",
         "openai_compat",
