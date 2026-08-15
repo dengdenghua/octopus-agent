@@ -281,6 +281,20 @@ def call_subagent(
         except (ImportError, AttributeError):
             session = None
 
+    # Capture the parent turn's react stack (ambient ContextVar set around
+    # the main conversation's ``stream_react_loop``) so the runner can drive
+    # this sub-agent through the SAME react loop instead of the bespoke
+    # mini-loop. Ambient only — never persisted into session metadata.
+    if (context or {}).get("react_stack") is None:
+        try:
+            from runtime.execution.subagents._ambient import current_react_stack
+
+            _ambient_stack = current_react_stack()
+        except (ImportError, AttributeError):
+            _ambient_stack = None
+        if _ambient_stack is not None:
+            context = {**(context or {}), "react_stack": _ambient_stack}
+
     # When a schema is requested, steer the model toward schema-valid JSON up
     # front. Enforcement still happens post-hoc (see ``_do_call_with_schema``)
     # so this works on any model, not just ones with native structured output.

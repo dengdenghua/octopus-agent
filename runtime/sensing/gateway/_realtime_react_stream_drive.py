@@ -15,6 +15,7 @@ import time
 from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, Any
 
+from runtime.execution.subagents._ambient import react_stack_scope
 from runtime.memory.threads.event_log import EventLog
 from runtime.platform.models import ParsedIntent
 from runtime.platform.models.llm import default_reasoning_effort
@@ -406,6 +407,7 @@ async def _drive_react(
             scoped_cancellation(cancel_source.token),
             orchestration_progress_scope(_orchestration_progress),
             workflow_settlement_scope(_workflow_settlement),
+            react_stack_scope(runtime._stack),
         ):
             # Per-turn sub-agent lifecycle bridge. Launched once the react
             # boot yields ``react_started`` — the task_id it carries is the

@@ -468,6 +468,40 @@ def make_llm_ephemeral_runner(
             getattr(call, "context", None),
         )
 
+        # ── MAIN react-loop path (opt-in) ───────────────────────
+        # The end-state model drives a sub-agent through ``stream_react_loop``
+        # — the SAME machinery as the main conversation — instead of this
+        # bespoke mini-loop. The bridge captures the parent turn's stack
+        # (ambient, never persisted) into ``call.context["react_stack"]``.
+        # ``react_loop_subagent`` opts a dispatch in until the realtime server
+        # is validated end-to-end and the default is flipped.
+        _ctx = getattr(call, "context", None) or {}
+        if _ctx.get("react_loop_subagent") and _ctx.get("react_stack") is not None:
+            from runtime.execution.subagents.react_drive import (
+                run_subagent_react_loop,
+            )
+
+            _result = run_subagent_react_loop(
+                _ctx["react_stack"],
+                prompt=call.user_prompt,
+                role_id=call.role.id,
+                model=effective_model,
+                thread_id=str(
+                    _ctx.get("child_thread_id")
+                    or getattr(call, "caller_thread_id", None)
+                    or ""
+                ),
+                session_id=str(_ctx.get("subagent_session_id") or ""),
+                emitter=_ctx.get("event_emitter"),
+                max_iterations=_ctx.get("react_loop_max_iterations") or EPHEMERAL_MAX_ROUNDS,
+                conversation_messages=[{"role": "user", "content": call.user_prompt}],
+                tool_allowlist=tuple(call.role.tool_allowlist or ()),
+                metadata=_ctx,
+            )
+            if _result is not None:
+                return getattr(_result, "final_answer", "") or ""
+            return call.user_prompt
+
         # Single-shot fallback path · used when no registry was
         # plumbed through (legacy bootstrap, unit tests).
         if registry is None:
