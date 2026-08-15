@@ -125,7 +125,13 @@ function isTeamCallToolName(name: string): boolean {
     normalized === "call_agent_parallel" ||
     normalized === "call_agent" ||
     normalized === "delegate_agent" ||
-    normalized === "spawn_agent"
+    normalized === "spawn_agent" ||
+    // Sub-agent lifecycle markers arrive as ``runtime.__subagent_spawned__``
+    // / ``__subagent_finished__``. Strict equality above never matched them,
+    // so ``isSubagentRow`` stayed false and the avatar branch was
+    // unreachable — the row showed a generic Users glyph and no identity.
+    normalized.includes("__subagent_spawned__") ||
+    normalized.includes("__subagent_finished__")
   );
 }
 
@@ -152,15 +158,32 @@ function subagentIdentityFromArgs(args: Record<string, unknown>): {
   icon?: string | null;
   avatarUrl?: string;
 } {
-  const explicitIcon = typeof args.icon === "string" ? args.icon : null;
+  const explicitIcon =
+    (typeof args.icon === "string" && args.icon) ||
+    // Lifecycle markers ship a bare emoji under ``avatar``.
+    (typeof args.avatar === "string" && args.avatar) ||
+    null;
   const avatarUrl =
     typeof args.avatar_url === "string" ? args.avatar_url : undefined;
+
+  // Human-facing identity keys that skip the friendlyRoleName() mapping:
+  // ``role_display_name`` / ``codename`` come from the sub-agent lifecycle
+  // markers and are already display-ready.
+  const pickDisplay = (source: Record<string, unknown>): string => {
+    return (
+      (typeof source.agent_name === "string" && source.agent_name.trim()) ||
+      (typeof source.display_name === "string" && source.display_name.trim()) ||
+      (typeof source.role_display_name === "string" &&
+        source.role_display_name.trim()) ||
+      (typeof source.codename === "string" && source.codename.trim()) ||
+      ""
+    );
+  };
 
   // Helper to pick the raw identity key and map it to a human-readable role.
   const pickRaw = (source: Record<string, unknown>): string => {
     return (
-      (typeof source.agent_name === "string" && source.agent_name.trim()) ||
-      (typeof source.display_name === "string" && source.display_name.trim()) ||
+      pickDisplay(source) ||
       (typeof source.subagent_type === "string" &&
         source.subagent_type.trim()) ||
       (typeof source.agent_id === "string" && source.agent_id.trim()) ||
@@ -170,12 +193,19 @@ function subagentIdentityFromArgs(args: Record<string, unknown>): {
     );
   };
 
-  // Top-level single-agent delegation (call_agent / delegate_agent)
+  // Top-level single-agent delegation (call_agent / delegate_agent) and
+  // sub-agent lifecycle markers. An already human-facing display name is used
+  // verbatim; only raw ids go through friendlyRoleName().
+  const displayTop = pickDisplay(args);
   const rawTop = pickRaw(args);
   if (rawTop) {
+    const roleForIcon =
+      typeof args.role === "string" && args.role.trim()
+        ? args.role.trim()
+        : rawTop;
     return {
-      name: friendlyRoleName(rawTop),
-      icon: explicitIcon ?? roleIconFromId(rawTop),
+      name: displayTop || friendlyRoleName(rawTop),
+      icon: explicitIcon ?? roleIconFromId(roleForIcon),
       avatarUrl,
     };
   }
@@ -188,7 +218,8 @@ function subagentIdentityFromArgs(args: Record<string, unknown>): {
       const record = first as Record<string, unknown>;
       const rawFirst = pickRaw(record);
       if (rawFirst) {
-        const name = friendlyRoleName(rawFirst);
+        const displayFirst = pickDisplay(record);
+        const name = displayFirst || friendlyRoleName(rawFirst);
         return {
           name: specs.length > 1 ? `${name} 等` : name,
           icon: explicitIcon ?? roleIconFromId(rawFirst),
@@ -1093,7 +1124,8 @@ export function MessageGroup({
           )
         : 0;
       const isDeepThinking = isThinking
-        ? (groupDurationMs >= 15_000 && totalSteps >= 5) ||
+        ? groupDurationMs >= 10_000 || // a single long native thinking block
+          (groupDurationMs >= 15_000 && totalSteps >= 5) ||
           totalSteps >= 15 ||
           totalContentLength >= 3000
         : false;
@@ -1201,18 +1233,12 @@ export function MessageGroup({
 
       const summary =
         item.type === "reasoningGroup"
-          ? // Unified metadata display for reasoning groups instead of text truncation
-            isDeepThinking
+          ? isDeepThinking
             ? // Deep thinking: show "深度思考 · 思考了 X · N 条"
               hasStoredDuration
               ? `${t.messageGrouping.deepThinking ?? "深度思考"} · ${t.messageGrouping.thoughtFor ?? "思考了"} ${formatThinkingDuration(groupDurationMs)} · ${count} 条`
               : `${t.messageGrouping.deepThinking ?? "深度思考"} · ${count} 条`
-            : // Normal thinking: show "思考 · N 条" or "思考 · X · N 条" if duration > 2s
-              hasStoredDuration && groupDurationMs >= 2000
-              ? `${t.messageGrouping.thinking ?? "思考"} · ${formatThinkingDuration(groupDurationMs)} · ${count} 条`
-              : count > 1
-                ? `${t.messageGrouping.thinking ?? "思考"} · ${count} 条`
-                : t.messageGrouping.thinking ?? "思考"
+            : summarizeReasoningGroup(item, t)
           : item.type === "actionCallbackGroup"
             ? summarizeActionGroup(item, t)
             : isAggregatedGroup
@@ -1286,9 +1312,30 @@ export function MessageGroup({
             ),
       ).join("\n");
       const processEventSummary = publicProcessText(summary);
+      // Wording-based internal reasoning (no structured phase, no native
+      // duration, no public checkpoint counterpart) is self-talk: mute it to
+      // a "思考过程" label with the content behind the disclosure toggle,
+      // instead of presenting the raw notes as public progress. Trace-based
+      // and code-mode reasoning keep their compact content summary.
+      const isWordingInternal =
+        isThinking &&
+        !codeMode &&
+        !isDeepThinking &&
+        !isLiveTimeline &&
+        !hasStoredDuration &&
+        // A single message's internal self-talk (all chunks share one
+        // message id) is muted; a chain of distinct reasoning messages or
+        // structured reasoning keeps its content summary.
+        new Set(
+          item.steps.map((step) => step.messageId).filter(Boolean),
+        ).size === 1 &&
+        item.steps.every((step) => !step.phaseId) &&
+        !timelineItems.some((tl) => tl.type === "commentary");
       const thinkingDisclosureLabel = isDeepThinking
         ? t.messageGrouping.deepThinking
-        : processEventSummary || summary;
+        : isWordingInternal
+          ? (t.messageGrouping.thinkingProcess ?? "思考过程")
+          : processEventSummary || summary;
       const hasThinkingDetail =
         isThinking &&
         !isLiveTimeline &&
@@ -1304,13 +1351,6 @@ export function MessageGroup({
             <button
               type="button"
               onClick={() => {
-                // If thinking has expandable detail, toggle it inline first
-                if (hasThinkingDetail) {
-                  setExpandedThinkingRows((current) => ({
-                    ...current,
-                    [item.id]: !current[item.id],
-                  }));
-                }
                 // Always activate timeline and open workbench for full context
                 activateTimelineItem(timelineItemLinkageId(item), "chat");
                 emitOpenAgentWorkbench({
@@ -1440,15 +1480,6 @@ export function MessageGroup({
                   ) : (
                     <span>{processEventSummary || summary}</span>
                   )}
-                  {hasThinkingDetail && (
-                    <ChevronRightIcon
-                      className={cn(
-                        "size-3 shrink-0 transition-all opacity-0 group-hover/process-row:opacity-100",
-                        expandedThinkingRows[item.id] ? "rotate-90" : "",
-                      )}
-                      aria-hidden="true"
-                    />
-                  )}
                 </span>
                 {isThinking &&
                   isLastOverall &&
@@ -1488,6 +1519,37 @@ export function MessageGroup({
                 <span className="sr-only" data-testid="live-process-strip" />
               )}
             </button>
+            {hasThinkingDetail && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setExpandedThinkingRows((current) => ({
+                    ...current,
+                    [item.id]: !current[item.id],
+                  }));
+                }}
+                className="shrink-0 p-0.5 text-muted-foreground/55 opacity-0 transition-opacity group-hover/process-row:opacity-100 hover:text-muted-foreground focus-visible:opacity-100"
+                aria-label={
+                  expandedThinkingRows[item.id]
+                    ? t.agentWorkbenchPages.collapse
+                    : t.agentWorkbenchPages.expandDetails
+                }
+                title={
+                  expandedThinkingRows[item.id]
+                    ? t.agentWorkbenchPages.collapse
+                    : t.agentWorkbenchPages.expandDetails
+                }
+                data-testid="thinking-row-toggle"
+              >
+                <ChevronRightIcon
+                  className={cn(
+                    "size-3 transition-transform",
+                    expandedThinkingRows[item.id] ? "rotate-90" : "",
+                  )}
+                />
+              </button>
+            )}
             {isAggregatedGroup && (
               <button
                 type="button"
@@ -1890,7 +1952,9 @@ function groupConsecutiveReasoningSteps(steps: CoTStep[]): TimelineItem[] {
   let currentActionGroup: ActionCallbackGroupItem | null = null;
 
   const flushReasoningGroup = () => {
-    if (currentGroup) items.push(currentGroup);
+    // A group merged from an earlier position (same-phase coalescing) may
+    // already be present in ``items`` — never push it twice.
+    if (currentGroup && !items.includes(currentGroup)) items.push(currentGroup);
     currentGroup = null;
   };
   const flushActionGroup = () => {
@@ -1915,11 +1979,45 @@ function groupConsecutiveReasoningSteps(steps: CoTStep[]): TimelineItem[] {
     if (step.type === "reasoning") {
       flushActionGroup();
       if (!currentGroup) {
+        // Coalesce same-phase reasoning across intervening tool calls: a
+        // single structured phase's native + raw thinking disclosures merge
+        // into one row. The merged group keeps the earlier group's id so an
+        // expanded disclosure stays open when streamed reasoning joins.
+        const phaseId = step.phaseId;
+        if (phaseId) {
+          const prev = [...items]
+            .reverse()
+            .find(
+              (it): it is ReasoningStepGroupItem =>
+                it.type === "reasoningGroup" &&
+                it.steps[0]?.phaseId === phaseId,
+            );
+          if (prev) {
+            currentGroup = prev;
+            currentGroup.steps.push(step);
+            continue;
+          }
+        }
         currentGroup = {
           id: `${step.id ?? "reasoning"}-group`,
           type: "reasoningGroup",
           steps: [],
           // 组内步骤连续且无工具调用穿插，角色与首个步骤一致
+          role: step.role,
+          inferred: step.inferred,
+        };
+      } else if (
+        step.phaseId &&
+        currentGroup.steps[0]?.phaseId &&
+        step.phaseId !== currentGroup.steps[0].phaseId
+      ) {
+        // A phase boundary breaks the run even when reasoning is consecutive:
+        // each structured phase keeps its own disclosure row.
+        flushReasoningGroup();
+        currentGroup = {
+          id: `${step.id ?? "reasoning"}-group`,
+          type: "reasoningGroup",
+          steps: [],
           role: step.role,
           inferred: step.inferred,
         };

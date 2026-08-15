@@ -479,10 +479,22 @@ function turnToMessages(turn: Turn): Message[] {
       }
       case "mcpToolCall": {
         const mcp = item as McpToolCallItem;
+        // Sub-agent lifecycle markers carry their identity payload in
+        // ``result`` (finish) rather than ``arguments`` (spawn) — see
+        // ``_subagent_lifecycle_item_from_journal``. The renderer only reads
+        // args, so a finish row rendered as a nameless "委派任务". Fold the
+        // result payload in as a fallback so both halves name their agent.
+        const isSubagentMarker = mcp.tool.includes("subagent");
+        const markerResult =
+          isSubagentMarker && mcp.result && typeof mcp.result === "object"
+            ? (mcp.result as Record<string, unknown>)
+            : null;
         pending.toolCalls.push({
           id: mcp.id,
           name: `${mcp.server}.${mcp.tool}`,
-          args: mcp.arguments,
+          args: markerResult
+            ? { ...markerResult, ...(mcp.arguments ?? {}) }
+            : mcp.arguments,
           type: "tool_call",
           ...toolCallTimelineCoordinates(mcp),
         });

@@ -268,7 +268,16 @@ export function isTeammateToolName(name: string): boolean {
 }
 
 function extractTeammateName(args: Record<string, unknown>): string {
-  for (const key of ["agent_name", "display_name"]) {
+  // ``role_display_name`` / ``codename`` are what the sub-agent lifecycle
+  // markers (``__subagent_spawned__`` / ``__subagent_finished__``) carry.
+  // Without them a marker row fell through to a bare "委派任务" verb with no
+  // name, because none of the keys below are present on those payloads.
+  for (const key of [
+    "agent_name",
+    "display_name",
+    "role_display_name",
+    "codename",
+  ]) {
     const value = args[key];
     if (typeof value === "string" && value.trim()) return value.trim();
   }
