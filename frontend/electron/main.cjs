@@ -206,6 +206,14 @@ function wc(webContentsId) {
   const target = webContents.fromId(webContentsId);
   if (!target || target.isDestroyed())
     throw new Error(`webContents ${webContentsId} not found`);
+  // The browser bridge only drives embedded <webview> tabs. Refuse to
+  // execute JS / capture / navigate in the main window or any other
+  // webContents, so a compromised renderer cannot pivot off its own
+  // webviews into contexts it was never meant to touch (defense in depth;
+  // the app's own UI is otherwise treated as trusted).
+  if (target.getType() !== "webview") {
+    throw new Error(`webContents ${webContentsId} is not a webview`);
+  }
   return target;
 }
 

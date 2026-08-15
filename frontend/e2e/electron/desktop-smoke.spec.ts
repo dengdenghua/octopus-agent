@@ -53,6 +53,22 @@ test("desktop shell boots: window, preload bridge, workbench root", async () => 
     );
     expect(listing.ok).toBe(true);
     expect(Array.isArray(listing.items)).toBe(true);
+
+    // The browser bridge must refuse to drive the MAIN window's webContents:
+    // browser:executeJS is for embedded <webview> tabs only. This proves the
+    // renderer cannot pivot off its own webviews (defense in depth).
+    const mainContentsId = await app.evaluate(
+      ({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.id,
+    );
+    const executeOnMain = await win.evaluate(async (wid) => {
+      try {
+        await window.octopus?.browser?.executeJS?.(wid, "1+1");
+        return "accepted";
+      } catch (err) {
+        return err instanceof Error ? err.message : String(err);
+      }
+    }, mainContentsId);
+    expect(executeOnMain).toContain("not a webview");
   } finally {
     await app.close();
   }
