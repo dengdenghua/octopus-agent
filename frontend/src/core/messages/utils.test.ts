@@ -147,6 +147,51 @@ describe("public assistant text sanitization", () => {
     );
   });
 
+  it("strips a batched tool-call json fence (array payload)", () => {
+    // A model narrating its plan as a batched protocol array used to leak the
+    // whole block into the chat copy: the fence matcher only covered
+    // `{"command": <writer>}` objects, so `[{"tool": ...}, ...]` passed through.
+    const text = [
+      "开始只读审计：先摸清仓库结构。",
+      "",
+      "```json",
+      "[",
+      '  {"tool": "list_cwd", "args": {}},',
+      '  {"tool": "git_status", "args": {}}',
+      "]",
+      "```",
+    ].join("\n");
+    const cleaned = stripInternalToolProtocol(text);
+    expect(cleaned).toBe("开始只读审计：先摸清仓库结构。");
+    expect(cleaned).not.toMatch(/"tool"\s*:/);
+  });
+
+  it("strips a single-object tool-call json fence keyed by tool", () => {
+    const text = [
+      "Checking the runtime entrypoint.",
+      "",
+      "```json",
+      '{"tool": "read_file", "args": {"path": "Makefile"}}',
+      "```",
+    ].join("\n");
+    expect(stripInternalToolProtocol(text)).toBe(
+      "Checking the runtime entrypoint.",
+    );
+  });
+
+  it("keeps a genuine json code fence that is not a tool call", () => {
+    const text = [
+      "Here is the config shape:",
+      "",
+      "```json",
+      '{"name": "octopus", "version": "0.2.0"}',
+      "```",
+    ].join("\n");
+    const cleaned = stripInternalToolProtocol(text);
+    expect(cleaned).toContain("```json");
+    expect(cleaned).toContain('"version": "0.2.0"');
+  });
+
   it("does not expose a recovery handoff when it is the entire answer", () => {
     expect(
       stripInternalToolProtocol(

@@ -295,6 +295,12 @@ function redactPublicProcessText(value: string): string {
     .trim();
 }
 
+/** 公开进度文案：剥离内部协议标记 + 敏感信息，折叠行内空白。
+ *
+ * 只折叠行内空白（``[^\S\n]+``）并**保留换行**。压平 ``\n`` 会让 markdown
+ * 围栏塌到同一行 —— ``` 不再是块级围栏、只能解析成行内 code，整段过程文案
+ * 糊成一个段落（语言标记 ``json`` 也混进正文）。保留换行后围栏正常渲染成
+ * ``<pre><code>``。 */
 function publicProcessText(value: string): string {
   return (
     normalizePublicTimelineChunk(value) ??
@@ -305,7 +311,7 @@ function publicProcessText(value: string): string {
             value.replace(INTERNAL_PROCESS_BLOCK_RE, ""),
           ),
         ),
-      ).replace(/\s+/g, " "),
+      ).replace(/[^\S\n]+/g, " "),
     )
   );
 }

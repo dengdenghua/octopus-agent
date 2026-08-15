@@ -387,6 +387,14 @@ const INTERNAL_TOOL_FENCE_RE =
   /```(?:tool|tools?|tool_call|octopus-tool)\b[\s\S]*?(?:```|$)/gi;
 const JSON_COMMAND_TOOL_FENCE_RE =
   /(?:\*\*Task:[^\n]*\*\*\s*)?```json\s*\{\s*"command"\s*:\s*"(?:fs_writer|fs_writen|fs_written|write_file|write_text_file|edit_text_file|str_replace|apply_patch)"[\s\S]*?(?:```|$)/gi;
+/** Tool-call protocol emitted as a ``json`` fence whose payload is an ARRAY of
+ * ``{"tool": ..., "args": ...}`` entries (batched calls), or a single such
+ * object. ``JSON_COMMAND_TOOL_FENCE_RE`` only covers ``{"command": <writer>}``,
+ * so batched array payloads used to leak verbatim into the public narrative —
+ * a model that narrates its plan as ```json [{"tool": "list_cwd"}, ...]``` had
+ * the whole protocol block rendered as chat copy. */
+const JSON_TOOL_ARRAY_FENCE_RE =
+  /```(?:json|jsonc|json5)?\s*\n?\s*[[{][\s\S]*?"(?:tool|tool_name)"\s*:\s*"[^"]+"[\s\S]*?(?:```|$)/gi;
 const BARE_INTERNAL_TOOL_PAYLOAD_RE =
   /^\s*(?:fs_writer|fs_writen|fs_written|write_file|write_text_file|edit_text_file|str_replace|apply_patch)\s*(?:\n|\()\s*[\s\S]*$/i;
 const XML_TOOL_CALL_RE = /<tool_call>[\s\S]*?(?:<\/tool_call>|$)/gi;
@@ -521,6 +529,7 @@ export function stripInternalToolProtocol(content: string): string {
   const cleaned = content
     .replace(INTERNAL_TOOL_FENCE_RE, "")
     .replace(JSON_COMMAND_TOOL_FENCE_RE, "")
+    .replace(JSON_TOOL_ARRAY_FENCE_RE, "")
     .replace(SEED_TOOL_CALL_RE, "")
     .replace(XML_TOOL_CALL_RE, "")
     .replace(XML_TOOL_INVOCATION_RE, "")
