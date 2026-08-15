@@ -32,7 +32,11 @@ const DESKTOP_DIR = path.join(os.homedir(), "Desktop");
 // ``--smoke-test`` launches the packaged-style shell against the built
 // ``dist/`` from an unpackaged checkout, so the Playwright Electron E2E can
 // prove the shell + preload bridge + workbench boot without a dev server.
+// ``--smoke-test-backend`` additionally spawns the Python backend (normally a
+// packaged-only path) so the spawn + health + renderer-connection chain is
+// exercised; the test reuses an existing venv via OCTOPUS_DESKTOP_BACKEND_ROOT.
 const SMOKE_TEST = process.argv.includes("--smoke-test");
+const SMOKE_TEST_BACKEND = process.argv.includes("--smoke-test-backend");
 
 // Force Chinese locale for native dialogs and system UI so native controls
 // (Cancel / New Folder / sidebar / search) follow the app's primary language.
@@ -891,7 +895,7 @@ if (!app.requestSingleInstanceLock()) {
     mainWindow = createMainWindow();
     // Create the window before bootstrapping the backend so the renderer can
     // show first-launch progress (uv downloads the Python runtime once).
-    if (app.isPackaged) {
+    if (app.isPackaged || SMOKE_TEST_BACKEND) {
       spawnBackend(backendConfigPath(), backendProgress).catch((err) => {
         console.error("[octopus] backend bootstrap failed:", err.message);
       });

@@ -73,3 +73,48 @@ test("desktop shell boots: window, preload bridge, workbench root", async () => 
     await app.close();
   }
 });
+
+test("desktop backend spawns and the renderer reaches it", async () => {
+  const backendPort = 18000;
+  const backendUrl = `http://127.0.0.1:${backendPort}`;
+  const app = await electron.launch({
+    args: [path.join(ELECTRON_DIR, "main.cjs"), "--smoke-test-backend"],
+    cwd: REPO_ROOT,
+    env: {
+      ...process.env,
+      OCTOPUS_PET_DISABLED: "1",
+      // Reuse the checkout's venv so the spawn path runs without a
+      // first-launch bootstrap download.
+      OCTOPUS_DESKTOP_BACKEND_ROOT: REPO_ROOT,
+      OCTOPUS_BACKEND_URL: backendUrl,
+    },
+  });
+
+  try {
+    const win = await app.firstWindow();
+    await win.waitForLoadState("domcontentloaded");
+
+    // The preload must advertise the smoke backend URL the renderer connects
+    // to — proves the spawn port and the renderer's base URL agree.
+    const baseURL = await win.evaluate(() => window.octopus?.backendBaseURL);
+    expect(baseURL).toBe(backendUrl);
+
+    // Poll /api/health until the Python backend finishes booting.
+    let healthOk = false;
+    for (let i = 0; i < 60; i++) {
+      try {
+        const res = await fetch(`${backendUrl}/api/health`);
+        if (res.ok) {
+          healthOk = true;
+          break;
+        }
+      } catch {
+        // backend still booting — retry
+      }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    expect(healthOk).toBe(true);
+  } finally {
+    await app.close();
+  }
+});

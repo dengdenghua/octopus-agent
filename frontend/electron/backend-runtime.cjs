@@ -16,8 +16,21 @@ const fs = require("fs");
 const path = require("path");
 const { app } = require("electron");
 
-const backendRoot = () => path.join(app.getPath("userData"), "backend");
+// Packaged layout roots the uv-managed venv under userData/backend. A test
+// (or an embedder) can override it to reuse an existing venv — e.g. the
+// Playwright smoke reuses the checkout's own .venv so the spawn path is
+// exercised without a first-launch bootstrap download.
+const backendRoot = () =>
+  process.env.OCTOPUS_DESKTOP_BACKEND_ROOT ||
+  path.join(app.getPath("userData"), "backend");
 const resourcesPath = () => process.resourcesPath;
+
+// The port must match what main.cjs advertises to the renderer via
+// OCTOPUS_BACKEND_URL; derive it from that same env when present.
+function backendPort() {
+  const m = (process.env.OCTOPUS_BACKEND_URL || "").match(/:(\d+)$/);
+  return m ? m[1] : "8000";
+}
 
 function pythonExe() {
   return process.platform === "win32"
@@ -75,7 +88,11 @@ const OPTIONAL_GROUPS = {
     "rapidocr-onnxruntime>=1.3.0",
   ],
   extract: ["trafilatura>=2.0", "pypdf>=6.15.0"],
-  mcp: ["mcp>=1.28.1,<2.0", "pydantic-settings>=2.14.2", "pyjwt[crypto]>=2.13.0"],
+  mcp: [
+    "mcp>=1.28.1,<2.0",
+    "pydantic-settings>=2.14.2",
+    "pyjwt[crypto]>=2.13.0",
+  ],
 };
 
 function venvReady() {
@@ -103,7 +120,10 @@ async function bootstrapCore(onProgress) {
   if (venvReady()) return;
   onProgress?.({ stage: "venv", message: "首次启动：创建后端虚拟环境…" });
   await runProcess(uvCmd(), ["venv", path.join(backendRoot(), ".venv")]);
-  onProgress?.({ stage: "deps", message: "安装核心依赖（仅首次，约几百 MB）…" });
+  onProgress?.({
+    stage: "deps",
+    message: "安装核心依赖（仅首次，约几百 MB）…",
+  });
   await runProcess(uvCmd(), [
     "pip",
     "install",
@@ -149,7 +169,7 @@ async function spawnBackend(configPath, onProgress) {
       "--host",
       "127.0.0.1",
       "--port",
-      "8000",
+      backendPort(),
     ],
     { stdio: "inherit", env },
   );
