@@ -14,6 +14,7 @@ re-exports it for the gateway's streaming path.
 from __future__ import annotations
 
 import inspect
+import re
 from functools import lru_cache
 from typing import Any
 
@@ -52,6 +53,73 @@ TASK_CHAIN_SKILLS: frozenset[str] = frozenset(
         "docx",
     }
 )
+
+
+def _goal_tokens(goal: str) -> frozenset[str]:
+    """Lowercased, stopword-filtered tokens of the current goal.
+
+    Used as the relevance query for tool search — matching skill names /
+    descriptions against the user's actual intent so a large registry
+    (many MCP servers, plugin packs) doesn't drown the tool budget with
+    unrelated tools.
+    """
+    _stop = frozenset(
+        {
+            "the", "a", "an", "and", "or", "for", "with", "into", "from",
+            "this", "that", "these", "those", "please", "help", "me", "i",
+            "you", "we", "my", "your", "of", "to", "in", "on", "at", "by",
+            "is", "are", "was", "be", "do", "does", "did", "can", "could",
+            "should", "would", "will", "what", "when", "where", "which",
+            "how", "who", "there", "about", "it", "as", "if", "not", "no",
+            "using", "use", "want", "need", "then", "than", "so", "also",
+        }
+    )
+    text = (goal or "").lower()
+    words = [w for w in re.findall(r"[a-z][a-z0-9_\-]{1,}", text)]
+    return frozenset(w for w in words if len(w) > 2 and w not in _stop)
+
+
+def _skill_text(name: str, description: str) -> str:
+    """Searchable text for a skill: the name plus a compact description.
+
+    The MCP bridge registers tools as ``mcp_<server>_<tool>`` skills whose
+    descriptions come from the MCP tool descriptions, so tool search ranks
+    remote tools by the same overlap metric as local skills.
+    """
+    name_tokens = " ".join(re.split(r"[^a-z0-9]", name.lower()))
+    return f"{name_tokens} {description or ''}".lower()
+
+
+def _skill_description(registry: Any, name: str) -> str:
+    """Safe description lookup for relevance scoring (never raises)."""
+    try:
+        skill = registry.get(name)
+        return str(getattr(skill, "description", "") or "")
+    except (AttributeError, TypeError, KeyError, ValueError):
+        return ""
+
+
+def _relevance_score(name: str, description: str, tokens: frozenset[str]) -> int:
+    """Keyword-overlap score between the goal and a skill.
+
+    A token in the skill name counts 2 (the name is the strongest signal);
+    a token in the description counts 1. No embeddings needed — this is the
+    honest, dependency-free tool-search primitive that Claude Code's
+    ToolSearch formalizes.
+    """
+    if not tokens:
+        return 0
+    text = _skill_text(name, description)
+    score = 0
+    for tok in tokens:
+        if tok in name.lower():
+            score += 2
+        elif tok in text:
+            score += 1
+    return score
+
+
+
 
 
 TASK_CHAIN_MODES: frozenset[str] = frozenset(
@@ -273,12 +341,31 @@ def build_anthropic_tool_specs(
             forced.append(name)
             forced_set.add(name)
     selected = list(forced)
-    for name in all_names:
-        if name in forced_set:
-            continue
-        if len(selected) >= max_skills + len(forced):
-            break
-        selected.append(name)
+    budget = max_skills + len(forced)
+    candidates = [name for name in all_names if name not in forced_set]
+    tokens = _goal_tokens(goal)
+    if tokens and len(candidates) + len(forced) > budget:
+        # Tool search: when the registry outgrows the budget, keep the
+        # skills most relevant to the current goal instead of the first N
+        # in registration order. MCP tools-as-skills rank by their real
+        # descriptions, so remote tools follow the same relevance signal.
+        # A stable tiebreak (original registry order) keeps the selection
+        # deterministic across calls.
+        _order_index = {name: i for i, name in enumerate(all_names)}
+        scored = [
+            (name, _relevance_score(name, _skill_description(registry, name), tokens))
+            for name in candidates
+        ]
+        scored.sort(key=lambda pair: (-pair[1], _order_index.get(pair[0], 0)))
+        for name, _score in scored:
+            if len(selected) >= budget:
+                break
+            selected.append(name)
+    else:
+        for name in candidates:
+            if len(selected) >= budget:
+                break
+            selected.append(name)
 
     specs: list[ToolSpec] = []
     for name in selected:
