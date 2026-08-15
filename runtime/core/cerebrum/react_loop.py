@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import json
 import logging
 import re
 import time
-import uuid
 from collections.abc import Callable, Generator
 from typing import TYPE_CHECKING, Any
 
-from runtime.core.cerebrum import _react_loop_reexports as _reexports
 from runtime.core.cerebrum._react_loop_reexports import *  # noqa: F403
 from runtime.core.cerebrum.react_action_outcomes import (
     _action_batch_fingerprint,
@@ -26,7 +23,6 @@ from runtime.core.cerebrum.react_convergence import (
 )
 from runtime.core.cerebrum.react_execution import (
     _build_research_progress_summary,
-    _execute_action_via_beak,
     _phase_6d_dispatch_and_observe,
     _phase_6g_housekeeping,
 )
@@ -79,7 +75,6 @@ from runtime.core.cerebrum.react_terminal import (
     _finalize_react_turn,
 )
 from runtime.core.cerebrum.react_types import (
-    REACT_OBSERVATION_FOLLOWUP,
     ReActResult,
     ReActStep,
 )
@@ -89,7 +84,6 @@ from runtime.platform.config.schema import (
     BUDGET_DEFAULT_MAX_USD,
 )
 from runtime.platform.models import ParsedIntent, Step, TaskId
-from runtime.platform.models.llm import Message
 from runtime.platform.models.rescue_policy import next_custom_model_fallback
 from runtime.safety.approval.approval_gate import ApprovalProvider
 from runtime.safety.guards.repeat_tool_reminder import (
@@ -100,39 +94,6 @@ if TYPE_CHECKING:
     from runtime.execution.agents.base import Agent
 
 _logger = logging.getLogger(__name__)
-
-
-def _orch_launch_announcement(args: dict[str, Any]) -> str:
-    """Progress line emitted when ``run_orchestration`` launches.
-
-    Built from the ACTUAL args so the announcement never lies when the preset
-    changes — the agent ids become the parallel perspectives, and the
-    rounds/verify/synthesize flags shape the tail. Falls back to a generic
-    line when there is nothing agent-specific to describe.
-    """
-    agents = [str(a).strip() for a in (args.get("agent_id") or []) if str(a or "").strip()]
-    if not agents:
-        return "已启动并行审计，将交叉核验发现后再汇总结论。"
-    perspective = "多视角" if len(agents) > 1 else ""
-    clauses: list[str] = []
-    rounds = args.get("rounds")
-    clauses.append(f"{rounds} 轮交叉核验" if rounds else "交叉核验")
-    if args.get("verify"):
-        clauses.append("逐条验证")
-    clauses.append("汇总结论" if args.get("synthesize") else "汇总")
-    return f"已启动{perspective}并行审计：{'/'.join(agents)} 并行，{'，'.join(clauses)}。"
-
-
-# Backward-compatible helper surface plus the actual loop entry points.
-__all__ = _reexports.__all__ + [
-    "ReActResult",
-    "ReActStep",
-    "_WRITE_TOOLS",
-    "_dispatch_parallel_actions",
-    "_finalize_react_turn",
-    "run_react_loop",
-    "stream_react_loop",
-]
 
 
 def _mark_subagent_owner_thread(thread_id: str, *, busy: bool) -> None:
@@ -438,95 +399,6 @@ def _stream_react_loop_impl(
     final_answer_segments: list[str] = []
     final_answer_emitted = False
 
-    # ``audit.ultracode`` is a deterministic orchestration preset, not a
-    # suggestion to the model. Earlier versions only mentioned
-    # ``run_orchestration`` in the prompt, so providers routinely skipped it
-    # and the UI's "最高" setting produced a single-agent audit. Start exactly
-    # one real orchestration before the first model round and feed its evidence
-    # back into the normal ReAct history for synthesis. Resumed turns that
-    # already contain the synthetic step never launch it again.
-    _workflow_preset = str(intent.user_context.get("workflow_preset") or "").strip().lower()
-    _ultracode_already_started = any(
-        "run_orchestration" in str(prior.action or "") for prior in steps
-    )
-    if _workflow_preset == "audit.ultracode" and not _ultracode_already_started:
-        _orch_call_id = uuid.uuid4().hex[:12]
-        _orch_args = {
-            "goal": str(intent.normalized_goal or intent.raw or "").strip(),
-            "agent_id": ["critic", "explorer", "researcher"],
-            "n": 3,
-            "rounds": 2,
-            "patience": 1,
-            "verify": True,
-            "synthesize": True,
-        }
-        _orch_action = (
-            "run_orchestration("
-            + json.dumps(
-                _orch_args,
-                ensure_ascii=False,
-                separators=(",", ":"),
-            )
-            + ")"
-        )
-        _orch_announcement = _orch_launch_announcement(_orch_args)
-        yield {
-            "type": "commentary_delta",
-            "delta": _orch_announcement,
-            "progress_source": "runtime",
-            "public_status": True,
-            "start_new_segment": True,
-            "iteration": 1,
-        }
-        yield {
-            "type": "tool_start",
-            "tool_name": "run_orchestration",
-            "tool_call_id": _orch_call_id,
-            "iteration": 1,
-            "input_preview": _orch_args,
-        }
-        _orch_started_at = time.monotonic()
-        _orch_observation, _orch_beak_step = _execute_action_via_beak(
-            stack,
-            _orch_action,
-            react_task_id=react_task_id,
-            react_step_counter=1,
-            agent=agent,
-            intent=intent,
-        )
-        if not _orch_observation:
-            _orch_observation = (
-                "(ultracode orchestration unavailable) run_orchestration is not registered "
-                "or was denied by the active agent policy. Continue with a manual multi-pass audit."
-            )
-        _orch_ok = _tool_call_succeeded(_orch_observation, _orch_beak_step)
-        if _orch_beak_step is not None:
-            executed_beak_steps.append(_orch_beak_step)
-        _orch_react_step = ReActStep(
-            iteration=1,
-            thought="Runtime-enforced audit.ultracode orchestration",
-            public_update=_orch_announcement,
-            action=_orch_action,
-            observation=_orch_observation,
-            raw_llm_output="",
-        )
-        steps.append(_orch_react_step)
-        messages.append(Message(role="assistant", content=_orch_action))
-        messages.append(
-            Message(
-                role="user",
-                content=f"Observation: {_orch_observation}\n\n{REACT_OBSERVATION_FOLLOWUP}",
-            )
-        )
-        yield {
-            "type": "tool_end",
-            "tool_name": "run_orchestration",
-            "tool_call_id": _orch_call_id,
-            "iteration": 1,
-            "status": "success" if _orch_ok else "error",
-            "output_preview": str(_orch_observation)[:1200],
-            "duration_ms": int((time.monotonic() - _orch_started_at) * 1000),
-        }
 
     # Throughput sampler — chars/sec across all delta yields. We emit a
     # ``throughput`` event every ~500ms so the UI can show a live

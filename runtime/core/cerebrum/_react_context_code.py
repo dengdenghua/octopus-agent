@@ -239,13 +239,15 @@ def _build_workflow_preset_prompt(workflow_preset: str | None) -> str:
         )
     elif preset == "audit.ultracode":
         body = (
-            "当前工作流: audit.ultracode / 最高强度审查。\n"
-            "- 不要单轮通读了事,做多代理并行深审。若具备 `run_orchestration` 技能,"
-            "用它发起编排(agent_id 传一组不同视角的角色,如 [critic, explorer, "
-            "researcher];n=5、rounds=2~3、verify=true、synthesize=true),让发现经过 "
-            "收集→去重→投票核验→综合;不具备该技能时,改为按模块多轮交叉审查。\n"
-            "- 扇出深度由部署预算自动伸缩,你只负责发起编排,不要自行抬高 max_spawns。\n"
-            "- 汇总按 严重度 + 证据(文件:行)+ 修复顺序 归并;核验未通过的发现标注为存疑。"
+            "当前工作流: ultracode / 深度模式。\n"
+            "- 以最详尽、最正确的答案为目标,不要因为 token 成本就提前收手;"
+            "质量优先于速度。\n"
+            "- 存在可并行推进的独立子问题时,主动扇出子代理;若具备 `run_orchestration` "
+            "技能,用它发起多视角编排(如 [critic, explorer, researcher])收集→去重→"
+            "投票核验→综合;不具备则按模块自行分轮交叉推进。扇出深度由部署预算约束,"
+            "你负责发起与编排,不自行抬高 spawn 上限。\n"
+            "- 给出结论前做对抗性自检:找反例、复核关键断言与证据(文件:行),"
+            "核验未通过的标注为存疑,而不是满足于首版答案。"
         )
     elif preset == "develop.iterate":
         body = (

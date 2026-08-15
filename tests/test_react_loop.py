@@ -51,7 +51,6 @@ from runtime.core.cerebrum.react_loop import (
     _native_tool_calls_missing_required_args,
     _normalized_tool_call_from_react_action,
     _observed_read_fallback_update,
-    _orch_launch_announcement,
     _parse_action,
     _parse_reasoning_action_fallback,
     _parse_step,
@@ -1136,43 +1135,26 @@ def test_code_agent_mode_prompt_distinguishes_audit_and_uxui_modes() -> None:
     assert "浏览器重新走查" in uxui
 
 
-def test_workflow_preset_prompt_steers_audit_ultracode_to_orchestration() -> None:
+def test_workflow_preset_prompt_steers_audit_ultracode_to_exhaustive_mode() -> None:
     prompt = _build_workflow_preset_prompt("audit.ultracode")
 
     assert "<workflow-preset>" in prompt
-    assert "audit.ultracode" in prompt
-    # Steers toward the deep multi-agent review skill, defensively.
+    assert "ultracode" in prompt
+    # Directs toward orchestration but leaves the fan-out choice to the model
+    # (soft ultracode — the model decides, not the runtime).
     assert "run_orchestration" in prompt
-    assert "verify=true" in prompt
+    assert "对抗性自检" in prompt
     # Security: the preset must NOT let the turn raise its own spawn ceiling —
     # depth stays operator-budget-gated. The directive says so explicitly.
-    assert "max_spawns" in prompt
+    assert "上限" in prompt
 
 
-def test_audit_ultracode_executes_orchestration_before_first_model_round() -> None:
+def test_audit_ultracode_does_not_force_orchestration() -> None:
+    """Ultracode is a soft directive: the runtime no longer injects a
+    synthetic orchestration step before the first model round — the model
+    starts normally and chooses whether to fan out (Claude Code semantics)."""
     router = _ScriptedRouter(["Final Answer: synthesized audit"])
     stack = _build_stack_with_executor(router)
-    calls: list[dict[str, Any]] = []
-
-    def _fake_orchestration(**kwargs: Any) -> dict[str, Any]:
-        calls.append(kwargs)
-        return {
-            "ok": True,
-            "confirmed": ["finding-a", "finding-b"],
-            "count": 2,
-            "synthesis": "combined audit evidence",
-        }
-
-    stack.executor.registry.register(
-        Skill(
-            name="run_orchestration",
-            summary="Run deterministic multi-agent audit.",
-            affinity=["delegation", "orchestration", "swarm"],
-            trusted_source="builtin://run_orchestration",
-            handler=_fake_orchestration,
-        ),
-        verify_tests=False,
-    )
     intent = _intent("audit the repository")
     intent.user_context.update(
         {
@@ -1186,87 +1168,22 @@ def test_audit_ultracode_executes_orchestration_before_first_model_round() -> No
     events: list[dict[str, Any]] = []
     try:
         for _ in range(12):
-            event = next(gen)
-            events.append(event)
-            if event.get("type") == "tool_end" and event.get("tool_name") == "run_orchestration":
+            try:
+                event = next(gen)
+            except StopIteration:
                 break
+            events.append(event)
     finally:
         gen.close()
 
-    assert len(calls) == 1
-    assert calls[0]["agent_id"] == ["critic", "explorer", "researcher"]
-    assert calls[0]["n"] == 3
-    assert calls[0]["rounds"] == 2
-    assert calls[0]["verify"] is True
-    assert calls[0]["synthesize"] is True
-    assert any(
-        event.get("type") == "tool_start" and event.get("tool_name") == "run_orchestration"
-        for event in events
-    )
-    assert any(
-        event.get("type") == "tool_end"
+    # No runtime-injected orchestration: the model answered directly, with
+    # the orchestration skill available for it to choose.
+    assert not any(
+        event.get("type") == "tool_start"
         and event.get("tool_name") == "run_orchestration"
-        and event.get("status") == "success"
         for event in events
     )
-    assert router.calls == 0, "orchestration must run before the first model request"
-    # The launch announcement reflects the REAL orchestration args (agent
-    # perspectives + round count), not a fixed sentence that would lie the
-    # moment the preset changes.
-    deltas = [e["delta"] for e in events if e.get("type") == "commentary_delta"]
-    assert any(
-        "critic/explorer/researcher" in d and "2 轮交叉核验" in d and "汇总结论" in d
-        for d in deltas
-    )
-
-
-def test_orch_launch_announcement_reflects_args() -> None:
-    """The announcement is built from the actual orchestration args — agent ids
-    become the parallel perspectives, and rounds/verify/synthesize shape the
-    tail, so the copy tracks the preset instead of a hardcoded sentence."""
-    line = _orch_launch_announcement(
-        {
-            "agent_id": ["critic", "explorer", "researcher"],
-            "n": 3,
-            "rounds": 2,
-            "verify": True,
-            "synthesize": True,
-        }
-    )
-    assert line.startswith("已启动多视角并行审计")
-    assert "critic/explorer/researcher 并行" in line
-    assert "2 轮交叉核验" in line
-    assert "逐条验证" in line
-    assert line.endswith("汇总结论。")
-
-
-def test_orch_launch_announcement_single_agent_drops_multi_perspective() -> None:
-    line = _orch_launch_announcement(
-        {"agent_id": ["researcher"], "rounds": 1, "verify": True, "synthesize": True}
-    )
-    assert "多视角" not in line
-    assert "researcher 并行" in line
-    assert line.startswith("已启动并行审计")
-
-
-def test_orch_launch_announcement_empty_agents_falls_back_to_generic() -> None:
-    line = _orch_launch_announcement({"rounds": 2, "verify": True, "synthesize": True})
-    assert line == "已启动并行审计，将交叉核验发现后再汇总结论。"
-
-
-def test_orch_launch_announcement_flags_shape_tail() -> None:
-    # no rounds → uncounted 交叉核验; verify off → no 逐条验证;
-    # synthesize off → ends with 汇总 instead of 汇总结论
-    line = _orch_launch_announcement(
-        {"agent_id": ["critic", "explorer"], "rounds": 0, "verify": False, "synthesize": False}
-    )
-    assert "2 轮" not in line
-    assert "交叉核验" in line
-    assert "逐条验证" not in line
-    assert line.endswith("汇总。")
-    assert "汇总结论" not in line
-
-
+    assert router.calls == 1
 def test_personal_agent_mode_prompt_steers_build_mode() -> None:
     prompt = _build_personal_agent_mode_prompt("build")
 

@@ -74,9 +74,10 @@ export function modePresetForAgentMode(
  * Resolve the workflow preset to SEND, applying the audit-intensity toggle.
  *
  * Only audit mode carries an intensity switch: "max" upgrades the sent preset to
- * `audit.ultracode`, which the backend acts on to steer a deep multi-agent
- * review (depth still governed by the operator orchestration budget). Every
- * other mode — and audit at "standard" — keeps its base preset unchanged.
+ * `audit.ultracode`, a soft exhaustive mode — the backend directs the model to
+ * fan out and self-check, but the model chooses its own orchestration (depth
+ * still governed by the operator orchestration budget). Every other mode — and
+ * audit at "standard" — keeps its base preset unchanged.
  */
 export function workflowPresetForMode(
   agentMode: AgentModeName,

@@ -31,6 +31,30 @@ _PER_TURN_ABSOLUTE_LIMIT: int = 5
 _MAX_TRACKED_TURNS: int = 1024
 _LOG = logging.getLogger(__name__)
 
+
+def _effective_flat_limit() -> int:
+    """Per-turn ad-hoc cap, relaxed in ultracode mode.
+
+    The flat cap (5) guards ad-hoc, model-driven delegation. The soft
+    ``audit.ultracode`` mode asks the model to be exhaustive and fan out
+    when parallelism helps, so it gets a higher ad-hoc budget (20) — still
+    bounded by the operator's ``OCTOPUS_ORCH_TOKEN_BUDGET`` for actual
+    orchestration, so a client can never escalate to unlimited spawns.
+    """
+    try:
+        from runtime.platform.process.session import current_session
+
+        sess = current_session()
+        if sess is not None:
+            meta = getattr(sess, "metadata", None) or {}
+            if isinstance(meta, dict):
+                preset = str(meta.get("workflow_preset") or "").strip().lower()
+                if preset == "audit.ultracode":
+                    return 20
+    except Exception:  # noqa: BLE001 — budget never breaks delegation
+        pass
+    return _PER_TURN_ABSOLUTE_LIMIT
+
 # Per-turn state. OrderedDict for LRU eviction.
 _TURN_DELEGATIONS: OrderedDict[str, int] = OrderedDict()
 _TURN_FAILED_FINGERPRINTS: OrderedDict[str, set[str]] = OrderedDict()
@@ -260,7 +284,7 @@ def check_absolute_cap(
     if not turn_id:
         return (0, True)
     cur = _TURN_DELEGATIONS.get(turn_id, 0)
-    return (cur, cur < _PER_TURN_ABSOLUTE_LIMIT)
+    return (cur, cur < _effective_flat_limit())
 
 
 def remaining_flat_delegations(turn_id: str | None) -> int | None:
@@ -275,7 +299,7 @@ def remaining_flat_delegations(turn_id: str | None) -> int | None:
     """
     if not turn_id:
         return None
-    return max(0, _PER_TURN_ABSOLUTE_LIMIT - _TURN_DELEGATIONS.get(turn_id, 0))
+    return max(0, _effective_flat_limit() - _TURN_DELEGATIONS.get(turn_id, 0))
 
 
 def record_delegation(
