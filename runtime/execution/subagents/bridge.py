@@ -294,6 +294,14 @@ def call_subagent(
             _ambient_stack = None
         if _ambient_stack is not None:
             context = {**(context or {}), "react_stack": _ambient_stack}
+            # Real-time sub-agents dispatched inside the parent react loop are
+            # driven through the MAIN react loop by default (the react-drive
+            # path is now validated; sequential + parallel children reuse the
+            # same machinery and the runner falls back to the mini-loop if the
+            # react path yields no result). Explicit callers may opt out by
+            # passing ``react_loop_subagent=False``.
+            if (context or {}).get("react_loop_subagent") is None:
+                context = {**context, "react_loop_subagent": True}
 
     # When a schema is requested, steer the model toward schema-valid JSON up
     # front. Enforcement still happens post-hoc (see ``_do_call_with_schema``)

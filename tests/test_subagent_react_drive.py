@@ -400,3 +400,53 @@ def test_bus_tool_and_conclude_events_carry_per_child_codename() -> None:
             assert payload.get("codename") == "Spark-9f2", (
                 f"{ev['type']} lost the child codename"
             )
+
+
+
+
+def test_bridge_flips_react_loop_default_inside_react_stack(monkeypatch) -> None:
+    """A sub-agent dispatched inside the parent react loop drives through the
+    MAIN react loop by default (no per-call opt-in needed), and an explicit
+    ``react_loop_subagent=False`` is respected as an opt-out."""
+    import runtime.execution.subagents.bridge as bridge
+    from runtime.execution.subagents._ambient import react_stack_scope
+    from runtime.platform.process.session import Session, _current_session
+
+    captured: dict[str, dict] = {}
+
+    def fake_dispatch(**kwargs):  # noqa: ARG001
+        captured["context"] = dict(kwargs.get("context") or {})
+        return {
+            "agent_id": kwargs.get("agent_id") or "",
+            "output": "done",
+            "success": True,
+        }
+
+    monkeypatch.setattr(bridge, "_dispatch", fake_dispatch)
+
+    sess = Session(thread_id="t-1", metadata={})
+    with react_stack_scope(_FakeStack(_ScriptedRouter(["x"]))):
+        _token = _current_session.set(sess)
+        try:
+            bridge.call_subagent(agent_id="researcher", prompt="go", session=sess)
+        finally:
+            _current_session.reset(_token)
+
+    assert captured.get("context", {}).get("react_loop_subagent") is True
+    assert captured.get("context", {}).get("react_stack") is not None
+
+    # Explicit opt-out is honoured.
+    captured.clear()
+    with react_stack_scope(_FakeStack(_ScriptedRouter(["x"]))):
+        _token = _current_session.set(sess)
+        try:
+            bridge.call_subagent(
+                agent_id="researcher",
+                prompt="go",
+                session=sess,
+                context={"react_loop_subagent": False},
+            )
+        finally:
+            _current_session.reset(_token)
+
+    assert captured.get("context", {}).get("react_loop_subagent") is False
