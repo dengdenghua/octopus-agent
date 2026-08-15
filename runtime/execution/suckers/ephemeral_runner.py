@@ -138,6 +138,16 @@ def _tool_call_signature(tool_call: Any) -> tuple[str, str]:
         return (str(name), repr(raw))
 
 
+def _tool_path_args(tool_input: Any) -> dict[str, Any]:
+    """Emit only the write-target path so the bridge's file-touch tracking can
+    list it on the finish card without shipping the whole tool input (file
+    content) onto the parent timeline. Best-effort, never raises."""
+    if not isinstance(tool_input, dict):
+        return {}
+    path = tool_input.get("path")
+    return {"path": path} if isinstance(path, str) and path else {}
+
+
 # ── Child→parent report tool (dsh ``tool-subagent-report``) ──────────────
 # Installed into every continuable in-process child's tool surface (i.e. when
 # ``call.context["subagent_session_id"]`` is present): the child can deliver
@@ -933,6 +943,7 @@ def make_llm_ephemeral_runner(
                         "round": round_i + 1,
                         "skill": getattr(tc, "name", "") or "",
                         "tool_call_id": getattr(tc, "id", "") or "",
+                        "args": _tool_path_args(getattr(tc, "input", None)),
                         "status": "failed" if is_error else "success",
                         "duration_ms": _duration_ms,
                         "output_preview": output[:1000],

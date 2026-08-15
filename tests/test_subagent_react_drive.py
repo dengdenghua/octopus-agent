@@ -472,10 +472,11 @@ def test_react_loop_forwards_tool_events_to_emitter(monkeypatch) -> None:
         }
         yield {
             "type": "tool_end",
-            "tool_name": "web_search",
+            "tool_name": "edit_file",
             "tool_call_id": "c1",
             "status": "success",
             "duration_ms": 12,
+            "input": {"path": "/ws/foo.py"},
             "output": "results",
         }
         yield {"type": "react_completed"}
@@ -514,3 +515,6 @@ def test_react_loop_forwards_tool_events_to_emitter(monkeypatch) -> None:
     assert len(ends) == 1
     assert ends[0]["status"] == "success"
     assert ends[0]["round"] == 1
+    # ``args`` rides on the end event so the bridge's file-touch tracking can
+    # list files the sub-agent wrote on the parent finish card.
+    assert ends[0]["args"] == {"path": "/ws/foo.py"}

@@ -112,6 +112,20 @@ def _tool_args_preview(event: dict[str, Any]) -> str:
         return ""
 
 
+def _tool_path_args(event: dict[str, Any]) -> dict[str, Any]:
+    """Emit only the write-target path in ``args`` so the bridge's
+    file-touch tracking can list it on the finish card without shipping the
+    whole tool input (file content) onto the parent timeline."""
+    try:
+        raw = event.get("input")
+        if raw is None:
+            raw = event.get("args")
+        path = raw.get("path") if isinstance(raw, dict) else None
+        return {"path": path} if isinstance(path, str) and path else {}
+    except (AttributeError, TypeError):
+        return {}
+
+
 def run_subagent_react_loop(
     stack: Any,
     *,
@@ -223,6 +237,7 @@ def run_subagent_react_loop(
                         "round": round_no,
                         "skill": str(evt.get("tool_name") or ""),
                         "tool_call_id": str(evt.get("tool_call_id") or ""),
+                        "args": _tool_path_args(evt),
                         "status": "failed" if _is_error else "success",
                         "duration_ms": evt.get("duration_ms"),
                         "output_preview": str(evt.get("output") or "")[:1000],
