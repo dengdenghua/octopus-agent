@@ -552,14 +552,13 @@ def test_react_loop_early_close_clears_busy(
 # ─── queued-report live injection (dsh ``inject`` via steering) ──────────
 
 
-def _patch_injector(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
-    import runtime.sensing.gateway._realtime_cerebrum_steering as steering
-
-    captured: list[tuple[str, str]] = []
-    monkeypatch.setattr(
-        steering,
-        "_inject_thread_steering",
-        lambda thread_id, text: captured.append((thread_id, text)) or True,
+def _patch_injector() -> list[str]:
+    captured: list[str] = []
+    # inject_report_into_thread looks up the *global* store's registered
+    # injector, so register on the conftest-provided private store.
+    store = get_subagent_session_store()
+    store.register_thread_injector(
+        "th-parent", lambda text: captured.append(text) or True
     )
     return captured
 
@@ -567,20 +566,20 @@ def _patch_injector(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
 def test_queued_report_injects_into_running_turn(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    captured = _patch_injector(monkeypatch)
     store = _store(tmp_path)
+    captured = _patch_injector()
     session = store.create(agent_id="researcher", thread_id="th-parent")
     store.mark_thread_busy("th-parent")
     store.append_report(session.session_id, content="中途发现", delivery="wakeup")
 
-    assert captured == [("th-parent", "[子代理报告] 中途发现")]
+    assert captured == ["[子代理报告] 中途发现"]
 
 
 def test_wakeup_and_quiet_reports_never_inject(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    captured = _patch_injector(monkeypatch)
     store = _store(tmp_path)
+    captured = _patch_injector()
     session = store.create(agent_id="researcher", thread_id="th-parent")
     store.append_report(session.session_id, content="唤醒报告", delivery="wakeup")
     store.append_report(session.session_id, content="静默报告", delivery="quiet")
@@ -594,8 +593,8 @@ def test_queued_report_injection_is_truncated(
 ) -> None:
     from runtime.execution.subagents.sessions import QUEUED_REPORT_INJECT_MAX_CHARS
 
-    captured = _patch_injector(monkeypatch)
     store = _store(tmp_path)
+    captured = _patch_injector()
     session = store.create(agent_id="researcher", thread_id="th-parent")
     store.mark_thread_busy("th-parent")
     store.append_report(
@@ -604,7 +603,7 @@ def test_queued_report_injection_is_truncated(
         delivery="wakeup",
     )
     assert len(captured) == 1
-    text = captured[0][1]
+    text = captured[0]
     assert text.startswith("[子代理报告] ")
     assert len(text) <= QUEUED_REPORT_INJECT_MAX_CHARS + len("[子代理报告] ")
 
@@ -612,13 +611,11 @@ def test_queued_report_injection_is_truncated(
 def test_queued_report_injection_failure_never_breaks_report(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import runtime.sensing.gateway._realtime_cerebrum_steering as steering
-
-    def boom(thread_id, text):  # noqa: ANN001 — test stub
+    def boom(text: str) -> bool:  # noqa: ANN001 — test stub
         raise RuntimeError("injector down")
 
-    monkeypatch.setattr(steering, "_inject_thread_steering", boom)
     store = _store(tmp_path)
+    store.register_thread_injector("th-parent", boom)
     session = store.create(agent_id="researcher", thread_id="th-parent")
     store.mark_thread_busy("th-parent")
     delivered = store.append_report(session.session_id, content="仍要落盘", delivery="wakeup")
@@ -683,19 +680,25 @@ def test_evicted_sessions_stay_discoverable(tmp_path: Path) -> None:
     )
     first = store.create(agent_id="researcher", thread_id="th-parent")
     store.append_report(first.session_id, content="r1", delivery="quiet")
-    other = store.create(agent_id="coder", thread_id="th-other")  # evicts first
+    store.create(agent_id="coder", thread_id="th-other")  # evicts first
 
     pending = store.pending_thread_reports("th-parent")
     assert [(sid, index, report.content) for sid, index, report in pending] == [
         (first.session_id, 0, "r1"),
     ]
 
-    candidates = store.list_reference_candidates(target_id=other.session_id)
+    candidates = store.list_reference_candidates(target_id="th-parent")
     assert [c["sessionId"] for c in candidates] == [first.session_id]
+    # Cross-thread discovery stays blocked even after eviction.
+    cross_ids = [
+        c["sessionId"]
+        for c in store.list_reference_candidates(target_id="th-other")
+    ]
+    assert first.session_id not in cross_ids
 
     out = store.resolve_session_mentions(
         f"use @session:{first.session_id}",
-        target_id=other.session_id,
+        target_id="th-parent",
     )
     assert out.content == "use"
     assert out.additional_context is not None
@@ -707,25 +710,30 @@ def test_inject_report_into_thread_public_seam(
     from runtime.execution.subagents.sessions import (
         QUEUED_REPORT_INJECT_MAX_CHARS,
         inject_report_into_thread,
+        set_subagent_session_store,
     )
 
-    captured: list[tuple[str, str]] = []
-
-    def fake_inject(thread_id: str, text: str) -> bool:
-        captured.append((thread_id, text))
-        return True
-
-    monkeypatch.setattr(
-        "runtime.sensing.gateway._realtime_cerebrum_steering._inject_thread_steering",
-        fake_inject,
-    )
-    assert inject_report_into_thread("th-1", "内容") is True
-    assert captured == [("th-1", "[子代理报告] 内容")]
-    assert inject_report_into_thread("", "内容") is False
-    assert inject_report_into_thread("th-1", "") is False
-    assert len(captured) == 1
-    assert inject_report_into_thread("th-1", "长" * (QUEUED_REPORT_INJECT_MAX_CHARS + 50))
-    assert len(captured[1][1]) <= QUEUED_REPORT_INJECT_MAX_CHARS + len("[子代理报告] ")
+    captured: list[str] = []
+    store = _store(tmp_path)
+    previous = get_subagent_session_store()
+    set_subagent_session_store(store)
+    try:
+        store.register_thread_injector(
+            "th-1", lambda text: captured.append(text) or True
+        )
+        assert inject_report_into_thread("th-1", "内容") is True
+        assert captured == ["[子代理报告] 内容"]
+        assert inject_report_into_thread("", "内容") is False
+        assert inject_report_into_thread("th-1", "") is False
+        assert len(captured) == 1
+        assert inject_report_into_thread(
+            "th-1", "长" * (QUEUED_REPORT_INJECT_MAX_CHARS + 50)
+        )
+        assert len(captured[1]) <= QUEUED_REPORT_INJECT_MAX_CHARS + len("[子代理报告] ")
+        # No registered injector for an unknown thread → no-op.
+        assert inject_report_into_thread("th-nobody", "内容") is False
+    finally:
+        set_subagent_session_store(previous)
 
 
 def test_legacy_session_without_reports_loads(tmp_path: Path) -> None:

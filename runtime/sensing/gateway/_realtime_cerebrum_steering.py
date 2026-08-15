@@ -142,6 +142,40 @@ def _inject_thread_steering(thread_id: str, text: str) -> bool:
     return True
 
 
+def _register_turn_injector(thread_id: str) -> None:
+    """Register this thread's live-injection hook on the subagent session store.
+
+    Inverts the ``inject`` dependency: the execution layer (sessions.py) never
+    imports the gateway — instead the gateway registers a callback the store
+    invokes when a ``queued`` report should reach the running turn. Best-effort;
+    a missing store (feature disabled) is a no-op.
+    """
+    try:
+        from runtime.execution.subagents.sessions import get_subagent_session_store
+
+        store = get_subagent_session_store()
+        if store is None:
+            return
+        store.register_thread_injector(
+            thread_id, lambda text: bool(_inject_thread_steering(thread_id, text))
+        )
+    except Exception:  # noqa: BLE001 — registration is best-effort
+        pass
+
+
+def _unregister_turn_injector(thread_id: str) -> None:
+    """Drop the thread's live-injection hook (no-op when not registered)."""
+    try:
+        from runtime.execution.subagents.sessions import get_subagent_session_store
+
+        store = get_subagent_session_store()
+        if store is None:
+            return
+        store.unregister_thread_injector(thread_id)
+    except Exception:  # noqa: BLE001 — best-effort
+        pass
+
+
 def _register_active_turn(runtime: CerebrumRuntime, turn: Turn, log: EventLog) -> None:
     runtime._active_turns[turn.id] = (turn, log)
     runtime._turn_steering[turn.id] = SimpleQueue()
@@ -157,9 +191,10 @@ def _register_active_turn(runtime: CerebrumRuntime, turn: Turn, log: EventLog) -
     runtime._turn_steering_accepting[turn.id] = True
     budget = getattr(runtime, "_turn_steering_budget", None)
     if budget is None:
-        budget = runtime._turn_steering_budget = {}
+        budget = runtime._turn_steering_budget = {}  # type: ignore[attr-defined]
     budget[turn.id] = _max_turn_steering_injections()
     _register_thread_turn(turn.thread_id, runtime, turn.id)
+    _register_turn_injector(turn.thread_id)
     previous = max(
         (item for item in turn.items if item.timeline_sequence is not None),
         key=lambda item: item.timeline_sequence or 0,
@@ -186,6 +221,7 @@ def _unregister_active_turn(runtime: CerebrumRuntime, turn_id: str) -> None:
     active = runtime._active_turns.pop(turn_id, None)
     if active is not None:
         _unregister_thread_turn(active[0].thread_id, runtime, turn_id)
+        _unregister_turn_injector(active[0].thread_id)
     runtime._turn_steering.pop(turn_id, None)
     runtime._turn_steering_seen.pop(turn_id, None)
     runtime._turn_steering_notified.pop(turn_id, None)

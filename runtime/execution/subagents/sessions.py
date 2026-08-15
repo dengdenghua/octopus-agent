@@ -257,6 +257,11 @@ class SubagentSessionStore:
         self._thread_wake_handlers: dict[
             str, Callable[[str, SubagentReport], None]
         ] = {}
+        # Per-thread live-injection hooks registered by the realtime gateway
+        # while a turn for the thread is active. ``queued`` reports are steered
+        # into the running turn via the registered hook instead of importing
+        # the gateway from the execution layer (import-direction ratchet).
+        self._thread_injectors: dict[str, Callable[[str], bool]] = {}
 
     def _path_for(self, session_id: str) -> Path | None:
         if self._base_dir is None:
@@ -318,12 +323,21 @@ class SubagentSessionStore:
                     continue
                 if session is not None and session.session_id == session_id:
                     loaded.append(session)
-        except OSError:
+        except OSError:  # noqa: BLE001 — session discovery is best-effort
             pass
         return loaded
 
-    def _reference_records_locked(self) -> list[Any]:
-        """Candidate records from cached + durable sessions (dsh listCandidates)."""
+    def _reference_records_locked(
+        self, *, scope_thread_id: str | None = None
+    ) -> list[Any]:
+        """Candidate records from cached + durable sessions (dsh listCandidates).
+
+        When ``scope_thread_id`` is provided, only sessions owned by that
+        thread are surfaced. Sub-agent sessions are private to the parent
+        thread that spawned them (``thread_id`` is set at ``create``); without
+        this filter any authenticated actor could enumerate and read another
+        thread's session transcripts (cross-tenant IDOR).
+        """
         from runtime.execution.tool_engine.session_reference import (
             SessionReferenceRecord,
         )
@@ -332,6 +346,8 @@ class SubagentSessionStore:
         seen: set[str] = set()
         for session in list(self._memory.values()) + self._disk_sessions_locked():
             if session.session_id in seen:
+                continue
+            if scope_thread_id is not None and session.thread_id != scope_thread_id:
                 continue
             seen.add(session.session_id)
             records.append(
@@ -361,11 +377,22 @@ class SubagentSessionStore:
             self._write_locked(session)
         return session
 
-    def get(self, session_id: str) -> SubagentSession | None:
+    def get(
+        self, session_id: str, *, scope_thread_id: str | None = None
+    ) -> SubagentSession | None:
+        """Load a session, optionally scoped to a parent thread.
+
+        With ``scope_thread_id`` set, a session whose ``thread_id`` differs is
+        treated as unknown (fail-closed) — a caller must not read another
+        thread's session transcript. Mirrors the owner-binding already used
+        for control sessions and terminals.
+        """
         with self._lock:
             cached = self._memory.get(session_id)
             if cached is not None:
                 self._touch_locked(session_id)
+                if scope_thread_id is not None and cached.thread_id != scope_thread_id:
+                    return None
                 return _copy_session(cached)
             path = self._path_for(session_id)
             if path is None or not path.exists():
@@ -378,18 +405,23 @@ class SubagentSessionStore:
                 return None
             if session is None or not session.session_id:
                 return None
+            if scope_thread_id is not None and session.thread_id != scope_thread_id:
+                return None
             self._store_locked(session)
             return _copy_session(session)
 
-    def surface_events(self, session_id: str) -> list[dict[str, Any]]:
+    def surface_events(
+        self, session_id: str, *, scope_thread_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """The dsh surface-event shape for one session (session-reference input).
 
         Mirrors dsh ``sessionQuery.readSurface`` for a subagent session: the
         user/assistant turns are surfaced as ``user/message`` +
         ``assistant/message`` events so ``session_reference.prepare`` can
-        project them. An unknown session returns an empty surface.
+        project them. An unknown session returns an empty surface; with
+        ``scope_thread_id`` a cross-thread session is treated as unknown.
         """
-        session = self.get(session_id)
+        session = self.get(session_id, scope_thread_id=scope_thread_id)
         if session is None:
             return []
         return _surface_events_from_turns(session)
@@ -407,13 +439,17 @@ class SubagentSessionStore:
         for sessions other than ``target_id``, ranked by the resolver's
         working-directory affinity and filtered by an optional
         case-insensitive id / label substring.
+
+        Candidates are scoped to the calling thread (``target_id``): a session
+        spawned by another thread must not be discoverable — the autocomplete
+        only ever proposes siblings of the current conversation.
         """
         from runtime.execution.tool_engine.session_reference import (
             SessionReferenceResolver,
         )
 
         with self._lock:
-            records = self._reference_records_locked()
+            records = self._reference_records_locked(scope_thread_id=target_id)
         resolver = SessionReferenceResolver()
         return [
             {
@@ -495,6 +531,32 @@ class SubagentSessionStore:
         """
         with self._lock:
             self._thread_wake_handlers[thread_id] = handler
+
+    def register_thread_injector(
+        self,
+        thread_id: str,
+        injector: Callable[[str], bool],
+    ) -> None:
+        """Register the parent turn's live-injection hook for one thread.
+
+        The realtime gateway registers this while a turn for the thread is
+        active so a ``queued`` report can be steered into the running turn at
+        the next step boundary. Inverting the dependency this way keeps the
+        execution layer free of sensing imports (import-direction ratchet).
+        """
+        with self._lock:
+            self._thread_injectors[thread_id] = injector
+
+    def unregister_thread_injector(self, thread_id: str) -> None:
+        """Drop the thread's live-injection hook (no-op when not registered)."""
+        with self._lock:
+            self._thread_injectors.pop(thread_id, None)
+
+    def registered_thread_injector(
+        self, thread_id: str
+    ) -> Callable[[str], bool] | None:
+        with self._lock:
+            return self._thread_injectors.get(thread_id)
 
     def unregister_thread_wake_handler(self, thread_id: str) -> None:
         """Drop the thread's wakeup hook (no-op when not registered)."""
@@ -772,15 +834,19 @@ class SubagentSessionStore:
         )
 
         with self._lock:
-            records = self._reference_records_locked()
+            records = self._reference_records_locked(scope_thread_id=target_id)
         kwargs: dict[str, Any] = {}
         if max_references is not None:
             kwargs["max_references"] = max_references
         resolver = SessionReferenceResolver(**kwargs)
+
+        def _scoped_surface(session_id: str) -> list[dict[str, Any]]:
+            return self.surface_events(session_id, scope_thread_id=target_id)
+
         return resolver.resolve_mentions(
             prompt,
             target_id=target_id,
-            read_surface=self.surface_events,
+            read_surface=_scoped_surface,
             sessions=records,
             strip_mentions=strip_mentions,
         )
@@ -980,10 +1046,11 @@ def _normalize_report_delivery(value: Any) -> Literal["wakeup", "quiet", "queued
 def inject_report_into_thread(thread_id: str, content: str) -> bool:
     """Best-effort dsh ``inject``: queue a report into the running turn.
 
-    The realtime gateway keeps a thread→active-turn registry; when the
-    parent is mid-turn the text lands in its steering queue and the react
-    loop drains it at the nearest step boundary. Missing gateway, no active
-    turn, or any failure degrades to a no-op — the durable report stays in
+    The realtime gateway registers a per-thread injector while a turn for the
+    thread is active; when the parent is mid-turn the text lands in its
+    steering queue and the react loop drains it at the nearest step boundary.
+    No registered injector (no active turn / subagent sessions disabled) or
+    any failure degrades to a no-op — the durable report stays in
     ``pending_reports`` for the next wake or continuation.
 
     Returns True when the report was queued into an accepting running turn.
@@ -991,12 +1058,14 @@ def inject_report_into_thread(thread_id: str, content: str) -> bool:
     if not thread_id or not content:
         return False
     try:
-        from runtime.sensing.gateway._realtime_cerebrum_steering import (
-            _inject_thread_steering,
-        )
-
+        store = get_subagent_session_store()
+        if store is None:
+            return False
+        injector = store.registered_thread_injector(thread_id)
+        if injector is None:
+            return False
         text = _truncate(content, QUEUED_REPORT_INJECT_MAX_CHARS)
-        return bool(_inject_thread_steering(thread_id, f"[子代理报告] {text}"))
+        return bool(injector(f"[子代理报告] {text}"))
     except Exception:  # noqa: BLE001 — injection is best-effort
         logger.debug("queued report injection failed", exc_info=True)
         return False

@@ -166,6 +166,49 @@ def test_call_subagent_continues_session_with_transcript(tmp_path: Path) -> None
     assert len(session.turns) == 2
 
 
+def test_call_subagent_cross_thread_continuation_blocked(tmp_path: Path) -> None:
+    """A session spawned by thread A must read as unknown when thread B tries
+    to continue it (cross-tenant IDOR guard)."""
+    seen: list[str] = []
+    previous_runner = bridge.get_sub_agent_runner()
+    previous_store = get_subagent_session_store()
+    store = _store(tmp_path)
+    try:
+
+        def runner(prompt: str, **kw: object) -> str:
+            seen.append(prompt)
+            return "answer"
+
+        bridge.set_sub_agent_runner(runner)  # type: ignore[arg-type]
+        set_subagent_session_store(store)
+        first = bridge.call_subagent(
+            agent_id="zzz_custom_session_role",
+            prompt="first ask",
+            context={"thread_id": "thread-A"},
+        )
+        assert first["success"] is True
+        # Same-thread continuation works.
+        same = bridge.call_subagent(
+            agent_id="zzz_custom_session_role",
+            prompt="dig deeper",
+            continue_session_id=first["session_id"],
+            context={"thread_id": "thread-A"},
+        )
+        assert same["success"] is True
+        # Cross-thread continuation is treated as unknown (fail-closed).
+        cross = bridge.call_subagent(
+            agent_id="zzz_custom_session_role",
+            prompt="steal",
+            continue_session_id=first["session_id"],
+            context={"thread_id": "thread-B"},
+        )
+        assert cross["success"] is False
+        assert cross["session_error"] == "unknown_session"
+    finally:
+        bridge.set_sub_agent_runner(previous_runner)
+        set_subagent_session_store(previous_store)
+
+
 def test_call_subagent_unknown_session_fails_loud(tmp_path: Path) -> None:
     seen: list[str] = []
     previous_runner = bridge.get_sub_agent_runner()

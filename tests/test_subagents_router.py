@@ -241,11 +241,24 @@ def test_list_subagent_session_candidates(tmp_path: Any, monkeypatch: pytest.Mon
         lambda: store,
     )
 
-    response = _client().get("/api/subagents/sessions")
+    # Candidates are scoped to the calling thread (target): only same-thread
+    # sessions surface, cross-thread sessions stay private (IDOR guard).
+    response = _client().get(
+        "/api/subagents/sessions",
+        params={"target": "t1"},
+    )
     assert response.status_code == 200
     ids = [c["sessionId"] for c in response.json()["candidates"]]
     assert s1.session_id in ids
+    assert s2.session_id not in ids
+
+    response = _client().get(
+        "/api/subagents/sessions",
+        params={"target": "t2"},
+    )
+    ids = [c["sessionId"] for c in response.json()["candidates"]]
     assert s2.session_id in ids
+    assert s1.session_id not in ids
 
 
 def test_list_subagent_session_candidates_query_and_target(
@@ -255,21 +268,23 @@ def test_list_subagent_session_candidates_query_and_target(
 
     store = SubagentSessionStore(base_dir=tmp_path / "s")
     s1 = store.create(agent_id="researcher", thread_id="t1")
-    s2 = store.create(agent_id="writer", thread_id="t2")
+    s2 = store.create(agent_id="writer", thread_id="t1")
+    s3 = store.create(agent_id="coder", thread_id="t2")
     monkeypatch.setattr(
         "runtime.execution.subagents.sessions.get_subagent_session_store",
         lambda: store,
     )
 
-    # target excludes one session; query filters by id substring.
+    # target scopes to the thread; query filters by id substring.
     response = _client().get(
         "/api/subagents/sessions",
-        params={"target": s1.session_id, "query": s2.session_id[:8]},
+        params={"target": "t1", "query": s1.session_id[:8]},
     )
     assert response.status_code == 200
     ids = [c["sessionId"] for c in response.json()["candidates"]]
-    assert s1.session_id not in ids
-    assert s2.session_id in ids
+    assert s1.session_id in ids
+    assert s2.session_id not in ids  # filtered by query
+    assert s3.session_id not in ids  # different thread
 
     # Missing store → empty candidates, still 200.
     monkeypatch.setattr(

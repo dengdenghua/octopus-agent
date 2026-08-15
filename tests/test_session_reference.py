@@ -354,6 +354,7 @@ def test_store_surface_events_and_candidates(tmp_path: Path) -> None:
     store = SubagentSessionStore(base_dir=tmp_path / "sessions")
     s1 = store.create(agent_id="researcher", thread_id="t1")
     s2 = store.create(agent_id="writer", thread_id="t2")
+    s3 = store.create(agent_id="coder", thread_id="t1")  # same thread as s1
     store.append_turn(s1.session_id, prompt="p1", output="o1", success=True)
 
     events = store.surface_events(s1.session_id)
@@ -361,10 +362,18 @@ def test_store_surface_events_and_candidates(tmp_path: Path) -> None:
     assert events[1]["type"] == "assistant/message"
     assert store.surface_events("missing") == []
 
-    candidates = store.list_reference_candidates(target_id=s1.session_id)
+    # Candidates are scoped to the calling thread: same-thread sessions are
+    # discoverable, cross-thread sessions stay private (cross-tenant IDOR
+    # guard — a thread must not enumerate another thread's subagent sessions).
+    candidates = store.list_reference_candidates(target_id="t1")
     ids = [c["sessionId"] for c in candidates]
-    assert s2.session_id in ids
-    assert s1.session_id not in ids
+    assert s1.session_id in ids
+    assert s3.session_id in ids
+    assert s2.session_id not in ids
+    candidates_t2 = store.list_reference_candidates(target_id="t2")
+    ids_t2 = [c["sessionId"] for c in candidates_t2]
+    assert s2.session_id in ids_t2
+    assert s1.session_id not in ids_t2
 
 
 def test_extract_session_mentions() -> None:
@@ -496,20 +505,29 @@ def test_resolve_mentions_caps_at_max_references() -> None:
 def test_store_resolve_session_mentions(tmp_path: Path) -> None:
     store = SubagentSessionStore(base_dir=tmp_path / "sessions")
     s1 = store.create(agent_id="researcher", thread_id="t1")
-    s2 = store.create(agent_id="writer", thread_id="t2")
     store.append_turn(s1.session_id, prompt="p1", output="o1", success=True)
 
+    # Same-thread mention resolves with the referenced frame.
     out = store.resolve_session_mentions(
         f"use @session:{s1.session_id}",
-        target_id=s2.session_id,
+        target_id="t1",
     )
     assert out.content == "use"
     assert out.additional_context is not None
     rendered = out.additional_context["content"][0]["text"]
     assert "<referenced-sessions>" in rendered
 
+    # Cross-thread mention of s1 from thread t2 is treated as unknown: the
+    # token is stripped but no frame is injected (thread-private sessions).
+    out = store.resolve_session_mentions(
+        f"use @session:{s1.session_id}",
+        target_id="t2",
+    )
+    assert out.additional_context is None
+    assert out.content == "use"
+
     # Stale mention against a store with no matching session → no context.
     stale = "ffffffffffffffffffffffffffffffff"
-    out = store.resolve_session_mentions(f"@session:{stale}", target_id=s2.session_id)
+    out = store.resolve_session_mentions(f"@session:{stale}", target_id="t2")
     assert out.additional_context is None
     assert out.content == ""

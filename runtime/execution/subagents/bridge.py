@@ -325,7 +325,16 @@ def call_subagent(
         get_subagent_session_store = None  # type: ignore[assignment]
     _session_store = get_subagent_session_store() if get_subagent_session_store else None
     if continue_session_id:
-        loaded = _session_store.get(continue_session_id) if _session_store else None
+        # Session continuation is scoped to the spawning thread: a session
+        # created by another thread must read as unknown (cross-tenant IDOR
+        # guard — mirrors the owner-binding on control sessions/terminals).
+        loaded = (
+            _session_store.get(
+                continue_session_id, scope_thread_id=_memory_thread_id
+            )
+            if _session_store
+            else None
+        )
         if loaded is None:
             return {
                 "agent_id": agent_id,
