@@ -24,16 +24,26 @@ Agent runtime hooks · lifecycle events for the agent loop.
 - `StopEvent`
 - `SessionStartEvent`
 - `NotificationEvent`
+- `SubagentStartEvent`
+- `SubagentStopEvent`
+- `PostToolUseFailureEvent`
+- `PermissionRequestEvent`
+- `PermissionDeniedEvent`
 - `HookDecision`
 - `HookRegistry`
 - `get_global_registry`
 - `register_hook`
 - `dispatch_pre_tool`
 - `dispatch_post_tool`
+- `dispatch_post_tool_failure`
 - `dispatch_user_prompt`
 - `dispatch_stop`
 - `dispatch_session_start`
 - `dispatch_notification`
+- `dispatch_subagent_start`
+- `dispatch_subagent_stop`
+- `dispatch_permission_request`
+- `dispatch_permission_denied`
 
 ## Modules
 
@@ -60,6 +70,11 @@ Agent runtime hooks · lifecycle events for the agent loop.
 | class | `class StopEvent(HookEvent)` | Fired when a full agent turn completes · successfully or not. |
 | class | `class SessionStartEvent(HookEvent)` | Fired once at ``bind_thread_session`` time · useful for loading per-user context (preferences · feature flags). |
 | class | `class NotificationEvent(HookEvent)` | Generic runtime notification · budget warnings · rate limits · provider outages. Informational · decision is always pass_through. |
+| class | `class SubagentStartEvent(HookEvent)` | Fired when a sub-agent is spawned (before the runner executes). |
+| class | `class SubagentStopEvent(HookEvent)` | Fired when a sub-agent call finishes, successfully or not. |
+| class | `class PostToolUseFailureEvent(HookEvent)` | Fired when a tool execution raises / returns a failure. |
+| class | `class PermissionRequestEvent(HookEvent)` | Fired when the approval gate is about to ask the human for a tool. |
+| class | `class PermissionDeniedEvent(HookEvent)` | Fired when an approval is refused (by gate policy, hook, or human). |
 
 ### `external_bridge.py`
 
@@ -97,6 +112,11 @@ Agent runtime hooks · lifecycle events for the agent loop.
 | func | `def dispatch_stop(thread_id, success, step_count, session)` |  |
 | func | `def dispatch_session_start(thread_id, session)` |  |
 | func | `def dispatch_notification(kind, details, session)` |  |
+| func | `def dispatch_subagent_start(thread_id, agent_id, subagent_type, prompt_preview, session_id, session)` |  |
+| func | `def dispatch_subagent_stop(thread_id, agent_id, subagent_type, session_id, ok, duration_ms, output_preview, session)` |  |
+| func | `def dispatch_post_tool_failure(sucker_id, args, error, session)` |  |
+| func | `def dispatch_permission_request(sucker_id, args, caller, session)` |  |
+| func | `def dispatch_permission_denied(sucker_id, args, reason, session)` |  |
 
 ### `tool_edge_hooks.py`
 
@@ -117,16 +137,19 @@ Agent runtime hooks · lifecycle events for the agent loop.
 
 ## Who imports this
 
-**8** file(s) reference this package:
+**10** file(s) reference this package:
 
 - **`runtime/core/`** · 1 file(s)
   - `runtime/core/cerebrum/_react_execution_phase6d.py`
-- **`runtime/execution/`** · 3 file(s)
+- **`runtime/execution/`** · 4 file(s)
+  - `runtime/execution/subagents/bridge.py`
   - `runtime/execution/suckers/plan_mode.py`
   - `runtime/execution/tool_engine/_executor_helpers.py`
   - `runtime/execution/tool_engine/executor.py`
 - **`runtime/platform/`** · 1 file(s)
   - `runtime/platform/ui/app.py`
+- **`runtime/safety/`** · 1 file(s)
+  - `runtime/safety/approval/approval_gate.py`
 - **`runtime/sensing/`** · 3 file(s)
   - `runtime/sensing/gateway/realtime_turn_lifecycle.py`
   - `runtime/sensing/gateway/realtime_turn_outcome.py`

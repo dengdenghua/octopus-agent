@@ -40,7 +40,7 @@ graph LR
   sensing -- 72 --> execution
   core -- 58 --> platform
   memory -- 57 --> platform
-  execution -- 47 --> safety
+  execution -- 48 --> safety
   sensing -- 39 --> protocol
   sensing -- 32 --> adapters
   sensing -- 31 --> core

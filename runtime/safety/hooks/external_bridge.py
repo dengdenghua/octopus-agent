@@ -41,10 +41,15 @@ from typing import Any, Literal
 
 from .events import (
     NotificationEvent,
+    PermissionDeniedEvent,
+    PermissionRequestEvent,
     PostToolUseEvent,
+    PostToolUseFailureEvent,
     PreToolUseEvent,
     SessionStartEvent,
     StopEvent,
+    SubagentStartEvent,
+    SubagentStopEvent,
     UserPromptSubmitEvent,
 )
 from .registry import HookDecision, get_global_registry
@@ -65,13 +70,18 @@ _EVENT_TYPES = {
     "UserPromptSubmit": UserPromptSubmitEvent,
     "PreToolUse": PreToolUseEvent,
     "PostToolUse": PostToolUseEvent,
+    "PostToolUseFailure": PostToolUseFailureEvent,
     "Notification": NotificationEvent,
     "Stop": StopEvent,
     "SessionStart": SessionStartEvent,
+    "SubagentStart": SubagentStartEvent,
+    "SubagentStop": SubagentStopEvent,
+    "PermissionRequest": PermissionRequestEvent,
+    "PermissionDenied": PermissionDeniedEvent,
 }
 # Events whose groups may carry a tool-name matcher (dsh discards matchers
 # for events without a matcher subject).
-_MATCHER_EVENTS = {"PreToolUse", "PostToolUse"}
+_MATCHER_EVENTS = {"PreToolUse", "PostToolUse", "PostToolUseFailure"}
 
 _CLAUDE_LITERAL_RE = re.compile(r"^[A-Za-z0-9_|]+$")
 

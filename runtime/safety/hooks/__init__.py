@@ -3,12 +3,17 @@
 Hook events
 -----------
 
-``UserPromptSubmit``  — fires before the planner sees a new user turn
-``PreToolUse``        — fires before each skill call · can modify args / cancel
-``PostToolUse``       — fires after each skill call · can modify output
-``Stop``              — fires when an agent turn ends
-``SessionStart``      — fires when a new session binding is established
-``Notification``      — fires on runtime notifications (budget warn etc.)
+``UserPromptSubmit``     — fires before the planner sees a new user turn
+``PreToolUse``           — fires before each skill call · can modify args / cancel
+``PostToolUse``          — fires after each skill call · can modify output
+``PostToolUseFailure``   — fires when a tool call fails (notification)
+``Stop``                 — fires when an agent turn ends
+``SessionStart``         — fires when a new session binding is established
+``Notification``         — fires on runtime notifications (budget warn etc.)
+``SubagentStart``        — fires when a sub-agent spawns (notification)
+``SubagentStop``         — fires when a sub-agent call finishes (notification)
+``PermissionRequest``    — fires before the approval gate asks · can grant/deny
+``PermissionDenied``     — fires when an approval is refused (notification)
 
 Each event carries a structured payload (``event_type`` + context)
 and the hook handler returns a ``HookDecision`` telling the runtime
@@ -46,10 +51,15 @@ from __future__ import annotations
 from .events import (
     HookEvent,
     NotificationEvent,
+    PermissionDeniedEvent,
+    PermissionRequestEvent,
     PostToolUseEvent,
+    PostToolUseFailureEvent,
     PreToolUseEvent,
     SessionStartEvent,
     StopEvent,
+    SubagentStartEvent,
+    SubagentStopEvent,
     UserPromptSubmitEvent,
 )
 from .registry import (
@@ -60,10 +70,15 @@ from .registry import (
 )
 from .runner import (
     dispatch_notification,
+    dispatch_permission_denied,
+    dispatch_permission_request,
     dispatch_post_tool,
+    dispatch_post_tool_failure,
     dispatch_pre_tool,
     dispatch_session_start,
     dispatch_stop,
+    dispatch_subagent_start,
+    dispatch_subagent_stop,
     dispatch_user_prompt,
 )
 
@@ -76,6 +91,11 @@ __all__ = [
     "StopEvent",
     "SessionStartEvent",
     "NotificationEvent",
+    "SubagentStartEvent",
+    "SubagentStopEvent",
+    "PostToolUseFailureEvent",
+    "PermissionRequestEvent",
+    "PermissionDeniedEvent",
     # Registry
     "HookDecision",
     "HookRegistry",
@@ -84,8 +104,13 @@ __all__ = [
     # Dispatch · called by runtime internals
     "dispatch_pre_tool",
     "dispatch_post_tool",
+    "dispatch_post_tool_failure",
     "dispatch_user_prompt",
     "dispatch_stop",
     "dispatch_session_start",
     "dispatch_notification",
+    "dispatch_subagent_start",
+    "dispatch_subagent_stop",
+    "dispatch_permission_request",
+    "dispatch_permission_denied",
 ]

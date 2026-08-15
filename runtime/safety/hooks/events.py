@@ -89,3 +89,76 @@ class NotificationEvent(HookEvent):
     event_name: str = "Notification"
     kind: str = ""  # "budget_warn" | "rate_limit" | "provider_down" | ...
     details: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class SubagentStartEvent(HookEvent):
+    """Fired when a sub-agent is spawned (before the runner executes).
+
+    Notification-type: handlers observe the spawn (audit, budget, routing)
+    but cannot cancel the call.
+    """
+
+    event_name: str = "SubagentStart"
+    thread_id: str = ""
+    agent_id: str = ""
+    subagent_type: str = ""
+    prompt_preview: str = ""
+    session_id: str = ""
+
+
+@dataclass
+class SubagentStopEvent(HookEvent):
+    """Fired when a sub-agent call finishes, successfully or not."""
+
+    event_name: str = "SubagentStop"
+    thread_id: str = ""
+    agent_id: str = ""
+    subagent_type: str = ""
+    session_id: str = ""
+    ok: bool = True
+    duration_ms: int = 0
+    output_preview: str = ""
+
+
+@dataclass
+class PostToolUseFailureEvent(HookEvent):
+    """Fired when a tool execution raises / returns a failure.
+
+    Notification-type: the failure has already happened; handlers get a
+    chance to observe (metrics, alerts, incident hooks) before the error
+    propagates.
+    """
+
+    event_name: str = "PostToolUseFailure"
+    sucker_id: str = ""
+    args: dict[str, Any] = field(default_factory=dict)
+    error: str = ""
+
+
+@dataclass
+class PermissionRequestEvent(HookEvent):
+    """Fired when the approval gate is about to ask the human for a tool.
+
+    Handler can grant (return ``allow``) or deny — the decision replaces
+    the gate's ask, letting automation approve safe calls without a
+    prompt.
+    """
+
+    event_name: str = "PermissionRequest"
+    sucker_id: str = ""
+    args: dict[str, Any] = field(default_factory=dict)
+    caller: str = ""
+
+
+@dataclass
+class PermissionDeniedEvent(HookEvent):
+    """Fired when an approval is refused (by gate policy, hook, or human).
+
+    Notification-type: audit / metrics.
+    """
+
+    event_name: str = "PermissionDenied"
+    sucker_id: str = ""
+    args: dict[str, Any] = field(default_factory=dict)
+    reason: str = ""

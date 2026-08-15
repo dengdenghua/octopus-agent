@@ -580,6 +580,20 @@ class ApprovalPolicy:
         return None
 
 
+def _fire_permission_denied(req: ApprovalRequest, reason: str | None) -> None:
+    """Dispatch a PermissionDenied hook (best-effort, never breaks approval)."""
+    try:
+        from runtime.safety.hooks import dispatch_permission_denied
+
+        dispatch_permission_denied(
+            sucker_id=req.tool_name,
+            args={"args_preview": req.args_preview, "detail": req.detail},
+            reason=reason or "",
+        )
+    except Exception:  # noqa: BLE001 — hooks are best-effort
+        pass
+
+
 class RuleBasedProvider(ApprovalProvider):
     """Decorator that consults a static policy before delegating.
 
@@ -594,6 +608,8 @@ class RuleBasedProvider(ApprovalProvider):
     def request(self, req: ApprovalRequest, *, timeout: float = 120.0) -> ApprovalDecision:
         decision = self._policy.decide(req)
         if decision is not None:
+            if not decision.approved:
+                _fire_permission_denied(req, decision.reason)
             _logger.debug(
                 "RuleBasedProvider short-circuit: %s → %s (%s)",
                 req.tool_name,
@@ -601,7 +617,31 @@ class RuleBasedProvider(ApprovalProvider):
                 decision.reason,
             )
             return decision
-        return self._fallback.request(req, timeout=timeout)
+        # No policy hit → offer hooks a chance to grant or deny before
+        # falling through to the interactive ask. A cancel from a
+        # PermissionRequest hook replaces the gate's decision (lets
+        # automation deny unsafe calls without a human prompt).
+        hook_denied = None
+        try:
+            from runtime.safety.hooks import dispatch_permission_request
+
+            hook_decision = dispatch_permission_request(
+                sucker_id=req.tool_name,
+                args={"args_preview": req.args_preview, "detail": req.detail},
+                caller="approval",
+            )
+            if hook_decision.cancelled:
+                hook_denied = hook_decision.reason or "denied by PermissionRequest hook"
+        except Exception:  # noqa: BLE001 — hooks are best-effort, never break approval
+            hook_denied = None
+        if hook_denied:
+            decision = ApprovalDecision(approved=False, reason=hook_denied)
+            _fire_permission_denied(req, decision.reason)
+            return decision
+        decision = self._fallback.request(req, timeout=timeout)
+        if not decision.approved:
+            _fire_permission_denied(req, decision.reason)
+        return decision
 
 
 __all__ = [

@@ -836,7 +836,29 @@ class ToolExecutor:
             except (TypeError, ValueError, RuntimeError):  # noqa: BLE001
                 pass
 
-            # 8b. Post-write diagnostics · auto-trigger ruff/eslint and
+            # 8b. PUBLIC PostToolUseFailure hook · fires when the tool did
+            # not succeed. Notification-type: the failure already happened;
+            # handlers get a chance to observe (metrics, alerts) before the
+            # error propagates to the planner.
+            if status != "success":
+                try:
+                    from runtime.platform.process.session import current_session as _cs3
+                    from runtime.safety.hooks.runner import dispatch_post_tool_failure
+
+                    dispatch_post_tool_failure(
+                        sucker_id=str(sucker_id),
+                        args=args,
+                        error=(
+                            result.error_type
+                            if isinstance(result.error_type, str)
+                            else ""
+                        ),
+                        session=_cs3(),
+                    )
+                except (TypeError, ValueError, RuntimeError):  # noqa: BLE001
+                    pass
+
+            # 8c. Post-write diagnostics · auto-trigger ruff/eslint and
             # attach a targeted regression matrix after successful writes.
             # Output is appended to ``result.output`` (frozen model ·
             # re-built via ``model_copy``) so the model sees lint feedback

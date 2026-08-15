@@ -399,6 +399,20 @@ def call_subagent(
     # a sub-agent tile from the spawn moment, independent of the
     # in-memory emitter being wired through to the realtime gateway.
     _safe_journal_emit(_spawn_event)
+    try:
+        from runtime.safety.hooks import dispatch_subagent_start
+
+        dispatch_subagent_start(
+            thread_id=_memory_thread_id,
+            agent_id=agent_id,
+            subagent_type=_role_label or agent_id,
+            prompt_preview=(
+                prompt[:500] if isinstance(prompt, str) else ""
+            ),
+            session_id=str(_active_session.get("session_id") or ""),
+        )
+    except Exception:  # noqa: BLE001 — hooks are best-effort, never break the call
+        pass
 
     def _tracking_emitter(event: dict) -> None:
         # Once the parent turn redirects, the old execution generation is
@@ -821,6 +835,24 @@ def call_subagent(
         _attach_trace_fields(_finish_event, _trace_context)
         _safe_emit(event_emitter, _finish_event)
         _safe_journal_emit(_finish_event)
+        try:
+            from runtime.safety.hooks import dispatch_subagent_stop
+
+            dispatch_subagent_stop(
+                thread_id=_memory_thread_id,
+                agent_id=agent_id,
+                subagent_type=_role_label or agent_id,
+                session_id=str(_active_session.get("session_id") or ""),
+                ok=bool(ok),
+                duration_ms=round(float(elapsed) * 1000),
+                output_preview=(
+                    result.get("output", "")[:500]
+                    if isinstance(result.get("output"), str)
+                    else ""
+                ),
+            )
+        except Exception:  # noqa: BLE001 — hooks are best-effort, never break the call
+            pass
         return result
 
     # Cost ceiling gate: when OCTOPUS_MAX_COST_USD is set, refuse to spawn once

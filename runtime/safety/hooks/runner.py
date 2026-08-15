@@ -21,10 +21,15 @@ from typing import Any
 from .events import (
     HookEvent,
     NotificationEvent,
+    PermissionDeniedEvent,
+    PermissionRequestEvent,
     PostToolUseEvent,
+    PostToolUseFailureEvent,
     PreToolUseEvent,
     SessionStartEvent,
     StopEvent,
+    SubagentStartEvent,
+    SubagentStopEvent,
     UserPromptSubmitEvent,
 )
 from .registry import HookDecision, get_global_registry
@@ -216,3 +221,90 @@ def dispatch_notification(
         details=details or {},
     )
     return _run_chain(event, NotificationEvent)
+
+
+def dispatch_subagent_start(
+    thread_id: str,
+    agent_id: str,
+    subagent_type: str,
+    prompt_preview: str = "",
+    session_id: str = "",
+    session: Any = None,
+) -> HookDecision:
+    event = SubagentStartEvent(
+        session=session,
+        thread_id=thread_id,
+        agent_id=agent_id,
+        subagent_type=subagent_type,
+        prompt_preview=prompt_preview,
+        session_id=session_id,
+    )
+    return _run_chain(event, SubagentStartEvent)
+
+
+def dispatch_subagent_stop(
+    thread_id: str,
+    agent_id: str,
+    subagent_type: str,
+    session_id: str = "",
+    ok: bool = True,
+    duration_ms: int = 0,
+    output_preview: str = "",
+    session: Any = None,
+) -> HookDecision:
+    event = SubagentStopEvent(
+        session=session,
+        thread_id=thread_id,
+        agent_id=agent_id,
+        subagent_type=subagent_type,
+        session_id=session_id,
+        ok=ok,
+        duration_ms=duration_ms,
+        output_preview=output_preview,
+    )
+    return _run_chain(event, SubagentStopEvent)
+
+
+def dispatch_post_tool_failure(
+    sucker_id: str,
+    args: dict[str, Any] | None = None,
+    error: str = "",
+    session: Any = None,
+) -> HookDecision:
+    event = PostToolUseFailureEvent(
+        session=session,
+        sucker_id=sucker_id,
+        args=args or {},
+        error=error,
+    )
+    return _run_chain(event, PostToolUseFailureEvent)
+
+
+def dispatch_permission_request(
+    sucker_id: str,
+    args: dict[str, Any] | None = None,
+    caller: str = "",
+    session: Any = None,
+) -> HookDecision:
+    event = PermissionRequestEvent(
+        session=session,
+        sucker_id=sucker_id,
+        args=args or {},
+        caller=caller,
+    )
+    return _run_chain(event, PermissionRequestEvent)
+
+
+def dispatch_permission_denied(
+    sucker_id: str,
+    args: dict[str, Any] | None = None,
+    reason: str = "",
+    session: Any = None,
+) -> HookDecision:
+    event = PermissionDeniedEvent(
+        session=session,
+        sucker_id=sucker_id,
+        args=args or {},
+        reason=reason,
+    )
+    return _run_chain(event, PermissionDeniedEvent)
