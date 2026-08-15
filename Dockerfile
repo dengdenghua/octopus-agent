@@ -24,14 +24,14 @@ FROM node:20-alpine AS webui-builder
 
 WORKDIR /webui
 
-# 利用 Docker 层缓存: 先复制 package.json → npm ci → 再复制源码
-COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+# 利用 Docker 层缓存: 先复制清单 + pnpm 锁文件 -> 安装依赖 -> 再复制源码
+COPY frontend/package.json frontend/pnpm-lock.yaml ./
+RUN corepack enable && pnpm install --frozen-lockfile --no-fund
 
-# 源码变更不影响 npm ci 缓存层
+# 源码变更不影响依赖缓存层
 COPY frontend/ ./
 
-RUN npm run build
+RUN pnpm run build
 # 产物在 /webui/dist · 运行时阶段复制到 /app/webui
 
 
