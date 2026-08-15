@@ -34,7 +34,6 @@ export function SubAgentBusStreamPanel({
    * window the main workbench timeline defaults to. */
   showAll?: boolean;
 }) {
-  const { t } = useI18n();
   const { events, status } = useSubAgentBusStream(rootThreadId);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickRef = useRef(true);
