@@ -29,13 +29,19 @@ from .delegation_budget import (
 )
 
 # ── build the spawn budget ────────────────────────────────
-# Default cap is 48 (conservative). The OPT-IN budget-driven path can go higher
-# (256) when a trusted token budget set by the bus/operator is present.
-_ORCH_MAX_SPAWNS_CEILING = 48
-# Higher ceiling for the OPT-IN budget-driven path only (a trusted token budget
-# set by the bus/operator). Lets a deep verify+synth run use its full natural
-# spawn count (~n*rounds*voters) instead of being throttled at 48. The default
-# (no budget) path keeps the conservative 48 cap untouched.
+# Hard ceiling on total spawns per orchestration, for every path. Raised from the
+# old conservative 48 so a deep verify+synth run (~n*rounds*voters) can use its
+# full natural spawn count instead of being throttled mid-fan-out.
+#
+# NOTE ON THE TRUST BOUNDARY: this ceiling also bounds a model-declared explicit
+# ``max_spawns``, so the model can now reach 256 without an operator budget. That
+# is deliberate. What it does NOT change: spawns are still metered per-run by the
+# budget scope, and the depth/recursion guards are enforced elsewhere — this is a
+# width cap, not the fork-bomb defence.
+_ORCH_MAX_SPAWNS_CEILING = 256
+# Ceiling for the OPT-IN budget-driven path (a trusted token budget set by the
+# bus/operator). Kept as its own name so the two paths can diverge again without
+# touching call sites; equal to the default ceiling today.
 _ORCH_MAX_SPAWNS_BUDGET_CEILING = 256
 _ORCH_VERIFY_VOTERS = 3
 _ORCH_MAX_FINDINGS_PER_WORKER = 50
@@ -54,10 +60,10 @@ def _resolve_max_spawns(
     """Resolve an orchestration's total spawn budget.
 
     Precedence:
-      1. explicit ``max_spawns`` (clamped to the conservative 48 ceiling);
-      2. opt-in ``token_budget`` (TRUSTED only) → scale to budget up to the
-         higher ``_ORCH_MAX_SPAWNS_BUDGET_CEILING``;
-      3. default → ``n*rounds`` estimate, hard-capped at 48 (unchanged).
+      1. explicit ``max_spawns`` (clamped to ``_ORCH_MAX_SPAWNS_CEILING``);
+      2. opt-in ``token_budget`` (TRUSTED only) → scale to budget up to
+         ``_ORCH_MAX_SPAWNS_BUDGET_CEILING``;
+      3. default → ``n*rounds`` estimate, clamped to the same ceiling.
 
     Pure function so the budget policy is unit-testable without spawning agents.
     """

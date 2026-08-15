@@ -38,20 +38,26 @@ class TestMaxSpawnsForTokenBudget:
 
 
 class TestResolveMaxSpawns:
-    def test_default_no_budget_keeps_48_cap(self) -> None:
-        # deep verify+synth naturally wants ~121 but stays capped at 48
+    def test_default_no_budget_allows_the_full_natural_plan(self) -> None:
+        # deep verify+synth naturally wants n*rounds + n*rounds*voters + 1 = 121.
+        # The old 48 ceiling throttled this mid-fan-out; 256 lets it run whole.
         got = _resolve_max_spawns(None, n=6, rounds=5, verify=True, synthesize=True)
-        assert got == _ORCH_MAX_SPAWNS_CEILING == 48
+        assert got == 121 < _ORCH_MAX_SPAWNS_CEILING
+
+    def test_default_is_still_clamped_at_the_ceiling(self) -> None:
+        # 8*8*4 + 1 = 257 overshoots, so the ceiling still binds
+        got = _resolve_max_spawns(None, n=8, rounds=8, verify=True, synthesize=True)
+        assert got == _ORCH_MAX_SPAWNS_CEILING == 256
 
     def test_default_small_run_uses_n_rounds(self) -> None:
         got = _resolve_max_spawns(None, n=3, rounds=2, verify=False, synthesize=False)
         assert got == 6  # n*rounds, no verify/synth
 
-    def test_token_budget_opt_in_scales_past_48(self) -> None:
+    def test_token_budget_opt_in_scales_to_the_budget(self) -> None:
         got = _resolve_max_spawns(
             None, n=3, rounds=2, verify=True, synthesize=True, token_budget=400_000
         )
-        assert got == 50  # budget-driven, above the default 48 throttle
+        assert got == 50  # budget-driven: 400k / 8k per spawn
 
     def test_explicit_max_spawns_wins_over_budget(self) -> None:
         got = _resolve_max_spawns(
@@ -59,8 +65,12 @@ class TestResolveMaxSpawns:
         )
         assert got == 10  # explicit wins; budget ignored
 
-    def test_explicit_still_capped_at_48(self) -> None:
-        assert _resolve_max_spawns(100, n=3, rounds=2, verify=False, synthesize=False) == 48
+    def test_explicit_is_honoured_below_the_ceiling(self) -> None:
+        assert _resolve_max_spawns(100, n=3, rounds=2, verify=False, synthesize=False) == 100
+
+    def test_explicit_is_capped_at_the_ceiling(self) -> None:
+        # a model-declared max_spawns can reach 256 but never exceed it
+        assert _resolve_max_spawns(10_000, n=3, rounds=2, verify=False, synthesize=False) == 256
 
     def test_budget_never_below_n(self) -> None:
         # tiny budget (→ floor 2) must still allow at least n per round
@@ -87,10 +97,12 @@ class TestOperatorEnvBudget:
             assert operator_orchestration_token_budget() is None
 
     def test_operator_env_drives_resolve_max_spawns(self, monkeypatch) -> None:
-        # the operator switch, fed through the resolver, lifts above the 48 cap
+        # the operator switch, fed through the resolver, overrides the n*rounds
+        # estimate (which would only be 3*2 + 3*2*3 + 1 = 25 here)
         monkeypatch.setenv(self._ENV, "400000")
         budget = operator_orchestration_token_budget()
         got = _resolve_max_spawns(
             None, n=3, rounds=2, verify=True, synthesize=True, token_budget=budget
         )
-        assert got == 50 > _ORCH_MAX_SPAWNS_CEILING
+        assert got == 50
+        assert got <= _ORCH_MAX_SPAWNS_CEILING
