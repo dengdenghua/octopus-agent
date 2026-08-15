@@ -28,6 +28,11 @@ const petSidecar = require("./pet-sidecar.cjs");
 const DEV_URL = process.env.ELECTRON_START_URL || "http://127.0.0.1:3000";
 const DESKTOP_DIR = path.join(os.homedir(), "Desktop");
 
+// ``--smoke-test`` launches the packaged-style shell against the built
+// ``dist/`` from an unpackaged checkout, so the Playwright Electron E2E can
+// prove the shell + preload bridge + workbench boot without a dev server.
+const SMOKE_TEST = process.argv.includes("--smoke-test");
+
 // Force Chinese locale for native dialogs and system UI so native controls
 // (Cancel / New Folder / sidebar / search) follow the app's primary language.
 app.commandLine.appendSwitch("lang", "zh-CN");
@@ -788,7 +793,7 @@ function createMainWindow() {
     return { action: "deny" };
   });
 
-  if (app.isPackaged) {
+  if (app.isPackaged || SMOKE_TEST) {
     win.loadFile(path.join(__dirname, "..", "dist", "index.html"));
   } else {
     win.loadURL(DEV_URL);

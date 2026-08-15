@@ -45,7 +45,8 @@
     "e2e:full:mobile": "cross-env OCTOPUS_E2E_TEST_MATCH=mobile-smoke.spec.ts playwright test --config playwright.full.config.ts --project chromium",
     "e2e:headed": "playwright test --headed",
     "e2e:ui": "playwright test --ui",
-    "generate-types": "openapi-typescript ../docs/openapi-snapshot.json -o src/core/api/openapi-types.ts"
+    "generate-types": "openapi-typescript ../docs/openapi-snapshot.json -o src/core/api/openapi-types.ts",
+    "e2e:desktop": "playwright test --config playwright.electron.config.ts"
   },
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",
