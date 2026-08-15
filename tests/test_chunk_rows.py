@@ -62,7 +62,46 @@ class TestClassify:
         )
         assert entry is not None
         assert entry["event_type"] == "sub_text_delta"
-        assert entry["extra"] == {"role_id": "r", "round": 1, "parent_tool_use_id": None}
+        assert entry["extra"] == {
+            "role_id": "r",
+            "round": 1,
+            "parent_tool_use_id": None,
+            "session_id": "",
+        }
+
+    def test_sub_text_delta_session_id_preserved_and_split(self) -> None:
+        """Different sessions must never pack into the same row, and a
+        packed row must round-trip ``session_id`` losslessly."""
+        from runtime.memory.journal import SubTextDeltaEvent
+
+        def _sd(delta: str, session_id: str) -> dict:
+            entry = classify_chunk(
+                SubTextDeltaEvent(
+                    event_id=uuid4(),
+                    role_id="r",
+                    round=1,
+                    delta=delta,
+                    session_id=session_id,
+                )
+            )
+            assert entry is not None
+            return entry
+
+        # Different session_id breaks the run — they must not merge.
+        assert not continues_chunk_run(_sd("one", "abc123def456"), _sd("two", "ZZZ999other"))
+        # Same session_id continues.
+        assert continues_chunk_run(_sd("one", "abc123def456"), _sd("two", "abc123def456"))
+        # Same-session run packs and expands losslessly (>= MIN_RUN=3).
+        packed = pack_chunk_row(
+            [
+                _sd("one", "abc123def456"),
+                _sd("two", "abc123def456"),
+                _sd("three", "abc123def456"),
+            ]
+        )
+        expanded = expand_chunk_row(packed)
+        assert [m["delta"] for m in expanded] == ["one", "two", "three"]
+        assert all(m["session_id"] == "abc123def456" for m in expanded)
 
     def test_non_chunk_event_is_verbatim(self) -> None:
         assert classify_chunk(UserMessageEvent(text="hi")) is None

@@ -53,7 +53,7 @@ _EXTRA_KEYS: dict[str, tuple[str, ...]] = {
     # (index/call_id/name); including them keeps packed rows lossless.
     # Defaults keep text/reasoning runs identical to before.
     "assistant/chunk": ("iteration", "kind", "index", "call_id", "name"),
-    "sub_text_delta": ("role_id", "round", "parent_tool_use_id"),
+    "sub_text_delta": ("role_id", "round", "parent_tool_use_id", "session_id"),
 }
 
 _PACKABLE_TYPES = frozenset(_EXTRA_KEYS)
