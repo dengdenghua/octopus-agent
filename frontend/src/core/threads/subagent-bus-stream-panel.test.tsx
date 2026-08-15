@@ -71,6 +71,20 @@ describe("SubAgentBusStreamPanel", () => {
     expect(screen.getAllByText("exp-1").length).toBeGreaterThan(0);
   });
 
+  it("renders each sub-agent as its own grouped lane", () => {
+    mockedUse.mockReturnValue({
+      events: [
+        spawnedEvent("Spark-A", "researcher"),
+        spawnedEvent("Spark-B", "researcher"),
+      ],
+      status: "live",
+      lastSeq: 2,
+    });
+    renderPanel("root-1");
+    expect(screen.getAllByText("Spark-A").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Spark-B").length).toBeGreaterThan(0);
+  });
+
   it("renders the error state when the stream is failing", () => {
     mockedUse.mockReturnValue({ events: [], status: "error", lastSeq: 0 });
     renderPanel("root-1");

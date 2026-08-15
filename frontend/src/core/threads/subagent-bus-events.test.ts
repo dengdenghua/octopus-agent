@@ -77,6 +77,37 @@ describe("busEventToLiveEvent", () => {
     expect(e).toMatchObject({ status: "done", durationMs: 12 });
   });
 
+  it("groups every child event under its own codename lane", () => {
+    const spawnA = busEventToLiveEvent(
+      ev("sub_started", { role: "researcher", codename: "Spark-A" }, 1),
+      0,
+    );
+    const toolA = busEventToLiveEvent(
+      ev(
+        "sub_tool_end",
+        {
+          role: "researcher",
+          codename: "Spark-A",
+          tool: "web_search",
+          status: "success",
+        },
+        2,
+      ),
+      1,
+    );
+    const spawnB = busEventToLiveEvent(
+      ev("sub_started", { role: "researcher", codename: "Spark-B" }, 3),
+      2,
+    );
+    // Same role, different codenames -> distinct per-child group keys.
+    expect(spawnA?.agentId).toBe("Spark-A");
+    expect(toolA?.agentId).toBe("Spark-A");
+    expect(spawnB?.agentId).toBe("Spark-B");
+    // Tool events no longer carry the parent's tool-call id, so grouped
+    // timeline keys on the child (codename) instead of merging siblings.
+    expect(toolA?.parentToolUseId).toBeUndefined();
+  });
+
   it("maps sub_tool_end error", () => {
     const e = busEventToLiveEvent(
       ev("sub_tool_end", { role: "r", tool: "x", status: "error" }),

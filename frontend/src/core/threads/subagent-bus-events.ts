@@ -60,9 +60,15 @@ export function busEventToLiveEvent(
   const role = str(payload.role) ?? "";
   const startedAt = toMillis(event.ts);
   const baseId = `${type}:${event.thread_id ?? event.root_thread_id ?? "root"}:${event.seq ?? index}`;
+  // Group key: the child's own codename (unique per sub-agent) so the
+  // grouped timeline shows each sub-agent as its own lane. Falling back to
+  // role keeps same-role children visually distinct only when no codename is
+  // present (a coordination root usually has one codename per child).
+  const agentId = (str(payload.codename) ?? role) || undefined;
   const common = {
-    agentId: role || undefined,
+    agentId,
     subAgentRole: role || undefined,
+    subagentCodename: str(payload.codename),
     iteration: num(payload.iteration) ?? 0,
   };
 
@@ -75,7 +81,6 @@ export function busEventToLiveEvent(
         status: "running",
         startedAt,
         lifecycle: "spawned",
-        subagentCodename: str(payload.codename),
         subagentAvatar: avatar,
         ...common,
       };
@@ -86,7 +91,6 @@ export function busEventToLiveEvent(
         name: str(payload.tool) ?? "tool",
         status: "running",
         startedAt,
-        parentToolUseId: str(payload.parent_tool_use_id),
         ...common,
       };
     }
@@ -99,7 +103,6 @@ export function busEventToLiveEvent(
         status: isError ? "error" : "done",
         startedAt,
         durationMs: num(payload.duration_ms),
-        parentToolUseId: str(payload.parent_tool_use_id),
         output: isError ? undefined : undefined,
         ...common,
       };

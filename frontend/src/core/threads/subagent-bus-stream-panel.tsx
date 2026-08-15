@@ -1,5 +1,7 @@
 "use client";
 
+import { useCallback, useEffect, useRef } from "react";
+
 import { AlertCircleIcon, Loader2Icon, RadioIcon } from "lucide-react";
 
 import { useI18n } from "@/core/i18n/hooks";
@@ -34,6 +36,23 @@ export function SubAgentBusStreamPanel({
 }) {
   const { t } = useI18n();
   const { events, status } = useSubAgentBusStream(rootThreadId);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const stickRef = useRef(true);
+
+  // Follow the live stream, but only when the user is already near the
+  // bottom — never yank the view away from something they're reading.
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el && stickRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [events.length]);
 
   return (
     <div className={cn("flex h-full min-h-0 flex-col", className)}>
@@ -41,7 +60,11 @@ export function SubAgentBusStreamPanel({
       {events.length === 0 ? (
         <EmptyState status={status} />
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="min-h-0 flex-1 overflow-y-auto px-3 pb-4"
+        >
           <LiveToolTimeline events={events} groupByAgent showAll={showAll} />
         </div>
       )}
