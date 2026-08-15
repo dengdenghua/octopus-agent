@@ -105,6 +105,7 @@ class TentacleCoordinator:
         *,
         decision_engine: DecisionEngine | None = None,
         dashboard_port: int | None = 8766,
+        dashboard_host: str = "127.0.0.1",  # loopback by default: unauthenticated dashboard must not face the LAN
         screen_max_fps: int = 15,
         mcp_server: bool = False,
         pc_screen: bool = False,
@@ -139,6 +140,7 @@ class TentacleCoordinator:
         )
         self._decision_engine = decision_engine
         self._dashboard_port = dashboard_port
+        self._dashboard_host = dashboard_host
         self._dashboard_server: Any | None = None
         self._mcp_server_enabled = mcp_server
 
@@ -171,14 +173,15 @@ class TentacleCoordinator:
                 app.include_router(create_tentacle_router(self))
                 config = uvicorn.Config(
                     app,
-                    host="0.0.0.0",  # nosec B104 — dashboard server, intentional LAN bind
+                    host=self._dashboard_host,  # loopback unless explicitly opened via dashboard_host
                     port=self._dashboard_port,
                     log_level="warning",
                 )
                 self._dashboard_server = uvicorn.Server(config)
                 asyncio.create_task(self._dashboard_server.serve())
                 logger.info(
-                    "Dashboard started at http://0.0.0.0:%d/api/tentacle/dashboard",
+                    "Dashboard started at http://%s:%d/api/tentacle/dashboard",
+                    self._dashboard_host,
                     self._dashboard_port,
                 )
             except ImportError:
