@@ -392,7 +392,10 @@ async def _subagent_bus_sse(
         return
 
     loop = asyncio.get_running_loop()
-    queue: asyncio.Queue[dict | None] = asyncio.Queue()
+    # ``None`` is the shutdown sentinel, so the live queue is widened relative to
+    # the replay events above. Keep the streamed value in its own name: reusing
+    # ``event`` from the replay loop would pin it to the narrower ``dict[str, Any]``.
+    queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
     def _on_event(event: dict[str, Any]) -> None:
         loop.call_soon_threadsafe(queue.put_nowait, event)
@@ -402,14 +405,14 @@ async def _subagent_bus_sse(
         yield 'data: {"type":"subscribed"}\n\n'
         while True:
             try:
-                event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                live_event = await asyncio.wait_for(queue.get(), timeout=15.0)
             except TimeoutError:
                 yield ": keepalive\n\n"
                 continue
-            if event is None:
+            if live_event is None:
                 break
             try:
-                payload = json.dumps(event, ensure_ascii=False)
+                payload = json.dumps(live_event, ensure_ascii=False)
             except (TypeError, ValueError):
                 payload = json.dumps({"type": "error", "error": "not-serializable"})
             yield f"data: {payload}\n\n"
