@@ -105,6 +105,25 @@ EPHEMERAL_MAX_ROUNDS_BY_ROLE: dict[str, int] = {
 # budget-exhausted placeholder.
 EPHEMERAL_TOKEN_BUDGET: int = 0
 
+# Convergence guard. If the agent runs this many consecutive rounds where it
+# only re-invokes tools it has already called (no new tool signature), it is
+# looping rather than exploring. Stop early and hand back the partial work as
+# converged instead of burning the whole round cap and surfacing a hard
+# "exceeded round cap" error to the user.
+EPHEMERAL_STALL_ROUNDS: int = 3
+
+
+def _tool_call_signature(tool_call: Any) -> tuple[str, str]:
+    """Stable identity for one tool call, used for repeat-loop detection."""
+    name = getattr(tool_call, "name", "") or ""
+    raw = getattr(tool_call, "input", None) or {}
+    try:
+        import json as _json
+
+        return (str(name), _json.dumps(raw, sort_keys=True, ensure_ascii=False))
+    except (TypeError, ValueError):  # non-serializable args -> fall back to repr
+        return (str(name), repr(raw))
+
 
 # ── Child→parent report tool (dsh ``tool-subagent-report``) ──────────────
 # Installed into every continuable in-process child's tool surface (i.e. when
@@ -550,6 +569,8 @@ def make_llm_ephemeral_runner(
             Message(role="user", content=call.user_prompt),
         ]
         accumulated_text = ""
+        seen_tool_signatures: set[tuple[str, str]] = set()
+        stall_rounds = 0
         for round_i in range(max_rounds):
             req = ModelRequest(
                 model=effective_model,
@@ -816,6 +837,34 @@ def make_llm_ephemeral_runner(
                     content=tool_results,
                 )
             )
+
+            # Convergence guard: consecutive rounds that only repeat
+            # previously-seen tool calls (zero new signatures) are a loop,
+            # not progress. Treat them as converged and return the partial
+            # work instead of exhausting the round cap on a dead spin.
+            new_signatures = [
+                sig
+                for sig in (_tool_call_signature(tc) for tc in tool_calls)
+                if sig not in seen_tool_signatures
+            ]
+            if new_signatures:
+                seen_tool_signatures.update(new_signatures)
+                stall_rounds = 0
+            elif tool_calls:
+                stall_rounds += 1
+                if stall_rounds >= EPHEMERAL_STALL_ROUNDS:
+                    notice = (
+                        "\n\n[已提前收敛:连续多轮重复相同工具调用且无新进展,"
+                        "保留当前结果,停止继续探索]"
+                    )
+                    _emit_sub_text_delta(
+                        call.role.id,
+                        round_i + 1,
+                        notice,
+                        session_id=_ctx_session_id,
+                        emitter=_ctx_emitter,
+                    )
+                    return accumulated_text + notice
 
         # Hit the round cap. Raise so the bridge can surface a real
         # failure (success=false + error) instead of returning a

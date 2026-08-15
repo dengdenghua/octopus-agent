@@ -544,6 +544,36 @@ def test_agentic_runner_uses_effective_context_allowlist():
     assert tool_names == ["web_search", "bb_write"]
 
 
+def test_agentic_loop_stalls_on_repeated_tool_calls():
+    """Repeated identical tool calls should converge early, not burn the
+    whole round cap and surface an "exceeded round cap" error."""
+    from runtime.execution.suckers.ephemeral_runner import (
+        EPHEMERAL_STALL_ROUNDS,
+        make_llm_ephemeral_runner,
+    )
+
+    # The model keeps emitting the exact same tool call every round.
+    script = [
+        [{"name": "read_file", "input": {"path": "x.py"}}]
+    ] * 30
+    router = _ScriptedAgenticRouter(script=script)
+    registry = _StubRegistry({"read_file": lambda **kw: {"ok": True}})
+    runner = make_llm_ephemeral_runner(
+        router,
+        registry=registry,
+        default_model="m",
+    )
+    call = _make_call(role_id="reviewer")
+
+    result = runner(call)
+
+    # Stops as soon as EPHEMERAL_STALL_ROUNDS consecutive rounds add no new
+    # tool signature · long before the explorer-style round cap (15).
+    rounds_run = len(router.call_log)
+    assert rounds_run == EPHEMERAL_STALL_ROUNDS + 1
+    assert "已提前收敛" in result
+
+
 class TestTokenBudget:
     def test_length_limited_text_continues_in_next_round(self):
         """A sub-agent that hits the provider output cap should not

@@ -231,7 +231,10 @@ BUILTIN_ROLES: dict[str, EphemeralRoleDef] = {
             "question, use the file-system tools to locate the "
             "answer. Return concise findings as a list of "
             "file:line references · one per finding · NO prose "
-            "beyond a one-sentence summary at the end."
+            "beyond a one-sentence summary at the end. "
+            "Stop as soon as you have the answer; do NOT repeat "
+            "identical tool calls — if a tool returns nothing new, "
+            "conclude with what you already have."
         ),
         share_context=True,
         share_memory=False,
