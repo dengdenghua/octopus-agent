@@ -302,6 +302,15 @@ def call_subagent(
             # passing ``react_loop_subagent=False``.
             if (context or {}).get("react_loop_subagent") is None:
                 context = {**context, "react_loop_subagent": True}
+            # Real-time sub-agents also get their OWN thread identity by
+            # default (independent thread_id), so each child is a real,
+            # addressable thread — journal/trace attribute to the child and
+            # parallel children no longer collide on the parent's busy flag.
+            # Blackboard continuity is preserved via ``blackboard_root_turn_id``
+            # (the parent's turn), independent of the child thread id. Callers
+            # may opt out with ``flip_subagent_thread=False``.
+            if (context or {}).get("flip_subagent_thread") is None:
+                context = {**context, "flip_subagent_thread": True}
 
     # When a schema is requested, steer the model toward schema-valid JSON up
     # front. Enforcement still happens post-hoc (see ``_do_call_with_schema``)

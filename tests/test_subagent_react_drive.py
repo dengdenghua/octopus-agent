@@ -433,6 +433,7 @@ def test_bridge_flips_react_loop_default_inside_react_stack(monkeypatch) -> None
             _current_session.reset(_token)
 
     assert captured.get("context", {}).get("react_loop_subagent") is True
+    assert captured.get("context", {}).get("flip_subagent_thread") is True
     assert captured.get("context", {}).get("react_stack") is not None
 
     # Explicit opt-out is honoured.
@@ -444,9 +445,13 @@ def test_bridge_flips_react_loop_default_inside_react_stack(monkeypatch) -> None
                 agent_id="researcher",
                 prompt="go",
                 session=sess,
-                context={"react_loop_subagent": False},
+                context={
+                    "react_loop_subagent": False,
+                    "flip_subagent_thread": False,
+                },
             )
         finally:
             _current_session.reset(_token)
 
     assert captured.get("context", {}).get("react_loop_subagent") is False
+    assert captured.get("context", {}).get("flip_subagent_thread") is False
