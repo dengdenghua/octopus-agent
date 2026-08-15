@@ -249,3 +249,6 @@ runtime/execution/all_skills/.preinstalled
 
 # Godot editor cache for the desktop-pet sidecar (never commit; regenerated).
 pet-sidecar/.godot/
+
+# Root-level preview screenshots (local UI artifacts, never commit)
+/preview*.png
