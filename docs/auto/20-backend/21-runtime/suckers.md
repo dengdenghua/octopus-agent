@@ -55,6 +55,7 @@ Suckers = skill pool.
 | `_delegation_skills_vote.py` | ``_call_agent_vote`` · the consensus / vote gate. |
 | `_ephemeral_events.py` | Event emission helpers for ephemeral sub-agent runs. |
 | `_ephemeral_tool_exec.py` | Tool execution helpers for ephemeral sub-agent runs. |
+| `_ephemeral_verification.py` | Verification gate for ephemeral sub-agents. |
 | `_lsp_candidates.py` | Seed a language server with the files a reference search must cover. |
 | `_memory_skills_handlers.py` | Registrar for memory_skills · extracted from memory_skills.py. |
 | `_write_skills_background.py` | Background-process machinery for write_skills · extracted from write_skills.py. |
@@ -152,6 +153,15 @@ Suckers = skill pool.
 | --- | --- | --- |
 | func | `def orchestration_progress_scope(callback)` | Install a progress callback for orchestrations run inside the scope. |
 | func | `def workflow_settlement_scope(callback)` | Install a settlement callback for workflows run inside the scope. |
+
+### `_ephemeral_verification.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def is_code_write_tool(name)` |  |
+| func | `def written_code_path(tool_input)` | Return the code-file path written by a write tool, else ``None``. |
+| func | `def is_verification_tool(name, tool_input)` | True when a tool call counts as a verification step. |
+| func | `def verification_gate_nudge(executed_tools, max_rounds, current_round)` | Return a verification nudge message, or ``None`` when no gate applies. |
 
 ### `_lsp_candidates.py`
 
@@ -416,6 +426,7 @@ Suckers = skill pool.
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | class | `class EphemeralRoundCapExceeded(RuntimeError)` | Raised when the ephemeral sub-agent loop hits its round cap. |
+| class | `class EphemeralConvergedIncomplete(RuntimeError)` | Raised when the convergence guard stops a sub-agent early because it only repeated identical tool calls (a loop, not progress). |
 | func | `def make_llm_ephemeral_runner(router, registry, default_model, max_tokens, temperature, system_provider, token_budget)` | Build an ephemeral runner that calls ``router.call(request)`` per invocation. |
 
 ### `forged_persistence.py`
@@ -639,7 +650,7 @@ Suckers = skill pool.
 
 ## Who imports this
 
-**64** file(s) reference this package:
+**65** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
@@ -660,13 +671,13 @@ Suckers = skill pool.
   - `runtime/core/cerebrum/_react_prompt_assembly_guidance.py`
   - `runtime/core/cerebrum/capability_router.py`
   - _… and 2 more_
-- **`runtime/execution/`** · 9 file(s)
+- **`runtime/execution/`** · 10 file(s)
   - `runtime/execution/all_skills/__init__.py`
   - `runtime/execution/arms/base.py`
   - `runtime/execution/loops/verifiers.py`
   - `runtime/execution/misc/skill_policy.py`
   - `runtime/execution/subagents/_bridge_trace.py`
-  - _… and 4 more_
+  - _… and 5 more_
 - **`runtime/memory/`** · 3 file(s)
   - `runtime/memory/cowork/runtime.py`
   - `runtime/memory/hemolymph/composer.py`
