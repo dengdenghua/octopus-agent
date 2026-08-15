@@ -143,7 +143,7 @@ video-gpu = [
 code-intel = [
     "tree-sitter>=0.23",
     "tree-sitter-python>=0.23",
-    "tree-sitter-typescript>=0.23",
+    "tree-sitter-typescript>=0.23.2",
 ]
 discord = [
     "cryptography>=50.0.0",
@@ -204,7 +204,7 @@ all = [
     # code intelligence (AST)
     "tree-sitter>=0.23",
     "tree-sitter-python>=0.23",
-    "tree-sitter-typescript>=0.23",
+    "tree-sitter-typescript>=0.23.2",
     # local vision (image semantic index / album / OCR)
     "fastembed>=0.8.0",
     "insightface>=1.0.1",
