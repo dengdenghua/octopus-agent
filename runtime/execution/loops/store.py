@@ -178,8 +178,8 @@ class LoopRunStore:
                             created = created.replace(tzinfo=UTC)
                         if (now - created).total_seconds() > ttl:
                             continue
-                    except (TypeError, ValueError):
-                        pass  # unparseable timestamp: keep (fail safe)
+                    except (TypeError, ValueError):  # noqa: BLE001 — unparseable timestamp: keep (fail safe)
+                        pass
                 keep.append(run)
             if cap > 0:
                 keep.sort(key=lambda run: (run.created_at, run.run_id), reverse=True)
