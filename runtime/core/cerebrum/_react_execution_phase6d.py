@@ -120,6 +120,47 @@ def _flush_guard_notices(state: _LoopState, messages: Any) -> None:
     notices.clear()
 
 
+_SANDBOX_VIOLATION_RE = re.compile(r"sandbox[ _\-]?violation", re.IGNORECASE)
+# Tools whose sandbox block is safe to escalate to the human (network/write
+# denied for a command). Pure write/edit/delete tools are deliberately NOT
+# listed — a blocked write must be re-considered, not auto-re-offered.
+_ESCALABLE_TOOLS = frozenset(
+    {
+        "exec_shell",
+        "exec_command",
+        "run_command",
+        "background_exec",
+        "bash",
+        "sh",
+        "shell",
+        "git",
+        "git_network",
+        "npm",
+        "pnpm",
+        "yarn",
+        "pip",
+        "pip3",
+        "cargo",
+        "go",
+        "test",
+        "typecheck",
+        "lint",
+        "verify",
+        "verify_skills",
+    }
+)
+
+
+def _looks_like_sandbox_violation(observation: str | None) -> bool:
+    """Whether a tool observation is a sandbox rejection (post-execution)."""
+    return bool(observation and _SANDBOX_VIOLATION_RE.search(observation))
+
+
+def _can_escalate_sandbox(tool_name: str) -> bool:
+    """Whether this tool is eligible for the sandbox-escalation prompt."""
+    return tool_name in _ESCALABLE_TOOLS
+
+
 def _latest_human_intent(messages: Any) -> str:
     """Most recent human message text — the only trusted authorization
     evidence for the guardian review (codex policy_template Evidence
@@ -666,6 +707,110 @@ def _phase_6d_dispatch_and_observe(
                         }
                         terminated_reason = "cancelled"
                         return _LoopControl.BREAK
+                    # ── Sandbox-blocked escalation ─────────────────────────
+                    # A tool that ran inside the sandbox can be blocked
+                    # (network denied / write outside workspace) and come back
+                    # as a "sandbox_violation" execution error. That failure
+                    # carries no approval prompt by itself. Escalate to the
+                    # human: offer to re-run the same command with a relaxed
+                    # sandbox (network allowed), and only re-execute after
+                    # explicit approval — mirroring Codex's post-block prompt.
+                    if (
+                        not tool_ok
+                        and observation
+                        and _looks_like_sandbox_violation(observation)
+                        and _can_escalate_sandbox(resolved_name)
+                        and not _auto_approve
+                    ):
+                        _escalation_provider = approval_provider or AutoDenyProvider()
+                        _escalation_detail = (
+                            f"{resolved_name} 被沙箱拦截（最可能是网络被禁用或写入超出工作区）。"
+                            "是否允许以放宽沙箱（允许网络访问）重跑该命令？"
+                        )
+                        yield {
+                            "type": "tool_approval_request",
+                            "tool_name": resolved_name,
+                            "tool_call_id": call_id,
+                            "iteration": i + 1,
+                            "args_preview": str(_input_preview)[:500] if _input_preview else "",
+                            "detail": _escalation_detail,
+                            "risk": {
+                                "level": "high",
+                                "categories": ["sandbox_escalation"],
+                                "reason": "sandbox blocked the command; user may approve relaxed constraints",
+                                "requires_approval": True,
+                            },
+                            "approval_action": "confirm",
+                            "approval_policy": _approval_policy.to_dict(),
+                            "sandbox_escalation": True,
+                        }
+                        _escalation_decision = _escalation_provider.request(
+                            ApprovalRequest(
+                                thread_id=thread_id,
+                                tool_name=resolved_name,
+                                tool_call_id=call_id,
+                                args_preview=(
+                                    str(_input_preview)[:500] if _input_preview else ""
+                                ),
+                                detail=_escalation_detail,
+                            ),
+                            timeout=120.0,
+                        )
+                        if not _escalation_decision.approved:
+                            yield {
+                                "type": "tool_end",
+                                "tool_name": resolved_name,
+                                "tool_call_id": call_id,
+                                "iteration": i + 1,
+                                "status": "rejected",
+                                "output_preview": (
+                                    _escalation_decision.reason
+                                    or "User declined sandbox escalation (run with network)"
+                                ),
+                                "duration_ms": int(
+                                    (time.monotonic() - _tool_started_at) * 1000
+                                ),
+                            }
+                            observation = (
+                                "(工具被沙箱拦截，用户拒绝放宽沙箱重跑；"
+                                "请换一种不需要该权限/网络的方式，或询问用户。)"
+                            )
+                            _record_rejected_step(steps, messages, step, observation)
+                            _flush_guard_notices(state, messages)
+                            return _LoopControl.NEXT_ITERATION
+                        _logger.info(
+                            "react_loop iter %d · sandbox escalation approved for %s",
+                            i + 1,
+                            resolved_name,
+                        )
+                        with _sink_scope():
+                            set_injection_gate_handled(True)
+                            try:
+                                esc_obs, esc_step = _execute_action_via_beak(
+                                    stack,
+                                    step.action,
+                                    react_task_id=react_task_id,
+                                    react_step_counter=i + 1,
+                                    agent=agent,
+                                    intent=intent,
+                                    sandbox_override={
+                                        "type": "dangerFullAccess",
+                                        "networkAccess": True,
+                                    },
+                                )
+                            finally:
+                                set_injection_gate_handled(False)
+                        if esc_step is not None:
+                            executed_beak_steps.append(esc_step)
+                        esc_ok = _tool_call_succeeded(esc_obs, esc_step)
+                        if esc_ok:
+                            observation = esc_obs
+                            beak_step = esc_step
+                            tool_ok = True
+                        else:
+                            observation = (observation or "") + (
+                                "\n[已获授权放宽沙箱重跑，但仍失败；请换方法或调整参数]"
+                            )
                     if not tool_ok and observation:
                         # C2: only auto-retry idempotent tools. Re-running a
                         # write/edit/exec/delete/dangerous tool whose first

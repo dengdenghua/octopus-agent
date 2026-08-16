@@ -136,7 +136,7 @@ class PersistentStdioMCPClient(MCPClient):
             effective_process_sandbox_mode,
             inference_domains,
             process_sandbox_required,
-            select_process_backend,
+            resolved_process_backend,
         )
 
         if not process_sandbox_required():
@@ -170,7 +170,7 @@ class PersistentStdioMCPClient(MCPClient):
             inference_domains=inference_domains(),
         )
         try:
-            choice = select_process_backend(effective_process_sandbox_mode())
+            choice = resolved_process_backend(effective_process_sandbox_mode())
             argv, env, cwd = choice.backend.transform(
                 [self.config.command, *self.config.args],
                 policy.env_for(),

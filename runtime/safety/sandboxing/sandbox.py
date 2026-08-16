@@ -408,6 +408,7 @@ class BackendChoice:
     name: str
     hard: bool
     strict: bool = False
+    needs_approval: bool = False
 
 
 @dataclass(frozen=True)
@@ -869,7 +870,11 @@ def select_process_backend(mode: str | None = None) -> BackendChoice:
                 "sandbox-exec on macOS)"
             )
         _warn_soft_fallback_once()
-        return BackendChoice(DirectBackend(), "direct", hard=False)
+        # A hard sandbox was requested but none is available. Rather than
+        # silently running with soft constraints only, flag this choice so
+        # execution entry points gate the direct path behind an authorization
+        # prompt (explicit human consent for unconfined execution).
+        return BackendChoice(DirectBackend(), "direct", hard=False, needs_approval=True)
 
     raise SandboxViolation(f"unknown process sandbox mode: {raw}")
 
@@ -909,6 +914,201 @@ def _warn_soft_fallback_once() -> None:
 
 def _sbpl_escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+# ═══════════════════════════════════════════════════════════
+# Resolved posture — single source of truth for the execution
+# contract.  ``select_process_backend`` above stays as the cheap,
+# pure resolver (used by embedders and tests); production entry
+# points call ``resolved_process_backend`` so the whole process
+# shares ONE verified backend instead of each exec path re-deriving
+# one (and silently downgrading).
+# ═══════════════════════════════════════════════════════════
+
+_PROBE_COMMAND = ("echo", "octopus-sandbox-probe")
+_probe_cache: dict[tuple[str, str], bool] = {}
+_probe_lock = threading.Lock()
+
+_resolved_choice: BackendChoice | None = None
+_resolved_mode: str | None = None
+_resolved_lock = threading.Lock()
+
+
+@dataclass(frozen=True)
+class ProcessSandboxPosture:
+    """The isolation posture the process resolved at boot."""
+
+    mode: str
+    backend: str
+    hard: bool
+    enforcement: str
+
+
+def _hard_backend_candidates(mode: str) -> list[tuple[Backend, str]]:
+    """Priority-ordered (backend, name) hard candidates for ``mode``."""
+    if mode in {"bwrap", "bubblewrap"}:
+        return [(BubblewrapBackend(), "bwrap")]
+    if mode in {"seatbelt", "sandbox-exec"}:
+        return [(SeatbeltBackend(), "seatbelt")]
+    if mode == "landlock":
+        return [(LandlockBackend(), "landlock")]
+    # auto / strict
+    out: list[tuple[Backend, str]] = []
+    if sys.platform.startswith("linux"):
+        out.append((BubblewrapBackend(), "bwrap"))
+        out.append((LandlockBackend(), "landlock"))
+    out.append((SeatbeltBackend(), "seatbelt"))
+    return out
+
+
+def probe_backend_runs(backend: Backend, *, timeout_s: float = 8.0) -> bool:
+    """Run one harmless command through ``backend`` and report whether it runs.
+
+    Unlike ``available()`` — which only checks for the binary — this actually
+    applies the isolation primitive and confirms a subprocess survives. A
+    backend that is present-but-broken (e.g. a deprecated ``sandbox-exec``
+    that no longer applies its profile, or ``bwrap`` on a host where user
+    namespaces are blocked) fails here and is treated as unavailable by
+    :func:`resolve_process_backend`.
+
+    Results are cached per backend-class + platform, so the probe runs at
+    most once per process per backend.
+    """
+    key = (type(backend).__name__, sys.platform)
+    with _probe_lock:
+        if key in _probe_cache:
+            return _probe_cache[key]
+    ok = _probe_uncached(backend, timeout_s=timeout_s)
+    with _probe_lock:
+        _probe_cache[key] = ok
+    return ok
+
+
+def _probe_uncached(backend: Backend, *, timeout_s: float) -> bool:
+    import tempfile
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="octopus-sandbox-probe-") as td:
+            workspace = Path(td)
+            policy = SandboxPolicy(workspace=workspace, timeout_s=timeout_s)
+            argv, env, cwd = backend.transform(
+                list(_PROBE_COMMAND),
+                policy.env_for(),
+                workspace,
+                policy,
+            )
+            result = subprocess.run(
+                argv,
+                cwd=str(cwd),
+                env=env,
+                capture_output=True,
+                timeout=timeout_s,
+                text=True,
+            )
+            return result.returncode == 0
+    except Exception:
+        return False
+
+
+def _set_resolved(mode: str, choice: BackendChoice) -> BackendChoice:
+    global _resolved_choice, _resolved_mode
+    with _resolved_lock:
+        _resolved_choice = choice
+        _resolved_mode = mode
+    return choice
+
+
+def resolve_process_backend(mode: str | None = None) -> BackendChoice:
+    """Resolve the process sandbox backend once, verified by a real probe.
+
+    Single source of truth for the execution contract; :func:`select_process_backend`
+    is the cheap, pure resolver, while this adds the once-per-process probe and
+    caches the result keyed by the resolved mode.
+
+    Resolution rules:
+
+    * ``soft``/``direct``/``off`` → ``DirectBackend``.
+    * explicit hard backend (``bwrap``/``seatbelt``/``landlock``) → must be
+      available AND survive a real probe, else :class:`SandboxViolation`.
+    * ``strict`` → first available+probed hard backend, else raises.
+    * ``auto`` → first available+probed hard backend; if none, falls back to
+      ``DirectBackend`` WITH a loud once-per-process consent warning — never a
+      silent downgrade.
+    """
+    raw = (mode or os.environ.get("OCTOPUS_PROCESS_SANDBOX") or "auto").strip().lower()
+    if raw in {"", "soft", "direct", "off", "false", "0"}:
+        return _set_resolved(raw or "soft", BackendChoice(DirectBackend(), "direct", hard=False))
+
+    with _resolved_lock:
+        if _resolved_choice is not None and _resolved_mode == raw:
+            return _resolved_choice
+
+    if raw not in {
+        "auto",
+        "strict",
+        "bwrap",
+        "bubblewrap",
+        "seatbelt",
+        "sandbox-exec",
+        "landlock",
+    }:
+        raise SandboxViolation(f"unknown process sandbox mode: {raw}")
+
+    for backend, name in _hard_backend_candidates(raw):
+        if backend.available() and probe_backend_runs(backend):
+            return _set_resolved(raw, BackendChoice(backend, name, hard=True, strict=raw == "strict"))
+
+    if raw == "auto":
+        # Never a silent downgrade: a hard backend is present-but-broken or
+        # none exists. Loudly degrade to soft and let the caller/operator see it.
+        _warn_soft_fallback_once()
+        return _set_resolved(raw, BackendChoice(DirectBackend(), "direct", hard=False))
+
+    raise SandboxViolation(
+        f"process sandbox mode '{raw}' has no usable hard backend "
+        "(install bwrap on Linux, rely on Landlock >= 5.13, use sandbox-exec "
+        "on macOS, or set OCTOPUS_PROCESS_SANDBOX=auto to allow a soft fallback "
+        "with an explicit warning)"
+    )
+
+
+def resolved_process_backend(mode: str | None = None) -> BackendChoice:
+    """Return the process-wide resolved backend, resolving on first use.
+
+    Once the startup gate or the first exec path resolves the posture, every
+    later call with the same mode returns that cached backend, so no call site
+    can silently run weaker than what the process resolved at boot.
+    """
+    raw = (mode or os.environ.get("OCTOPUS_PROCESS_SANDBOX") or "auto").strip().lower()
+    if raw in {"", "soft", "direct", "off", "false", "0"}:
+        return BackendChoice(DirectBackend(), "direct", hard=False)
+    with _resolved_lock:
+        if _resolved_choice is not None and _resolved_mode == raw:
+            return _resolved_choice
+    return resolve_process_backend(raw)
+
+
+def resolved_process_sandbox_posture(mode: str | None = None) -> ProcessSandboxPosture:
+    """Authoritative isolation posture of this process (resolves on first use)."""
+    effective = mode or effective_process_sandbox_mode()
+    choice = resolved_process_backend(effective)
+    policy = SandboxPolicy(workspace=Path.cwd())
+    return ProcessSandboxPosture(
+        mode=effective,
+        backend=choice.name,
+        hard=choice.hard,
+        enforcement=choice.backend.enforcement(policy),
+    )
+
+
+def _reset_process_backend_cache() -> None:
+    """Drop the resolved posture and probe cache (test isolation / hot reload)."""
+    global _resolved_choice, _resolved_mode
+    with _resolved_lock:
+        _resolved_choice = None
+        _resolved_mode = None
+    with _probe_lock:
+        _probe_cache.clear()
 
 
 def _unique_paths(paths: list[Path]) -> list[Path]:

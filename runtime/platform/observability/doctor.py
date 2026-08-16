@@ -74,9 +74,9 @@ class Doctor:
         at the Python layer, so it earns a visible warn.
         """
         try:
-            from runtime.safety.sandboxing.sandbox import select_process_backend
+            from runtime.safety.sandboxing.sandbox import resolved_process_backend
 
-            choice = select_process_backend()
+            choice = resolved_process_backend()
         except Exception as exc:  # noqa: BLE001 — doctor must never crash
             report.results.append(
                 CheckResult(

@@ -218,7 +218,7 @@ class _LSPClient:
             effective_process_sandbox_mode,
             inference_domains,
             process_sandbox_required,
-            select_process_backend,
+            resolved_process_backend,
         )
 
         if process_sandbox_required():
@@ -234,7 +234,7 @@ class _LSPClient:
                 inference_domains=inference_domains(),
             )
             try:
-                choice = select_process_backend(effective_process_sandbox_mode())
+                choice = resolved_process_backend(effective_process_sandbox_mode())
                 spawn_argv, spawn_env, transformed_cwd = choice.backend.transform(
                     spawn_argv,
                     policy.env_for(),

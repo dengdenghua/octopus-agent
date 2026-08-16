@@ -67,10 +67,10 @@ def probe_execution_health(*, cwd: str | None = None, timeout_s: float = 8.0) ->
         from runtime.safety.sandboxing.sandbox import (
             SandboxPolicy,
             effective_process_sandbox_mode,
-            select_process_backend,
+            resolved_process_backend,
         )
 
-        choice = select_process_backend(effective_process_sandbox_mode())
+        choice = resolved_process_backend(effective_process_sandbox_mode())
         policy = SandboxPolicy(workspace=workspace)
         argv, env, run_cwd = choice.backend.transform(
             ["echo", "octopus-exec-canary"],
@@ -92,6 +92,41 @@ def probe_execution_health(*, cwd: str | None = None, timeout_s: float = 8.0) ->
         return False
 
 
+def _log_process_isolation_posture(*, degraded: bool) -> None:
+    """Emit one authoritative line describing the process isolation posture.
+
+    Unlike the old canary (which only reported blocked execution), this also
+    reports the *strength* of the isolation: the resolved backend that the
+    whole process shares. A soft fallback is labelled ``DEGRADED`` so an
+    operator sees "commands run, but only soft constraints" instead of
+    assuming kernel-level isolation. Best-effort — never raises.
+    """
+    try:
+        from runtime.safety.sandboxing.sandbox import resolved_process_sandbox_posture
+
+        posture = resolved_process_sandbox_posture()
+    except Exception as exc:  # noqa: BLE001 — posture reporting must never break startup
+        _logger.debug("process isolation posture unavailable: %s", exc)
+        return
+    if posture.hard:
+        label = f"{posture.backend}(hard)"
+        level = _logger.info
+    else:
+        label = f"{posture.backend}(DEGRADED — soft constraints only)"
+        level = _logger.warning
+    if degraded:
+        suffix = "; sandboxed command could not run — run-evidence guards will auto-downgrade"
+    else:
+        suffix = ""
+    level(
+        "process isolation = %s | mode=%s | enforcement=%s%s",
+        label,
+        posture.mode,
+        posture.enforcement,
+        suffix,
+    )
+
+
 def run_startup_canary(*, cwd: str | None = None) -> bool:
     """Probe and record execution health; return the degraded flag.
 
@@ -102,10 +137,5 @@ def run_startup_canary(*, cwd: str | None = None) -> bool:
     """
     degraded = probe_execution_health(cwd=cwd)
     set_execution_canary(degraded)
-    if degraded:
-        _logger.warning(
-            "execution canary: sandboxed command could not run — dynamic "
-            "verification evidence (tests / typecheck) may be unavailable "
-            "this session; ReAct run-evidence guards will auto-downgrade"
-        )
+    _log_process_isolation_posture(degraded=degraded)
     return degraded

@@ -56,7 +56,7 @@ def test_commercial_stdio_parameters_use_selected_hard_backend(tmp_path, monkeyp
 
     monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "commercial")
     monkeypatch.setattr(
-        "runtime.safety.sandboxing.sandbox.select_process_backend",
+        "runtime.safety.sandboxing.sandbox.resolved_process_backend",
         lambda _mode: BackendChoice(TaggingBackend(), "tagged", hard=True),
     )
 

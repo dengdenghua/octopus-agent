@@ -216,6 +216,8 @@ def stream_run(
     allow_network: bool = False,
     egress_allow_common: bool = False,
     sandbox_required: bool = False,
+    approval_provider: Any | None = None,
+    thread_id: str = "",
 ) -> dict[str, Any]:
     """Run ``argv`` as a subprocess, streaming output as it arrives.
 
@@ -278,7 +280,7 @@ def stream_run(
     if sandbox_dir is not None:
         from runtime.safety.sandboxing.sandbox import (
             SandboxPolicy,
-            select_process_backend,
+            resolved_process_backend,
         )
 
         sandbox_root = Path(sandbox_dir).expanduser().resolve()
@@ -337,9 +339,57 @@ def stream_run(
             if os.environ.get("OCTOPUS_PROCESS_SANDBOX") or os.environ.get(
                 "OCTOPUS_DEPLOYMENT_MODE"
             ):
-                choice = select_process_backend(effective_process_sandbox_mode())
+                choice = resolved_process_backend(effective_process_sandbox_mode())
             else:
-                choice = select_process_backend()
+                choice = resolved_process_backend()
+            if getattr(choice, "needs_approval", False):
+                # A hard sandbox was requested but is not available on this
+                # host. Do not silently run unconfined: when an approval
+                # provider is available, ask a human to authorize the direct
+                # (non-sandboxed) fallback; otherwise fail closed.
+                if approval_provider is not None:
+                    from runtime.safety.approval.approval_gate import ApprovalRequest
+
+                    decision = approval_provider.request(
+                        ApprovalRequest(
+                            thread_id=thread_id,
+                            tool_name="exec_shell",
+                            tool_call_id="",
+                            args_preview=" ".join(str(a) for a in argv),
+                            detail="no hard sandbox backend is available; "
+                            "authorizing the unconfined execution fallback",
+                        ),
+                        timeout=120.0,
+                    )
+                    if not decision.approved:
+                        return {
+                            "error": "sandbox_fallback_denied: unconfined "
+                            "execution was not authorized",
+                            "sandbox_backend": "direct",
+                            "sandbox_hard": False,
+                            "execution_policy": _policy_snapshot(
+                                result={
+                                    "status": "denied",
+                                    "error_type": "sandbox_fallback_denied",
+                                }
+                            ),
+                        }
+                    # Authorized: fall through to the shared transform below;
+                    # the direct backend then runs with explicit human consent.
+                else:
+                    return {
+                    "error": "sandbox_fallback_needs_approval: no hard sandbox "
+                    "backend is available and no approval provider is "
+                    "configured; refuse unconfined execution",
+                    "sandbox_backend": "direct",
+                    "sandbox_hard": False,
+                    "execution_policy": _policy_snapshot(
+                        result={
+                            "status": "needs_approval",
+                            "error_type": "sandbox_fallback_needs_approval",
+                        }
+                    ),
+                }
             run_argv, run_env, transformed_cwd = choice.backend.transform(
                 list(argv),
                 run_env,

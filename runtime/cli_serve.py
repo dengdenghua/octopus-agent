@@ -100,12 +100,12 @@ def _prepare_execution_security(cfg: Any) -> tuple[str | None, dict[str, str | N
     from runtime.safety.sandboxing.sandbox import (
         effective_process_sandbox_mode,
         process_sandbox_required,
-        select_process_backend,
+        resolved_process_backend,
     )
 
     if process_sandbox_required():
         try:
-            select_process_backend(effective_process_sandbox_mode())
+            resolved_process_backend(effective_process_sandbox_mode())
         except Exception as exc:  # noqa: BLE001 — startup must report a stable config error
             for key, value in previous.items():
                 if value is None:

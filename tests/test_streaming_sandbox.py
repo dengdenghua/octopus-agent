@@ -138,7 +138,7 @@ def test_stream_run_strict_mode_rejects_without_hard_backend(
     )
 
     assert "error" in result
-    assert "strict process sandbox requested" in result["error"]
+    assert "has no usable hard backend" in result["error"]
     assert result["execution_policy"]["schema"] == "octopus.execution_policy.v1"
     assert result["execution_policy"]["sandbox_requested"] is True
     assert result["execution_policy"]["result"]["status"] == "sandbox_violation"
@@ -179,7 +179,7 @@ def test_commercial_mode_cannot_downgrade_to_soft_backend(
         sandbox_required=True,
     )
 
-    assert "strict process sandbox requested" in result["error"]
+    assert "has no usable hard backend" in result["error"]
     assert result["execution_policy"]["backend"] == "direct"
     assert result["execution_policy"]["result"]["status"] == "sandbox_violation"
 
@@ -202,7 +202,7 @@ def test_stream_run_uses_selected_backend(
 
     monkeypatch.setattr(
         sandbox_mod,
-        "select_process_backend",
+        "resolved_process_backend",
         lambda: sandbox_mod.BackendChoice(TaggingBackend(), "tagged", hard=True),
     )
 
@@ -230,7 +230,7 @@ def test_stream_run_surfaces_backend_violation(
 
     monkeypatch.setattr(
         sandbox_mod,
-        "select_process_backend",
+        "resolved_process_backend",
         lambda: sandbox_mod.BackendChoice(RejectingBackend(), "reject", hard=True),
     )
 

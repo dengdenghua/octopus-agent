@@ -672,7 +672,7 @@ class TestBackgroundExec:
 
         monkeypatch.setattr(
             sandbox_mod,
-            "select_process_backend",
+            "resolved_process_backend",
             lambda: sandbox_mod.BackendChoice(TaggingBackend(), "tagged", hard=True),
         )
 

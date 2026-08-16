@@ -639,3 +639,167 @@ class TestLandlockSelection:
         monkeypatch.setattr(SeatbeltBackend, "available", staticmethod(lambda: False))
         choice = select_process_backend()
         assert choice.name == "landlock"
+
+
+# ═══════════════════════════════════════════════════════════
+# Resolved posture: real probe + single source of truth
+# ═══════════════════════════════════════════════════════════
+
+
+@pytest.fixture
+def fresh_backend_cache():
+    from runtime.safety.sandboxing import sandbox as sandbox_mod
+
+    sandbox_mod._reset_process_backend_cache()
+    yield
+    sandbox_mod._reset_process_backend_cache()
+
+
+class TestResolvedPosture:
+    def test_probe_direct_backend_runs(self, workspace: Path) -> None:
+        from runtime.safety.sandboxing.sandbox import DirectBackend, probe_backend_runs
+
+        assert probe_backend_runs(DirectBackend()) is True
+
+    def test_resolve_soft_uses_direct(
+        self, monkeypatch: pytest.MonkeyPatch, fresh_backend_cache
+    ) -> None:
+        monkeypatch.setenv("OCTOPUS_PROCESS_SANDBOX", "soft")
+        from runtime.safety.sandboxing.sandbox import DirectBackend, resolve_process_backend
+
+        choice = resolve_process_backend()
+        assert choice.name == "direct"
+        assert choice.hard is False
+        assert isinstance(choice.backend, DirectBackend)
+
+    def test_resolve_strict_fails_closed_without_verified_backend(
+        self, monkeypatch: pytest.MonkeyPatch, fresh_backend_cache
+    ) -> None:
+        monkeypatch.setenv("OCTOPUS_PROCESS_SANDBOX", "strict")
+        from runtime.safety.sandboxing import sandbox as sandbox_mod
+        from runtime.safety.sandboxing.sandbox import (
+            BubblewrapBackend,
+            SandboxViolation,
+            SeatbeltBackend,
+            resolve_process_backend,
+        )
+
+        monkeypatch.setattr(BubblewrapBackend, "available", staticmethod(lambda: False))
+        monkeypatch.setattr(SeatbeltBackend, "available", staticmethod(lambda: False))
+        monkeypatch.setattr(sandbox_mod, "probe_backend_runs", lambda _b: True)
+
+        with pytest.raises(SandboxViolation, match="has no usable hard backend"):
+            resolve_process_backend()
+
+    def test_resolve_auto_falls_back_to_soft_loudly(
+        self, monkeypatch: pytest.MonkeyPatch, fresh_backend_cache
+    ) -> None:
+        monkeypatch.setenv("OCTOPUS_PROCESS_SANDBOX", "auto")
+        from runtime.safety.sandboxing import sandbox as sandbox_mod
+        from runtime.safety.sandboxing.sandbox import (
+            BubblewrapBackend,
+            DirectBackend,
+            SeatbeltBackend,
+            resolve_process_backend,
+        )
+
+        monkeypatch.setattr(BubblewrapBackend, "available", staticmethod(lambda: False))
+        monkeypatch.setattr(SeatbeltBackend, "available", staticmethod(lambda: False))
+        monkeypatch.setattr(sandbox_mod, "probe_backend_runs", lambda _b: True)
+
+        choice = resolve_process_backend()
+        assert choice.name == "direct"
+        assert choice.hard is False
+        assert isinstance(choice.backend, DirectBackend)
+
+    def test_resolve_requires_real_probe_for_present_backend(
+        self, monkeypatch: pytest.MonkeyPatch, fresh_backend_cache
+    ) -> None:
+        """A backend that is 'available' (binary present) but fails to run is
+        treated as unavailable — this is the present-but-broken seatbelt case."""
+        monkeypatch.setenv("OCTOPUS_PROCESS_SANDBOX", "seatbelt")
+        from runtime.safety.sandboxing.sandbox import (
+            SandboxViolation,
+            SeatbeltBackend,
+            resolve_process_backend,
+        )
+
+        monkeypatch.setattr(SeatbeltBackend, "available", staticmethod(lambda: True))
+        # Probe fails even though the binary is present.
+        from runtime.safety.sandboxing import sandbox as sandbox_mod
+
+        monkeypatch.setattr(sandbox_mod, "probe_backend_runs", lambda _b: False)
+
+        with pytest.raises(SandboxViolation, match="has no usable hard backend"):
+            resolve_process_backend()
+
+    def test_resolve_picks_verified_backend(
+        self, monkeypatch: pytest.MonkeyPatch, fresh_backend_cache
+    ) -> None:
+        monkeypatch.setenv("OCTOPUS_PROCESS_SANDBOX", "auto")
+        monkeypatch.setattr(sys, "platform", "linux")
+        from runtime.safety.sandboxing import sandbox as sandbox_mod
+        from runtime.safety.sandboxing.sandbox import (
+            BubblewrapBackend,
+            SeatbeltBackend,
+            resolve_process_backend,
+        )
+
+        monkeypatch.setattr(BubblewrapBackend, "available", staticmethod(lambda: True))
+        monkeypatch.setattr(SeatbeltBackend, "available", staticmethod(lambda: True))
+        # Only bwrap verifies; seatbelt is present but does not verify.
+        monkeypatch.setattr(
+            sandbox_mod,
+            "probe_backend_runs",
+            lambda b: isinstance(b, BubblewrapBackend),
+        )
+
+        choice = resolve_process_backend()
+        assert choice.name == "bwrap"
+        assert choice.hard is True
+
+    def test_resolved_process_backend_is_cached_single_source(
+        self, monkeypatch: pytest.MonkeyPatch, fresh_backend_cache
+    ) -> None:
+        monkeypatch.setenv("OCTOPUS_PROCESS_SANDBOX", "auto")
+        monkeypatch.setattr(sys, "platform", "linux")
+        from runtime.safety.sandboxing import sandbox as sandbox_mod
+        from runtime.safety.sandboxing.sandbox import (
+            BubblewrapBackend,
+            SeatbeltBackend,
+            resolve_process_backend,
+        )
+
+        monkeypatch.setattr(BubblewrapBackend, "available", staticmethod(lambda: True))
+        monkeypatch.setattr(SeatbeltBackend, "available", staticmethod(lambda: True))
+        monkeypatch.setattr(sandbox_mod, "probe_backend_runs", lambda _b: True)
+
+        first = resolve_process_backend()
+        # Second resolution must return the identical cached instance and must
+        # not re-run the (now-failing) resolution path.
+        monkeypatch.setattr(
+            sandbox_mod, "resolve_process_backend", lambda *a, **k: (_ for _ in ()).throw(
+                AssertionError("must not re-resolve")
+            )
+        )
+        second = sandbox_mod.resolved_process_backend()
+        assert second is first
+
+    def test_posture_reports_backend_and_strength(
+        self, monkeypatch: pytest.MonkeyPatch, fresh_backend_cache, tmp_path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("OCTOPUS_PROCESS_SANDBOX", "soft")
+        from runtime.safety.sandboxing.sandbox import (
+            DirectBackend,
+            resolved_process_sandbox_posture,
+        )
+
+        posture = resolved_process_sandbox_posture()
+        assert posture.backend == "direct"
+        assert posture.hard is False
+        assert posture.enforcement == DirectBackend().enforcement(
+            __import__(
+                "runtime.safety.sandboxing.sandbox", fromlist=["SandboxPolicy"]
+            ).SandboxPolicy(workspace=tmp_path)
+        )

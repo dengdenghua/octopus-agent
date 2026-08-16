@@ -404,7 +404,7 @@ def _background_exec(
             SandboxPolicy,
             SandboxViolation,
             effective_process_sandbox_mode,
-            select_process_backend,
+            resolved_process_backend,
         )
 
         sandbox_root = Path(sandbox_dir).expanduser().resolve()
@@ -427,9 +427,9 @@ def _background_exec(
             if os.environ.get("OCTOPUS_PROCESS_SANDBOX") or os.environ.get(
                 "OCTOPUS_DEPLOYMENT_MODE"
             ):
-                choice = select_process_backend(effective_process_sandbox_mode())
+                choice = resolved_process_backend(effective_process_sandbox_mode())
             else:
-                choice = select_process_backend()
+                choice = resolved_process_backend()
             argv, run_env, transformed_cwd = choice.backend.transform(
                 list(argv),
                 run_env,
