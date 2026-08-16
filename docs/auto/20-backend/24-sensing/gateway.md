@@ -83,6 +83,7 @@ tier: "standard"
 | `_realtime_cerebrum_requests.py` | JSON-RPC method dispatch for the realtime runtime. |
 | `_realtime_cerebrum_steering.py` | Active-turn lease + steering management for the realtime runtime. |
 | `_realtime_cerebrum_thread.py` | Thread/session + emit helpers for the realtime runtime. |
+| `_realtime_detached_turn.py` | Connection-detached emitter for server-resident turns (audit T-01). |
 | `_realtime_gateway_approval.py` | Per-connection approval manager and gateway-wide interrupt registry. |
 | `_realtime_gateway_connection.py` | Per-WebSocket RPC connection (``RpcConnection``). |
 | `_realtime_gateway_frame.py` | Last-ditch frame-size guard so no single WS frame exceeds the ceiling. |

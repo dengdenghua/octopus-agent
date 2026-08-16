@@ -443,6 +443,9 @@ def test_schema_oct_requires_secret_when_enabled() -> None:
     from runtime.platform.config.schema import OctConfig as SchemaOct
 
     SchemaOct(enabled=False)  # ok
-    SchemaOct(enabled=True, jwt_secret="x" * 32)  # ok
+    # Audit R-03: a "valid-looking" long secret must still clear the entropy
+    # gate — use a genuinely strong secret for the positive case.
+    _strong = "V8!xQ#z9mK2@Lp4%Yw7^Nc1&Fd3*Gh5!Tq7#Rp9"
+    SchemaOct(enabled=True, jwt_secret=_strong)  # ok
     with pytest.raises(ValueError, match="jwt_secret"):
         SchemaOct(enabled=True)

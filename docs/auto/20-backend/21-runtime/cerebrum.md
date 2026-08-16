@@ -296,6 +296,7 @@ tier: "core"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
+| func | `def turn_wall_time_cap_s(goal_mode, research_mode, swarm_mode)` | Resolve the wall-clock hard cap for a turn (audit T-05). |
 | class | `class ActiveTask` |  |
 | class | `class PauseRequest` |  |
 | class | `class PauseController` |  |
@@ -476,6 +477,7 @@ tier: "core"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def is_smart_routing_enabled()` |  |
+| func | `def resolve_tier_model(tier)` | Public alias for :func:`_resolve_tier_model`. |
 | func | `def get_tier_config()` | Snapshot of the operator-configured tier → model map. |
 | func | `def estimate_turn_complexity(text, has_explicit_model, has_topology, is_code_mode, is_swarm_mode, is_research_mode, is_goal_mode, looks_tool_intent, requires_todo_protocol)` | Return a three-tier verdict for the turn. |
 | func | `def select_model_for_complexity(verdict, user_model, is_code_mode)` | Map a verdict to the actual model name to call. |
@@ -504,7 +506,7 @@ tier: "core"
 
 ## Who imports this
 
-**54** file(s) reference this package:
+**56** file(s) reference this package:
 
 - **`runtime/cli_code.py/`** · 1 file(s)
   - `runtime/cli_code.py`
@@ -527,9 +529,11 @@ tier: "core"
   - `runtime/execution/parallel_agents/stack_runner.py`
   - `runtime/execution/subagents/react_drive.py`
   - _… and 2 more_
-- **`runtime/memory/`** · 2 file(s)
+- **`runtime/memory/`** · 4 file(s)
   - `runtime/memory/cowork/turn_plan.py`
   - `runtime/memory/diagnostics/_trace_store_recovery.py`
+  - `runtime/memory/threads/compaction.py`
+  - `runtime/memory/threads/llm_summariser.py`
 - **`runtime/platform/`** · 7 file(s)
   - `runtime/platform/config/builder.py`
   - `runtime/platform/lifecycle/demo.py`
