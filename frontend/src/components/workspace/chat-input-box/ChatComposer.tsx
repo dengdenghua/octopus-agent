@@ -1,9 +1,9 @@
 import {
-  ArrowUpIcon,
   GlobeIcon,
   ImageIcon,
   LightbulbIcon,
   Loader2Icon,
+  SendHorizontalIcon,
   ZapIcon,
   MapIcon,
   MonitorIcon,
@@ -805,22 +805,28 @@ export function ChatComposer({
     (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
       const items = event.clipboardData?.items;
       if (!items) return;
-      const files: File[] = [];
+      const pasted: File[] = [];
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         if (item && item.kind === "file") {
           const file = item.getAsFile();
-          if (file && file.type.toLowerCase().startsWith("image/")) {
-            files.push(file);
+          if (file) {
+            pasted.push(file);
           }
         }
       }
-      if (files.length > 0) {
-        event.preventDefault();
-        addPendingImages(files);
-      }
+      if (pasted.length === 0) return;
+      const imageFiles = pasted.filter((file) =>
+        file.type.toLowerCase().startsWith("image/"),
+      );
+      const otherFiles = pasted.filter(
+        (file) => !file.type.toLowerCase().startsWith("image/"),
+      );
+      event.preventDefault();
+      if (imageFiles.length > 0) addPendingImages(imageFiles);
+      if (otherFiles.length > 0) addPendingUploadFiles(otherFiles);
     },
-    [addPendingImages],
+    [addPendingImages, addPendingUploadFiles],
   );
   const handleDropFiles = useCallback(
     (event: React.DragEvent<HTMLTextAreaElement>) => {
@@ -1170,7 +1176,7 @@ export function ChatComposer({
                 title={sendLabel}
                 aria-label={sendLabel}
               >
-                <ArrowUpIcon className="size-3.5" />
+                <SendHorizontalIcon className="size-3.5" />
               </button>
               <button
                 type="button"
@@ -1216,7 +1222,7 @@ export function ChatComposer({
               {isBusy ? (
                 <Loader2Icon className="size-3.5 animate-spin" />
               ) : (
-                <ArrowUpIcon className="size-3.5" />
+                <SendHorizontalIcon className="size-3.5" />
               )}
             </button>
           )}
