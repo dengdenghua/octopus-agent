@@ -237,3 +237,13 @@ def test_run_quickstart_doctor_failure(monkeypatch, tmp_path: Path) -> None:
     )
     assert rc == 1
     assert "doctor" in text.lower()
+
+
+def test_run_kg_empty_journal(tmp_path: Path) -> None:
+    j = tmp_path / "j.jsonl"
+    j.write_text("", encoding="utf-8")
+    rc, out = _run(cc.run_kg, from_journal=j, color=False)
+    assert rc == 0
+    assert "knowledge graph" in out.lower()
+    rc2, _ = _run(cc.run_kg, from_journal=j, color=False, neighbors="x")
+    assert rc2 == 0
