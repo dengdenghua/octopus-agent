@@ -29,9 +29,11 @@ from runtime.core.cerebrum.react_loop import (
 
 class TestCheckpointInterval:
     def test_default_is_every_completed_iteration(self, monkeypatch):
+        # Audit T-14: the shipped default is now every 10 iterations; this
+        # test pins the default explicitly.
         monkeypatch.delenv("OCTOPUS_CHECKPOINT_EVERY_N", raising=False)
-        assert _DEFAULT_CHECKPOINT_INTERVAL == 1
-        assert _checkpoint_interval() == 1
+        assert _DEFAULT_CHECKPOINT_INTERVAL == 10
+        assert _checkpoint_interval() == 10
 
     def test_unset_returns_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("OCTOPUS_CHECKPOINT_EVERY_N", raising=False)
