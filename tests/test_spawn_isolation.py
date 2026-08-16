@@ -105,7 +105,9 @@ def test_the_diff_survives_the_envelope_projection(monkeypatch: Any) -> None:
     succ = env["successes"][0]
     assert succ.get("isolated") is True, "isolation flag lost in the envelope"
     assert "diff --git" in str(succ.get("diff") or ""), "the diff never reached the caller"
-    assert str(succ.get("branch") or "").startswith("octo/wt-"), "branch lost in the envelope"
+    # Audit F-08: the worktree branch is deleted right after capture, so it
+    # must NOT ride out in the envelope as a stale/misleading identifier.
+    assert "branch" not in succ, "stale branch leaked into the envelope"
 
 
 def test_graph_node_surfaces_its_isolated_diff(monkeypatch: Any) -> None:

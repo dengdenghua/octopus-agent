@@ -248,7 +248,6 @@ def _run_tournament(
             ok=bool(r.get("ok")),
             meta={
                 "files": r.get("files") or [],
-                "branch": r.get("branch"),
                 "error": r.get("error"),
             },
         )
@@ -294,7 +293,6 @@ def _run_tournament(
             {
                 "id": winner.id,
                 "files": list(winner.meta.get("files") or []),
-                "branch": winner.meta.get("branch"),
                 "diff": winner.output,
             }
             if winner

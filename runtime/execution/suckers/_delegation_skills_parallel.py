@@ -320,7 +320,9 @@ def _call_agent_parallel(
             )
             diff, files = _capture_diff(path)
         result["isolated"] = True
-        result["branch"] = branch
+        # Audit F-08: the worktree branch is deleted right after capture, so
+        # the branch name in the envelope would be stale/misleading — the
+        # lane is identified by bb_key/spec_index instead.
         result["diff"] = diff
         result["files_touched"] = files
         return result
