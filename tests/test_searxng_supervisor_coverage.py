@@ -61,3 +61,98 @@ def test_should_restart_matrix() -> None:
     assert ss._should_restart(**{**base, "docker_present": False}) is False
     assert ss._should_restart(**{**base, "container_running": True}) is False
     assert ss._should_restart(**{**base, "last_restart": 95.0}) is False  # in backoff
+
+
+def _proc(returncode=0, stdout="", stderr=""):
+    import subprocess
+
+    # text=True callers expect str; the docker-info probe uses bytes but
+    # never inspects stdout.
+    return subprocess.CompletedProcess([], returncode, stdout=stdout, stderr=stderr)
+
+
+def test_docker_probes(monkeypatch) -> None:
+    import subprocess
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _proc(0, "v25"))
+    assert ss._docker_running("docker") is True
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _proc(1))
+    assert ss._docker_running("docker") is False
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(OSError("no docker")))
+    assert ss._docker_running("docker") is False
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _proc(0, "abc123\n"))
+    assert ss._container_exists("docker", "searx") is True
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _proc(0, ""))
+    assert ss._container_exists("docker", "searx") is False
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _proc(0, "true"))
+    assert ss._container_running("docker", "searx") is True
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _proc(0, "false"))
+    assert ss._container_running("docker", "searx") is False
+
+
+def test_already_up(monkeypatch) -> None:
+    class _Up:
+        def __init__(self, ok):
+            self.ok = ok
+
+        def get(self, url):
+            if not self.ok:
+                raise RuntimeError("down")
+            return object()
+
+    class _Client:
+        def __init__(self, ok):
+            self._ok = ok
+
+        def __enter__(self):
+            return _Up(self._ok)
+
+        def __exit__(self, *a):
+            return False
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "Client", lambda timeout=1.5: _Client(True))
+    assert ss._already_up() is True
+    monkeypatch.setattr(httpx, "Client", lambda timeout=1.5: _Client(False))
+    assert ss._already_up() is False
+
+
+def test_ensure_settings_and_url_env(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    f = ss._ensure_settings()
+    assert f.exists() and "secret_key" in f.read_text(encoding="utf-8")
+    f2 = ss._ensure_settings()
+    assert f == f2  # idempotent
+
+    import os
+
+    monkeypatch.delenv("SEARXNG_URL", raising=False)
+    ss._set_url_env(force=False)
+    assert os.environ.get("SEARXNG_URL", "") == ss._local_url()
+    monkeypatch.setenv("SEARXNG_URL", "https://external")
+    ss._set_url_env(force=False)
+    assert os.environ["SEARXNG_URL"] == "https://external"
+    ss._set_url_env(force=True)
+    assert os.environ["SEARXNG_URL"] == ss._local_url()
+
+
+def test_launch_branches(monkeypatch) -> None:
+    import os
+    import subprocess
+
+    monkeypatch.setattr(ss, "_docker", lambda: "/usr/bin/docker")
+    monkeypatch.setenv("HOME", "/tmp/searx-home")
+    # running already
+    monkeypatch.setattr(ss, "_container_running", lambda d, n: True)
+    assert ss._launch() is True
+    # exists but stopped -> docker start
+    monkeypatch.setattr(ss, "_container_running", lambda d, n: False)
+    monkeypatch.setattr(ss, "_container_exists", lambda d, n: True)
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _proc(0))
+    assert ss._launch() is True
+    # no docker
+    monkeypatch.setattr(ss, "_docker", lambda: None)
+    assert ss._launch() is False
