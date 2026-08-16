@@ -98,11 +98,17 @@ def test_doc_write_and_read_no_root(tmp_path: Path, monkeypatch) -> None:
     assert bad_ext.status_code == 400
     bad_body = client.put("/api/wiki/docs/x.md", json={"content": 1})
     assert bad_body.status_code == 400
-    ok = client.put("/api/wiki/docs/custom/note.md", json={"content": "# Note\n"})
+    ok = client.put("/api/wiki/docs/_coverage_tmp/note.md", json={"content": "# Note\n"})
     assert ok.status_code == 200
-    read = client.get("/api/wiki/docs/custom/note.md")
+    read = client.get("/api/wiki/docs/_coverage_tmp/note.md")
     assert read.status_code == 200
     assert read.json()["content"] == "# Note\n"
+    # The no-root PUT writes into the real docs/auto tree — remove the
+    # test artifact so it cannot leak into the repo.
+    target = wr._resolve_doc_path("_coverage_tmp/note.md")
+    if target.is_file():
+        target.unlink()
+        target.parent.rmdir()
 
 
 def test_generate_conflict_when_running(tmp_path: Path, monkeypatch) -> None:
