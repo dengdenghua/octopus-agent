@@ -202,6 +202,35 @@ def worktree_scope(repo_root: str, name: str) -> Iterator[tuple[str, str]]:
         shutil.rmtree(base, ignore_errors=True)
 
 
+# Audit F-09: a single oversized diff (e.g. a committed binary or generated
+# blob) must not blow up the model context; the diff is capped and truncated
+# with an explicit marker.
+_MAX_DIFF_CHARS = 200_000
+
+
+def _cap_diff(diff: str) -> str:
+    if len(diff) <= _MAX_DIFF_CHARS:
+        return diff
+    return (
+        diff[:_MAX_DIFF_CHARS]
+        + f"\n...(diff truncated at {_MAX_DIFF_CHARS} chars)\n"
+    )
+
+
+def _symlink_warnings(worktree: str, files: list[str]) -> str:
+    """Flag changed paths that are symlinks (audit F-09) so a caller that
+    later applies the diff knows a link target is involved."""
+    warnings: list[str] = []
+    for rel in files:
+        path = os.path.join(worktree, rel)
+        try:
+            if os.path.islink(path):
+                warnings.append(f"warning: {rel} is a symlink -> {os.readlink(path)}")
+        except OSError:
+            continue
+    return "\n".join(warnings)
+
+
 def _capture_diff(worktree: str, repo_root: str) -> tuple[str, list[str]]:
     # Fail closed: if the worktree's .git file was tampered with, resolving it
     # raises and the task is marked failed rather than running git against a
@@ -212,6 +241,10 @@ def _capture_diff(worktree: str, repo_root: str) -> tuple[str, list[str]]:
         worktree, repo_root, "diff", "--cached", "--name-only", "--no-textconv", check=False
     ).stdout
     files = [line for line in names.split("\n") if line.strip()]
+    diff = _cap_diff(diff)
+    warnings = _symlink_warnings(worktree, files)
+    if warnings:
+        diff = (warnings + "\n" + diff) if diff else warnings
     return diff, files
 
 

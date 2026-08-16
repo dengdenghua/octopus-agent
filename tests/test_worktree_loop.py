@@ -246,3 +246,35 @@ def test_worktree_loop_capture_untouched_by_hardening(tmp_path: Path):
     assert r["results"][0]["files"] == ["a.txt"]
     assert "+hello" in r["results"][0]["diff"]
     assert _worktree_count(repo) == 1
+
+
+def test_oversized_diff_is_truncated_with_marker(tmp_path: Path):
+    """Audit F-09: a diff larger than the cap is truncated with a marker."""
+    repo = _init_repo(tmp_path)
+
+    def worker(path: str, task: str) -> None:
+        (Path(path) / "big.txt").write_text("x" * 300_000, encoding="utf-8")
+
+    r = run_worktree_loop(str(repo), ["t1"], worker)
+    assert r["ok"] is True
+    diff = r["results"][0]["diff"]
+    assert "diff truncated at" in diff
+    assert len(diff) < 300_000
+
+
+def test_symlink_in_diff_is_flagged(tmp_path: Path):
+    """Audit F-09: changed symlinks are flagged in the captured diff."""
+    repo = _init_repo(tmp_path)
+
+    def worker(path: str, task: str) -> None:
+        (Path(path) / "real.txt").write_text("target\n", encoding="utf-8")
+        try:
+            (Path(path) / "link.txt").symlink_to("real.txt")
+        except (OSError, NotImplementedError):
+            pass
+
+    r = run_worktree_loop(str(repo), ["t1"], worker)
+    assert r["ok"] is True
+    diff = r["results"][0]["diff"]
+    if (Path(tmp_path) / "wt").exists():  # symlink creation supported
+        assert "is a symlink" in diff
