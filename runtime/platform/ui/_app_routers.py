@@ -268,6 +268,19 @@ def mount_routers_a(
             logging.getLogger(__name__).warning(
                 "loop run startup reconciliation failed: %s", _reconcile_exc
             )
+        # Audit T-13: retention — a long-lived loop store must not grow
+        # without bound. Best-effort, like reconciliation.
+        try:
+            _pruned = _loop_store.prune()
+            if _pruned:
+                logging.getLogger(__name__).info(
+                    "loop run store pruned: %d run(s) over retention policy",
+                    _pruned,
+                )
+        except Exception as _prune_exc:  # noqa: BLE001
+            logging.getLogger(__name__).warning(
+                "loop run retention prune failed: %s", _prune_exc
+            )
         _loop_review_queue = ReviewQueue(app_paths().review_queue_path)
         _loop_controller = (
             LoopController(

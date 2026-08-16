@@ -142,6 +142,55 @@ class LoopRunStore:
                 self._write_payload(payload)
             return affected
 
+    #: Retention policy (audit T-13): keep at most this many runs per owner
+    #: namespace and nothing older than this. Applied at startup via
+    #: :meth:`prune` so a long-lived loop store cannot grow without bound.
+    DEFAULT_MAX_RUNS = 1_000
+    DEFAULT_TTL_SECONDS = 90 * 24 * 60 * 60
+
+    def prune(
+        self,
+        *,
+        max_runs: int | None = None,
+        ttl_seconds: int | None = None,
+    ) -> int:
+        """Enforce retention (audit T-13): drop the oldest runs beyond
+        ``max_runs`` and any run older than ``ttl_seconds`` (by
+        ``created_at``). Idempotent; returns the number of runs removed.
+        ``None`` keeps the default policy (``DEFAULT_MAX_RUNS`` /
+        ``DEFAULT_TTL_SECONDS``); ``0`` disables that axis.
+        """
+        from datetime import UTC, datetime
+
+        cap = DEFAULT_MAX_RUNS if max_runs is None else max(0, int(max_runs))
+        ttl = DEFAULT_TTL_SECONDS if ttl_seconds is None else max(0, int(ttl_seconds))
+        now = datetime.now(UTC)
+        with self._write_lock():
+            payload = self._read_payload()
+            runs = self._read_runs_from_payload(payload)
+            before = len(runs)
+            keep: list[LoopRun] = []
+            for run in runs:
+                if ttl > 0:
+                    try:
+                        created = datetime.fromisoformat(run.created_at)
+                        if created.tzinfo is None:
+                            created = created.replace(tzinfo=UTC)
+                        if (now - created).total_seconds() > ttl:
+                            continue
+                    except (TypeError, ValueError):
+                        pass  # unparseable timestamp: keep (fail safe)
+                keep.append(run)
+            if cap > 0:
+                keep.sort(key=lambda run: (run.created_at, run.run_id), reverse=True)
+                keep = keep[:cap]
+            removed = before - len(keep)
+            if removed:
+                payload["runs"] = self._dump_runs(keep)
+                payload["lastUpdated"] = _now_iso()
+                self._write_payload(payload)
+            return removed
+
     def save(self, run: LoopRun) -> LoopRun:
         return self.mutate(run.run_id, lambda _: run)
 

@@ -313,3 +313,72 @@ def test_reconcile_interrupted_folds_active_runs_and_preserves_attempts(tmp_path
 def test_reconcile_interrupted_on_empty_store(tmp_path) -> None:
     store = LoopRunStore(tmp_path / "loop_runs.json")
     assert store.reconcile_interrupted() == []
+
+
+# ═══════════════════════════════════════════════════════════
+# Audit T-13: retention (max-runs cap + TTL)
+# ═══════════════════════════════════════════════════════════
+
+
+def test_prune_enforces_max_runs_cap(tmp_path) -> None:
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    for i in range(30):
+        store.create(
+            LoopRun(
+                owner_id="alice",
+                goal=f"g{i}",
+                thread_id="t",
+                workspace_path=str(tmp_path),
+                status=LoopRunStatus.COMPLETED,
+            )
+        )
+    removed = store.prune(max_runs=10, ttl_seconds=0)
+    assert removed == 20
+    remaining = store.list(limit=1000)
+    assert len(remaining) == 10
+    # The newest 10 survive (created_at ordering).
+    goals = sorted(r.goal for r in remaining)
+    assert goals == [f"g{i}" for i in range(20, 30)]
+
+
+def test_prune_enforces_ttl(tmp_path) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    old = LoopRun(
+        owner_id="alice",
+        goal="old",
+        thread_id="t",
+        workspace_path=str(tmp_path),
+        status=LoopRunStatus.COMPLETED,
+        created_at=(datetime.now(UTC) - timedelta(days=200)).isoformat(),
+    )
+    fresh = LoopRun(
+        owner_id="alice",
+        goal="fresh",
+        thread_id="t",
+        workspace_path=str(tmp_path),
+        status=LoopRunStatus.COMPLETED,
+    )
+    store.create(old)
+    store.create(fresh)
+    removed = store.prune(max_runs=0, ttl_seconds=90 * 24 * 60 * 60)
+    assert removed == 1
+    remaining = store.list(limit=100)
+    assert [r.goal for r in remaining] == ["fresh"]
+
+
+def test_prune_is_idempotent_when_within_policy(tmp_path) -> None:
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    for i in range(5):
+        store.create(
+            LoopRun(
+                owner_id="alice",
+                goal=f"g{i}",
+                thread_id="t",
+                workspace_path=str(tmp_path),
+                status=LoopRunStatus.COMPLETED,
+            )
+        )
+    assert store.prune(max_runs=100, ttl_seconds=0) == 0
+    assert len(store.list(limit=1000)) == 5
