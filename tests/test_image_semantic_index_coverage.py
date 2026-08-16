@@ -111,3 +111,48 @@ def test_find_duplicates_and_blurry(tmp_path: Path) -> None:
     assert blurry[0]["path"] == "blur.png"
     assert isi.find_duplicates(db_path=tmp_path / "nope.db") is None
     assert isi.find_blurry(db_path=tmp_path / "nope.db") is None
+
+
+class _FakeEmbed:
+    def embed(self, items):
+        return [[1.0, 0.0, 0.5] for _ in items]
+
+
+def test_build_index_and_search(monkeypatch, tmp_path: Path) -> None:
+    from PIL import Image
+
+    monkeypatch.setenv("OCTOPUS_IMAGE_SEMANTIC", "auto")
+    monkeypatch.setattr(isi, "_image_model", lambda: _FakeEmbed())
+    monkeypatch.setattr(isi, "_text_model", lambda: _FakeEmbed())
+    monkeypatch.setattr(isi, "_face_app", lambda: None)
+
+    img_dir = tmp_path / "imgs"
+    img_dir.mkdir()
+    Image.new("RGB", (8, 8), (10, 10, 10)).save(img_dir / "a.png")
+
+    db = tmp_path / "idx.db"
+    summary = isi.build_index(str(img_dir), db_path=db, include_faces=True)
+    assert summary["ok"] is True
+    assert summary["indexed"] == 1
+    assert summary["semantic"] is True
+
+    hits = isi.search_by_text("a cat", top_k=5, db_path=db)
+    assert hits is not None and len(hits) == 1
+    assert hits[0]["path"] == "a.png"
+
+    img_hits = isi.search_by_image(str(img_dir / "a.png"), top_k=5, db_path=db)
+    assert img_hits is not None and len(img_hits) == 1
+
+    # disabled -> None / error
+    monkeypatch.setenv("OCTOPUS_IMAGE_SEMANTIC", "0")
+    assert isi.search_by_text("x", db_path=db) is None
+    disabled = isi.build_index(str(img_dir), db_path=db)
+    assert disabled["ok"] is False and "disabled" in disabled["error"]
+
+    # no model -> None / error
+    monkeypatch.setenv("OCTOPUS_IMAGE_SEMANTIC", "auto")
+    monkeypatch.setattr(isi, "_image_model", lambda: None)
+    no_model = isi.build_index(str(img_dir), db_path=db)
+    assert no_model["ok"] is False and "clip_vision_unavailable" in no_model["error"]
+    monkeypatch.setattr(isi, "_text_model", lambda: None)
+    assert isi.search_by_text("x", db_path=db) is None

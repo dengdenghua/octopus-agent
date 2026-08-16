@@ -224,11 +224,15 @@ def _compute_dhash(img, size: int = 8) -> str:
 
 
 def _laplacian_sharpness(img) -> float:
-    """Compute Laplacian variance for blur detection. Lower variance → more blurry."""
-    import cv2
-    import numpy as np
+    """Compute Laplacian variance for blur detection. Lower variance → more blurry.
 
+    Self-gated: when OpenCV is unavailable the import is INSIDE the try so the
+    function degrades to 0.0 instead of raising into the index builder.
+    """
     try:
+        import cv2
+        import numpy as np
+
         gray = cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2GRAY)
         lap = cv2.Laplacian(gray, cv2.CV_64F)
         return lap.var()
