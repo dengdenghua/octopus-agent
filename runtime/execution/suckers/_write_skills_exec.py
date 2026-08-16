@@ -21,8 +21,10 @@ from ._write_skills_background import (
     _background_execution_policy,
     _background_paths,
     _BackgroundProcess,
+    _prune_finished_background_processes,
     _read_background_metadata,
     _snapshot_background_metadata,
+    _sweep_background_dirs,
     _write_background_metadata,
     background_process_identity_matches,
 )
@@ -324,6 +326,29 @@ def _background_exec(
     if parse_error:
         return {"error": parse_error}
     assert argv is not None
+
+    # Opportunistic housekeeping on every new background task: bound the
+    # in-memory registry and sweep terminal task dirs past their TTL.
+    with contextlib.suppress(Exception):
+        _prune_finished_background_processes()
+        _sweep_background_dirs()
+
+    # Cap simultaneously running tasks so a runaway agent cannot fork-bomb
+    # the host via repeated background_exec calls.
+    from ._write_skills_background import _BACKGROUND_MAX_CONCURRENT
+
+    running_ids = [
+        tid for tid, bg in _BACKGROUND_PROCESSES.items() if bg.proc.poll() is None
+    ]
+    if len(running_ids) >= _BACKGROUND_MAX_CONCURRENT:
+        return {
+            "error": (
+                f"too_many_background_tasks: {len(running_ids)} running, "
+                f"max {_BACKGROUND_MAX_CONCURRENT}; kill one before starting more"
+            ),
+            "running_task_ids": running_ids,
+            "argv": argv,
+        }
 
     from runtime.safety.sandboxing.sandbox import process_sandbox_required
 

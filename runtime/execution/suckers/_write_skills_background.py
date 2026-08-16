@@ -13,6 +13,8 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
+import shutil
 import subprocess
 import threading
 import time
@@ -98,6 +100,8 @@ class _BackgroundProcess:
         self.execution_policy = execution_policy or {}
         self.started_at = time.time()
         self.cancelled = False
+        self._wait_failed = False
+        self.ended_at: float | None = None
         self._lock = threading.Lock()
         self.stdout_path = stdout_path
         self.stderr_path = stderr_path
@@ -127,8 +131,17 @@ class _BackgroundProcess:
         self._wait_thread.start()
 
     def _metadata(self, *, exit_code: int | None) -> dict[str, Any]:
-        if self.cancelled:
+        with self._lock:
+            return self._metadata_unlocked(exit_code=exit_code)
+
+    def _metadata_unlocked(self, *, exit_code: int | None) -> dict[str, Any]:
+        """Build the metadata dict. The caller must hold ``self._lock``."""
+        cancelled = self.cancelled
+        wait_failed = self._wait_failed
+        if cancelled:
             status = "cancelled"
+        elif exit_code is None and wait_failed:
+            status = "unknown"
         elif exit_code is None:
             status = "running"
         elif exit_code == 0:
@@ -162,16 +175,22 @@ class _BackgroundProcess:
         with self._lock:
             _write_background_metadata(
                 self.metadata_path,
-                self._metadata(exit_code=exit_code),
+                self._metadata_unlocked(exit_code=exit_code),
             )
 
     def _wait_and_persist(self) -> None:
         try:
             exit_code = self.proc.wait()
         except Exception:  # noqa: BLE001
+            with self._lock:
+                self._wait_failed = True
+                self.ended_at = time.time()
+            self._persist(exit_code=None)
             return
         for thread in self._output_threads:
             thread.join(timeout=2.0)
+        with self._lock:
+            self.ended_at = time.time()
         self._persist(exit_code=exit_code)
 
     @staticmethod
@@ -201,7 +220,9 @@ class _BackgroundProcess:
 
     def snapshot(self) -> dict[str, Any]:
         exit_code = self.proc.poll()
-        if self.cancelled:
+        with self._lock:
+            cancelled = self.cancelled
+        if cancelled:
             status = "cancelled"
         elif exit_code is None:
             status = "running"
@@ -242,18 +263,63 @@ class _BackgroundProcess:
         }
 
     def kill(self) -> dict[str, Any]:
-        if self.proc.poll() is None:
-            from runtime.platform.process.tree import terminate_process_tree
+        from runtime.platform.process.tree import terminate_process_tree
 
+        with self._lock:
             self.cancelled = True
+        if self.proc.poll() is None:
             terminate_process_tree(self.proc)
-        else:
-            self.cancelled = self.cancelled or False
-        self._wait_thread.join(timeout=1)
+        deadline = time.monotonic() + 3.0
+        while self._wait_thread.is_alive() and time.monotonic() < deadline:
+            self._wait_thread.join(timeout=0.1)
         return self.snapshot()
 
 
 _BACKGROUND_PROCESSES: dict[str, _BackgroundProcess] = {}
+
+# Finished tasks stay queryable for this long; afterwards they are pruned from
+# the in-memory registry to bound growth in long agent sessions.
+_BACKGROUND_FINISHED_TTL_S = 1800.0
+_BACKGROUND_REGISTRY_MAX = 128
+# Cap on simultaneously RUNNING background tasks per runtime process, so a
+# runaway agent cannot fork-bomb the host via background_exec.
+_BACKGROUND_MAX_CONCURRENT = 16
+
+
+def _prune_finished_background_processes(
+    *, ttl_s: float = _BACKGROUND_FINISHED_TTL_S,
+    max_keep: int = _BACKGROUND_REGISTRY_MAX,
+) -> int:
+    """Drop finished registry entries older than ``ttl_s`` (or beyond ``max_keep``).
+
+    Pruned tasks remain readable on disk via their persisted metadata, so this
+    only bounds memory, never data. Returns the number of pruned entries.
+    """
+    now = time.time()
+    prunable: list[str] = []
+    finished: list[tuple[float, str]] = []
+    for task_id, bg in list(_BACKGROUND_PROCESSES.items()):
+        with bg._lock:
+            ended_at = bg.ended_at
+        if ended_at is None:
+            continue
+        if now - ended_at >= ttl_s:
+            prunable.append(task_id)
+        else:
+            finished.append((ended_at, task_id))
+    for task_id in prunable:
+        _BACKGROUND_PROCESSES.pop(task_id, None)
+    # The cap bounds the entries it can actually evict (finished ones), not the
+    # whole registry. Sizing overflow by the whole registry meant a session with
+    # many RUNNING tasks computed a large overflow and evicted still-fresh
+    # finished entries well inside their TTL — while the registry stayed over
+    # max_keep anyway, since running entries are never evictable. Keep the
+    # newest finished entries and drop only the oldest surplus.
+    overflow = len(finished) - max_keep
+    if overflow > 0:
+        for _, task_id in sorted(finished)[:overflow]:
+            _BACKGROUND_PROCESSES.pop(task_id, None)
+    return len(prunable)
 
 
 def _background_root() -> Path:
@@ -311,6 +377,84 @@ def _background_file_truncated(path: Path) -> bool:
         return path.stat().st_size >= _BACKGROUND_OUTPUT_CAP
     except OSError:
         return False
+
+
+# Terminal-state task dirs older than the TTL (or oldest beyond the cap)
+# are swept; live or unparsable dirs are never touched.
+_BACKGROUND_DIR_TTL_S = 7 * 24 * 3600.0
+_BACKGROUND_DIR_MAX = 256
+_BACKGROUND_TASK_ID_RE = re.compile(r"^[0-9a-f]{8,64}$")
+_BACKGROUND_TERMINAL_RECOVERY = frozenset(
+    {"orphaned_process_exited", "orphaned_process_missing"}
+)
+
+
+def _background_dir_mtime(task_dir: Path) -> float:
+    try:
+        return max(
+            task_dir.stat().st_mtime,
+            (task_dir / "metadata.json").stat().st_mtime,
+        )
+    except OSError:
+        try:
+            return task_dir.stat().st_mtime
+        except OSError:
+            return 0.0
+
+
+def _sweep_background_dirs(
+    *,
+    ttl_s: float = _BACKGROUND_DIR_TTL_S,
+    max_keep: int = _BACKGROUND_DIR_MAX,
+) -> int:
+    """Delete terminal-state task dirs past ``ttl_s`` or beyond ``max_keep``.
+
+    Terminal means the metadata carries an ``exit_code``, a ``cancelled``
+    flag, or a terminal ``recovery_state``. Live and unparsable dirs are
+    never removed. Returns the number of directories removed.
+    """
+    try:
+        candidates = [d for d in _background_root().iterdir() if d.is_dir()]
+    except OSError:
+        return 0
+    now = time.time()
+    kept_terminal: list[tuple[float, Path]] = []
+    removed = 0
+    for task_dir in candidates:
+        if not _BACKGROUND_TASK_ID_RE.match(task_dir.name):
+            continue
+        try:
+            metadata = json.loads(
+                (task_dir / "metadata.json").read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(metadata, dict):
+            continue
+        terminal = (
+            metadata.get("exit_code") is not None
+            or bool(metadata.get("cancelled"))
+            or str(metadata.get("recovery_state") or "") in _BACKGROUND_TERMINAL_RECOVERY
+        )
+        if not terminal:
+            continue
+        mtime = _background_dir_mtime(task_dir)
+        if now - mtime >= ttl_s:
+            shutil.rmtree(task_dir, ignore_errors=True)
+            removed += 1
+        else:
+            kept_terminal.append((mtime, task_dir))
+    # The cap bounds the dirs it can actually delete — terminal dirs still
+    # inside their TTL — and nothing else. Sizing overflow by ``len(candidates)``
+    # let live dirs (and dirs skipped as unparsable or wrongly named) inflate
+    # the count, deleting terminal dirs that had finished seconds ago despite a
+    # 7-day TTL. Live/unsweepable dirs cannot be traded against this budget, so
+    # they must not shrink it either; only the oldest surplus is dropped.
+    overflow = len(kept_terminal) - max_keep
+    for _, task_dir in sorted(kept_terminal)[: max(overflow, 0)]:
+        shutil.rmtree(task_dir, ignore_errors=True)
+        removed += 1
+    return removed
 
 
 def _process_group_id(pid: int) -> int | None:
