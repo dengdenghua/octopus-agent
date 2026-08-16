@@ -85,14 +85,14 @@ def test_goal_mode_from_several_signals():
     assert resolve_work_mode({"goal_mode": True}).is_goal is True
     assert resolve_work_mode({"goal_mode": "goal"}).is_goal is True
     assert resolve_work_mode({"completion_policy": "goal"}).is_goal is True
-    assert resolve_work_mode({"codex_mode": "goal"}).is_goal is True
+    assert resolve_work_mode({"workflow_mode": "goal"}).is_goal is True
     assert resolve_work_mode({"goal_mode": "off"}).is_goal is False
 
 
-def test_codex_plan_or_spec():
-    assert resolve_work_mode({"codex_mode": "spec"}).is_codex_plan_or_spec is True
-    assert resolve_work_mode({"completion_policy": "plan"}).is_codex_plan_or_spec is True
-    assert resolve_work_mode({"codex_mode": "goal"}).is_codex_plan_or_spec is False
+def test_plan_or_spec():
+    assert resolve_work_mode({"workflow_mode": "spec"}).is_plan_or_spec is True
+    assert resolve_work_mode({"completion_policy": "plan"}).is_plan_or_spec is True
+    assert resolve_work_mode({"workflow_mode": "goal"}).is_plan_or_spec is False
 
 
 def test_swarm_detection():

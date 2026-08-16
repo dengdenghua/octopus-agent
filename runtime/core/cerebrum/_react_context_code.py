@@ -228,30 +228,40 @@ def _build_workflow_preset_prompt(workflow_preset: str | None) -> str:
     calling a tool that isn't there.
     """
     preset = (workflow_preset or "").strip().lower()
+    # Backward compatibility aliases
     if preset == "codex.plan":
+        preset = "plan.mode"
+    elif preset == "codex.spec":
+        preset = "spec.mode"
+    elif preset == "codex.goal":
+        preset = "goal.mode"
+    elif preset == "ultracode" or preset == "audit.ultracode":
+        preset = "audit.deep"
+
+    if preset == "plan.mode":
         body = (
-            "当前工作流: codex.plan / Plan 模式。\n"
+            "当前工作流: plan.mode / Plan 模式。\n"
             "- 可以读取上下文、搜索资料、检查代码结构并提出少量澄清问题。\n"
             "- 默认不要写文件、改代码、执行实现性改动或启动长任务;用户明确要求执行时才切换。\n"
             "- 输出可执行计划,至少包含目标理解、约束/风险、步骤、验收标准和需要确认的点。"
         )
-    elif preset == "codex.spec":
+    elif preset == "spec.mode":
         body = (
-            "当前工作流: codex.spec / Spec 模式。\n"
+            "当前工作流: spec.mode / Spec 模式。\n"
             "- 目标是沉淀规格,不是马上实现。默认不要改代码或写入项目文件。\n"
             "- 输出目标、非目标、用户故事/流程、接口或数据契约、边界条件、验收标准和开放问题。\n"
             "- 如果现有代码会影响规格,先读相关文件再写规格;不要凭空假设接口。"
         )
-    elif preset == "codex.goal":
+    elif preset == "goal.mode":
         body = (
-            "当前工作流: codex.goal / Goal 模式。\n"
+            "当前工作流: goal.mode / Goal 模式。\n"
             "- 围绕 objective 持续推进,但单轮仍受 max_iterations、token 和成本预算约束。\n"
             "- 开始前拆成可审计 todo;每次推进后更新状态,保留可恢复上下文。\n"
             "- 完成前做 completion audit: 逐项核对原始目标、交付物、测试/验收和当前证据。"
         )
-    elif preset == "audit.ultracode":
+    elif preset == "audit.deep":
         body = (
-            "当前工作流: ultracode / 深度模式。\n"
+            "当前工作流: audit.deep / 深度模式。\n"
             "- 以最详尽、最正确的答案为目标,不要因为 token 成本就提前收手;"
             "质量优先于速度。token 成本不是约束条件。\n"
             "- **默认就要编排,不要等到发现可并行子问题才编排。** 每个实质性任务都先用 "

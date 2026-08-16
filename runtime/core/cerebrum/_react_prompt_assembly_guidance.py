@@ -46,7 +46,7 @@ def _build_auto_delegation_guidance(state: _AssemblyState) -> str:
     """Delegation guidance for a non-swarm turn.
 
     Two variants, because the DEFAULT one actively contradicts the
-    ``audit.ultracode`` preset. That preset's contract is "orchestrate by
+    ``audit.deep`` preset. That preset's contract is "orchestrate by
     default, the bar is inverted" — while this block used to open with
     "Current mode is single-agent", tell the model that simple or sequential
     work should be done alone, and cap fan-out at "exactly one
@@ -60,10 +60,14 @@ def _build_auto_delegation_guidance(state: _AssemblyState) -> str:
     is orthogonal to how wide to go, so both variants keep it.
     """
     preset = str(state.workflow_preset_value or "").strip().lower()
-    if preset == "audit.ultracode":
+    # Backward compatibility
+    if preset in ("audit.ultracode", "ultracode"):
+        preset = "audit.deep"
+
+    if preset == "audit.deep":
         return (
             "\n<agent-auto-delegation-guidance>\n"
-            "This turn runs the ultracode deep workflow. You are the lead of a "
+            "This turn runs the deep audit workflow. You are the lead of a "
             "multi-agent run, NOT a single agent: the <workflow-preset> block "
             "above is authoritative on how wide to go, and nothing here "
             "narrows it.\n"
@@ -487,7 +491,7 @@ def _assemble_delegation_guidance(state: _AssemblyState) -> None:
             "当前为 Codex 风格 "
             + (
                 "Spec"
-                if state.codex_mode_value == "spec" or state.completion_policy_value == "spec"
+                if state.workflow_mode_value == "spec" or state.completion_policy_value == "spec"
                 else "Plan"
             )
             + " 模式。默认产出计划/规格和验收口径,不要主动进入实现或写文件; "

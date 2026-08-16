@@ -144,14 +144,14 @@ def _apply_orchestration_grant(session_metadata: dict[str, Any]) -> None:
     as a TRUSTED spawn-ceiling source, but this metadata dict starts life as the
     client-supplied ``user_context`` — so any client-sent value is a spawn-budget
     escalation and is dropped unconditionally. When the turn carries the
-    ``audit.ultracode`` workflow preset, the SERVER grants the budget
+    ``audit.deep`` workflow preset, the SERVER grants the budget
     (``ultracode_token_budget()``: preset env → operator env → default), which is
     what lets the preset actually widen the fan-out without the client ever
     choosing the number.
     """
     session_metadata.pop("orchestration_token_budget", None)
     preset = str(session_metadata.get("workflow_preset") or "").strip().lower()
-    if preset != "audit.ultracode":
+    if preset not in ("audit.deep", "audit.ultracode", "ultracode"):
         return
     from runtime.execution.suckers.delegation_budget import ultracode_token_budget
 

@@ -2,7 +2,7 @@
 
 react_loop previously resolved a pile of overlapping mode signals inline
 (``mode`` / ``capability_mode`` / ``agent_mode`` / ``personal_mode`` /
-``codex_mode`` / ``completion_policy`` / ``goal_mode`` / ``workspace_scope`` /
+``workflow_mode`` / ``completion_policy`` / ``goal_mode`` / ``workspace_scope`` /
 ``workspace_path`` / ``personal_workspace_*``) across ~120 scattered lines. After
 the project↔personal workspace merge, "project vs personal vs code" is no longer a
 hard wall — a personal thread gets a per-thread cwd as an *effective* workspace and
@@ -48,7 +48,7 @@ class WorkMode:
     capability_mode: str
     agent_mode: str  # builder | coder | architect (code role)
     personal_mode: str  # build | research | general (personal-space role)
-    codex_mode: str
+    workflow_mode: str
     completion_policy: str
     workflow_preset: str
     mode_contract: str  # NOT lowercased (original keeps case)
@@ -60,7 +60,7 @@ class WorkMode:
     # Derived.
     is_code: bool
     is_goal: bool
-    is_codex_plan_or_spec: bool
+    is_plan_or_spec: bool
 
     @property
     def scope(self) -> str:
@@ -117,7 +117,10 @@ def resolve_work_mode(user_context: dict[str, Any] | None) -> WorkMode:
     workflow_preset = (
         str(uc.get("workflow_preset") or metadata.get("workflow_preset") or "").strip().lower()
     )
-    codex_mode = str(uc.get("codex_mode") or metadata.get("codex_mode") or "").strip().lower()
+    workflow_mode = str(uc.get("workflow_mode") or metadata.get("workflow_mode") or "").strip().lower()
+    # Backward compatibility: codex_mode is deprecated, map to workflow_mode
+    if not workflow_mode:
+        workflow_mode = str(uc.get("codex_mode") or metadata.get("codex_mode") or "").strip().lower()
     completion_policy = (
         str(uc.get("completion_policy") or metadata.get("completion_policy") or "").strip().lower()
     )
@@ -140,7 +143,7 @@ def resolve_work_mode(user_context: dict[str, Any] | None) -> WorkMode:
             isinstance(goal_mode_value, str)
             and goal_mode_value.lower() in {"goal", "goal_mode", "true"}
         )
-        or codex_mode == "goal"
+        or workflow_mode == "goal"
         or completion_policy == "goal"
     )
 
@@ -162,7 +165,7 @@ def resolve_work_mode(user_context: dict[str, Any] | None) -> WorkMode:
         or (isinstance(effective_wp, str) and effective_wp.strip())
     )
 
-    is_codex_plan_or_spec = codex_mode in {"plan", "spec"} or completion_policy in {"plan", "spec"}
+    is_plan_or_spec = workflow_mode in {"plan", "spec"} or completion_policy in {"plan", "spec"}
 
     return WorkMode(
         project_workspace=project_wp,
@@ -173,7 +176,7 @@ def resolve_work_mode(user_context: dict[str, Any] | None) -> WorkMode:
         capability_mode=capability_mode,
         agent_mode=agent_mode,
         personal_mode=personal_mode,
-        codex_mode=codex_mode,
+        workflow_mode=workflow_mode,
         completion_policy=completion_policy,
         workflow_preset=workflow_preset,
         mode_contract=mode_contract,
@@ -181,7 +184,7 @@ def resolve_work_mode(user_context: dict[str, Any] | None) -> WorkMode:
         project_signals=project_signals,
         is_code=is_code,
         is_goal=is_goal,
-        is_codex_plan_or_spec=is_codex_plan_or_spec,
+        is_plan_or_spec=is_plan_or_spec,
     )
 
 

@@ -81,9 +81,9 @@ class _AssemblyState:
     capability_mode_value: Any = None
     agent_mode_value: Any = None
     workflow_preset_value: Any = None
-    codex_mode_value: Any = None
+    workflow_mode_value: Any = None
     completion_policy_value: Any = None
-    is_codex_composer_plan_or_spec: bool = False
+    is_plan_or_spec_composer: bool = False
     mode_contract_value: Any = None
     personal_mode_value: Any = None
     project_signals: Any = None

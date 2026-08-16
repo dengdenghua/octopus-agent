@@ -1186,10 +1186,10 @@ describe("useThreadStreamRealtime permissions", () => {
         planningMode: true,
         metadata: {
           context: expect.objectContaining({
-            codex_mode: "plan",
+            workflow_mode: "plan",
             completion_policy: "plan",
-            mode_preset: "codex.plan",
-            workflow_preset: "codex.plan",
+            mode_preset: "plan.mode",
+            workflow_preset: "plan.mode",
           }),
         },
       }),
@@ -1223,11 +1223,11 @@ describe("useThreadStreamRealtime permissions", () => {
     );
     expect(payload).not.toHaveProperty("planningMode");
     expect(context).toMatchObject({
-      codex_mode: "goal",
+      workflow_mode: "goal",
       completion_policy: "goal",
       goal_mode: true,
-      mode_preset: "codex.goal",
-      workflow_preset: "codex.goal",
+      mode_preset: "goal.mode",
+      workflow_preset: "goal.mode",
     });
   });
 

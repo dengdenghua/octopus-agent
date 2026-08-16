@@ -3121,9 +3121,9 @@ def test_react_loop_injects_codex_plan_mode_guidance() -> None:
     intent = _intent("Plan the migration")
     intent.user_context.update(
         {
-            "codex_mode": "plan",
+            "workflow_mode": "plan",
             "completion_policy": "plan",
-            "workflow_preset": "codex.plan",
+            "workflow_preset": "plan.mode",
             "mode_contract": "Custom plan contract",
         }
     )

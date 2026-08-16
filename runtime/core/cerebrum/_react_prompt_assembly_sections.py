@@ -296,9 +296,9 @@ def _assemble_early_sections(state: _AssemblyState) -> None:
     state.capability_mode_value = _wm.capability_mode
     state.agent_mode_value = _wm.agent_mode
     state.workflow_preset_value = _wm.workflow_preset
-    state.codex_mode_value = _wm.codex_mode
+    state.workflow_mode_value = _wm.workflow_mode
     state.completion_policy_value = _wm.completion_policy
-    state.is_codex_composer_plan_or_spec = _wm.is_codex_plan_or_spec
+    state.is_plan_or_spec_composer = _wm.is_plan_or_spec
     state.mode_contract_value = _wm.mode_contract
     state.personal_mode_value = _wm.personal_mode
     state.project_signals = _wm.project_signals
@@ -361,12 +361,21 @@ def _assemble_early_sections(state: _AssemblyState) -> None:
         max_tokens_budget=state.max_tokens_budget,
         max_usd_budget=state.max_usd_budget,
     )
-    # 弹性预算：默认不自动暂停。仅当用户显式开启 budget_auto_pause 时才在
-    # 超限时暂停；否则超限只记录告警、不阻塞长任务（能力增强而非限制）。
+    # 弹性预算：默认不自动暂停。仅当用户显式开启 budget_auto_pause（按请求旗标）
+    # 或运行时配置 budget.budget_auto_pause=true 时才在超限时暂停；否则超限只
+    # 记录告警、不阻塞长任务（能力增强而非限制）。
+    _config_auto_pause = bool(
+        getattr(
+            getattr(getattr(state.stack, "config", None), "budget", None),
+            "budget_auto_pause",
+            False,
+        )
+    )
     state.budget_auto_pause_enabled = bool(
         _uc.get("budget_auto_pause")
         or _metadata.get("budget_auto_pause")
         or state.intent.flags.get("budget_auto_pause", False)
+        or _config_auto_pause
     )
     state.todo_protocol_mode = context_mode(_uc)
     state.todo_protocol_required = not state.no_tool_turn and should_require_todo_protocol(

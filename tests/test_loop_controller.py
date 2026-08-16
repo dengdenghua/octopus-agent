@@ -324,7 +324,7 @@ def test_loop_controller_plan_mode_completes_without_code_verifier(tmp_path) -> 
         runner_contexts.append(
             {
                 "mode": intent.user_context.get("mode"),
-                "codex_mode": intent.user_context.get("codex_mode"),
+                "workflow_mode": intent.user_context.get("workflow_mode"),
                 "completion_policy": intent.user_context.get("completion_policy"),
                 "workflow_preset": intent.user_context.get("workflow_preset"),
                 "goal_mode": intent.user_context.get("goal_mode"),
@@ -350,9 +350,9 @@ def test_loop_controller_plan_mode_completes_without_code_verifier(tmp_path) -> 
     assert runner_contexts == [
         {
             "mode": "plan",
-            "codex_mode": "plan",
+            "workflow_mode": "plan",
             "completion_policy": "plan",
-            "workflow_preset": "codex.plan",
+            "workflow_preset": "plan.mode",
             "goal_mode": False,
             "mode_contract": (
                 "Codex Plan 模式：先读上下文、澄清风险和约束，输出可执行计划与验收标准；"
@@ -378,7 +378,7 @@ def test_loop_controller_goal_loop_mode_sets_goal_contract(tmp_path) -> None:
     def runner(*, stack, intent, agent, model=None, max_iterations=0, thread_id=None):
         runner_contexts.append(
             {
-                "codex_mode": intent.user_context.get("codex_mode"),
+                "workflow_mode": intent.user_context.get("workflow_mode"),
                 "completion_policy": intent.user_context.get("completion_policy"),
                 "goal_mode": intent.user_context.get("goal_mode"),
                 "workflow_preset": intent.user_context.get("workflow_preset"),
@@ -400,10 +400,10 @@ def test_loop_controller_goal_loop_mode_sets_goal_contract(tmp_path) -> None:
 
     assert completed.status == LoopRunStatus.COMPLETED
     assert verifier_registry.calls == []
-    assert runner_contexts[0]["codex_mode"] == "goal"
+    assert runner_contexts[0]["workflow_mode"] == "goal"
     assert runner_contexts[0]["completion_policy"] == "goal"
     assert runner_contexts[0]["goal_mode"] is True
-    assert runner_contexts[0]["workflow_preset"] == "codex.goal"
+    assert runner_contexts[0]["workflow_preset"] == "goal.mode"
     assert "Codex Goal 模式" in str(runner_contexts[0]["mode_contract"])
 
 

@@ -1,10 +1,10 @@
-"""audit.ultracode orchestration bus — grant, scrub, and progress streaming.
+"""audit.deep orchestration bus — grant, scrub, and progress streaming.
 
 Three wires make the preset real end to end:
 1. ``ultracode_token_budget()`` — the SERVER-side spawn-budget grant.
 2. ``_apply_orchestration_grant`` — the gateway scrubs any client-supplied
    ``orchestration_token_budget`` (spawn-budget escalation) and grants the
-   server value only for the ``audit.ultracode`` preset.
+   server value only for the ``audit.deep`` preset.
 3. ``orchestration_progress_scope`` — ``run_orchestration`` phase lines
    stream to the client as thinking deltas instead of one opaque blob.
 """
@@ -78,11 +78,11 @@ def test_grant_scrubs_client_supplied_budget(monkeypatch: pytest.MonkeyPatch) ->
     assert "orchestration_token_budget" not in meta
 
 
-def test_grant_applied_for_ultracode_preset(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_grant_applied_for_deep_preset(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OCTOPUS_ULTRACODE_TOKEN_BUDGET", raising=False)
     monkeypatch.delenv("OCTOPUS_ORCH_TOKEN_BUDGET", raising=False)
     meta: dict[str, Any] = {
-        "workflow_preset": "audit.ultracode",
+        "workflow_preset": "audit.deep",
         # client tries to pick its own number — the server value wins
         "orchestration_token_budget": 10_000_000,
     }
@@ -91,7 +91,7 @@ def test_grant_applied_for_ultracode_preset(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_no_grant_for_other_presets() -> None:
-    meta: dict[str, Any] = {"workflow_preset": "codex.plan"}
+    meta: dict[str, Any] = {"workflow_preset": "plan.mode"}
     _apply_orchestration_grant(meta)
     assert "orchestration_token_budget" not in meta
 
@@ -157,16 +157,16 @@ def test_emitter_exception_never_breaks_run(monkeypatch: pytest.MonkeyPatch) -> 
 # ceiling was in the hundreds. These pin the parts that carry that behaviour.
 
 
-def _ultracode_prompt() -> str:
+def _deep_prompt() -> str:
     from runtime.core.cerebrum._react_context_code import (
         _build_workflow_preset_prompt,
     )
 
-    return _build_workflow_preset_prompt("audit.ultracode")
+    return _build_workflow_preset_prompt("audit.deep")
 
 
-def test_ultracode_prompt_makes_orchestration_the_default() -> None:
-    prompt = _ultracode_prompt()
+def test_deep_prompt_makes_orchestration_the_default() -> None:
+    prompt = _deep_prompt()
 
     assert "默认就要编排" in prompt
     # The bar must be inverted: not "is this worth fanning out" but "is this
@@ -175,14 +175,14 @@ def test_ultracode_prompt_makes_orchestration_the_default() -> None:
     assert "run_orchestration" in prompt
 
 
-def test_ultracode_prompt_names_widths_the_code_actually_honours() -> None:
+def test_deep_prompt_names_widths_the_code_actually_honours() -> None:
     """The prompt may not advertise a width the clamp silently eats.
 
     ``_run_orchestration`` clamps n to 1-6 and rounds to 1-5, so telling the
     model to pass n=12 would produce a value quietly reduced to 6 — the model
     would believe it fanned out twice as wide as it did.
     """
-    prompt = _ultracode_prompt()
+    prompt = _deep_prompt()
 
     assert "上限 6" in prompt, "must state the real n ceiling"
     assert "8-16" not in prompt, "must not advertise a width the clamp eats"
@@ -190,21 +190,21 @@ def test_ultracode_prompt_names_widths_the_code_actually_honours() -> None:
     assert "多次串联编排" in prompt
 
 
-def test_ultracode_prompt_forbids_deferring_fan_out_behind_a_reading_phase() -> None:
+def test_deep_prompt_forbids_deferring_fan_out_behind_a_reading_phase() -> None:
     """The phase wording must not license an unbounded solo understanding phase.
 
     Measured, not theorised. A live run (deepseek-v4-flash, 30 iterations,
     ``run_orchestration`` present in a 102-tool spec) spent all 25 tool calls
     on atomic reads and spawned ZERO sub-agents while naming fan-out 13 times
     in its own reasoning. The deciding line it produced was a paraphrase of
-    this very prompt: "按照 ultracode 指南，我应该先理解再扇出" — the earlier
+    this very prompt: "按照深度指南，我应该先理解再扇出" — the earlier
     phase wording ("理解→设计→实现→审查") read as permission to finish
     understanding alone first, and understanding a real codebase never
     finishes inside one turn's budget. After this clause landed, the same
     configuration called ``run_orchestration(n=5, rounds=3)`` at iteration 4
     and produced 49 spawns.
     """
-    prompt = _ultracode_prompt()
+    prompt = _deep_prompt()
 
     assert "第一次编排就发生在理解阶段" in prompt
     # The excuse the model actually used has to be named as forbidden, not
@@ -215,16 +215,16 @@ def test_ultracode_prompt_forbids_deferring_fan_out_behind_a_reading_phase() -> 
     assert "子代理自带工具" in prompt
 
 
-def test_ultracode_prompt_keeps_the_spawn_ceiling_operator_owned() -> None:
+def test_deep_prompt_keeps_the_spawn_ceiling_operator_owned() -> None:
     """The preset steers WHAT and HOW WIDE, never how many spawns are allowed:
     a client picking the preset must not be able to raise its own ceiling."""
-    prompt = _ultracode_prompt()
+    prompt = _deep_prompt()
 
     assert "不自行抬高 spawn 上限" in prompt
 
 
-def test_ultracode_prompt_degrades_when_skill_is_gated_out() -> None:
-    prompt = _ultracode_prompt()
+def test_deep_prompt_degrades_when_skill_is_gated_out() -> None:
+    prompt = _deep_prompt()
 
     assert "被网关裁掉" in prompt
     assert "不要去调一个不存在的工具" in prompt
@@ -236,9 +236,9 @@ def test_other_presets_do_not_inherit_the_fan_out_mandate() -> None:
     )
 
     for preset in (
-        "codex.plan",
-        "codex.spec",
-        "codex.goal",
+        "plan.mode",
+        "spec.mode",
+        "goal.mode",
         "develop.iterate",
         "audit.review",
         "uxui.regression",
@@ -257,7 +257,7 @@ def test_other_presets_do_not_inherit_the_fan_out_mandate() -> None:
 # simple or sequential work should be done alone, and cap fan-out at "exactly
 # one call_agent_parallel batch for the current turn". A live run proved the
 # nearest concrete instruction wins: preset present, tool in the spec, zero
-# spawns. These pin the ultracode variant, and pin that the default variant is
+# spawns. These pin the deep variant, and pin that the default variant is
 # unchanged for every other turn.
 
 
@@ -281,8 +281,8 @@ def _delegation_block(preset: str | None) -> str:
     return _build_auto_delegation_guidance(_PresetOnlyState(preset))  # type: ignore[arg-type]
 
 
-def test_delegation_block_does_not_call_ultracode_single_agent() -> None:
-    body = _delegation_block("audit.ultracode")
+def test_delegation_block_does_not_call_deep_single_agent() -> None:
+    body = _delegation_block("audit.deep")
 
     assert "single agent" in body or "NOT a single agent" in body
     assert "Current mode is single-agent" not in body
@@ -292,18 +292,18 @@ def test_delegation_block_does_not_call_ultracode_single_agent() -> None:
     assert "authoritative" in body
 
 
-def test_delegation_block_forbids_reading_first_under_ultracode() -> None:
-    body = _delegation_block("audit.ultracode")
+def test_delegation_block_forbids_reading_first_under_deep() -> None:
+    body = _delegation_block("audit.deep")
 
     assert "Fan out DURING the understanding phase" in body
     assert "Workers carry their own tools" in body
     # "do it yourself for simple work" is the default-variant licence that let
-    # the model defer indefinitely; under ultracode it must be the exception.
+    # the model defer indefinitely; under deep mode it must be the exception.
     assert "Simple or sequential work: do it yourself" not in body
 
 
 def test_default_delegation_block_is_unchanged_for_other_turns() -> None:
-    for preset in (None, "", "audit.review", "codex.plan", "develop.iterate"):
+    for preset in (None, "", "audit.review", "plan.mode", "develop.iterate"):
         body = _delegation_block(preset)
         assert "Current mode is single-agent Agent/ReAct" in body, preset
         assert "Simple or sequential work: do it yourself" in body, preset
@@ -313,7 +313,7 @@ def test_default_delegation_block_is_unchanged_for_other_turns() -> None:
 
 def test_both_delegation_variants_keep_the_synthesis_hygiene() -> None:
     """Widening the fan-out must not drop the "you still own the answer" rules."""
-    for preset in ("audit.ultracode", "audit.review"):
+    for preset in ("audit.deep", "audit.review"):
         body = _delegation_block(preset)
         assert "synthesize the outputs" in body, preset
         assert "Never finish with raw worker logs" in body, preset

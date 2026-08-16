@@ -42,7 +42,7 @@ class LoopControllerAttemptMixin:
             "objective": run.goal,
             "workspace_path": workspace_path,
             "mode": run.mode.value,
-            "codex_mode": run.mode.value if run.mode in _PRODUCT_LOOP_MODES else "",
+            "workflow_mode": run.mode.value if run.mode in _PRODUCT_LOOP_MODES else "",
             "goal_mode": run.policy.goal_mode or run.mode == LoopMode.GOAL,
             "completion_policy": (
                 "goal"

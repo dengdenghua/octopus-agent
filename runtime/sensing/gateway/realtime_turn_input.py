@@ -748,10 +748,10 @@ def _build_intent(
         context_payload.setdefault("workspace_scope", "project")
         context_payload.setdefault("mode", "code")
     if marker_mode:
-        context_payload.setdefault("codex_mode", marker_mode)
+        context_payload.setdefault("workflow_mode", marker_mode)
         context_payload.setdefault("completion_policy", marker_mode)
-        context_payload.setdefault("mode_preset", f"codex.{marker_mode}")
-        context_payload.setdefault("workflow_preset", f"codex.{marker_mode}")
+        context_payload.setdefault("mode_preset", f"{marker_mode}.mode")
+        context_payload.setdefault("workflow_preset", f"{marker_mode}.mode")
         if marker_mode == "goal":
             context_payload.setdefault("goal_mode", True)
     context_payload = _apply_runtime_surface_context(text, context_payload)

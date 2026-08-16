@@ -264,10 +264,10 @@ async def _start_turn(
                 next_block["text"] = stripped_text
                 metadata = dict(next_block.get("metadata") or {})
                 context = dict(metadata.get("context") or {})
-                context.setdefault("codex_mode", marker_mode)
+                context.setdefault("workflow_mode", marker_mode)
                 context.setdefault("completion_policy", marker_mode)
-                context.setdefault("mode_preset", f"codex.{marker_mode}")
-                context.setdefault("workflow_preset", f"codex.{marker_mode}")
+                context.setdefault("mode_preset", f"{marker_mode}.mode")
+                context.setdefault("workflow_preset", f"{marker_mode}.mode")
                 if marker_mode == "goal":
                     context.setdefault("goal_mode", True)
                 metadata["context"] = context

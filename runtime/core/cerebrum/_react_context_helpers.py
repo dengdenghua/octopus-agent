@@ -465,7 +465,7 @@ def _format_skill_catalog(
     _delegation_agent_mode = str(_uc_for_delegation.get("agent_mode") or "").strip().lower()
     _workflow_preset = str(_uc_for_delegation.get("workflow_preset") or "").strip().lower()
     _personal_mode = str(_uc_for_delegation.get("personal_mode") or "").strip().lower()
-    _ultracode = _workflow_preset == "audit.ultracode"
+    _is_deep_mode = _workflow_preset in ("audit.deep", "audit.ultracode", "ultracode")
     _delegation_cap = bool(
         (_labels & {"delegation", "swarm"})
         or _delegation_mode in {"code"}
@@ -546,7 +546,7 @@ def _format_skill_catalog(
                 "bb_write",
                 "bb_read",
                 "bb_keys",
-                *(["run_orchestration"] if _ultracode else []),
+                *(["run_orchestration"] if _is_deep_mode else []),
             ]
             if _delegation_cap
             else []

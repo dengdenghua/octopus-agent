@@ -3267,10 +3267,10 @@ def test_codex_composer_marker_is_stripped_into_intent_metadata() -> None:
 
     assert intent.raw == "Finish the hardening pass"
     assert intent.normalized_goal == "Finish the hardening pass"
-    assert intent.user_context["codex_mode"] == "goal"
+    assert intent.user_context["workflow_mode"] == "goal"
     assert intent.user_context["completion_policy"] == "goal"
     assert intent.user_context["goal_mode"] is True
-    assert intent.user_context["mode_preset"] == "codex.goal"
+    assert intent.user_context["mode_preset"] == "goal.mode"
     assert intent.user_context["workflow_preset"] == "codex.goal"
 
 

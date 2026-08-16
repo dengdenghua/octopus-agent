@@ -36,7 +36,7 @@ export type AgentModeName = "develop" | "audit" | "uxui";
 export type DetectedProjectKind = "builder" | "coder" | "architect";
 /**
  * Audit-only intensity. "standard" → audit.review (single-pass); "max" →
- * audit.ultracode (exhaustive mode — the model is directed to fan out and
+ * audit.deep (exhaustive mode — the model is directed to fan out and
  * self-check, but chooses its own orchestration). The toggle only shows
  * for audit.
  */

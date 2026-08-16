@@ -36,14 +36,14 @@ describe("modePresetForAgentMode", () => {
 });
 
 describe("workflowPresetForMode", () => {
-  it("upgrades audit to ultracode only at max intensity", () => {
+  it("upgrades audit to deep only at max intensity", () => {
     expect(workflowPresetForMode("audit", "standard")).toBe("audit.review");
-    expect(workflowPresetForMode("audit", "max")).toBe("audit.ultracode");
+    expect(workflowPresetForMode("audit", "max")).toBe("audit.deep");
     // Default intensity is the conservative single-pass review.
     expect(workflowPresetForMode("audit")).toBe("audit.review");
   });
 
-  it("ignores intensity for non-audit modes (no ultracode leak)", () => {
+  it("ignores intensity for non-audit modes (no deep leak)", () => {
     expect(workflowPresetForMode("develop", "max")).toBe("develop.iterate");
     expect(workflowPresetForMode("uxui", "max")).toBe("uxui.regression");
   });

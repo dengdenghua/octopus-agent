@@ -17,7 +17,7 @@ export interface ModeOrchestrationPreset {
   workflowPreset:
     | "develop.iterate"
     | "audit.review"
-    | "audit.ultracode"
+    | "audit.deep"
     | "uxui.regression";
   skillPackProfile: SkillPackProfile;
   verificationPolicy: VerificationPolicy;
@@ -74,7 +74,7 @@ export function modePresetForAgentMode(
  * Resolve the workflow preset to SEND, applying the audit-intensity toggle.
  *
  * Only audit mode carries an intensity switch: "max" upgrades the sent preset to
- * `audit.ultracode`, a soft exhaustive mode — the backend directs the model to
+ * `audit.deep`, a soft exhaustive mode — the backend directs the model to
  * fan out and self-check, but the model chooses its own orchestration (depth
  * still governed by the operator orchestration budget). Every other mode — and
  * audit at "standard" — keeps its base preset unchanged.
@@ -84,7 +84,7 @@ export function workflowPresetForMode(
   auditIntensity: AuditIntensity = "standard",
 ): ModeOrchestrationPreset["workflowPreset"] {
   if (agentMode === "audit" && auditIntensity === "max") {
-    return "audit.ultracode";
+    return "audit.deep";
   }
   return modePresetForAgentMode(agentMode).workflowPreset;
 }

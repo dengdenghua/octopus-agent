@@ -236,7 +236,7 @@ def _execute_action_via_beak(
                 "personal_mode",
                 "personal_instructions",
                 "project_signals",
-                "codex_mode",
+                "workflow_mode",
                 "goal_mode",
                 "completion_policy",
                 "mode_preset",
