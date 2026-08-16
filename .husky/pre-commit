@@ -1,0 +1,13 @@
+#!/bin/sh
+# Audit A-11: wire the pre-commit framework (ruff, bandit, invariant lint,
+# trailing-whitespace, ...) into the husky chain.
+#
+# pre-commit is an optional dev dependency; when it is not installed the
+# hook skips gracefully — the CI gates still enforce the same checks.
+# Install once with:  pip install pre-commit
+if ! command -v pre-commit >/dev/null 2>&1; then
+  echo "husky(pre-commit): 'pre-commit' not found — skipping (pip install pre-commit)" >&2
+  exit 0
+fi
+
+exec pre-commit run --hook-stage commit

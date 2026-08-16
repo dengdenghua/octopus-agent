@@ -70,6 +70,9 @@ lint-fixtures:  ## No test fixture input may be hidden from git by .gitignore
 lint-mypy:  ## Run the mypy ratchet (no NEW type errors on hot packages)
 	$(PYTHON) tools/lint/mypy_ratchet.py
 
+secret-scan:  ## Scan git history for leaked secrets (requires gitleaks)
+	gitleaks git --no-banner --redact
+
 lint-ruff:  ## Run ruff
 	$(PYTHON) -m ruff check runtime/ tests/ tools/
 	$(PYTHON) -m ruff format --check runtime/ tests/ tools/
