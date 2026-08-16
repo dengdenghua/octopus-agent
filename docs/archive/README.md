@@ -15,5 +15,7 @@ that should not sit in the main docs path.
 | `p0_p1_p2_p3.md` | Old priority-tier (P0–P3) backlog |
 | `redis-streams-vs-nats-jetstream.md` | Historical transport comparison analysis |
 | `subagent-alignment-phase1-2-summary.md` | Past subagent alignment phase 1/2 summary |
+| `OPTIMIZATION_SUMMARY.md` | One-off optimization summary; kept out of the root allow-list (audit A-02/Q-03) |
+| `octopus-agent-core-analysis.md` | One-off core architecture analysis report; kept out of the root allow-list (audit A-02/Q-03) |
 
 Keep new user-facing docs out of this folder.
