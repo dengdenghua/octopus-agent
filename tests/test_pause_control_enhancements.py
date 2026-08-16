@@ -197,3 +197,82 @@ def test_gc_preserves_fresh_active_tasks(ctrl: PauseController):
     # All should still be present after GC
     active_after = ctrl.list_active()
     assert len(active_after) == 5
+
+
+# ═══════════════════════════════════════════════════════════
+# Audit T-05: mode-graded wall-clock hard cap
+# ═══════════════════════════════════════════════════════════
+
+
+def test_turn_wall_time_cap_defaults(monkeypatch):
+    from runtime.core.cerebrum.pause_control import (
+        DEFAULT_TURN_WALL_TIME_CAP_LONG_HORIZON_S,
+        DEFAULT_TURN_WALL_TIME_CAP_S,
+        turn_wall_time_cap_s,
+    )
+
+    monkeypatch.delenv("OCTOPUS_TURN_WALL_TIME_CAP_S", raising=False)
+    assert turn_wall_time_cap_s() == float(DEFAULT_TURN_WALL_TIME_CAP_S)
+    assert turn_wall_time_cap_s(goal_mode=True) == float(DEFAULT_TURN_WALL_TIME_CAP_LONG_HORIZON_S)
+    assert turn_wall_time_cap_s(research_mode=True) == float(
+        DEFAULT_TURN_WALL_TIME_CAP_LONG_HORIZON_S
+    )
+    assert turn_wall_time_cap_s(swarm_mode=True) == float(DEFAULT_TURN_WALL_TIME_CAP_LONG_HORIZON_S)
+    assert turn_wall_time_cap_s(goal_mode=True, research_mode=True) == float(
+        DEFAULT_TURN_WALL_TIME_CAP_LONG_HORIZON_S
+    )
+
+
+def test_turn_wall_time_cap_env_override(monkeypatch):
+    from runtime.core.cerebrum.pause_control import turn_wall_time_cap_s
+
+    monkeypatch.setenv("OCTOPUS_TURN_WALL_TIME_CAP_S", "3600")
+    assert turn_wall_time_cap_s() == 3600.0
+    assert turn_wall_time_cap_s(goal_mode=True) == 3600.0  # env wins over mode grading
+
+    monkeypatch.setenv("OCTOPUS_TURN_WALL_TIME_CAP_S", "0")
+    assert turn_wall_time_cap_s() == 0.0  # 0 disables the cap
+
+
+def test_resume_or_register_turn_forwards_wall_time_cap(monkeypatch):
+    """The production registration point passes the cap through to
+    register_active, so the per-iteration guard can auto-pause (T-05)."""
+    from runtime.core.cerebrum import react_resume
+    from runtime.core.cerebrum.pause_control import turn_wall_time_cap_s
+
+    recorded: dict = {}
+
+    class _StubPause:
+        def register_active(self, task_id, **kwargs):
+            recorded["kwargs"] = kwargs
+
+        def consume_grant(self, task_id):
+            return {}
+
+        def clear(self, task_id):
+            pass
+
+    import runtime.core.cerebrum.pause_control as pause_ctrl_mod
+
+    monkeypatch.setattr(pause_ctrl_mod, "get_pause_controller", lambda: _StubPause())
+
+    class _Intent:
+        user_context = {}
+
+    turn = react_resume._resume_or_register_turn(
+        stack=object(),
+        intent=_Intent(),
+        agent=object(),
+        resume_task_id=None,
+        react_task_id="task-t05",
+        thread_id="th",
+        max_iterations=30,
+        active_max_tokens_budget=100_000,
+        active_max_usd_budget=1.0,
+        max_wall_time_seconds=turn_wall_time_cap_s(),
+        messages=[],
+    )
+    assert recorded["kwargs"]["max_wall_time_seconds"] == float(
+        __import__("runtime.core.cerebrum.pause_control", fromlist=["DEFAULT_TURN_WALL_TIME_CAP_S"]).DEFAULT_TURN_WALL_TIME_CAP_S
+    )
+    assert turn is not None

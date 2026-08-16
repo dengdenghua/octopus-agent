@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -17,6 +18,37 @@ from runtime.platform.process.paths import app_paths
 from runtime.platform.process.service_provider import get_provider
 
 _log = logging.getLogger(__name__)
+
+# Audit T-05: default wall-clock hard cap for a turn, wired into the
+# per-iteration cancel/pause guard so a runaway turn auto-pauses even when
+# the user never pauses it. Long-horizon modes (goal / research / swarm) get
+# 4h, interactive turns 2h. ``OCTOPUS_TURN_WALL_TIME_CAP_S`` overrides
+# globally; ``0`` disables.
+DEFAULT_TURN_WALL_TIME_CAP_S = 2 * 60 * 60
+DEFAULT_TURN_WALL_TIME_CAP_LONG_HORIZON_S = 4 * 60 * 60
+
+
+def turn_wall_time_cap_s(
+    *,
+    goal_mode: bool = False,
+    research_mode: bool = False,
+    swarm_mode: bool = False,
+) -> float:
+    """Resolve the wall-clock hard cap for a turn (audit T-05).
+
+    Env override wins; otherwise long-horizon modes get 4h and everything
+    else 2h. ``0`` disables the cap (auto-pause never trips on time).
+    """
+    raw = os.environ.get("OCTOPUS_TURN_WALL_TIME_CAP_S", "").strip()
+    if raw:
+        try:
+            return max(0.0, float(raw))
+        except ValueError:
+            _log.warning("OCTOPUS_TURN_WALL_TIME_CAP_S=%r not a number; ignoring", raw)
+    if goal_mode or research_mode or swarm_mode:
+        return float(DEFAULT_TURN_WALL_TIME_CAP_LONG_HORIZON_S)
+    return float(DEFAULT_TURN_WALL_TIME_CAP_S)
+
 
 PauseReason = Literal[
     "user_request",  # Implementation note.

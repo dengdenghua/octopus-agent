@@ -68,6 +68,7 @@ from runtime.core.cerebrum.react_quiet_evidence import (
     _result_checkpoint_is_meaningful,
     _should_accumulate_quiet_evidence,
 )
+from runtime.core.cerebrum.pause_control import turn_wall_time_cap_s
 from runtime.core.cerebrum.react_resume import (
     _resume_or_register_turn,
 )
@@ -370,6 +371,14 @@ def _stream_react_loop_impl(
     # ── PHASE 5 · pre-loop state init + checkpoint resume ──────────────
     # Pause registration, taint reset, checkpoint resume, and resume
     # grants moved verbatim to react_resume._resume_or_register_turn.
+    # Audit T-05: register the active turn with a mode-graded wall-clock
+    # hard cap so the per-iteration guard auto-pauses runaway turns; the
+    # resume path carries the same cap forward.
+    _wall_time_cap = turn_wall_time_cap_s(
+        goal_mode=_is_goal_mode,
+        research_mode=_is_research_mode,
+        swarm_mode=_is_swarm_mode,
+    )
     _rboot = _resume_or_register_turn(
         stack,
         intent,
@@ -380,6 +389,7 @@ def _stream_react_loop_impl(
         max_iterations=max_iterations,
         active_max_tokens_budget=_active_max_tokens_budget,
         active_max_usd_budget=_active_max_usd_budget,
+        max_wall_time_seconds=_wall_time_cap,
         messages=messages,
     )
     _pause = _rboot.pause_controller

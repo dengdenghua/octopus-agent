@@ -362,6 +362,7 @@ def _resume_or_register_turn(
     max_iterations: int,
     active_max_tokens_budget: Any,
     active_max_usd_budget: Any,
+    max_wall_time_seconds: float = 0.0,
     messages: list,
 ) -> _ResumedTurn:
     """Pause registration, taint reset, checkpoint resume, resume grant.
@@ -385,6 +386,7 @@ def _resume_or_register_turn(
         max_iterations=max_iterations,
         max_tokens=active_max_tokens_budget,
         max_usd=active_max_usd_budget,
+        max_wall_time_seconds=max_wall_time_seconds,
         carry_tokens=_carry_tokens,
         carry_cost_usd=_carry_cost,
     )
