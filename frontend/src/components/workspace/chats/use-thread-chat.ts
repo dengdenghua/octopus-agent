@@ -25,7 +25,8 @@ function resolveStateFromPath(
 export function useThreadChat() {
   const params = useParams();
   const threadIdFromPath = params.threadId ?? params.thread_id;
-  const { pathname } = useLocation();
+  const location = useLocation();
+  const { pathname } = location;
   const isNewPath = threadIdFromPath === "new" || pathname.endsWith("/new");
 
   const [searchParams] = useSearchParams();
@@ -34,7 +35,13 @@ export function useThreadChat() {
   // when the user actually navigates (new → existing, existing → different
   // existing, existing → new). We combine pathname + threadIdFromPath so
   // that both hash changes and param changes trigger a reset.
-  const pathId = `${pathname}|${threadIdFromPath ?? ""}`;
+  // `taskNonce` (sidebar 新建任务) must join the identity: clicking it while
+  // already on `/realtime/new` keeps the same pathname, and without the
+  // nonce the identical pathId skips the reset - the button looks dead and
+  // the old draft/thread id survives a "new task" click.
+  const taskNonce =
+    (location.state as { taskNonce?: string } | null)?.taskNonce ?? "";
+  const pathId = `${pathname}|${threadIdFromPath ?? ""}|${taskNonce}`;
 
   const [state, setState] = useState<ThreadChatState>(() =>
     resolveStateFromPath(threadIdFromPath, isNewPath),
