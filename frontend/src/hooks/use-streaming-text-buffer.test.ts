@@ -126,6 +126,9 @@ describe("useStreamingTextBuffer", () => {
           targetText: text,
           minCharsPerTick: 1,
           maxCharsPerTick: 1,
+          // Pin the per-tick cap: the backlog-pressure scaling would
+          // otherwise widen the lane and defeat the 1-char setup.
+          backlogScaleDivisor: Number.MAX_SAFE_INTEGER,
         }),
       { initialProps: { text: "a" } },
     );
@@ -224,6 +227,28 @@ describe("useStreamingTextBuffer", () => {
       vi.advanceTimersByTime(80);
     });
     expect(result.current).toBe(full);
+  });
+
+  it("widens the per-tick lane under deep backlog so fast providers cannot outrun it", () => {
+    mockMatchMedia(false);
+    const { result, rerender } = renderHook(
+      ({ text }: { text: string }) =>
+        useStreamingTextBuffer({ targetText: text }),
+      { initialProps: { text: "起" } },
+    );
+    // ~1200 chars arrive at once (fast provider burst); with the old fixed
+    // 4-char cap the display would need 300 ticks (12s) to catch up. The
+    // backlog-scaled cap should close most of the gap within ~5s.
+    const burst = `起${"快速模型一次吐出的大段回答内容。".repeat(75)}`;
+    rerender({ text: burst });
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(result.current.length).toBeGreaterThan(burst.length * 0.6);
+    act(() => {
+      vi.advanceTimersByTime(20000);
+    });
+    expect(result.current).toBe(burst);
   });
 
   it("reveals the full text immediately on finish when drainOnFinish is off", () => {

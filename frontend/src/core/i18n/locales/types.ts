@@ -264,6 +264,7 @@ export interface Translations {
       removed: number,
     ) => string;
     toolCallsCount: (n: number) => string;
+    diffTruncated: (n: number) => string;
     loadOlderTurns: string;
     loadingOlderTurns: string;
   };

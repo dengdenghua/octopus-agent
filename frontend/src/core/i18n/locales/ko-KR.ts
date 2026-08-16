@@ -325,6 +325,7 @@ export const koKR: Translations = {
     fileOperationsCountWithDiff: (n: number, added: number, removed: number) =>
       `파일 작업 ${n}회 (+${added} / -${removed})`,
     toolCallsCount: (n: number) => `작업 기록 ${n}개`,
+    diffTruncated: (n: number) => `… 잘림: 나머지 ${n}줄 숨김 …`,
     loadOlderTurns: "이전 턴 불러오기",
     loadingOlderTurns: "이전 턴 불러오는 중…",
   },

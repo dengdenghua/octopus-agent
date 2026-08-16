@@ -108,6 +108,24 @@ function splitInlineThinkingDetails(content: string) {
   };
 }
 
+/**
+ * Cheap pre-filter for the streaming hot path.
+ *
+ * The full protocol-cleaning chain (stripInternalToolProtocol →
+ * stripInternalTraceDetails → splitInlineThinkingDetails → …) is a dozen
+ * whole-string regex passes — fine per settled message, wasteful when it
+ * re-runs on every streamed token. Every pattern in that chain requires at
+ * least one of the characters below (protocol XML/fence markers, ReAct
+ * field headers, guard boilerplate). A reply containing none of them is
+ * guaranteed to pass through every stage unchanged, so we can skip the
+ * entire chain. First-mark test is O(n) with zero allocation.
+ */
+const PROTOCOL_FIRST_MARK_RE = /[<`TAFONS质量（{[]/;
+
+export function containsProtocolMarkers(content: string): boolean {
+  return PROTOCOL_FIRST_MARK_RE.test(content);
+}
+
 function getReasoningSummary(message: Message): string | null {
   const additional = isRecord(message.additional_kwargs)
     ? message.additional_kwargs
@@ -517,10 +535,22 @@ function MessageContent_({
         thinkingContent: null,
       };
     }
+    const source = rawContent ?? "";
+    // Streaming fast path: skip the whole protocol-cleaning regex chain for
+    // content that contains none of the protocol first-marks (see
+    // containsProtocolMarkers). The chain is idempotent, so settled
+    // messages and marked streaming content still get the full treatment.
+    if (!containsProtocolMarkers(source)) {
+      return {
+        content: source,
+        hadInlineThinking: false,
+        thinkingContent: null,
+      };
+    }
     return splitInlineThinkingDetails(
       stripInternalToolProtocol(
         stripLegacySubagentBudgetPlaceholder(
-          stripInternalTraceDetails(rawContent ?? ""),
+          stripInternalTraceDetails(source),
         ),
       ),
     );

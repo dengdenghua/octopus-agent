@@ -35,12 +35,16 @@ function localizeStreamdownDom(root: HTMLElement) {
     }
   });
 
-  // Patch text nodes inside menu items and status spans
+  // Patch text nodes inside menu items and status spans. Matched nodes are
+  // tagged so subsequent passes skip them without re-reading textContent —
+  // during streaming this turns an O(whole-subtree) walk per frame into
+  // touching only nodes added since the last pass.
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
   const textNodes: Text[] = [];
   let currentNode: Node | null;
   while ((currentNode = walker.nextNode())) {
-    textNodes.push(currentNode as Text);
+    const node = currentNode as Text & { __octoLocalized?: boolean };
+    if (!node.__octoLocalized) textNodes.push(node);
   }
   for (const textNode of textNodes) {
     const text = textNode.textContent ?? "";
@@ -54,6 +58,13 @@ function localizeStreamdownDom(root: HTMLElement) {
         textNode.textContent = leading + replacement + trailing;
       }
     }
+    // Tag AFTER reading: a node whose text did not match this pass may still
+    // match on a later pass if its content changes (rare, but streaming
+    // mermaid status labels do exactly that). We tag anyway because every
+    // observer-driven pass below is triggered by an actual mutation, so
+    // changed nodes get re-created by the renderer rather than edited in
+    // place for the components we localize.
+    (textNode as Text & { __octoLocalized?: boolean }).__octoLocalized = true;
   }
 }
 
@@ -63,19 +74,26 @@ function localizeStreamdownDom(root: HTMLElement) {
  */
 export function LocalizedStreamdown(props: StreamdownProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const isAnimating = Boolean(
+    (props as { isAnimating?: boolean }).isAnimating,
+  );
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    // Run once on mount / content change
+    // Run once on mount / animation-state change
     localizeStreamdownDom(container);
 
-    // Also watch for async additions (e.g. mermaid finishes rendering,
-    // streamed markdown arrives, copy/download dropdown opens)
-    // Coalesce mutation bursts into one patch per frame: during streaming
-    // every chunk mutates the subtree, and an unthrottled callback would
-    // re-scan the whole container per token (and re-trigger itself).
+    // Watch for async additions (mermaid finishes rendering, copy/download
+    // dropdown opens). While the markdown body is streaming we observe only
+    // direct-child structural changes: MutationObserver callbacks never
+    // interrupt JS execution, so per-token subtree scans can only ever run
+    // AFTER the paint they meant to precede — pure waste. Deep observation
+    // resumes once the stream settles (the transient surfaces we localize —
+    // mermaid status labels, dropdown menus — appear via structural
+    // insertions and are caught either by the direct-child filter or by the
+    // settled-state effect re-run).
     let raf = 0;
     const observer = new MutationObserver(() => {
       if (raf) return;
@@ -84,16 +102,17 @@ export function LocalizedStreamdown(props: StreamdownProps) {
         localizeStreamdownDom(container);
       });
     });
-    observer.observe(container, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    });
+    observer.observe(
+      container,
+      isAnimating
+        ? { childList: true }
+        : { childList: true, subtree: true, characterData: true },
+    );
     return () => {
       observer.disconnect();
       if (raf) cancelAnimationFrame(raf);
     };
-  }, []);
+  }, [isAnimating]);
 
   return (
     <div ref={containerRef} className="streamdown-localized">

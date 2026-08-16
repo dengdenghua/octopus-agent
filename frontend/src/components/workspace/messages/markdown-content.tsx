@@ -63,6 +63,10 @@ function isExternalUrl(href: string | undefined): boolean {
  */
 export function stripLeakedControlMarkup(value: string): string {
   if (!value) return value;
+  // Cheap bail-out: every pattern below requires at least one of these
+  // first-marks (control tags, the legacy guard boilerplate, markdown
+  // rules). Plain prose skips the whole regex chain unchanged.
+  if (!/[<\-质量]/.test(value)) return value;
   const withoutControlTags = stripLeakedRendererMarkup(value, { trim: false });
   // Compatibility repair for replies persisted before guard diagnostics were
   // moved to structured turn state. Match only the exact legacy boilerplate,
@@ -87,6 +91,11 @@ export function stripLeakedControlMarkup(value: string): string {
  */
 export function stabilizeMarkdownTableCodePipes(value: string): string {
   if (!value) return value;
+  // Cheap bail-out: the transform only touches lines containing both a
+  // pipe and a backtick. A single O(n) scan saves the per-line
+  // split/map/join allocation on the streaming hot path for the common
+  // case (prose without tables).
+  if (!value.includes("|") || !value.includes("`")) return value;
   let inFence = false;
   return value
     .split("\n")
@@ -95,7 +104,7 @@ export function stabilizeMarkdownTableCodePipes(value: string): string {
         inFence = !inFence;
         return line;
       }
-      if (inFence || !line.includes("|")) return line;
+      if (inFence || !line.includes("|") || !line.includes("`")) return line;
       return line.replace(/(`+)([\s\S]*?)\1/g, (span, ticks, code) => {
         const escaped = String(code).replace(/(^|[^\\])\|/g, "$1\\|");
         return `${ticks}${escaped}${ticks}`;

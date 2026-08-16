@@ -15,6 +15,7 @@ import {
   memo,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 
@@ -82,11 +83,18 @@ export const Reasoning = memo(
       }
     }, [isStreaming, setDuration, startTime]);
 
+    // Auto-open only on the false→true edge of `isStreaming`. Tracking
+    // `isOpen` here meant a user who manually collapsed the panel mid-stream
+    // got it forced back open on the next render — the user's explicit
+    // choice must win over the convenience default.
+    const prevStreamingRef = useRef(isStreaming);
     useEffect(() => {
-      if (isStreaming && !isOpen) {
+      const wasStreaming = prevStreamingRef.current;
+      prevStreamingRef.current = isStreaming;
+      if (isStreaming && !wasStreaming) {
         setIsOpen(true);
       }
-    }, [isOpen, isStreaming, setIsOpen]);
+    }, [isStreaming, setIsOpen]);
 
     return (
       <ReasoningContext.Provider

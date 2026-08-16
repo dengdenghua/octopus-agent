@@ -26,6 +26,10 @@ import {
 } from "@/core/composer-image-inbox";
 import { useI18n } from "@/core/i18n/hooks";
 import { useModels } from "@/core/models/hooks";
+import {
+  loadComposerDraft,
+  saveComposerDraft,
+} from "@/core/threads/composer-draft";
 import { EvolutionIndicator } from "../evolution-indicator";
 import { ModelPicker, type PickerModel } from "../model-picker";
 import { PartnerModelControl } from "../partner-model-control";
@@ -127,7 +131,24 @@ export function ChatComposer({
       void pet.stop().catch(() => {});
     }
   }, [petVisible]);
-  const [draft, setDraft] = useState(defaultValue);
+  const [draft, setDraft] = useState(() =>
+    // A per-thread draft survives thread switches and reloads. defaultValue
+    // (external injection, e.g. "retry this message") wins when present.
+    defaultValue || (loadComposerDraft(threadId) ?? ""),
+  );
+  // Restore the stored draft when the composer moves to a different thread
+  // (the component is reused across navigation).
+  const prevDraftThreadRef = useRef(threadId);
+  useEffect(() => {
+    if (prevDraftThreadRef.current === threadId) return;
+    prevDraftThreadRef.current = threadId;
+    setDraft(loadComposerDraft(threadId) ?? "");
+  }, [threadId]);
+  // Persist the draft (debounced) so a reload never loses half-typed text.
+  useEffect(() => {
+    const timer = setTimeout(() => saveComposerDraft(threadId, draft), 300);
+    return () => clearTimeout(timer);
+  }, [threadId, draft]);
   const [researchUrlText, setResearchUrlText] = useState("");
   const [researchTextTitle, setResearchTextTitle] = useState("");
   const [researchTextBody, setResearchTextBody] = useState("");

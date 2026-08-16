@@ -151,9 +151,10 @@ export const CodeBlock = ({
         );
       }, 150);
     } else {
-      // Settled code: drop any stale streaming highlight and highlight the
-      // final code immediately.
-      setHtml("");
+      // Settled code: highlight immediately and KEEP the stale streaming
+      // highlight on screen until the fresh one arrives. Clearing here used
+      // to flash one frame of unhighlighted plain text between the stream
+      // and the final highlight.
       void highlightCode(code, language, showLineNumbers, shikiTheme).then(
         applyHighlight,
       );

@@ -332,6 +332,7 @@ export const enUS: Translations = {
     fileOperationsCountWithDiff: (n: number, added: number, removed: number) =>
       `${n} file operation${n === 1 ? "" : "s"} (+${added} / -${removed})`,
     toolCallsCount: (n: number) => `${n} action record${n === 1 ? "" : "s"}`,
+    diffTruncated: (n: number) => `… truncated, ${n} more line${n === 1 ? "" : "s"} hidden …`,
     loadOlderTurns: "Load older turns",
     loadingOlderTurns: "Loading older turns…",
   },

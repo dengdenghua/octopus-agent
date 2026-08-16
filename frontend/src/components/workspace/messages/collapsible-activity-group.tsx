@@ -100,8 +100,9 @@ export function parseUnifiedDiff(diff: string): DiffRow[] {
 }
 
 function DiffLines({ diffs }: { diffs: unknown }) {
-  const rows = useMemo(() => {
-    if (!Array.isArray(diffs)) return [];
+  const { t } = useI18n();
+  const { rows, truncated } = useMemo(() => {
+    if (!Array.isArray(diffs)) return { rows: [] as DiffRow[], truncated: 0 };
     const list: DiffRow[] = [];
     for (const raw of diffs) {
       if (typeof raw !== "string" || !raw.trim()) continue;
@@ -109,7 +110,10 @@ function DiffLines({ diffs }: { diffs: unknown }) {
     }
     // Truncate pathological diffs (chat perf guard); the header row in
     // the label already carries the +N/-M counts.
-    return list.length > 400 ? list.slice(0, 400) : list;
+    if (list.length > 400) {
+      return { rows: list.slice(0, 400), truncated: list.length - 400 };
+    }
+    return { rows: list, truncated: 0 };
   }, [diffs]);
 
   if (rows.length === 0) return null;
@@ -134,6 +138,11 @@ function DiffLines({ diffs }: { diffs: unknown }) {
           <span className="min-w-0 flex-1">{row.text}</span>
         </div>
       ))}
+      {truncated > 0 && (
+        <div className="px-2 py-1 text-center text-muted-foreground/80 select-none">
+          {t.message.diffTruncated(truncated)}
+        </div>
+      )}
     </div>
   );
 }
@@ -147,31 +156,33 @@ export function buildHeaderSummary(
   items: ActivityItem[],
   t: ReturnType<typeof useI18n>["t"],
 ): string | null {
+  // No leading emoji here — the header already renders the kind's lucide
+  // icon (KIND_ICON); emoji + lucide side by side looked inconsistent.
   if (kind === "think") {
     if (items.length === 0) return null;
     const totalSeconds = Math.max(
       1,
       Math.round(sumMeta(items, "duration_seconds")),
     );
-    return `🧠 ${t.message.thinkingForSeconds(totalSeconds)}`;
+    return t.message.thinkingForSeconds(totalSeconds);
   }
   if (kind === "plan") {
-    return `📋 ${t.message.planningNSteps(items.length)}`;
+    return t.message.planningNSteps(items.length);
   }
   if (kind === "file_ops") {
     const added = sumMeta(items, "lines_added");
     const removed = sumMeta(items, "lines_removed");
     if (added === 0 && removed === 0) {
-      return `✏️ ${t.message.fileOperationsCount(items.length)}`;
+      return t.message.fileOperationsCount(items.length);
     }
-    return `✏️ ${t.message.fileOperationsCountWithDiff(
+    return t.message.fileOperationsCountWithDiff(
       items.length,
       added,
       removed,
-    )}`;
+    );
   }
   // tool_calls
-  return `🔧 ${t.message.toolCallsCount(items.length)}`;
+  return t.message.toolCallsCount(items.length);
 }
 
 // -------------------------------------------------------------------------

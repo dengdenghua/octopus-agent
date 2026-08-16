@@ -326,6 +326,7 @@ export const jaJP: Translations = {
     fileOperationsCountWithDiff: (n: number, added: number, removed: number) =>
       `ファイル操作 ${n} 回 (+${added} / -${removed})`,
     toolCallsCount: (n: number) => `操作記録 ${n} 件`,
+    diffTruncated: (n: number) => `… 省略: 残り ${n} 行 …`,
     loadOlderTurns: "古いターンを読み込む",
     loadingOlderTurns: "古いターンを読み込み中…",
   },
