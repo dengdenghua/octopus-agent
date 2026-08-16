@@ -930,6 +930,11 @@ class _ReactBridgeState:
                     file_item,
                     workspace_focus=file_focus,
                 )
+                # The promoted item is created with the default IN_PROGRESS
+                # status. Flip it to COMPLETED before the completion event so
+                # the item doesn't read as ``inProgress`` and get swept to
+                # ``failed`` by _close_turn when the turn ends.
+                file_item.status = ItemStatus.COMPLETED
                 # ``_emit_item_completed`` lives on ``CerebrumRuntime`` and
                 # isn't reachable from here — use the local ``_emit_completed``
                 # so we don't reach across class boundaries.

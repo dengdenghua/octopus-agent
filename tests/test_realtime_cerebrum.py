@@ -4102,6 +4102,16 @@ def test_tool_end_with_diff_emits_file_change_item(gateway: Any) -> None:
     hunk = change["hunks"][0]
     assert hunk["oldStart"] == 1 and hunk["newStart"] == 1
     assert hunk["decision"] == "pending"
+    # The promoted item must land as completed, not stay inProgress and get
+    # swept to failed by _close_turn when the turn ends.
+    assert fci["status"] == "completed"
+    completed_events = [
+        n.params["item"]
+        for n in out["notifications"]
+        if n.method == "item/completed" and n.params["item"].get("type") == "fileChange"
+    ]
+    assert len(completed_events) == 1
+    assert completed_events[0]["status"] == "completed"
 
 
 def test_code_file_change_without_verification_fails_turn(gateway: Any) -> None:
