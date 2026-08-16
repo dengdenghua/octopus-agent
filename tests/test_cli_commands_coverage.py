@@ -135,3 +135,21 @@ def test_backup_restore_roundtrip(tmp_path: Path) -> None:
     rc2, _ = _run(cc.run_restore, input_path=artifact, base_dir=str(restored_base), color=False)
     assert rc2 == 0
     assert (restored_base / "config.yaml").exists(), "restore did not recreate config"
+
+
+def test_run_kg_and_wiki_missing_journal(tmp_path: Path) -> None:
+    missing = tmp_path / "nope.jsonl"
+    rc, out = _run(cc.run_kg, from_journal=missing, color=False)
+    assert rc == 2
+    rc2, _ = _run(cc.run_wiki, from_journal=missing, color=False)
+    assert rc2 == 2
+
+
+def test_run_export(tmp_path: Path) -> None:
+    base = tmp_path / "octo"
+    base.mkdir()
+    (base / "config.yaml").write_text("name: test\n", encoding="utf-8")
+    out = tmp_path / "export.json"
+    rc, _ = _run(cc.run_export, output=out, base_dir=str(base), color=False)
+    assert rc == 0
+    assert out.exists()
