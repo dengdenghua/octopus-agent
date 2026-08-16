@@ -54,9 +54,7 @@ def test_isolated_spec_receives_a_worktree_path(monkeypatch: Any) -> None:
         return {"success": True, "output": "ok", "agent_id": "researcher"}
 
     monkeypatch.setattr("runtime.execution.subagents.call_subagent", fake_call)
-    monkeypatch.setattr(
-        "runtime.execution.subagents.worktree_loop.is_git_repo", lambda _root: True
-    )
+    monkeypatch.setattr("runtime.execution.subagents.worktree_loop.is_git_repo", lambda _root: True)
 
     import contextlib
 
@@ -64,9 +62,7 @@ def test_isolated_spec_receives_a_worktree_path(monkeypatch: Any) -> None:
     def fake_scope(_root: str, name: str) -> Any:
         yield f"/tmp/wt-{name}", f"octo/wt-{name}"
 
-    monkeypatch.setattr(
-        "runtime.execution.subagents.worktree_loop.worktree_scope", fake_scope
-    )
+    monkeypatch.setattr("runtime.execution.subagents.worktree_loop.worktree_scope", fake_scope)
     monkeypatch.setattr(
         "runtime.execution.subagents.worktree_loop._capture_diff",
         lambda _p: ("diff --git a/f b/f", ["f"]),
@@ -76,6 +72,69 @@ def test_isolated_spec_receives_a_worktree_path(monkeypatch: Any) -> None:
     assert seen.get("workspace_path", "").startswith("/tmp/wt-")
     succ = env["successes"][0]
     assert succ["files_touched"] == ["f"]
+
+
+def test_the_diff_survives_the_envelope_projection(monkeypatch: Any) -> None:
+    """Found live, not by a stub: ``_build_parallel_envelope`` is a WHITELIST
+    projection, so ``isolated`` / ``branch`` / ``diff`` were dropped on the way
+    out. The worktree was created, written and cleaned up correctly, but the
+    caller got nothing back - isolation silently meant "discard the work".
+
+    ``files_touched`` masked it, because ``common`` already projected that one.
+    So this asserts on the ENVELOPE entry, never on ``_invoke``'s return value.
+    """
+    monkeypatch.setattr(
+        "runtime.execution.subagents.call_subagent",
+        lambda **_kw: {"success": True, "output": "edited", "agent_id": "implementer"},
+    )
+    monkeypatch.setattr("runtime.execution.subagents.worktree_loop.is_git_repo", lambda _root: True)
+
+    import contextlib
+
+    @contextlib.contextmanager
+    def fake_scope(_root: str, name: str) -> Any:
+        yield "/tmp/wt-x", f"octo/wt-{name}"
+
+    monkeypatch.setattr("runtime.execution.subagents.worktree_loop.worktree_scope", fake_scope)
+    monkeypatch.setattr(
+        "runtime.execution.subagents.worktree_loop._capture_diff",
+        lambda _p: ("diff --git a/probe b/probe\n+new line", ["probe"]),
+    )
+
+    env = ds._call_agent_parallel(specs=[_spec(isolate=True, bb_key="w")])
+    succ = env["successes"][0]
+    assert succ.get("isolated") is True, "isolation flag lost in the envelope"
+    assert "diff --git" in str(succ.get("diff") or ""), "the diff never reached the caller"
+    assert str(succ.get("branch") or "").startswith("octo/wt-"), "branch lost in the envelope"
+
+
+def test_graph_node_surfaces_its_isolated_diff(monkeypatch: Any) -> None:
+    """The graph's per-node result dict is a whitelist projection too."""
+
+    def fake_parallel(specs: Any = None, **_kw: Any) -> dict[str, Any]:
+        return {
+            "ok": True,
+            "successes": [
+                {
+                    "bb_key": specs[0]["bb_key"],
+                    "spec_index": 0,
+                    "agent_id": "implementer",
+                    "output": "done",
+                    "isolated": True,
+                    "branch": "octo/wt-spawn-w",
+                    "diff": "diff --git a/f b/f",
+                    "files_touched": ["f"],
+                }
+            ],
+            "failures": [],
+        }
+
+    monkeypatch.setattr(ds, "_call_agent_parallel", fake_parallel)
+    out = ds._run_agent_graph(nodes=[{"id": "w", "prompt": "edit it", "isolate": True}])
+    node = out["nodes"]["w"]
+    assert node.get("isolated") is True
+    assert "diff --git" in str(node.get("diff") or "")
+    assert node.get("files_touched") == ["f"]
 
 
 def test_diff_is_captured_before_the_worktree_is_removed(monkeypatch: Any) -> None:
@@ -88,9 +147,7 @@ def test_diff_is_captured_before_the_worktree_is_removed(monkeypatch: Any) -> No
         "runtime.execution.subagents.call_subagent",
         lambda **_kw: {"success": True, "output": "ok", "agent_id": "researcher"},
     )
-    monkeypatch.setattr(
-        "runtime.execution.subagents.worktree_loop.is_git_repo", lambda _root: True
-    )
+    monkeypatch.setattr("runtime.execution.subagents.worktree_loop.is_git_repo", lambda _root: True)
 
     import contextlib
 
@@ -102,9 +159,7 @@ def test_diff_is_captured_before_the_worktree_is_removed(monkeypatch: Any) -> No
         finally:
             order.append("exit")
 
-    monkeypatch.setattr(
-        "runtime.execution.subagents.worktree_loop.worktree_scope", fake_scope
-    )
+    monkeypatch.setattr("runtime.execution.subagents.worktree_loop.worktree_scope", fake_scope)
 
     def fake_diff(_p: str) -> tuple[str, list[str]]:
         order.append("capture")
@@ -146,16 +201,12 @@ def test_isolation_failure_degrades_one_lane_not_the_batch(monkeypatch: Any) -> 
         "runtime.execution.subagents.call_subagent",
         lambda **_kw: {"success": True, "output": "ok", "agent_id": "researcher"},
     )
-    monkeypatch.setattr(
-        "runtime.execution.subagents.worktree_loop.is_git_repo", lambda _root: True
-    )
+    monkeypatch.setattr("runtime.execution.subagents.worktree_loop.is_git_repo", lambda _root: True)
 
     def boom(_root: str, _name: str) -> Any:
         raise OSError("git worktree add failed: disk full")
 
-    monkeypatch.setattr(
-        "runtime.execution.subagents.worktree_loop.worktree_scope", boom
-    )
+    monkeypatch.setattr("runtime.execution.subagents.worktree_loop.worktree_scope", boom)
 
     env = ds._call_agent_parallel(specs=[_spec(isolate=True), _spec(prompt="read only")])
     assert env["ok"] is True, "one isolation failure sank the whole batch"

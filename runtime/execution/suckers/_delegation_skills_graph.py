@@ -392,6 +392,12 @@ def _run_agent_graph(
                 "output": text,
                 "ok": True,
             }
+            # An isolated node's real product is its diff, not its prose. This
+            # dict is also a whitelist projection, so the fields have to be
+            # named or ``isolate: true`` on a node silently discards the work.
+            for isolation_field in ("isolated", "branch", "diff", "files_touched"):
+                if succ.get(isolation_field):
+                    results[node_id][isolation_field] = succ.get(isolation_field)
             # Record for future resumes. ``put`` refuses anything that is not a
             # completed, non-empty success, so a lane that came back empty or
             # half-finished is exactly the work the next resume will redo.

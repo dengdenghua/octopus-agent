@@ -582,6 +582,15 @@ def _build_parallel_envelope(
                 success_entry["parsed"] = r.get("parsed")
             if "schema_ok" in r:
                 success_entry["schema_ok"] = r.get("schema_ok")
+            # Isolation evidence. This envelope is a WHITELIST projection, so a
+            # field not named here is silently dropped - which made ``isolate``
+            # a no-op end to end: the worktree was created, written, and cleaned
+            # up correctly, but the diff never reached the caller, so isolation
+            # meant "discard the work". ``files_touched`` survived only because
+            # ``common`` already projected it, which made the loss harder to see.
+            for isolation_field in ("isolated", "branch", "diff"):
+                if isolation_field in r:
+                    success_entry[isolation_field] = r.get(isolation_field)
             successes.append(success_entry)
             if output.strip():
                 outputs.append(output)
