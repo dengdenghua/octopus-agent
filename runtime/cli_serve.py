@@ -304,6 +304,24 @@ def register_cron_executor_task(runner: Any, channel_manager_holder: list | None
     if interval_s <= 0:
         return 0
 
+    # Audit T-02: reclaim jobs left in-flight by a previous process BEFORE
+    # the first tick. The tick skips marked jobs, so without this sweep a
+    # crashed job would be stuck "running" forever while its orphaned
+    # process group kept executing. Recovery kills the group and stamps
+    # last_run so the catch-up tick does not double-fire the job.
+    try:
+        from runtime.execution.cron_executor import recover_interrupted_cron_jobs
+
+        recovered = recover_interrupted_cron_jobs()
+        if recovered.get("interrupted"):
+            logging.getLogger(__name__).warning(
+                "cron recovery: %d job(s) interrupted at startup: %s",
+                recovered["interrupted"],
+                ", ".join(recovered.get("jobs") or []),
+            )
+    except Exception:  # noqa: BLE001 — recovery must never block boot
+        logging.getLogger(__name__).exception("cron recovery failed at startup")
+
     def _deliver(record: dict) -> None:
         """Push a finished cron run back to its recorded IM conversation."""
         if not channel_manager_holder:

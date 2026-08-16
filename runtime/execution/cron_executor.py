@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 import subprocess
 import sys
 import threading
@@ -60,6 +61,19 @@ _CRON_FALLBACK_LOCK = threading.Lock()
 # ─── Default runners (subprocess) ────────────────────────────
 
 
+def _pid_recorder(job: dict[str, Any]) -> Callable[[subprocess.Popen[Any]], None]:
+    """Return an ``on_start`` hook that records the child pid on the job.
+
+    Audit T-02: the child runs in its own session (pid == pgid), so the
+    recorded pid doubles as the process-group id for startup recovery.
+    """
+
+    def _record(proc: subprocess.Popen[Any]) -> None:
+        job["pid"] = proc.pid
+
+    return _record
+
+
 def default_shell_runner(command: str, job: dict[str, Any]) -> RunResult:
     """Run a UI-created shell job.
 
@@ -69,6 +83,7 @@ def default_shell_runner(command: str, job: dict[str, Any]) -> RunResult:
     proc, timed_out = _run_process(
         _shell_argv(command),
         timeout=SHELL_JOB_TIMEOUT_S,
+        on_start=_pid_recorder(job),
     )
     if timed_out:
         return "timeout", f"exceeded {SHELL_JOB_TIMEOUT_S}s"
@@ -101,6 +116,7 @@ def default_prompt_runner(prompt: str, job: dict[str, Any]) -> RunResult:
     proc, timed_out = _run_process(
         [sys.executable, "-m", "runtime", "run", prompt],
         timeout=PROMPT_JOB_TIMEOUT_S,
+        on_start=_pid_recorder(job),
     )
     if timed_out:
         return "timeout", f"exceeded {PROMPT_JOB_TIMEOUT_S}s"
@@ -115,12 +131,17 @@ def _run_process(
     argv: list[str],
     *,
     timeout: float,
+    on_start: Callable[[subprocess.Popen[Any]], None] | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], bool]:
     """Run a scheduled command in its own session and kill its descendants.
 
     ``subprocess.run(timeout=...)`` only guarantees that the direct child is
     reaped.  Scheduled commands commonly spawn shells, test runners, or
     agent subprocesses, so a timeout must target the whole process group.
+
+    ``on_start`` (audit T-02) receives the Popen right after launch so the
+    caller can persist the child's pid as an in-flight marker before the
+    job's own work starts.
     """
     from runtime.platform.process.tree import process_group_kwargs, terminate_process_tree
 
@@ -131,6 +152,11 @@ def _run_process(
         text=True,
         **process_group_kwargs(),
     )
+    if on_start is not None:
+        try:
+            on_start(proc)
+        except Exception:  # noqa: BLE001 — marker recording must not abort the run
+            _log.exception("cron_executor: on_start hook failed")
     try:
         stdout, stderr = proc.communicate(timeout=timeout)
         return (
@@ -225,7 +251,15 @@ def _is_due(job: dict[str, Any], now: datetime) -> bool:
     the current minute; a previously-run job fires when the next
     scheduled minute after ``last_run`` has passed — which yields
     exactly one catch-up run after downtime, not a burst.
+
+    In-flight jobs (audit T-02): a persisted ``started_at`` marker means
+    the job is either running now or was left in flight by a crash. A
+    live run must never double-fire; a stale marker is reclaimed by the
+    startup sweep (``recover_interrupted_cron_jobs``), which clears it
+    and stamps ``last_run`` so the job does not re-fire either.
     """
+    if job.get("started_at"):
+        return False
     last_run_dt = _parse_dt(job.get("last_run"))
 
     fire_at_dt = _parse_dt(job.get("fire_at"))
@@ -336,6 +370,17 @@ def _run_due_cron_jobs(
 
         import time as _time
 
+        # Audit T-02: persist the in-flight marker BEFORE dispatching so a
+        # crash mid-run leaves a recoverable trace. The tick skips marked
+        # jobs; startup recovery reclaims them (kill orphan + no re-fire).
+        job["started_at"] = tick_now.isoformat()
+        job["pid"] = None
+        changed = True
+        try:
+            atomic_write_json(path, jobs)
+        except OSError:
+            _log.exception("cron_executor: failed to persist in-flight marker for %r", name)
+
         started = _time.monotonic()
         try:
             if is_agent_job:
@@ -346,10 +391,11 @@ def _run_due_cron_jobs(
             status, output = "error", f"{type(exc).__name__}: {exc}"
         duration_ms = int((_time.monotonic() - started) * 1000)
 
+        job.pop("started_at", None)
+        job.pop("pid", None)
         job["last_run"] = tick_now.isoformat()
         job["last_status"] = status
         job["last_output"] = (output or "")[-_OUTPUT_EXCERPT_CHARS:]
-        changed = True
         results.append({"name": name, "status": status})
         record = {
             "run_id": f"{name}-{tick_now.strftime('%Y%m%dT%H%M%S')}",
@@ -418,6 +464,93 @@ def _append_run_ledger(ledger_path: Path, records: list[dict[str, Any]]) -> None
         _log.exception("cron_executor: failed to append run ledger %s", ledger_path)
 
 
+def _process_group_alive(pid: int) -> bool:
+    """True when a POSIX process group led by ``pid`` still exists.
+
+    Cron children launch with ``start_new_session=True``, so the child's
+    pid IS its process-group id. ``killpg(pid, 0)`` probes the group
+    (survives the leader exiting while descendants remain); Windows falls
+    back to a plain pid probe.
+    """
+    if pid <= 0:
+        return False
+    if sys.platform == "win32":
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+    try:
+        os.killpg(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # Exists but owned by another user — treat as alive (do not kill).
+        return True
+
+
+def recover_interrupted_cron_jobs(cron_path: Path | None = None) -> dict[str, Any]:
+    """Startup sweep (audit T-02): reclaim jobs left in-flight by a crash.
+
+    A job whose subprocess died with the server leaves a persisted
+    ``started_at``/``pid`` marker but nothing driving it. Without this
+    sweep the marker would skip the job forever (``_is_due`` refuses
+    in-flight jobs) while the orphaned process group keeps running.
+
+    Recovery, per marked job:
+      * kills the surviving process group by pid (``start_new_session``
+        makes pid == pgid),
+      * clears the marker and records ``last_status=interrupted``,
+      * stamps ``last_run`` so the job does NOT re-fire on the next
+        catch-up tick — no double execution.
+
+    Never raises; returns ``{"ok", "interrupted", "jobs"}``.
+    """
+    path = cron_path or app_paths().cron_jobs_path
+    try:
+        jobs = _read_raw_jobs(path)
+    except Exception:  # noqa: BLE001
+        _log.exception("cron recovery: cannot read %s", path)
+        return {"ok": False, "interrupted": 0, "jobs": [], "error": "read failed"}
+
+    now = datetime.now().astimezone().isoformat()
+    touched: list[str] = []
+    for job in jobs:
+        if not job.get("started_at"):
+            continue
+        name = str(job.get("name") or "?")
+        pid = job.get("pid")
+        if isinstance(pid, int) and pid > 0 and _process_group_alive(pid):
+            try:
+                from runtime.platform.process.tree import terminate_pid_tree
+
+                terminated = terminate_pid_tree(pid)
+            except Exception:  # noqa: BLE001 — recovery must never raise
+                _log.exception("cron recovery: kill failed for %r pid=%s", name, pid)
+                terminated = False
+            _log.warning(
+                "cron recovery: reaped orphaned process group pid=%s job=%r (%s)",
+                pid,
+                name,
+                "killed" if terminated else "kill-failed",
+            )
+        job.pop("started_at", None)
+        job.pop("pid", None)
+        job["last_run"] = now
+        job["last_status"] = "interrupted"
+        job["last_output"] = "interrupted by process restart (audit T-02)"
+        touched.append(name)
+
+    if touched:
+        try:
+            atomic_write_json(path, jobs)
+        except OSError:
+            _log.exception("cron recovery: failed to persist %s", path)
+            return {"ok": False, "interrupted": len(touched), "jobs": touched, "error": "persist failed"}
+    return {"ok": True, "interrupted": len(touched), "jobs": touched}
+
+
 def read_run_ledger(ledger_path: Path, *, limit: int = 50) -> list[dict[str, Any]]:
     """Read the newest ``limit`` run records (newest first)."""
     import json
@@ -447,4 +580,5 @@ __all__ = [
     "default_prompt_runner",
     "read_run_ledger",
     "run_due_cron_jobs",
+    "recover_interrupted_cron_jobs",
 ]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -456,3 +457,119 @@ def test_store_projection_includes_last_output(tmp_path: Path) -> None:
     )
     jobs = _read_cron_jobs(path)
     assert jobs[0]["last_output"] == "some output"
+
+
+# ═══════════════════════════════════════════════════════════
+# Audit T-02: in-flight markers + startup recovery
+# ═══════════════════════════════════════════════════════════
+
+
+def test_tick_skips_job_with_inflight_marker(tmp_path: Path) -> None:
+    """A job with a persisted started_at marker is NOT fired again."""
+    path = tmp_path / "cron_jobs.json"
+    _write_jobs(
+        path,
+        [
+            {
+                "name": "in_flight",
+                "command": "echo hi",
+                "cron_expression": "* * * * *",
+                "started_at": NOW.isoformat(),
+                "pid": 999999,
+            }
+        ],
+    )
+    result = run_due_cron_jobs(cron_path=path, now=NOW + timedelta(minutes=1), shell_runner=_ok_shell)
+    assert result["fired"] == 0
+    job = _read_jobs(path)[0]
+    assert job["started_at"]  # marker preserved, untouched
+
+
+def test_marker_persisted_before_dispatch_and_cleared_after(tmp_path: Path) -> None:
+    """The in-flight marker is on disk BEFORE the runner starts (crash
+    window) and is cleared + last_run stamped when the run finishes."""
+    path = tmp_path / "cron_jobs.json"
+    _write_jobs(
+        path,
+        [{"name": "m", "command": "echo hi", "cron_expression": "* * * * *"}],
+    )
+    seen_on_disk: list[bool] = []
+
+    def observing_runner(command: str, job: dict[str, Any]) -> tuple[str, str]:
+        # Simulate the crash window: read the persisted file mid-run.
+        job["pid"] = 424242  # as the subprocess runner would record
+        seen_on_disk.append(bool(_read_jobs(path)[0].get("started_at")))
+        return "ok", "done"
+
+    run_due_cron_jobs(cron_path=path, now=NOW, shell_runner=observing_runner)
+    assert seen_on_disk == [True]  # marker was persisted before dispatch
+    job = _read_jobs(path)[0]
+    assert "started_at" not in job
+    assert "pid" not in job
+    assert job["last_status"] == "ok"
+    assert job["last_run"] is not None
+
+
+def test_recover_clears_stale_marker_and_prevents_refire(tmp_path: Path) -> None:
+    """Startup recovery: a marker with a dead pid is cleared, recorded as
+    interrupted, and last_run is stamped so the job does not re-fire."""
+    from runtime.execution.cron_executor import recover_interrupted_cron_jobs
+
+    path = tmp_path / "cron_jobs.json"
+    _write_jobs(
+        path,
+        [
+            {
+                "name": "crashed",
+                "command": "echo hi",
+                "cron_expression": "* * * * *",
+                "started_at": NOW.isoformat(),
+                "pid": 99999999,  # almost certainly dead
+            }
+        ],
+    )
+    result = recover_interrupted_cron_jobs(cron_path=path)
+    assert result["ok"] is True
+    assert result["interrupted"] == 1
+    job = _read_jobs(path)[0]
+    assert "started_at" not in job
+    assert "pid" not in job
+    assert job["last_status"] == "interrupted"
+    assert job["last_run"] is not None
+    # After recovery the job must NOT fire on the catch-up tick (no double run).
+    fired = run_due_cron_jobs(cron_path=path, now=NOW + timedelta(minutes=1), shell_runner=_ok_shell)
+    assert fired["fired"] == 0
+
+
+def test_recover_kills_live_orphan_process_group(tmp_path: Path) -> None:
+    """Startup recovery kills a surviving process group left by a crash."""
+    import sys as _sys
+
+    from runtime.execution.cron_executor import recover_interrupted_cron_jobs
+
+    orphan = subprocess.Popen(  # noqa: S603
+        [_sys.executable, "-c", "import time; time.sleep(30)"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    try:
+        path = tmp_path / "cron_jobs.json"
+        _write_jobs(
+            path,
+            [
+                {
+                    "name": "orphan",
+                    "command": "sleep 30",
+                    "cron_expression": "* * * * *",
+                    "started_at": NOW.isoformat(),
+                    "pid": orphan.pid,
+                }
+            ],
+        )
+        result = recover_interrupted_cron_jobs(cron_path=path)
+        assert result["interrupted"] == 1
+        assert orphan.poll() is not None  # process group was killed
+    finally:
+        if orphan.poll() is None:
+            orphan.kill()
