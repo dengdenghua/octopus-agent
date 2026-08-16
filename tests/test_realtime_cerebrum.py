@@ -5049,22 +5049,20 @@ def test_meta_skill_hint_silent_when_no_match(tmp_path: Path) -> None:
     assert hints == []
 
 
-def test_producer_thread_cancelled_when_consumer_disconnects(
+def test_turn_survives_ws_disconnect_and_runs_server_side(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """Regression: when the WebSocket disconnects mid-turn, the consumer
-    coroutine is cancelled — but the producer runs in a real OS thread
-    (asyncio.to_thread) that cancellation can't reach. Previously nobody
-    tripped ``cancel_source`` on consumer teardown, so the producer
-    looped to completion against a dead queue, piling up pending
-    ``Queue.put()`` tasks (the "Task was destroyed but it is pending"
-    flood). The fix trips ``cancel_source`` in the consumer's finally so
-    the producer thread observes cancellation and bails fast.
+    """Audit T-01: a dropped WebSocket must NOT cancel a running turn.
 
-    This test substitutes a fake stream that, after yielding once,
-    polls the cancellation token. It asserts the token DOES get tripped
-    after the consumer goes away.
+    Before the fix, the turn ran inside the WS request task: closing
+    the socket cancelled the consumer, whose finally tripped
+    ``cancel_source`` and killed the producer thread — a network
+    hiccup, lid-close or network switch destroyed a long turn. Turns
+    now run as server-resident tasks behind a detached emitter, so the
+    fake producer below is expected to run to NATURAL completion after
+    the disconnect (its cancellation token is never tripped) and the
+    resident task must drain on its own with nobody connected.
     """
     import threading
     import time
@@ -5078,14 +5076,14 @@ def test_producer_thread_cancelled_when_consumer_disconnects(
     first_event_sent = threading.Event()
 
     def fake_stream(*args: Any, **kwargs: Any) -> Iterator[dict[str, Any]]:
-        # Yield one event so the turn is clearly in-flight, then block
-        # in the producer thread polling the cancellation token. Mirrors
-        # a long tool call that keeps the worker thread alive after the
-        # consumer is gone.
+        # Yield one event so the turn is clearly in-flight, then keep
+        # the producer thread alive for a while, polling the
+        # cancellation token. Under T-01 the token must NEVER trip as a
+        # consequence of the disconnect; the thread returns naturally.
         yield {"type": "text_delta", "delta": "working"}
         first_event_sent.set()
         token = current_cancellation_token()
-        deadline = time.monotonic() + 5.0
+        deadline = time.monotonic() + 1.5
         while time.monotonic() < deadline:
             if token.is_cancelled:
                 observed["token_tripped"] = True
@@ -5125,18 +5123,24 @@ def test_producer_thread_cancelled_when_consumer_disconnects(
             # Wait until the producer has started streaming, then leave
             # the context → WebSocket disconnects mid-turn.
             assert first_event_sent.wait(timeout=5.0), "producer never started"
-        # ws is now closed; the gateway should cancel the in-flight turn
-        # task, whose finally trips cancel_source.
+        # ws is now closed; the server-resident turn must keep running.
 
-        # Give the producer's poll loop a moment to observe the trip.
         deadline = time.monotonic() + 5.0
         while observed["token_tripped"] is None and time.monotonic() < deadline:
             time.sleep(0.05)
 
-    assert observed["token_tripped"] is True, (
-        "producer thread was not cancelled after consumer disconnect — "
-        "cancel_source not tripped on teardown"
-    )
+        assert observed["token_tripped"] is False, (
+            "turn was cancelled by the ws disconnect — long turns must "
+            "survive connection loss and run on server-side (audit T-01)"
+        )
+
+        # The resident task finishes on its own with nobody connected.
+        deadline = time.monotonic() + 10.0
+        while gateway._resident_turn_tasks and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert not gateway._resident_turn_tasks, (
+            "resident turn did not drain after the requester left"
+        )
 
 
 def test_full_turn_dispatches_session_start_and_stop(

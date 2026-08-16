@@ -675,9 +675,10 @@ async def _drive_react(
     finally:
         # Trip cancellation so the producer THREAD (asyncio.to_thread)
         # observes it and bails — task cancellation alone can't stop a
-        # real OS thread. On ws-disconnect teardown this is what stops
-        # the react loop from running to completion against a dead
-        # queue and flooding pending Queue.put() tasks.
+        # real OS thread. Since audit T-01 the consumer only tears down
+        # when the turn genuinely ends (terminal event, explicit
+        # interrupt, or supervisor lease loss) — a dropped WebSocket no
+        # longer reaches this path; the turn runs on server-side.
         cancel_source.cancel(reason="consumer teardown")
         watcher.cancel()
         with contextlib.suppress(asyncio.CancelledError):

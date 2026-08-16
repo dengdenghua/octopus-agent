@@ -63,6 +63,7 @@ from runtime.protocol import (
     TurnStatus,
     decode_message,
 )
+from runtime.sensing.gateway._realtime_detached_turn import _DetachedTurnEmitter
 from runtime.sensing.gateway._realtime_gateway_approval import ApprovalManager, SharedTurnInterrupts
 from runtime.sensing.gateway._realtime_gateway_connection import RpcConnection
 from runtime.sensing.gateway._realtime_gateway_frame import (
@@ -164,6 +165,11 @@ class RealtimeGateway:
         self._wake_watch_refs: dict[str, int] = {}
         self._active_turn_threads: set[str] = set()
         self._auto_turn_tasks: dict[str, asyncio.Task[None]] = {}
+        # Audit T-01: turns run as server-resident tasks, decoupled from
+        # the originating WS request task. The event loop only keeps WEAK
+        # references to tasks, so a strong set is required to keep a
+        # detached turn alive after its requester disconnects.
+        self._resident_turn_tasks: set[asyncio.Task[Turn]] = set()
         self._loop: asyncio.AbstractEventLoop | None = None
         # Cross-connection state: the shared interrupt registry (see
         # SharedTurnInterrupts) plus the live-connection set used to
@@ -730,6 +736,12 @@ class RealtimeGateway:
         result. The same turn lifecycle was already broadcast over
         notifications, so this return value is for callers that prefer
         a synchronous "wait for done" answer over watching the stream.
+
+        Audit T-01: the turn itself runs in a server-resident task; if
+        this connection drops mid-turn, the turn CONTINUES server-side
+        and this RPC simply stops waiting. A reconnected client catches
+        up via ``thread/resume`` (event-log replay) and keeps receiving
+        live events as a watcher of the thread.
         """
         # Lenient per-actor turn-rate ceiling (auth-on only). Bursts pass;
         # only a sustained flood trips SERVER_BUSY, which clients treat as
@@ -762,15 +774,69 @@ class RealtimeGateway:
         # marks it busy for the auto-wake lane.
         self._watch_thread(thread_id, conn)
         self._active_turn_threads.add(thread_id)
+        # Audit T-01: the turn runs as a SERVER-RESIDENT task, decoupled
+        # from this WS request task. A disconnect cancels only this
+        # handler (the shield below re-raises without touching the
+        # resident); the turn keeps running, its events re-attach to
+        # whoever resumes the thread, and the terminal snapshot still
+        # fans out. Per-thread serialization is unchanged: the resident
+        # holds the turn lock for the whole run, so a second turn/start
+        # for the same thread queues behind it exactly as before.
+        resident = asyncio.create_task(
+            self._run_resident_turn(thread_id, params, conn),
+            name=f"resident-turn:{thread_id}",
+        )
+        self._resident_turn_tasks.add(resident)
+        resident.add_done_callback(self._resident_turn_tasks.discard)
+        try:
+            turn = await asyncio.shield(resident)
+        except asyncio.CancelledError:
+            # Requester went away mid-turn: the resident keeps running
+            # server-side; a reconnected client catches up via
+            # thread/resume replay + watcher fan-out.
+            _logger.info(
+                "realtime: requester disconnected; turn for thread %s "
+                "continues server-side",
+                thread_id,
+            )
+            raise
+        except _RpcError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            # The resident already surfaced ERROR to every live watcher;
+            # this caller gets the JSON-RPC error response only.
+            raise _RpcError(JsonRpcErrorCode.INTERNAL_ERROR, str(exc)) from exc
+        return {"turn": turn.model_dump(by_alias=True, mode="json")}
+
+    async def _run_resident_turn(
+        self,
+        thread_id: str,
+        params: dict[str, Any],
+        conn: RpcConnection,
+    ) -> Turn:
+        """Drive one turn to completion, decoupled from ``conn`` (T-01).
+
+        The turn is steered through a ``_DetachedTurnEmitter`` so a
+        dropped WebSocket no longer interrupts it: events flow to the
+        owner while it is alive, then to connections that resumed the
+        thread; only an explicit ``turn/interrupt`` stops the run.
+        Terminal fan-out reuses ``_emit_turn_completed`` — ``send`` on a
+        dead connection is a no-op, so the owner leg is safe either way.
+        """
+        emitter = _DetachedTurnEmitter(self, thread_id, conn)
         try:
             try:
                 async with self._turn_locks.hold(thread_id):
-                    turn = await self._runtime.start_turn(params, conn)
+                    turn = await self._runtime.start_turn(params, emitter)
             except _RpcError:
+                # Validation-style failures answer ONLY the RPC caller
+                # (the handler converts this into the JSON-RPC error
+                # response); no stream notification, matching the
+                # pre-detachment behaviour.
                 raise
             except Exception as exc:  # noqa: BLE001
                 _logger.exception("realtime: turn/start crashed")
-                await conn.notify(
+                await emitter.notify(
                     ServerMethod.ERROR,
                     {
                         "threadId": thread_id,
@@ -778,11 +844,11 @@ class RealtimeGateway:
                         "willRetry": False,
                     },
                 )
-                raise _RpcError(JsonRpcErrorCode.INTERNAL_ERROR, str(exc)) from exc
+                raise
         finally:
             self._active_turn_threads.discard(thread_id)
         await self._emit_turn_completed(conn, thread_id, turn)
-        return {"turn": turn.model_dump(by_alias=True, mode="json")}
+        return turn
 
     def _sanitize_turn_params(
         self,
