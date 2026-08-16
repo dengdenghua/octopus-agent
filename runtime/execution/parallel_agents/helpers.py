@@ -34,6 +34,28 @@ from .models import (
 )
 
 
+def journal_batch_lifecycle(batch_id: str, *, status: str, detail: str) -> None:
+    """Best-effort parallel-batch lifecycle row (audit T-12).
+
+    A ``running`` row at dispatch and a terminal row at close give the
+    journal startup sweep (``sweep_interrupted_jobs``) something to fold:
+    a batch left mid-flight by a crash/restart is marked interrupted on
+    the next boot instead of vanishing silently. Never raises.
+    """
+    try:
+        from runtime.memory.journal.activity import write_job_change
+
+        write_job_change(
+            job_id=batch_id,
+            kind="parallel_batch",
+            label=f"parallel batch {batch_id}",
+            status=status,
+            detail=detail,
+        )
+    except Exception:  # noqa: BLE001 — journaling is best-effort
+        pass
+
+
 def default_runner(
     description: str,
     *,

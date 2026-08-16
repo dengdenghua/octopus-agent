@@ -497,6 +497,19 @@ class _SchedulerMixin:
         batch.aggregated_content = _aggregate(batch)
         total, completed, failed, cancelled = batch.counts()
         status = batch.derived_status()
+        # Audit T-12: terminal row so the journal no longer shows the batch
+        # as running (startup sweep folds anything left running as
+        # interrupted).
+        from .helpers import journal_batch_lifecycle
+
+        journal_batch_lifecycle(
+            batch.batch_id,
+            status=status,
+            detail=(
+                f"parallel batch finished "
+                f"(completed={completed} failed={failed} cancelled={cancelled})"
+            ),
+        )
         self._publish_stage_change_locked(
             batch,
             stage="final_report",

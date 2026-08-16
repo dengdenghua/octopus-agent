@@ -203,6 +203,11 @@ class ParallelAgentOrchestrator(OwnershipMixin, _SchedulerMixin):
         with self._lock:
             self._batches[batch_id] = batch
             self._prune_completed_batches_locked()
+            # Audit T-12: journal the batch as running so a crash mid-run
+            # leaves a durable trace the startup sweep can close.
+            from .helpers import journal_batch_lifecycle
+
+            journal_batch_lifecycle(batch_id, status="running", detail="parallel batch started")
             for tid in entries:
                 self._task_index[tid] = batch_id
             self._publish_stage_change_locked(

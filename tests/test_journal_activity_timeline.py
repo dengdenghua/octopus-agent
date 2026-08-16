@@ -225,3 +225,43 @@ async def test_registry_on_settle_observer_invoked() -> None:
     assert seen[0]["id"] == job_id
     assert seen[0]["status"] == "completed"
     assert seen[0]["label"] == "settle observer"
+
+
+# ═══════════════════════════════════════════════════════════
+# Audit T-12: parallel-batch lifecycle rows + startup sweep
+# ═══════════════════════════════════════════════════════════
+
+
+def test_parallel_batch_lifecycle_rows_and_sweep() -> None:
+    """A parallel batch journals running -> terminal, and a batch left
+    running by a crash is folded to interrupted by the startup sweep."""
+    from runtime.execution.parallel_agents.helpers import journal_batch_lifecycle
+    from runtime.memory.journal.activity import sweep_interrupted_jobs
+
+    journal = InMemoryJournal()
+    with session_scope(_session(journal)):
+        journal_batch_lifecycle("batch_abc", status="running", detail="parallel batch started")
+        journal_batch_lifecycle(
+            "batch_abc",
+            status="completed",
+            detail="parallel batch finished (completed=3 failed=0 cancelled=0)",
+        )
+        # A second batch "crashed" mid-flight: only its running row exists.
+        journal_batch_lifecycle("batch_crashed", status="running", detail="parallel batch started")
+
+    rows = [e for e in journal.read_all() if e.event_type == "job/change"]
+    by_job: dict[str, list[Any]] = {}
+    for r in rows:
+        by_job.setdefault(str(r.job_id), []).append(r.status)
+    assert by_job["batch_abc"] == ["running", "completed"]
+    assert by_job["batch_crashed"] == ["running"]
+
+    # Startup sweep closes the crashed batch as interrupted.
+    closed = sweep_interrupted_jobs(journal)
+    closed_ids = {c["job_id"] for c in closed}
+    assert "batch_crashed" in closed_ids
+    assert "batch_abc" not in closed_ids  # already terminal, untouched
+    terminal = [e for e in journal.read_all() if e.event_type == "job/change"]
+    crashed_last = [e for e in terminal if str(e.job_id) == "batch_crashed"][-1]
+    assert crashed_last.status == "failed"
+    assert "interrupted" in crashed_last.detail
