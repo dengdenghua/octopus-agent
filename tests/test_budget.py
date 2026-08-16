@@ -101,6 +101,16 @@ class TestBDG_I3_ReserveCommitPair:  # noqa: N801 — invariant ID in suite name
         with pytest.raises(KeyError):
             small_budget.commit(uuid4(), CostEntry(tokens_in=10, tokens_out=0, usd=0.001))
 
+    def test_commit_overage_triggers_exceeded_backstop(self, small_budget: Budget):
+        """Actual cost above the ceiling (estimate was too low) must freeze
+        the budget so later reserves fail, not silently run over."""
+        rid = small_budget.reserve(CostEntry(tokens_in=10, tokens_out=0, usd=0.001))
+        assert small_budget.status == "active"
+        small_budget.commit(rid, CostEntry(tokens_in=2000, tokens_out=0, usd=0.50))
+        assert small_budget.status == "exceeded"
+        with pytest.raises(InsufficientBudget):
+            small_budget.reserve(CostEntry(tokens_in=1, tokens_out=0, usd=0.0))
+
     def test_refund_stale_reservations(self, small_budget: Budget):
         """Implementation note."""
         small_budget.reserve(CostEntry(tokens_in=100, tokens_out=0, usd=0.01))

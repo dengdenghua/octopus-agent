@@ -1,5 +1,5 @@
 ---
-implementation_status: implemented
+implementation_status: partial
 implemented_in:
   - runtime/safety/chromatophores/boids.py
   - runtime/safety/chromatophores/signal_bus.py
@@ -9,10 +9,10 @@ last_verified: 2026-06-25
 
 # Protocol · Swarm (群体协作 · Boids 三原则)
 
-> ⚠️ **实装状态:三原则全部已实装(程度不同)。**
-> - **Separation**(资源宣称仲裁):`BoidsArbitrator.arbitrate()` 完整实装,含优先级/TTL/只读共享。
-> - **Alignment**(同 affinity 同 tick 启动):`BoidsArbitrator.alignment_groups()` 实装,SwarmRuntime 在 `_dispatch` 中按 affinity 分组并发布 `arm.alignment` 事件。
-> - **Cohesion**(idle 腕靠拢最忙簇):`BoidsArbitrator.cohesion_rebalance()` 实装,SwarmRuntime 在每层结束后计算负载、发布 `arm.cohesion` 重定向建议。
+> ⚠️ **实装状态:三原则部分实装,与文档描述存在差距(部分为有意的降级/观测设计)。**
+> - **Separation**(资源宣称仲裁):`BoidsArbitrator.arbitrate()` 实装含 TTL/只读共享与优先级比较,但**优先级目前无调用方传入实际权重**(`ResourceClaim.priority` 恒为默认 `50`),抢占只替换持有方、**不向老持有方发送抢占通知**;claim 超时采用"降级不僵死"策略(ADR-010),超时后无锁继续而非失败。
+> - **Alignment**(同 affinity 同 tick 启动):`alignment_groups()` 按 affinity 分组实装,**但无 `sync_tick` 屏障**——各腕在各自 tick 启动,未实现文档 I3 的"同 tick 对齐启动"。
+> - **Cohesion**(idle 腕靠拢最忙簇):`cohesion_rebalance()` 实装,但负载输入取自 `arm._pending_load`,该字段**全仓无任何 setter,恒为 0**,因此该规则当前是 no-op(永不产出重定向建议)。
 > - `config.example.yaml` 中无 `chromatophores:` 配置段(三原则参数为代码内默认值,未来可抽取)。
 
 > **原则 ② 去中心协作** 的具体算法。
@@ -150,7 +150,6 @@ def alignment(goal: Goal, arms_available: list[Arm]) -> list[GoalAssignment]:
         chromatophores.publish("goal.aligned", assignment=a)
         assignments.append(a)
     return assignments
-
 
 def on_sync_tick(tick):
     # 每腕各自在 sync_tick 启动自己的 shard

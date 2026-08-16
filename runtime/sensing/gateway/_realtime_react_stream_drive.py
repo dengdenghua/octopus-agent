@@ -50,6 +50,19 @@ if TYPE_CHECKING:
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
 
 
+# High-frequency, individually disposable stream deltas. These decorate the
+# turn (reasoning / commentary / throughput) and are safe to drop when the
+# bridge queue is full: keeping the producer from blocking 10s per event is
+# what prevents cascading stalls that lose *structural* events (tool results,
+# final answer). Structural events keep backpressure-bounded enqueue.
+_COALESCABLE_DELTA_TYPES = frozenset({"throughput", "visibility"})
+
+
+def _is_coalescable_delta(event: dict[str, Any] | None) -> bool:
+    """True for decorative deltas that may be dropped under queue pressure."""
+    return isinstance(event, dict) and event.get("type") in _COALESCABLE_DELTA_TYPES
+
+
 def _lease_renewal_interval_s(lease_ttl_seconds: float) -> float:
     """Renewal cadence for the supervisor lease (lease_ttl/3, capped at 30s).
 
@@ -283,7 +296,32 @@ async def _drive_react(
         in the dispatch loop, ws error, etc.). Bounded blocking
         preserves backpressure for the normal case while leaving a
         kill-switch when something downstream is wedged.
+
+        Coalescable decorative deltas bypass the blocking put: they are
+        high-frequency and individually disposable, so on a full queue we
+        drop the newest delta instead of stalling the producer 10s (which
+        used to cascade and lose *structural* events downstream).
         """
+        if _is_coalescable_delta(event):
+            try:
+                # put_nowait is a plain method, so wrap it in a coroutine that
+                # swallows QueueFull: on a full queue the decorative delta is
+                # dropped rather than making the producer block 10s.
+                async def _coalesce() -> None:
+                    with contextlib.suppress(asyncio.QueueFull):
+                        queue.put_nowait(event)
+
+                asyncio.run_coroutine_threadsafe(
+                    _coalesce(),
+                    loop,
+                ).result(timeout=0.05)
+            except (RuntimeError, TimeoutError):
+                # Loop closed or consumer wedged — drop the decorative delta.
+                _logger.debug(
+                    "react bridge coalesced-delta drop (consumer slow) event=%s",
+                    event.get("type"),
+                )
+            return
         try:
             asyncio.run_coroutine_threadsafe(
                 queue.put(event),

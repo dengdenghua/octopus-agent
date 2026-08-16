@@ -50,7 +50,13 @@ class JobStart:
     owner: str | None = None
     owner_cleanup: Callable[[], Awaitable[None] | None] | None = None
     notify: Callable[[JobSnapshot], None] | None = None
+    on_start: Callable[[JobSnapshot], None] | None = None
     on_settle: Callable[[JobSnapshot], None] | None = None
+    # Registry-level backstop deadline in seconds. The producer's own
+    # timeout stays authoritative; this only force-fails a job whose
+    # producer never settles (stuck worker, leaked thread) so it cannot
+    # pin an owner's concurrency slot forever. ``None`` disables it.
+    watchdog_timeout_s: int | None = None
 
 
 @dataclass(frozen=True)

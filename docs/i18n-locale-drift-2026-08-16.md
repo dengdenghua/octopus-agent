@@ -1,0 +1,543 @@
+# i18n 语言包漂移清单（2026-08-16 审计）
+
+> 由审计探针生成。zh-CN 领先 en-US/ja-JP/ko-KR 共 518 个键。
+> 用法处均有 `t.xxx[source] ?? source` 回退，缺键时显示英文原文，不会崩溃。
+
+## 汇总
+
+| 命名空间 | 类型 | zh-CN 键数 | en/ja/ko 键数 | 缺口 |
+| --- | --- | --- | --- | --- |
+| agentOperator | Record<string,string> | 261 | 0 | 261 |
+| personality | Record<string,string> | 35 | 3 | 35 |
+| settings | Record<string,string> | 35 | 527 | 35 |
+| workspaceComputer | Record<string,string> | 187 | 0 | 187 |
+
+## agentOperator（261 键）
+
+- `agentOperator.Operator loop` → 运营闭环
+- `agentOperator.Agent evolution queue` → Agent 进化队列
+- `agentOperator.Task runs become review candidates first, then you decide what is promoted into memory, backlog, rules, or archive.` → 任务运行会先成为待审候选，再由你决定沉淀到记忆、待办、规则或归档。
+- `agentOperator.Apply promoted` → 应用已晋升项
+- `agentOperator.Refresh` → 刷新
+- `agentOperator.Pending` → 待审
+- `agentOperator.Promoted` → 已晋升
+- `agentOperator.Rejected` → 已拒绝
+- `agentOperator.Total` → 总计
+- `agentOperator.Recent task runs` → 最近任务运行
+- `agentOperator.No task runs yet` → 还没有任务运行
+- `agentOperator.No task selected` → 未选择任务
+- `agentOperator.Queue review` → 加入审核
+- `agentOperator.Pending review queue` → 待审核队列
+- `agentOperator.No pending review items` → 没有待审核项
+- `agentOperator.No process timeline available` → 暂无过程时间线
+- `agentOperator.score` → 评分
+- `agentOperator.approvals` → 审批
+- `agentOperator.lessons` → 经验
+- `agentOperator.tools` → 个工具
+- `agentOperator.errors` → 个错误
+- `agentOperator.loaded` → 已加载
+- `agentOperator.pending` → 待审
+- `agentOperator.unknown` → 未知
+- `agentOperator.Task recovery queue` → 任务恢复队列
+- `agentOperator.tracked` → 已跟踪
+- `agentOperator.action` → 需处理
+- `agentOperator.shown` → 显示
+- `agentOperator.takeover` → 接管
+- `agentOperator.resume` → 恢复
+- `agentOperator.No stalled, failed, or approval-blocked task runs.` → 没有停滞、失败或被审批阻塞的任务。
+- `agentOperator.lease` → 租约
+- `agentOperator.checkpoint` → 检查点
+- `agentOperator.thread` → 任务
+- `agentOperator.Resume-safe state is available` → 已有可安全恢复的状态
+- `agentOperator.Lease can be reclaimed` → 可以重新接管租约
+- `agentOperator.Take over` → 接管
+- `agentOperator.take over + resume` → 接管并恢复
+- `agentOperator.take over approval` → 接管审批
+- `agentOperator.resume checkpoint` → 从检查点恢复
+- `agentOperator.restart` → 重新开始
+- `agentOperator.resume paused` → 恢复已暂停任务
+- `agentOperator.take over` → 接管
+- `agentOperator.dispatch` → 派发
+- `agentOperator.operator approval` → 等待人工审批
+- `agentOperator.approval denied` → 审批被拒
+- `agentOperator.capability denied` → 能力被拒
+- `agentOperator.monitor` → 观察
+- `agentOperator.Open the loop run and resume from checkpoint` → 打开闭环运行并从检查点恢复
+- `agentOperator.Restart the task from the latest safe state` → 从最近的安全状态重新开始任务
+- `agentOperator.Resolve the pending approval request` → 处理待审批请求
+- `agentOperator.Review policy before retrying` → 重试前检查策略
+- `agentOperator.Worker dispatch is pending` → 工作单元仍待派发
+- `agentOperator.Competitor scorecard` → 竞品评分卡
+- `agentOperator.degraded` → 降级
+- `agentOperator.Behavioral head-to-head is not certified` → 同任务行为对比尚未认证
+- `agentOperator.Octopus has no tracked effective scorecard gaps` → Octopus 当前没有已跟踪的有效评分差距
+- `agentOperator.Architecture is estimated; static certification and same-task behavioral evidence are tracked separately.` → 架构分为估算值；静态认证与同任务行为证据会单独跟踪。
+- `agentOperator.Architecture` → 架构
+- `agentOperator.Static evidence` → 静态证据
+- `agentOperator.Behavior %` → 行为 %
+- `agentOperator.Queue real gaps` → 加入真实差距
+- `agentOperator.Real comparison ranking` → 真实对比排名
+- `agentOperator.Effective focus gaps` → 有效重点差距
+- `agentOperator.clear` → 无差距
+- `agentOperator.certified` → 已认证
+- `agentOperator.external leader gaps` → 外部领先差距
+- `agentOperator.leads` → 领先
+- `agentOperator.E2E surpass certification` → 端到端超越认证
+- `agentOperator.vs best external` → 对比最佳外部
+- `agentOperator.automation` → 自动化
+- `agentOperator.vs Codex` → 对比 Codex
+- `agentOperator.quality` → 质量
+- `agentOperator.behavior` → 行为
+- `agentOperator.verified` → 已验证
+- `agentOperator.provider blocked` → 供应商阻塞
+- `agentOperator.missing` → 缺失
+- `agentOperator.same-task repeated behavioral runs and static release gates clear the Codex bar` → 同任务重复行为运行和静态发布门槛均已超过 Codex
+- `agentOperator.waiting for E2E certification evidence` → 等待端到端认证证据
+- `agentOperator.Scorecard` → 评分卡
+- `agentOperator.scorecard` → 评分卡
+- `agentOperator.Evidence` → 证据
+- `agentOperator.Automation` → 自动化
+- `agentOperator.Quality` → 质量
+- `agentOperator.Behavior blocked` → 行为被阻塞
+- `agentOperator.Behavior` → 行为
+- `agentOperator.Certification checks` → 认证检查
+- `agentOperator.all checks passed` → 全部检查已通过
+- `agentOperator.Gap counters` → 差距计数
+- `agentOperator.scorecard gaps` → 评分卡差距
+- `agentOperator.automation gaps` → 自动化差距
+- `agentOperator.dimensions` → 维度
+- `agentOperator.surpassed` → 已超越
+- `agentOperator.open` → 未完成
+- `agentOperator.Scorecard gap drill-down for` → 评分卡差距详情：
+- `agentOperator.queued` → 已入队
+- `agentOperator.real` → 真实
+- `agentOperator.evidence` → 证据
+- `agentOperator.effective gap` → 有效差距
+- `agentOperator.surpass gap` → 超越差距
+- `agentOperator.best` → 最佳
+- `agentOperator.Remediation queue` → 修复队列
+- `agentOperator.not queued` → 未入队
+- `agentOperator.target` → 目标
+- `agentOperator.audit` → 审计
+- `agentOperator.Refresh queue item` → 刷新队列项
+- `agentOperator.Queue this gap` → 加入此差距
+- `agentOperator.Apply gap` → 应用差距
+- `agentOperator.Evidence sources` → 证据来源
+- `agentOperator.links` → 个链接
+- `agentOperator.Evidence link` → 证据链接
+- `agentOperator.Evidence checklist` → 证据清单
+- `agentOperator.impl` → 实现
+- `agentOperator.tests` → 测试
+- `agentOperator.Automation radar` → 自动化雷达
+- `agentOperator.policy drafts` → 策略草案
+- `agentOperator.Browser, desktop, visual replay, and signed automation policy coverage.` → 覆盖浏览器、桌面、视觉回放和签名自动化策略。
+- `agentOperator.Octo auto` → Octo 自动化
+- `agentOperator.Ready` → 就绪
+- `agentOperator.Remaining automation edges` → 剩余自动化差距
+- `agentOperator.Signed automation rule drafts` → 签名自动化规则草案
+- `agentOperator.Install deny rule` → 安装拒绝规则
+- `agentOperator.No automation rule drafts available.` → 暂无自动化规则草案。
+- `agentOperator.Replay gate blocked apply` → 回放门禁阻止应用
+- `agentOperator.Replay gate did not pass` → 回放门禁未通过
+- `agentOperator.Promotion was stopped because replay gate did not pass. Override only when you have reviewed the failing cases.` → 由于回放门禁未通过，晋升已停止。只有在核查失败案例后才能越权。
+- `agentOperator.No reason provided` → 未提供原因
+- `agentOperator.Override reason` → 越权原因
+- `agentOperator.Record why this replay gate override is acceptable.` → 说明为什么这次越过回放门禁是可接受的。
+- `agentOperator.Cancel` → 取消
+- `agentOperator.Apply with override` → 越权应用
+- `agentOperator.Override gate` → 越过门禁
+- `agentOperator.cases` → 案例
+- `agentOperator.pass` → 通过
+- `agentOperator.fail` → 失败
+- `agentOperator.low` → 低分
+- `agentOperator.Promotion audit` → 晋升审计
+- `agentOperator.Operator policy blocked team topology attempts` → 运营策略阻止了团队拓扑尝试
+- `agentOperator.Overrides were used after replay gate blocked apply` → 回放门禁阻止应用后使用了越权
+- `agentOperator.No blocked gate overrides recorded` → 没有门禁阻塞后的越权记录
+- `agentOperator.chain` → 链
+- `agentOperator.checked` → 已检查
+- `agentOperator.failed` → 失败
+- `agentOperator.over` → 越权
+- `agentOperator.gate` → 门禁
+- `agentOperator.topo` → 拓扑
+- `agentOperator.Memory quality` → 记忆质量
+- `agentOperator.Recall memories are fresh and contradiction-clean` → 召回记忆保持新鲜且无矛盾
+- `agentOperator.No committed experience memories yet` → 尚无已提交的经验记忆
+- `agentOperator.reliable` → 可靠
+- `agentOperator.active` → 活跃
+- `agentOperator.bucket experience` → 经验分组
+- `agentOperator.mem` → 记忆
+- `agentOperator.stale` → 过期
+- `agentOperator.contra` → 矛盾
+- `agentOperator.Auto verifier` → 自动验证器
+- `agentOperator.No auto-verifier decisions recorded yet` → 尚无自动验证决策记录
+- `agentOperator.routes` → 路由
+- `agentOperator.drift` → 漂移
+- `agentOperator.history` → 历史
+- `agentOperator.runs` → 运行
+- `agentOperator.repair-route promotion candidate(s)` → 个修复路由晋升候选
+- `agentOperator.Queue routes` → 加入路由
+- `agentOperator.Plugin health` → 插件健康
+- `agentOperator.Some plugins failed local smoke checks` → 部分插件未通过本地冒烟检查
+- `agentOperator.Some local plugins need operator review` → 部分本地插件需要人工审核
+- `agentOperator.Installed Codex plugins passed local smoke checks` → 已安装的 Codex 插件均通过本地冒烟检查
+- `agentOperator.compat` → 兼容
+- `agentOperator.tx` → 次事务
+- `agentOperator.total` → 总计
+- `agentOperator.ok` → 正常
+- `agentOperator.warn` → 警告
+- `agentOperator.Lifecycle history` → 生命周期历史
+- `agentOperator.No install, upgrade, or rollback transactions` → 没有安装、升级或回滚记录
+- `agentOperator.Publisher trust` → 发布者信任
+- `agentOperator.due` → 待轮换
+- `agentOperator.Ed25519 publisher keys · atomic rotation · audited revocation` → Ed25519 发布者密钥 · 原子轮换 · 可审计吊销
+- `agentOperator.Rotate key` → 轮换密钥
+- `agentOperator.Replace` → 替换
+- `agentOperator.No publisher keys registered.` → 尚未注册发布者密钥。
+- `agentOperator.Rotate publisher key` → 轮换发布者密钥
+- `agentOperator.Revoke publisher key` → 吊销发布者密钥
+- `agentOperator.Register a new Ed25519 public key and retire the previous key atomically.` → 以原子方式注册新的 Ed25519 公钥并停用旧密钥。
+- `agentOperator.Revocation takes effect immediately and is written to the governance audit chain.` → 吊销会立即生效，并写入治理审计链。
+- `agentOperator.Publisher ID` → 发布者 ID
+- `agentOperator.Previous key ID` → 旧密钥 ID
+- `agentOperator.Previous key ID (optional)` → 旧密钥 ID（可选）
+- `agentOperator.New key ID` → 新密钥 ID
+- `agentOperator.Key ID` → 密钥 ID
+- `agentOperator.Ed25519 public key` → Ed25519 公钥
+- `agentOperator.Base64 Ed25519 public key` → Base64 Ed25519 公钥
+- `agentOperator.Reason` → 原因
+- `agentOperator.Applying…` → 应用中…
+- `agentOperator.Rotate` → 轮换
+- `agentOperator.Revoke` → 吊销
+- `agentOperator.Tool safety` → 工具安全
+- `agentOperator.denied` → 次拒绝
+- `agentOperator.deny` → 拒绝
+- `agentOperator.block` → 阻止
+- `agentOperator.halt` → 终止
+- `agentOperator.Queue policy review` → 加入策略审核
+- `agentOperator.No static tool denials recorded in current trace window` → 当前追踪窗口中没有静态工具拒绝记录
+- `agentOperator.Policy review rules` → 策略审核规则
+- `agentOperator.Replay-backed policy reviews produced signed install drafts` → 基于回放的策略审核已生成签名安装草案
+- `agentOperator.No signed policy-review rule drafts yet` → 尚无签名策略审核规则草案
+- `agentOperator.drafts` → 草案
+- `agentOperator.signed` → 已签名
+- `agentOperator.Replay-backed policy review rule` → 基于回放的策略审核规则
+- `agentOperator.Install signed rule` → 安装签名规则
+- `agentOperator.Subagent risk` → 子 Agent 风险
+- `agentOperator.roles` → 个角色
+- `agentOperator.Route evidence has identified watch or retirement candidates` → 路由证据已识别出观察或停用候选
+- `agentOperator.No watch or retirement candidates in current fitness evidence` → 当前适配度证据中没有观察或停用候选
+- `agentOperator.risks` → 风险
+- `agentOperator.route` → 路由
+- `agentOperator.samples` → 个样本
+- `agentOperator.route evidence` → 条路由证据
+- `agentOperator.deep research` → 深度调研
+- `agentOperator.Watch` → 观察
+- `agentOperator.Retire` → 停用
+- `agentOperator.Topology policy` → 拓扑策略
+- `agentOperator.teams` → 个团队
+- `agentOperator.Operator-retired subagents are present in active topologies` → 活跃拓扑中存在已被人工停用的子 Agent
+- `agentOperator.Watched subagents are present in active topologies` → 活跃拓扑中存在被观察的子 Agent
+- `agentOperator.No active topology is affected by subagent policy` → 没有活跃拓扑受到子 Agent 策略影响
+- `agentOperator.blocked` → 阻塞
+- `agentOperator.watch` → 观察
+- `agentOperator.Team promotion` → 团队晋升
+- `agentOperator.proposals` → 个提案
+- `agentOperator.Strong subagents are ready for team topology promotion` → 高质量子 Agent 已可晋升到团队拓扑
+- `agentOperator.Promotion lift is being tracked from team performance` → 正在根据团队表现跟踪晋升收益
+- `agentOperator.No subagent-derived team promotions yet` → 尚无源自子 Agent 的团队晋升
+- `agentOperator.sub` → 子 Agent
+- `agentOperator.up` → 提升
+- `agentOperator.wait` → 等待
+- `agentOperator.down` → 下降
+- `agentOperator.Promote` → 晋升
+- `agentOperator.Reject` → 拒绝
+- `agentOperator.Archive` → 归档
+- `agentOperator.Override reason is required.` → 必须填写越权原因。
+- `agentOperator.Accepted from operator panel.` → 由运营面板接受。
+- `agentOperator.Retired from operator panel using subagent fitness route evidence.` → 根据子 Agent 适配度路由证据从运营面板停用。
+- `agentOperator.Placed on watch from operator panel using subagent fitness route evidence.` → 根据子 Agent 适配度路由证据从运营面板加入观察。
+- `agentOperator.Queued {count} {kind} replay review item(s).` → 已加入 {count} 个 {kind} 回放审核项。
+- `agentOperator.Queued {count} browser/desktop repair recipe item(s).` → 已加入 {count} 个浏览器/桌面修复方案项。
+- `agentOperator.Rejected {rejected} stale replay item(s); archived {archived} repair recipe item(s).` → 已拒绝 {rejected} 个过期回放项，并归档 {archived} 个修复方案项。
+- `agentOperator.Reran {attempted} browser/desktop repair recipe(s): {passed} passed, {failed} failed. Source cases remain operator-gated.` → 已重跑 {attempted} 个浏览器/桌面修复方案：{passed} 个通过，{failed} 个失败。源案例仍需人工把关。
+- `agentOperator.Queued {count} repair-route promotion review item(s).` → 已加入 {count} 个修复路由晋升审核项。
+- `agentOperator.Queued {count} replay evidence item(s).` → 已加入 {count} 个回放证据项。
+- `agentOperator.Queued {count} real scorecard gap review item(s).` → 已加入 {count} 个真实评分差距审核项。
+- `agentOperator.Queued {count} {dimension} scorecard remediation item(s).` → 已加入 {count} 个 {dimension} 评分修复项。
+- `agentOperator.Installed {effect} rule for {tool} · {count} policy rules` → 已为 {tool} 安装 {effect} 规则 · 共 {count} 条策略规则
+- `agentOperator.Installed {effect} automation rule for {tool} · {count} policy rules` → 已为 {tool} 安装 {effect} 自动化规则 · 共 {count} 条策略规则
+- `agentOperator.Took over task {task}.` → 已接管任务 {task}。
+- `agentOperator.Certification passed {passed}/{total}` → 认证通过 {passed}/{total}
+- `agentOperator.Audit chain broken at #{at}` → 审计链在第 {at} 位断裂
+- `agentOperator.gap` → 差距
+- `agentOperator.vs effective target` → 对比有效目标
+- `agentOperator.pass^k` → pass^k
+- `agentOperator.browser` → 浏览器
+- `agentOperator.desktop` → 桌面
+
+## personality（35 键）
+
+- `personality.templateNames.researcher` → 研究分析师
+- `personality.templateNames.code-reviewer` → 代码评审
+- `personality.templateNames.copywriter` → 文案策划
+- `personality.templateNames.data-analyst` → 数据分析师
+- `personality.templateNames.devops-engineer` → DevOps 工程师
+- `personality.templateNames.concise` → 简洁派
+- `personality.templateNames.teacher` → 教师
+- `personality.templateNames.creative` → 创意写作
+- `personality.templateNames.pirate` → 海盗
+- `personality.templateNames.shakespeare` → 莎士比亚
+- `personality.templateNames.philosopher` → 哲学家
+- `personality.templateNames.technical` → 技术专家
+- `personality.templateNames.helpful` → 贴心助手
+- `personality.templateNames.noir` → 黑色侦探
+- `personality.templateDescriptions.researcher` → 系统化研究分析师，擅长深度挖掘方法论。精于从多源头采集、整理与综合信息。
+- `personality.templateDescriptions.code-reviewer` → 专注质量、安全与最佳实践的全面代码评审专家。
+- `personality.templateDescriptions.copywriter` → 擅长营销文案、博客与说服性写作的创意内容作者。
+- `personality.templateDescriptions.data-analyst` → 数据驱动的分析师，用图表与统计把原始数据转化为可落地的洞察。
+- `personality.templateDescriptions.devops-engineer` → 专注可靠性、自动化与 CI/CD 的基础设施与部署专家。
+- `personality.templateDescriptions.concise` → 极简直接，毫无废话。
+- `personality.templateDescriptions.teacher` → 耐心的讲解者，循序渐进配以例子。
+- `personality.templateDescriptions.creative` → 富有想象力的讲述者，语言生动、构思新颖。
+- `personality.templateDescriptions.pirate` → 啊哈！操着海盗腔的老海狼。
+- `personality.templateDescriptions.shakespeare` → 用伊丽莎白时代英语，诗意十足。
+- `personality.templateDescriptions.philosopher` → 深思者，从多种哲学角度探索观点。
+- `personality.templateDescriptions.technical` → 精确、规范级别的技术沟通。
+- `personality.templateDescriptions.helpful` → 温暖周到，总能想在你前面。
+- `personality.templateDescriptions.noir` → 硬汉派侦探，用经典黑色电影风格叙述。
+- `personality.categories.knowledge` → 知识
+- `personality.categories.engineering` → 工程
+- `personality.categories.creative` → 创意
+- `personality.categories.analytics` → 分析
+- `personality.categories.style` → 风格
+- `personality.categories.fun` → 趣味
+- `personality.categories.general` → 通用
+
+## settings（35 键）
+
+- `settings.dialog.sectionKeywords.account.0` → 账号
+- `settings.dialog.sectionKeywords.account.1` → 登录
+- `settings.dialog.sectionKeywords.subscription.0` → 订阅
+- `settings.dialog.sectionKeywords.subscription.1` → 计费
+- `settings.dialog.sectionKeywords.appearance.0` → 外观
+- `settings.dialog.sectionKeywords.appearance.1` → 主题
+- `settings.dialog.sectionKeywords.appearance.2` → 材质
+- `settings.dialog.sectionKeywords.appearance.3` → 密度
+- `settings.dialog.sectionKeywords.appearance.4` → 语言
+- `settings.dialog.sectionKeywords.models.0` → 模型
+- `settings.dialog.sectionKeywords.models.1` → 接口
+- `settings.dialog.sectionKeywords.notification.0` → 消息
+- `settings.dialog.sectionKeywords.notification.1` → 通知
+- `settings.dialog.sectionKeywords.memory.0` → 记忆
+- `settings.dialog.sectionKeywords.memory.1` → 知识
+- `settings.dialog.sectionKeywords.memory.2` → 个人规则
+- `settings.dialog.sectionKeywords.memory.3` → 工作规则
+- `settings.dialog.sectionKeywords.memory.4` → 自定义规则
+- `settings.dialog.sectionKeywords.automation.0` → 自动化
+- `settings.dialog.sectionKeywords.automation.1` → 定时
+- `settings.dialog.sectionKeywords.mcp.0` → 工具
+- `settings.dialog.sectionKeywords.mcp.1` → 服务
+- `settings.dialog.sectionKeywords.privacy.0` → 隐私
+- `settings.dialog.sectionKeywords.privacy.1` → 权限
+- `settings.dialog.sectionKeywords.privacy.2` → 安全
+- `settings.dialog.sectionKeywords.privacy.3` → 个人空间
+- `settings.dialog.sectionKeywords.privacy.4` → 个人文件夹
+- `settings.dialog.sectionKeywords.privacy.5` → 默认文件夹
+- `settings.dialog.sectionKeywords.observability.0` → 监控
+- `settings.dialog.sectionKeywords.observability.1` → 诊断
+- `settings.dialog.sectionKeywords.observability.2` → 日志
+- `settings.dialog.sectionKeywords.about.0` → 关于
+- `settings.dialog.sectionKeywords.about.1` → 版本
+- `settings.dialog.sectionKeywords.about.2` → 帮助
+- `settings.dialog.sectionKeywords.sandbox.4` → sandbox
+
+## workspaceComputer（187 键）
+
+- `workspaceComputer.Local computer automation` → 本地电脑自动化页
+- `workspaceComputer.Confirmation expired` → 确认队列已过期
+- `workspaceComputer.The server cleared the token. Preview the action again.` → token 已在服务端清除，请重新预演动作
+- `workspaceComputer.Failed to read status` → 状态读取失败
+- `workspaceComputer.Live screen started` → 实时屏幕已启动
+- `workspaceComputer.The computer view is now live. Clicking the view only selects a point; it does not execute anything.` → 电脑画面进入工位观察区；点击画面只会选点，不会直接执行。
+- `workspaceComputer.Failed to start live screen` → 实时屏幕启动失败
+- `workspaceComputer.Live screen stopped` → 实时屏幕已停止
+- `workspaceComputer.The current workspace layout is preserved. Restart the live screen when needed.` → 保留当前工位布局；需要继续观察时可重新启动实时屏幕。
+- `workspaceComputer.Failed to stop live screen` → 实时屏幕停止失败
+- `workspaceComputer.Current screen captured` → 已观察当前屏幕
+- `workspaceComputer.Screenshot failed` → 截图失败
+- `workspaceComputer.Screenshot request failed` → 截图请求失败
+- `workspaceComputer.Action added to confirmation queue` → 动作已进入确认队列
+- `workspaceComputer.Action preview failed` → 动作预演失败
+- `workspaceComputer.Screen point added to confirmation queue` → 截图坐标已进入确认队列
+- `workspaceComputer.Point-click preview failed` → 坐标点击预演失败
+- `workspaceComputer.Next-step plan generated` → 已生成下一步计划
+- `workspaceComputer.No plan available` → 没有可用计划
+- `workspaceComputer.Describe the goal more specifically.` → 请补充更明确的任务目标
+- `workspaceComputer.Failed to generate plan` → 计划生成失败
+- `workspaceComputer.Candidate action added to confirmation queue` → 候选动作已放入确认队列
+- `workspaceComputer.Agent preview complete` → Agent 已完成预演
+- `workspaceComputer.The first step is awaiting your confirmation before it runs.` → 第一步已进入确认队列，需要你确认后才会执行。
+- `workspaceComputer.Agent has no executable next step` → Agent 暂无可执行下一步
+- `workspaceComputer.No candidate action was generated. Describe the goal more specifically.` → 没有生成候选动作，请补充更明确的目标。
+- `workspaceComputer.Agent loop preview failed` → Agent 循环预演失败
+- `workspaceComputer.Vision output validated` → 视觉输出已校验
+- `workspaceComputer.No action found` → 没有解析到动作
+- `workspaceComputer.Paste a valid JSON action.` → 请粘贴标准 JSON 动作
+- `workspaceComputer.Failed to parse vision output` → 视觉输出解析失败
+- `workspaceComputer.Vision model returned actions` → 视觉模型已返回动作
+- `workspaceComputer.Vision model is not ready` → 视觉模型未就绪
+- `workspaceComputer.Configure a vision model.` → 请配置视觉模型
+- `workspaceComputer.Vision model request failed` → 视觉模型调用失败
+- `workspaceComputer.Point selected from screenshot` → 已从截图选中坐标
+- `workspaceComputer.Point selected from live screen` → 已从实时屏幕选中坐标
+- `workspaceComputer.Action executed` → 动作已执行
+- `workspaceComputer.Action failed` → 动作执行失败
+- `workspaceComputer.Execution request failed` → 执行请求失败
+- `workspaceComputer.Computer control released` → 已释放电脑接管
+- `workspaceComputer.Other projects can now take control of this computer.` → 其他项目现在可以接管这台电脑。
+- `workspaceComputer.Failed to release control` → 释放接管失败
+- `workspaceComputer.Connection error` → 连接异常
+- `workspaceComputer.frames` → 帧
+- `workspaceComputer.Waiting for screen` → 等待画面
+- `workspaceComputer.Not started` → 未启动
+- `workspaceComputer.Computer assistant` → 本机助手
+- `workspaceComputer.Let the Agent see and operate this computer. Every step is previewed before you confirm it.` → 让 Agent 看见并操作这台电脑。每一步先预演，再由你确认。
+- `workspaceComputer.Refresh status` → 刷新状态
+- `workspaceComputer.Capture screen` → 观察屏幕
+- `workspaceComputer.Runtime health` → 运行健康
+- `workspaceComputer.Confirmation mode` → 确认方式
+- `workspaceComputer.Preview, then confirm` → 先预演再确认
+- `workspaceComputer.Loading` → 加载中
+- `workspaceComputer.Screen` → 屏幕
+- `workspaceComputer.Cursor position` → 鼠标位置
+- `workspaceComputer.Computer control` → 电脑控制
+- `workspaceComputer.Ready` → 已就绪
+- `workspaceComputer.Not ready` → 未就绪
+- `workspaceComputer.Semantic targeting` → 语义定位
+- `workspaceComputer.Available with limits` → 降级可用
+- `workspaceComputer.Control lease` → 接管租约
+- `workspaceComputer.Local runtime is blocked` → 本机运行时被阻塞
+- `workspaceComputer.The backend is running, but required automation capabilities are not ready. Screenshots, previews, mouse, and keyboard actions are temporarily unavailable.` → 后端已启动，但关键电脑自动化能力还没有就绪，暂时不能截图、预演或执行鼠标键盘动作。
+- `workspaceComputer.Screen observation` → 屏幕观察
+- `workspaceComputer.Snapshot` → 截图
+- `workspaceComputer.Live` → 实时
+- `workspaceComputer.Stop live` → 停止实时
+- `workspaceComputer.Start live` → 启动实时
+- `workspaceComputer.Click the live screen to select a point. Press Enter to select the center.` → 点击实时屏幕选择坐标；按 Enter 可选择屏幕中心点。
+- `workspaceComputer.Live computer screen` → 实时电脑屏幕
+- `workspaceComputer.Waiting for the live screen` → 等待实时屏幕画面
+- `workspaceComputer.Select “Start live” to open the computer view.` → 点击“启动实时”打开电脑工位画面
+- `workspaceComputer.Click the screenshot to select a point. Press Enter to select the center.` → 点击截图选择坐标；按 Enter 可选择屏幕中心点。
+- `workspaceComputer.Current screen screenshot` → 当前屏幕截图
+- `workspaceComputer.Select “Capture screen” to take a desktop screenshot.` → 点击“观察屏幕”获取当前桌面截图
+- `workspaceComputer.Task plan` → 任务计划
+- `workspaceComputer.For example: open Edge and visit https://gemini.google.com` → 例如：打开 Edge 并访问 https://gemini.google.com
+- `workspaceComputer.Preview agent loop` → Agent 循环预演
+- `workspaceComputer.Observe and plan next step` → 观察并生成下一步
+- `workspaceComputer.Add for confirmation` → 加入确认
+- `workspaceComputer.candidate actions awaiting confirmation` → 个候选动作等待确认
+- `workspaceComputer.actions awaiting confirmation` → 个动作等待确认
+- `workspaceComputer.vision models` → 个视觉模型
+- `workspaceComputer.Use selected point` → 填入坐标
+- `workspaceComputer.Vision output` → 视觉输出
+- `workspaceComputer.Select a vision model` → 选择视觉模型
+- `workspaceComputer.Vision model ID, for example glm-vision` → 视觉模型 ID，例如 glm-vision
+- `workspaceComputer.Run model` → 调用模型
+- `workspaceComputer.Current: ` → 当前：
+- `workspaceComputer.Could not load the model list. You can enter a model ID manually.` → 模型列表读取失败，可手动输入模型 ID。
+- `workspaceComputer.No model is marked supports_vision. Enable vision for a custom model in Settings.` → 暂无标记 supports_vision 的模型，可先在设置里给自定义模型开启视觉能力。
+- `workspaceComputer.Open model settings` → 去模型设置
+- `workspaceComputer.The current screenshot is sent to the selected vision model. Returned actions still require confirmation.` → 调用模型会把当前屏幕截图发送到所选视觉模型；返回动作仍需确认后才执行。
+- `workspaceComputer.Parse and add candidates` → 解析并加入候选
+- `workspaceComputer.Action preview` → 动作预演
+- `workspaceComputer.Click point` → 点击坐标
+- `workspaceComputer.Move cursor` → 移动鼠标
+- `workspaceComputer.Type text` → 输入文字
+- `workspaceComputer.Keyboard shortcut` → 快捷键
+- `workspaceComputer.Wait` → 等待
+- `workspaceComputer.Text to type into the focused control` → 要输入到当前焦点的文字
+- `workspaceComputer.ctrl+l or enter` → ctrl+l 或 enter
+- `workspaceComputer.Milliseconds` → 毫秒
+- `workspaceComputer.Generate confirmation` → 生成确认
+- `workspaceComputer.Confirmation queue` → 确认队列
+- `workspaceComputer.Risk: ` → 风险：
+- `workspaceComputer.Confirm and run` → 确认执行
+- `workspaceComputer.Mouse and keyboard actions awaiting confirmation appear here. Nothing touches the system before confirmation.` → 这里会显示待确认的鼠标、键盘动作。确认前不会操作系统。
+- `workspaceComputer.Activity log` → 操作记录
+- `workspaceComputer.No activity yet` → 还没有记录
+- `workspaceComputer.Replay evidence` → 回放证据
+- `workspaceComputer.Runtime` → 运行时
+- `workspaceComputer.Idle` → 空闲
+- `workspaceComputer.No project currently controls the physical mouse or keyboard.` → 当前没有项目接管真实鼠标键盘。
+- `workspaceComputer.Another project` → 其他项目
+- `workspaceComputer.This project` → 本项目
+- `workspaceComputer.This project controls the physical input; ` → 本项目正在接管真实鼠标键盘，
+- `workspaceComputer.remaining before another project can take over.` → 内会阻止其他项目抢占。
+- `workspaceComputer. controls the physical input; ` → 正在接管真实鼠标键盘，
+- `workspaceComputer.remaining before automatic release.` → 后自动释放。
+- `workspaceComputer.Checking` → 正在检查
+- `workspaceComputer.Checking whether the Agent can observe and operate this computer.` → 正在确认这台电脑是否可以被 Agent 观察和操作。
+- `workspaceComputer.Unavailable` → 不可用
+- `workspaceComputer.This environment cannot read the screen or perform computer actions.` → 当前环境还不能读取屏幕或执行电脑动作。
+- `workspaceComputer.Capabilities required` → 需要补能力
+- `workspaceComputer.The backend responded, but computer control capabilities are not ready.` → 后端已响应，但电脑控制能力还没有就绪。
+- `workspaceComputer.Screen connected` → 屏幕已连接
+- `workspaceComputer.Connected` → 已连接
+- `workspaceComputer.The screen can be observed and actions can run after confirmation. ` → 可以观察当前屏幕，并在确认后执行操作。
+- `workspaceComputer.Checking computer assistant` → 正在检查本机助手
+- `workspaceComputer.Required computer automation capabilities failed runtime checks.` → 关键电脑自动化能力未通过运行时检查。
+- `workspaceComputer.pyautogui is unavailable` → pyautogui 不可用
+- `workspaceComputer.Blocked` → 阻塞
+- `workspaceComputer.Computer assistant blocked` → 本机助手被阻塞
+- `workspaceComputer.Computer assistant available with limits` → 本机助手降级可用
+- `workspaceComputer. unavailable; observation, preview, and confirmed execution still work.` → 暂不可用；基础观察、预演和确认执行仍可继续。
+- `workspaceComputer.Some optional capabilities are unavailable. Observation, preview, and confirmed execution still work.` → 部分非关键能力暂不可用；基础观察、预演和确认执行仍可继续。
+- `workspaceComputer.Computer assistant ready` → 本机助手已就绪
+- `workspaceComputer.Required capabilities passed runtime checks. ` → 关键能力已通过运行时检查。
+- `workspaceComputer.Waiting for confirmation` → 等待你确认
+- `workspaceComputer.until expiry` → 后过期
+- `workspaceComputer.Check connection` → 检查连接
+- `workspaceComputer.Parse actions` → 解析动作
+- `workspaceComputer.Request vision model` → 请求视觉模型
+- `workspaceComputer.Generate plan` → 生成计划
+- `workspaceComputer.Execute action` → 执行操作
+- `workspaceComputer.Release control` → 释放接管
+- `workspaceComputer.Switch live screen` → 切换实时屏幕
+- `workspaceComputer.Working` → 正在处理
+- `workspaceComputer.New computer actions wait until the current action finishes.` → 当前动作完成前，新的电脑动作会先排队等待。
+- `workspaceComputer.Candidate actions available` → 有候选动作
+- `workspaceComputer.candidate actions. Select one to add it to the confirmation queue.` → 个候选动作，选择后会进入确认队列。
+- `workspaceComputer.Screen observed` → 已观察屏幕
+- `workspaceComputer.Select a point on the screenshot or ask the vision model for the next step.` → 可以点击截图选坐标，或让视觉模型生成下一步。
+- `workspaceComputer.Waiting for a task` → 等待任务
+- `workspaceComputer.Capture the screen or describe what you want the Agent to do.` → 先观察屏幕，或描述你希望 Agent 在电脑上完成什么。
+- `workspaceComputer.Action` → 动作
+- `workspaceComputer.Click` → 点击
+- `workspaceComputer.Move` → 移动
+- `workspaceComputer.Current cursor` → 当前鼠标
+- `workspaceComputer.Selected point` → 手动选点
+- `workspaceComputer.Unnamed control` → 未命名控件
+- `workspaceComputer.UIA match: ` → UIA 命中：
+- `workspaceComputer.Center` → 中心
+- `workspaceComputer.Query` → 查询
+- `workspaceComputer.This computer` → 这台电脑
+- `workspaceComputer.Observe` → 观察
+- `workspaceComputer.Screen screenshot captured` → 已获取屏幕截图
+- `workspaceComputer.Only observes the screen when you request it` → 只在你点击后观察屏幕
+- `workspaceComputer.Confirm` → 确认
+- `workspaceComputer.An action is awaiting confirmation` → 有动作等待确认
+- `workspaceComputer.Mouse and keyboard actions never run automatically` → 鼠标键盘不会直接执行
+- `workspaceComputer.Expiry` → 过期
+- `workspaceComputer.until automatic removal` → 后自动清除
+- `workspaceComputer.Confirmation tokens are short-lived` → 确认令牌短时有效
+- `workspaceComputer.Control` → 接管
+- `workspaceComputer.Permission guard` → 权限护栏
+- `workspaceComputer.Owner` → 所有者
+- `workspaceComputer.Target` → 目标
+- `workspaceComputer.Current action` → 当前动作
+- `workspaceComputer.Control session` → 控制会话
+- `workspaceComputer.Previews, executions, and screenshots are retained as control evidence.` → 预演、执行、截图会沉淀为控制证据。
+- `workspaceComputer.Running` → 执行中
+- `workspaceComputer.Paused` → 暂停
+- `workspaceComputer.Expired` → 已过期

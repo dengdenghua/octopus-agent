@@ -186,8 +186,65 @@ def write_job_change(
     )
 
 
+def sweep_interrupted_jobs(journal: Any) -> list[dict[str, str]]:
+    """Close out jobs left non-terminal by a previous process crash.
+
+    Jobs journal a ``running`` row at start and a terminal row at settle;
+    a backend killed mid-run leaves neither cancelled nor completed. This
+    folds the last status per ``job_id`` from the journal and writes a
+    terminal ``failed`` row (detail: interrupted by restart) for every job
+    whose last recorded state is still ``running`` / ``stopping``. The
+    sweep is idempotent - already-terminal jobs are never rewritten - and
+    best-effort, like every activity write. Returns the closed jobs as
+    ``{"job_id", "kind", "label", "last_status"}`` for startup logging.
+    """
+    if journal is None:
+        return []
+    read_by_type = getattr(journal, "read_by_type", None)
+    if read_by_type is None:
+        return []
+    try:
+        events = list(read_by_type("job/change"))
+    except Exception:  # noqa: BLE001 - startup sweep is best-effort
+        return []
+
+    last: dict[str, JobChangeEvent] = {}
+    for e in events:
+        jid = str(getattr(e, "job_id", "") or "")
+        if jid:
+            last[jid] = e
+
+    closed: list[dict[str, str]] = []
+    for jid, e in last.items():
+        status = str(getattr(e, "status", "") or "")
+        if status not in ("running", "stopping"):
+            continue
+        kind = str(getattr(e, "kind", "") or "")
+        label = str(getattr(e, "label", "") or "")
+        # Write directly to the passed journal: the sweep runs at serve
+        # startup where no ambient session exists, so ``_write`` (which
+        # resolves the journal from the session) would silently no-op.
+        try:
+            journal.write(
+                JobChangeEvent(
+                    job_id=jid,
+                    kind=kind,
+                    label=label,
+                    status="failed",
+                    detail="interrupted: backend restarted while this job was running",
+                )
+            )
+            closed.append(
+                {"job_id": jid, "kind": kind, "label": label, "last_status": status}
+            )
+        except Exception:  # noqa: BLE001 - startup sweep is best-effort
+            continue
+    return closed
+
+
 __all__ = [
     "capture_attribution",
+    "sweep_interrupted_jobs",
     "write_job_change",
     "write_workflow_end",
     "write_workflow_progress",

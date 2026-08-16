@@ -5,12 +5,20 @@
 // Item with stable id and tagged ``type``. The realtime reducer rebuilds
 // Conversation state from item/* notifications keyed on ``id``.
 
-export type ItemStatus =
-  | "inProgress"
-  | "completed"
-  | "failed"
-  | "interrupted"
-  | "declined";
+/**
+ * Runtime-visible mirror of ``runtime/protocol/items.py``'s ItemStatus.
+ * The protocol-enum-parity test compares THIS array against the backend
+ * enum, so a status added or renamed on either side fails CI.
+ */
+export const ITEM_STATUSES = [
+  "inProgress",
+  "completed",
+  "failed",
+  "interrupted",
+  "declined",
+] as const;
+
+export type ItemStatus = (typeof ITEM_STATUSES)[number];
 
 export type ItemType =
   | "userMessage"
@@ -319,13 +327,20 @@ export type Item =
   | ArtifactItem
   | ErrorItem;
 
-export type TurnStatus =
-  | "inProgress"
-  | "completed"
-  | "paused"
-  | "cancelled"
-  | "interrupted"
-  | "failed";
+/**
+ * Runtime-visible mirror of ``runtime/protocol/items.py``'s TurnStatus.
+ * See ITEM_STATUSES.
+ */
+export const TURN_STATUSES = [
+  "inProgress",
+  "completed",
+  "paused",
+  "cancelled",
+  "interrupted",
+  "failed",
+] as const;
+
+export type TurnStatus = (typeof TURN_STATUSES)[number];
 
 /** Soft hand-off hint payload from ``turn/metaSkill/hint``.
  *

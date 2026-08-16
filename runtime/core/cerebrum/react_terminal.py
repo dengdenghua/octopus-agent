@@ -155,6 +155,17 @@ def _finalize_react_turn(
         # for one more "final answer" round — that would both waste
         # budget and defeat the whole point of cancellation.
         yield {"type": "react_cancelled", "iteration": i + 1}
+        # Persist a cancelled trajectory so the cancellation is auditable
+        # (tokens/cost spent up to the Stop) and so resume-side gating can
+        # see the task reached a terminal state - otherwise a stale
+        # auto-checkpoint makes a cancelled task look resumable.
+        _persist_react_trajectory(
+            stack,
+            react_task_id=react_task_id,
+            beak_steps=executed_beak_steps,
+            success=False,
+            disposition="cancelled",
+        )
         with contextlib.suppress(Exception):
             pause_controller.clear(str(react_task_id))
             pause_controller.unregister_active(str(react_task_id))
@@ -265,6 +276,7 @@ def _finalize_react_turn(
                     react_task_id=react_task_id,
                     beak_steps=executed_beak_steps,
                     success=False,
+                    disposition="failed",
                 )
                 pause_controller.clear(str(react_task_id))
                 pause_controller.unregister_active(str(react_task_id))
@@ -321,6 +333,7 @@ def _finalize_react_turn(
                 react_task_id=react_task_id,
                 beak_steps=executed_beak_steps,
                 success=False,
+                disposition="failed",
             )
             pause_controller.clear(str(react_task_id))
             pause_controller.unregister_active(str(react_task_id))
@@ -379,6 +392,7 @@ def _finalize_react_turn(
         react_task_id=react_task_id,
         beak_steps=executed_beak_steps,
         success=effective_success,
+        disposition=disposition,
     )
     try:
         from runtime.safety.experiments.scheduler import (

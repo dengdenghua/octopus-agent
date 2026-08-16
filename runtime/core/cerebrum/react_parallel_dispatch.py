@@ -9,6 +9,7 @@ yields, and fencing untrusted tool output against prompt injection.
 
 from __future__ import annotations
 
+import contextvars
 import logging
 import time
 import uuid
@@ -258,8 +259,19 @@ def _dispatch_parallel_actions(
             beak_steps[idx] = bk
     else:
         max_workers = min(len(actions), _MAX_PARALLEL_ACTIONS)
+        # A raw ThreadPoolExecutor does NOT propagate contextvars to its
+        # workers, so the ambient cancellation token (and any other
+        # loop-scoped state) would be invisible to parallel tool calls -
+        # the single-action path checks cancellation after each tool, the
+        # parallel path never saw it. Give each worker its own copy of the
+        # dispatcher's context (a Context cannot be entered concurrently,
+        # hence one copy per task) so cancellation reaches every lane.
+        _parent_context = contextvars.copy_context()
         with _cf.ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {pool.submit(_run_one, idx): idx for idx in range(len(actions))}
+            futures = {
+                pool.submit(_parent_context.copy().run, _run_one, idx): idx
+                for idx in range(len(actions))
+            }
             for fut in _cf.as_completed(futures):
                 idx = futures[fut]
                 try:

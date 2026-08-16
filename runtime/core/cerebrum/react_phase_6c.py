@@ -650,6 +650,7 @@ def _phase_6c_parse_and_guard(
                             react_task_id=react_task_id,
                             beak_steps=executed_beak_steps,
                             success=False,
+                            disposition="failed",
                         )
                         _pause.unregister_active(str(react_task_id))
                         return _LoopControl.RETURN_NONE

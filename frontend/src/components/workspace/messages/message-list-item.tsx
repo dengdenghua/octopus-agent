@@ -158,11 +158,13 @@ function splitInlineThinkingDetails(content: string) {
  * whole-string regex passes — fine per settled message, wasteful when it
  * re-runs on every streamed token. Every pattern in that chain requires at
  * least one of the characters below (protocol XML/fence markers, ReAct
- * field headers, guard boilerplate). A reply containing none of them is
- * guaranteed to pass through every stage unchanged, so we can skip the
- * entire chain. First-mark test is O(n) with zero allocation.
+ * field headers, guard boilerplate, and the ASCII opening paren of the
+ * legacy ``(sub-agent exceeded token budget N/N)`` placeholder — its
+ * optional ``[...]`` prefix already matches via ``[``). A reply containing
+ * none of them is guaranteed to pass through every stage unchanged, so we
+ * can skip the entire chain. First-mark test is O(n) with zero allocation.
  */
-const PROTOCOL_FIRST_MARK_RE = /[<`TAFONS质量（{[]/;
+const PROTOCOL_FIRST_MARK_RE = /[<`TAFONS质量（({[]/;
 
 export function containsProtocolMarkers(content: string): boolean {
   return PROTOCOL_FIRST_MARK_RE.test(content);
@@ -362,9 +364,9 @@ export const MessageListItem = memo(function MessageListItem({
       <MessageContent
         // Human bubbles used to pass `w-fit` here. Combined with the inner
         // AIElementMessageContent's own `w-fit max-w-full min-w-0`, the
-        // Implementation note.
-        // onto one-character-per-line because the flex item min-width
-        // hit 0 and couldn't break in the middle of a 2-char string.
+        // outer `w-fit` could collapse the flex item's min-width to 0 and
+        // push text onto one-character-per-line because the flex item
+        // couldn't break in the middle of a 2-char string.
         // Using `max-w-[85%]` instead keeps the right-aligned cap but
         // gives the flex child room to stay on a single horizontal line.
         className={isHuman ? "max-w-[85%] items-end" : "w-full"}

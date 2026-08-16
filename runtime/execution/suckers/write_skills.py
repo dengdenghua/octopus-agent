@@ -340,7 +340,7 @@ def register_exec_skill(registry: SkillRegistry) -> int:
             description=(
                 "用途: 执行本地 shell 命令 (无 shell=True、有超时)；最适合编译、打包、文件管线、调用各种 CLI；当没有专门 skill 匹配时的兜底。\n"
                 "何时不用: 谷歌/搜资料用 web_search；抓取已知 URL 用 fetch_url (curl/wget 抓回的 HTML 不好解析)；跑 Python 片段用 ipython；改文件用 edit_file/write_text_file；查 git 状态用 git_status。\n"
-                "关键参数: command (str 或 list[str], 必填); cwd (可选); timeout_s (默认 30); run_in_background (默认 False, True 时返回 task_id, 配合 read_shell_output / kill_shell)。不要写 `cd dir && command` 或 `2>&1`：本工具不会启动 shell；请把 dir 放入 cwd，stdout/stderr 会分别返回。\n"
+                "关键参数: command (str 或 list[str], 必填); cwd (可选); timeout_s (默认 60); run_in_background (默认 False, True 时返回 task_id, 配合 read_shell_output / kill_shell)。不要写 `cd dir && command` 或 `2>&1`：本工具不会启动 shell；请把 dir 放入 cwd，stdout/stderr 会分别返回。\n"
                 "网络: 沙箱内默认禁止网络访问（pnpm/npm/pip 等需联网的命令会失败，仅模型推理端点可达）。网络有三档：默认禁网；传 allow_network=true 完全开启；若只需安装依赖/拉取代码等开发工具场景，可传 egress_allow_common=true（放行 npm/pip/github/apt 等预置常用域名，其余仍拦截）。\n"
                 '示例: exec_shell({"command": "npm test", "cwd": "web", "timeout_s": 120})'
             ),
@@ -364,7 +364,7 @@ def register_exec_skill(registry: SkillRegistry) -> int:
             description=(
                 "用途: 在带超时的子进程里跑一段 Python (当前解释器, 无 REPL 状态保留)；适合数据分析、临时计算、调用 numpy/pandas/json。\n"
                 "何时不用: 跑非 Python 命令用 exec_shell；只是数文本用 count_words；改文件用 edit_file 而不是写脚本绕路；要长跑用 background_exec / exec_shell(run_in_background=True)。\n"
-                "关键参数: code (必填, 完整 Python 片段, 用 print 才能拿到 stdout); cwd (可选); timeout_s (默认 30)。\n"
+                "关键参数: code (必填, 完整 Python 片段, 用 print 才能拿到 stdout); cwd (可选); timeout_s (默认 60)。\n"
                 '示例: ipython({"code": "import json; print(json.dumps({\\"x\\": 1}))"})'
             ),
             affinity=["python", "analysis", "exec", "dangerous"],

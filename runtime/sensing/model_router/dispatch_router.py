@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 from typing import Any
 
@@ -16,6 +17,8 @@ from .vision_guard import (
     classify_image_rejection,
     request_has_images,
 )
+
+_LOG = logging.getLogger("runtime.sensing.model_router.dispatch")
 
 
 class ModelDispatchRouter(ModelRouter):
@@ -57,7 +60,7 @@ class ModelDispatchRouter(ModelRouter):
         # Vision pre-guard: a model the operator marked non-vision never
         # sees a raw image — images are transcribed (or stripped) before
         # the upstream call, so a picture can't crash the turn up front.
-        guarded = apply_vision_guard(request)
+        guarded = apply_vision_guard(self._rewrite_unrouted(request))
         yielded_any = False
         try:
             for evt in picked.call_stream(guarded):
@@ -134,7 +137,7 @@ class ModelDispatchRouter(ModelRouter):
         picked = self._resolve(request.model)
         # Vision pre-guard: a model the operator marked non-vision never
         # sees a raw image (transcribe/strip before the upstream call).
-        guarded = apply_vision_guard(request)
+        guarded = apply_vision_guard(self._rewrite_unrouted(request))
         try:
             return picked.call(guarded)
         except Exception as exc:
@@ -275,19 +278,50 @@ class ModelDispatchRouter(ModelRouter):
         candidates.sort(key=lambda r: priority.get(_provider(r), 99))
         return candidates[0]
 
-    def _resolve(self, model_id: str) -> ModelRouter:
+    def _route_for(self, model_id: str) -> ModelRouter | None:
+        """Return the router explicitly registered for ``model_id``.
+
+        Checks the exact id first, then the ``provider/...`` prefix form
+        (``"openai/gpt-4o"`` → the router registered under ``"openai"``).
+        ``None`` means the model has no dedicated route and would fall
+        through to the fallback router.
+        """
         with self._lock:
             r = self._routes.get(model_id)
-        if r is not None:
-            return r
-        # Try prefix match for `provider/model` style ("openai/gpt-4o" → openai)
-        prefix = model_id.split("/", 1)[0] if "/" in model_id else None
-        if prefix:
-            with self._lock:
-                r = self._routes.get(prefix)
             if r is not None:
                 return r
-        return self._fallback
+            prefix = model_id.split("/", 1)[0] if "/" in model_id else None
+            if prefix:
+                r = self._routes.get(prefix)
+            return r
+
+    def _resolve(self, model_id: str) -> ModelRouter:
+        return self._route_for(model_id) or self._fallback
+
+    def _rewrite_unrouted(self, request: ModelRequest) -> ModelRequest:
+        """Gracefully degrade an unrouted model to the fallback's default.
+
+        A model name with no registered route falls through to the fallback
+        router.  If that router's provider only serves its own model ids
+        (e.g. a deepseek-compatible endpoint), forwarding the literal name
+        (say ``claude-haiku-4-5``) upstream is an opaque ``400`` that kills
+        the whole turn.  Rewrite to the fallback's default model instead and
+        log it, so an unconfigured model request still runs rather than
+        hard-failing.  Explicitly routed models are never rewritten.
+        """
+        if self._route_for(request.model) is not None:
+            return request
+        if self._resolve(request.model) is not self._fallback:
+            return request
+        default = getattr(self._fallback, "default_model", None)
+        if not default or default == request.model:
+            return request
+        _LOG.warning(
+            "model '%s' is not routed by any provider; falling back to default '%s'",
+            request.model,
+            default,
+        )
+        return request.model_copy(update={"model": default})
 
     # Expose default_model so upstream wrappers (e.g. MultiModelRouter) that
     # rewrite request.model won't clobber user-supplied ids.

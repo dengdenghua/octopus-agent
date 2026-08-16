@@ -167,6 +167,7 @@ def _persist_react_trajectory(
     react_task_id: Any,
     beak_steps: list[Any],
     success: bool,
+    disposition: str = "completed",
 ) -> None:
     if not beak_steps or react_task_id is None:
         return
@@ -203,6 +204,7 @@ def _persist_react_trajectory(
             outcome=TrajectoryOutcome(
                 success=success,
                 cost=CostEntry(),
+                disposition=disposition,
             ),
         )
         journal.write_trajectory(traj, actor="react_loop")

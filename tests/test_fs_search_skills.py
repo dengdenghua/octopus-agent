@@ -318,3 +318,38 @@ class TestReadFileRange:
         r = _read_file_range(path=str(p), offset=0, limit=1)
         assert r["offset"] == 1
         assert r["content"] == "a"
+
+    def test_crlf_lines_handled(self, tmp_path: Path):
+        p = tmp_path / "a.txt"
+        p.write_bytes(b"1\r\n2\r\n3\r\n4\r\n")
+        r = _read_file_range(path=str(p), offset=1, limit=3)
+        assert r["total_lines"] == 4
+        assert r["returned_lines"] == 3
+        assert r["content"] == "1\n2\n3"
+        assert r["truncated"]
+
+    def test_empty_file(self, tmp_path: Path):
+        p = tmp_path / "a.txt"
+        p.write_text("")
+        r = _read_file_range(path=str(p), offset=1, limit=5)
+        assert r["total_lines"] == 0
+        assert r["returned_lines"] == 0
+        assert r["content"] == ""
+        assert not r["truncated"]
+
+    def test_offset_beyond_eof(self, tmp_path: Path):
+        p = tmp_path / "a.txt"
+        p.write_text("x\ny")
+        r = _read_file_range(path=str(p), offset=10, limit=5)
+        assert r["returned_lines"] == 0
+        assert r["end_line"] == 2
+        assert r["total_lines"] == 2
+        assert r["content"] == ""
+
+    def test_no_trailing_newline(self, tmp_path: Path):
+        p = tmp_path / "a.txt"
+        p.write_text("line1\nline2")
+        r = _read_file_range(path=str(p), offset=1, limit=10)
+        assert r["total_lines"] == 2
+        assert r["content"] == "line1\nline2"
+        assert not r["truncated"]

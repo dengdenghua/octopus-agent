@@ -590,7 +590,7 @@ export function ChatComposer({
     const marker = codexComposerModeMarker(mode);
     setDraft((current) => {
       const body = current
-        .replace(/^\/codex\s+(?:plan|spec|goal)(?:\s+|$)/i, "")
+        .replace(/^\/(?:codex|mode)\s+(?:plan|spec|goal)(?:\s+|$)/i, "")
         .trimStart();
       return body ? `${marker}\n${body}` : `${marker}\n`;
     });

@@ -141,6 +141,16 @@ class Budget:
             self._tokens_in_spent += actual.tokens_in
             self._tokens_out_spent += actual.tokens_out
             self._usd_spent += actual.usd
+            # Backstop (BDG-I3): reserve() only gates on the *estimate*,
+            # which is routinely low for long output-heavy turns. Once the
+            # real cost is committed and blows past the ceiling, freeze the
+            # budget so every later reserve fails instead of silently running
+            # over budget.
+            if (
+                self._tokens_spent > self.limits.tokens
+                or self._usd_spent > self.limits.usd
+            ) and self._status == "active":
+                self._status = "exceeded"
 
     def refund_stale_reservations(self, ttl_seconds: int = 30) -> int:
         cutoff = now_utc() - timedelta(seconds=ttl_seconds)

@@ -412,30 +412,6 @@ class SwarmRuntime:
                         )
                     )
 
-        # ── Cohesion (Boids 原则 3):idle 腿靠拢最忙簇 ──
-        # After this layer finishes, suggest idle arms redirect to help the
-        # busiest arm in the next layer. This is advisory — we publish the
-        # suggestion as an event; the caller (or a future scheduler tick)
-        # decides whether to reassign.
-        if self._boids is not None and self._signal_bus is not None:
-            arm_load: dict[ArmId, int] = {}
-            idle_arms: list[ArmId] = []
-            for _assignment, arm in pairs:
-                load = getattr(arm, "_pending_load", 0)
-                arm_load[arm.arm_id] = load
-                if load == 0:
-                    idle_arms.append(arm.arm_id)
-            redirects = self._boids.cohesion_rebalance(arm_load, idle_arms)
-            for idle_arm, busiest in redirects.items():
-                self._publish(
-                    "arm.cohesion",
-                    {
-                        "idle_arm": str(idle_arm),
-                        "redirect_to": str(busiest),
-                        "busiest_load": arm_load[busiest],
-                    },
-                )
-
         return results
 
     def _run_one(

@@ -4,27 +4,14 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-// Mirror of the ItemStatus / TurnStatus string unions in
-// `src/core/realtime/items.ts`. The authoritative source of truth lives in
-// the backend (`runtime/protocol/items.py`). This gate fails the frontend
-// CI whenever the two drift — a new backend status would otherwise fall
-// silently into the frontend's default branch.
-const FRONTEND_ITEM_STATUS = [
-  "inProgress",
-  "completed",
-  "failed",
-  "interrupted",
-  "declined",
-] as const;
+import { ITEM_STATUSES, TURN_STATUSES } from "@/core/realtime/items";
 
-const FRONTEND_TURN_STATUS = [
-  "inProgress",
-  "completed",
-  "paused",
-  "cancelled",
-  "interrupted",
-  "failed",
-] as const;
+// The authoritative source of truth lives in the backend
+// (`runtime/protocol/items.py`). ITEM_STATUSES / TURN_STATUSES are the
+// ACTUAL frontend mirrors exported from `src/core/realtime/items.ts` — the
+// union types are derived from them — so this gate fails CI whenever the
+// two drift. A new backend status would otherwise fall silently into the
+// frontend's default branch.
 
 const REPO_ROOT = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -57,14 +44,10 @@ describe("protocol enum parity", () => {
   );
 
   it("ItemStatus matches runtime/protocol/items.py", () => {
-    expect(parseEnumValues(source, "ItemStatus")).toEqual([
-      ...FRONTEND_ITEM_STATUS,
-    ]);
+    expect(parseEnumValues(source, "ItemStatus")).toEqual([...ITEM_STATUSES]);
   });
 
   it("TurnStatus matches runtime/protocol/items.py", () => {
-    expect(parseEnumValues(source, "TurnStatus")).toEqual([
-      ...FRONTEND_TURN_STATUS,
-    ]);
+    expect(parseEnumValues(source, "TurnStatus")).toEqual([...TURN_STATUSES]);
   });
 });

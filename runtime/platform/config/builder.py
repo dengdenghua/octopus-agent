@@ -109,7 +109,11 @@ def build_from_config(config: AgentConfig) -> BuiltStack:
     # before persistence to keep accidental secrets (.env values, keys) off disk.
     journal: Journal
     journal = (
-        JSONLJournal(config.journal_file, redactor=Redactor())
+        JSONLJournal(
+            config.journal_file,
+            max_size_bytes=config.journal_max_bytes,
+            redactor=Redactor(),
+        )
         if config.journal_file
         else InMemoryJournal()
     )

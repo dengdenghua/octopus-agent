@@ -358,18 +358,29 @@ def _read_file_range(
 
     start = max(1, int(offset))
     cap = max(1, min(int(limit), _MAX_RANGE_LINES))
-
+    # Streaming window read: iterate the file once and keep only the requested
+    # slice, instead of reading the whole file into memory then slicing. This
+    # keeps both time and memory proportional to the file size (it must be
+    # scanned to count total_lines / detect truncation) but never materializes
+    # the full text, avoiding slow/giant reads that used to surface as tool
+    # timeouts on large files.
+    want_lo = start - 1
+    want_hi = start - 1 + cap  # exclusive
+    lines: list[str] = []
+    total = 0
     try:
-        text = base.read_text(encoding="utf-8", errors="strict")
+        with base.open("r", encoding="utf-8", errors="strict", newline="") as fh:
+            for line in fh:
+                total += 1
+                if want_lo <= total - 1 < want_hi:
+                    lines.append(line.rstrip("\r\n"))
     except UnicodeDecodeError:
         return {"error": "non-utf8 content", "path": path}
     except OSError as exc:
         return {"error": f"read_failed: {exc}", "path": path}
 
-    lines = text.splitlines()
-    total = len(lines)
     end = min(total, start - 1 + cap)
-    sliced = lines[start - 1 : end]
+    sliced = lines
     return {
         "path": str(base.resolve()),
         "total_lines": total,

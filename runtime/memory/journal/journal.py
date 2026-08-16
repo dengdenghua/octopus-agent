@@ -404,15 +404,16 @@ class JSONLJournal(Journal):
                                 _fcntl.flock(fd, _fcntl.LOCK_UN)
                         except OSError:  # noqa: BLE001 — file lock/seek/fsync best-effort
                             pass
-        # Rotate if we've blown past the cap. Cheap check (stat call) ·
-        # only triggers rewrite when actually needed.
-        if self._max_size_bytes is not None:
-            try:
-                size = self._path.stat().st_size
-            except OSError:
-                return
-            if size > self._max_size_bytes:
-                self._rotate_locked()
+            # Rotate if we've blown past the cap — still under the
+            # interprocess lock so a rename can't race another process's
+            # append to the old inode (data-loss window on rotation).
+            if self._max_size_bytes is not None:
+                try:
+                    size = self._path.stat().st_size
+                except OSError:
+                    return
+                if size > self._max_size_bytes:
+                    self._rotate_locked()
 
     def _mirror_event_effects(self, event: JournalEvent) -> None:
         """Best-effort side mirrors (audit chain + trace store) for one event.

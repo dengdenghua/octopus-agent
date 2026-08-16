@@ -25,7 +25,7 @@ _RESUME_CONFIRM_RE = re.compile(
     re.IGNORECASE,
 )
 _CODEX_COMPOSER_MODE_RE = re.compile(
-    r"^\s*/codex\s+(plan|spec|goal)(?:\s+|$)",
+    r"^\s*/(codex|mode)\s+(plan|spec|goal)(?:\s+|$)",
     re.IGNORECASE,
 )
 
@@ -41,7 +41,7 @@ def _extract_codex_composer_mode(text: str) -> tuple[str, str | None]:
     match = _CODEX_COMPOSER_MODE_RE.match(text or "")
     if match is None:
         return text, None
-    mode = match.group(1).lower()
+    mode = match.group(2).lower()
     return (text or "")[match.end() :].lstrip(), mode
 
 

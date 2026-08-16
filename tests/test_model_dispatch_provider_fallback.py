@@ -109,3 +109,64 @@ def test_provider_rescue_prefers_pro_over_earlier_chat_route() -> None:
     assert response.text == "recovered"
     assert chat.models == []
     assert pro.models == ["deepseek-v4-pro"]
+
+
+class _Defaulted(ModelRouter):
+    """Fallback that advertises a default_model and records what it saw."""
+
+    def __init__(self, default_model: str) -> None:
+        self.default_model = default_model
+        self.models: list[str] = []
+
+    def call(self, request: ModelRequest) -> ModelResponse:
+        self.models.append(request.model)
+        return ModelResponse(text="ok", model=request.model)
+
+    def call_stream(self, request: ModelRequest):
+        self.models.append(request.model)
+        yield ModelStreamEvent(type="text_delta", delta="ok")
+        yield ModelStreamEvent(
+            type="done",
+            final=ModelResponse(text="ok", model=request.model),
+        )
+
+
+def test_unrouted_model_degrades_to_fallback_default_for_call() -> None:
+    """An unregistered model name must not be forwarded verbatim to the
+    fallback provider (which would 400); it degrades to the fallback default."""
+    fallback = _Defaulted("deepseek-v4-flash")
+    served = _Healthy()
+    router = ModelDispatchRouter(fallback=fallback)
+    router.register("deepseek-v4-flash", served)
+
+    response = router.call(ModelRequest(model="claude-opus", messages=[Message(role="user", content="hi")]))
+
+    assert response.text == "ok"
+    # The literal unconfigured name never reaches the provider; the served
+    # default does instead.
+    assert fallback.models == ["deepseek-v4-flash"]
+
+
+def test_unrouted_model_degrades_to_fallback_default_for_stream() -> None:
+    fallback = _Defaulted("deepseek-v4-flash")
+    served = _Healthy()
+    router = ModelDispatchRouter(fallback=fallback)
+    router.register("deepseek-v4-flash", served)
+
+    events = list(router.call_stream(ModelRequest(model="claude-opus", messages=[Message(role="user", content="hi")])))
+
+    assert events[-1].final is not None
+    assert fallback.models == ["deepseek-v4-flash"]
+
+
+def test_routed_model_is_never_rewritten() -> None:
+    """A registered model keeps its name; only unrouted models degrade."""
+    fallback = _Defaulted("deepseek-v4-flash")
+    served = _Healthy()
+    router = ModelDispatchRouter(fallback=fallback)
+    router.register("deepseek-v4-flash", served)
+
+    router.call(ModelRequest(model="deepseek-v4-flash", messages=[Message(role="user", content="hi")]))
+
+    assert served.models == ["deepseek-v4-flash"]
+    assert fallback.models == []

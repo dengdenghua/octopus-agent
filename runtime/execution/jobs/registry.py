@@ -49,6 +49,7 @@ class _TrackedJob:
         "output",
         "started_at",
         "finished_at",
+        "deadline_at",
         "reported",
         "settled",
         "loop",
@@ -69,6 +70,7 @@ class _TrackedJob:
         cancel: Callable[[str | None], None],
         read_output: Callable[[], str] | None,
         loop: asyncio.AbstractEventLoop,
+        watchdog_timeout_s: int | None = None,
     ) -> None:
         self.id = job_id
         self.kind = kind
@@ -84,6 +86,11 @@ class _TrackedJob:
         self.output: str | None = None
         self.started_at = int(time.time() * 1000)
         self.finished_at: int | None = None
+        self.deadline_at = (
+            time.monotonic() + watchdog_timeout_s
+            if watchdog_timeout_s is not None and watchdog_timeout_s > 0
+            else None
+        )
         self.reported = False
         self.loop = loop
         self.settled: asyncio.Future[None] = loop.create_future()
@@ -121,6 +128,8 @@ class LocalJobRegistry:
         self._owner_cleanups: dict[str, Callable[[], Awaitable[None] | None]] = {}
         self._listeners_closed = False
         self._lock = threading.RLock()
+        self._sweeper: threading.Thread | None = None
+        self._sweeper_stop = threading.Event()
 
     # ── lifecycle ───────────────────────────────────────────
 
@@ -177,8 +186,19 @@ class LocalJobRegistry:
                 cancel=hooks.cancel,
                 read_output=hooks.read_output,
                 loop=loop,
+                watchdog_timeout_s=spec.watchdog_timeout_s,
             )
             self._store[job_id] = job
+            if spec.watchdog_timeout_s is not None and spec.watchdog_timeout_s > 0:
+                self._ensure_sweeper_locked()
+
+        if spec.on_start is not None:
+            try:
+                spec.on_start(self.snapshot(job))
+            except Exception:  # noqa: BLE001 - observer containment
+                _log.warning(
+                    "jobs: onStart observer threw for %s", job_id, exc_info=True
+                )
 
         def _on_done(task: asyncio.Task[Any]) -> None:
             if task.cancelled():
@@ -350,6 +370,7 @@ class LocalJobRegistry:
         """Close listeners, cancel live jobs, await settlement, and run the
         retained owner cleanups."""
         self._listeners_closed = True
+        self._sweeper_stop.set()
         with self._lock:
             all_jobs = list(self._store.values())
         self._cancel_for_teardown(all_jobs, "jobs service disposed")
@@ -400,6 +421,65 @@ class LocalJobRegistry:
             for job in self._store.values()
             if job.owner == owner and (job.status == "running" or job.status == "stopping")
         )
+
+    # ── stuck-job watchdog ─────────────────────────────────
+
+    _SWEEP_INTERVAL_S = 5.0
+    _SWEEP_IDLE_EXIT_SCANS = 12
+
+    def _ensure_sweeper_locked(self) -> None:
+        """Lazily start the deadline sweeper. It force-fails jobs whose
+        producer never settled, so a stuck worker cannot pin its owner's
+        concurrency slot forever. The thread self-retires after a run of
+        idle scans with nothing to watch and is restarted on demand."""
+        if self._sweeper is not None and self._sweeper.is_alive():
+            return
+
+        def _sweep_loop() -> None:
+            idle = 0
+            while not self._sweeper_stop.wait(self._SWEEP_INTERVAL_S):
+                expired: list[_TrackedJob] = []
+                watching = False
+                with self._lock:
+                    for job in self._store.values():
+                        if job.deadline_at is None:
+                            continue
+                        watching = True
+                        if not is_terminal(job.status) and time.monotonic() >= job.deadline_at:
+                            expired.append(job)
+                if not watching:
+                    idle += 1
+                    if idle >= self._SWEEP_IDLE_EXIT_SCANS:
+                        return
+                    continue
+                idle = 0
+                for job in expired:
+                    try:
+                        job.cancel("watchdog timeout")
+                    except Exception as error:  # noqa: BLE001 - containment
+                        _log.warning(
+                            "jobs: watchdog cancel of %s threw: %s", job.id, error
+                        )
+                    self.settle(
+                        job,
+                        JobOutcome(
+                            status="failed",
+                            detail="watchdog timeout: producer never settled",
+                        ),
+                    )
+                    _log.warning(
+                        "jobs: job %s (%s) force-failed by watchdog timeout",
+                        job.id,
+                        job.kind,
+                    )
+
+        self._sweeper_stop.clear()
+        self._sweeper = threading.Thread(
+            target=_sweep_loop,
+            daemon=True,
+            name="jobs-watchdog",
+        )
+        self._sweeper.start()
 
     def _expect(self, job_id: str) -> _TrackedJob:
         job = self._store.get(job_id)

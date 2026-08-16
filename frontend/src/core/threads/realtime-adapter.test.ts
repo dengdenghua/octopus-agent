@@ -283,6 +283,39 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     expect(ai?.additional_kwargs?.created_at).toBe("2026-05-09T00:00:00Z");
   });
 
+  it("stamps commentary with its own createdAt, not the turn's earliest", () => {
+    const commentary: AgentMessageItem = {
+      ...agentMsg("先同步一下进度。", "p1"),
+      messageKind: "commentary",
+      createdAt: "2026-05-09T00:00:30Z",
+    };
+    const state = conversationToAgentThreadState(
+      makeConv([
+        makeTurn(
+          [
+            reasoning("thinking hard"),
+            commentary,
+            agentMsg("The answer.", "a-ans"),
+          ],
+          "completed",
+        ),
+      ]),
+    );
+    const commentaryMsg = state.messages.find(
+      (message) => message.type === "ai" && message.id === "p1",
+    ) as AIMessage | undefined;
+    const answerMsg = state.messages.find(
+      (message) => message.type === "ai" && message.id === "a-ans",
+    ) as AIMessage | undefined;
+    expect(commentaryMsg?.additional_kwargs?.created_at).toBe(
+      "2026-05-09T00:00:30Z",
+    );
+    // The final answer keeps the earliest reasoning start time.
+    expect(answerMsg?.additional_kwargs?.created_at).toBe(
+      "2026-05-09T00:00:00Z",
+    );
+  });
+
   it("preserves public commentary as distinct non-terminal messages", () => {
     const firstCommentary: AgentMessageItem = {
       ...agentMsg("首轮扫描确认事件桥负责三类流。", "p1"),

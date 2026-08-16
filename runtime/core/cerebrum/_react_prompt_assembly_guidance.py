@@ -485,7 +485,7 @@ def _assemble_delegation_guidance(state: _AssemblyState) -> None:
                 "说明你准备如何修改、为何修改，征得确认后再执行写操作。\n"
                 "</audit-mode>"
             )
-    if state.is_codex_composer_plan_or_spec:
+    if state.is_plan_or_spec_composer:
         state.system_parts.append(
             "\n<codex-composer-mode>\n"
             "当前为 Codex 风格 "
@@ -780,7 +780,7 @@ def _assemble_tool_sections(state: _AssemblyState) -> None:
                 )
     else:
         state.system_parts.append(REACT_NO_TOOLS_NOTE)
-    if state.planning_mode and state.is_codex_composer_plan_or_spec:
+    if state.planning_mode and state.is_plan_or_spec_composer:
         state.system_parts.append(
             "CODEX PLAN/SPEC LOCK — This turn is a composer-applied "
             "Plan/Spec mode. Use tools only for read-only context gathering "

@@ -74,6 +74,7 @@ agents/**/*.bak
 # Local-only config
 config.yaml
 config.local.yaml
+config.local*.yaml
 !config.example.yaml
 
 # Docker

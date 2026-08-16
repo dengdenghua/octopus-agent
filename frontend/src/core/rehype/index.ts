@@ -2,6 +2,7 @@ import type { Element, Root, ElementContent } from "hast";
 import { useMemo } from "react";
 import rehypeKatex from "rehype-katex";
 import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
 import { visit } from "unist-util-visit";
 import type { BuildVisitor } from "unist-util-visit";
 import type { StreamdownProps } from "streamdown";
@@ -182,8 +183,12 @@ export function rehypeFileReferences() {
 // `<details>` wrapper around a ReAct trace) got escaped as text.
 // Static import fixes the first-render window; packages are
 // already in the dependency bundle anyway.
+//
+// Security: rehype-sanitize removes unsafe HTML (XSS vectors) after
+// rehype-raw parses it. The default schema allows safe tags/attrs.
 const CHAT_REHYPE_BASE: StreamdownProps["rehypePlugins"] = [
   rehypeRaw,
+  rehypeSanitize,
   [rehypeKatex, { output: "html" }],
 ] as StreamdownProps["rehypePlugins"];
 

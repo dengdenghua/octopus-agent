@@ -35,19 +35,23 @@ function localizeStreamdownDom(root: HTMLElement) {
     }
   });
 
-  // Patch text nodes inside menu items and status spans. Matched nodes are
-  // tagged so subsequent passes skip them without re-reading textContent —
-  // during streaming this turns an O(whole-subtree) walk per frame into
-  // touching only nodes added since the last pass.
+  // Patch text nodes inside menu items and status spans. Each node stores
+  // the exact text it was last processed with; unchanged nodes skip the
+  // trim + lookup work on subsequent passes. A node whose text changed
+  // IN PLACE (streaming mermaid status labels do exactly that) no longer
+  // matches its stored value and is re-examined, so a permanent tag can
+  // never strand a stale English label.
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
   const textNodes: Text[] = [];
   let currentNode: Node | null;
   while ((currentNode = walker.nextNode())) {
-    const node = currentNode as Text & { __octoLocalized?: boolean };
-    if (!node.__octoLocalized) textNodes.push(node);
+    const node = currentNode as Text & { __octoLocalized?: string };
+    if (node.__octoLocalized === node.textContent) continue;
+    textNodes.push(node);
   }
   for (const textNode of textNodes) {
-    const text = textNode.textContent ?? "";
+    const node = textNode as Text & { __octoLocalized?: string };
+    const text = node.textContent ?? "";
     const trimmed = text.trim();
     if (trimmed) {
       const replacement = (TEXT_REPLACEMENTS as Record<string, string>)[trimmed];
@@ -55,16 +59,13 @@ function localizeStreamdownDom(root: HTMLElement) {
         // Preserve surrounding whitespace
         const leading = text.startsWith(" ") ? " " : "";
         const trailing = text.endsWith(" ") ? " " : "";
-        textNode.textContent = leading + replacement + trailing;
+        node.textContent = leading + replacement + trailing;
       }
     }
-    // Tag AFTER reading: a node whose text did not match this pass may still
-    // match on a later pass if its content changes (rare, but streaming
-    // mermaid status labels do exactly that). We tag anyway because every
-    // observer-driven pass below is triggered by an actual mutation, so
-    // changed nodes get re-created by the renderer rather than edited in
-    // place for the components we localize.
-    (textNode as Text & { __octoLocalized?: boolean }).__octoLocalized = true;
+    // Remember the exact text just processed (the localized value when a
+    // patch was applied). Next pass compares cheaply and skips unchanged
+    // nodes; in-place text updates mismatch and get reprocessed.
+    node.__octoLocalized = node.textContent;
   }
 }
 

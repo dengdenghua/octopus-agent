@@ -19,10 +19,30 @@ describe("composer-draft", () => {
 
   it("stores the new-thread composer under a dedicated key", () => {
     saveComposerDraft(undefined, "新会话草稿");
-    expect(
-      window.localStorage.getItem(`octopus:composer-draft:${NEW_THREAD_DRAFT_KEY}`),
-    ).toBe("新会话草稿");
+    const raw = window.localStorage.getItem(
+      `octopus:composer-draft:${NEW_THREAD_DRAFT_KEY}`,
+    );
+    expect(raw).not.toBeNull();
+    const envelope = JSON.parse(raw ?? "{}") as { v?: number; text?: string };
+    expect(envelope.v).toBe(1);
+    expect(envelope.text).toBe("新会话草稿");
     expect(loadComposerDraft(null)).toBe("新会话草稿");
+  });
+
+  it("prunes drafts older than 30 days while keeping fresh ones", () => {
+    const oldKey = "octopus:composer-draft:stale-thread";
+    window.localStorage.setItem(
+      oldKey,
+      JSON.stringify({ v: 1, text: "旧草稿", savedAt: Date.now() - 31 * 24 * 60 * 60 * 1000 }),
+    );
+    saveComposerDraft("fresh-thread", "新草稿");
+    expect(window.localStorage.getItem(oldKey)).toBeNull();
+    expect(loadComposerDraft("fresh-thread")).toBe("新草稿");
+  });
+
+  it("still reads legacy plain-text drafts", () => {
+    window.localStorage.setItem("octopus:composer-draft:legacy", "老格式草稿");
+    expect(loadComposerDraft("legacy")).toBe("老格式草稿");
   });
 
   it("clears the entry when the draft is emptied", () => {

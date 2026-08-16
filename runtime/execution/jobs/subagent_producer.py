@@ -168,6 +168,25 @@ def build_subagent_job_start(
 
         return JobHooks(cancel=cancel, done=done, read_output=None)
 
+    def on_start(snapshot: JobSnapshot) -> None:
+        """Journal the start immediately.
+
+        ``on_settle`` only fires at terminal states, so a crash mid-run
+        used to leave zero journal trace of a live job - it vanished
+        silently on restart. A ``running`` row written at start lets the
+        startup sweep close it as interrupted instead."""
+        from runtime.memory.journal.activity import write_job_change
+
+        attribution = holder.get("attribution") or {}
+        write_job_change(
+            job_id=snapshot.id,
+            kind=snapshot.kind,
+            label=snapshot.label,
+            status=snapshot.status,
+            detail="started",
+            **attribution,
+        )
+
     def on_settle(snapshot: JobSnapshot) -> None:
         """Journal the terminal transition (durable timeline row)."""
         from runtime.memory.journal.activity import write_job_change
@@ -188,7 +207,12 @@ def build_subagent_job_start(
         owner=owner,
         run=run,
         notify=notify,
+        on_start=on_start,
         on_settle=on_settle,
+        # The producer's own timeout_s stays authoritative; the registry
+        # backstop sits above it so a stuck worker thread that never
+        # settles cannot pin the owner's concurrency slot forever.
+        watchdog_timeout_s=timeout_s + 60,
     )
 
 

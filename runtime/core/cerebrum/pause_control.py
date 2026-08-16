@@ -421,8 +421,21 @@ class PauseController:
             ckpts = list(read_by_type("react_checkpoint"))
             paused_events = list(read_by_type("task_paused"))
             resumed_events = list(read_by_type("task_resumed"))
+            trajectory_events = list(read_by_type("trajectory"))
         except (AttributeError, OSError):
             return 0
+
+        # A trajectory is only written at terminal states (completed /
+        # failed / cancelled / model-stall convergence) - never while a
+        # task is still runnable or paused. Any trajectory for a task
+        # means its last auto-checkpoint is stale history, not a
+        # resumable in-flight state; without this check a completed task
+        # shows a phantom "waiting to continue" after every restart.
+        terminal_tids: set[str] = set()
+        for e in trajectory_events:
+            tid = str(getattr(e, "task_id", "") or "")
+            if tid:
+                terminal_tids.add(tid)
 
         last_ckpt: dict[str, object] = {}
         for e in ckpts:
@@ -447,6 +460,8 @@ class PauseController:
             for tid, ckpt in last_ckpt.items():
                 if tid in self._pending or tid in self._paused:
                     continue  # Implementation note.
+                if tid in terminal_tids:
+                    continue  # Terminal trajectory written after this checkpoint.
                 if getattr(ckpt, "has_final_answer", False):
                     continue  # Implementation note.
                 state = last_state_ts.get(tid)

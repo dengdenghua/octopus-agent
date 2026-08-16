@@ -246,6 +246,9 @@ class _DiscoveryBackendMixin:
 
     def _browser_runtime_errors(self) -> tuple[type[BaseException], ...]:
         try:
+            from greenlet import (
+                error as GreenletError,  # type: ignore[import-not-found]  # noqa: N812
+            )
             from playwright.sync_api import (  # type: ignore[import-not-found]
                 Error as PlaywrightError,
             )
@@ -254,7 +257,14 @@ class _DiscoveryBackendMixin:
             )
         except ImportError:
             return (OSError, ImportError, RuntimeError)
-        return (OSError, ImportError, RuntimeError, PlaywrightError, PlaywrightTimeoutError)
+        return (
+            OSError,
+            ImportError,
+            RuntimeError,
+            PlaywrightError,
+            PlaywrightTimeoutError,
+            GreenletError,
+        )
 
     def _preferred_browser_executable(self) -> str | None:
         for browser in self._detect_browsers():

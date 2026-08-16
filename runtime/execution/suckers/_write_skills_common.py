@@ -13,7 +13,11 @@ from pathlib import Path
 from typing import Any
 
 _DEFAULT_MAX_BYTES = 1 * 1024 * 1024  # 1 MB
-_DEFAULT_EXEC_TIMEOUT_S = 30.0
+# Long commands (build/test/install) routinely exceed 30s; a too-short
+# default turned benign tool calls into timeouts that tripped the react
+# loop's timeout guards and killed otherwise-fine turns. Model-facing
+# tools still accept an explicit timeout_s override.
+_DEFAULT_EXEC_TIMEOUT_S = 60.0
 _EXEC_OUTPUT_CAP = 200_000
 _BACKGROUND_OUTPUT_CAP = 200_000
 

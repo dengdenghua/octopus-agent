@@ -38,6 +38,10 @@ class BudgetConfig(BaseModel):
     # Forced-convergence max_tokens cap for normal (non research/swarm) mode.
     # Default 2000; research/swarm convergence stays fixed at 5000.
     convergence_max_tokens: int = Field(default=2000, gt=0)
+    # Elastic budget: when a task passes the token/usd threshold, auto-pause
+    # and ask the user instead of only logging a warning. Pause is non-lossy
+    # (user can add budget and continue), so long tasks are not blocked.
+    budget_auto_pause: bool = False
 
 
 class ImmunityConfig(BaseModel):
@@ -323,10 +327,10 @@ class DriftConfig(BaseModel):
 class SchedulerConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    # Background scheduler worker pool. Default 1 matches BackgroundRunner's
-    # own default (single-threaded, no pool) — raise to run periodic ticks
-    # concurrently.
-    max_workers: int = Field(default=1, ge=1, le=128)
+    # Background scheduler worker pool. Default 2 allows two scheduled tasks
+    # to run concurrently (e.g., hourly health check + daily backup). Raise
+    # to run more periodic ticks in parallel.
+    max_workers: int = Field(default=2, ge=1, le=128)
 
 
 class TentacleConfig(BaseModel):
@@ -394,6 +398,10 @@ class AgentConfig(BaseModel):
     mcp_servers: list[MCPServerConfigEntry] = Field(default_factory=list)
 
     journal_file: str | None = None  # Implementation note.
+    # Journal rotation cap in bytes. When the journal exceeds this size, the
+    # oldest events are dropped to keep the file bounded. None (default) disables
+    # rotation. Recommended: 10-50 MB (10485760-52428800 bytes) for demo/dev.
+    journal_max_bytes: int | None = Field(default=None, ge=1_000_000)
     # Disable external web/browser skill groups while retaining local coding,
     # filesystem, git, shell, quality and desktop tools.
     enable_web_skills: bool = True

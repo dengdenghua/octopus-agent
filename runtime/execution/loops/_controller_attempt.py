@@ -52,10 +52,10 @@ class LoopControllerAttemptMixin:
                 else ""
             ),
             "mode_preset": (
-                f"codex.{run.mode.value}" if run.mode in _PRODUCT_LOOP_MODES else run.mode.value
+                f"{run.mode.value}.mode" if run.mode in _PRODUCT_LOOP_MODES else run.mode.value
             ),
             "workflow_preset": (
-                f"codex.{run.mode.value}" if run.mode in _PRODUCT_LOOP_MODES else ""
+                f"{run.mode.value}.mode" if run.mode in _PRODUCT_LOOP_MODES else ""
             ),
             "mode_contract": _loop_mode_contract(run.mode),
             "budget_auto_pause": run.policy.budget_auto_pause,

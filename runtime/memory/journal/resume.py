@@ -51,6 +51,7 @@ class ResumeInfo:
     total_nodes: int = 0
     task_terminated: bool = False
     task_success: bool | None = None
+    task_disposition: str | None = None
     strategy: str = ""
     tokens_spent_snapshot: int = 0
     usd_spent_snapshot: float = 0.0
@@ -92,6 +93,7 @@ def resume_info(journal: Journal, task_id: UUID | str) -> ResumeInfo | None:
         elif isinstance(e, TrajectoryEvent):
             info.task_terminated = True
             info.task_success = e.trajectory.outcome.success
+            info.task_disposition = e.trajectory.outcome.disposition
             if e.trajectory.outcome.cost.tokens > 0:
                 info.tokens_spent_snapshot = e.trajectory.outcome.cost.tokens
             if e.trajectory.outcome.cost.usd > 0:

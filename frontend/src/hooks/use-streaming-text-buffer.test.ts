@@ -126,9 +126,9 @@ describe("useStreamingTextBuffer", () => {
           targetText: text,
           minCharsPerTick: 1,
           maxCharsPerTick: 1,
-          // Pin the per-tick cap: the backlog-pressure scaling would
-          // otherwise widen the lane and defeat the 1-char setup.
-          backlogScaleDivisor: Number.MAX_SAFE_INTEGER,
+          // Pin the per-tick step to 1 char: the backlog-proportional
+          // lane would otherwise widen and defeat the 1-char setup.
+          backlogDivisor: Number.MAX_SAFE_INTEGER,
         }),
       { initialProps: { text: "a" } },
     );

@@ -528,13 +528,19 @@ function turnToMessages(turn: Turn): Message[] {
       }
       case "agentMessage": {
         const am = item as AgentMessageItem;
-        if (am.createdAt) pending.createdAt ??= am.createdAt;
         const isInterruptedMessage = am.id === interruptedMessageId;
         const isFailedMessage = am.status === "failed";
         const split = splitReactTrace(itemStreamText(am));
         const messageKind =
           am.messageKind ??
           (split.publicUpdate && !split.finalAnswer ? "commentary" : "answer");
+        // The earliest item feeding a FINAL answer is its reasoning (or the
+        // answer prose itself). Commentary/progress messages are separate
+        // bubbles with their own start time — they must not inherit the
+        // turn's earliest reasoning timestamp (overridden below).
+        if (am.createdAt && messageKind !== "commentary") {
+          pending.createdAt ??= am.createdAt;
+        }
         // The backend's ReAct loop streams the LLM's raw trajectory:
         // "Thought: ...\nAction: tool(...)\nFinal Answer: ..." into
         // a single ``agentMessage`` item. Rendering that verbatim dumps
@@ -646,6 +652,11 @@ function turnToMessages(turn: Turn): Message[] {
         }
         if (messageKind === "commentary" && !isInterruptedMessage) {
           kwargs.public_progress = true;
+        }
+        // Commentary bubbles show their own start time instead of the
+        // reasoning that preceded them in the same turn.
+        if (messageKind === "commentary" && am.createdAt) {
+          kwargs.created_at = am.createdAt;
         }
         const ai: AIMessage = {
           type: "ai",

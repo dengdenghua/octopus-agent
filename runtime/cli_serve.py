@@ -496,6 +496,26 @@ def run_serve(
     except Exception:
         _restore_execution_security(execution_env_previous)
         raise
+
+    # Startup orphan sweep: jobs journal a ``running`` row at start and a
+    # terminal row at settle; a backend killed mid-run (watchdog SIGKILL,
+    # crash) leaves them non-terminal forever. Close them out as
+    # interrupted so the durable timeline shows what happened instead of
+    # the job silently vanishing. Best-effort - never blocks startup.
+    try:
+        from runtime.memory.journal.activity import sweep_interrupted_jobs
+
+        closed_jobs = sweep_interrupted_jobs(getattr(stack, "journal", None))
+        if closed_jobs:
+            logging.getLogger(__name__).warning(
+                "jobs: closed %d background job(s) left running by a previous "
+                "process: %s",
+                len(closed_jobs),
+                ", ".join(item["job_id"] for item in closed_jobs),
+            )
+    except Exception:  # noqa: BLE001 - sweep must never block serve
+        logging.getLogger(__name__).debug("job orphan sweep failed", exc_info=True)
+
     runner = BackgroundRunner(
         name=f"scheduler-{cfg.name}",
         max_workers=cfg.scheduler.max_workers,

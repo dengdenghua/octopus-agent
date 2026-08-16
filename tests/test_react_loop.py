@@ -1139,7 +1139,7 @@ def test_workflow_preset_prompt_steers_audit_ultracode_to_exhaustive_mode() -> N
     prompt = _build_workflow_preset_prompt("audit.ultracode")
 
     assert "<workflow-preset>" in prompt
-    assert "ultracode" in prompt
+    assert "audit.deep" in prompt
     # Directs toward orchestration but leaves the fan-out choice to the model
     # (soft ultracode — the model decides, not the runtime).
     assert "run_orchestration" in prompt
@@ -3142,7 +3142,7 @@ def test_react_loop_injects_codex_plan_mode_guidance() -> None:
     all_text = "\n".join(
         msg.content for msg in router.requests[0].messages if isinstance(msg.content, str)
     )
-    assert "codex.plan" in all_text
+    assert "plan.mode" in all_text
     assert "Plan 模式" in all_text
     assert "Custom plan contract" in all_text
     assert "不要主动进入实现或写文件" in all_text

@@ -20,17 +20,15 @@ export interface StreamingTextBufferOptions {
   /** Minimum approximate UTF-16 code units revealed per update. */
   minCharsPerTick?: number;
   /**
-   * Maximum approximate UTF-16 code units revealed per update *when the
-   * backlog is small*. Under backlog pressure the cap scales with
-   * ``backlog / backlogScaleDivisor`` so fast providers cannot accumulate
-   * seconds of invisible text (the old fixed cap produced the visible
-   * "answer suddenly dumps the last chunk" effect on settlement).
+   * Ceiling for the minimum per-tick reveal (``minCharsPerTick`` is
+   * clamped by it). The backlog-proportional lane is intentionally
+   * uncapped so fast providers cannot accumulate seconds of invisible
+   * text (the old fixed cap produced the visible "answer suddenly dumps
+   * the last chunk" effect on settlement).
    */
   maxCharsPerTick?: number;
   /** Backlog ratio used to accelerate playback. */
   backlogDivisor?: number;
-  /** Backlog ratio used to scale the per-tick cap under pressure. */
-  backlogScaleDivisor?: number;
   /** Reveal a backlog at or below this size immediately. */
   fastDrainThreshold?: number;
   /** Maximum animated tail after settlement. Default 240 ms. */
@@ -97,7 +95,6 @@ export function useStreamingTextBuffer({
   minCharsPerTick = 1,
   maxCharsPerTick = 6,
   backlogDivisor = 12,
-  backlogScaleDivisor = 4,
   fastDrainThreshold = 0,
   maxFinishDelayMs = 240,
 }: StreamingTextBufferOptions): string {
@@ -111,7 +108,6 @@ export function useStreamingTextBuffer({
     minCharsPerTick,
     maxCharsPerTick,
     backlogDivisor,
-    backlogScaleDivisor,
     fastDrainThreshold,
     maxFinishDelayMs,
   });
@@ -164,15 +160,6 @@ export function useStreamingTextBuffer({
             minStep,
             Math.round(backlog / Math.max(1, opts.backlogDivisor)),
           );
-          // The cap breathes with backlog size: ~6 chars/tick while typing
-          // along, but a fast provider with a deep backlog gets a
-          // proportionally wider lane (e.g. backlog 480 → 120/tick) so the
-          // display can never fall arbitrarily far behind the stream.
-          const scaledCap = Math.max(
-            baseCap,
-            Math.round(backlog / Math.max(1, opts.backlogScaleDivisor)),
-          );
-          step = Math.min(step, scaledCap);
         }
         if (!enabledRef.current && finishStartedAtRef.current !== null) {
           // Spread the remaining tail across the bounded finish window rather
@@ -234,7 +221,6 @@ export function useStreamingTextBuffer({
       minCharsPerTick,
       maxCharsPerTick,
       backlogDivisor,
-      backlogScaleDivisor,
       fastDrainThreshold,
       maxFinishDelayMs,
     };
@@ -272,7 +258,6 @@ export function useStreamingTextBuffer({
     minCharsPerTick,
     maxCharsPerTick,
     backlogDivisor,
-    backlogScaleDivisor,
     fastDrainThreshold,
     maxFinishDelayMs,
     ensureAnimation,

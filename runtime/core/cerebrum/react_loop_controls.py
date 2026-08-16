@@ -485,7 +485,7 @@ def _cancel_pause_guard(
         )
         journal = getattr(stack, "journal", None)
         if journal is not None:
-            with contextlib.suppress(Exception):
+            try:
                 journal.write_react_checkpoint(
                     task_id=react_task_id,
                     iteration_completed=iteration,
@@ -505,6 +505,18 @@ def _cancel_pause_guard(
                     working_set_snapshot=list(working_set.values()),
                     progress_summary=progress_summary,
                     current_phase=current_phase,
+                )
+            except Exception:  # noqa: BLE001 - pausing must not fail on journal IO
+                # Loud, not silent: without this checkpoint a later resume
+                # silently falls back to a fresh run and everything done
+                # since the last auto-checkpoint is lost. Surface it now so
+                # the operator knows before clicking Continue.
+                _logger.warning(
+                    "react_loop pause checkpoint write FAILED (task %s, iter %d) "
+                    "- resume will fall back to a fresh run: %s",
+                    react_task_id,
+                    iteration,
+                    exc_info=True,
                 )
             try:
                 journal.write_task_paused(

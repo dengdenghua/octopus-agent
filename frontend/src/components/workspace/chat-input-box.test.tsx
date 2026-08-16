@@ -130,22 +130,22 @@ describe("<ChatInputBox /> cowork materials", () => {
     await openToolsMenu();
     fireEvent.click(screen.getByText("Insert Plan marker"));
 
-    expect(textarea().value).toBe("/codex plan\n");
+    expect(textarea().value).toBe("/mode plan\n");
     expect(onModeChange).not.toHaveBeenCalled();
 
     fireEvent.change(textarea(), {
-      target: { value: "/codex plan\nAudit this repo" },
+      target: { value: "/mode plan\nAudit this repo" },
     });
     await openToolsMenu();
     fireEvent.click(screen.getByText("Insert Spec marker"));
 
-    expect(textarea().value).toBe("/codex spec\nAudit this repo");
+    expect(textarea().value).toBe("/mode spec\nAudit this repo");
     expect(onModeChange).not.toHaveBeenCalled();
 
     await openToolsMenu();
     fireEvent.click(screen.getByText("Insert Goal marker"));
 
-    expect(textarea().value).toBe("/codex goal\nAudit this repo");
+    expect(textarea().value).toBe("/mode goal\nAudit this repo");
     expect(onModeChange).not.toHaveBeenCalled();
   });
 
@@ -216,12 +216,12 @@ describe("<ChatInputBox /> cowork materials", () => {
       />,
     );
 
-    fireEvent.change(textarea(), { target: { value: "/codex plan\n" } });
+    fireEvent.change(textarea(), { target: { value: "/mode plan\n" } });
 
     expect(screen.getByTitle("Send")).toBeDisabled();
     fireEvent.click(screen.getByTitle("Send"));
     expect(onSubmit).not.toHaveBeenCalled();
-    expect(textarea().value).toBe("/codex plan\n");
+    expect(textarea().value).toBe("/mode plan\n");
   });
 
   it("sends default execution mode through the normal message path", async () => {

@@ -1,7 +1,12 @@
 import { render, screen } from "@testing-library/react";
+import type { Message } from "@/core/api/types";
 import { describe, expect, it } from "vitest";
 
-import { MessageTimestamp } from "./message-list-item";
+import {
+  containsProtocolMarkers,
+  messageClipboardText,
+  MessageTimestamp,
+} from "./message-list-item";
 
 describe("MessageTimestamp", () => {
   it("renders nothing when no timestamp is provided", () => {
@@ -41,5 +46,31 @@ describe("MessageTimestamp", () => {
       <MessageTimestamp createdAt="2026-05-09T10:30:00Z" align="end" />,
     );
     expect(screen.getByText(/\d{2}:\d{2}/).className).toContain("self-end");
+  });
+});
+
+describe("protocol cleaning bail-out", () => {
+  it("does not skip the bare legacy sub-agent placeholder", () => {
+    // The legacy placeholder may appear WITHOUT the optional `[...]`
+    // prefix; its ASCII `(` must therefore be a first-mark so the
+    // streaming fast path still runs the cleaning chain.
+    expect(containsProtocolMarkers("(sub-agent exceeded token budget 100/200)")).toBe(
+      true,
+    );
+  });
+
+  it("empties a bare legacy sub-agent placeholder from clipboard text", () => {
+    const message = {
+      type: "ai",
+      content: "(sub-agent exceeded token budget 100/200)",
+    } as unknown as Message;
+    expect(messageClipboardText(message)).toBe("");
+  });
+
+  it("still skips plain prose without protocol markers", () => {
+    expect(
+      containsProtocolMarkers("这是一段普通的流式回答，没有任何协议标记。"),
+    ).toBe(false);
+    expect(containsProtocolMarkers("plain english prose here")).toBe(false);
   });
 });

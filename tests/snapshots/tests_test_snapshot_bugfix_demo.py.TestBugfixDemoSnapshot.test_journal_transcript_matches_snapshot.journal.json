@@ -847,6 +847,7 @@
           "usd": 0.0
         },
         "degraded": false,
+        "disposition": "completed",
         "success": true,
         "user_rating": null
       },

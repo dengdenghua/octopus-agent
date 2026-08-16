@@ -274,3 +274,29 @@ def test_vote_n_is_clamped(monkeypatch):
 
     ds._call_agent_vote(question="q", n=99, choices=["yes", "no"])
     assert seen["count"] == ds._VOTE_MAX
+
+def test_vote_panel_uses_distinct_roles(monkeypatch):
+    # Independence: N voters must not all be the same persona. The first
+    # voter is the requested role, the rest rotate through distinct roles.
+    seen: list[str] = []
+    lock = threading.Lock()
+
+    def _fake(agent_id: str = "", prompt: str = "", **_kw: Any) -> dict[str, Any]:
+        with lock:
+            seen.append(agent_id)
+        return {"agent_id": agent_id, "output": "VERDICT: yes", "success": True, "error": None}
+
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", _fake)
+    monkeypatch.setattr("runtime.execution.subagents.bridge.call_subagent", _fake)
+
+    ds._call_agent_vote(question="q", n=5, choices=["yes", "no"])
+    assert len(seen) == 5
+    assert len(set(seen)) >= 2  # genuinely distinct personas, not one role x5
+    assert set(seen) <= {
+        "reviewer",
+        "architect",
+        "security-review",
+        "debugger",
+        "researcher",
+        "explorer",
+    }

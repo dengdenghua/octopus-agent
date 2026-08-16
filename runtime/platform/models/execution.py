@@ -103,6 +103,11 @@ class TrajectoryOutcome(BaseModel):
     user_rating: int | None = Field(default=None, ge=1, le=5)
     cost: CostEntry = Field(default_factory=CostEntry)
     degraded: bool = False
+    # Terminal disposition distinguishes a *cancelled* / *paused* run from a
+    # plain failure: ``completed`` | ``cancelled`` | ``paused`` |
+    # ``blocked_on_user`` | ``failed`` | ``completed_with_warning`` |
+    # ``partial``. Backward-compatible default keeps old journal rows valid.
+    disposition: str = "completed"
 
 
 class Trajectory(BaseModel):

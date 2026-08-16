@@ -23,6 +23,8 @@ from runtime.platform.models import (
     TaskGraph,
     TaskId,
     TaskNode,
+    Trajectory,
+    TrajectoryOutcome,
 )
 from runtime.safety.auth import TrustEngine
 
@@ -229,6 +231,26 @@ class TestResumeInfoBasics:
         info = resume_info(journal, graph.task_id)
         # Implementation note.
         assert info.task_terminated is True
+        assert info.is_resumable is False
+
+    def test_cancelled_disposition_is_read_by_resume(self):
+        j = InMemoryJournal()
+        tid = TaskId(uuid4())
+        j.write_task_started(tid, arm_id=ArmId("a"), total_nodes=3, strategy="s")
+        j.write_trajectory(
+            Trajectory(
+                task_id=tid,
+                arm_id=ArmId("react_arm"),
+                strategy_id="react_loop",
+                steps=[],
+                outcome=TrajectoryOutcome(success=False, disposition="cancelled"),
+            ),
+            actor="react_loop",
+        )
+        info = resume_info(j, tid)
+        assert info is not None
+        assert info.task_terminated is True
+        assert info.task_disposition == "cancelled"
         assert info.is_resumable is False
 
 

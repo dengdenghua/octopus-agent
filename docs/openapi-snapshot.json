@@ -33898,6 +33898,77 @@
         ]
       }
     },
+    "/api/subagents/stream/{root_thread_id}": {
+      "get": {
+        "description": "Live SSE stream of the typed sub-agent event bus for a root thread.\n\nReplays events after ``after_seq`` (0 = whole buffer), then pushes new\nevents as they land. The Workbench subscribes here for an independent,\nfull-fidelity stream of a sub-agent run. Pass ``limit`` for a bounded\nsnapshot instead of a long-lived subscription.",
+        "operationId": "_subagents_bus_stream_api_subagents_stream__root_thread_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "root_thread_id",
+            "required": true,
+            "schema": {
+              "title": "Root Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_seq",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "After Seq",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response  Subagents Bus Stream Api Subagents Stream  Root Thread Id  Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": " Subagents Bus Stream",
+        "tags": [
+          "subagents"
+        ]
+      }
+    },
     "/api/subagents/{name}": {
       "get": {
         "operationId": "get_subagent_api_subagents__name__get",

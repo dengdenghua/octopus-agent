@@ -213,6 +213,9 @@ export const CodeBlock = ({
                 title={
                   wrap ? t.streaming.codeBlockScroll : t.streaming.codeBlockWrap
                 }
+                aria-label={
+                  wrap ? t.streaming.codeBlockScroll : t.streaming.codeBlockWrap
+                }
                 onClick={() => setWrap((value) => !value)}
               >
                 {wrap ? <ArrowLeftRight size={12} /> : <WrapText size={12} />}
