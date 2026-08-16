@@ -984,11 +984,13 @@ def _surface_events_prefer_journal(session: SubagentSession) -> list[dict[str, A
 
 
 def _journal_has_session_rows(journal: Any, session_id: str) -> bool:
-    """True when the journal already carries this session's prose lanes."""
+    """True when the journal already carries this session's prose lanes.
+
+    Audit P-04: probe only the session's rows (read_by_session) instead of
+    scanning the whole journal on every projection.
+    """
     try:
-        for event in journal.read_all():
-            if getattr(event, "session_id", "") != session_id:
-                continue
+        for event in journal.read_by_session(session_id):
             if getattr(event, "event_type", "") in ("user/message", "sub_text_delta"):
                 return True
     except Exception:  # noqa: BLE001 — a broken read falls back to turns

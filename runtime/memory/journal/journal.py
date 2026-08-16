@@ -138,6 +138,18 @@ __all__ = [
 # ═══════════════════════════════════════════════════════════
 
 
+def _refresh_session_index(
+    index: dict[str, list[JournalEvent]],
+    events: list[JournalEvent],
+    upto: int,
+) -> None:
+    """Extend a per-session index with events past ``upto`` (audit P-04)."""
+    for event in events[upto:]:
+        sid = str(getattr(event, "session_id", "") or "")
+        if sid:
+            index.setdefault(sid, []).append(event)
+
+
 class InMemoryJournal(Journal):
     def __init__(self, max_events: int = 0) -> None:
         """In-memory journal.
@@ -152,6 +164,10 @@ class InMemoryJournal(Journal):
         self._events = AppendOnlyList[JournalEvent](rule_id="CC-5")
         self._max_events = max(0, int(max_events))
         self._lock = Lock()
+        # Audit P-04: incremental per-session index so projections consume
+        # only a session's rows instead of re-scanning the whole log.
+        self._session_index: dict[str, list[JournalEvent]] = {}
+        self._session_index_upto = 0
 
     @enforces("CC-5")
     def _append(self, event: JournalEvent) -> None:
@@ -170,6 +186,13 @@ class InMemoryJournal(Journal):
         with self._lock:
             events = self._events.snapshot()
         return [event for event in events if self._visible(event, scope)]
+
+    def read_by_session(self, session_id: str) -> list[JournalEvent]:
+        with self._lock:
+            events = self._events.snapshot()
+            _refresh_session_index(self._session_index, events, self._session_index_upto)
+            self._session_index_upto = len(events)
+            return list(self._session_index.get(session_id, ()))
 
     def __len__(self) -> int:
         return len(self._events)
@@ -236,6 +259,10 @@ class JSONLJournal(Journal):
         self._trace_store = trace_store
         # Buffered chunk run awaiting packing (list of (entry, event) pairs).
         self._pending_chunk_run: list[tuple[dict, JournalEvent]] | None = None
+        # Audit P-04: incremental per-session index (built from the parsed
+        # cache; reset automatically when the file rotates/truncates).
+        self._session_index: dict[str, list[JournalEvent]] = {}
+        self._session_index_upto = 0
 
     def attach_trace_store(self, trace_store: Any) -> None:
         """Attach or replace the optional SQLite trace sidecar."""
@@ -687,6 +714,20 @@ class JSONLJournal(Journal):
             self._cache_byte_pos = new_pos
             events = list(self._cache)
             return [event for event in events if self._visible(event, scope)]
+
+    def read_by_session(self, session_id: str) -> list[JournalEvent]:
+        # Ensure the parsed cache includes the latest file tail (read_all
+        # flushes pending chunk runs and reads only the new delta).
+        self.read_all()
+        with self._lock:
+            events = list(self._cache)
+            if self._session_index_upto > len(events):
+                # File rotated/truncated — the old offsets are stale; rebuild.
+                self._session_index = {}
+                self._session_index_upto = 0
+            _refresh_session_index(self._session_index, events, self._session_index_upto)
+            self._session_index_upto = len(events)
+            return list(self._session_index.get(session_id, ()))
 
     def __len__(self) -> int:
         # Event count, not line count: a packed chunk row is one line but

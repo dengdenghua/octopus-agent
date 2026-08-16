@@ -113,6 +113,14 @@ class Journal:
     def read_by_agent(self, agent_id: str) -> list[JournalEvent]:
         return [e for e in self.read_all() if e.agent_id == agent_id]
 
+    def read_by_session(self, session_id: str) -> list[JournalEvent]:
+        """Events for one sub-agent session (audit P-04).
+
+        The base implementation filters the full log; a backend that keeps a
+        per-session index can override this to read only the session's rows.
+        """
+        return [e for e in self.read_all() if str(getattr(e, "session_id", "") or "") == session_id]
+
     def file_transaction_summary(
         self,
         *,

@@ -450,12 +450,12 @@ def surface_events_from_journal(
     events: list[dict[str, Any]] = []
     pending: list[str] = []
     journal_user_count = 0
-    for event in journal.read_all():
+    # Audit P-04: consume only this session's rows (read_by_session) instead
+    # of scanning the whole journal and discarding every other session's
+    # events — repeated projections stay O(session events), not O(journal).
+    for event in journal.read_by_session(session_id):
         etype = getattr(event, "event_type", "")
-        event_session = getattr(event, "session_id", "") or ""
         if etype == "user/message":
-            if event_session != session_id:
-                continue
             if pending:
                 events.append(_assistant_surface("".join(pending)))
                 pending = []
@@ -464,8 +464,6 @@ def surface_events_from_journal(
                 journal_user_count += 1
                 events.append(_user_surface(text))
         elif etype == "sub_text_delta":
-            if event_session != session_id:
-                continue
             pending.append(getattr(event, "delta", "") or "")
     if pending:
         events.append(_assistant_surface("".join(pending)))

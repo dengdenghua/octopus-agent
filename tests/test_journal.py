@@ -254,3 +254,77 @@ class TestInMemoryJournalRing:
         with pytest.raises(InvariantViolation):
             j._events.pop()
         assert list(j._events) == before
+
+
+class TestSessionIndex:
+    """Audit P-04: read_by_session consumes only a session's rows and
+    refreshes incrementally (O(new events) after the first scan)."""
+
+    def _session_event(self, session_id: str, seq: int) -> "JournalEvent":
+        from uuid import uuid4
+
+        from runtime.memory.journal._journal_models import SubTextDeltaEvent
+
+        return SubTextDeltaEvent(
+            ts=datetime(2026, 1, 1, 0, 0, seq),
+            thread_id="t",
+            task_id=str(uuid4()),
+            session_id=session_id,
+            delta=f"{session_id}-{seq}",
+        )
+
+    def test_inmemory_read_by_session_incremental(self) -> None:
+        j = InMemoryJournal()
+        j.write(self._session_event("A", 1))
+        j.write(self._session_event("B", 1))
+        assert [e.delta for e in j.read_by_session("A")] == ["A-1"]
+        # Incremental: new A + B events; only A is returned, both A rows.
+        j.write(self._session_event("A", 2))
+        j.write(self._session_event("B", 2))
+        assert [e.delta for e in j.read_by_session("A")] == ["A-1", "A-2"]
+        assert j.read_by_session("missing") == []
+
+    def test_jsonl_read_by_session_incremental(self, tmp_path: Path) -> None:
+        j = JSONLJournal(tmp_path / "j.jsonl")
+        j.write(self._session_event("A", 1))
+        j.write(self._session_event("B", 1))
+        assert [e.delta for e in j.read_by_session("A")] == ["A-1"]
+        j.write(self._session_event("A", 2))
+        assert [e.delta for e in j.read_by_session("A")] == ["A-1", "A-2"]
+        # A fresh instance reads the persisted file correctly too.
+        j2 = JSONLJournal(tmp_path / "j.jsonl")
+        assert [e.delta for e in j2.read_by_session("B")] == ["B-1"]
+
+    def test_surface_events_uses_session_rows(self) -> None:
+        from uuid import uuid4
+
+        from runtime.memory.journal._journal_models import UserMessageEvent
+        from runtime.memory.journal.derive import surface_events_from_journal
+
+        j = InMemoryJournal()
+        j.write(
+            UserMessageEvent(
+                ts=datetime(2026, 1, 1, 0, 0, 0),
+                thread_id="t",
+                task_id=str(uuid4()),
+                session_id="A",
+                text="ask A",
+            )
+        )
+        j.write(self._session_event("A", 1))
+        j.write(self._session_event("B", 1))
+        j.write(self._session_event("A", 2))
+        surface = surface_events_from_journal(j, session_id="A")
+        # Only A's deltas are projected, interleaved; B never leaks.
+
+        def _text(e):
+            data = e.get("data") or {}
+            if e.get("type") == "user/message":
+                return "".join(c.get("text", "") for c in data.get("content") or [])
+            msg = data.get("message") or {}
+            return "".join(c.get("text", "") for c in (msg.get("content") or []))
+
+        texts = [_text(e) for e in surface]
+        assert any("A-1" in t for t in texts)
+        assert any("A-2" in t for t in texts)
+        assert not any("B-1" in t for t in texts)
