@@ -320,15 +320,28 @@ def mount_routers_b(
         )
 
         if stack is not None:
-            from runtime.memory.threads.compaction import CompactionPolicy
+            from runtime.memory.threads.compaction import (
+                CompactionPolicy,
+                compaction_trigger_tokens,
+            )
             from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
 
-            # Compaction kicks in once a thread accrues ~24 turns; we
-            # summarise down to the last 12. Thresholds tuned so very
-            # short sessions never pay the summariser round-trip.
+            # Compaction kicks in once a thread accrues ~24 turns OR an
+            # estimated volume at ~90% of the active model's advertised
+            # context window — whichever first; we summarise down to the
+            # last 12. The trigger is derived from ``planner.model``
+            # (operator window config → models.dev snapshot → name
+            # heuristics → 256k convention for unresolvable ids like
+            # ``auto``), so a 1M-window relay compacts ~8x later than a
+            # 128k one instead of sharing a flat guess. The token path
+            # catches few-turns-huge-content threads (a couple of 20k-
+            # token tool dumps would otherwise blow a 128k window well
+            # before turn 24).
+            _chat_model = getattr(getattr(stack, "planner", None), "model", None)
             _compaction_policy = CompactionPolicy(
                 trigger_at=24,
                 keep_recent=12,
+                trigger_tokens=compaction_trigger_tokens(_chat_model),
                 max_summary_chars=4_000,
             )
             _summary_router = getattr(getattr(stack, "planner", None), "router", None)

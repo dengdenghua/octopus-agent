@@ -18,8 +18,15 @@ Design choices:
   thread log. It appends a ``turn_compacted`` event that replay
   treats as a splice operation. The original lines stay on disk for
   audits.
-* **Trigger by turn count.** Simple. Token-budget-aware variants are
-  left to callers because token counts depend on the active model.
+* **Dual trigger: turn count OR token volume.** The turn-count path is
+  simple and model-independent; the token path catches the case the
+  count path misses — few turns, huge content (a single 50k-token tool
+  dump would otherwise blow the window long before 20 turns accrue).
+  Token counts are a chars//3 estimate (same heuristic as
+  ``runtime.memory.hemolymph.estimate_tokens``; kept local so this
+  leaf module doesn't pull composer's heavier imports). Callers that
+  prefer exact counts can pre-check with their tokenizer and compact
+  manually via :func:`compact`.
 
 Call sites:
 
@@ -30,6 +37,7 @@ Call sites:
 
 from __future__ import annotations
 
+import contextlib
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -58,14 +66,23 @@ Summariser = Callable[[Sequence[Turn]], str]
 class CompactionPolicy:
     """Knobs for when and how much to compact.
 
-    ``keep_recent`` turns stay visible verbatim. When total turns
-    exceed ``trigger_at``, everything **older** than the kept slice is
-    summarised into one. Must satisfy ``trigger_at > keep_recent``
-    (enforced at use time).
+    ``keep_recent`` turns stay visible verbatim. Compaction fires when
+    EITHER the turn count reaches ``trigger_at`` OR (when
+    ``trigger_tokens`` is set) the estimated token volume of the whole
+    thread reaches it — whichever comes first. Must satisfy
+    ``trigger_at > keep_recent`` for the count path (enforced at use
+    time). ``trigger_tokens`` should sit well above the typical token
+    volume of the ``keep_recent`` window itself, else the thread
+    re-triggers every turn.
     """
 
     trigger_at: int = 20
     keep_recent: int = 10
+    # Token-volume trigger (estimated, chars//3). ``None`` disables the
+    # volume path — the historical behaviour. Set by the realtime
+    # runtime wiring; sized against the active model's context window
+    # minus system prompt / tool output / completion reserves.
+    trigger_tokens: int | None = None
     max_summary_chars: int = 4_000
     # Tag that goes into the summary turn's id so callers can recognise
     # compaction artefacts in logs. Appears in the turn id like
@@ -81,12 +98,155 @@ class CompactionResult:
 
 
 def should_compact(turns: Sequence[Turn], policy: CompactionPolicy) -> bool:
-    """Cheap trigger check — safe to call after every turn."""
-    if policy.trigger_at <= policy.keep_recent:
+    """Cheap trigger check — safe to call after every turn.
+
+    Fires on turn count OR estimated token volume (when
+    ``policy.trigger_tokens`` is set). Both paths share the
+    ``len(turns) > keep_recent`` floor: with nothing older than the
+    keep window there is nothing to fold, and triggering would burn a
+    summariser round-trip for a guaranteed no-op (or oscillate every
+    turn if the kept window alone is over budget).
+    """
+    if len(turns) <= policy.keep_recent:
         return False
-    # Don't compact a thread that has already been compacted down to
-    # within the keep window (prevents oscillation on every new turn).
-    return len(turns) >= policy.trigger_at
+    if policy.trigger_at > policy.keep_recent and len(turns) >= policy.trigger_at:
+        return True
+    if policy.trigger_tokens is not None:
+        return estimate_turns_tokens(turns) >= policy.trigger_tokens
+    return False
+
+
+def _estimate_text_tokens(text: str) -> int:
+    """Same heuristic as the ReAct loop's ``_estimate_tokens``.
+
+    MUST stay in the same token units as
+    ``context_budget_tokens_for_model`` (Chinese ≈ 1.5 chars/token,
+    English ≈ 4 chars/token) so the volume trigger compares against a
+    budget derived from the same scale. A plain ``chars // 3`` would
+    halve CJK-heavy threads and delay compaction past the window.
+    """
+    cn = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
+    en = len(text) - cn
+    return int(cn / 1.5 + en / 4)
+
+
+def estimate_turns_tokens(turns: Sequence[Turn]) -> int:
+    """Estimate the token volume of ``turns`` (whole-thread context cost).
+
+    Walks every item and accumulates the token estimates of the fields
+    that actually ride the context: message texts, reasoning content,
+    command + aggregated output, MCP tool results/errors, file diffs,
+    plan/todo text, error messages. One pass, no regex, no slicing —
+    safe to call after every turn. Never raises on malformed items.
+    """
+    tokens = 0
+    try:
+        for turn in turns:
+            for item in getattr(turn, "items", None) or ():
+                tokens += _estimate_item_tokens(item)
+    except Exception:  # noqa: BLE001 — best-effort estimate
+        return 0
+    return tokens
+
+
+def _estimate_item_tokens(item: Any) -> int:
+    """Token estimate of one item's context-bearing fields.
+
+    Flat accumulation rather than isinstance dispatch: item kinds share
+    no common text field (``text`` / ``content`` / ``command`` / ...),
+    and ``getattr`` misses on undeclared pydantic fields return
+    ``None`` harmlessly, so each probe is a no-op for unrelated kinds.
+    """
+    tokens = 0
+    # UserMessageItem / AgentMessageItem / PlanItem.
+    text = getattr(item, "text", None)
+    if isinstance(text, str):
+        tokens += _estimate_text_tokens(text)
+    # ReasoningItem: content + summary lines live in the thread log
+    # and inflate replayed context even though the LLM summariser
+    # skips them when rendering its transcript.
+    content = getattr(item, "content", None)
+    if isinstance(content, str):
+        tokens += _estimate_text_tokens(content)
+    for line in getattr(item, "summary", None) or ():
+        if isinstance(line, str):
+            tokens += _estimate_text_tokens(line)
+    # CommandExecutionItem: command + aggregated_output.
+    command = getattr(item, "command", None)
+    if isinstance(command, str):
+        tokens += _estimate_text_tokens(command)
+        output = getattr(item, "aggregated_output", None)
+        if isinstance(output, str):
+            tokens += _estimate_text_tokens(output)
+    # McpToolCallItem: server/tool + error, else the result payload.
+    server = getattr(item, "server", None)
+    if isinstance(server, str):
+        tool = getattr(item, "tool", None)
+        tokens += _estimate_text_tokens(server) + (
+            _estimate_text_tokens(tool) if isinstance(tool, str) else 0
+        )
+        error = getattr(item, "error", None)
+        if isinstance(error, str):
+            tokens += _estimate_text_tokens(error)
+        else:
+            result = getattr(item, "result", None)
+            if result is not None:
+                with contextlib.suppress(Exception):  # noqa: BLE001 — exotic payloads
+                    tokens += _estimate_text_tokens(str(result))
+    # FileChangeItem: diffs dominate — the raw unified diff rides the
+    # context for audit/revert even when the UI renders hunks.
+    for change in getattr(item, "changes", None) or ():
+        path = getattr(change, "path", None)
+        if isinstance(path, str):
+            tokens += _estimate_text_tokens(path)
+        diff = getattr(change, "diff", None)
+        if isinstance(diff, str):
+            tokens += _estimate_text_tokens(diff)
+    # ErrorItem.
+    message = getattr(item, "message", None)
+    if isinstance(message, str):
+        tokens += _estimate_text_tokens(message)
+    # TodoListItem: explanation + entry titles.
+    explanation = getattr(item, "explanation", None)
+    if isinstance(explanation, str):
+        tokens += _estimate_text_tokens(explanation)
+    for entry in getattr(item, "plan", None) or ():
+        title = getattr(entry, "title", None)
+        if isinstance(title, str):
+            tokens += _estimate_text_tokens(title)
+    return tokens
+
+
+# Fallback trigger when the model can't be resolved (``auto`` routing,
+# empty planner, unknown id). Matches ``custom_model_flags``'s
+# documented 256k guess for unknown models: compacting early wastes a
+# summariser round-trip, compacting late overflows the window.
+_UNKNOWN_MODEL_TRIGGER_TOKENS = 230_400  # 256_000 * 0.9
+
+
+def compaction_trigger_tokens(model: str | None) -> int:
+    """Derive ``trigger_tokens`` from ``model``'s advertised context window.
+
+    Reuses the ReAct loop's ``context_budget_tokens_for_model`` so the
+    durable thread-log trigger and the hot-path message compression
+    share one scale: operator-configured window → models.dev snapshot
+    → name heuristics, each already reserving 10% for the next
+    response / tool schemas. Models the resolver can't place (``auto``,
+    blank, exotic relay ids) fall back to the 256k convention rather
+    than the resolver's 25k floor — 25k would fire the summariser on
+    nearly every thread.
+    """
+    try:
+        from runtime.core.cerebrum._react_context_helpers import (
+            context_budget_tokens_for_model,
+        )
+
+        budget = context_budget_tokens_for_model(model)
+    except Exception:  # noqa: BLE001 — never block wiring on a probe
+        return _UNKNOWN_MODEL_TRIGGER_TOKENS
+    if budget <= 25_000:
+        return _UNKNOWN_MODEL_TRIGGER_TOKENS
+    return budget
 
 
 def compact(

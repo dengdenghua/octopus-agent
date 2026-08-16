@@ -16,6 +16,8 @@ from runtime.memory.threads.compaction import (
     CompactionPolicy,
     CompactionResult,
     compact,
+    compaction_trigger_tokens,
+    estimate_turns_tokens,
     should_compact,
 )
 from runtime.memory.threads.event_log import EventLog
@@ -40,6 +42,7 @@ def _make_turn(
     user_text: str = "",
     agent_text: str = "",
     command: str | None = None,
+    items_extra: list | None = None,
 ) -> Turn:
     items: list = []
     if user_text:
@@ -48,6 +51,8 @@ def _make_turn(
         items.append(AgentMessageItem(text=agent_text))
     if command:
         items.append(CommandExecutionItem(command=command))
+    if items_extra:
+        items.extend(items_extra)
     return Turn(
         id=f"trn_{idx:04d}_{new_id().hex[:6]}",
         threadId=thread_id,
@@ -68,6 +73,126 @@ class TestTrigger:
     def test_fires_when_over_threshold(self) -> None:
         turns = [_make_turn(i) for i in range(25)]
         assert should_compact(turns, CompactionPolicy(trigger_at=20, keep_recent=10)) is True
+
+
+class TestTokenVolumeTrigger:
+    """W7: compaction must also fire on token volume, not just turn count.
+
+    The count path misses few-turns-huge-content threads — a couple of
+    20k-token tool dumps blow a 128k window long before turn 24.
+    """
+
+    def test_fires_below_turn_threshold_on_volume(self) -> None:
+        # 6 turns × ~30k chars ≈ 60k estimated tokens — far under the
+        # turn threshold but over the token one.
+        turns = [
+            _make_turn(i, user_text=f"ask-{i} ", agent_text="x" * 30_000)
+            for i in range(6)
+        ]
+        policy = CompactionPolicy(
+            trigger_at=24,
+            keep_recent=2,
+            trigger_tokens=10_000,
+        )
+        assert len(turns) < policy.trigger_at
+        assert should_compact(turns, policy) is True
+
+    def test_volume_path_disabled_by_default(self) -> None:
+        turns = [
+            _make_turn(i, user_text="ask", agent_text="x" * 30_000)
+            for i in range(6)
+        ]
+        # trigger_tokens unset → historical count-only behaviour.
+        assert should_compact(turns, CompactionPolicy(trigger_at=24, keep_recent=2)) is False
+
+    def test_volume_respects_keep_recent_floor(self) -> None:
+        # Over budget but nothing older than the keep window to fold —
+        # triggering would burn a summariser call for a guaranteed no-op
+        # and oscillate every turn.
+        turns = [_make_turn(i, agent_text="x" * 30_000) for i in range(3)]
+        policy = CompactionPolicy(trigger_at=24, keep_recent=10, trigger_tokens=1_000)
+        assert should_compact(turns, policy) is False
+
+    def test_token_triggered_compact_produces_summary(self) -> None:
+        turns = [
+            _make_turn(i, user_text=f"ask-{i}", agent_text=f"ans-{i} " + "y" * 20_000)
+            for i in range(8)
+        ]
+        policy = CompactionPolicy(trigger_at=24, keep_recent=3, trigger_tokens=5_000)
+        result = compact("th", turns, policy)
+        assert result is not None
+        # Everything older than the keep window folds into one summary.
+        assert result.superseded_ids == [t.id for t in turns[:5]]
+        assert len(result.summary_turn.items) == 1
+
+    def test_estimation_covers_heavy_item_kinds(self) -> None:
+        # MCP tool results, file diffs and reasoning content are the
+        # usual volume hogs — the estimator must count them all.
+        from runtime.protocol.items import (
+            FileChange,
+            FileChangeItem,
+            McpToolCallItem,
+            ReasoningItem,
+        )
+
+        turns = [
+            _make_turn(
+                0,
+                items_extra=[
+                    McpToolCallItem(
+                        server="srv",
+                        tool="search",
+                        result={"rows": ["r" * 3_000] * 3},
+                    ),
+                    FileChangeItem(
+                        changes=[
+                            FileChange(path="a.py", op="update", diff="+" + "d" * 6_000),
+                        ]
+                    ),
+                    ReasoningItem(content="think " * 1_000),
+                ],
+            ),
+        ]
+        # ~9k (mcp) + ~6k (diff) + ~5k (reasoning) chars at en/4 → ≥4k tokens.
+        assert estimate_turns_tokens(turns) >= 4_000
+
+    def test_estimation_is_zero_for_empty_thread(self) -> None:
+        assert estimate_turns_tokens([]) == 0
+
+    def test_cjk_not_halved_vs_react_scale(self) -> None:
+        # The trigger must use the same token units as
+        # context_budget_tokens_for_model (cn/1.5 + en/4). A chars//3
+        # estimate would halve Chinese threads and delay compaction
+        # past the window the budget was derived from.
+        cn_turns = [_make_turn(0, user_text="中" * 3_000)]
+        assert estimate_turns_tokens(cn_turns) >= 2_000  # 3000/1.5 = 2000
+
+
+class TestTriggerTokensDerivation:
+    """The token trigger derives from the model's advertised window.
+
+    128k / 256k / 1M models must compact at different volumes instead
+    of sharing one flat guess; unresolvable ids (``auto``) fall back
+    to the 256k convention rather than firing on every thread.
+    """
+
+    def test_unresolvable_model_falls_back_to_256k_convention(self) -> None:
+        assert compaction_trigger_tokens(None) == 230_400
+        assert compaction_trigger_tokens("auto") == 230_400
+
+    def test_known_model_families_use_name_heuristics(self) -> None:
+        # Non-custom models skip operator config and land in the
+        # resolver's family heuristics: 200k claude → 150k budget,
+        # 256k glm/deepseek → 230.4k budget.
+        assert compaction_trigger_tokens("claude-sonnet-4-5") == 150_000
+        assert compaction_trigger_tokens("glm-5.2") == 230_400
+
+    def test_trigger_scales_with_window(self) -> None:
+        # The whole point: a 1M-window model gets ~8x the headroom of
+        # a 128k one instead of a shared flat threshold.
+        small = compaction_trigger_tokens("claude-sonnet-4-5")
+        large = compaction_trigger_tokens("glm-5.2")
+        assert large > small * 1.5
 
 
 class TestCompact:
