@@ -588,16 +588,23 @@ class TestCronImDelivery:
         monkeypatch.setenv("OCTOPUS_CRON_EXECUTOR", "1")
         monkeypatch.setenv("OCTOPUS_CRON_EXECUTOR_POLL_SECONDS", "30")
 
+        import threading
+
+        ran = threading.Event()
+
         def _fake_run_due(deliver=None):
-            deliver(
-                {
-                    "name": "job",
-                    "channel_id": "c1",
-                    "thread_id": "th1",
-                    "output_excerpt": "done",
-                    "status": "ok",
-                }
-            )
+            try:
+                deliver(
+                    {
+                        "name": "job",
+                        "channel_id": "c1",
+                        "thread_id": "th1",
+                        "output_excerpt": "done",
+                        "status": "ok",
+                    }
+                )
+            finally:
+                ran.set()
 
         import runtime.execution.cron_executor as cron_exec
 
@@ -606,12 +613,17 @@ class TestCronImDelivery:
         cm = _FakeCM()
         holder: list = []
         cli_serve.register_cron_executor_task(_FakeRunner(), holder)
-        # Before the manager is published the tick's delivery is a no-op.
+        # Ticks are dispatched to a background cron worker (audit T-11), so
+        # wait for each tick to actually run before asserting.
         captured["callback"]()
+        assert ran.wait(5), "first tick never ran"
+        # Before the manager is published the tick's delivery is a no-op.
         assert cm.calls == []
         # Publish the manager (serve does this after construction) -> delivery flows.
         holder.append(cm)
+        ran.clear()
         captured["callback"]()
+        assert ran.wait(5), "second tick never ran"
         assert cm.calls == [("c1", "th1", "[章鱼助手 · 定时订阅] job\n状态：ok\ndone")]
 
 
