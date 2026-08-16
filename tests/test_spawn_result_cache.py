@@ -381,3 +381,76 @@ def test_declared_directory_digest_tracks_content(tmp_path: Any) -> None:
     (d / "a.txt").write_text("a2", encoding="utf-8")
     k2 = compute_spawn_cache_key(agent_id="r", prompt="p", input_files=[str(d)])
     assert k1 != k2
+
+
+# ═══════════════════════════════════════════════════════════
+# Audit F-10: TTL, audible eviction, owner validation
+# ═══════════════════════════════════════════════════════════
+
+
+def test_expired_token_is_dropped() -> None:
+    from runtime.execution.suckers.delegation_result_cache import (
+        _TOKEN_TTL_S,
+        create_spawn_cache,
+        load_spawn_cache,
+        reset_spawn_cache_store,
+    )
+
+    reset_spawn_cache_store()
+    try:
+        cache = create_spawn_cache(owner=None)
+        assert load_spawn_cache(cache.token) is cache
+        cache.created_at -= _TOKEN_TTL_S + 1  # backdate past the TTL
+        assert load_spawn_cache(cache.token) is None  # expired -> invalidated
+    finally:
+        reset_spawn_cache_store()
+
+
+def test_owner_validation() -> None:
+    from runtime.execution.suckers.delegation_result_cache import (
+        create_spawn_cache,
+        load_spawn_cache,
+        reset_spawn_cache_store,
+    )
+
+    reset_spawn_cache_store()
+    try:
+        cache = create_spawn_cache(owner="alice")
+        assert load_spawn_cache(cache.token, owner="alice") is cache
+        assert load_spawn_cache(cache.token, owner="bob") is None  # owner mismatch
+    finally:
+        reset_spawn_cache_store()
+
+
+def test_store_capacity_evicts_oldest_token_audibly() -> None:
+    from runtime.execution.suckers.delegation_result_cache import (
+        _MAX_TOKENS,
+        create_spawn_cache,
+        load_spawn_cache,
+        reset_spawn_cache_store,
+    )
+
+    reset_spawn_cache_store()
+    try:
+        first = create_spawn_cache(owner=None)
+        for _ in range(_MAX_TOKENS):
+            create_spawn_cache(owner=None)
+        assert load_spawn_cache(first.token) is None  # oldest evicted (FIFO)
+    finally:
+        reset_spawn_cache_store()
+
+
+def test_entry_capacity_refuses_and_keeps_old() -> None:
+    from runtime.execution.suckers.delegation_result_cache import (
+        _MAX_ENTRIES_PER_TOKEN,
+        SpawnResultCache,
+    )
+
+    cache = SpawnResultCache(token="t-cap")
+    result = {"success": True, "output": "x", "agent_id": "r"}
+    for i in range(_MAX_ENTRIES_PER_TOKEN):
+        assert cache.put(f"k{i}", result) is True
+    # At capacity, a NEW key is refused but existing entries stay readable.
+    assert cache.put("k-extra", result) is False
+    assert cache.get("k0") is not None
+    assert cache.get("k-extra") is None

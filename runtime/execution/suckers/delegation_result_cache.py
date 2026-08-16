@@ -29,10 +29,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import secrets
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any
+
+_log = logging.getLogger(__name__)
 
 # Context keys that differ per invocation without changing the work: closures
 # (unstable reprs), ambient stacks, routing decisions made per-call, and
@@ -57,6 +61,10 @@ _VOLATILE_CONTEXT_KEYS = frozenset(
 
 _MAX_ENTRIES_PER_TOKEN = 256
 _MAX_TOKENS = 128
+# Audit F-10: a resume token is valid for this long (absolute, since
+# creation); after that load_spawn_cache treats it as expired so stale
+# results are never replayed.
+_TOKEN_TTL_S = 24 * 60 * 60
 
 
 def _digest_input_files(paths: Any) -> str:
@@ -174,6 +182,8 @@ class SpawnResultCache:
     """One token's replay store. Thread-safe: parallel lanes put concurrently."""
 
     token: str
+    owner: str | None = None
+    created_at: float = field(default_factory=time.time)
     _entries: dict[str, dict[str, Any]] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -211,10 +221,17 @@ class SpawnResultCache:
             return False
         snapshot = {k: result[k] for k in _SNAPSHOT_FIELDS if k in result}
         snapshot["success"] = True
+        snapshot["_cached_at"] = time.time()
         with self._lock:
             if len(self._entries) < _MAX_ENTRIES_PER_TOKEN or key in self._entries:
                 self._entries[key] = snapshot
                 return True
+            _log.warning(
+                "spawn cache %s at capacity (%d entries) — evicting nothing, "
+                "refusing new entry (audit F-10)",
+                self.token[:8],
+                _MAX_ENTRIES_PER_TOKEN,
+            )
         return False
 
     def __len__(self) -> int:
@@ -226,25 +243,72 @@ _TOKEN_STORE: dict[str, SpawnResultCache] = {}
 _STORE_LOCK = threading.Lock()
 
 
-def create_spawn_cache(token: str = "") -> SpawnResultCache:
-    """Create (and register) a fresh cache. Token generated when omitted."""
+def _ambient_owner() -> str | None:
+    """Best-effort caller identity for owner validation (audit F-10): the
+    ambient session's thread id when one is bound, else None (no binding)."""
+    try:
+        from runtime.platform.process.session import current_session
+
+        sess = current_session()
+        if sess is not None:
+            return str(getattr(sess, "thread_id", "") or "").strip() or None
+    except Exception:  # noqa: BLE001 — owner binding is best-effort
+        pass
+    return None
+
+
+def create_spawn_cache(token: str = "", owner: str | None = None) -> SpawnResultCache:
+    """Create (and register) a fresh cache. Token generated when omitted.
+
+    ``owner`` (audit F-10) binds the cache to a caller identity; resumes from
+    a different owner are rejected by :func:`load_spawn_cache`. Defaults to
+    the ambient session's thread id.
+    """
     tok = str(token or "").strip() or f"src-{secrets.token_urlsafe(9)}"
-    cache = SpawnResultCache(token=tok)
+    cache = SpawnResultCache(token=tok, owner=owner if owner is not None else _ambient_owner())
     with _STORE_LOCK:
         while len(_TOKEN_STORE) >= _MAX_TOKENS:
-            _TOKEN_STORE.pop(next(iter(_TOKEN_STORE)))  # FIFO: oldest token goes
+            evicted = _TOKEN_STORE.pop(next(iter(_TOKEN_STORE)))
+            _log.warning(
+                "spawn cache store at capacity (%d tokens) — evicting oldest token "
+                "%s (audit F-10)",
+                _MAX_TOKENS,
+                evicted.token[:8],
+            )
         _TOKEN_STORE[tok] = cache
     return cache
 
 
-def load_spawn_cache(token: str) -> SpawnResultCache | None:
-    """Look up a previously issued cache. ``None`` for unknown/expired tokens -
-    the caller decides whether that is an error (a resume with a typo'd token
-    should fail loud, not silently re-run everything the caller thought was
-    cached).
+def load_spawn_cache(token: str, owner: str | None = None) -> SpawnResultCache | None:
+    """Look up a previously issued cache. ``None`` for unknown/expired tokens or
+    an owner mismatch — the caller decides whether that is an error (a resume
+    with a typo'd token should fail loud, not silently re-run everything the
+    caller thought was cached).
+
+    Audit F-10: a token older than ``_TOKEN_TTL_S`` is expired (dropped +
+    logged), and a cache bound to an owner refuses callers with a different
+    owner.
     """
+    tok = str(token or "").strip()
     with _STORE_LOCK:
-        return _TOKEN_STORE.get(str(token or "").strip())
+        cache = _TOKEN_STORE.get(tok)
+        if cache is None:
+            return None
+        if cache.created_at and (time.time() - cache.created_at) > _TOKEN_TTL_S:
+            _TOKEN_STORE.pop(tok, None)
+            _log.warning("spawn cache token %s expired (TTL %ds) — dropped", tok[:8], _TOKEN_TTL_S)
+            return None
+        if cache.owner is not None:
+            caller = owner if owner is not None else _ambient_owner()
+            if caller != cache.owner:
+                _log.warning(
+                    "spawn cache token %s owner mismatch (cache owner %r, caller %r) — refused",
+                    tok[:8],
+                    cache.owner,
+                    caller,
+                )
+                return None
+        return cache
 
 
 def reset_spawn_cache_store() -> None:
