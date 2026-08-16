@@ -144,6 +144,7 @@ class WorkflowEngine:
         max_items_per_call: int = 4096,
         sync_timeout_ms: int = 5000,
         dispose_grace_ms: int = 5000,
+        run_timeout_ms: int = 1_800_000,
         observer: WorkflowObserver | None = None,
         child_dispatch: ChildDispatcher | None = None,
     ) -> None:
@@ -163,6 +164,10 @@ class WorkflowEngine:
         self._max_items_per_call = max_items_per_call
         self._sync_timeout_ms = sync_timeout_ms
         self._dispose_grace_ms = dispose_grace_ms
+        # Audit T-10: a run-level total duration cap (0 disables). A runaway
+        # script that keeps calling hooks can no longer pin the process
+        # beyond this ceiling.
+        self._run_timeout_ms = max(0, int(run_timeout_ms))
         self._observer = observer or WorkflowObserver()
         self._child_dispatch = child_dispatch or partial(
             _default_child_dispatcher,
@@ -228,6 +233,7 @@ class WorkflowEngine:
             dispatch=self._child_dispatch,
             sync_timeout_ms=self._sync_timeout_ms,
             dispose_grace_ms=self._dispose_grace_ms,
+            run_timeout_ms=self._run_timeout_ms,
             observer=observer or self._observer,
         )
         run._spawn()  # noqa: SLF001 — same-package construction handshake
@@ -254,6 +260,7 @@ class WorkflowRun:
         dispatch: ChildDispatcher,
         sync_timeout_ms: int,
         dispose_grace_ms: int,
+        run_timeout_ms: int,
         observer: WorkflowObserver,
     ) -> None:
         self._engine = engine
@@ -262,6 +269,7 @@ class WorkflowRun:
         self._dispatch = dispatch
         self._sync_timeout_ms = sync_timeout_ms
         self._dispose_grace_ms = dispose_grace_ms
+        self._run_timeout_ms = max(0, int(run_timeout_ms))
         self._observer = observer
         self._loop: asyncio.AbstractEventLoop | None = None
         self._proc: subprocess.Popen[bytes] | None = None
@@ -274,6 +282,7 @@ class WorkflowRun:
         self._first_line_received = False
         self._sync_timer: asyncio.TimerHandle | None = None
         self._grace_timer: asyncio.TimerHandle | None = None
+        self._run_timer: asyncio.TimerHandle | None = None
         self._reader_task: asyncio.Task[Any] | None = None
         self._exit_task: asyncio.Task[Any] | None = None
         self._stderr_task: asyncio.Task[Any] | None = None
@@ -299,11 +308,18 @@ class WorkflowRun:
         self._loop = asyncio.get_running_loop()
         self._result_future = self._loop.create_future()
         try:
+            from runtime.platform.process.tree import process_group_kwargs
+
             self._proc = subprocess.Popen(
                 [sys.executable, "-m", "runtime.execution.workflow.worker"],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                # Audit T-10: the worker runs in its own session (pid ==
+                # pgid) so terminating it later kills the whole process
+                # group — subagent children the worker spawned do not
+                # outlive the run.
+                **process_group_kwargs(),
             )
         except OSError as exc:
             self._settle(
@@ -323,6 +339,13 @@ class WorkflowRun:
             self._sync_timeout_ms / 1000.0,
             self._on_sync_timeout,
         )
+        # Audit T-10: run-level total duration cap. Fires once; if the run
+        # is still alive it cancels with the cap reason.
+        if self._run_timeout_ms > 0:
+            self._run_timer = self._loop.call_later(
+                self._run_timeout_ms / 1000.0,
+                self._on_run_timeout,
+            )
         self._reader_task = self._loop.create_task(self._read_loop())
         self._exit_task = self._loop.create_task(self._wait_exit())
         self._stderr_task = self._loop.create_task(self._drain_stderr())
@@ -493,8 +516,9 @@ class WorkflowRun:
         self._cancel_reason = reason or "workflow cancelled"
         self._send_host_message(("cancel", self._cancel_reason))
         # Reply to in-flight children immediately so the script can settle
-        # fast; the abandoned child tasks keep running to completion in the
-        # background (octopus ``call_subagent`` has no cancel handle).
+        # fast. The worker now runs in its own session and force-settle
+        # terminates the whole process group (audit T-10), so subagent
+        # children do not outlive the run.
         for seq in list(self._in_flight):
             self._send_host_message(
                 (
@@ -522,6 +546,17 @@ class WorkflowRun:
             )
         )
 
+    def _on_run_timeout(self) -> None:
+        """Total-duration cap reached (audit T-10): cancel the run."""
+        if self._settled:
+            return
+        _logger.warning(
+            "workflow run %s exceeded total duration cap (%d ms)",
+            self.id,
+            self._run_timeout_ms,
+        )
+        self.cancel(reason=f"workflow run exceeded total duration cap ({self._run_timeout_ms} ms)")
+
     def _on_sync_timeout(self) -> None:
         if self._settled or self._first_line_received:
             return
@@ -543,13 +578,15 @@ class WorkflowRun:
         proc = self._proc
         if proc is None or proc.poll() is not None:
             return
+        # Audit T-10: kill the whole process group (worker + any subagent
+        # children it spawned) instead of only the direct child, so a
+        # cancelled run does not leave children running in the background.
         try:
-            proc.terminate()
-        except OSError:
-            return
-        try:
-            proc.wait(timeout=1.0)
-        except subprocess.TimeoutExpired:
+            from runtime.platform.process.tree import terminate_process_tree
+
+            terminate_process_tree(proc)
+        except Exception:  # noqa: BLE001 — best-effort termination
+            _logger.exception("workflow worker tree termination failed")
             with contextlib.suppress(OSError):
                 proc.kill()
 
@@ -589,6 +626,9 @@ class WorkflowRun:
         timer = getattr(self, "_sync_timer", None)
         if timer is not None:
             timer.cancel()
+        run_timer = getattr(self, "_run_timer", None)
+        if run_timer is not None:
+            run_timer.cancel()
         if not self._result_future.done():
             self._result_future.set_result(result)
         self._emit(

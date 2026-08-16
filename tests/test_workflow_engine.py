@@ -474,3 +474,53 @@ def test_default_child_bridge_routes_through_call_subagent() -> None:
         assert result.agents_started == 1
     finally:
         set_ephemeral_role_runner(previous)
+
+
+# ── Audit T-10: run-level duration cap + process-group termination ──────────
+
+
+def test_run_total_duration_cap() -> None:
+    """A run past its total duration cap settles promptly (cancelled with the
+    cap reason) instead of waiting for the slow child to finish."""
+    async def slow_dispatch(request: dict[str, Any]) -> dict[str, Any]:
+        await asyncio.sleep(5)
+        return {"ok": True, "output": "OUT", "structured": None, "stop_reason": "completed"}
+
+    async def scenario() -> Any:
+        engine = _engine(child_dispatch=slow_dispatch, run_timeout_ms=300, dispose_grace_ms=1000)
+        run = engine.start({"script": "a = await agent('long')\nreturn a", "meta": FAKE_META})
+        try:
+            return await asyncio.wait_for(run.result, timeout=5)
+        finally:
+            await run.dispose()
+
+    result = asyncio.run(scenario())
+    assert result.stop_reason == "cancelled"
+    assert "total duration cap" in (result.error or "")
+    assert result.agents_started == 1
+
+
+def test_worker_runs_in_own_session() -> None:
+    """The worker subprocess must be a session leader so tree termination
+    can kill its children (audit T-10)."""
+    import os
+
+    async def slow_dispatch(request: dict[str, Any]) -> dict[str, Any]:
+        await asyncio.sleep(0.5)
+        return {"ok": True, "output": "OUT", "structured": None, "stop_reason": "completed"}
+
+    async def scenario() -> Any:
+        engine = _engine(child_dispatch=slow_dispatch, run_timeout_ms=0)
+        # The worker stays alive awaiting the slow agent dispatch.
+        run = engine.start({"script": "a = await agent('x')\nreturn a", "meta": FAKE_META})
+        proc = run._proc  # noqa: SLF001 — test inspects the spawned worker
+        session_of_worker = os.getsid(proc.pid) if proc is not None else os.getsid(0)
+        try:
+            result = await asyncio.wait_for(run.result, timeout=10)
+            return result, session_of_worker
+        finally:
+            await run.dispose()
+
+    result, session_of_worker = asyncio.run(scenario())
+    assert result.stop_reason == "completed"
+    assert session_of_worker != os.getsid(0)
