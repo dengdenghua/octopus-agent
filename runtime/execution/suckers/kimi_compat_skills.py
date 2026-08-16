@@ -50,9 +50,17 @@ def _client(timeout_s: float = _HTTP_TIMEOUT_S) -> Any:
 
 
 def _ensure_path(path: str | Path, sandbox_dir: str | None = None) -> tuple[Path, str | None]:
+    """Resolve a caller-supplied path for a read/copy skill.
+
+    Audit S-05: ``allow_sensitive`` was set to True here, so a prompt-
+    injected request could name ``~/.ssh`` (or ``~/.aws``, ``~/.kube``,
+    ``/etc/passwd``, …) as a deploy source and have its secrets copied
+    into the servable deployments area. The sensitive-path check is the
+    hard floor; no skill caller gets to opt out.
+    """
     from runtime.safety.auth.path_guard import check_path
 
-    verdict = check_path(path, sandbox_dir=sandbox_dir, allow_sensitive=True)
+    verdict = check_path(path, sandbox_dir=sandbox_dir, allow_sensitive=False)
     if not verdict.allow:
         return Path(path), f"path_blocked: {verdict.reason}"
     return Path(verdict.resolved) if verdict.resolved else Path(path), None
