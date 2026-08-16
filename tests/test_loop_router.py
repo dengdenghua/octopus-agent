@@ -194,9 +194,10 @@ class _StubDispatcher:
         self.cancel_calls: list[tuple[str, str]] = []
         self.running: set[str] = set()
 
-    def submit(self, run_id: str) -> None:
+    def submit(self, run_id: str) -> bool:
         self.calls.append(run_id)
         self.running.add(run_id)
+        return True
 
     def is_running(self, run_id: str) -> bool:
         return run_id in self.running

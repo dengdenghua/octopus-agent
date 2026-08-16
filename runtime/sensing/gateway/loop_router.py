@@ -308,7 +308,8 @@ def create_loop_router(
         if background:
             if dispatcher is None:
                 raise HTTPException(503, "loop dispatcher unavailable")
-            dispatcher.submit(run.run_id)
+            if not dispatcher.submit(run.run_id):
+                raise HTTPException(429, "loop dispatcher queue full; retry later")
             return _owned_run(run.run_id, actor_id)
         if controller is None:
             raise HTTPException(503, "loop controller unavailable")
@@ -395,7 +396,8 @@ def create_loop_router(
         _owned_run(run_id, actor)
         if dispatcher is None:
             raise HTTPException(503, "loop dispatcher unavailable")
-        dispatcher.submit(run_id)
+        if not dispatcher.submit(run_id):
+            raise HTTPException(429, "loop dispatcher queue full; retry later")
         latest = _owned_run(run_id, actor)
         return latest.model_dump(mode="json")
 

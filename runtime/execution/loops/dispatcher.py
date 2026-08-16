@@ -17,22 +17,33 @@ class LoopRunDispatcher:
         controller: LoopController,
         store: LoopRunStore,
         max_workers: int = 2,
+        max_queued: int = 8,
     ) -> None:
         self.controller = controller
         self.store = store
+        self._max_workers = max(1, int(max_workers))
+        self._max_queued = max(0, int(max_queued))
         self._executor = SessionExecutor(
-            max_workers=max_workers,
+            max_workers=self._max_workers,
             thread_name_prefix="loop-run",
         )
         self._lock = threading.Lock()
         self._futures: dict[str, Future] = {}
         self._sources: dict[str, CancellationSource] = {}
 
-    def submit(self, run_id: str) -> None:
+    def submit(self, run_id: str) -> bool:
+        """Dispatch a run. Returns True when accepted; False when the queue is
+        full (audit T-16) — the caller maps that to a 429. An already-running
+        run is a no-op that still returns True."""
         with self._lock:
             current = self._futures.get(run_id)
             if current is not None and not current.done():
-                return
+                return True
+            pending = sum(1 for f in self._futures.values() if not f.done())
+            # Approximate the queued depth: futures beyond the active workers.
+            queued = max(0, pending - self._max_workers)
+            if queued >= self._max_queued:
+                return False
             source = CancellationSource()
             self._sources[run_id] = source
             future = self._executor.submit(
@@ -42,6 +53,7 @@ class LoopRunDispatcher:
             )
             self._futures[run_id] = future
             future.add_done_callback(lambda _done, run_id=run_id: self._forget(run_id))
+            return True
 
     def is_running(self, run_id: str) -> bool:
         with self._lock:

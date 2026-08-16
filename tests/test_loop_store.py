@@ -382,3 +382,41 @@ def test_prune_is_idempotent_when_within_policy(tmp_path) -> None:
         )
     assert store.prune(max_runs=100, ttl_seconds=0) == 0
     assert len(store.list(limit=1000)) == 5
+
+
+# ═══════════════════════════════════════════════════════════
+# Audit T-16: dispatcher queue cap refuses when full
+# ═══════════════════════════════════════════════════════════
+
+
+def test_dispatcher_queue_cap_refuses_when_full(tmp_path) -> None:
+    import threading
+    import time
+
+    from runtime.execution.loops.dispatcher import LoopRunDispatcher
+
+    release = threading.Event()
+    started: list[str] = []
+
+    class _SlowController:
+        def execute(self, run_id: str, cancellation_token=None):
+            started.append(run_id)
+            release.wait(10)
+            return None
+
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    d = LoopRunDispatcher(
+        controller=_SlowController(),
+        store=store,
+        max_workers=1,
+        max_queued=2,
+    )
+    try:
+        assert d.submit("r1") is True
+        assert d.submit("r2") is True  # queued
+        assert d.submit("r3") is True  # queued (1 running + 2 queued = cap)
+        assert d.submit("r4") is False  # queue full -> refused
+        assert d.submit("r1") is True  # already accepted run is a no-op True
+    finally:
+        release.set()
+        time.sleep(0.1)
