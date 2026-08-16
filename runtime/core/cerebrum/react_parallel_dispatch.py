@@ -59,6 +59,66 @@ _WRITE_TOOLS: frozenset[str] = frozenset(
 _MAX_PARALLEL_ACTIONS = 4
 
 
+# Audit T-07: wall-clock ceiling for a parallel tool batch. A single hung
+# tool must not pin the turn forever; beyond this the whole batch is
+# drained (completed lanes keep their results, the rest are timed out).
+_DEFAULT_PARALLEL_BATCH_TIMEOUT_S = 600.0
+
+
+def _absorb_lane_result(
+    fut: Any,
+    idx: int,
+    observations: list[str | None],
+    beak_steps: list[Any],
+) -> None:
+    try:
+        obs, bk = fut.result()
+    except Exception as exc:  # noqa: BLE001 — surface any worker exception as a tool error observation
+        obs, bk = (
+            f"(工具执行异常) {type(exc).__name__}: {exc}",
+            None,
+        )
+    observations[idx] = obs
+    beak_steps[idx] = bk
+
+
+def _collect_parallel_lane_results(
+    futures: dict[Any, int],
+    observations: list[str | None],
+    beak_steps: list[Any],
+    *,
+    timeout_s: float,
+) -> None:
+    """Drain a parallel batch under a wall-clock ceiling (audit T-07).
+
+    ``timeout_s <= 0`` waits indefinitely (old behaviour). On timeout,
+    completed lanes keep their results; lanes still running are cancelled
+    and marked with an explicit timeout observation so the batch returns a
+    merged answer instead of hanging the whole turn.
+    """
+    import concurrent.futures as _cf
+
+    if timeout_s is None or timeout_s <= 0:
+        for fut in _cf.as_completed(futures):
+            _absorb_lane_result(fut, futures[fut], observations, beak_steps)
+        return
+
+    try:
+        for fut in _cf.as_completed(futures, timeout=timeout_s):
+            _absorb_lane_result(fut, futures[fut], observations, beak_steps)
+    except _cf.TimeoutError:
+        for fut, idx in futures.items():
+            if observations[idx] is not None:
+                continue
+            if fut.done():
+                # Completed between the timeout and this sweep — keep its result.
+                _absorb_lane_result(fut, idx, observations, beak_steps)
+            else:
+                fut.cancel()
+                observations[idx] = f"(工具执行超时 · 超过并行批级上限 {timeout_s:g}s)"
+                beak_steps[idx] = None
+
+
 def _dispatch_parallel_actions(
     actions: list[str],
     *,
@@ -69,6 +129,7 @@ def _dispatch_parallel_actions(
     agent: Any,
     intent: ParsedIntent,
     beak_step_sink: list[Any] | None = None,
+    parallel_batch_timeout_s: float = _DEFAULT_PARALLEL_BATCH_TIMEOUT_S,
 ) -> Generator[Any, None, tuple[str, list[dict[str, object]]]]:
     """Concurrent multi-action dispatcher (口子 2).
 
@@ -272,17 +333,12 @@ def _dispatch_parallel_actions(
                 pool.submit(_parent_context.copy().run, _run_one, idx): idx
                 for idx in range(len(actions))
             }
-            for fut in _cf.as_completed(futures):
-                idx = futures[fut]
-                try:
-                    obs, bk = fut.result()
-                except Exception as exc:  # noqa: BLE001 — surface any worker exception as a tool error observation
-                    obs, bk = (
-                        f"(工具执行异常) {type(exc).__name__}: {exc}",
-                        None,
-                    )
-                observations[idx] = obs
-                beak_steps[idx] = bk
+            _collect_parallel_lane_results(
+                futures,
+                observations,
+                beak_steps,
+                timeout_s=parallel_batch_timeout_s,
+            )
 
     # Emit tool_end events in declared (action) order so the UI
     # transcript matches the model's intent.
