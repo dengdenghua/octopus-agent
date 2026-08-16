@@ -266,6 +266,7 @@ def _run_agent_graph(
                     "agent_id": n["agent_id"] or default_role,
                     "prompt": n["resolved_prompt"],
                     "bb_key": n["id"],
+                    "isolate": n["isolate"],
                     **({"output_schema": n["output_schema"]} if n["output_schema"] else {}),
                 }
                 for n in runnable

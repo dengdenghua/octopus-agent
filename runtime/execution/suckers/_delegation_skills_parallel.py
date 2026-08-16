@@ -195,6 +195,13 @@ def _call_agent_parallel(
                 # reply is validated (and re-asked once on mismatch) by
                 # call_subagent, and the parsed object rides back in the envelope.
                 "output_schema": raw.get("output_schema"),
+                # Filesystem isolation opt-in. A BOOLEAN, never a path: the
+                # worktree is created on the trusted side and its path handed to
+                # call_subagent. ``workspace`` is in
+                # MODEL_PROTECTED_CONTEXT_PREFIXES precisely so a model cannot
+                # aim confinement at a directory of its choosing, and this flag
+                # must not become a way around that.
+                "isolate": bool(raw.get("isolate")),
             }
         )
 
@@ -254,6 +261,69 @@ def _call_agent_parallel(
     except (ImportError, AttributeError):
         _ambient_react_stack = None
 
+    def _invoke(spec: dict[str, Any], call_context: dict[str, Any]) -> dict[str, Any]:
+        """Spawn one sub-agent, in its own git worktree when ``isolate`` is set.
+
+        The trusted side creates the worktree and passes its path, which
+        ``call_subagent`` pins as the session's write root — a model-supplied
+        path would be stripped by ``arg_guard``, and rightly so.
+
+        The scope DELETES the worktree on exit, so the diff is captured inside
+        it. Without that the isolated writes would simply vanish and isolation
+        would silently mean "discard the work". Nothing is auto-merged:
+        reconciling parallel edits stays a human call, matching ``tournament``.
+        """
+        if not spec.get("isolate"):
+            return call_subagent(
+                agent_id=spec["agent_id"],
+                prompt=spec["prompt"],
+                context=call_context,
+                timeout_s=timeout_s,
+                session=session,
+                use_cheap_model=bool(spec.get("cheap")),
+                output_schema=spec.get("output_schema"),
+            )
+
+        import os
+
+        from runtime.execution.subagents.worktree_loop import (
+            _capture_diff,
+            is_git_repo,
+            worktree_scope,
+        )
+
+        repo_root = os.getcwd()
+        if not is_git_repo(repo_root):
+            # Fail closed rather than silently running unisolated: the caller
+            # asked for confinement, and quietly writing to the live tree would
+            # be the opposite of what was requested.
+            return {
+                "agent_id": spec["agent_id"],
+                "output": "",
+                "success": False,
+                "error": f"isolate requested but not a git repo: {repo_root}",
+                "error_type": "isolation_unavailable",
+            }
+
+        label = str(spec.get("bb_key") or spec.get("spec_index") or "spawn")
+        with worktree_scope(repo_root, f"spawn-{label}") as (path, branch):
+            result = call_subagent(
+                agent_id=spec["agent_id"],
+                prompt=spec["prompt"],
+                context=call_context,
+                timeout_s=timeout_s,
+                session=session,
+                use_cheap_model=bool(spec.get("cheap")),
+                output_schema=spec.get("output_schema"),
+                workspace_path=path,
+            )
+            diff, files = _capture_diff(path)
+        result["isolated"] = True
+        result["branch"] = branch
+        result["diff"] = diff
+        result["files_touched"] = files
+        return result
+
     def _run_one(spec: dict[str, Any]) -> dict[str, Any]:
         # Bind parent session in this worker thread · ContextVars
         # don't propagate across threads automatically.
@@ -312,16 +382,11 @@ def _call_agent_parallel(
                 "subagent_route_decision": route_decision,
             }
         try:
-            result = call_subagent(
-                agent_id=spec["agent_id"],
-                prompt=spec["prompt"],
-                context=call_context,
-                timeout_s=timeout_s,
-                session=session,
-                use_cheap_model=bool(spec.get("cheap")),
-                output_schema=spec.get("output_schema"),
-            )
-        except (ConnectionError, TimeoutError, TypeError, ValueError) as exc:  # noqa: BLE001
+            result = _invoke(spec, call_context)
+        except (ConnectionError, TimeoutError, TypeError, ValueError, OSError) as exc:  # noqa: BLE001
+            # OSError joins the list because worktree creation touches git and
+            # the filesystem; an isolation failure must degrade to one failed
+            # lane, not take down the whole batch.
             result = {
                 "agent_id": spec["agent_id"],
                 "output": "",
@@ -346,15 +411,10 @@ def _call_agent_parallel(
                 )
             else:
                 try:
-                    retry = call_subagent(
-                        agent_id=spec["agent_id"],
-                        prompt=spec["prompt"],
-                        context=call_context,
-                        timeout_s=timeout_s,
-                        session=session,
-                        use_cheap_model=bool(spec.get("cheap")),
-                        output_schema=spec.get("output_schema"),
-                    )
+                    # A retried isolated lane gets a FRESH worktree: the first
+                    # attempt's tree is already gone, and reusing a half-written
+                    # one would hand the retry a dirty starting state.
+                    retry = _invoke(spec, call_context)
                     if retry.get("success"):
                         retry["retried"] = True
                         result = retry
@@ -368,7 +428,8 @@ def _call_agent_parallel(
                         result["error"] = (
                             f"{existing_err} (retry also failed: {retry.get('error') or 'unknown'})"
                         )
-                except (ConnectionError, TimeoutError, TypeError, ValueError):
+                except (ConnectionError, TimeoutError, TypeError, ValueError, OSError):
+                    # OSError: the retry's worktree creation can fail on its own.
                     result["retried"] = True
         # Record this spec's outcome against the smart-budget. Each
         # spec gets its own fingerprint so a failed spec doesn't
