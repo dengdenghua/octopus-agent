@@ -23,8 +23,6 @@ const TEXT_REPLACEMENTS: Record<string, string> = {
   "Loading diagram...": "正在加载图表...",
   "Mermaid Error:": "Mermaid 错误：",
   "Show Code": "显示代码",
-  "CSV": "CSV",
-  "Markdown": "Markdown",
 };
 
 function localizeStreamdownDom(root: HTMLElement) {
@@ -75,16 +73,27 @@ export function LocalizedStreamdown(props: StreamdownProps) {
 
     // Also watch for async additions (e.g. mermaid finishes rendering,
     // streamed markdown arrives, copy/download dropdown opens)
+    // Coalesce mutation bursts into one patch per frame: during streaming
+    // every chunk mutates the subtree, and an unthrottled callback would
+    // re-scan the whole container per token (and re-trigger itself).
+    let raf = 0;
     const observer = new MutationObserver(() => {
-      localizeStreamdownDom(container);
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        localizeStreamdownDom(container);
+      });
     });
     observer.observe(container, {
       childList: true,
       subtree: true,
       characterData: true,
     });
-    return () => observer.disconnect();
-  });
+    return () => {
+      observer.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
 
   return (
     <div ref={containerRef} className="streamdown-localized">
