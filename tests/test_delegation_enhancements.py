@@ -511,3 +511,29 @@ def test_call_agent_parallel_propagates_react_stack(mock_subagent, mock_builtins
     for call in mock_subagent.call_args_list:
         ctx = call.kwargs["context"]
         assert ctx.get("react_stack") is fake_stack
+
+
+# ─── Audit F-04: git lane failure degrades, never breaks the batch ─────────
+
+
+def test_isolated_git_lane_failure_degrades_to_failed_lane(mock_builtins, monkeypatch):
+    """A subprocess.CalledProcessError from worktree creation must degrade to
+    one failed lane instead of escaping and killing the whole parallel batch."""
+    import subprocess
+
+    from runtime.execution.suckers._delegation_skills_parallel import _call_agent_parallel
+    import runtime.execution.subagents.worktree_loop as wt_loop
+
+    def _boom(repo_root, name):
+        raise subprocess.CalledProcessError(128, ["git", "worktree", "add"])
+
+    monkeypatch.setattr(wt_loop, "worktree_scope", _boom)
+
+    result = _call_agent_parallel(
+        specs=[{"agent_id": "researcher", "prompt": "x", "isolate": True}],
+    )
+    assert result["ok"] is False
+    assert result["success_count"] == 0
+    assert result["failures"], "expected a failed lane record, not an exception"
+    err = str(result["failures"][0].get("error") or "")
+    assert "CalledProcessError" in err

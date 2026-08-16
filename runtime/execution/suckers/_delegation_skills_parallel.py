@@ -12,6 +12,7 @@ same pattern used by ``_delegation_skills_agent`` / ``_write_skills_background``
 from __future__ import annotations
 
 import json
+import subprocess
 from typing import Any
 
 from ._delegation_skills_common import (
@@ -383,7 +384,7 @@ def _call_agent_parallel(
             }
         try:
             result = _invoke(spec, call_context)
-        except (ConnectionError, TimeoutError, TypeError, ValueError, OSError) as exc:  # noqa: BLE001
+        except (ConnectionError, TimeoutError, TypeError, ValueError, OSError, subprocess.SubprocessError) as exc:  # noqa: BLE001
             # OSError joins the list because worktree creation touches git and
             # the filesystem; an isolation failure must degrade to one failed
             # lane, not take down the whole batch.
@@ -428,7 +429,7 @@ def _call_agent_parallel(
                         result["error"] = (
                             f"{existing_err} (retry also failed: {retry.get('error') or 'unknown'})"
                         )
-                except (ConnectionError, TimeoutError, TypeError, ValueError, OSError):
+                except (ConnectionError, TimeoutError, TypeError, ValueError, OSError, subprocess.SubprocessError):
                     # OSError: the retry's worktree creation can fail on its own.
                     result["retried"] = True
         # Record this spec's outcome against the smart-budget. Each
@@ -470,7 +471,7 @@ def _call_agent_parallel(
         for f in done:
             try:
                 results.append(f.result(timeout=1))
-            except (ConnectionError, TimeoutError, TypeError, ValueError) as exc:  # noqa: BLE001
+            except (ConnectionError, TimeoutError, TypeError, ValueError, subprocess.SubprocessError) as exc:  # noqa: BLE001
                 spec = future_specs.get(f, {})
                 task_label = (
                     spec.get("bb_key") or spec.get("role_label") or spec.get("agent_id_original")
