@@ -79,7 +79,6 @@ class TentaclePool:
         self._locks: dict[str, DeviceLock] = {}
         self._subscribers: list[Callable[[dict], Awaitable[None]]] = []
         self._lock = asyncio.Lock()
-        self._event_queue: asyncio.Queue[dict] = asyncio.Queue()
 
     # ── 注册 / 注销 ─────────────────────────────────────────
 
@@ -206,8 +205,8 @@ class TentaclePool:
         self._subscribers.append(callback)
 
     async def push_screen_change(self, event: dict) -> None:
-        """设备推送屏幕变化时调用."""
-        await self._event_queue.put(event)
+        """设备推送屏幕变化时调用 (audit P-10: the unbounded dead queue was
+        removed — delivery goes through the subscriber fan-out in _emit)."""
         await self._emit("device.screen_changed", event)
 
     # ── 内部 ────────────────────────────────────────────────
