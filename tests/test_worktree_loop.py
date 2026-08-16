@@ -176,3 +176,73 @@ def test_worktree_scope_cleans_up_on_error(tmp_path: Path):
         assert Path(path).is_dir()
         raise RuntimeError("x")
     assert _worktree_count(repo) == 1
+
+
+def _write_fake_gitdir(gitfile: Path, fake_gitdir: Path) -> None:
+    """Point a worktree's .git file at an attacker-controlled gitdir."""
+    gitfile.write_text(f"gitdir: {fake_gitdir}\n", encoding="utf-8")
+    (fake_gitdir / "config").write_text(
+        "[core]\n\thooksPath = .\n\tfsmonitor = true\n", encoding="utf-8"
+    )
+
+
+def test_worktree_loop_fails_closed_on_tampered_gitfile(tmp_path: Path):
+    """Audit F-03: a worker that rewrites the worktree's .git file to a
+    forged gitdir must not make the trusted side load the fake config — the
+    task fails closed and the main checkout stays untouched."""
+    repo = _init_repo(tmp_path)
+
+    def tamper_worker(path: str, task: str) -> None:
+        fake = Path(tmp_path) / "fake-gitdir"
+        fake.mkdir(exist_ok=True)
+        _write_fake_gitdir(Path(path) / ".git", fake)
+
+    r = run_worktree_loop(str(repo), ["t1"], tamper_worker)
+    # The task record fails (gitfile resolves outside the main gitdir) and
+    # the loop reports no success.
+    assert r["ok"] is False
+    assert r["succeeded"] == 0
+    assert r["results"][0]["error"]
+    assert "gitdir" in r["results"][0]["error"].lower()
+    # The main checkout must be untouched (no diff was captured, nothing
+    # applied, no worktrees left behind).
+    assert _worktree_count(repo) == 1
+    main_log = subprocess.run(
+        ["git", "-C", str(repo), "log", "--oneline"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    # exactly the init commit — no stray commits from a fake gitdir
+    assert len(main_log) == 1 and main_log[0].endswith("init")
+
+
+def test_worktree_loop_rejects_gitfile_escaping_main_repo(tmp_path: Path):
+    """Audit F-03: a .git file pointing OUTSIDE the main repo's git dir is
+    rejected even when it is not a fake-gitdir style escape."""
+    repo = _init_repo(tmp_path)
+
+    def escape_worker(path: str, task: str) -> None:
+        outside = tmp_path / "outside-git"
+        outside.mkdir(exist_ok=True)
+        _write_fake_gitdir(Path(path) / ".git", outside)
+
+    r = run_worktree_loop(str(repo), ["t1"], escape_worker)
+    assert r["ok"] is False
+    assert r["succeeded"] == 0
+    assert "gitdir" in r["results"][0]["error"].lower()
+
+
+def test_worktree_loop_capture_untouched_by_hardening(tmp_path: Path):
+    """Audit F-03 regression: normal worktree capture still produces the
+    exact per-task diff after gitdir pinning + hardening flags."""
+    repo = _init_repo(tmp_path)
+
+    def worker(path: str, task: str) -> None:
+        (Path(path) / "a.txt").write_text("hello\n", encoding="utf-8")
+
+    r = run_worktree_loop(str(repo), ["t1"], worker)
+    assert r["ok"] is True
+    assert r["results"][0]["files"] == ["a.txt"]
+    assert "+hello" in r["results"][0]["diff"]
+    assert _worktree_count(repo) == 1

@@ -49,6 +49,90 @@ def _git(cwd: str, *args: str, check: bool = True) -> subprocess.CompletedProces
     )
 
 
+# Audit F-03: a worktree's ``.git`` is a *file* pointing at the gitdir, and it
+# sits inside the worktree — inside a confined worker's write root. If a
+# worker (or a prompt-injected one) rewrites that file to point at an
+# attacker-controlled gitdir, a naive ``git -C <wt>`` would load config and
+# hooks from the fake gitdir (fsmonitor, hooksPath, include.path, diff
+# drivers) and execute them on the trusted side. Every per-worktree git call
+# therefore pins the gitdir/worktree explicitly and hardens the command:
+#   * --git-dir / --work-tree resolve the exact validated gitdir, so the
+#     worktree's ``.git`` file is never consulted again.
+#   * core.fsmonitor=false + core.hooksPath= neutralise the two classic
+#     auto-exec hooks; core.attributesFile= drops the shared attributes file.
+#   * --no-textconv on diff so a malicious in-worktree .gitattributes cannot
+#     trigger a configured textconv driver during capture.
+_GIT_HARDENING: tuple[str, ...] = (
+    "-c",
+    "core.fsmonitor=false",
+    "-c",
+    "core.hooksPath=",
+    "-c",
+    "core.attributesFile=",
+)
+
+
+def _resolve_worktree_gitdir(worktree: str, repo_root: str) -> str:
+    """Resolve and validate the gitdir a worktree's ``.git`` file points at.
+
+    Fail closed (audit F-03): the resolved gitdir must live inside the main
+    repo's git-common-dir; anything else (tampered ``.git`` file) raises so
+    the caller marks the task failed instead of running git against an
+    attacker-controlled repository.
+    """
+    gitfile = os.path.join(worktree, ".git")
+    try:
+        with open(gitfile, encoding="utf-8") as fh:
+            line = fh.read().strip()
+    except OSError as exc:
+        raise RuntimeError(f"worktree .git unreadable: {exc}") from exc
+    if not line.startswith("gitdir:"):
+        raise RuntimeError(f"worktree .git is not a gitdir pointer: {line[:80]!r}")
+    raw = line.split(":", 1)[1].strip()
+    gitdir = raw if os.path.isabs(raw) else os.path.normpath(os.path.join(worktree, raw))
+    # The main repo is trusted (its .git is the real one); the worktree gitdir
+    # must be nested inside it. Use --git-common-dir so linked-worktree repos
+    # (where repo_root's own .git is a gitfile too) still resolve to the real
+    # shared gitdir.
+    common = _git(repo_root, "rev-parse", "--git-common-dir", check=False)
+    if common.returncode != 0:
+        raise RuntimeError(f"cannot resolve main gitdir: {common.stderr.strip()}")
+    common_root = common.stdout.strip()
+    if not os.path.isabs(common_root):
+        common_root = os.path.normpath(os.path.join(repo_root, common_root))
+    try:
+        real_gitdir = os.path.realpath(gitdir)
+        real_common = os.path.realpath(common_root)
+        inside = os.path.commonpath([real_gitdir, real_common]) == real_common
+    except ValueError:
+        inside = False
+    if not inside:
+        raise RuntimeError(f"worktree gitdir escapes main repo: {gitdir}")
+    return gitdir
+
+
+def _git_in_worktree(
+    worktree: str,
+    repo_root: str,
+    *args: str,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    """Run git against a worktree with a pinned, validated gitdir (F-03)."""
+    gitdir = _resolve_worktree_gitdir(worktree, repo_root)
+    return subprocess.run(
+        [
+            "git",
+            f"--git-dir={gitdir}",
+            f"--work-tree={worktree}",
+            *_GIT_HARDENING,
+            *args,
+        ],
+        capture_output=True,
+        text=True,
+        check=check,
+    )
+
+
 def is_git_repo(path: str) -> bool:
     try:
         result = _git(path, "rev-parse", "--is-inside-work-tree", check=False)
@@ -64,6 +148,29 @@ def _slug(text: str, fallback: str) -> str:
     return cleaned or fallback
 
 
+def _restore_worktree_gitfile(worktree: str, expected_gitdir: str) -> None:
+    """Rewrite a worktree's ``.git`` file back to the gitdir we created it
+    with (audit F-03). A worker may have tampered the pointer; ``git worktree
+    remove`` refuses to remove a worktree whose gitdir no longer matches the
+    registry, so we restore the invariant we established at add time before
+    tearing the worktree down. Best-effort: cleanup must never raise."""
+    if not expected_gitdir:
+        return
+    gitfile = os.path.join(worktree, ".git")
+    try:
+        with open(gitfile, encoding="utf-8") as fh:
+            line = fh.read().strip()
+    except OSError:
+        return
+    if line == f"gitdir: {expected_gitdir}":
+        return
+    try:
+        with open(gitfile, "w", encoding="utf-8") as fh:
+            fh.write(f"gitdir: {expected_gitdir}\n")
+    except OSError:
+        pass
+
+
 @contextmanager
 def worktree_scope(repo_root: str, name: str) -> Iterator[tuple[str, str]]:
     """Create an isolated git worktree off HEAD, yield ``(path, branch)``, and
@@ -71,21 +178,39 @@ def worktree_scope(repo_root: str, name: str) -> Iterator[tuple[str, str]]:
     base = tempfile.mkdtemp(prefix="octo-wt-")
     path = os.path.join(base, "wt")
     branch = f"octo/wt-{name}"
+    gitdir = ""
     with _WORKTREE_LOCK:
         _git(repo_root, "worktree", "add", "-b", branch, path, "HEAD")
+        # Record the gitdir the worktree was registered with while the .git
+        # pointer is still pristine — cleanup restores it if a worker tampers
+        # with the file (audit F-03). git auto-uniquifies same-basename
+        # worktrees (wt, wt1, ...), so the admin dir name is not predictable;
+        # the pointer is the source of truth.
+        try:
+            with open(os.path.join(path, ".git"), encoding="utf-8") as fh:
+                gitdir = fh.read().strip().split(":", 1)[1].strip()
+        except OSError:
+            gitdir = ""
     try:
         yield path, branch
     finally:
         with _WORKTREE_LOCK:
+            _restore_worktree_gitfile(path, gitdir)
             _git(repo_root, "worktree", "remove", "--force", path, check=False)
+            _git(repo_root, "worktree", "prune", check=False)
             _git(repo_root, "branch", "-D", branch, check=False)
         shutil.rmtree(base, ignore_errors=True)
 
 
-def _capture_diff(worktree: str) -> tuple[str, list[str]]:
-    _git(worktree, "add", "-A", check=False)
-    diff = _git(worktree, "diff", "--cached", check=False).stdout
-    names = _git(worktree, "diff", "--cached", "--name-only", check=False).stdout
+def _capture_diff(worktree: str, repo_root: str) -> tuple[str, list[str]]:
+    # Fail closed: if the worktree's .git file was tampered with, resolving it
+    # raises and the task is marked failed rather than running git against a
+    # forged gitdir (audit F-03).
+    _git_in_worktree(worktree, repo_root, "add", "-A", check=False)
+    diff = _git_in_worktree(worktree, repo_root, "diff", "--cached", "--no-textconv", check=False).stdout
+    names = _git_in_worktree(
+        worktree, repo_root, "diff", "--cached", "--name-only", "--no-textconv", check=False
+    ).stdout
     files = [line for line in names.split("\n") if line.strip()]
     return diff, files
 
@@ -187,7 +312,7 @@ def run_worktree_loop(
             with worktree_scope(repo_root, name) as (path, branch):
                 record["branch"] = branch
                 worker(path, task)
-                record["diff"], record["files"] = _capture_diff(path)
+                record["diff"], record["files"] = _capture_diff(path, repo_root)
                 record["ok"] = True
         except Exception as exc:  # noqa: BLE001 — isolate one task's failure
             record["error"] = f"{type(exc).__name__}: {exc}"
