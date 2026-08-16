@@ -40,6 +40,13 @@ _CHECK_PATHS: tuple[str, ...] = (
     "runtime/core/cerebrum",
     "runtime/sensing/gateway",
     "runtime/platform/process",
+    # Audit Q-04: doubled the covered surface (was 4 packages). The
+    # ratchet freezes existing errors in mypy_baseline.txt; only NEW
+    # errors fail.
+    "runtime/safety/hooks",
+    "runtime/platform/config",
+    "runtime/core/nerves",
+    "runtime/memory/journal",
 )
 
 # ``<path>:<line>: error: <message>  [<code>]`` — notes and summaries are
