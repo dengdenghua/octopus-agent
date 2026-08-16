@@ -105,6 +105,43 @@ def test_ollama_forwards_the_catalog_and_parses_calls_back() -> None:
     assert "tool_calls=[]" not in code
 
 
+def test_ollama_streaming_reuses_the_call_path() -> None:
+    """The ReAct loop streams, so the fix only lands if streaming routes here.
+
+    ``ollama_router`` deliberately has no ``call_stream``: the abstract base
+    wraps ``call()`` as a synthetic stream and re-emits ``tool_calls`` as
+    ``tool_use`` events. If a real streaming override is ever added it must
+    forward the catalog too, or native mode silently regresses on ollama only.
+    """
+    from runtime.platform.models.llm import ModelRouter
+    from runtime.sensing.model_router.ollama_router import OllamaModelRouter
+
+    assert OllamaModelRouter.call_stream is ModelRouter.call_stream
+
+
+def test_base_stream_fallback_reemits_tool_calls() -> None:
+    """A fallback that dropped tool calls would make forwarding pointless."""
+    from runtime.platform.models.llm import CostEntry, ModelResponse, ModelRouter
+    from runtime.sensing.model_router.models import ToolCall
+
+    call = ToolCall(id="c1", name="edit_file", input={"path": "a.py"})
+
+    class _Stub(ModelRouter):
+        def call(self, request: ModelRequest) -> ModelResponse:
+            return ModelResponse(
+                text="",
+                tool_calls=[call],
+                input_tokens=0,
+                output_tokens=0,
+                cost=CostEntry(tokens_in=0, tokens_out=0, usd=0.0),
+                model="m",
+                provider="stub",
+            )
+
+    events = list(_Stub().call_stream(_request(force=True)))
+    assert [e.tool_call for e in events if e.type == "tool_use"] == [call]
+
+
 def test_ollama_parses_a_tool_call_from_an_openai_shaped_reply() -> None:
     """End-to-end shape check against the wire format ollama actually returns."""
     from runtime.sensing.model_router.models import ToolCall
