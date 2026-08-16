@@ -131,3 +131,71 @@ def test_rules_yaml_mtime_conflict(tmp_path: Path) -> None:
     data = resp.json()
     if data.get("ok") is not True:
         assert "modified externally" in data.get("error", "") or "parse failed" in data.get("error", "")
+
+
+def test_rules_yaml_put_schema_and_reload(tmp_path: Path) -> None:
+    rules = tmp_path / "rules.yaml"
+    rules.write_text(RULES_YAML, encoding="utf-8")
+    app = FastAPI()
+    admin = app.router
+    import runtime.core.nerves.reflex.rules_loader as rl
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(rl, "find_default_rules_file", lambda: rules)
+    register_reflex_editor_endpoints(
+        admin,
+        _reflex_router=SimpleNamespace(replace_reflexes=lambda _r: 1),
+        panel_html="<html>panel</html>",
+        editor_html="<html>editor</html>",
+    )
+    app.state._rl_patch = monkeypatch
+    client = TestClient(app)
+
+    # top-level not a list -> schema error
+    no_rules = client.post(
+        "/api/reflex/rules-yaml",
+        json={"content": "foo: bar\n", "expected_mtime": 0, "reload": False},
+    )
+    assert no_rules.json().get("ok") is False
+    assert "rules:" in no_rules.json().get("error", "")
+
+    # valid rules with reload=True -> reload path runs (fake replace_reflexes)
+    ok = client.post(
+        "/api/reflex/rules-yaml",
+        json={"content": RULES_YAML, "expected_mtime": 0, "reload": True},
+    )
+    data = ok.json()
+    assert data.get("ok") is True
+    assert data.get("reloaded") is True or data.get("reload_error")
+
+
+def test_rules_yaml_put_reload_failure(tmp_path: Path, monkeypatch) -> None:
+    rules = tmp_path / "rules.yaml"
+    rules.write_text(RULES_YAML, encoding="utf-8")
+    app = FastAPI()
+    admin = app.router
+    import runtime.core.nerves.reflex.rules_loader as rl
+    import runtime.cli as cli
+
+    monkeypatch.setattr(rl, "find_default_rules_file", lambda: rules)
+    monkeypatch.setattr(cli, "_build_reflex_router", lambda: (_ for _ in ()).throw(RuntimeError("no reflex")))
+
+    class _Router:
+        def replace_reflexes(self, reflexes):
+            return 0
+
+    register_reflex_editor_endpoints(
+        admin,
+        _reflex_router=_Router(),
+        panel_html="",
+        editor_html="",
+    )
+    client = TestClient(app)
+    resp = client.post(
+        "/api/reflex/rules-yaml",
+        json={"content": RULES_YAML, "expected_mtime": 0, "reload": True},
+    )
+    data = resp.json()
+    assert data.get("ok") is True
+    assert data.get("reloaded") is False
+    assert "reload_error" in data
