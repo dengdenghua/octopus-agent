@@ -151,6 +151,8 @@ class AnthropicModelRouter(Provider, ModelRouter):
 
                 tool_dicts = [t.model_dump() for t in request.tools]
                 create_kwargs["tools"] = prepare_cached_tools(tool_dicts)
+                if request.require_tool_use:
+                    create_kwargs["tool_choice"] = {"type": "any"}
             elif request.enable_thinking:
                 # Budget must be strictly < max_tokens. If the caller
                 # set a small max_tokens we clamp the budget.
@@ -385,6 +387,13 @@ class AnthropicModelRouter(Provider, ModelRouter):
 
                 tool_dicts = [t.model_dump() for t in request.tools]
                 create_kwargs["tools"] = prepare_cached_tools(tool_dicts)
+                # ``{"type": "any"}`` forces *some* tool call without naming
+                # which — the agentic loop asks for it after a prose-only
+                # round so narration is not an available decode. Omitted
+                # otherwise so the default (auto) semantics are unchanged.
+                # See ``_LoopState.zero_action_rounds``.
+                if request.require_tool_use:
+                    create_kwargs["tool_choice"] = {"type": "any"}
             elif request.enable_thinking:
                 requested_budget = (
                     thinking_budget_for_effort(

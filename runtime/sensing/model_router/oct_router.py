@@ -134,7 +134,11 @@ class OctModelRouter(Provider, ModelRouter):
                 }
                 for t in request.tools
             ]
-            payload["tool_choice"] = "auto"
+            # ``required`` is the agentic-loop escape hatch for a model that
+            # answered the previous round with prose only: it removes
+            # text-only as a decode option for exactly one round. See
+            # ``_LoopState.zero_action_rounds``.
+            payload["tool_choice"] = "required" if request.require_tool_use else "auto"
         return payload
 
     def call(self, request: ModelRequest) -> ModelResponse:

@@ -186,8 +186,14 @@ class GeminiModelRouter(Provider, ModelRouter):
             # toolConfig.functionCallingConfig.mode = "AUTO" is the
             # default when tools are present; we set it explicitly
             # to match Anthropic's ``tool_choice=auto`` semantics.
+            # ``ANY`` is Gemini's spelling of "must call some function" —
+            # the agentic loop asks for it after a prose-only round so a
+            # text-only reply is not an available decode. See
+            # ``_LoopState.zero_action_rounds``.
             payload["toolConfig"] = {
-                "functionCallingConfig": {"mode": "AUTO"},
+                "functionCallingConfig": {
+                    "mode": "ANY" if request.require_tool_use else "AUTO",
+                },
             }
         return payload
 

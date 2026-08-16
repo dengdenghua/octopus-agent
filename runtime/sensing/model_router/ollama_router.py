@@ -9,6 +9,7 @@ from .models import (
     ModelRequest,
     ModelResponse,
     ModelRouter,
+    ToolCall,
 )
 from .provider import Provider, ProviderCapabilities
 
@@ -115,6 +116,27 @@ class OllamaModelRouter(Provider, ModelRouter):
                     payload["max_tokens"] = request.max_tokens
                 if request.temperature is not None:
                     payload["temperature"] = request.temperature
+                # This router advertises ``supports_tool_use=True``, which
+                # makes ``native_tool_use_active()`` return True and puts the
+                # agentic loop into native mode — but the tool catalog was
+                # never forwarded and the response path hardcoded
+                # ``tool_calls=[]``. Native mode therefore could not produce a
+                # single action on ollama: every round came back as prose and
+                # the turn ended through the guard impasse. Ollama serves an
+                # OpenAI-compatible endpoint, so the same wire shape applies.
+                if request.tools:
+                    payload["tools"] = [
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": t.name,
+                                "description": t.description,
+                                "parameters": t.input_schema,
+                            },
+                        }
+                        for t in request.tools
+                    ]
+                    payload["tool_choice"] = "required" if request.require_tool_use else "auto"
 
                 resp = client.post(
                     f"{self._base_url}/v1/chat/completions",
@@ -137,10 +159,32 @@ class OllamaModelRouter(Provider, ModelRouter):
             choices = data.get("choices") or []
             text = ""
             finish_reason = None
+            raw_calls: list = []
             if choices:
                 msg = choices[0].get("message", {})
-                text = msg.get("content", "")
+                text = msg.get("content", "") or ""
                 finish_reason = choices[0].get("finish_reason")
+                raw_calls = msg.get("tool_calls") or []
+
+            # Forwarding the catalog is only half the fix: without parsing the
+            # calls back the loop still observes an actionless round.
+            tool_calls: list[ToolCall] = []
+            for tc in raw_calls:
+                if not isinstance(tc, dict):
+                    continue
+                fn = tc.get("function") or {}
+                args_raw = fn.get("arguments") or ""
+                try:
+                    args = json.loads(args_raw) if isinstance(args_raw, str) else args_raw
+                except json.JSONDecodeError:
+                    args = {}
+                tool_calls.append(
+                    ToolCall(
+                        id=str(tc.get("id") or ""),
+                        name=str(fn.get("name") or ""),
+                        input=args if isinstance(args, dict) else {},
+                    )
+                )
 
             usage = data.get("usage") or {}
             input_tokens = int(usage.get("prompt_tokens", 0) or 0)
@@ -148,7 +192,7 @@ class OllamaModelRouter(Provider, ModelRouter):
 
             return ModelResponse(
                 text=text,
-                tool_calls=[],
+                tool_calls=tool_calls,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 cost=CostEntry(tokens_in=input_tokens, tokens_out=output_tokens, usd=0.0),
