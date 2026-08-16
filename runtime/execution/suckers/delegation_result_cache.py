@@ -59,6 +59,57 @@ _MAX_ENTRIES_PER_TOKEN = 256
 _MAX_TOKENS = 128
 
 
+def _digest_input_files(paths: Any) -> str:
+    """Content digest of the declared input files (audit F-05).
+
+    A node that reads external files must declare them via ``input_files``
+    so editing the files invalidates the cache key — otherwise a resume
+    would replay a result computed against stale file contents. Files are
+    hashed by content (sha256), directories recursively; a missing path is
+    a stable marker (missing == missing), and an unreadable path degrades
+    to a marker rather than crashing the key computation. Relative paths
+    resolve against the process cwd.
+    """
+    from pathlib import Path
+
+    norm = sorted({str(x) for x in (paths or []) if x is not None})
+    parts: list[str] = []
+    for raw in norm:
+        p = Path(raw)
+        if not p.is_absolute():
+            p = Path.cwd() / p
+        parts.append(_digest_one_path(p))
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
+
+
+def _digest_one_path(p: Any) -> str:
+    from pathlib import Path
+
+    try:
+        if p.is_file():
+            try:
+                data = p.read_bytes()
+            except OSError:
+                return f"{p}:unreadable"
+            return f"{p}:sha256:{hashlib.sha256(data).hexdigest()}"
+        if p.is_dir():
+            entries: list[str] = []
+            try:
+                children = sorted(p.rglob("*"), key=lambda c: str(c))
+            except OSError:
+                return f"{p}:unreadable_dir"
+            for child in children:
+                try:
+                    if child.is_file():
+                        entries.append(_digest_one_path(child))
+                except OSError:
+                    entries.append(f"{child}:unreadable")
+            return f"{p}:dir:{"|".join(entries)}"
+    except OSError:
+        return f"{p}:unreadable"
+    return f"{p}:missing"
+
+
 def _digest_context(context: dict[str, Any] | None) -> str:
     """Stable digest of the context fields that shape the work.
 
@@ -82,12 +133,19 @@ def compute_spawn_cache_key(
     cheap: bool = False,
     context: dict[str, Any] | None = None,
     extra: dict[str, Any] | None = None,
+    input_files: Any = None,
 ) -> str:
     """Content hash identifying one spawn's work.
 
     ``extra`` carries identity-bearing fields the caller knows about but that
     don't live in the context - e.g. a node's ``output_schema``, which changes
     what a valid reply looks like even though the prompt is unchanged.
+
+    ``input_files`` (audit F-05): paths whose CONTENT the spawn reads.
+    Declaring them folds a content digest into the key, so editing an input
+    file invalidates the cached result instead of replaying stale output.
+    Nodes that read external files must declare them; undeclared reads are
+    the caller's responsibility (the cache stays opt-in at the token level).
     """
     material = json.dumps(
         {
@@ -96,6 +154,7 @@ def compute_spawn_cache_key(
             "cheap": bool(cheap),
             "context": _digest_context(context),
             "extra": extra or {},
+            "input_files": _digest_input_files(input_files),
         },
         sort_keys=True,
         ensure_ascii=False,

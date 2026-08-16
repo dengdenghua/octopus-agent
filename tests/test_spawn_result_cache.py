@@ -335,3 +335,49 @@ def test_isolated_nodes_never_replay(monkeypatch: Any) -> None:
     second = ds._run_agent_graph(nodes=graph, resume_token=token)
     assert "l" not in second["replayed"]
     assert any(s["bb_key"] == "l" for s in fake.spawned)
+
+
+# ═══════════════════════════════════════════════════════════
+# Audit F-05: declared input-file content folds into the cache key
+# ═══════════════════════════════════════════════════════════
+
+
+def test_key_moves_when_declared_input_file_changes(tmp_path: Any) -> None:
+    f = tmp_path / "data.txt"
+    f.write_text("v1", encoding="utf-8")
+    k1 = compute_spawn_cache_key(agent_id="r", prompt="p", input_files=[str(f)])
+    f.write_text("v2", encoding="utf-8")
+    k2 = compute_spawn_cache_key(agent_id="r", prompt="p", input_files=[str(f)])
+    assert k1 != k2  # modified input file invalidates the key
+
+
+def test_key_stable_for_unchanged_declared_input(tmp_path: Any) -> None:
+    f = tmp_path / "data.txt"
+    f.write_text("v1", encoding="utf-8")
+    k1 = compute_spawn_cache_key(agent_id="r", prompt="p", input_files=[str(f)])
+    k2 = compute_spawn_cache_key(agent_id="r", prompt="p", input_files=[str(f)])
+    assert k1 == k2
+
+
+def test_key_without_input_files_is_unchanged_semantics() -> None:
+    """Not declaring input_files keeps the old key shape (no digest)."""
+    k1 = compute_spawn_cache_key(agent_id="r", prompt="p")
+    k2 = compute_spawn_cache_key(agent_id="r", prompt="p")
+    assert k1 == k2
+
+
+def test_missing_and_unreadable_inputs_are_stable(tmp_path: Any) -> None:
+    missing = tmp_path / "nope.txt"
+    k1 = compute_spawn_cache_key(agent_id="r", prompt="p", input_files=[str(missing)])
+    k2 = compute_spawn_cache_key(agent_id="r", prompt="p", input_files=[str(missing)])
+    assert k1 == k2
+
+
+def test_declared_directory_digest_tracks_content(tmp_path: Any) -> None:
+    d = tmp_path / "inputs"
+    d.mkdir()
+    (d / "a.txt").write_text("a1", encoding="utf-8")
+    k1 = compute_spawn_cache_key(agent_id="r", prompt="p", input_files=[str(d)])
+    (d / "a.txt").write_text("a2", encoding="utf-8")
+    k2 = compute_spawn_cache_key(agent_id="r", prompt="p", input_files=[str(d)])
+    assert k1 != k2

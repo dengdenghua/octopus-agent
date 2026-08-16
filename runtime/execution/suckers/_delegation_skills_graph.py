@@ -211,6 +211,9 @@ def _node_cache_key(
             # non-isolated result with an isolated spawn of the same prompt.
             "isolate": bool(node.get("isolate")),
         },
+        # Audit F-05: a node that reads external files declares them so the
+        # cache key moves when their content changes (no stale replay).
+        input_files=node.get("input_files"),
     )
 
 
