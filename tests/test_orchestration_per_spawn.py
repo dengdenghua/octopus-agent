@@ -23,6 +23,7 @@ from runtime.execution.suckers._delegation_skills_common import (
 from runtime.execution.suckers._delegation_skills_orchestration import (
     _ROLE_LENS,
     _finder_spec,
+    _lens_for,
     _synthesis_spec,
 )
 
@@ -75,6 +76,27 @@ def test_unknown_role_omits_the_lens_block_rather_than_inventing_one() -> None:
     assert "GOAL:\ng" in spec["prompt"]
 
 
+def test_lens_lookup_tolerates_the_spellings_models_actually_write() -> None:
+    """``_coerce_roles`` keeps the caller's spelling, and the downstream role
+    resolver casefolds — so an exact-match lens lookup would drop the lens while
+    keeping the role, silently reverting to N identical prompts.
+    """
+    for spelling in ("Researcher", "RESEARCHER", " researcher ", "Security_Review"):
+        assert _lens_for(spelling), f"lens lost for {spelling!r}"
+
+
+def test_every_canonical_lens_key_survives_its_own_normalisation() -> None:
+    """Guards against adding a key that the normaliser can never match."""
+    assert [k for k in _ROLE_LENS if _lens_for(k) is None] == []
+
+
+def test_every_lens_role_is_a_spawnable_agent() -> None:
+    """A lens for a role the registry rejects would never reach a worker."""
+    from runtime.execution.suckers._delegation_skills_common import _allowed_agent_ids
+
+    assert set(_ROLE_LENS) <= set(_allowed_agent_ids())
+
+
 def test_finder_spec_keeps_the_structured_output_schema() -> None:
     """The schema is what makes findings survive multi-line prose."""
     spec = _finder_spec("researcher", "g", [])
@@ -124,6 +146,39 @@ def test_synthesis_spawn_does_not_inherit_roles_zero(monkeypatch: Any) -> None:
 def test_synthesizer_carries_no_finder_schema() -> None:
     """It returns prose, not a findings array; a schema would reject it."""
     assert "output_schema" not in _synthesis_spec("g", ["a"])
+
+
+# ── verification stays homogeneous, unlike discovery ──────────────
+
+
+def test_voters_deliberately_share_one_ballot() -> None:
+    """Not an oversight mirroring the finder defect — the opposite requirement.
+
+    A jury's majority only means something if every voter answered the SAME
+    question under the same framing. Giving voters distinct lenses would make
+    them answer different questions and the tally meaningless. Discovery wants
+    divergence; verification wants identical conditions.
+    """
+    import inspect
+
+    from runtime.execution.suckers import _delegation_skills_vote as vote_mod
+
+    src = inspect.getsource(vote_mod._call_agent_vote)
+    assert '"prompt": ballot' in src
+    assert "for _ in range(n_int)" in src, "voters no longer share one ballot"
+
+
+# ── facade: helpers stay reachable through delegation_skills ───────
+
+
+def test_spec_builders_are_re_exported_like_their_prompt_siblings() -> None:
+    """``_finder_prompt`` / ``_synthesis_prompt`` are re-exported for
+    monkeypatching; the spec builders that wrap them must be too, or callers
+    reach past the facade into the private module.
+    """
+    for name in ("_finder_spec", "_synthesis_spec"):
+        assert hasattr(ds, name), f"{name} missing from the delegation_skills facade"
+        assert name in ds.__all__
 
 
 # ── spawn accounting: the count nobody was pinning ────────────────

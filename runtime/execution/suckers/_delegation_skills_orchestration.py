@@ -201,8 +201,23 @@ _ROLE_LENS: dict[str, str] = {
 }
 
 
+def _lens_for(role: str) -> str | None:
+    """Look up a role's lens tolerantly.
+
+    ``_coerce_roles`` preserves the caller's spelling verbatim, and a model
+    writing ``agent_id=["Researcher", "Security_Review"]`` is routine. The role
+    itself still resolves downstream (``_resolve_custom_agent_id`` casefolds),
+    so an exact-match lookup here would drop the lens while keeping the role —
+    a silent degradation back to N identical prompts, which is the very thing
+    the lens exists to prevent. Normalise case and ``_``/``-`` the same way the
+    resolver does.
+    """
+    key = str(role or "").strip().lower().replace("_", "-")
+    return _ROLE_LENS.get(key)
+
+
 def _finder_prompt(goal: str, seen: list[str], role: str = "") -> str:
-    lens = _ROLE_LENS.get(str(role).strip())
+    lens = _lens_for(role)
     base = f"You are one worker in a parallel discovery pass.\n\nGOAL:\n{goal}\n\n"
     if lens:
         base += (
