@@ -207,13 +207,25 @@ def _build_workflow_preset_prompt(workflow_preset: str | None) -> str:
     ``audit.ultracode`` additionally triggers deterministic multi-agent
     orchestration in the ReAct runtime.
 
-    Spawn DEPTH is deliberately NOT set here — it stays governed by the operator
-    orchestration budget (``OCTOPUS_ORCH_TOKEN_BUDGET``; conservative 48-spawn cap
-    unless the operator opts in). This prompt only steers WHAT to do, never how
-    many agents to allow, so a client picking this preset cannot escalate its own
-    spawn budget. The directive is also defensive about skill availability: if the
-    ``run_orchestration`` skill is gated out for this agent, fall back to a manual
-    multi-pass review rather than calling a tool that isn't there.
+    Spawn CEILING is deliberately NOT set here — it stays governed by the operator
+    orchestration budget (``OCTOPUS_ORCH_TOKEN_BUDGET`` and the runtime ceiling in
+    ``_delegation_skills_orchestration``). This prompt only steers WHAT to do and
+    how WIDE to ask, never how many agents are permitted, so a client picking this
+    preset cannot escalate its own spawn budget.
+
+    The orchestration trigger is deliberately DEFAULT-ON with an inverted bar
+    ("is this trivial enough to skip fan-out?"), not conditional on the model
+    first noticing parallelisable sub-problems. The older conditional phrasing
+    ("when independent sub-problems exist, fan out") left the judgement call to a
+    model that reliably decided its current task did not qualify, so the preset
+    read as deep-thinking guidance and produced single-agent runs. The directive
+    also names concrete widths, because ``run_orchestration`` defaults to n=3 /
+    rounds=2 (6 spawns) and an unparameterised call silently stays narrow no
+    matter how high the operator ceiling is.
+
+    Still defensive about skill availability: if ``run_orchestration`` is gated
+    out for this agent, fall back to a manual multi-pass review rather than
+    calling a tool that isn't there.
     """
     preset = (workflow_preset or "").strip().lower()
     if preset == "codex.plan":
@@ -241,13 +253,25 @@ def _build_workflow_preset_prompt(workflow_preset: str | None) -> str:
         body = (
             "当前工作流: ultracode / 深度模式。\n"
             "- 以最详尽、最正确的答案为目标,不要因为 token 成本就提前收手;"
-            "质量优先于速度。\n"
-            "- 存在可并行推进的独立子问题时,主动扇出子代理;若具备 `run_orchestration` "
-            "技能,用它发起多视角编排(如 [critic, explorer, researcher])收集→去重→"
-            "投票核验→综合;不具备则按模块自行分轮交叉推进。扇出深度由部署预算约束,"
-            "你负责发起与编排,不自行抬高 spawn 上限。\n"
+            "质量优先于速度。token 成本不是约束条件。\n"
+            "- **默认就要编排,不要等到发现可并行子问题才编排。** 每个实质性任务都先用 "
+            "`run_orchestration` 发起多代理编排;只有纯对话轮次和琐碎的机械改动(改错别字、"
+            "单行修复)才允许独自完成。判断标准是反向的:不是「这值得扇出吗」,而是"
+            "「这琐碎到不配扇出吗」。\n"
+            "- 扇出要**开够宽度**。默认参数(n=3, rounds=2)只有 6 个 spawn,对深度任务偏窄:"
+            "显式传 `n`(单次编排上限 6,深度任务就按 5-6 开)、需要多轮深挖时传 `rounds`"
+            "(上限 5),并开 `verify`(投票核验)和 `synthesize`(综合)。单次编排装不下的"
+            "工作量,用**多次串联编排**覆盖,而不是传一个会被夹掉的大 n。扇出上限由部署"
+            "预算约束,你负责把宽度提到任务真实需要的量级,但不自行抬高 spawn 上限。\n"
+            "- 多阶段工作(理解→设计→实现→审查)按阶段**串联多次编排**,每次读完结果再决定"
+            "下一阶段,而不是一次编排包办全部。你始终在环里。\n"
+            "- 质量模式,按任务形态挑用:并行分片求全覆盖;独立视角互不干扰再交叉核验;"
+            "对抗性验证(专门派人推翻已有结论);完整性批判(专门派人找漏掉了什么);"
+            "循环到榨干(重复扇出直到不再有新发现)。\n"
             "- 给出结论前做对抗性自检:找反例、复核关键断言与证据(文件:行),"
-            "核验未通过的标注为存疑,而不是满足于首版答案。"
+            "核验未通过的标注为存疑,而不是满足于首版答案。\n"
+            "- 若 `run_orchestration` 技能被网关裁掉了,退化为按模块自行分轮交叉推进,"
+            "不要去调一个不存在的工具。"
         )
     elif preset == "develop.iterate":
         body = (

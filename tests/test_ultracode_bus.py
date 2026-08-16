@@ -145,3 +145,80 @@ def test_emitter_exception_never_breaks_run(monkeypatch: pytest.MonkeyPatch) -> 
     with ds.orchestration_progress_scope(_boom):
         result = ds._run_orchestration(goal="g", n=1, rounds=1, patience=0, verify=False)
     assert result["ok"] is True
+
+
+# ── the operating contract in the preset prompt ──────────────────
+#
+# The bus wires above make fan-out POSSIBLE; the prompt is what makes it
+# HAPPEN. An earlier revision phrased the trigger conditionally ("when
+# independent sub-problems exist, fan out"), which left the call to a model
+# that reliably judged its own task not to qualify — so the preset read as
+# deep-thinking advice and produced single-agent runs on a runtime whose
+# ceiling was in the hundreds. These pin the parts that carry that behaviour.
+
+
+def _ultracode_prompt() -> str:
+    from runtime.core.cerebrum._react_context_code import (
+        _build_workflow_preset_prompt,
+    )
+
+    return _build_workflow_preset_prompt("audit.ultracode")
+
+
+def test_ultracode_prompt_makes_orchestration_the_default() -> None:
+    prompt = _ultracode_prompt()
+
+    assert "默认就要编排" in prompt
+    # The bar must be inverted: not "is this worth fanning out" but "is this
+    # trivial enough to skip it".
+    assert "这琐碎到不配扇出吗" in prompt
+    assert "run_orchestration" in prompt
+
+
+def test_ultracode_prompt_names_widths_the_code_actually_honours() -> None:
+    """The prompt may not advertise a width the clamp silently eats.
+
+    ``_run_orchestration`` clamps n to 1-6 and rounds to 1-5, so telling the
+    model to pass n=12 would produce a value quietly reduced to 6 — the model
+    would believe it fanned out twice as wide as it did.
+    """
+    prompt = _ultracode_prompt()
+
+    assert "上限 6" in prompt, "must state the real n ceiling"
+    assert "8-16" not in prompt, "must not advertise a width the clamp eats"
+    # Over-wide work is covered by chaining orchestrations, not by a bigger n.
+    assert "多次串联编排" in prompt
+
+
+def test_ultracode_prompt_keeps_the_spawn_ceiling_operator_owned() -> None:
+    """The preset steers WHAT and HOW WIDE, never how many spawns are allowed:
+    a client picking the preset must not be able to raise its own ceiling."""
+    prompt = _ultracode_prompt()
+
+    assert "不自行抬高 spawn 上限" in prompt
+
+
+def test_ultracode_prompt_degrades_when_skill_is_gated_out() -> None:
+    prompt = _ultracode_prompt()
+
+    assert "被网关裁掉" in prompt
+    assert "不要去调一个不存在的工具" in prompt
+
+
+def test_other_presets_do_not_inherit_the_fan_out_mandate() -> None:
+    from runtime.core.cerebrum._react_context_code import (
+        _build_workflow_preset_prompt as build,
+    )
+
+    for preset in (
+        "codex.plan",
+        "codex.spec",
+        "codex.goal",
+        "develop.iterate",
+        "audit.review",
+        "uxui.regression",
+    ):
+        body = build(preset)
+        assert body, f"{preset} must still render a contract"
+        assert "默认就要编排" not in body, f"{preset} must not mandate fan-out"
+    assert build("nope") == ""
