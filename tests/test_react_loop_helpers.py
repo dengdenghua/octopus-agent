@@ -168,3 +168,38 @@ def test_default_checkpoint_interval_is_throttled(monkeypatch) -> None:
     # The cadence helper fires on multiples of the interval.
     assert rc._should_auto_checkpoint(10, interval) is True
     assert rc._should_auto_checkpoint(5, interval) is False
+
+
+# ─── Audit Q-05: react_model_stream pure helpers ─────────────────────────────
+
+
+def test_stream_answer_body_extracts_final() -> None:
+    from runtime.core.cerebrum.react_model_stream import _stream_answer_body
+
+    assert _stream_answer_body("plain prose") == "plain prose"
+    assert "the answer" in _stream_answer_body("Thought: x\nFinal Answer: the answer")
+
+
+def test_safe_stream_end_holds_protocol_leader() -> None:
+    from runtime.core.cerebrum.react_model_stream import _safe_stream_end
+
+    assert _safe_stream_end("") == 0
+    # Plain prose is released fully.
+    assert _safe_stream_end("hello world") == len("hello world")
+    # A possible "Action:" leader is held back until the parser sees it whole.
+    assert _safe_stream_end("let's think\nAct") < len("let's think\nAct")
+    assert _safe_stream_end("let's think\nAction: echo") < len("let's think\nAction: echo")
+
+
+def test_stream_has_protocol_detection() -> None:
+    from runtime.core.cerebrum.react_model_stream import _stream_has_protocol
+
+    assert _stream_has_protocol("Action: echo hi") is True
+    assert _stream_has_protocol("ordinary answer text") is False
+
+
+def test_ambient_subagent_session_id_best_effort() -> None:
+    from runtime.core.cerebrum.react_model_stream import _ambient_subagent_session_id
+
+    # No sub-agent ambient set in this test thread -> "" (never raises).
+    assert _ambient_subagent_session_id() == ""
