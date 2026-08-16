@@ -109,3 +109,45 @@ def test_bookkeeping_success_does_not_hide_an_unrecovered_tool_failure():
     ]
 
     assert _has_unrecovered_beak_failure(steps)
+
+
+# ─── Audit T-17: deadline closes the underlying model stream ────────────────
+
+
+def test_model_deadline_closes_underlying_stream() -> None:
+    """When the inactivity deadline fires, the pump's underlying stream must
+    be closed so the provider connection aborts instead of lingering."""
+    import threading
+    import time
+
+    from runtime.core.cerebrum.react_model_deadlines import (
+        _MODEL_STREAM_DEADLINE,
+        _iter_model_stream_with_deadline,
+    )
+
+    closed = threading.Event()
+
+    class _FakeRouter:
+        def call_stream(self, request):
+            def gen():
+                try:
+                    while True:
+                        time.sleep(0.01)
+                        yield {"delta": "x"}
+                finally:
+                    closed.set()
+
+            return gen()
+
+    events = list(
+        _iter_model_stream_with_deadline(
+            _FakeRouter(),
+            object(),
+            timeout_s=0.15,
+            visible_started=lambda: None,
+            any_activity_counts=False,
+        )
+    )
+    assert closed.wait(1), "underlying stream was not closed after the deadline"
+    # The deadline marker is yielded before the generator returns.
+    assert events and events[-1] is _MODEL_STREAM_DEADLINE

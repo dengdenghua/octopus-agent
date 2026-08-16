@@ -9,6 +9,7 @@ inactivity deadline once user-visible tokens start flowing.
 
 from __future__ import annotations
 
+import contextlib
 import contextvars
 import queue
 import threading
@@ -120,6 +121,10 @@ def _iter_model_stream_with_deadline(
     event_queue: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=64)
     stop_event = threading.Event()
     caller_context = contextvars.copy_context()
+    # Audit T-17: shared holder so the deadline path can close the pump's
+    # underlying stream (the provider connection) instead of letting the
+    # pump thread linger inside the blocking read.
+    pump_stream_holder: dict[str, Any] = {"stream": None}
     _current_cancellation_token: Any = None
     try:
         from runtime.safety.approval.cancellation import (
@@ -139,8 +144,10 @@ def _iter_model_stream_with_deadline(
                 continue
 
     def _consume() -> None:
+        stream = router.call_stream(request)
+        pump_stream_holder["stream"] = stream
         try:
-            for event in router.call_stream(request):
+            for event in stream:
                 if stop_event.is_set():
                     break
                 _put("event", event)
@@ -199,6 +206,16 @@ def _iter_model_stream_with_deadline(
                 return
     finally:
         stop_event.set()
+        # Audit T-17: a deadline/cancel fired — close the underlying stream
+        # (best-effort) so the pump thread's provider read aborts instead of
+        # lingering until the provider's own timeout. Closing a generator
+        # mid-iteration from another thread is best-effort; a genuinely
+        # stuck provider read is additionally bounded by the router's read
+        # timeout.
+        stream = pump_stream_holder.get("stream")
+        if stream is not None and hasattr(stream, "close"):
+            with contextlib.suppress(Exception):
+                stream.close()
 
 
 def _collect_model_stream_text_with_deadline(
