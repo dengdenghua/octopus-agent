@@ -167,7 +167,7 @@ def _restore_worktree_gitfile(worktree: str, expected_gitdir: str) -> None:
     try:
         with open(gitfile, "w", encoding="utf-8") as fh:
             fh.write(f"gitdir: {expected_gitdir}\n")
-    except OSError:
+    except OSError:  # noqa: BLE001 — best-effort cleanup must never raise
         pass
 
 
