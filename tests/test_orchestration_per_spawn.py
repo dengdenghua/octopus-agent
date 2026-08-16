@@ -151,21 +151,43 @@ def test_synthesizer_carries_no_finder_schema() -> None:
 # ── verification stays homogeneous, unlike discovery ──────────────
 
 
-def test_voters_deliberately_share_one_ballot() -> None:
+def test_voters_deliberately_share_one_ballot(monkeypatch: Any) -> None:
     """Not an oversight mirroring the finder defect — the opposite requirement.
 
     A jury's majority only means something if every voter answered the SAME
-    question under the same framing. Giving voters distinct lenses would make
+    question under the same framing. Giving voters distinct PROMPTS would make
     them answer different questions and the tally meaningless. Discovery wants
     divergence; verification wants identical conditions.
+
+    Distinct voter *personas* are fine and are asserted separately below: the
+    persona changes who is judging, the ballot fixes what is being judged.
     """
-    import inspect
+    seen: dict[str, Any] = {}
 
-    from runtime.execution.suckers import _delegation_skills_vote as vote_mod
+    def fake(specs: Any = None, **_kw: Any) -> dict[str, Any]:
+        seen["specs"] = list(specs or [])
+        return {"ok": True, "successes": [], "failures": []}
 
-    src = inspect.getsource(vote_mod._call_agent_vote)
-    assert '"prompt": ballot' in src
-    assert "for _ in range(n_int)" in src, "voters no longer share one ballot"
+    monkeypatch.setattr(ds, "_call_agent_parallel", fake)
+    ds._call_agent_vote(question="is this real?", n=5, choices=["keep", "drop"])
+
+    prompts = {s["prompt"] for s in seen["specs"]}
+    assert len(prompts) == 1, "voters no longer share one ballot"
+
+
+def test_voter_personas_rotate_so_the_panel_is_not_one_role_sampled_n_times(
+    monkeypatch: Any,
+) -> None:
+    seen: dict[str, Any] = {}
+
+    def fake(specs: Any = None, **_kw: Any) -> dict[str, Any]:
+        seen["specs"] = list(specs or [])
+        return {"ok": True, "successes": [], "failures": []}
+
+    monkeypatch.setattr(ds, "_call_agent_parallel", fake)
+    ds._call_agent_vote(question="is this real?", n=3)
+
+    assert len({s["agent_id"] for s in seen["specs"]}) == 3
 
 
 # ── facade: helpers stay reachable through delegation_skills ───────

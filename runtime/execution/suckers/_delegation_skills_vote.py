@@ -21,9 +21,21 @@ from ._delegation_skills_common import (
     _build_ballot_prompt,
     _coerce_vote_choices,
     _extract_verdict,
+    _isolated_judge_context,
     _normalize_verdict,
     _tally_votes,
     _vote_note,
+)
+
+# Distinct reviewer-adjacent personas to cycle through so the panel is made of
+# genuinely independent judgments rather than N samples of the same role.
+_VOTER_INDEPENDENT_ROLES = (
+    "reviewer",
+    "architect",
+    "security-review",
+    "debugger",
+    "researcher",
+    "explorer",
 )
 
 
@@ -74,6 +86,17 @@ def _call_agent_vote(
     ballot_choices = _coerce_vote_choices(choices)
     voter = str(agent_id or "reviewer").strip() or "reviewer"
     ballot = _build_ballot_prompt(q, ballot_choices)
+    # Judge isolation, applied HERE rather than at each caller: every verifier
+    # lane funnels through this function (run_orchestration's verify,
+    # verdict_repair's judge, tournament's panel), so one switch covers them all
+    # and a future caller inherits it by construction. See
+    # ``_isolated_judge_context`` for what is withheld and why.
+    #
+    # This matters more since the panel began rotating personas: the rotation
+    # seats ``debugger`` (whose role allowlist carries ``exec_shell``) and
+    # ``researcher`` (``bb_write``), so without the read-only intersection a
+    # voter could run shell or publish to the board its fellow voters read.
+    vote_context = _isolated_judge_context(context)
     # Ask each voter for a JSON object; call_subagent validates it and re-asks
     # once on a mismatch. ``verdict`` is left a free string (not an enum) so
     # _normalize_verdict keeps its lenient casefold/substring mapping to the
@@ -86,8 +109,20 @@ def _call_agent_vote(
         },
         "required": ["verdict"],
     }
+    # Independent panel: put the requested voter role first, then rotate through
+    # distinct personas so each voter samples a different judgment posture.
+    #
+    # The BALLOT is identical for every voter — a majority only means something
+    # if all of them answered the same question under the same framing. What
+    # varies is the judging persona, not the question.
+    voter_pool = tuple(dict.fromkeys((voter,) + _VOTER_INDEPENDENT_ROLES))
     specs = [
-        {"agent_id": voter, "prompt": ballot, "output_schema": vote_schema} for _ in range(n_int)
+        {
+            "agent_id": voter_pool[i % len(voter_pool)],
+            "prompt": ballot,
+            "output_schema": vote_schema,
+        }
+        for i in range(n_int)
     ]
 
     # Resolve the monkeypatch-visible name lazily via the delegation_skills
@@ -98,7 +133,7 @@ def _call_agent_vote(
     env = _call_agent_parallel(
         specs=specs,
         timeout_s=timeout_s,
-        context=context,
+        context=vote_context,
         session=session,
     )
 

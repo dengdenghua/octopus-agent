@@ -422,6 +422,45 @@ def _skill_context_from_spec(
     return context or None
 
 
+def _isolated_judge_context(
+    base_context: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Context for a verifier/voter spawn: starved of caller context, read-only.
+
+    A voter exists to reach a verdict the lead cannot reach on its own. Two
+    things defeat that, and each is closed here:
+
+    * **Caller context.** A voter that can read the lead's conversation,
+      inherited memory, or its own prior turns in this thread is being handed
+      the conclusion it was spawned to check — it agrees with reasoning it can
+      see instead of judging the claim. The ballot already carries everything a
+      verdict legitimately needs (``_build_ballot_prompt`` embeds the question
+      and the artifact), so withholding the rest costs nothing and removes the
+      anchor. Reviewers demonstrably catch more when they cannot see the
+      producer's justification.
+    * **Write access.** A ballot returns a verdict, so a judge holding
+      ``exec_shell`` / ``edit_file`` / ``git_commit`` can only cause damage, and
+      one that "fixes" the thing it was assessing has destroyed the very
+      independence being paid for. ``bb_write`` is included in that: a voter
+      publishing to the turn blackboard can steer its fellow voters, which is
+      the one thing an independent panel must not be able to do.
+
+    Both keys canonicalise into ``MODEL_PROTECTED_CONTEXT_PREFIXES``
+    (``toolallowlist`` / ``subagentpolicy``), so ``arg_guard`` strips a model's
+    attempt to set OR clear them — this is a trusted-side switch that a spawned
+    agent cannot talk its way out of.
+    """
+    ctx: dict[str, Any] = dict(base_context or {})
+    ctx["tool_allowlist_read_only"] = True
+    ctx["subagent_policy_starve_context"] = True
+    # ``share_history`` is the pre-existing per-thread memory switch and is NOT
+    # prefix-protected, so it is set here as well: the starve flag is what the
+    # trusted path enforces, this merely makes the intent explicit at the one
+    # place that already reads it.
+    ctx["share_history"] = False
+    return ctx
+
+
 # Default per-subagent wall-clock timeout. Bumped from 300s in 2026-06
 # after operator feedback: research-style subagents commonly need 10-15
 # rounds × ~60s/round, hitting the old 300s budget after only 5 rounds.

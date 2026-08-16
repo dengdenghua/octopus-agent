@@ -639,7 +639,13 @@ def make_llm_ephemeral_runner(
             allowlist = tuple(str(name).strip() for name in ctx_allowlist if str(name).strip())
         else:
             allowlist = tuple(call.role.tool_allowlist) if call.role.tool_allowlist else ()
-        tool_specs = select_tool_specs(allowlist, all_specs)
+        # ``tool_allowlist_read_only`` is a TRUSTED-side switch (the vote /
+        # verdict-repair judge lane sets it). The name is not incidental: it
+        # canonicalises to ``toolallowlistreadonly``, which starts with the
+        # ``toolallowlist`` prefix in MODEL_PROTECTED_CONTEXT_PREFIXES, so
+        # ``arg_guard`` strips a model's attempt to set — or clear — it.
+        read_only = bool(call.context.get("tool_allowlist_read_only")) if call.context else False
+        tool_specs = select_tool_specs(allowlist, all_specs, read_only=read_only)
 
         if not tool_specs:
             # No tools to expose · degrade to single-shot.

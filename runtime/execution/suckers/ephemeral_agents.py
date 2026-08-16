@@ -524,6 +524,25 @@ def _dedupe_tool_names(names: list[str]) -> list[str]:
     return out
 
 
+# What a read-only judge gets when its role declares no allowlist at all
+# (``architect`` is one, and the voter rotation seats it). Enough to check a
+# claim against the code; nothing that leaves a trace.
+_READ_ONLY_DEFAULT_JUDGE_TOOLS: tuple[str, ...] = (
+    "read_file",
+    "read_file_range",
+    "grep_text",
+    "glob_files",
+    "list_cwd",
+    "file_stats",
+    "tree",
+    "git_diff",
+    "code_search",
+    "code_find_symbol",
+    "bb_read",
+    "bb_keys",
+)
+
+
 def _effective_tool_allowlist(
     role: EphemeralRoleDef,
     context: dict[str, Any] | None,
@@ -757,8 +776,15 @@ def _compose_system_prompt(
     # outputs. Memory is keyed by (thread_id, role_id) and bounded to the
     # last MAX_TURNS_PER_KEY turns. Disabled when context explicitly says
     # ``share_history: false`` or when no thread_id is present.
+    # Verifier context-starvation. Set by the trusted vote path only (the key
+    # canonicalises under the ``subagentpolicy`` protected prefix, so a model
+    # cannot set or clear it). It overrides the role definition's own
+    # share_context / share_memory: an independent judge must not be able to
+    # read the reasoning it was spawned to check, and picking a role whose
+    # definition happens to share context must not silently re-open that.
+    starved = bool((context or {}).get("subagent_policy_starve_context"))
     thread_id = (context or {}).get("thread_id") or getattr(session, "thread_id", None)
-    share_history = (context or {}).get("share_history", True)
+    share_history = (context or {}).get("share_history", True) and not starved
     if thread_id and share_history:
         from runtime.execution.subagents.memory import recent_turns_prompt
 
@@ -766,7 +792,7 @@ def _compose_system_prompt(
         if history_prefix:
             parts.append(history_prefix.strip())
 
-    if role.share_context:
+    if role.share_context and not starved:
         msgs = _collect_caller_context(session)
         if msgs:
             rendered_lines: list[str] = ["## Caller conversation"]
@@ -793,7 +819,7 @@ def _compose_system_prompt(
                     )
                 )
 
-    if role.share_memory:
+    if role.share_memory and not starved:
         mem = _collect_caller_memory(session)
         if mem:
             parts.append(mem)
@@ -850,6 +876,24 @@ def run_ephemeral_definition(
     effective_tool_allowlist = (
         [] if effective_tool_policy.allow_all else list(effective_tool_policy.allowed)
     )
+    # Read-only verifier lane: narrow the ADVERTISED list too, so the granted-
+    # skills note doesn't promise a tool the runner will filter out (an agent
+    # told it has ``exec_shell`` and then handed no such tool wastes a round
+    # discovering that). Enforcement stays in ``select_tool_specs`` — an empty
+    # list here means "atomic inherit", which the runner still intersects, so
+    # this cannot be the only gate.
+    if bool(call_context.get("tool_allowlist_read_only")):
+        from runtime.execution.suckers.layers import is_read_only_skill
+
+        if effective_tool_policy.allow_all:
+            # ``allow_all`` would otherwise hand a judge the entire catalog.
+            effective_tool_allowlist = sorted(
+                name for name in _READ_ONLY_DEFAULT_JUDGE_TOOLS if is_read_only_skill(name)
+            )
+        else:
+            effective_tool_allowlist = [
+                name for name in effective_tool_allowlist if is_read_only_skill(name)
+            ]
     if effective_tool_policy.sources:
         call_context["skill_policy_sources"] = {
             source: list(names) for source, names in effective_tool_policy.sources.items()

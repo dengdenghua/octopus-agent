@@ -94,9 +94,82 @@ def as_skill_ids() -> list[SkillId]:
 _BLACKBOARD_SKILLS = frozenset({"bb_read", "bb_write", "bb_keys"})
 
 
+# ── read-only tool surface (verifier / voter roles) ─────────────────────
+# An ALLOW-list, not a deny-list, and deliberately so: a deny-list silently
+# leaks every write skill added after it was written, whereas an omission here
+# only costs a verifier one tool. Membership rule: the skill observes state and
+# leaves nothing behind — no filesystem write, no shell, no git mutation, no
+# outbound send, and no agent-memory/SOUL mutation (``remember`` / ``diary_write``
+# / ``update_soul`` are atomic but they still persist).
+#
+# ``exec_shell`` is absent on purpose. A judge that can run the test suite would
+# be stronger, but shell is the write path — verification that needs to EXECUTE
+# belongs on the produce side (``verdict_repair``'s producer, a graph node),
+# not on a ballot.
+READ_ONLY_SKILL_NAMES: frozenset[str] = frozenset(
+    {
+        # filesystem · read + discovery
+        "read_file",
+        "read_file_range",
+        "list_cwd",
+        "file_stats",
+        "count_words",
+        "hash_text",
+        "glob_files",
+        "grep_text",
+        "tree",
+        # code intelligence · read-only AST / index queries
+        "code_analyze",
+        "code_search",
+        "code_find_symbol",
+        "code_dependency_graph",
+        "kg_query",
+        # language server · pure queries
+        "lsp_diagnostics",
+        "lsp_hover",
+        "lsp_references",
+        "lsp_definitions",
+        # git · inspection only (no add/commit/checkout/push)
+        "git_diff",
+        "git_log",
+        "git_status",
+        # external evidence
+        "fetch_url",
+        "web_search",
+        "web_extract",
+        # shared state · READ side only. bb_write is excluded even though the
+        # blackboard is an in-memory turn dict: a voter that publishes to the
+        # board can steer its fellow voters, which is the one thing an
+        # independent panel must not be able to do.
+        "bb_read",
+        "bb_keys",
+        "todo_read",
+        # catalog introspection. execute_skill is safe to include because it
+        # rejects side-effecting skills itself (``is_side_effecting`` fails
+        # closed on unknown affinity).
+        "search_skills",
+        "query_skill",
+        "execute_skill",
+        "search_capabilities",
+        "query_capability",
+        # agent memory · recall side only
+        "recall",
+        "recall_scores",
+        "list_soul_history",
+        "list_learned_skills",
+    }
+)
+
+
+def is_read_only_skill(skill_name: str | SkillId) -> bool:
+    return str(skill_name) in READ_ONLY_SKILL_NAMES
+
+
 def select_tool_specs(
     allowlist: tuple[str, ...],
     all_specs: list[Any],
+    *,
+    read_only: bool = False,
 ) -> list[Any]:
     """Pick which tool specs an ephemeral sub-agent may use (by ``spec.name``).
 
@@ -107,6 +180,11 @@ def select_tool_specs(
       (``ATOMIC_SKILL_NAMES``), NOT the full catalog. An empty allowlist must
       not silently grant ``exec_shell`` / write / patch skills the role never
       asked for. ``bb_*`` are themselves atomic, so collaboration is preserved.
+
+    ``read_only`` intersects the result with :data:`READ_ONLY_SKILL_NAMES`. It
+    is applied LAST, after the allowlist and after the ``bb_*`` top-up, so it
+    cannot be widened by a role definition or by a dynamic grant — a verifier
+    stays read-only no matter what the caller asked to hand it.
     """
     if allowlist:
         spec_set = set(allowlist)
@@ -115,5 +193,8 @@ def select_tool_specs(
         for s in all_specs:
             if s.name in _BLACKBOARD_SKILLS and s.name not in spec_set:
                 tool_specs.append(s)
-        return tool_specs
-    return [s for s in all_specs if is_atomic(s.name)]
+    else:
+        tool_specs = [s for s in all_specs if is_atomic(s.name)]
+    if read_only:
+        return [s for s in tool_specs if is_read_only_skill(s.name)]
+    return tool_specs
