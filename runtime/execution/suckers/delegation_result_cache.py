@@ -126,8 +126,27 @@ class SpawnResultCache:
     def put(self, key: str, result: dict[str, Any]) -> bool:
         """Store a result. Returns False (and stores nothing) unless the result
         is a completed, non-empty success - the rule this cache exists under.
+
+        Completion is judged by the fields that are actually present on an
+        envelope entry, NOT by a ``success`` flag. ``_build_parallel_envelope``
+        drops that flag from ``successes`` (membership in the list IS the
+        success signal), so requiring it here made every real spawn unstorable
+        while hand-built test envelopes carrying ``success: True`` passed - the
+        cache looked correct and cached nothing in production.
+
+        So: an explicit ``success: False`` still rejects, a missing flag is
+        treated as "the caller already classified this as a success", and the
+        partial/round-cap/converged markers reject regardless - those describe a
+        spawn that stopped early, which is exactly what a resume must redo.
         """
-        if not isinstance(result, dict) or not result.get("success"):
+        if not isinstance(result, dict):
+            return False
+        if result.get("success") is False:
+            return False
+        if any(
+            result.get(marker)
+            for marker in ("partial", "round_cap_exceeded", "converged_early", "error")
+        ):
             return False
         if not str(result.get("output") or "").strip():
             return False

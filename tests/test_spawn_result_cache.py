@@ -200,6 +200,75 @@ def test_put_refuses_failures_and_empty_output() -> None:
     assert hit is not None and hit["output"] == "real" and hit["parsed"] == {"a": 1}
 
 
+def test_put_accepts_the_real_envelope_shape_without_a_success_flag() -> None:
+    """Regression for a live-only defect: ``_build_parallel_envelope`` DROPS
+    ``success`` from ``successes`` entries (membership in that list is the
+    success signal). ``put`` used to require the flag, so every real spawn was
+    unstorable while hand-built test envelopes carrying ``success: True``
+    passed - the cache looked correct and cached nothing in production.
+    """
+    cache = SpawnResultCache(token="t")
+    envelope_entry = {
+        "agent_id": "researcher",
+        "codename": "Scout",
+        "output": "real finding",
+        "bb_key": "a",
+        "spec_index": 0,
+        "duration_s": 1.2,
+        "partial": False,
+        "round_cap_exceeded": False,
+        # no "success" key at all - this is the production shape
+    }
+    assert cache.put("k", envelope_entry) is True
+    hit = cache.get("k")
+    assert hit is not None and hit["output"] == "real finding"
+
+
+@pytest.mark.parametrize("marker", ["partial", "round_cap_exceeded", "converged_early", "error"])
+def test_put_refuses_a_spawn_that_stopped_early(marker: str) -> None:
+    """A spawn that hit its round cap or converged incomplete produced text, but
+    not FINISHED text. Caching it would pin a truncated answer onto every
+    future resume - the exact thing a resume exists to redo.
+    """
+    cache = SpawnResultCache(token="t")
+    entry = {"agent_id": "researcher", "output": "half an answer", marker: True}
+    assert cache.put("k", entry) is False
+    assert cache.get("k") is None
+
+
+def test_real_parallel_path_stores_and_replays(monkeypatch: Any) -> None:
+    """End-to-end through the REAL ``_call_agent_parallel``, stubbing only
+    ``call_subagent``. The 12 tests above all stub the whole parallel call, so
+    none of them exercise the envelope shape the cache is actually handed -
+    which is how the production miss survived a green suite.
+    """
+    spawns = {"n": 0}
+
+    def fake_sub(agent_id: str = "", prompt: str = "", **_kw: Any) -> dict[str, Any]:
+        spawns["n"] += 1
+        return {"agent_id": agent_id, "output": f"OUT-{prompt[:16]}", "success": True}
+
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", fake_sub)
+
+    nodes = [
+        {"id": "a", "prompt": "alpha work"},
+        {"id": "b", "prompt": "use {a.output}", "depends_on": ["a"]},
+    ]
+    first = ds._run_agent_graph(nodes=nodes)
+    assert spawns["n"] == 2
+
+    spawns["n"] = 0
+    second = ds._run_agent_graph(nodes=nodes, resume_token=first["resume_token"])
+    assert spawns["n"] == 0, "real envelope did not reach the cache"
+    assert sorted(second["replayed"]) == ["a", "b"]
+
+    spawns["n"] = 0
+    changed = [dict(nodes[0]), {**nodes[1], "prompt": "use {a.output} differently"}]
+    third = ds._run_agent_graph(nodes=changed, resume_token=first["resume_token"])
+    assert spawns["n"] == 1
+    assert third["replayed"] == ["a"]
+
+
 # ── token lifecycle ────────────────────────────────────────────────
 
 
