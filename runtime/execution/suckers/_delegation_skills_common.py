@@ -576,6 +576,11 @@ def _resolve_custom_agent_id(
     if requested in allowed:
         return requested, None
     lower = requested.lower()
+    # Audit-shaped → explorer (file traversal + grep + read, deadline-bounded).
+    # A local code audit is a read-only file review, not web research, so it
+    # must not collapse into the web-focused researcher persona.
+    if any(hint in lower for hint in ("audit", "审计")) and "explorer" in allowed:
+        return "explorer", requested
     # Research-shaped → researcher (cheap model, broad search tools)
     if any(hint in lower for hint in _RESEARCH_NAME_HINTS) and "researcher" in allowed:
         return "researcher", requested
@@ -656,6 +661,39 @@ def _is_transient_error(result: dict[str, Any]) -> bool:
         "504",
     )
     return any(marker in err_msg for marker in transient_markers)
+
+
+def _should_auto_retry(result: dict[str, Any]) -> bool:
+    """Should we retry this sub-agent failure once?
+
+    Retries transient class errors (timeout / connection / rate-limit) plus
+    budget- or convergence-exhaustion runs (round-cap, early-converged,
+    partial) — a fresh attempt has a real chance to finish. This is the
+    automatic fallback the parent previously had to perform by hand. Structural
+    failures and arbitrary custom errors are never retried because they won't
+    get better on a second attempt.
+    """
+    if result.get("success"):
+        return False
+    if _is_transient_error(result):
+        return True
+    if (
+        result.get("partial")
+        or result.get("round_cap_exceeded")
+        or result.get("converged_early")
+    ):
+        return True
+    err_msg = (result.get("error") or "").lower()
+    exhaustion_markers = (
+        "round cap",
+        "round_cap",
+        "without converging",
+        "converged early",
+        "max iteration",
+        "iteration cap",
+        "budget",
+    )
+    return any(marker in err_msg for marker in exhaustion_markers)
 
 
 def _derive_error_type(result: dict[str, Any]) -> str:

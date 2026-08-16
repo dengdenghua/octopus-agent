@@ -145,6 +145,28 @@ def test_custom_agent_id_debugger_shape(mock_subagent, mock_builtins):
     assert mock_subagent.call_args[1]["agent_id"] == "debugger"
 
 
+def test_custom_agent_id_audit_shape(mock_subagent, mock_builtins):
+    """streaming-auditor / typography-auditor → explorer (file-audit persona,
+    deadline-bounded) instead of the web-focused researcher."""
+    from runtime.execution.suckers.delegation_skills import _call_agent
+
+    mock_subagent.return_value = {
+        "agent_id": "explorer",
+        "output": "audit findings",
+        "success": True,
+    }
+
+    result = _call_agent(
+        agent_id="streaming-auditor",
+        prompt="Audit the frontend streaming UX",
+    )
+
+    assert result["success"] is True
+    assert result["agent_id"] == "streaming-auditor"
+    assert result["resolved_to"] == "explorer"
+    assert mock_subagent.call_args[1]["agent_id"] == "explorer"
+
+
 def test_custom_agent_id_generic_fallback(mock_subagent, mock_builtins):
     """unknown_shape_foo → explorer/researcher/general (first available)."""
     from runtime.execution.suckers.delegation_skills import _call_agent

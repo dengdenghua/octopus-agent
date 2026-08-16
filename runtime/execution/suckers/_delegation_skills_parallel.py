@@ -21,11 +21,11 @@ from ._delegation_skills_common import (
     _derive_error_type,
     _display_name_for_agent_id,
     _empty_parallel_result,
-    _is_transient_error,
     _parallel_route_decision,
     _resolve_custom_agent_id,
     _resolve_session_and_turn,
     _role_defaults_to_cheap,
+    _should_auto_retry,
     _skill_context_from_spec,
     _wrap_prompt_with_role_label,
 )
@@ -336,7 +336,7 @@ def _call_agent_parallel(
         result["subagent_route_decision"] = route_decision
         # Retry once on transient failure. Per-spec retry, not per
         # parallel batch — one slow worker shouldn't block faster ones.
-        if _is_transient_error(result):
+        if _should_auto_retry(result):
             if orch_budget is not None and not orch_budget.try_charge():
                 result["retry_skipped"] = True
                 existing_err = result.get("error") or ""

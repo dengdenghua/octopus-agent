@@ -584,12 +584,16 @@ def test_parallel_envelope_preserves_agent_telemetry_and_partial_output(monkeypa
     assert r["failures"][0]["round_cap_exceeded"] is True
     assert r["failures"][0]["rounds_completed"] == 25
     assert r["failures"][0]["partial_output"] == "partial notes before cap"
+    # A round-cap failure is now auto-retried once; the retry also failed, so
+    # the original failure is preserved with a retry note appended to the error.
+    assert r["failures"][0]["retried"] is True
+    assert "ROUND_CAP_EXCEEDED" in r["failures"][0]["error"]
     assert r["partial_outputs"] == [
         {
             "agent_id": "reviewer",
             "spec_index": 1,
             "task_label": "reviewer",
-            "error": "ROUND_CAP_EXCEEDED",
+            "error": r["failures"][0]["error"],
             "error_type": "round_cap_exceeded",
             "output": "partial notes before cap",
         }

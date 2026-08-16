@@ -16,9 +16,9 @@ from ._delegation_skills_common import (
     _DEFAULT_SUBAGENT_TIMEOUT_S,
     _delegation_budget_exhausted_message,
     _display_name_for_agent_id,
-    _is_transient_error,
     _resolve_custom_agent_id,
     _resolve_session_and_turn,
+    _should_auto_retry,
     _skill_context_from_spec,
     _wrap_prompt_with_role_label,
 )
@@ -205,7 +205,7 @@ def _call_agent(
     # Retry once on transient failure. Critical: retry does NOT bump
     # the budget counter — that happens in ``_record_delegation`` based
     # on the FINAL result (success vs. repeat-failure vs. first-failure).
-    if _is_transient_error(result):
+    if _should_auto_retry(result):
         if orch_budget is not None and not orch_budget.try_charge():
             result["retry_skipped"] = True
             existing_err = result.get("error") or ""
