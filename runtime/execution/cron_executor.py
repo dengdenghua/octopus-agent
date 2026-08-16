@@ -436,6 +436,8 @@ def _run_due_cron_jobs(
 
 _RUNS_LEDGER_NAME = "cron_runs.jsonl"
 _RUNS_LEDGER_MAX_BYTES = 2 * 1024 * 1024
+# Audit P-08: read/trim only the tail — never the whole ledger.
+_LEDGER_TAIL_READ_BYTES = 256 * 1024
 
 
 def _runs_ledger_path(cron_path: Path) -> Path:
@@ -446,8 +448,9 @@ def _append_run_ledger(ledger_path: Path, records: list[dict[str, Any]]) -> None
     """Append run records to the JSONL history ledger (best-effort).
 
     The ledger is the queryable "what ran and how did it go" surface —
-    ``/api/cron/runs`` reads it back. Capped by simple truncation of the
-    oldest lines so a chatty every-minute job can't fill the disk.
+    ``/api/cron/runs`` reads it back. Capped by truncating the oldest half
+    (audit P-08: the trim reads only the kept half from the file midpoint,
+    never the whole ledger) so a chatty every-minute job can't fill the disk.
     """
     import json
 
@@ -457,11 +460,32 @@ def _append_run_ledger(ledger_path: Path, records: list[dict[str, Any]]) -> None
             for line in lines:
                 fh.write(line + "\n")
         if ledger_path.stat().st_size > _RUNS_LEDGER_MAX_BYTES:
-            existing = ledger_path.read_text(encoding="utf-8").splitlines()
-            keep = existing[-(len(existing) // 2) :]
-            ledger_path.write_text("\n".join(keep) + "\n", encoding="utf-8")
+            _trim_ledger_oldest_half(ledger_path)
     except OSError:
         _log.exception("cron_executor: failed to append run ledger %s", ledger_path)
+
+
+def _trim_ledger_oldest_half(ledger_path: Path) -> None:
+    """Drop the oldest half of a JSONL ledger without reading it whole (P-08)."""
+    try:
+        size = ledger_path.stat().st_size
+    except OSError:
+        return
+    with ledger_path.open("rb") as fh:
+        fh.seek(size // 2)
+        # Advance to a line boundary so the cut never splits a record.
+        while True:
+            b = fh.read(1)
+            if not b or b == b"\n":
+                break
+        rest = fh.read()
+    if not rest.strip():
+        return
+    try:
+        with ledger_path.open("wb") as fh:
+            fh.write(rest)
+    except OSError:
+        _log.exception("cron_executor: failed to trim run ledger %s", ledger_path)
 
 
 def _process_group_alive(pid: int) -> bool:
@@ -552,11 +576,25 @@ def recover_interrupted_cron_jobs(cron_path: Path | None = None) -> dict[str, An
 
 
 def read_run_ledger(ledger_path: Path, *, limit: int = 50) -> list[dict[str, Any]]:
-    """Read the newest ``limit`` run records (newest first)."""
+    """Read the newest ``limit`` run records (newest first).
+
+    Audit P-08: reads only the tail of the file (``_LEDGER_TAIL_READ_BYTES``)
+    instead of the whole ledger, so the cost stays O(tail) as the ledger
+    grows. A partial first line from the cut is skipped by the JSON parse.
+    """
     import json
 
     try:
-        raw = ledger_path.read_text(encoding="utf-8")
+        size = ledger_path.stat().st_size
+    except OSError:
+        return []
+    if size <= 0:
+        return []
+    tail_bytes = min(size, _LEDGER_TAIL_READ_BYTES)
+    try:
+        with ledger_path.open("rb") as fh:
+            fh.seek(size - tail_bytes)
+            raw = fh.read(tail_bytes).decode("utf-8", errors="replace")
     except (OSError, ValueError):
         return []
     records: list[dict[str, Any]] = []

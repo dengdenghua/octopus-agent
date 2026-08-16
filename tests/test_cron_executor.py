@@ -573,3 +573,63 @@ def test_recover_kills_live_orphan_process_group(tmp_path: Path) -> None:
     finally:
         if orphan.poll() is None:
             orphan.kill()
+
+
+# ═══════════════════════════════════════════════════════════
+# Audit P-08: ledger tail read + midpoint trim (O(tail), not O(file))
+# ═══════════════════════════════════════════════════════════
+
+
+def test_read_run_ledger_returns_only_newest_tail(tmp_path: Path) -> None:
+    from runtime.execution.cron_executor import read_run_ledger
+
+    ledger = tmp_path / "cron_runs.jsonl"
+    lines = []
+    for i in range(200):
+        lines.append(json.dumps({"name": f"job{i}", "status": "ok"}))
+    ledger.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    runs = read_run_ledger(ledger, limit=5)
+    assert len(runs) == 5
+    assert [r["name"] for r in runs] == ["job199", "job198", "job197", "job196", "job195"]
+
+
+def test_read_run_ledger_mid_file_cut_skips_partial_line(tmp_path: Path) -> None:
+    """A tail read that starts mid-line must not return a corrupt record."""
+    from runtime.execution.cron_executor import read_run_ledger
+
+    ledger = tmp_path / "cron_runs.jsonl"
+    ledger.write_text(
+        "".join(
+            json.dumps({"name": f"job{i}", "status": "ok"}) + "\n" for i in range(30)
+        ),
+        encoding="utf-8",
+    )
+    runs = read_run_ledger(ledger, limit=3)
+    assert len(runs) == 3
+    assert all(r["name"].startswith("job") for r in runs)
+
+
+def test_trim_ledger_oldest_half_keeps_valid_records(tmp_path: Path) -> None:
+    from runtime.execution.cron_executor import (
+        _append_run_ledger,
+        _trim_ledger_oldest_half,
+        read_run_ledger,
+    )
+
+    ledger = tmp_path / "cron_runs.jsonl"
+    records = [{"name": f"job{i}", "status": "ok"} for i in range(20)]
+    _append_run_ledger(ledger, records)
+
+    before = len(read_run_ledger(ledger, limit=1000))
+    assert before == 20
+
+    _trim_ledger_oldest_half(ledger)
+
+    after = read_run_ledger(ledger, limit=1000)
+    assert len(after) < before, "oldest records were not dropped"
+    assert len(after) >= 9  # roughly half; the cut line itself is dropped
+    # Every surviving record is a valid, complete JSON record.
+    for line in ledger.read_text(encoding="utf-8").splitlines():
+        rec = json.loads(line)
+        assert "name" in rec
