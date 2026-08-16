@@ -17,6 +17,37 @@ warn()  { printf "${YELLOW}[WARN]${NC}  %s\n" "$*"; }
 err()   { printf "${RED}[ERROR]${NC} %s\n" "$*" >&2; }
 die()   { err "$@"; exit 1; }
 
+# Audit S-09: never pipe a download straight into a shell. Download to a
+# temp file, verify the pinned SHA-256, and only then execute. A mismatch
+# (or a missing digest tool) fails closed — supply-chain protection for the
+# three piped installers (pyenv.run / nvm install.sh / uv install.sh).
+#   $1 = url, $2 = expected sha256, $3 = interpreter (bash|sh)
+download_verify_run() {
+    local url="$1" expected="$2" interpreter="$3"
+    local tmp actual
+    tmp="$(mktemp)" || die "cannot create temp file for download verification"
+    if ! curl -fsSL "$url" -o "$tmp"; then
+        rm -f "$tmp"
+        die "download failed: $url"
+    fi
+    actual="$(shasum -a 256 "$tmp" 2>/dev/null | awk '{print $1}')"
+    if [ -z "$actual" ]; then
+        actual="$(sha256sum "$tmp" 2>/dev/null | awk '{print $1}')"
+    fi
+    if [ -z "$actual" ]; then
+        rm -f "$tmp"
+        die "no sha256 tool available to verify $url"
+    fi
+    if [ "$actual" != "$expected" ]; then
+        rm -f "$tmp"
+        die "checksum mismatch for $url (expected $expected, got $actual)"
+    fi
+    "$interpreter" "$tmp"
+    local rc=$?
+    rm -f "$tmp"
+    return "$rc"
+}
+
 for arg in "$@"; do
     case "$arg" in
         --minimal) MINIMAL=1 ;;
@@ -83,7 +114,7 @@ install_python_pyenv() {
     info "Installing Python 3.12 via pyenv..."
     if ! require_cmd pyenv; then
         info "Installing pyenv..."
-        curl -fsSL https://pyenv.run | bash 2>/dev/null || {
+        download_verify_run https://pyenv.run 1065197a9fff657e0e2941e4ca8c8b6e72833833466b777b9eddd0fff335ec41 bash 2>/dev/null || {
             warn "pyenv install failed, trying brew..."
             if require_cmd brew; then
                 brew install pyenv
@@ -160,7 +191,7 @@ if [[ "$MINIMAL" -eq 0 ]]; then
         info "Installing nvm..."
         export NVM_DIR="$HOME/.nvm"
         if [[ ! -d "$NVM_DIR" ]]; then
-            curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+            download_verify_run https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh abdb525ee9f5b48b34d8ed9fc67c6013fb0f659712e401ecd88ab989b3af8f53 bash
         fi
         [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
         nvm install --lts
@@ -178,7 +209,7 @@ if require_cmd uv; then
 else
     warn "uv not found"
     info "Installing uv..."
-    curl -fsSL https://astral.sh/uv/install.sh | sh
+    download_verify_run https://astral.sh/uv/install.sh 504511fbbbd811aeaba6738abc79408956b6c7da0ca35437b3dcc24a41efc111 sh
     export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
     if require_cmd uv; then
         ok "uv installed: $(uv --version 2>&1)"
