@@ -4,6 +4,7 @@ Replaces the deprecated test_a2_auto_rollback.py.
 Quantifies rollback latency and query performance for canary, ledger,
 and coordinator subsystems.
 """
+
 from __future__ import annotations
 
 import sys

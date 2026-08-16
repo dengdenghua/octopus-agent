@@ -6,6 +6,7 @@
 
 import asyncio
 import time
+
 from runtime.sensing.gateway.adaptive_delta_buffer import AdaptiveDeltaBuffer
 
 
@@ -63,18 +64,17 @@ def generate_chunks(pattern: str, count: int) -> list[str]:
     if pattern == "low_throughput":
         # 每个 chunk 1-2 字符，模拟慢速生成
         return ["a" for _ in range(count)]
-    elif pattern == "high_throughput":
+    if pattern == "high_throughput":
         # 每个 chunk 50-100 字符，模拟快速生成
         return ["x" * 80 for _ in range(count)]
-    elif pattern == "mixed":
+    if pattern == "mixed":
         # 混合模式：开始慢，中间快，结束慢
         chunks = []
         chunks.extend(["a" for _ in range(count // 3)])
         chunks.extend(["x" * 80 for _ in range(count // 3)])
         chunks.extend(["b" for _ in range(count // 3)])
         return chunks
-    else:
-        raise ValueError(f"Unknown pattern: {pattern}")
+    raise ValueError(f"Unknown pattern: {pattern}")
 
 
 async def run_benchmark():
@@ -99,22 +99,22 @@ async def run_benchmark():
 
         # 固定批处理
         fixed_flushes, fixed_time = await benchmark_fixed_batching(chunks)
-        print(f"固定批处理 (64 chars, 32ms):")
+        print("固定批处理 (64 chars, 32ms):")
         print(f"  刷新次数: {fixed_flushes}")
-        print(f"  耗时: {fixed_time*1000:.2f}ms")
-        print(f"  平均每次刷新: {total_chars/fixed_flushes:.1f} chars")
+        print(f"  耗时: {fixed_time * 1000:.2f}ms")
+        print(f"  平均每次刷新: {total_chars / fixed_flushes:.1f} chars")
 
         # 自适应批处理
         adaptive_flushes, adaptive_time = await benchmark_adaptive_batching(chunks)
-        print(f"自适应批处理:")
+        print("自适应批处理:")
         print(f"  刷新次数: {adaptive_flushes}")
-        print(f"  耗时: {adaptive_time*1000:.2f}ms")
-        print(f"  平均每次刷新: {total_chars/adaptive_flushes:.1f} chars")
+        print(f"  耗时: {adaptive_time * 1000:.2f}ms")
+        print(f"  平均每次刷新: {total_chars / adaptive_flushes:.1f} chars")
 
         # 对比
         flush_reduction = (1 - adaptive_flushes / fixed_flushes) * 100
         time_reduction = (1 - adaptive_time / fixed_time) * 100
-        print(f"优化效果:")
+        print("优化效果:")
         print(f"  刷新次数减少: {flush_reduction:+.1f}%")
         print(f"  耗时减少: {time_reduction:+.1f}%")
 

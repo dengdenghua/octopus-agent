@@ -330,7 +330,9 @@ def run_octopus_agent(
 
     agent_env = _build_agent_env(model)
 
-    logger.info("[%s] Starting agent (model=%s, timeout=%ss)", instance.instance_id, model, timeout_seconds)
+    logger.info(
+        "[%s] Starting agent (model=%s, timeout=%ss)", instance.instance_id, model, timeout_seconds
+    )
     start = time.time()
 
     try:
@@ -431,9 +433,7 @@ def process_instance(
     """
     start = time.time()
     try:
-        workspace = prepare_workspace(
-            instance, workspace_root, repos_cache=repos_cache
-        )
+        workspace = prepare_workspace(instance, workspace_root, repos_cache=repos_cache)
         agent_result = run_octopus_agent(
             instance,
             workspace,
@@ -756,14 +756,16 @@ Examples:
                     continue
                 try:
                     entry = json.loads(line)
-                    all_results.append(InstanceResult(
-                        instance_id=entry["instance_id"],
-                        prediction=SwebenchPrediction(
+                    all_results.append(
+                        InstanceResult(
                             instance_id=entry["instance_id"],
-                            model=entry.get("model", args.model),
-                            prediction=entry.get("prediction", ""),
-                        ),
-                    ))
+                            prediction=SwebenchPrediction(
+                                instance_id=entry["instance_id"],
+                                model=entry.get("model", args.model),
+                                prediction=entry.get("prediction", ""),
+                            ),
+                        )
+                    )
                 except (json.JSONDecodeError, KeyError):
                     continue
 

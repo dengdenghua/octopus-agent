@@ -71,11 +71,7 @@ class CodexCliTrialRunner:
             if isinstance(event, dict):
                 events.extend(_codex_event_to_eval(event))
         if completed.returncode != 0:
-            kind = (
-                "infrastructure_error"
-                if _is_infrastructure_error(completed.stderr)
-                else "error"
-            )
+            kind = "infrastructure_error" if _is_infrastructure_error(completed.stderr) else "error"
             events.append(
                 {
                     "kind": kind,

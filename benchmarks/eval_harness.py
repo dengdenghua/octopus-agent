@@ -305,7 +305,6 @@ class SuiteReport:
             ],
         }
 
-
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> SuiteReport:
         case_rows = raw.get("cases")

@@ -335,9 +335,11 @@ def _tool_name(item: dict[str, Any]) -> str:
 def _runtime_error_event(error: Any) -> dict[str, Any]:
     """Separate provider/control-plane outages from scored agent failures."""
 
-    rendered = json.dumps(error, ensure_ascii=False, sort_keys=True) if isinstance(
-        error, (dict, list)
-    ) else str(error)
+    rendered = (
+        json.dumps(error, ensure_ascii=False, sort_keys=True)
+        if isinstance(error, (dict, list))
+        else str(error)
+    )
     lowered = rendered.lower()
     provider_markers = (
         "http_401",

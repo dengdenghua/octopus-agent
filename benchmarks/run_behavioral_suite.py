@@ -36,9 +36,7 @@ from benchmarks.realtime_runner import (
 from benchmarks.system_run_seed import load_system_run_seed, merge_seed_reports
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-INFRASTRUCTURE_STATUS_PATH = (
-    REPO_ROOT / "benchmarks/results/behavioral-infrastructure-latest.json"
-)
+INFRASTRUCTURE_STATUS_PATH = REPO_ROOT / "benchmarks/results/behavioral-infrastructure-latest.json"
 
 
 def _approval_behavior(case_id: str) -> tuple[str, str]:
@@ -286,9 +284,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             fixture = prepared.fixtures[case.id]
 
             def resolve_instructions(_workspace: Path) -> str | None:
-                preview_url = (
-                    fixture.url() if isinstance(fixture, LiveIsolatedFixture) else None
-                )
+                preview_url = fixture.url() if isinstance(fixture, LiveIsolatedFixture) else None
                 instructions: list[str] = []
                 if preview_url:
                     # Codex Desktop's browser profile blocks the raw loopback
@@ -546,9 +542,7 @@ def _local_auth_url(realtime_url: str) -> str:
     scheme = {"ws": "http", "wss": "https"}.get(parsed.scheme)
     if scheme is None or not parsed.netloc:
         raise ValueError("--octopus-url must be an absolute ws:// or wss:// URL")
-    return urllib.parse.urlunsplit(
-        (scheme, parsed.netloc, "/api/auth/local/login", "", "")
-    )
+    return urllib.parse.urlunsplit((scheme, parsed.netloc, "/api/auth/local/login", "", ""))
 
 
 def _local_access_token(

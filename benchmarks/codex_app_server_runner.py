@@ -92,9 +92,7 @@ class CodexAppServerTrialRunner:
         def receive() -> dict[str, Any]:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise TimeoutError(
-                    f"Codex app-server trial exceeded {self.timeout_seconds:.1f}s"
-                )
+                raise TimeoutError(f"Codex app-server trial exceeded {self.timeout_seconds:.1f}s")
             try:
                 message = messages.get(timeout=remaining)
             except queue.Empty as exc:
@@ -105,9 +103,7 @@ class CodexAppServerTrialRunner:
                 raise RuntimeError(f"Codex app-server protocol error: {message}") from message
             if message is None:
                 detail = "".join(stderr_lines)[-4000:]
-                raise RuntimeError(
-                    f"Codex app-server exited before completing the turn: {detail}"
-                )
+                raise RuntimeError(f"Codex app-server exited before completing the turn: {detail}")
             return message
 
         def request(method: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -200,9 +196,7 @@ class CodexAppServerTrialRunner:
                     if str(turn.get("status") or "") == "failed":
                         detail = turn.get("error") or turn
                         kind = (
-                            "infrastructure_error"
-                            if _is_infrastructure_error(detail)
-                            else "error"
+                            "infrastructure_error" if _is_infrastructure_error(detail) else "error"
                         )
                         events.append({"kind": kind, "error": detail})
                     break
@@ -333,11 +327,7 @@ def _app_server_message_to_eval(
                 for part in group
                 if part
             ]
-            return (
-                [{"kind": "reasoning_delta", "delta": "\n".join(pieces)}]
-                if pieces
-                else []
-            )
+            return [{"kind": "reasoning_delta", "delta": "\n".join(pieces)}] if pieces else []
         tool_name = _tool_name_for_item(item)
         if tool_name:
             # App Server reports a sub-agent lifecycle as a completed
@@ -377,9 +367,7 @@ def _is_transient_reconnect(detail: Any) -> bool:
         if isinstance(detail, (dict, list))
         else str(detail)
     ).lower()
-    return bool(
-        re.search(r"\breconnecting\b|response.?stream.?disconnected", rendered)
-    )
+    return bool(re.search(r"\breconnecting\b|response.?stream.?disconnected", rendered))
 
 
 def _tool_name_for_item(item: dict[str, Any]) -> str:

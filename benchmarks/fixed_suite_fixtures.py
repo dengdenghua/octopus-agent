@@ -151,9 +151,7 @@ def _trajectory_requirement(case_id: str, trajectory: Trajectory) -> str | None:
 
     def browser_count(name: str) -> int:
         return sum(
-            1
-            for observed in tool_names
-            if observed in {f"browser_{name}", f"live_browser_{name}"}
+            1 for observed in tool_names if observed in {f"browser_{name}", f"live_browser_{name}"}
         )
 
     if case_id == "browser.dynamic-crud":
