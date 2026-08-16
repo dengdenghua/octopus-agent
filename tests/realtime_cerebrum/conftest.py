@@ -54,7 +54,14 @@ def _patch_react_loop(monkeypatch: pytest.MonkeyPatch) -> None:
             }
         )
         approval_provider = kwargs.get("approval_provider")
-        script = _helpers._SCRIPT[:]
+        # When _SCRIPT_POP_ONCE is True, consume the script on first call
+        # so loop-back (auto-verification) doesn't replay events and
+        # double-emit file changes.
+        if _helpers._SCRIPT_POP_ONCE:
+            script = _helpers._SCRIPT[:]
+            _helpers._SCRIPT.clear()
+        else:
+            script = _helpers._SCRIPT[:]
         for event in script:
             if event.get("__approve__"):
                 # Translate into an approval round-trip using the

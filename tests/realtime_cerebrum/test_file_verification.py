@@ -35,6 +35,8 @@ def test_tool_end_with_diff_emits_file_change_item(gateway: Any) -> None:
     """When react_loop emits a ``tool_end`` carrying a unified diff,
     the bridge must promote it to a structured FileChangeItem so the
     UI can render hunk-level controls."""
+    from tests.realtime_cerebrum import _helpers
+
     client, _ = gateway
     diff = "--- a/src/foo.py\n+++ b/src/foo.py\n@@ -1,3 +1,3 @@\n x\n-old\n+new\n y\n"
     _set_script(
@@ -57,6 +59,10 @@ def test_tool_end_with_diff_emits_file_change_item(gateway: Any) -> None:
             {"type": "react_completed"},
         ]
     )
+    # The unverified code change trips the agent-driven verification
+    # loop-back (one extra drive). Consume the script on the first drive so
+    # that loop-back does not replay the edit and double-emit the change.
+    _helpers._SCRIPT_POP_ONCE = True
     with client.websocket_connect("/api/realtime") as ws:
         out = _drive(
             ws,
@@ -85,6 +91,9 @@ def test_tool_end_with_diff_emits_file_change_item(gateway: Any) -> None:
     hunk = change["hunks"][0]
     assert hunk["oldStart"] == 1 and hunk["newStart"] == 1
     assert hunk["decision"] == "pending"
+    # The promoted item must land as completed, not stay inProgress and get
+    # swept to failed by _close_turn when the turn ends.
+    assert fci["status"] == "completed"
 
 
 def test_code_file_change_without_verification_fails_turn(gateway: Any) -> None:

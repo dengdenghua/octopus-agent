@@ -20,6 +20,7 @@ from runtime.protocol import (
 # ─── module-level mutable state (singleton) ────────────────
 
 _SCRIPT: list[dict[str, Any]] = []
+_SCRIPT_POP_ONCE: bool = False
 _LAST_STREAM_ARGS: dict[str, Any] = {}
 _LAST_STREAM_KWARGS: dict[str, Any] = {}
 _LAST_SESSION: dict[str, Any] = {}
@@ -30,8 +31,10 @@ _LAST_SESSION: dict[str, Any] = {}
 
 def set_script(events: list[dict[str, Any]]) -> None:
     """Replace the fake react_loop script."""
+    global _SCRIPT_POP_ONCE
     _SCRIPT.clear()
     _SCRIPT.extend(events)
+    _SCRIPT_POP_ONCE = False
     _LAST_STREAM_KWARGS.clear()
     _LAST_SESSION.clear()
 
