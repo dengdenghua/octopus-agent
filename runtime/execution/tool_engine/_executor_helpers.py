@@ -136,14 +136,40 @@ def _call_handler_with_transient_retry(
     args: dict[str, Any],
     *,
     allow_retry: bool = True,
+    timeout_s: float | None = None,
 ) -> tuple[Any, list[str]]:
+    """Call a tool handler with transient retry, optionally under a ceiling.
+
+    Audit T-06: when ``timeout_s > 0`` the call runs on a worker thread and
+    must finish within the ceiling — on expiry ``TimeoutError`` is raised and
+    the executor maps it to ``status="timeout"``. A hung Python thread cannot
+    be force-killed, so the worker is released (``shutdown(wait=False)``)
+    and the caller proceeds instead of pinning its thread forever.
+    """
+    def _run() -> tuple[Any, list[str]]:
+        try:
+            return handler(**args), []
+        except Exception as exc:  # noqa: BLE001 - retry classifier needs arbitrary skill exceptions
+            if not allow_retry or not _is_transient_tool_exception(exc):
+                raise
+            retry_tag = f"transient_retry:{type(exc).__name__}"
+            return handler(**args), [retry_tag]
+
+    if not timeout_s or timeout_s <= 0:
+        return _run()
+
+    import concurrent.futures as _cf
+
+    pool = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="tool-timeout")
+    fut = pool.submit(_run)
     try:
-        return handler(**args), []
-    except Exception as exc:  # noqa: BLE001 - retry classifier needs arbitrary skill exceptions
-        if not allow_retry or not _is_transient_tool_exception(exc):
-            raise
-        retry_tag = f"transient_retry:{type(exc).__name__}"
-        return handler(**args), [retry_tag]
+        return fut.result(timeout=float(timeout_s))
+    except _cf.TimeoutError:
+        pool.shutdown(wait=False, cancel_futures=True)
+        raise TimeoutError(f"tool handler exceeded its timeout ({timeout_s:g}s)")
+    except BaseException:
+        pool.shutdown(wait=False, cancel_futures=True)
+        raise
 
 
 def _prepare_scoped_args(

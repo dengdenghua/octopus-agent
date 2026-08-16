@@ -47,6 +47,11 @@ class Skill(BaseModel):
     # default, and the vast majority) ⇒ no claim ⇒ unchanged behaviour. Use a
     # ``…:read`` suffix for shared readers (they coexist).
     exclusive_resource: str | None = None
+    # Audit T-06: optional wall-clock ceiling for the handler call, in
+    # seconds. When set (>0), a handler that exceeds it is judged
+    # status="timeout" by the tool engine instead of holding its worker
+    # thread forever. ``None`` (default) keeps the direct call.
+    timeout_s: float | None = None
 
     @property
     def has_tests(self) -> bool:

@@ -667,6 +667,7 @@ class ToolExecutor:
                             skill.handler,
                             args,
                             allow_retry=(caller != "react_loop" or not _effect_side),
+                            timeout_s=getattr(skill, "timeout_s", None),
                         )
                     status: ExecutionStatus = "success"
                     error_type: str | None = None
