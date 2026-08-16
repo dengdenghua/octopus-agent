@@ -4449,7 +4449,7 @@ export const enUS: Translations = {
     embeddedBlocked: "This website does not support embedded display",
     embeddedBlockedDescription:
       "Open it externally, or switch to desktop browser mode to continue.",
-    copilot: {
+    assistant: {
       stopAgent: "Stop",
       stopAgentTooltip: "Stop agent auto-operation",
       autoBrowseOnTooltip: "AI can operate the current page · click to disable",

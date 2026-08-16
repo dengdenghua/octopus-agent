@@ -78,7 +78,7 @@ interface ResearchLogEntry {
   url?: string;
 }
 
-export function CopilotPanel({ webviewHandle }: Props) {
+export function AssistantPanel({ webviewHandle }: Props) {
   const { t } = useI18n();
   const { activeTab, state, setCopilotOpen, setCopilotWidth } =
     useBrowserStore();
@@ -112,22 +112,22 @@ export function CopilotPanel({ webviewHandle }: Props) {
       {
         name: "Gemini",
         url: "https://gemini.google.com/app",
-        hint: t.browser.copilot.researchPlatformHintGemini,
+        hint: t.browser.assistant.researchPlatformHintGemini,
       },
       {
         name: "NotebookLM",
         url: "https://notebooklm.google.com/",
-        hint: t.browser.copilot.researchPlatformHintNotebookLM,
+        hint: t.browser.assistant.researchPlatformHintNotebookLM,
       },
       {
-        name: t.browser.copilot.researchPlatformNameDoubao,
+        name: t.browser.assistant.researchPlatformNameDoubao,
         url: "https://www.doubao.com/chat/",
-        hint: t.browser.copilot.researchPlatformHintDoubao,
+        hint: t.browser.assistant.researchPlatformHintDoubao,
       },
       {
         name: "Perplexity",
         url: "https://www.perplexity.ai/",
-        hint: t.browser.copilot.researchPlatformHintPerplexity,
+        hint: t.browser.assistant.researchPlatformHintPerplexity,
       },
     ],
     [t],
@@ -146,7 +146,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
   // Implementation note.
   // Implementation note.
   const threadId = useMemo(
-    () => `copilot:${activeTab?.id ?? "none"}:${agentName}`,
+    () => `assistant:${activeTab?.id ?? "none"}:${agentName}`,
     [activeTab?.id, agentName],
   );
 
@@ -227,7 +227,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
     });
     // Implementation note.
     void sendMessage(threadId, {
-      text: t.browser.copilot.stopAgentMessage,
+      text: t.browser.assistant.stopAgentMessage,
       files: [],
     });
   }, [sendMessage, threadId, t, webviewHandle]);
@@ -257,8 +257,8 @@ export function CopilotPanel({ webviewHandle }: Props) {
   const buildBrowserControl = useCallback(
     (loopTabId: string | null): BrowserControlOptions => ({
       sessionId: `browser-${loopTabId || "active"}`,
-      ownerId: "browser-copilot",
-      ownerLabel: "Browser Copilot",
+      ownerId: "browser-assistant",
+      ownerLabel: "Browser Assistant",
       surface: window.octopus?.isElectron
         ? "electron_webview"
         : "backend_preview",
@@ -318,7 +318,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
       const control = buildBrowserControl(loopTabId);
       if (loopCountRef.current >= MAX_AGENT_LOOP) {
         void sendMessage(threadId, {
-          text: t.browser.copilot.maxLoopReached(MAX_AGENT_LOOP),
+          text: t.browser.assistant.maxLoopReached(MAX_AGENT_LOOP),
           files: [],
         });
         loopCountRef.current = 0;
@@ -393,7 +393,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
     const wcId = webviewHandle?.getWebContentsId();
     if (!api || wcId == null) {
       void sendMessage(threadId, {
-        text: t.browser.copilot.webviewNotReadyError,
+        text: t.browser.assistant.webviewNotReadyError,
         files: [],
       });
       return;
@@ -401,7 +401,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
 
     if (loopCountRef.current >= MAX_AGENT_LOOP) {
       void sendMessage(threadId, {
-        text: t.browser.copilot.maxLoopReached(MAX_AGENT_LOOP),
+        text: t.browser.assistant.maxLoopReached(MAX_AGENT_LOOP),
         files: [],
       });
       loopCountRef.current = 0;
@@ -516,7 +516,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
               pageAgent: pageInfo.pageAgent,
             }
           : undefined;
-        const summary = `${t.browser.copilot.confirmedRiskyOperation}\n${formatResults([result], pageInfoLite)}`;
+        const summary = `${t.browser.assistant.confirmedRiskyOperation}\n${formatResults([result], pageInfoLite)}`;
         void sendMessage(threadId, { text: summary, files: [] });
       } catch (err) {
         swallow(err);
@@ -537,7 +537,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
   const buildOutgoingText = useCallback(
     (raw: string): string => {
       const recorderHeader = recorderMode
-        ? `${t.browser.copilot.recorderProtocol}\n\n---\n\n`
+        ? `${t.browser.assistant.recorderProtocol}\n\n---\n\n`
         : "";
       if (!autoBrowse) return `${recorderHeader}${raw}`;
       if (protocolInjectedRef.current.has(threadId)) return raw;
@@ -575,7 +575,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
   const buildRecorderTask = useCallback(
     (goal: string) => {
       const trimmed = goal.trim();
-      const c = t.browser.copilot;
+      const c = t.browser.assistant;
       return [
         c.recorderProtocol,
         "",
@@ -604,7 +604,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
     if (!goal) return;
     setRecorderMode(true);
     setAutoBrowse(true);
-    const c = t.browser.copilot;
+    const c = t.browser.assistant;
     setResearchLog((prev) =>
       [
         {
@@ -634,7 +634,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
   const addPageToResearchLog = useCallback(async () => {
     setBusy(true);
     setErrorMsg(null);
-    const c = t.browser.copilot;
+    const c = t.browser.assistant;
     try {
       const page = webviewHandle ? await webviewHandle.extractText() : null;
       const title = page?.title || activeTab?.title || c.currentPageFallback;
@@ -690,7 +690,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
   // Implementation note.
   const askWithPage = useCallback(
     async (instruction: string) => {
-      const c = t.browser.copilot;
+      const c = t.browser.assistant;
       if (webviewHandle && !window.octopus) {
         setBusy(true);
         setErrorMsg(null);
@@ -793,10 +793,10 @@ export function CopilotPanel({ webviewHandle }: Props) {
           <button
             onClick={stopAgentLoop}
             className="flex shrink-0 items-center gap-1 rounded bg-destructive/10 px-1.5 py-0.5 text-micro font-medium text-destructive transition-colors hover:bg-destructive/20 dark:text-destructive"
-            title={t.browser.copilot.stopAgentTooltip}
+            title={t.browser.assistant.stopAgentTooltip}
           >
             <StopCircleIcon className="size-3" />
-            {t.browser.copilot.stopAgent}
+            {t.browser.assistant.stopAgent}
           </button>
         )}
         {/* Implementation note. */}
@@ -810,8 +810,8 @@ export function CopilotPanel({ webviewHandle }: Props) {
           )}
           title={
             autoBrowse
-              ? t.browser.copilot.autoBrowseOnTooltip
-              : t.browser.copilot.autoBrowseOffTooltip
+              ? t.browser.assistant.autoBrowseOnTooltip
+              : t.browser.assistant.autoBrowseOffTooltip
           }
         >
           {autoBrowse ? "AUTO" : "READ"}
@@ -824,7 +824,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
               ? "bg-success/10 text-success"
               : "border border-white/28 text-muted-foreground hover:bg-white/18",
           )}
-          title={t.browser.copilot.recorderTitle}
+          title={t.browser.assistant.recorderTitle}
         >
           REC
         </button>
@@ -841,21 +841,21 @@ export function CopilotPanel({ webviewHandle }: Props) {
       <div className="flex shrink-0 flex-wrap gap-1.5 border-b border-white/20 bg-white/[0.05] px-3 py-2">
         <QuickAction
           icon={FileTextIcon}
-          label={t.browser.copilot.summarizePage}
-          onClick={() => askWithPage(t.browser.copilot.summarizePagePrompt)}
+          label={t.browser.assistant.summarizePage}
+          onClick={() => askWithPage(t.browser.assistant.summarizePagePrompt)}
           disabled={busy}
         />
         <QuickAction
           icon={ListIcon}
-          label={t.browser.copilot.extractKeyPoints}
-          onClick={() => askWithPage(t.browser.copilot.extractKeyPointsPrompt)}
+          label={t.browser.assistant.extractKeyPoints}
+          onClick={() => askWithPage(t.browser.assistant.extractKeyPointsPrompt)}
           disabled={busy}
         />
         <QuickAction
           icon={LanguagesIcon}
-          label={t.browser.copilot.translateToChinese}
+          label={t.browser.assistant.translateToChinese}
           onClick={() =>
-            askWithPage(t.browser.copilot.translateToChinesePrompt)
+            askWithPage(t.browser.assistant.translateToChinesePrompt)
           }
           disabled={busy}
         />
@@ -866,10 +866,10 @@ export function CopilotPanel({ webviewHandle }: Props) {
           <div className="mb-2 flex items-center justify-between gap-2">
             <div className="min-w-0">
               <div className="text-mini font-medium text-success">
-                {t.browser.copilot.recorderTitle}
+                {t.browser.assistant.recorderTitle}
               </div>
               <div className="truncate text-micro text-muted-foreground">
-                {t.browser.copilot.recorderDesc}
+                {t.browser.assistant.recorderDesc}
               </div>
             </div>
           </div>
@@ -877,8 +877,8 @@ export function CopilotPanel({ webviewHandle }: Props) {
             <input
               value={researchGoal}
               onChange={(e) => setResearchGoal(e.target.value)}
-              placeholder={t.browser.copilot.researchGoalPlaceholder}
-              aria-label={t.browser.copilot.researchGoalPlaceholder}
+              placeholder={t.browser.assistant.researchGoalPlaceholder}
+              aria-label={t.browser.assistant.researchGoalPlaceholder}
               className={cn(
                 "min-w-0 flex-1 rounded px-2 py-1 text-mini outline-none focus:ring-1 focus:ring-success/40",
                 "bg-white/10",
@@ -894,7 +894,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
               }
               className="rounded bg-success px-2 py-1 text-mini font-medium text-white hover:bg-success disabled:opacity-40"
             >
-              {t.browser.copilot.start}
+              {t.browser.assistant.start}
             </button>
           </div>
           <div className="mt-2 flex items-center justify-between gap-2">
@@ -907,7 +907,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
                 "bg-white/10",
               )}
             >
-              {t.browser.copilot.recordCurrentPage}
+              {t.browser.assistant.recordCurrentPage}
             </button>
             {researchLog.length > 0 && (
               <button
@@ -915,7 +915,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
                 onClick={() => setResearchLog([])}
                 className="text-micro text-muted-foreground hover:text-foreground"
               >
-                {t.browser.copilot.clearLog}
+                {t.browser.assistant.clearLog}
               </button>
             )}
           </div>
@@ -931,8 +931,8 @@ export function CopilotPanel({ webviewHandle }: Props) {
               >
                 <ClipboardCheckIcon className="size-3" />
                 {briefCopied
-                  ? t.browser.copilot.copied
-                  : t.browser.copilot.copyBrief}
+                  ? t.browser.assistant.copied
+                  : t.browser.assistant.copyBrief}
               </button>
               <button
                 type="button"
@@ -943,7 +943,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
                 )}
               >
                 <DownloadIcon className="size-3" />
-                {t.browser.copilot.exportMd}
+                {t.browser.assistant.exportMd}
               </button>
             </div>
           )}
@@ -991,7 +991,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
               )}
             >
               <div className="font-medium text-warning">
-                {t.browser.copilot.needsUserConfirmationTitle}
+                {t.browser.assistant.needsUserConfirmationTitle}
               </div>
               <div className="mt-1 text-muted-foreground">
                 {describePendingAction(pending)}
@@ -1007,7 +1007,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
                   disabled={busy}
                   className="rounded bg-warning px-2 py-1 font-medium text-white hover:bg-warning disabled:opacity-50"
                 >
-                  {t.browser.copilot.confirmExecute}
+                  {t.browser.assistant.confirmExecute}
                 </button>
                 <button
                   onClick={() => dismissPendingAction(pending.id)}
@@ -1030,7 +1030,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
         {thread.messages.length === 0 && !thread.isLoading && (
           <div className="flex h-full flex-col items-center justify-center text-center text-xs text-muted-foreground">
             <SparklesIcon className="mb-2 size-6 opacity-50" />
-            <div>{t.browser.copilot.emptyHint}</div>
+            <div>{t.browser.assistant.emptyHint}</div>
           </div>
         )}
         {thread.messages.map((m) => {
@@ -1072,7 +1072,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
             )}
           >
             <Loader2Icon className="size-3.5 animate-spin" />
-            {t.browser.copilot.thinking}
+            {t.browser.assistant.thinking}
           </div>
         )}
       </div>
@@ -1089,8 +1089,8 @@ export function CopilotPanel({ webviewHandle }: Props) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKey}
-            placeholder={t.browser.copilot.inputPlaceholder}
-            aria-label={t.browser.copilot.inputPlaceholder}
+            placeholder={t.browser.assistant.inputPlaceholder}
+            aria-label={t.browser.assistant.inputPlaceholder}
             rows={1}
             className="max-h-32 min-h-[24px] flex-1 resize-none bg-transparent text-sm outline-none"
           />
@@ -1125,7 +1125,7 @@ function confirmationPreflight(
   action: AgentAction,
   t: {
     browser: {
-      copilot: {
+      assistant: {
         confirmInputContent: string;
         confirmSubmitForm: string;
         confirmSensitiveClick: string;
@@ -1136,19 +1136,19 @@ function confirmationPreflight(
 ): ActionResult | null {
   const reasons: string[] = [];
   if (action.type === "type" || action.type === "pageInput") {
-    reasons.push(t.browser.copilot.confirmInputContent);
+    reasons.push(t.browser.assistant.confirmInputContent);
   }
   if (action.type === "press" && /^(enter|return)$/i.test(action.key)) {
-    reasons.push(t.browser.copilot.confirmSubmitForm);
+    reasons.push(t.browser.assistant.confirmSubmitForm);
   }
   if (action.type === "click" && SENSITIVE_ACTION_RE.test(action.selector)) {
-    reasons.push(t.browser.copilot.confirmSensitiveClick);
+    reasons.push(t.browser.assistant.confirmSensitiveClick);
   }
   if (
     (action.type === "pageAction" || action.type === "pageCapability") &&
     SENSITIVE_ACTION_RE.test(action.id)
   ) {
-    reasons.push(t.browser.copilot.confirmSensitiveAction);
+    reasons.push(t.browser.assistant.confirmSensitiveAction);
   }
   if (reasons.length === 0) return null;
   return {
@@ -1239,7 +1239,7 @@ function buildResearchBrief(
   t: ReturnType<typeof useI18n>["t"],
 ): string {
   if (entries.length === 0) return "";
-  const c = t.browser.copilot;
+  const c = t.browser.assistant;
   const ordered = [...entries].reverse();
   const lines = [
     c.researchBriefTitle,
@@ -1278,7 +1278,7 @@ function guessPlatformName(
   url: string | null | undefined,
   t: ReturnType<typeof useI18n>["t"],
 ): string {
-  const c = t.browser.copilot;
+  const c = t.browser.assistant;
   if (!url) return c.unknownPlatform;
   try {
     const host = new URL(url).hostname.toLowerCase();
@@ -1368,7 +1368,7 @@ function AgentPicker({
         >
           {agents.length === 0 ? (
             <div className="px-2 py-1.5 text-xs text-muted-foreground">
-              {t.browser.copilot.noAgents}
+              {t.browser.assistant.noAgents}
             </div>
           ) : (
             agents.map((a) => {

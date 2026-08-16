@@ -4441,7 +4441,7 @@ export const jaJP: Translations = {
     embeddedBlocked: "このウェブサイトは埋め込み表示をサポートしていません",
     embeddedBlockedDescription:
       "外部で開くか、デスクトップブラウザーモードに切り替えて続行。",
-    copilot: {
+    assistant: {
       stopAgent: "Stop",
       stopAgentTooltip: "エージェントの自動操作を停止",
       autoBrowseOnTooltip: "AI が現在のページを操作可能 · クリックで無効化",

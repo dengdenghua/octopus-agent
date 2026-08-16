@@ -3786,7 +3786,7 @@ export interface Translations {
     loadingPage: string;
     embeddedBlocked: string;
     embeddedBlockedDescription: string;
-    copilot: {
+    assistant: {
       stopAgent: string;
       stopAgentTooltip: string;
       autoBrowseOnTooltip: string;

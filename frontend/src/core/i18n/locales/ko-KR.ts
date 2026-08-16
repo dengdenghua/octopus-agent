@@ -4370,7 +4370,7 @@ export const koKR: Translations = {
     embeddedBlocked: "이 웹사이트는 임베디드 표시를 지원하지 않습니다",
     embeddedBlockedDescription:
       "외부 브라우저에서 열거나 데스크톱 브라우저 모드로 전환해 계속하세요.",
-    copilot: {
+    assistant: {
       stopAgent: "중지",
       stopAgentTooltip: "agent 자동 조작 중지",
       autoBrowseOnTooltip:

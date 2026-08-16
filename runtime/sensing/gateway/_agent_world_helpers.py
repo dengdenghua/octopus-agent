@@ -87,8 +87,8 @@ BUILTIN_TEMPLATES: list[dict[str, Any]] = [
         "featured": True,
     },
     {
-        "id": "frontend_copilot",
-        "display_name": "Frontend Copilot",
+        "id": "frontend_assistant",
+        "display_name": "Frontend Assistant",
         "description": "Builds polished UI flows, empty states, loading states, and responsive layouts.",
         "author": "octopus",
         "category": "creative",

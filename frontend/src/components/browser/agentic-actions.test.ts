@@ -1,5 +1,5 @@
 // withActionTimeout: a hung webview IPC promise must settle as a
-// rejection instead of freezing the copilot loop in `busy` forever.
+// rejection instead of freezing the assistant loop in `busy` forever.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

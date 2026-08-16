@@ -755,7 +755,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
         )}
       </div>
 
-      {/* AI copilot toggle */}
+      {/* AI assistant toggle */}
       <button
         onClick={toggleCopilot}
         className={cn(

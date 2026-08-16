@@ -4180,7 +4180,7 @@ export const zhCN: Translations = {
     embeddedBlocked: "此网站不支持嵌入显示",
     embeddedBlockedDescription:
       "可以在外部浏览器打开，或切换到桌面浏览器模式继续。",
-    copilot: {
+    assistant: {
       stopAgent: "停止",
       stopAgentTooltip: "停止 agent 自动操作",
       autoBrowseOnTooltip: "AI 可自动操作当前页面 · 点击关闭",

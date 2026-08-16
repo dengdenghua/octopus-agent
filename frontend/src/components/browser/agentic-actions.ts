@@ -170,7 +170,7 @@ export async function runAction(
 }
 
 // A wedged webview IPC channel leaves action promises pending forever,
-// which froze the copilot loop in `busy` with only a manual Stop as
+// which froze the assistant loop in `busy` with only a manual Stop as
 // the way out. Racing every action against a deadline turns the hang
 // into a normal failed result: the loop's catch/finally path reports
 // it and unfreezes.
@@ -336,7 +336,7 @@ export const BROWSER_ACTION_PROTOCOL = `\
 
 // Run an AgentAction against a WebviewTabHandle (the React webview component's
 // imperative handle), as opposed to runAction() above which drives the Electron
-// browser by webContentsId. Shared here so BOTH the standalone browser copilot
+// browser by webContentsId. Shared here so BOTH the standalone browser assistant
 // and the embedded browser-preview surface drive their webview through one
 // dispatcher (the embedded preview's webview was previously uncontrollable).
 export async function runBrowserHandleAction(

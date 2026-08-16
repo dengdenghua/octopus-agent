@@ -283,7 +283,7 @@ async def _run_sse_server(host: str, port: int) -> None:
     print(f"  MCP SSE endpoint: http://{host}:{port}/api/tentacle/mcp/sse")
     print(f"  WebSocket port: {port - 1}")
     print()
-    print("Claude Desktop / Cursor 配置（网关开启账号鉴权时，需在配置里带上账号登录 Token）:")
+    print("MCP 客户端配置（网关开启账号鉴权时，需在配置里带上账号登录 Token）:")
     print(
         json.dumps(
             {

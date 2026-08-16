@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { CopilotPanel } from "@/components/browser/copilot-panel";
+import { AssistantPanel } from "@/components/browser/assistant-panel";
 
 import { TabBar } from "@/components/browser/tab-bar";
 import { UrlBar } from "@/components/browser/url-bar";
@@ -456,7 +456,7 @@ function BrowserShell() {
                   minWidth: renderDevice !== "desktop" ? 280 : undefined,
                 }}
               >
-                <CopilotPanel webviewHandle={activeHandle} />
+                <AssistantPanel webviewHandle={activeHandle} />
               </div>
             )}
             <div
