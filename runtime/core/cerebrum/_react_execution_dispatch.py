@@ -11,6 +11,7 @@ react_loop or react_execution.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from typing import Any
 
@@ -32,6 +33,64 @@ _VERIFY_SKILLS = frozenset(
     }
 )
 TOOL_OBSERVATION_MAX_CHARS = 16000
+
+# Argument-validation rejections ("old_string must be non-empty", "missing
+# path") are a different failure class from execution failures: the call never
+# reached the tool's real work, so the correct response is invariably to
+# re-issue the SAME tool with corrected argument names/values. The generic
+# failure coaching below offers "switch tools or just answer" as alternatives,
+# which turns a one-key typo into an abandoned write — observed in
+# trn_634e5726d3c14e85, where a single ``old``/``old_string`` mismatch ended
+# the only write attempt of an 11-turn session and the model spent its
+# remaining 25 calls re-reading source. Matched on the shape these validators
+# emit rather than on tool identity so new skills inherit the behaviour.
+_SCHEMA_ERROR_RE = re.compile(
+    r"^(?:"
+    r"missing\s+\w+"
+    r"|(?:\w+(?:\[\d+\])?(?:\.\w+)?)\s+(?:must\s+be|is\s+required)\b"
+    r"|unknown\s+(?:argument|parameter|field)\b"
+    r"|unexpected\s+keyword\b"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _is_schema_rejection(detail: str, error_type: str) -> bool:
+    """Whether a failure is argument validation rather than execution.
+
+    Deliberately narrow: only the leading clause of the error payload is
+    considered, so a command whose *output* happens to contain "missing path"
+    is not misclassified as a schema rejection.
+    """
+    if error_type not in {"structured_error", "validation_error", "invalid_arguments"}:
+        return False
+    for line in (detail or "").splitlines():
+        text = line.strip().strip("{}\"' ")
+        if not text:
+            continue
+        # Strip a leading JSON key so {"error": "missing path"} is reachable.
+        if text.lower().startswith('"error"') or text.lower().startswith("error"):
+            _, _, text = text.partition(":")
+            text = text.strip().strip("\"' ")
+        return bool(_SCHEMA_ERROR_RE.match(text))
+    return False
+
+
+def _schema_repair_feedback(skill_name: str) -> str:
+    """Directive retry coaching for an argument-validation rejection.
+
+    States the invariant (same tool, corrected arguments) and closes the two
+    escape hatches the generic message leaves open, because neither can be
+    correct here: the tool was never actually exercised.
+    """
+    return (
+        "这是参数校验失败，不是执行失败 —— 该工具的真实操作从未运行。\n"
+        f"下一轮必须重新调用 `{skill_name}`，仅修正参数名/取值；"
+        "禁止改用其他工具、禁止跳过这一步、禁止在本轮给出 Final Answer。\n"
+        "先核对该工具声明的必填参数全名（例如 edit_file 需要 "
+        "`old_string`/`new_string`，不是 `old`/`new`），逐字使用，不要缩写或改写。"
+    )
+
 
 # dsh tool-result pruner master switch lives in tool_output_pruner.py;
 # this local alias keeps the react-loop call sites (and their tests) on
@@ -66,6 +125,7 @@ def _execute_action_via_beak(
     react_step_counter: int,
     agent: Any = None,
     intent: ParsedIntent | None = None,
+    sandbox_override: dict[str, Any] | None = None,
 ) -> tuple[str | None, Any]:
     executor = getattr(stack, "executor", None)
     if executor is None:
@@ -227,25 +287,53 @@ def _execute_action_via_beak(
             )
 
         with session_cm:
-            trusted_browser_loopback = bool(
-                skill_name.startswith("browser_")
-                and (
-                    user_context.get("browser_operation_mode") is True
-                    or user_context.get("browser_regression_enabled") is True
+            # Sandbox escalation hook: when the caller re-runs a tool that
+            # was blocked by the sandbox, ``sandbox_override`` temporarily
+            # replaces the session's declared ``sandbox_policy`` (e.g. to
+            # allow network) for this one execution, then is restored so the
+            # rest of the turn keeps its original (tighter) contract.
+            _sandbox_prev: Any = None
+            # Hold the mapping itself rather than re-deriving it in the
+            # restore block: the session lookup can fail independently there,
+            # which would leak the widened policy into the rest of the turn.
+            _sandbox_md: dict[str, Any] | None = None
+            if sandbox_override is not None:
+                try:
+                    from runtime.platform.process.session import current_session as _cs_ov
+
+                    _ov_md = getattr(_cs_ov(), "metadata", None)
+                    if isinstance(_ov_md, dict):
+                        _sandbox_prev = _ov_md.get("sandbox_policy")
+                        _ov_md["sandbox_policy"] = sandbox_override
+                        _sandbox_md = _ov_md
+                except Exception:  # noqa: BLE001 - escalation override is best-effort
+                    _sandbox_md = None
+            try:
+                trusted_browser_loopback = bool(
+                    skill_name.startswith("browser_")
+                    and (
+                        user_context.get("browser_operation_mode") is True
+                        or user_context.get("browser_regression_enabled") is True
+                    )
                 )
-            )
-            step = executor.execute_step(
-                step_id=react_step_counter,
-                node_id=f"react_n{react_step_counter}",
-                sucker_id=SkillId(skill_name),
-                args=args,
-                caller="react_loop",
-                task_id=react_task_id,
-                arm_id=ArmId("react_arm"),
-                budget=budget,
-                actor=None,
-                trusted_browser_loopback=trusted_browser_loopback,
-            )
+                step = executor.execute_step(
+                    step_id=react_step_counter,
+                    node_id=f"react_n{react_step_counter}",
+                    sucker_id=SkillId(skill_name),
+                    args=args,
+                    caller="react_loop",
+                    task_id=react_task_id,
+                    arm_id=ArmId("react_arm"),
+                    budget=budget,
+                    actor=None,
+                    trusted_browser_loopback=trusted_browser_loopback,
+                )
+            finally:
+                if _sandbox_md is not None:
+                    if _sandbox_prev is None:
+                        _sandbox_md.pop("sandbox_policy", None)
+                    else:
+                        _sandbox_md["sandbox_policy"] = _sandbox_prev
     except (ConnectionError, TimeoutError, OSError, TypeError, ValueError) as exc:
         _logger.warning("react_loop tool exec failed (%s): %s", skill_name, exc)
         return f"(工具执行异常) {type(exc).__name__}: {exc}", None
@@ -285,6 +373,11 @@ def _execute_action_via_beak(
         )
         detail = normalized_result.rendered.strip()
         detail_line = f"\n{detail}" if detail else ""
+        if _is_schema_rejection(detail, err):
+            return (
+                f"(参数校验失败) status={status} error={err}{detail_line}\n"
+                + _schema_repair_feedback(skill_name)
+            ), step
         return (
             f"(工具失败) status={status} error={err}{detail_line}\n"
             "请在下一轮 Thought 中分析失败原因，然后换一种方式重试 · "

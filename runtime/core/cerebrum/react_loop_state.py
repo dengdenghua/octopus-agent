@@ -96,6 +96,11 @@ class _LoopState:
     model_failovers: int = 0
     model_timeout_recoveries: int = 0
     consecutive_format_violations: int = 0
+    # Consecutive rounds that produced neither a tool call nor a final answer.
+    # Drives ``ModelRequest.require_tool_use`` so a prose-only round is
+    # answered by constraining the next decode rather than by another
+    # prompt-level reminder the model is free to ignore.
+    zero_action_rounds: int = 0
     throughput_chars: int = 0
     final_stream_started: bool = False
     force_convergence_next: bool = False

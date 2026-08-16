@@ -333,6 +333,22 @@ def _note_guard_impasse(
     return state["count"] >= rejection_limit
 
 
+def guard_stall_kind(steps: list[ReActStep]) -> str:
+    """Classify *why* a guard keeps rejecting: ``action_deficit`` vs ``evidence``.
+
+    The two demand opposite responses and the loop previously conflated them:
+
+    * ``evidence`` — the model is running tools but cannot obtain what the
+      guard wants. Text feedback is useful here; it names the missing piece.
+    * ``action_deficit`` — the model executed nothing at all. Text feedback is
+      provably useless: in trn_c2fbddce247b4164 the same guard rejected three
+      rephrasings of "I'll inspect X next" while zero tools ran. What breaks
+      that loop is the decode-level ``require_tool_use`` forcing, so this case
+      should be given fewer rephrasing attempts before terminating honestly.
+    """
+    return "evidence" if _trajectory_has_executed_action(steps) else "action_deficit"
+
+
 def _guard_rejection_outcome(state: dict, label: str, steps: list) -> str:
     """Return ``retry`` or ``hard_stop`` for a repeated rejection.
 
@@ -575,12 +591,22 @@ def _strip_inline_tool_calls(text: str) -> str:
     return "".join(parts).strip()
 
 
-def _guard_impasse_final_answer(label: str, message: str) -> str:
+def _guard_impasse_final_answer(
+    label: str,
+    message: str,
+    steps: list[ReActStep] | None = None,
+) -> str:
     """The honest terminal answer for a guard impasse — shared by every
     in-loop guard-rejection site so the wording (and the truth it tells)
-    can't drift between them."""
+    can't drift between them.
+
+    ``steps`` lets the hint distinguish an *action deficit* (the model never
+    executed anything) from *evidence starvation* (it ran tools but could not
+    obtain what the guard demanded).  Optional so existing call sites keep
+    working; passing it produces a materially more accurate diagnosis.
+    """
     user_reason = _guard_reason_for_user(label, message)
-    actionable = _guard_impasse_actionable_hint(label, message)
+    actionable = _guard_impasse_actionable_hint(label, message, steps)
     # ``label`` is useful for logs/metrics, but exposing names such as
     # ``todo-protocol guard`` makes an internal policy failure look like an
     # assistant answer.  Keep the user-facing result factual and actionable.
@@ -592,7 +618,11 @@ def _guard_impasse_final_answer(label: str, message: str) -> str:
     )
 
 
-def _guard_impasse_actionable_hint(label: str, message: str) -> str:
+def _guard_impasse_actionable_hint(
+    label: str,
+    message: str,
+    steps: list[ReActStep] | None = None,
+) -> str:
     """Scene-specific actionable advice appended to the impasse message.
 
     Instead of a single generic "check and retry", give the user a
@@ -620,6 +650,23 @@ def _guard_impasse_actionable_hint(label: str, message: str) -> str:
             "1) 点击继续，让我先读取相关文件或运行验证命令；\n"
             "2) 提供必要的权限/登录/信息后我再继续。"
         )
+    # The fallback used to assert that the tool-call format "was not
+    # recognised by the execution layer".  When the trajectory contains no
+    # executed action at all, that claim is simply false — nothing was
+    # rejected because nothing was ever emitted (observed in
+    # trn_c2fbddce247b4164: zero commandExecution items and zero
+    # tool-call-protocol-error injections, yet the user was told their tool
+    # format failed).  Misdiagnosing an action deficit as a parse failure
+    # sends the user to fix a wire format that was never broken.
+    if steps is not None and not _trajectory_has_executed_action(steps):
+        return (
+            "本轮我只输出了说明文字，没有真正执行任何工具调用，"
+            "因此没有可用于收尾的证据。这不是工具格式或权限问题。\n"
+            "如何解决：\n"
+            "1) 点击继续，我会直接从具体操作开始，而不是先复述计划；\n"
+            "2) 如果目标包含修改代码，请明确说出要改的文件或行为，"
+            "我会先落地改动再验证。"
+        )
     return (
         "这通常意味着模型输出的工具调用格式未被执行层识别,"
         "或任务所需的能力/权限当前不可用。\n"
@@ -628,6 +675,22 @@ def _guard_impasse_actionable_hint(label: str, message: str) -> str:
         "2) 检查上面的原因后重新描述任务；\n"
         "3) 如仍失败，尝试切换到 CLI code 模式运行。"
     )
+
+
+def _trajectory_has_executed_action(steps: list[ReActStep]) -> bool:
+    """Whether any step actually reached the execution layer.
+
+    Distinct from ``_trajectory_has_successful_tool_evidence``: a *failed*
+    execution still counts here, because the wire format demonstrably worked.
+    Only a trajectory with no executed action at all is an action deficit.
+    """
+    for step in steps:
+        if getattr(step, "action_results", None):
+            return True
+        action = (getattr(step, "action", "") or "").strip().lower()
+        if action and action not in {"none", "n/a", "na"}:
+            return True
+    return False
 
 
 def _guard_reason_for_user(label: str, message: str) -> str:
@@ -780,7 +843,7 @@ def _phase_6e_guards_and_step_emit(
                         "explicitly instead of burning the iteration budget",
                         _guard_label,
                     )
-                    final_answer = _guard_impasse_final_answer(_guard_label, _guard_message)
+                    final_answer = _guard_impasse_final_answer(_guard_label, _guard_message, steps)
                     terminated_reason = "guard_impasse"
                     steps.append(step)
                     return _LoopControl.BREAK

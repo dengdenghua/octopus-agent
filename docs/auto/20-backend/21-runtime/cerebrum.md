@@ -337,6 +337,12 @@ tier: "core"
 | func | `def build_direct_answer_directive(goal, decision, steps)` | Keep the original task next to bounded evidence during synthesis. |
 | func | `def evidence_answer_conflicts_with_goal(goal, answer)` | Reject a synthesis answer that falsely claims there was no task. |
 
+### `react_final_answer_guards.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def guard_stall_kind(steps)` | Classify *why* a guard keeps rejecting: ``action_deficit`` vs ``evidence``. |
+
 ### `react_goal_analysis.py`
 
 | Kind | Symbol | Doc |
@@ -498,7 +504,7 @@ tier: "core"
 
 ## Who imports this
 
-**53** file(s) reference this package:
+**54** file(s) reference this package:
 
 - **`runtime/cli_code.py/`** · 1 file(s)
   - `runtime/cli_code.py`
@@ -514,13 +520,13 @@ tier: "core"
   - `runtime/cli_serve.py`
 - **`runtime/core/`** · 1 file(s)
   - `runtime/core/graph_runtime/runtime.py`
-- **`runtime/execution/`** · 6 file(s)
+- **`runtime/execution/`** · 7 file(s)
   - `runtime/execution/loops/_controller_attempt.py`
   - `runtime/execution/misc/parallel_runner.py`
   - `runtime/execution/parallel_agents/_orchestrator_models.py`
   - `runtime/execution/parallel_agents/stack_runner.py`
-  - `runtime/execution/swarm/runtime.py`
-  - `runtime/execution/tool_spec_builder.py`
+  - `runtime/execution/subagents/react_drive.py`
+  - _… and 2 more_
 - **`runtime/memory/`** · 2 file(s)
   - `runtime/memory/cowork/turn_plan.py`
   - `runtime/memory/diagnostics/_trace_store_recovery.py`

@@ -32,6 +32,65 @@ from runtime.core.cerebrum.todo_protocol import render_todo_protocol_guidance
 
 _logger = logging.getLogger(__name__)
 
+# Explicit repair authorisation inside an audit turn. Deliberately requires an
+# imperative verb of *action*, not a mere mention of problems: "有哪些问题需要
+# 修复" is a question about repairs, not a mandate to perform them, and a false
+# positive here would let an audit turn silently rewrite code. Matched against
+# the user's own instruction only — never against tool output, which is
+# untrusted and frequently contains words like "fix" in unrelated contexts.
+_FIX_AUTHORIZATION_PATTERNS = (
+    "继续修复",
+    "开始修复",
+    "直接修复",
+    "去修复",
+    "修复吧",
+    "修一下",
+    "修掉",
+    "全修",
+    "都修",
+    "干活",
+    "动手",
+    "改吧",
+    "开始改",
+    "直接改",
+    "去改",
+    "开始优化",
+    "帮我修",
+    "让你修",
+    "现在修",
+)
+_FIX_AUTHORIZATION_EN = (
+    "go ahead and fix",
+    "start fixing",
+    "just fix",
+    "fix it now",
+    "fix them all",
+    "apply the fix",
+    "make the change",
+)
+
+
+def _fix_authorization_present(state: _AssemblyState) -> bool:
+    """Whether the user's instruction authorises landing writes this turn.
+
+    An explicit host-provided flag wins; otherwise the goal text is matched
+    against imperative repair instructions. Returns False on any uncertainty
+    so the read-only default holds — the cost of a missed authorisation is one
+    clarifying round, while the cost of a false positive is an unrequested
+    edit.
+    """
+    for source in (state.user_context, state.metadata):
+        flag = source.get("fix_authorized") if isinstance(source, dict) else None
+        if isinstance(flag, bool):
+            return flag
+    goal = str(getattr(state.intent, "normalized_goal", "") or "").strip()
+    if not goal:
+        return False
+    lowered = goal.lower()
+    if any(token in goal for token in _FIX_AUTHORIZATION_PATTERNS):
+        return True
+    return any(token in lowered for token in _FIX_AUTHORIZATION_EN)
+
 
 def _assemble_core_guidance(state: _AssemblyState) -> None:
     """Approval gate + workspace / project / code-mode / cadence sections."""
@@ -311,17 +370,35 @@ def _assemble_delegation_guidance(state: _AssemblyState) -> None:
         or str(state.mode_value or "").strip().lower() == "audit"
         or str(state.agent_mode_value or "").strip().lower() == "audit"
     ):
-        state.system_parts.append(
-            "\n<audit-mode>\n"
-            "当前为审计/审查模式。默认行为是只读检查并输出审计报告："
-            "先逐项核对目标并给出证据与结论，最后汇总发现的问题和风险。\n"
-            "不要在没有明确说明的情况下静默修改代码或配置。若你已收到用户明确的"
-            "修复授权（如“修复”“继续修复”“干活”“改吧”“动手”等指令），"
-            "直接落地执行写操作，并在最终回复中显式列出每一处改动与验证结果，"
-            "不要再停下来反复征询方向；只有在用户尚未授权修改或意图不明确时，"
-            "才先在报告中指出问题、说明拟改方案并征得确认后再动手。\n"
-            "</audit-mode>"
-        )
+        # Once the user has authorised repairs, the read-only clause is
+        # *removed* rather than followed by an exception. Keeping both in the
+        # prompt makes the model re-adjudicate "does the exception apply?"
+        # every round — observed across trn_c2fbddce247b4164 /
+        # trn_3348dff0b9e54a99, whose reasoning traces spend most of their
+        # length on exactly that question and end with another plan instead of
+        # an edit. A contract the model has to reason *about* is a contract it
+        # can reason its way out of.
+        if _fix_authorization_present(state):
+            state.system_parts.append(
+                "\n<audit-mode>\n"
+                "本轮为审计模式下的已授权修复阶段。用户已明确要求动手修复，"
+                "只读约束不再适用。\n"
+                "直接落地写操作：先改代码，再运行验证，最后在回复中列出"
+                "每一处改动（文件与行为）和验证结果。\n"
+                "不要重新征询方向、不要复述计划代替执行、"
+                "不要以“我将检查/我先看一下”作为本轮结论。\n"
+                "</audit-mode>"
+            )
+        else:
+            state.system_parts.append(
+                "\n<audit-mode>\n"
+                "当前为审计/审查模式。默认行为是只读检查并输出审计报告："
+                "先逐项核对目标并给出证据与结论，最后汇总发现的问题和风险。\n"
+                "不要在没有明确说明的情况下静默修改代码或配置；"
+                "若审计中发现需要修复的问题，先在报告中指出，"
+                "说明你准备如何修改、为何修改，征得确认后再执行写操作。\n"
+                "</audit-mode>"
+            )
     if state.is_codex_composer_plan_or_spec:
         state.system_parts.append(
             "\n<codex-composer-mode>\n"

@@ -650,7 +650,7 @@ Suckers = skill pool.
 
 ## Who imports this
 
-**65** file(s) reference this package:
+**66** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
@@ -671,13 +671,13 @@ Suckers = skill pool.
   - `runtime/core/cerebrum/_react_prompt_assembly_guidance.py`
   - `runtime/core/cerebrum/capability_router.py`
   - _… and 2 more_
-- **`runtime/execution/`** · 10 file(s)
+- **`runtime/execution/`** · 11 file(s)
   - `runtime/execution/all_skills/__init__.py`
   - `runtime/execution/arms/base.py`
   - `runtime/execution/loops/verifiers.py`
   - `runtime/execution/misc/skill_policy.py`
   - `runtime/execution/subagents/_bridge_trace.py`
-  - _… and 5 more_
+  - _… and 6 more_
 - **`runtime/memory/`** · 3 file(s)
   - `runtime/memory/cowork/runtime.py`
   - `runtime/memory/hemolymph/composer.py`

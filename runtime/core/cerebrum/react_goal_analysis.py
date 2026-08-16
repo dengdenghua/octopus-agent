@@ -99,7 +99,10 @@ def derive_effective_execution_goal(current_goal: str, conversation_messages: An
     if not current or _goal_explicitly_cancels_execution(current):
         return current
     if (
-        _goal_requests_code_mutation(current)
+        # Colloquial prods are excluded here on purpose: "动手啊" authorises
+        # writes but is not a goal, so it must inherit the earlier objective
+        # rather than replace it.
+        _goal_requests_code_mutation(current, include_colloquial=False)
         or _goal_requests_project_inspection(current)
         or _explicitly_requested_tool_names(current)
     ):
@@ -211,12 +214,37 @@ def _goal_requests_research_lookup(goal: str) -> bool:
     )
 
 
-def _goal_requests_code_mutation(goal: str) -> bool:
+# Bare colloquial imperatives ("干活啊", "动手", "改吧"). These authorise writes
+# but, unlike the formal verbs, they carry no subject — they are steering
+# prods that only mean something relative to an earlier goal. So they count as
+# a mutation request for guard purposes, yet must NOT make a steering message
+# look self-contained to ``derive_effective_execution_goal``; otherwise
+# "动手啊" replaces the original question instead of inheriting it.
+_COLLOQUIAL_MUTATION_MARKERS = (
+    "干活",
+    "动手",
+    "开始优化",
+    "开始改",
+    "去改",
+    "改吧",
+    "修一下",
+    "修掉",
+    "全修",
+    "都修",
+    "落地",
+)
+
+
+def _goal_requests_code_mutation(goal: str, *, include_colloquial: bool = True) -> bool:
     """Whether the user asked code mode to change workspace state.
 
     This is intentionally keyed off explicit action verbs.  Code mode is
     also used for read-only reviews, so merely mentioning a file/repository
     must not force an edit.
+
+    ``include_colloquial=False`` restricts the match to *self-contained*
+    mutation requests, excluding bare prods like "动手啊" that need an earlier
+    goal to be meaningful.
     """
 
     lowered = _inspection_goal_text(goal)
@@ -237,10 +265,18 @@ def _goal_requests_code_mutation(goal: str) -> bool:
         " ",
         lowered,
     )
+    # ``别`` is as common as ``不要`` in spoken prohibitions ("别改吧"), and the
+    # short colloquial verbs added to ``chinese_markers`` below must be
+    # negatable too — otherwise widening the positive vocabulary would turn
+    # "别改吧" into an implementation mandate.
+    _negatable = (
+        r"修改|改动|更改|重命名|更新|创建|新增|添加|删除|写入|修复|构建|迁移|重构"
+        r"|干活|动手|落地|改吧|开始改|去改|修一下|修掉"
+    )
     lowered = re.sub(
-        r"(?:不要|无需|不需要|禁止|不得|不可|"
-        r"不(?=修改|改动|更改|重命名|更新|创建|新增|添加|删除|写入|修复|构建|迁移|重构))\s*"
-        r"(?:修改|改动|更改|重命名|更新|创建|新增|添加|删除|写入|修复|构建|迁移|重构)",
+        r"(?:不要|无需|不需要|禁止|不得|不可|别|"
+        rf"不(?={_negatable}))\s*"
+        rf"(?:{_negatable})",
         " ",
         lowered,
     )
@@ -283,8 +319,19 @@ def _goal_requests_code_mutation(goal: str) -> bool:
         "构建",
         "迁移",
         "重构",
+        # Colloquial imperatives carry the same mandate as the formal verbs
+        # above and were previously invisible here: "干活啊" and "开始优化"
+        # both returned False, so the missing-write guard never fired on turns
+        # that produced zero file changes (trn_3348dff0b9e54a99,
+        # trn_7e2403ef8c5a42db). They are imperative-only by construction —
+        # "优化" alone is excluded because it routinely appears in read-only
+        # review prose ("这段代码可以优化"), whereas "开始优化" cannot.
     )
-    return english_mutation is not None or any(marker in lowered for marker in chinese_markers)
+    if english_mutation is not None or any(marker in lowered for marker in chinese_markers):
+        return True
+    if not include_colloquial:
+        return False
+    return any(marker in lowered for marker in _COLLOQUIAL_MUTATION_MARKERS)
 
 
 def _explicitly_requested_tool_names(goal: str) -> set[str]:

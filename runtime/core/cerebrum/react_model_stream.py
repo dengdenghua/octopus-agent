@@ -191,6 +191,7 @@ def _phase_6b_model_stream(
     terminated_reason = state.terminated_reason
     consecutive_llm_errors = state.consecutive_llm_errors
     _model_failovers = state.model_failovers
+    _zero_action_rounds = state.zero_action_rounds
     resp = None
     raw_text = ""
     _request_has_tool_evidence = False
@@ -233,6 +234,22 @@ def _phase_6b_model_stream(
                     )
                     if _native_mode and _evidence_convergence_active is None
                     else []
+                ),
+                # Action-deficit forcing. A model that answered the previous
+                # round with prose only — no tool call — will usually do it
+                # again: prompt-level reminders are advice, and the observed
+                # failure mode is the model narrating "I'll check X next"
+                # for several consecutive rounds while executing nothing
+                # (trn_c2fbddce247b4164 / trn_2f015724ea194bfd: zero tool
+                # calls each, terminated by the guard impasse). Constraining
+                # the decode instead makes prose-only physically unavailable
+                # for one round. Never applied while converging: the closing
+                # round is *supposed* to be prose.
+                require_tool_use=(
+                    _native_mode
+                    and _evidence_convergence_active is None
+                    and not _iteration_recovery_mode
+                    and _zero_action_rounds > 0
                 ),
             )
             text_parts: list[str] = []

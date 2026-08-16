@@ -73,6 +73,28 @@ from runtime.platform.models.rescue_policy import note_model_stall
 _logger = logging.getLogger(__name__)
 
 
+def _next_zero_action_rounds(
+    current: int,
+    *,
+    step: Any,
+    maybe_final: Any,
+    final_answer_emitted: bool,
+) -> int:
+    """Consecutive count of rounds that neither acted nor concluded.
+
+    Drives ``ModelRequest.require_tool_use`` on the following request. A round
+    that emitted an action resets the count even if that action *failed*: the
+    model is engaging with the tools rather than narrating around them, which
+    is the behaviour the forcing exists to restore. Concluding the turn also
+    resets, so a legitimate prose answer is never treated as a deficit.
+    """
+    if step is not None and (getattr(step, "action", "") or "").strip():
+        return 0
+    if maybe_final or final_answer_emitted:
+        return 0
+    return current + 1
+
+
 def _phase_6c_parse_and_guard(
     state: _LoopState,
     *,
@@ -399,7 +421,7 @@ def _phase_6c_parse_and_guard(
                         "with no intervening tool execution — terminating",
                         _guard_label,
                     )
-                    final_answer = _guard_impasse_final_answer(_guard_label, _guard_message)
+                    final_answer = _guard_impasse_final_answer(_guard_label, _guard_message, steps)
                     terminated_reason = "guard_impasse"
                     steps.append(step)
                     return _LoopControl.BREAK
@@ -585,6 +607,7 @@ def _phase_6c_parse_and_guard(
                             final_answer = _guard_impasse_final_answer(
                                 _guard_label,
                                 _guard_message,
+                                steps,
                             )
                             terminated_reason = "guard_impasse"
                             steps.append(step)
@@ -660,6 +683,12 @@ def _phase_6c_parse_and_guard(
             yield _tp
         return _LoopControl.CONTINUE
     finally:
+        state.zero_action_rounds = _next_zero_action_rounds(
+            state.zero_action_rounds,
+            step=step,
+            maybe_final=maybe_final,
+            final_answer_emitted=final_answer_emitted,
+        )
         state.native_mode = _native_mode
         state.model_timeout_recoveries = _model_timeout_recoveries
         state.final_stream_started = _final_stream_started
