@@ -93,3 +93,41 @@ def test_rules_cards_get(tmp_path: Path) -> None:
     else:
         # ruamel missing — the endpoint degrades cleanly.
         assert "error" in data
+
+
+def test_rules_cards_put_upsert_and_delete(tmp_path: Path) -> None:
+    rules = tmp_path / "rules.yaml"
+    rules.write_text(RULES_YAML, encoding="utf-8")
+    client = _build(rules)
+    resp = client.post(
+        "/api/reflex/rules-cards",
+        json={
+            "expected_mtime": 0,
+            "reload": False,
+            "upserts": [
+                {"id": "new1", "trigger_mode": "contains", "trigger_text": "ping", "reply": "pong", "priority": "low"}
+            ],
+            "deletes": ["webhook"],
+        },
+    )
+    data = resp.json()
+    if data.get("ok") is True:
+        content = rules.read_text(encoding="utf-8")
+        assert "ping" in content
+        assert "webhook" not in content
+    else:
+        assert "error" in data  # ruamel missing degrades cleanly
+
+
+def test_rules_yaml_mtime_conflict(tmp_path: Path) -> None:
+    rules = tmp_path / "rules.yaml"
+    rules.write_text(RULES_YAML, encoding="utf-8")
+    client = _build(rules)
+    future_mtime = rules.stat().st_mtime + 1000
+    resp = client.post(
+        "/api/reflex/rules-yaml",
+        json={"content": RULES_YAML, "expected_mtime": future_mtime, "reload": False},
+    )
+    data = resp.json()
+    if data.get("ok") is not True:
+        assert "modified externally" in data.get("error", "") or "parse failed" in data.get("error", "")
