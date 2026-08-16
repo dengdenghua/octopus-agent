@@ -73,6 +73,10 @@ class ParallelTaskRunner:
         self._tasks: dict[str, ParallelTask] = {}
         self._pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="parallel-task")
         self._cancelled: set[str] = set()
+        # Audit T-09: one CancellationSource per in-flight task, installed as
+        # the ambient token around run_react_loop so cancel() actually stops
+        # the running loop instead of just labelling it cancelled.
+        self._sources: dict[str, Any] = {}
         # The wired execution stack (``StackProtocol``) this runner drives
         # ``run_react_loop`` against. Previously ``_run_task`` reached for a
         # ``get_app_state()`` helper that never existed, so every task failed
@@ -104,6 +108,11 @@ class ParallelTaskRunner:
         if not task or task.status in (TaskStatus.COMPLETED, TaskStatus.FAILED):
             return False
         self._cancelled.add(task_id)
+        # Fire the task's cancellation source so the running react loop (which
+        # polls the ambient token each iteration) stops promptly (audit T-09).
+        source = self._sources.get(task_id)
+        if source is not None:
+            source.cancel(reason="cancelled by operator")
         task.status = TaskStatus.CANCELLED
         task.finished_at = time.time()
         return True
@@ -127,6 +136,15 @@ class ParallelTaskRunner:
         task.status = TaskStatus.RUNNING
         task.started_at = time.time()
 
+        # Audit T-09: install a per-task cancellation source as the ambient
+        # token so a cancel() from the API thread reaches the running loop.
+        from runtime.safety.approval.cancellation import (
+            CancellationSource,
+            scoped_cancellation,
+        )
+
+        source = CancellationSource()
+        self._sources[task_id] = source
         try:
             from runtime.core.cerebrum.react_loop import run_react_loop
             from runtime.platform.models import ParsedIntent
@@ -147,20 +165,32 @@ class ParallelTaskRunner:
             if not state:
                 raise RuntimeError("parallel runner has no execution stack wired in")
 
-            result = run_react_loop(
-                stack=state,
-                intent=intent,
-                agent=None,
-                max_iterations=6,
-                thread_id=task.thread_id or task.id,
-            )
-            task.result = str(result) if result else "completed"
-            task.status = TaskStatus.COMPLETED
+            with scoped_cancellation(source.token):
+                result = run_react_loop(
+                    stack=state,
+                    intent=intent,
+                    agent=None,
+                    max_iterations=6,
+                    thread_id=task.thread_id or task.id,
+                )
+            if task_id in self._cancelled:
+                # Audit T-09: a cancelled task must keep its CANCELLED
+                # terminal state instead of being overwritten by the
+                # loop's normal completion path.
+                task.result = str(result) if result else "cancelled"
+                task.status = TaskStatus.CANCELLED
+            else:
+                task.result = str(result) if result else "completed"
+                task.status = TaskStatus.COMPLETED
         except Exception as exc:
             _logger.exception("parallel task %s failed", task_id)
-            task.error = str(exc)
-            task.status = TaskStatus.FAILED
+            if task_id in self._cancelled:
+                task.status = TaskStatus.CANCELLED
+            else:
+                task.error = str(exc)
+                task.status = TaskStatus.FAILED
         finally:
+            self._sources.pop(task_id, None)
             task.finished_at = time.time()
 
 
