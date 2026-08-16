@@ -651,6 +651,68 @@ def test_explorer_has_no_hard_round_cap():
     assert EPHEMERAL_MAX_ROUNDS_BY_ROLE["explorer"] is None
 
 
+def test_length_limit_on_the_last_round_still_finishes_the_writeout():
+    """A finite-cap role cut off mid-sentence on its LAST allowed round must
+    still get to finish, instead of returning a truncated answer.
+
+    The continue-after-truncation path is gated on ``round_i + 1 < max_rounds``,
+    so before the write-out grace a role that got length-limited exactly at the
+    cap had nowhere to continue: the work was done and only the write-out was
+    broken. reviewer's cap is 5, so rounds 0-3 burn budget with tool calls and
+    round 4 (the last) returns length-limited text.
+    """
+    from runtime.execution.suckers.ephemeral_runner import (
+        make_llm_ephemeral_runner,
+    )
+
+    script = [
+        [{"name": "read_file", "input": {"path": "a.ts"}}],
+        [{"name": "read_file", "input": {"path": "b.ts"}}],
+        [{"name": "read_file", "input": {"path": "c.ts"}}],
+        [{"name": "read_file", "input": {"path": "d.ts"}}],
+        "findings so far, cut off at hardware+",  # round 4 == cap, length-limited
+        " and the rest of the report.",  # only reachable via write-out grace
+    ]
+    router = _ScriptedAgenticRouter(
+        script=script,
+        finish_reasons=["stop", "stop", "stop", "stop", "length", "stop"],
+    )
+    registry = _StubRegistry({"read_file": lambda **kw: {"ok": True}})
+    runner = make_llm_ephemeral_runner(router, registry=registry, default_model="m")
+
+    out = runner(_make_call(role_id="reviewer"))  # cap 5
+
+    assert "findings so far, cut off at hardware+" in out
+    assert "and the rest of the report." in out
+    assert "[response truncated" not in out
+
+
+def test_writeout_grace_is_bounded_and_not_exploration_budget():
+    """Grace only covers the write-out. A model that keeps getting
+    length-limited cannot use it to run forever, and it never buys extra
+    tool-calling rounds."""
+    from runtime.execution.suckers.ephemeral_runner import (
+        EPHEMERAL_WRITEOUT_GRACE_ROUNDS,
+        make_llm_ephemeral_runner,
+    )
+
+    # Always length-limited, always text: the loop can only exit via the cap
+    # plus the bounded grace.
+    router = _ScriptedAgenticRouter(
+        script=["chunk " * 3] * 40,
+        finish_reasons=["length"] * 40,
+    )
+    registry = _StubRegistry({"read_file": lambda **kw: {"ok": True}})
+    runner = make_llm_ephemeral_runner(router, registry=registry, default_model="m")
+
+    out = runner(_make_call(role_id="reviewer"))  # cap 5
+
+    assert isinstance(out, str)
+    # 5 capped rounds + at most the grace allowance — never the whole script.
+    assert len(router.call_log) <= 5 + EPHEMERAL_WRITEOUT_GRACE_ROUNDS
+    assert len(router.call_log) < 40
+
+
 class TestTokenBudget:
     def test_length_limited_text_continues_in_next_round(self):
         """A sub-agent that hits the provider output cap should not

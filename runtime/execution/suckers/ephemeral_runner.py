@@ -348,6 +348,20 @@ _CONTINUE_AFTER_LENGTH_LIMIT = (
     "and finish every missing requirement."
 )
 
+# Extra rounds granted ONLY to finish a reply the provider cut mid-sentence.
+#
+# The continue-after-truncation path is gated on ``round_i + 1 < max_rounds``, so
+# a role with a finite cap that gets length-limited on its LAST allowed round has
+# nowhere to continue and returns a mid-sentence answer with a "[response
+# truncated]" marker. That is the worst possible outcome: the work was done, and
+# only the write-out is broken.
+#
+# These rounds are not general exploration budget. They are only reachable when
+# the model is provably mid-write-out (length-limited finish reason with no tool
+# calls), the wall-clock deadline still holds, and the allowance has not been
+# spent — so they cannot be used to keep exploring past the cap.
+EPHEMERAL_WRITEOUT_GRACE_ROUNDS: int = 3
+
 _TRUNCATION_ENDINGS = (
     ".",
     "!",
@@ -686,13 +700,16 @@ def make_llm_ephemeral_runner(
         # plus a once-per-run flag so we never loop the nudge forever.
         executed_tools: list[dict[str, Any]] = []
         verification_nudged = False
+        # Write-out grace: rounds consumed past ``max_rounds`` purely to finish a
+        # provider-truncated reply. See EPHEMERAL_WRITEOUT_GRACE_ROUNDS.
+        writeout_grace_used = 0
         # Bound the loop by time (and the optional role round cap), not by a
         # round count alone. ``itertools.count`` keeps the body's existing
         # ``continue`` semantics intact while we break on the deadline/cap.
         for round_i in itertools.count():
             if time.monotonic() >= loop_deadline:
                 break
-            if max_rounds is not None and round_i >= max_rounds:
+            if max_rounds is not None and round_i >= max_rounds + writeout_grace_used:
                 break
             req = ModelRequest(
                 model=effective_model,
@@ -799,9 +816,30 @@ def make_llm_ephemeral_runner(
 
             # Done · LLM produced text but no more tool calls.
             if not tool_calls:
-                if _is_length_limited_finish(finish_reason_round) and (
-                    max_rounds is None or round_i + 1 < max_rounds
-                ):
+                # Room to continue a cut-off write-out? Either the cap is not
+                # reached yet, or the write-out grace still has rounds left. The
+                # deadline is re-checked by the loop head, so grace can never
+                # outlive the wall clock.
+                grace_left = (
+                    writeout_grace_used < EPHEMERAL_WRITEOUT_GRACE_ROUNDS
+                    and time.monotonic() < loop_deadline
+                )
+                can_continue_writeout = (
+                    max_rounds is None
+                    or round_i + 1 < max_rounds + writeout_grace_used
+                    or grace_left
+                )
+                if _is_length_limited_finish(finish_reason_round) and can_continue_writeout:
+                    if max_rounds is not None and round_i + 1 >= max_rounds + writeout_grace_used:
+                        # Spending grace, not exploration budget.
+                        writeout_grace_used += 1
+                        _log.info(
+                            "ephemeral write-out grace · role=%s round=%d · %d/%d used",
+                            call.role.id,
+                            round_i,
+                            writeout_grace_used,
+                            EPHEMERAL_WRITEOUT_GRACE_ROUNDS,
+                        )
                     _log.info(
                         "ephemeral agentic runner · role=%s model=%s "
                         "round=%d · continuing after finish_reason=%s",
@@ -820,7 +858,7 @@ def make_llm_ephemeral_runner(
                     continue
                 if (
                     not _is_length_limited_finish(finish_reason_round)
-                    and (max_rounds is None or round_i + 1 < max_rounds)
+                    and (max_rounds is None or round_i + 1 < max_rounds + writeout_grace_used)
                     and _looks_truncated_text(
                         text,
                         output_tokens=output_tokens_round,
@@ -1065,6 +1103,7 @@ def make_llm_ephemeral_runner(
 __all__ = [
     "EPHEMERAL_MAX_ROUNDS",
     "EPHEMERAL_MAX_ROUNDS_BY_ROLE",
+    "EPHEMERAL_WRITEOUT_GRACE_ROUNDS",
     "EphemeralConvergedIncomplete",
     "EphemeralRoundCapExceeded",
     "_emit_subagent_lifecycle_event",
