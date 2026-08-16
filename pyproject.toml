@@ -257,7 +257,7 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["runtime*", "tools*"]
+include = ["runtime*", "tools*", "octopus_runtime*", "demos*"]
 exclude = ["tests*", "*.fixtures*"]
 
 # ─── pytest ──────────────────────────────────────────
