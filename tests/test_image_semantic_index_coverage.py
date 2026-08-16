@@ -156,3 +156,50 @@ def test_build_index_and_search(monkeypatch, tmp_path: Path) -> None:
     assert no_model["ok"] is False and "clip_vision_unavailable" in no_model["error"]
     monkeypatch.setattr(isi, "_text_model", lambda: None)
     assert isi.search_by_text("x", db_path=db) is None
+
+
+def test_group_faces_clusters(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("OCTOPUS_IMAGE_SEMANTIC", "auto")
+    monkeypatch.setattr(isi, "face_capable", lambda: True)
+    db = tmp_path / "f.db"
+    conn = isi._open(db)
+    for img, vec in [("a.png", [1.0, 0.0]), ("b.png", [1.0, 0.1]), ("c.png", [0.0, 1.0])]:
+        conn.execute(
+            "INSERT INTO image_faces (path, face_index, face_embedding) VALUES (?, 0, ?)",
+            (img, isi._vec_to_blob(vec)),
+        )
+    conn.commit()
+    conn.close()
+    groups = isi.group_faces(db, threshold=0.5)
+    assert groups is not None and len(groups) == 2  # a+b together, c alone
+    assert any("a.png" in g["images"] and "b.png" in g["images"] for g in groups)
+
+    monkeypatch.setattr(isi, "face_capable", lambda: False)
+    assert isi.group_faces(db) is None
+    assert isi.group_faces(tmp_path / "nope.db") is None
+
+
+def test_search_face(monkeypatch, tmp_path: Path) -> None:
+    from PIL import Image
+
+    monkeypatch.setenv("OCTOPUS_IMAGE_SEMANTIC", "auto")
+    monkeypatch.setattr(isi, "face_capable", lambda: True)
+    monkeypatch.setattr(isi, "_face_app", lambda: type("A", (), {
+        "get": staticmethod(lambda arr: [type("F", (), {"normed_embedding": [1.0, 0.0]})()])
+    })())
+
+    db = tmp_path / "sf.db"
+    conn = isi._open(db)
+    conn.execute(
+        "INSERT INTO image_faces (path, face_index, face_embedding) VALUES (?, 0, ?)",
+        ("who.png", isi._vec_to_blob([1.0, 0.0])),
+    )
+    conn.commit()
+    conn.close()
+
+    img = tmp_path / "q.png"
+    Image.new("RGB", (8, 8), (3, 3, 3)).save(img)
+    hits = isi.search_face(str(img), db_path=db)
+    assert hits is not None and len(hits) == 1
+    assert hits[0]["path"] == "who.png"
+    assert isi.search_face("", db_path=db) is None
