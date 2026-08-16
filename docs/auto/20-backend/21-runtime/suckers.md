@@ -369,10 +369,10 @@ Suckers = skill pool.
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def compute_spawn_cache_key(agent_id, prompt, cheap, context, extra)` | Content hash identifying one spawn's work. |
+| func | `def compute_spawn_cache_key(agent_id, prompt, cheap, context, extra, input_files)` | Content hash identifying one spawn's work. |
 | class | `class SpawnResultCache` | One token's replay store. Thread-safe: parallel lanes put concurrently. |
-| func | `def create_spawn_cache(token)` | Create (and register) a fresh cache. Token generated when omitted. |
-| func | `def load_spawn_cache(token)` | Look up a previously issued cache. ``None`` for unknown/expired tokens - the caller decides whether that is an error (a resume with a typo'd |
+| func | `def create_spawn_cache(token, owner)` | Create (and register) a fresh cache. Token generated when omitted. |
+| func | `def load_spawn_cache(token, owner)` | Look up a previously issued cache. ``None`` for unknown/expired tokens or an owner mismatch — the caller decides whether that is an error (a |
 | func | `def reset_spawn_cache_store()` | Test seam: drop every token. Production code never needs this. |
 
 ### `delegation_skills.py`

@@ -217,7 +217,7 @@ tier: "core"
 
 ## Who imports this
 
-**56** file(s) reference this package:
+**57** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
@@ -235,13 +235,13 @@ tier: "core"
   - `runtime/core/cerebrum/llm_planner.py`
   - `runtime/core/cerebrum/resume_cli.py`
   - `runtime/core/graph_runtime/runtime.py`
-- **`runtime/execution/`** · 10 file(s)
+- **`runtime/execution/`** · 11 file(s)
   - `runtime/execution/jobs/subagent_producer.py`
+  - `runtime/execution/parallel_agents/helpers.py`
   - `runtime/execution/subagents/sessions.py`
   - `runtime/execution/suckers/_ephemeral_events.py`
   - `runtime/execution/suckers/browser_act_skills.py`
-  - `runtime/execution/suckers/registry.py`
-  - _… and 5 more_
+  - _… and 6 more_
 - **`runtime/memory/`** · 5 file(s)
   - `runtime/memory/goals/projection.py`
   - `runtime/memory/goals/service.py`

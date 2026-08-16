@@ -86,12 +86,12 @@ Agent runtime hooks · lifecycle events for the agent loop.
 | func | `def matcher_diagnostic(matcher, dialect)` | Stable diagnostic for an invalid matcher, ``None`` when valid. |
 | func | `def matches_matcher(matcher, query, dialect)` | Whether a matcher selects ``query``; invalid regexes never match. |
 | func | `def parse_hook_output(exit_code, stdout, stderr)` | Decode one hook process outcome into the neutral ``HookOutput``. |
-| func | `def run_external_hook(command, payload, dialect, cwd, env, timeout_s, plugin_root, project_dir)` | Run one command hook. Never raises — infra faults pass through. |
+| func | `def run_external_hook(command, payload, dialect, cwd, env, timeout_s, plugin_root, project_dir, allowed_commands)` | Run one command hook. Never raises — infra faults pass through. |
 | func | `def parse_external_hooks(raw, dialect)` | Normalize one dialect ``hooks.json`` payload. |
 | func | `def load_external_hooks(path, dialect)` | Read one ``hooks.json``. Missing / unparsable → empty, never raises. |
 | func | `def build_payload(event, event_name)` | One per-event stdin payload (dsh bridge payload builder). |
 | func | `def discover_external_hook_paths()` | Default discovery order: explicit env → home → process cwd. |
-| func | `def register_external_hooks(registry, paths)` | Load every discovered (or given) ``hooks.json`` into the registry. |
+| func | `def register_external_hooks(registry, paths, command_allowlist)` | Load every discovered (or given) ``hooks.json`` into the registry. |
 
 ### `registry.py`
 
