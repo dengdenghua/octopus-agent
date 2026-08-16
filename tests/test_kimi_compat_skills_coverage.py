@@ -288,3 +288,84 @@ def test_safe_output_dir_and_media_path(tmp_path: Path, monkeypatch) -> None:
     assert explicit == tmp_path / "x"
     out = kcs._media_output_path("image", "png", output_path=str(tmp_path / "o.png"))
     assert out == tmp_path / "o.png"
+
+
+# ── website version manager (list/snapshot/restore/delete) ───
+
+
+def _project_dir(tmp_path: Path) -> Path:
+    proj = tmp_path / "site"
+    proj.mkdir()
+    (proj / "index.html").write_text("<h1>hi</h1>", encoding="utf-8")
+    (proj / "node_modules").mkdir()
+    return proj
+
+
+def test_website_version_manager_full_lifecycle(tmp_path: Path, monkeypatch) -> None:
+    import runtime.platform.process.paths as pp
+
+    monkeypatch.setattr(pp, "app_paths", lambda: type("P", (), {"data_dir": tmp_path / "d"})())
+    proj = _project_dir(tmp_path)
+    assert "missing project_dir" in kcs._website_version_manager(project_dir="")["error"]
+    assert "project_dir not found" in kcs._website_version_manager(
+        project_dir=str(tmp_path / "nope")
+    )["error"]
+
+    listed = kcs._website_version_manager("list", project_dir=str(proj))
+    assert listed["ok"] is True and listed["versions"] == []
+
+    snap = kcs._website_version_manager("snapshot", project_dir=str(proj), label="v1")
+    assert snap["ok"] is True
+    vid = snap["version"]["id"]
+    assert (kcs._version_root(proj) / vid / "index.html").exists()
+
+    listed2 = kcs._website_version_manager("list", project_dir=str(proj))
+    assert len(listed2["versions"]) == 1
+
+    # mutate the project then restore
+    (proj / "index.html").write_text("<h1>changed</h1>", encoding="utf-8")
+    restored = kcs._website_version_manager("restore", project_dir=str(proj), version_id=vid)
+    assert restored["ok"] is True
+    assert "<h1>hi</h1>" in (proj / "index.html").read_text(encoding="utf-8")
+
+    deleted = kcs._website_version_manager("delete", project_dir=str(proj), version_id=vid)
+    assert deleted["ok"] is True
+    listed3 = kcs._website_version_manager("list", project_dir=str(proj))
+    assert listed3["versions"] == []
+
+    assert "missing version_id" in kcs._website_version_manager(
+        "restore", project_dir=str(proj)
+    )["error"]
+    assert "version not found" in kcs._website_version_manager(
+        "restore", project_dir=str(proj), version_id="nope"
+    )["error"]
+    assert "unknown action" in kcs._website_version_manager(
+        "bogus", project_dir=str(proj)
+    )["error"]
+
+
+def test_screenshot_web_full_page(monkeypatch) -> None:
+    captured: dict = {}
+
+    def fake_browser_screenshot(**kw):
+        captured.update(kw)
+        return {"ok": True, "path": kw.get("path")}
+
+    import runtime.execution.suckers.browser_skills as bs
+
+    monkeypatch.setattr(bs, "_browser_screenshot", fake_browser_screenshot)
+    out = kcs._screenshot_web_full_page(url="http://x", path="/tmp/out.png")
+    assert out["ok"] is True
+    assert captured["full_page"] is True
+    out2 = kcs._screenshot_web_full_page(url="http://x")
+    assert out2["path"]  # default path generated
+
+
+def test_register_kimi_compat_skills() -> None:
+    from runtime.execution.suckers.registry import SkillRegistry
+
+    reg = SkillRegistry()
+    n = kcs.register_kimi_compat_skills(reg)
+    assert n >= 10
+    assert "generate_image" in reg.all_names()
+    assert "deploy_website" in reg.all_names()
