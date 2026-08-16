@@ -24,7 +24,11 @@ learn:
 local_auth:
   enabled: true
   allow_any_username: true
-  jwt_secret: dev-secret-key-32-chars-minimum-required
+  # Audit R-03: no literal secret in git. Inject a strong secret via env
+  # (e.g. OCTOPUS_LOCAL_AUTH_JWT_SECRET="$(openssl rand -hex 32)").
+  # Schema rejects weak/default values at startup; if the env var is unset
+  # the empty value fails validation and startup aborts (fail closed).
+  jwt_secret: ${OCTOPUS_LOCAL_AUTH_JWT_SECRET}
   jwt_expire_seconds: 86400  # 1 day
 
 # 开发环境允许客户端绕过审批（仅单用户）

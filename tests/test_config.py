@@ -368,3 +368,63 @@ class TestCLIConfigFlag:
         assert rc in (0, 1)  # Implementation note.
         out = capsys.readouterr().out
         assert "config-driven" in out
+
+
+# ═══════════════════════════════════════════════════════════
+# Audit R-03: weak JWT secrets rejected at startup
+# ═══════════════════════════════════════════════════════════
+
+# NB: keep "$" out of the literal — the loader interpolates $VAR / ${VAR}
+# in config values, so a $ in a secret would be eaten by env lookup.
+_STRONG_SECRET = "V8!xQ#z9mK2@Lp4%Yw7^Nc1&Fd3*Gh5!Tq7#Rp9"
+
+
+class TestJwtSecretValidation:
+    def test_weak_dev_literal_rejected_local_auth(self):
+        """Audit R-03: the leaked dev literal must fail startup validation."""
+        with pytest.raises(ValueError, match="known weak/default"):
+            load_from_dict(
+                {
+                    "local_auth": {
+                        "enabled": True,
+                        "jwt_secret": "dev-secret-key-32-chars-minimum-required",
+                    }
+                }
+            )
+
+    def test_weak_dev_literal_rejected_oct(self):
+        with pytest.raises(ValueError, match="known weak/default"):
+            load_from_dict(
+                {"oct": {"enabled": True, "jwt_secret": "dev-secret-key-32-chars-minimum-required"}}
+            )
+
+    def test_low_entropy_long_secret_rejected(self):
+        """Long-but-predictable (all lowercase) secrets must not pass."""
+        with pytest.raises(ValueError, match="too predictable"):
+            load_from_dict({"local_auth": {"jwt_secret": "a" * 40}})
+
+    def test_strong_secret_accepted(self):
+        cfg = load_from_dict(
+            {
+                "local_auth": {"enabled": True, "jwt_secret": _STRONG_SECRET},
+                "oct": {"enabled": True, "jwt_secret": _STRONG_SECRET},
+            }
+        )
+        assert cfg.local_auth.jwt_secret == _STRONG_SECRET
+        assert cfg.oct.jwt_secret == _STRONG_SECRET
+
+    def test_dev_yaml_env_injected_secret(self, monkeypatch, tmp_path: Path):
+        """Audit R-03: dev.yaml must not carry a literal secret — the value
+        comes from OCTOPUS_LOCAL_AUTH_JWT_SECRET."""
+        monkeypatch.setenv("OCTOPUS_LOCAL_AUTH_JWT_SECRET", _STRONG_SECRET)
+        dev = Path("config/dev.yaml")
+        cfg = load_from_yaml(dev)
+        assert cfg.local_auth.jwt_secret == _STRONG_SECRET
+
+    def test_dev_yaml_unset_env_fails_closed(self, monkeypatch, tmp_path: Path):
+        """Unset env -> empty interpolation -> schema min_length rejects ->
+        startup fails rather than silently using an empty secret."""
+        monkeypatch.delenv("OCTOPUS_LOCAL_AUTH_JWT_SECRET", raising=False)
+        dev = Path("config/dev.yaml")
+        with pytest.raises(ValueError):
+            load_from_yaml(dev)

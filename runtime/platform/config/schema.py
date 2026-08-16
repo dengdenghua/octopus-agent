@@ -256,6 +256,66 @@ class EvolveConfig(BaseModel):
         return self.model or planner.model, self.base_url or planner.base_url
 
 
+# Audit R-03: known-weak / example JWT secrets that must never pass schema
+# validation, no matter how long they are. Rotated on 2026-08-17 — the old
+# dev literal is treated as leaked.
+_WEAK_JWT_SECRET_VALUES: frozenset[str] = frozenset(
+    {
+        "dev-secret-key-32-chars-minimum-required",
+        "secret",
+        "changeme",
+        "change-me",
+        "change_me",
+        "replaceme",
+        "replace-me",
+        "replace_me",
+        "your-secret",
+        "your-secret-key",
+        "your_secret",
+        "your-secret-here",
+        "jwt-secret",
+        "jwt_secret",
+        "dev-secret",
+        "development",
+        "development-secret",
+        "password",
+        "password123",
+        "1234567890",
+        "0123456789",
+    }
+)
+
+
+def validate_jwt_secret(secret: str | None, *, owner: str) -> None:
+    """Reject weak/known JWT secrets at startup (audit R-03).
+
+    * ``None`` is fine — callers that require a secret (e.g. oct enabled)
+      enforce it separately.
+    * Exact weak/example values are rejected even if long enough.
+    * Entropy gate: at least 3 of lower/upper/digit/special must be present
+      (same rule as ``integrations.local_auth``), so all-lowercase filler
+      like the old dev literal cannot slip through a length check.
+    """
+    if secret is None:
+        return
+    if secret.strip().lower() in _WEAK_JWT_SECRET_VALUES:
+        raise ValueError(
+            f"config.{owner}.jwt_secret is a known weak/default value and is "
+            "rejected at startup (audit R-03); rotate it and inject a strong "
+            "secret via environment"
+        )
+    has_lower = any(c.islower() for c in secret)
+    has_upper = any(c.isupper() for c in secret)
+    has_digit = any(c.isdigit() for c in secret)
+    has_special = any(not c.isalnum() for c in secret)
+    score = sum([has_lower, has_upper, has_digit, has_special])
+    if score < 3:
+        raise ValueError(
+            f"config.{owner}.jwt_secret is too predictable: needs at least 3 of "
+            "lowercase, uppercase, digits, special characters"
+        )
+
+
 class OctConfig(BaseModel):
     """oct 账号网关(octopus 自己的,octopus-mobile server)。"""
 
@@ -277,6 +337,7 @@ class OctConfig(BaseModel):
         # 否则登录会回退到"复用网关 JWT"——agent 不持网关密钥、验不过 → 已登录用户被锁死。
         if self.enabled and not self.jwt_secret:
             raise ValueError("config.oct.enabled=true 时必须设置 oct.jwt_secret(≥32 字符)")
+        validate_jwt_secret(self.jwt_secret, owner="oct")
         return self
 
 
@@ -293,6 +354,11 @@ class LocalAuthConfig(BaseModel):
     jwt_audience: str | None = None
     actor_prefix: str = "local:"
     default_roles: list[str] = Field(default_factory=lambda: ["user", "local"])
+
+    @model_validator(mode="after")
+    def _reject_weak_jwt_secret(self) -> LocalAuthConfig:
+        validate_jwt_secret(self.jwt_secret, owner="local_auth")
+        return self
 
     @property
     def password_required(self) -> bool:
