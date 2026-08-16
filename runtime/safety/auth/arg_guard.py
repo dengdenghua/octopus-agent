@@ -68,6 +68,13 @@ MODEL_PROTECTED_CONTEXT_PREFIXES: tuple[str, ...] = (
     "promptinjection",
     "inheritedinjection",
     "deniedpath",
+    # Audit F-01: the react-drive dispatch path is a trusted-side decision
+    # (bridge.call_subagent stamps react_stack / react_loop_subagent, and the
+    # runner honors react_loop_max_iterations). A model must not steer a
+    # spawn onto/off the MAIN react loop, inflate its iteration budget, or
+    # forge a stack object.
+    "reactloop",
+    "reactstack",
 )
 
 

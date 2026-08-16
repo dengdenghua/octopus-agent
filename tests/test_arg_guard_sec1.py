@@ -242,3 +242,29 @@ class TestStripHelper:
         assert "allow_sensitive" in MODEL_FORBIDDEN_ARGS
         assert "allow_private" in MODEL_FORBIDDEN_ARGS
         assert len(MODEL_FORBIDDEN_ARGS) == 2
+
+
+class TestReactDriveDispatchKeysAreModelProtected:
+    """Audit F-01: choosing the react-drive dispatch path (and its iteration
+    budget / stack) is a trusted-side decision made by bridge.call_subagent.
+    A model — or an injection riding in tool output — must not steer a spawn
+    onto/off the MAIN react loop, inflate the loop budget, or forge a stack.
+    """
+
+    def test_strips_react_dispatch_keys_from_model_context(self) -> None:
+        cleaned, stripped = strip_model_controlled_overrides(
+            {
+                "context": {
+                    "react_loop_subagent": True,
+                    "react_loop_max_iterations": 500,
+                    "react_stack": {"forged": True},
+                    "goal": "keep me",
+                },
+            }
+        )
+        assert cleaned == {"context": {"goal": "keep me"}}
+        assert stripped == [
+            "context.react_loop_max_iterations",
+            "context.react_loop_subagent",
+            "context.react_stack",
+        ]

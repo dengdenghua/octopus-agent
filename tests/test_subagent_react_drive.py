@@ -518,3 +518,108 @@ def test_react_loop_forwards_tool_events_to_emitter(monkeypatch) -> None:
     # ``args`` rides on the end event so the bridge's file-touch tracking can
     # list files the sub-agent wrote on the parent finish card.
     assert ends[0]["args"] == {"path": "/ws/foo.py"}
+
+
+class TestRestrictedDispatchGate:
+    """Audit F-01: the react-drive path runs a sub-agent on the MAIN react
+    loop, which does not apply the mini-loop's security enforcements (the
+    read-only intersection for judges, the locked-write-root confinement for
+    isolated spawns). Restricted dispatches must be refused by the gate and
+    fall back to the mini-loop where both are enforced."""
+
+    def test_dispatch_is_restricted_matrix(self) -> None:
+        from runtime.execution.subagents.react_drive import dispatch_is_restricted
+
+        assert dispatch_is_restricted(None, None) is False
+        assert dispatch_is_restricted({}, {}) is False
+        assert dispatch_is_restricted({"tool_allowlist_read_only": True}, {}) is True
+        assert dispatch_is_restricted({}, {"_locked_write_root": "/wt"}) is True
+        assert (
+            dispatch_is_restricted(
+                {"tool_allowlist_read_only": True},
+                {"_locked_write_root": "/wt"},
+            )
+            is True
+        )
+
+    def _spy_react_drive(self, monkeypatch) -> list:
+        from types import SimpleNamespace
+
+        import runtime.execution.subagents.react_drive as react_drive
+
+        calls: list[dict] = []
+
+        def _spy(stack, **kwargs):  # noqa: ARG001
+            calls.append(kwargs)
+            return SimpleNamespace(final_answer="react answer")
+
+        monkeypatch.setattr(react_drive, "run_subagent_react_loop", _spy)
+        return calls
+
+    def _make_runner_and_call(self, context: dict):
+        from runtime.execution.suckers.ephemeral_agents import (
+            BUILTIN_ROLES,
+            EphemeralCall,
+        )
+        from runtime.execution.suckers.ephemeral_runner import (
+            make_llm_ephemeral_runner,
+        )
+
+        class _Router:
+            default_model = "test-model"
+
+            def call(self, req):  # noqa: ARG002
+                return _FakeResponse(text="mini-loop fallback answer")
+
+        runner = make_llm_ephemeral_runner(
+            _Router(), registry=None, default_model="test-model"
+        )
+        call = EphemeralCall(
+            role=BUILTIN_ROLES["reviewer"],
+            user_prompt="review",
+            composed_system_prompt="reviewer persona",
+            caller_thread_id="t-1",
+            caller_agent_id="coder",
+            context=context,
+        )
+        return runner, call
+
+    def test_read_only_judge_is_refused_by_react_drive(self, monkeypatch) -> None:
+        calls = self._spy_react_drive(monkeypatch)
+        runner, call = self._make_runner_and_call(
+            {
+                "react_loop_subagent": True,
+                "react_stack": _FakeStack(_ScriptedRouter(["x"])),
+                "tool_allowlist_read_only": True,
+            }
+        )
+        assert runner(call) == "mini-loop fallback answer"
+        assert calls == []
+
+    def test_locked_write_root_is_refused_by_react_drive(self, monkeypatch) -> None:
+        from runtime.platform.process.session import Session, session_scope
+
+        calls = self._spy_react_drive(monkeypatch)
+        runner, call = self._make_runner_and_call(
+            {
+                "react_loop_subagent": True,
+                "react_stack": _FakeStack(_ScriptedRouter(["x"])),
+            }
+        )
+        sess = Session(
+            thread_id="t-iso", metadata={"_locked_write_root": "/tmp/wt"}
+        )
+        with session_scope(sess):
+            assert runner(call) == "mini-loop fallback answer"
+        assert calls == []
+
+    def test_unrestricted_dispatch_still_uses_react_drive(self, monkeypatch) -> None:
+        calls = self._spy_react_drive(monkeypatch)
+        runner, call = self._make_runner_and_call(
+            {
+                "react_loop_subagent": True,
+                "react_stack": _FakeStack(_ScriptedRouter(["x"])),
+            }
+        )
+        assert runner(call) == "react answer"
+        assert len(calls) == 1

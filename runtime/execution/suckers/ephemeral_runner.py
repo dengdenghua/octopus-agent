@@ -524,37 +524,52 @@ def make_llm_ephemeral_runner(
         _ctx = getattr(call, "context", None) or {}
         if _ctx.get("react_loop_subagent") and _ctx.get("react_stack") is not None:
             from runtime.execution.subagents.react_drive import (
+                dispatch_is_restricted,
                 run_subagent_react_loop,
             )
 
-            _result = run_subagent_react_loop(
-                _ctx["react_stack"],
-                prompt=call.user_prompt,
-                role_id=call.role.id,
-                model=effective_model,
-                thread_id=str(
-                    _ctx.get("child_thread_id")
-                    or getattr(call, "caller_thread_id", None)
-                    or ""
-                ),
-                session_id=str(_ctx.get("subagent_session_id") or ""),
-                emitter=_ctx.get("event_emitter"),
-                max_iterations=_ctx.get("react_loop_max_iterations") or EPHEMERAL_MAX_ROUNDS,
-                # Carry the role persona + caller context into the react loop
-                # as system history so the child keeps its role/memory/mode
-                # (the mini-loop injected these via ``composed_system_prompt``).
-                # The trailing user message is the current goal the react loop
-                # consumes from ``intent.raw``.
-                conversation_messages=[
-                    {"role": "system", "content": call.composed_system_prompt},
-                    {"role": "user", "content": call.user_prompt},
-                ],
-                tool_allowlist=tuple(call.role.tool_allowlist or ()),
-                metadata=_ctx,
-            )
-            if _result is not None:
-                return getattr(_result, "final_answer", "") or ""
-            return call.user_prompt
+            # Audit F-01: react-drive runs this sub-agent on the MAIN react
+            # loop, which does not apply the mini-loop's read-only
+            # intersection (judges) nor the locked-write-root confinement
+            # (isolated spawns). Restricted dispatches fall through to the
+            # mini-loop below where both gates are enforced.
+            try:
+                from runtime.platform.process.session import current_session
+
+                _session_meta = getattr(current_session(), "metadata", None) or {}
+            except (ImportError, AttributeError, LookupError):
+                _session_meta = {}
+            if not dispatch_is_restricted(_ctx, _session_meta):
+                _result = run_subagent_react_loop(
+                    _ctx["react_stack"],
+                    prompt=call.user_prompt,
+                    role_id=call.role.id,
+                    model=effective_model,
+                    thread_id=str(
+                        _ctx.get("child_thread_id")
+                        or getattr(call, "caller_thread_id", None)
+                        or ""
+                    ),
+                    session_id=str(_ctx.get("subagent_session_id") or ""),
+                    emitter=_ctx.get("event_emitter"),
+                    max_iterations=_ctx.get("react_loop_max_iterations") or EPHEMERAL_MAX_ROUNDS,
+                    # Carry the role persona + caller context into the react loop
+                    # as system history so the child keeps its role/memory/mode
+                    # (the mini-loop injected these via ``composed_system_prompt``).
+                    # The trailing user message is the current goal the react loop
+                    # consumes from ``intent.raw``.
+                    conversation_messages=[
+                        {"role": "system", "content": call.composed_system_prompt},
+                        {"role": "user", "content": call.user_prompt},
+                    ],
+                    tool_allowlist=tuple(call.role.tool_allowlist or ()),
+                    metadata=_ctx,
+                )
+                if _result is not None:
+                    return getattr(_result, "final_answer", "") or ""
+                return call.user_prompt
+            # Restricted dispatch (read-only judge / locked write root):
+            # continue to the mini-loop, which enforces both.
 
         # Single-shot fallback path · used when no registry was
         # plumbed through (legacy bootstrap, unit tests).

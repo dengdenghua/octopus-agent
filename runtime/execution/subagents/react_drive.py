@@ -16,7 +16,7 @@ realtime server is wired to pass its live stack.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from runtime.core.cerebrum.react_loop import ReActResult, stream_react_loop
@@ -34,6 +34,35 @@ except ImportError:  # pragma: no cover - optional import at runtime
 _TERMINAL_KINDS = frozenset(
     {"react_completed", "react_cancelled", "react_error", "react_paused"},
 )
+
+
+def dispatch_is_restricted(
+    context: Mapping[str, Any] | None,
+    session_metadata: Mapping[str, Any] | None,
+) -> bool:
+    """Return True when this dispatch must NOT use the react-drive path.
+
+    Audit F-01: the MAIN react loop does not consume
+    ``user_context["tool_allowlist"]`` and does not read the Session's
+    ``_locked_write_root``, so the two mini-loop enforcements do not apply
+    to react-driven sub-agents:
+
+    * the read-only intersection for judge lanes
+      (``tool_allowlist_read_only`` → ``select_tool_specs(read_only=...)``),
+    * the write-confinement block for isolated spawns
+      (``_locked_write_root`` → ``_ephemeral_write_confine_block``).
+
+    A react-driven judge would therefore receive the full tool surface and
+    an isolated spawn would write into the main tree while its envelope
+    still claimed ``isolated: true``. Restricted dispatches fall back to
+    the mini-loop where both gates are enforced. Fail closed: any marker
+    present blocks the react-drive fast path.
+    """
+    ctx = context or {}
+    meta = session_metadata or {}
+    return bool(ctx.get("tool_allowlist_read_only")) or bool(
+        meta.get("_locked_write_root")
+    )
 
 
 def build_subagent_intent(
