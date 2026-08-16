@@ -1114,11 +1114,14 @@ export function MessageList({
   const verificationAuditNotice =
     isVerificationRequiredError && errorBannerText ? errorBannerText : null;
 
-  // Aggregation layer (fold continuous tool-call runs into collapsible
-  // bubbles) is currently disabled because it was eating streaming AI messages
-  // in Code mode. Restore direct group rendering so every AI response
-  // shows. Re-enable by wrapping `groupMessages` with `groupActivities`
-  // once the streaming-message edge case is handled.
+  // Tool-run folding into collapsible bubbles lives in the group/timeline
+  // layer (message-group.tsx): `aggregateSimilarToolCalls` merges consecutive
+  // same-kind tool calls, and the component keeps a tool-carrying AI
+  // message's streamed answer in the conversation lane instead of burying it
+  // inside the process replay. That guard is what the old message-level
+  // `groupActivities` folding in message-grouping.ts lacked, so it ate
+  // streaming AI messages and was removed as a redundant, regression-prone
+  // path. groupMessages stays a straight group mapper here.
   const groupedMessages = useMemo(
     () => groupMessages(messages, (group) => group),
     [messages],
