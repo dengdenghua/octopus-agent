@@ -394,25 +394,80 @@ class SwarmRuntime:
                     )
 
         results: list[ArmResult] = []
-        with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
-            futures: list[Future[ArmResult]] = [
-                executor.submit(self._run_one, assignment, arm, budget, seed_outputs)
+        # Audit T-08: an arm hung past the layer budget must not pin the
+        # whole swarm. Each layer gets the budget's latency ceiling; on
+        # timeout the hung arm is failed with an explicit reason, pending
+        # futures are cancelled, and the executor is released without
+        # waiting for the (uninterruptible) Python worker thread.
+        layer_timeout_s = self._layer_budget_timeout_s(budget)
+        executor = ThreadPoolExecutor(max_workers=self._max_workers)
+        try:
+            spawned: list[tuple[Future[ArmResult], Any, Any]] = [
+                (
+                    executor.submit(self._run_one, assignment, arm, budget, seed_outputs),
+                    assignment,
+                    arm,
+                )
                 for assignment, arm in pairs
             ]
-            for fut in futures:
+            start = time.monotonic()
+            slot_results: dict[int, ArmResult] = {}
+            for slot, (fut, _assignment, _arm) in enumerate(spawned):
+                remaining = (
+                    None
+                    if layer_timeout_s <= 0
+                    else max(0.0, layer_timeout_s - (time.monotonic() - start))
+                )
                 try:
-                    results.append(fut.result())
+                    slot_results[slot] = fut.result(timeout=remaining)
+                except TimeoutError:
+                    break
                 except Exception as e:  # Implementation note.
-                    results.append(
-                        ArmResult(
-                            arm_id=ArmId("unknown"),
-                            task_id=TaskId(new_id()),
+                    slot_results[slot] = ArmResult(
+                        arm_id=ArmId("unknown"),
+                        task_id=TaskId(new_id()),
+                        status="failed",
+                        reason=f"executor_error:{e!s}",
+                    )
+            # Sweep: futures without a result are either still running (hung
+            # past the layer budget) or completed between the timeout and
+            # this sweep.
+            for slot, (fut, assignment, arm) in enumerate(spawned):
+                if slot in slot_results:
+                    continue
+                fut.cancel()
+                if fut.done():
+                    try:
+                        slot_results[slot] = fut.result(timeout=0)
+                    except Exception as e:  # noqa: BLE001
+                        slot_results[slot] = ArmResult(
+                            arm_id=getattr(arm, "arm_id", ArmId("unknown")),
+                            task_id=assignment.subgraph.task_id,
                             status="failed",
                             reason=f"executor_error:{e!s}",
                         )
+                else:
+                    slot_results[slot] = ArmResult(
+                        arm_id=getattr(arm, "arm_id", ArmId("unknown")),
+                        task_id=assignment.subgraph.task_id,
+                        status="failed",
+                        reason=f"layer_budget_timeout after {layer_timeout_s:g}s",
                     )
-
+            results = [slot_results[i] for i in range(len(spawned))]
+        finally:
+            # wait=False: a hung worker thread cannot be force-killed; the
+            # swarm must proceed without it (the layer already recorded the
+            # timeout). Queued futures are cancelled.
+            executor.shutdown(wait=False, cancel_futures=True)
         return results
+
+    def _layer_budget_timeout_s(self, budget: Any) -> float:
+        """Layer wall-clock ceiling derived from the budget's latency limit
+        (audit T-08). ``<=0`` keeps the legacy indefinite wait."""
+        latency_ms = getattr(getattr(budget, "limits", None), "latency_ms", 0) or 0
+        if latency_ms <= 0:
+            return 0.0
+        return max(1.0, latency_ms / 1000.0)
 
     def _run_one(
         self,

@@ -769,3 +769,53 @@ class TestSwarmRuntimeExplainability:
 
         with pytest.raises(ValidationError):
             event.type = "swarm_finished"  # type: ignore[misc]
+
+
+# ═══════════════════════════════════════════════════════════
+# Audit T-08: layer budget timeout isolates a hung arm
+# ═══════════════════════════════════════════════════════════
+
+
+def test_layer_budget_timeout_fails_hung_arm() -> None:
+    """An arm hung past the budget's latency limit must be failed by the
+    layer, not pin the swarm forever."""
+    from runtime.execution.swarm._runtime_helpers import _make_context_ref, _make_deadline
+    from runtime.execution.swarm import SwarmRuntime
+    from runtime.platform.models import (
+        ArmAssignment,
+        Budget,
+        BudgetLimits,
+        BudgetSpec,
+        TaskGraph,
+        TaskId,
+        TaskNode,
+    )
+
+    arm = FakeArm("code_arm", allowed=["read_file"], delay_ms=20_000)
+    pool = FakeArmPool([arm])
+    runtime = SwarmRuntime(arm_pool=pool, max_workers=2)
+
+    graph = TaskGraph(
+        nodes=[TaskNode(node_id="n1", skill_ref="read_file")],
+        budget=BudgetSpec(tokens=1000, usd=0.1),
+        task_type="bulk_read",
+    )
+    assignment = ArmAssignment(
+        arm_id=ArmId("code_arm"),
+        subgraph=graph,
+        context_ref=_make_context_ref(graph),
+        deadline=_make_deadline(graph),
+    )
+    budget = Budget(
+        task_id=TaskId(uuid4()),
+        limits=BudgetLimits(tokens=100_000, usd=10.0, latency_ms=200),
+    )
+
+    t0 = time.monotonic()
+    results = runtime._dispatch([(assignment, arm)], budget)
+    elapsed = time.monotonic() - t0
+
+    assert elapsed < 10.0, f"swarm pinned by hung arm: {elapsed:.1f}s"
+    assert len(results) == 1
+    assert results[0].status == "failed"
+    assert "layer_budget_timeout" in results[0].reason
