@@ -561,3 +561,55 @@ class TestCreateAppInjection:
         # The contract here is "inject was respected" → custom_probe is
         # in the resulting registry; not "no other skills exist".
         assert "custom_probe" in names
+
+
+class TestCronImDelivery:
+    """Audit T-15: cron completion notices reach the live ChannelManager."""
+
+    def test_cron_deliver_uses_populated_channel_holder(self, monkeypatch) -> None:
+        import runtime.cli_serve as cli_serve
+
+        captured: dict = {}
+
+        class _FakeRunner:
+            def add_periodic(self, name, *, interval_s, callback, jitter_s, run_on_start):
+                captured["callback"] = callback
+
+        class _FakeCM:
+            def __init__(self):
+                self.calls: list[tuple] = []
+
+            def has(self, channel_id: str) -> bool:
+                return channel_id == "c1"
+
+            def deliver_cron_result(self, channel_id, thread_id, text):
+                self.calls.append((channel_id, thread_id, text))
+
+        monkeypatch.setenv("OCTOPUS_CRON_EXECUTOR", "1")
+        monkeypatch.setenv("OCTOPUS_CRON_EXECUTOR_POLL_SECONDS", "30")
+
+        def _fake_run_due(deliver=None):
+            deliver(
+                {
+                    "name": "job",
+                    "channel_id": "c1",
+                    "thread_id": "th1",
+                    "output_excerpt": "done",
+                    "status": "ok",
+                }
+            )
+
+        import runtime.execution.cron_executor as cron_exec
+
+        monkeypatch.setattr(cron_exec, "run_due_cron_jobs", _fake_run_due)
+
+        cm = _FakeCM()
+        holder: list = []
+        cli_serve.register_cron_executor_task(_FakeRunner(), holder)
+        # Before the manager is published the tick's delivery is a no-op.
+        captured["callback"]()
+        assert cm.calls == []
+        # Publish the manager (serve does this after construction) -> delivery flows.
+        holder.append(cm)
+        captured["callback"]()
+        assert cm.calls == [("c1", "th1", "[章鱼助手 · 定时订阅] job\n状态：ok\ndone")]

@@ -583,7 +583,12 @@ def run_serve(
 
     register_governance_audit_rotation_task(runner)
 
-    register_cron_executor_task(runner)
+    # Audit T-15: the cron tick's IM delivery hook is a no-op unless the
+    # live ChannelManager is handed to it. The manager is built later in
+    # this function, so hand over a one-element holder and populate it
+    # once the manager exists (see below).
+    _cron_channel_holder: list = []
+    register_cron_executor_task(runner, _cron_channel_holder)
 
     register_memory_distill_task(runner, stack)
 
@@ -649,6 +654,11 @@ def run_serve(
     except Exception as exc:
         logging.getLogger(__name__).debug("channel manager init failed: %s", exc)
         channel_manager = None
+    # Audit T-15: now that the manager exists, publish it to the cron
+    # executor's holder so agent-scheduled jobs with a channel_id actually
+    # deliver their completion notice over IM.
+    if channel_manager is not None:
+        _cron_channel_holder.append(channel_manager)
 
     require_ui_auth = bool(
         getattr(getattr(cfg, "oct", None), "enabled", False)
