@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/harness";
 
-import { FollowUpSuggestions } from "./follow-up-suggestions";
+import {
+  FollowUpSuggestions,
+  resetFollowUpGenerationGuard,
+} from "./follow-up-suggestions";
 
 const fetchMock = vi.fn();
 
@@ -32,6 +35,7 @@ const SAMPLE_BUCKET = {
 beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
+  resetFollowUpGenerationGuard();
 });
 
 afterEach(() => {
@@ -63,6 +67,7 @@ describe("FollowUpSuggestions", () => {
       <FollowUpSuggestions
         project="/p"
         agentId="coder"
+        conversationVersion={ "v0" }
         isLoading={false}
         onSelect={vi.fn()}
       />,
@@ -89,6 +94,7 @@ describe("FollowUpSuggestions", () => {
       <FollowUpSuggestions
         project="/p"
         agentId="coder"
+        conversationVersion={ "v1" }
         isLoading={false}
         onSelect={vi.fn()}
       />,
@@ -110,12 +116,57 @@ describe("FollowUpSuggestions", () => {
       <FollowUpSuggestions
         project={null}
         agentId="coder"
+        conversationVersion={ "v2" }
         isLoading={false}
         onSelect={vi.fn()}
       />,
     );
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not re-generate when remounted with the same conversation version", async () => {
+    mockOnce({ added: 0, generated: 0, error: null }); // /run
+    mockOnce({
+      project_root: "/p",
+      generated_at: "",
+      enabled: true,
+      suggestions: [],
+    }); // refresh after run
+    const { unmount } = renderWithProviders(
+      <FollowUpSuggestions
+        project="/p"
+        agentId="coder"
+        conversationVersion="v-remount"
+        isLoading={false}
+        onSelect={vi.fn()}
+      />,
+    );
+    await waitFor(() => {
+      const runCall = fetchMock.mock.calls.find(
+        (call) => (call[1] as RequestInit | undefined)?.method === "POST",
+      );
+      expect(runCall).toBeDefined();
+    });
+    unmount();
+
+    const runCallsBefore = fetchMock.mock.calls.filter(
+      (c) => (c[1] as RequestInit | undefined)?.method === "POST",
+    ).length;
+    renderWithProviders(
+      <FollowUpSuggestions
+        project="/p"
+        agentId="coder"
+        conversationVersion="v-remount"
+        isLoading={false}
+        onSelect={vi.fn()}
+      />,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const runCallsAfter = fetchMock.mock.calls.filter(
+      (c) => (c[1] as RequestInit | undefined)?.method === "POST",
+    ).length;
+    expect(runCallsAfter).toBe(runCallsBefore);
   });
 
   it("renders pending suggestion chips after generation", async () => {
@@ -125,6 +176,7 @@ describe("FollowUpSuggestions", () => {
       <FollowUpSuggestions
         project="/p"
         agentId="coder"
+        conversationVersion={ "v3" }
         isLoading={false}
         onSelect={vi.fn()}
       />,
@@ -142,6 +194,7 @@ describe("FollowUpSuggestions", () => {
       <FollowUpSuggestions
         project="/p"
         agentId="coder"
+        conversationVersion={ "v4" }
         isLoading={false}
         onSelect={onSelect}
       />,

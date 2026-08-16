@@ -7,7 +7,7 @@
  */
 
 import { SparklesIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -16,11 +16,27 @@ import {
   type AmbientSuggestion,
 } from "@/hooks/use-ambient-suggestions";
 
+// Survives remounts: this component unmounts during loading and remounts on
+// every thread switch, so an instance-level ref would re-POST /run each time
+// even when the conversation has no new replies.
+const generatedConversationVersions = new Map<string, string>();
+
+/** Test-only: clear the cross-mount generation guard. */
+export function resetFollowUpGenerationGuard() {
+  generatedConversationVersions.clear();
+}
+
 export interface FollowUpSuggestionsProps {
   /** Project root for suggestions storage */
   project: string | null;
   /** Thread/agent ID for context-aware generation */
   agentId?: string;
+  /**
+   * Monotonic conversation version (e.g. turn count). Included in the
+   * generate-once guard so re-entering an unchanged thread skips generation
+   * while a genuinely new reply still triggers it.
+   */
+  conversationVersion: string | number;
   /** Whether the conversation is currently loading */
   isLoading: boolean;
   /** Callback when user clicks a suggestion */
@@ -34,6 +50,7 @@ export interface FollowUpSuggestionsProps {
 export function FollowUpSuggestions({
   project,
   agentId,
+  conversationVersion,
   isLoading,
   onSelect,
   baseUrl,
@@ -63,17 +80,16 @@ export function FollowUpSuggestions({
   // while the conversation is idle (see message-list.tsx), so mounting IS
   // the "conversation just finished" signal. We can't watch a loading→idle
   // transition here because the component is unmounted during loading.
-  const generatedKeyRef = useRef("");
   useEffect(() => {
     const generationKey = `${project ?? ""}:${agentId ?? ""}:${locale}`;
-    if (!agentId || !project || generatedKeyRef.current === generationKey) {
-      return;
-    }
-    generatedKeyRef.current = generationKey;
+    const version = String(conversationVersion ?? "");
+    if (!agentId || !project) return;
+    if (generatedConversationVersions.get(generationKey) === version) return;
+    generatedConversationVersions.set(generationKey, version);
     generate(agentId, { turnWindow: 5, locale }).catch(() => {
       // Silently fail, suggestions are optional
     });
-  }, [agentId, project, locale, generate]);
+  }, [agentId, project, locale, conversationVersion, generate]);
 
   const handleSelect = useCallback(
     async (suggestion: AmbientSuggestion) => {

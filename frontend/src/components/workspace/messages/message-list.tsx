@@ -2155,6 +2155,7 @@ export function MessageList({
             <FollowUpSuggestions
               project={project}
               agentId={threadId}
+              conversationVersion={messageTurns.length}
               isLoading={thread.isLoading}
               onSelect={onSendFollowUp}
               className="ml-11 mt-4"

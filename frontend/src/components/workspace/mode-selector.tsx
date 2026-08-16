@@ -115,6 +115,31 @@ async function fetchModes(): Promise<ModeInfo[]> {
   return data.modes;
 }
 
+// The mode list is static server config and detection depends only on the
+// workspace path - both survive route switches. Module-level caches keep
+// remounts (every thread switch remounts ModeSelector) from re-fetching.
+let modesPromise: Promise<ModeInfo[]> | null = null;
+function loadModes(): Promise<ModeInfo[]> {
+  if (!modesPromise) {
+    modesPromise = fetchModes();
+    modesPromise.catch(() => {
+      modesPromise = null;
+    });
+  }
+  return modesPromise;
+}
+
+const detectionCache = new Map<string, Promise<DetectResponse>>();
+function loadDetection(workspacePath: string): Promise<DetectResponse> {
+  let cached = detectionCache.get(workspacePath);
+  if (!cached) {
+    cached = fetchDetection(workspacePath);
+    cached.catch(() => detectionCache.delete(workspacePath));
+    detectionCache.set(workspacePath, cached);
+  }
+  return cached;
+}
+
 async function setModeOnServer(
   mode: AgentModeName,
   sessionId: string,
@@ -224,7 +249,7 @@ export function ModeSelector({
     const doDetect = async () => {
       setDetecting(true);
       try {
-        const result = await fetchDetection(workDir);
+        const result = await loadDetection(workDir);
         if (cancelled) return;
         setDetection(result);
         onDetectionChange?.(result);
@@ -254,7 +279,7 @@ export function ModeSelector({
 
   useEffect(() => {
     let cancelled = false;
-    fetchModes()
+    loadModes()
       .then((m) => {
         if (!cancelled) setModes(m);
       })
