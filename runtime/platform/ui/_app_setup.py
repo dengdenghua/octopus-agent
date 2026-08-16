@@ -56,6 +56,30 @@ def setup_app(
     # leaving SSE / streaming endpoints untouched. See GzipStaticMiddleware.
     app.add_middleware(GzipStaticMiddleware)
 
+    # Audit P-06: HTTP backstops — a bounded request timeout and a bounded
+    # concurrency cap so a hung endpoint or a burst of requests cannot hold
+    # threads forever or exhaust the worker pool. Streaming/SSE/websocket and
+    # the OpenAI-compat /v1 surface are skipped (the model deadlines govern
+    # those). Env overrides: OCTOPUS_HTTP_REQUEST_TIMEOUT_S (0 disables),
+    # OCTOPUS_HTTP_MAX_CONCURRENCY (0 disables).
+    from runtime.platform.ui.request_limits import (
+        ConcurrencyCapMiddleware,
+        DEFAULT_MAX_CONCURRENCY,
+        DEFAULT_TIMEOUT_S,
+        RequestTimeoutMiddleware,
+        _env_float,
+        _env_int,
+    )
+
+    app.add_middleware(
+        RequestTimeoutMiddleware,
+        timeout_s=_env_float("OCTOPUS_HTTP_REQUEST_TIMEOUT_S", DEFAULT_TIMEOUT_S),
+    )
+    app.add_middleware(
+        ConcurrencyCapMiddleware,
+        max_concurrency=_env_int("OCTOPUS_HTTP_MAX_CONCURRENCY", DEFAULT_MAX_CONCURRENCY),
+    )
+
     if molili_jwt_secret is None and molili_config is not None:
         molili_jwt_secret = getattr(molili_config, "jwt_secret", None)
     if oct_jwt_secret is None and oct_config is not None:
