@@ -149,6 +149,7 @@ tier: "core"
 | func | `def write_workflow_progress(run_id, kind, text, agent_seq, agent_label, task_id, agent_id, conversation_id)` | Journal one workflow narration row (phase / log / agent lifecycle). |
 | func | `def write_workflow_end(run_id, stop_reason, agents_started, error, task_id, agent_id, conversation_id)` | Journal a workflow run settlement (dsh workflow ``on_end``). |
 | func | `def write_job_change(job_id, kind, label, status, detail, task_id, agent_id, conversation_id)` | Journal one background-job lifecycle transition (dsh ``tool-jobs``). |
+| func | `def sweep_interrupted_jobs(journal)` | Close out jobs left non-terminal by a previous process crash. |
 
 ### `derive.py`
 
@@ -216,7 +217,7 @@ tier: "core"
 
 ## Who imports this
 
-**55** file(s) reference this package:
+**56** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
@@ -228,6 +229,8 @@ tier: "core"
   - `runtime/cli_reflect.py`
 - **`runtime/cli_run.py/`** · 1 file(s)
   - `runtime/cli_run.py`
+- **`runtime/cli_serve.py/`** · 1 file(s)
+  - `runtime/cli_serve.py`
 - **`runtime/core/`** · 3 file(s)
   - `runtime/core/cerebrum/llm_planner.py`
   - `runtime/core/cerebrum/resume_cli.py`

@@ -148,11 +148,20 @@ class TestThreadSessionBindUnbind:
 
 
 class TestSchedulerConfig:
-    def test_default_max_workers_is_one(self):
+    def test_default_max_workers_is_config_wired(self):
+        """The invariant this section exists for is that the worker count comes
+        from config instead of a hardcoded literal — NOT that it equals any
+        particular number. It was pinned to ``== 1`` and broke when P-01
+        (df4cb853) deliberately raised the default to 2, so the assertion now
+        tracks the wiring: schema default and AgentConfig default agree, and the
+        value is a legal override.
+        """
         from runtime.platform.config.schema import AgentConfig, SchedulerConfig
 
-        assert SchedulerConfig().max_workers == 1
-        assert AgentConfig().scheduler.max_workers == 1
+        default = SchedulerConfig().max_workers
+        assert default >= 1
+        assert AgentConfig().scheduler.max_workers == default
+        assert SchedulerConfig(max_workers=default + 1).max_workers == default + 1
 
     def test_max_workers_below_one_rejected(self):
         import pytest

@@ -48,6 +48,7 @@ Suckers = skill pool.
 | `_code_intel_helpers.py` | Pure helper functions for code_intelligence_skills · extracted from code_intelligence_skills.py to keep the parent file under 1000 lines. |
 | `_delegation_skills_agent.py` | ``_call_agent`` · single isolated subagent delegation. |
 | `_delegation_skills_common.py` | Shared leaf helpers for delegation_skills · extracted from delegation_skills.py. |
+| `_delegation_skills_graph.py` | ``call_agent_graph`` · declarative DAG fan-out with server-side fan-in. |
 | `_delegation_skills_judge.py` | ``_run_verdict_repair`` / ``_run_tournament`` / ``_run_cli_team`` · judge panels. |
 | `_delegation_skills_orchestration.py` | ``_run_orchestration`` · deterministic multi-round discovery loop. |
 | `_delegation_skills_parallel.py` | ``_call_agent_parallel`` · concurrent fan-out + graceful-degradation envelope. |
@@ -91,6 +92,7 @@ Suckers = skill pool.
 | `crawler_skills.py` | — |
 | `cron_skills.py` | cron_skills · let the agent self-schedule a future turn from inside a turn. |
 | `delegation_budget.py` | Smart per-turn delegation budget. |
+| `delegation_result_cache.py` | Spawn-level content-hash result cache · resume a graph without respawning. |
 | `delegation_skills.py` | — |
 | `desktop_grounding.py` | Semantic grounding for the desktop vision loop. |
 | `echo_skills.py` | ECHO Universe Engine 叙事 Ganglion 接入. |
@@ -363,6 +365,16 @@ Suckers = skill pool.
 | func | `def record_delegation(turn_id, fingerprint, succeeded, budget)` | Record a delegation attempt. |
 | func | `def bump_and_check(turn_id)` | Legacy compat shim: pre-check the absolute cap. |
 
+### `delegation_result_cache.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def compute_spawn_cache_key(agent_id, prompt, cheap, context, extra)` | Content hash identifying one spawn's work. |
+| class | `class SpawnResultCache` | One token's replay store. Thread-safe: parallel lanes put concurrently. |
+| func | `def create_spawn_cache(token)` | Create (and register) a fresh cache. Token generated when omitted. |
+| func | `def load_spawn_cache(token)` | Look up a previously issued cache. ``None`` for unknown/expired tokens - the caller decides whether that is an error (a resume with a typo'd |
+| func | `def reset_spawn_cache_store()` | Test seam: drop every token. Production code never needs this. |
+
 ### `delegation_skills.py`
 
 | Kind | Symbol | Doc |
@@ -503,7 +515,8 @@ Suckers = skill pool.
 | --- | --- | --- |
 | func | `def is_atomic(skill_name)` |  |
 | func | `def as_skill_ids()` |  |
-| func | `def select_tool_specs(allowlist, all_specs)` | Pick which tool specs an ephemeral sub-agent may use (by ``spec.name``). |
+| func | `def is_read_only_skill(skill_name)` |  |
+| func | `def select_tool_specs(allowlist, all_specs, read_only)` | Pick which tool specs an ephemeral sub-agent may use (by ``spec.name``). |
 
 ### `loader/md_loader.py`
 
