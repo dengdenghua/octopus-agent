@@ -15,6 +15,7 @@ from __future__ import annotations
 # ║   §5 orchestration loop    → _delegation_skills_orchestration          ║
 # ║   §6 judge panels          → _delegation_skills_judge                  ║
 # ║   §7 pipeline              → _delegation_skills_pipeline               ║
+# ║   §8 declarative DAG       → _delegation_skills_graph                  ║
 # ╚════════════════════════════════════════════════════════════════════════╝
 #
 # The names tests monkeypatch at this module level (``_allowed_agent_ids`` /
@@ -55,6 +56,13 @@ from ._delegation_skills_common import (
     _wrap_prompt_with_role_label,
     orchestration_progress_scope,
     workflow_settlement_scope,
+)
+from ._delegation_skills_graph import (
+    _MAX_GRAPH_NODES,
+    _coerce_graph_nodes,
+    _plan_layers,
+    _resolve_node_prompt,
+    _run_agent_graph,
 )
 from ._delegation_skills_judge import (
     _run_cli_team,
@@ -693,11 +701,94 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         ),
         replace=True,
     )
-    # 8 delegation/orchestration skills registered above (call_agent,
+    # ── declarative DAG (fan-in resolved server-side) ─────────────
+    graph_description = (
+        "Run a DAG of subagents where one lane CONSUMES another lane's output. "
+        "Declare each node's `depends_on`; independent nodes run concurrently "
+        "and the runtime derives the execution order.\n"
+        "\n"
+        "Use it when call_agent_parallel is not enough because a later step "
+        "needs an earlier step's result:\n"
+        "  - two investigations in parallel, then one node that reconciles both;\n"
+        "  - find → verify → write-up, where each stage reads the last;\n"
+        "  - a diamond: split into lanes, then fold back into one answer.\n"
+        "\n"
+        "A node prompt may reference an upstream output:\n"
+        "  {node_id.output}        — that node's full reply text\n"
+        "  {node_id.output.field}  — a field, when that node used output_schema\n"
+        "The substitution happens SERVER-SIDE, so upstream text never passes "
+        "through your context — that is the point of using a graph instead of "
+        "running lanes yourself and pasting results into the next prompt.\n"
+        "\n"
+        "Prefer call_agent_parallel when lanes are independent (cheaper, one "
+        "layer). Prefer run_pipeline when many ITEMS each need the same stage "
+        "chain. Use this when the TOPOLOGY itself has a join.\n"
+        "\n"
+        f"Args: {{nodes: list[{{id: str, prompt: str, depends_on?: list[str], "
+        f"agent_id?: str, output_schema?: object}}] (up to {_MAX_GRAPH_NODES}), "
+        "default_agent_id?: str (default researcher), "
+        "timeout_s?: int (per-subagent, default 900)}.\n"
+        "\n"
+        "Returns: {ok, nodes:{id:{id, agent_id, output, ok, error?, skipped?}}, "
+        "order:[[id,...],...] (execution layers), terminal:[str] (leaf outputs), "
+        "layers_run, success_count, failure_count, total}.\n"
+        "\n"
+        "Cycles and unknown depends_on are rejected before any spawn. A node "
+        "whose upstream failed is skipped and reported, not run with an "
+        "unresolved placeholder.\n"
+        "\n"
+        "Budget: one graph costs ONE against the 5/turn delegation cap; "
+        "per-node spawns are charged against the internal spawn budget."
+    )
+    registry.register(
+        Skill(
+            name="call_agent_graph",
+            description=graph_description,
+            affinity=["delegation", "graph", "dag", "fan-in", "depends_on", "multi-agent"],
+            cost_profile="high",
+            trusted_source="skill://public/call_agent_graph",
+            handler=_run_agent_graph,
+            tests=[
+                SkillTestCase(
+                    name="missing_nodes_returns_error",
+                    tier="golden",
+                    args={},
+                    expect=SkillExpect(
+                        schema_keys=["ok", "nodes", "success_count", "failure_count"]
+                    ),
+                    custom_predicate=lambda r: (
+                        isinstance(r, dict)
+                        and r.get("ok") is False
+                        and "required" in (r.get("error") or "")
+                    ),
+                ),
+                SkillTestCase(
+                    name="cycle_is_rejected_before_spawning",
+                    tier="golden",
+                    args={
+                        "nodes": [
+                            {"id": "a", "prompt": "x", "depends_on": ["b"]},
+                            {"id": "b", "prompt": "y", "depends_on": ["a"]},
+                        ]
+                    },
+                    expect=SkillExpect(
+                        schema_keys=["ok", "nodes", "success_count", "failure_count"]
+                    ),
+                    custom_predicate=lambda r: (
+                        isinstance(r, dict)
+                        and r.get("ok") is False
+                        and "cycle" in (r.get("error") or "")
+                    ),
+                ),
+            ],
+        ),
+        replace=True,
+    )
+    # 9 delegation/orchestration skills registered above (call_agent,
     # call_agent_parallel, call_agent_vote, run_orchestration,
-    # verdict_repair, tournament, cli_team, run_pipeline). Bump when adding
-    # another — the count had drifted to a stale 5.
-    return 8
+    # verdict_repair, tournament, cli_team, run_pipeline, call_agent_graph).
+    # Bump when adding another — the count had drifted to a stale 5.
+    return 9
 
 
 __all__ = [
@@ -763,6 +854,12 @@ __all__ = [
     "_run_verdict_repair",
     # pipeline
     "_run_pipeline",
+    # declarative DAG (server-side fan-in)
+    "_MAX_GRAPH_NODES",
+    "_coerce_graph_nodes",
+    "_plan_layers",
+    "_resolve_node_prompt",
+    "_run_agent_graph",
     # delegation-budget aliases kept visible for monkeypatch / lazy import
     "_check_absolute_cap",
     "_compute_fingerprint",
