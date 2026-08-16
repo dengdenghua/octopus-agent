@@ -82,3 +82,33 @@ def test_graph_and_okf_bundle(tmp_path: Path, monkeypatch) -> None:
     assert graph.status_code == 200
     bundle = client.get("/api/wiki/okf-bundle")
     assert bundle.status_code in (200, 404)
+
+
+def test_split_frontmatter() -> None:
+    meta, body = wr._split_frontmatter("---\ntype: page\ntitle: Hi\n---\n# Body\n")
+    assert meta.get("title") == "Hi"
+    assert "# Body" in body
+    no_meta, full = wr._split_frontmatter("plain text\n")
+    assert no_meta == {} and full == "plain text\n"
+
+
+def test_doc_write_and_read_no_root(tmp_path: Path, monkeypatch) -> None:
+    client = _make_client(monkeypatch)
+    bad_ext = client.put("/api/wiki/docs/x.txt", json={"content": "hi"})
+    assert bad_ext.status_code == 400
+    bad_body = client.put("/api/wiki/docs/x.md", json={"content": 1})
+    assert bad_body.status_code == 400
+    ok = client.put("/api/wiki/docs/custom/note.md", json={"content": "# Note\n"})
+    assert ok.status_code == 200
+    read = client.get("/api/wiki/docs/custom/note.md")
+    assert read.status_code == 200
+    assert read.json()["content"] == "# Note\n"
+
+
+def test_generate_conflict_when_running(tmp_path: Path, monkeypatch) -> None:
+    app = FastAPI()
+    app.include_router(wr.create_wiki_router())
+    monkeypatch.setattr(wr, "_run_generator", lambda: False)  # already running
+    client = TestClient(app)
+    resp = client.post("/api/wiki/generate")
+    assert resp.status_code == 409
