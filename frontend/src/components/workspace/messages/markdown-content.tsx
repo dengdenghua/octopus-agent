@@ -62,6 +62,7 @@ function isExternalUrl(href: string | undefined): boolean {
  * display repairs already-persisted replies as well as new streams.
  */
 export function stripLeakedControlMarkup(value: string): string {
+  if (!value) return value;
   const withoutControlTags = stripLeakedRendererMarkup(value, { trim: false });
   // Compatibility repair for replies persisted before guard diagnostics were
   // moved to structured turn state. Match only the exact legacy boilerplate,
@@ -85,6 +86,7 @@ export function stripLeakedControlMarkup(value: string): string {
  * without a visible backslash. Fenced code blocks are deliberately ignored.
  */
 export function stabilizeMarkdownTableCodePipes(value: string): string {
+  if (!value) return value;
   let inFence = false;
   return value
     .split("\n")

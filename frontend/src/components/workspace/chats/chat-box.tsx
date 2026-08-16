@@ -1,9 +1,9 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
 import { env } from "@/env";
 import { getWorkspaceArtifactRefetchInterval } from "@/core/artifacts/polling";
-import { listWorkspaceArtifactRefs } from "@/core/artifacts/workspace-outputs";
+import { useWorkspaceArtifacts } from "@/core/artifacts/use-workspace-artifacts";
 import { normalizeWorkspaceArtifactRef } from "@/core/artifacts/utils";
 import { cn } from "@/lib/utils";
 
@@ -36,15 +36,12 @@ const ChatBox: React.FC<{
     isLoading: thread.isLoading,
     threadId,
   });
-  const { data: workspaceArtifacts = EMPTY_ARTIFACTS } = useQuery({
-    queryKey: ["workspace-artifacts", threadId],
-    queryFn: ({ signal }) => listWorkspaceArtifactRefs(threadId, signal),
-    enabled: Boolean(threadId && threadId !== "new"),
-    refetchInterval: getWorkspaceArtifactRefetchInterval(thread.isLoading),
-    refetchIntervalInBackground: true,
-    staleTime: 3000,
-    gcTime: 30000,
-  });
+  const { data: workspaceArtifacts = EMPTY_ARTIFACTS } = useWorkspaceArtifacts(
+    threadId,
+    {
+      refetchInterval: getWorkspaceArtifactRefetchInterval(thread.isLoading),
+    },
+  );
 
   useEffect(() => {
     const previous = previousRunRef.current;

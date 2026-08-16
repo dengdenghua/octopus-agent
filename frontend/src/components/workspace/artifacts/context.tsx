@@ -10,7 +10,7 @@ import {
   type SetStateAction,
 } from "react";
 
-import { listWorkspaceArtifactRefs } from "@/core/artifacts/workspace-outputs";
+import { useWorkspaceArtifacts } from "@/core/artifacts/use-workspace-artifacts";
 import { useSidebar } from "@/components/ui/sidebar";
 import { env } from "@/env";
 
@@ -67,28 +67,19 @@ export function ArtifactsProvider({
   // point (or clicking an artifact summary row while the list was empty)
   // showed `暂无预览内容` even though files were already persisted on disk.
   //
-  // The fetch only runs when we have a threadId and the list is still empty.
-  // If chat-box or openWorkbenchArtifact already populated artifacts we skip.
+  // Now using the shared useWorkspaceArtifacts hook which is also used by
+  // chat-box, so React Query deduplicates requests. This fallback only runs
+  // when the shared query hasn't populated the list yet.
+  const { data: fallbackArtifacts } = useWorkspaceArtifacts(threadId, {
+    enabled: !env.STATIC_WEBSITE_ONLY && artifacts.length === 0,
+  });
+
   useEffect(() => {
-    if (!threadId) return;
-    if (env.STATIC_WEBSITE_ONLY) return;
-    if (artifacts.length > 0) return;
-    const controller = new AbortController();
-    listWorkspaceArtifactRefs(threadId, controller.signal)
-      .then((refs) => {
-        if (controller.signal.aborted) return;
-        if (refs.length === 0) return;
-        setArtifacts((prev) =>
-          prev.length === 0 ? refs : Array.from(new Set([...prev, ...refs])),
-        );
-      })
-      .catch(() => {
-        // Network/backend errors here are non-fatal: the same list is also
-        // refreshed from chat-box when the turn settles, so we silently drop
-        // failures instead of surfacing them in the UI.
-      });
-    return () => controller.abort();
-  }, [threadId, artifacts.length]);
+    if (!fallbackArtifacts || fallbackArtifacts.length === 0) return;
+    setArtifacts((prev) =>
+      prev.length === 0 ? fallbackArtifacts : Array.from(new Set([...prev, ...fallbackArtifacts])),
+    );
+  }, [fallbackArtifacts]);
 
   const select = useCallback(
     (artifact: string, autoSelect = false) => {
