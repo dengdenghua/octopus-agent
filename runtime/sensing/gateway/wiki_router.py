@@ -65,6 +65,20 @@ class _GenState:
         self.error: str | None = None
         self._lock = threading.Lock()
 
+    def try_start(self) -> bool:
+        """Atomic test-and-set (audit P-05): returns True when this call
+        acquired the generation slot (marking the run started), False when
+        another generation is already running — so concurrent requests can
+        never double-start the subprocess."""
+        with self._lock:
+            if self.running:
+                return False
+            self.running = True
+            self.started_at = time.time()
+            self.finished_at = 0.0
+            self.error = None
+            return True
+
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
             elapsed = (
@@ -88,18 +102,20 @@ class _GenState:
 _STATE = _GenState()
 
 
-def _run_generator() -> None:
+def _run_generator() -> bool:
     """Kick off ``scripts/gen_wiki.py`` in a worker thread. Because the
     generator is pure static analysis it completes in < 2s · we don't
     need real incremental progress · just flip ``running`` on/off and
-    let the UI show ``indeterminate``."""
+    let the UI show ``indeterminate``.
+
+    Returns True when a generator was started, False when one is already
+    running (audit P-05: the test-and-set happens under the lock, so two
+    concurrent requests cannot both spawn the subprocess)."""
+
+    if not _STATE.try_start():
+        return False
 
     def worker() -> None:
-        with _STATE._lock:
-            _STATE.running = True
-            _STATE.started_at = time.time()
-            _STATE.finished_at = 0.0
-            _STATE.error = None
         try:
             repo_root = _repo_root()
             script = repo_root / "scripts" / "gen_wiki.py"
@@ -122,6 +138,7 @@ def _run_generator() -> None:
                 _STATE.finished_at = time.time()
 
     threading.Thread(target=worker, daemon=True).start()
+    return True
 
 
 # ═══════════════════════════════════════════════════════════
@@ -505,9 +522,10 @@ def create_wiki_router(
             except Exception as exc:  # noqa: BLE001
                 raise HTTPException(500, f"generate failed: {exc}") from exc
             return {"ok": True, "manifest": manifest}
-        if _STATE.running:
+        if not _run_generator():
+            # Audit P-05: the atomic test-and-set owns the decision; a 409
+            # here means another request already won the slot.
             raise HTTPException(409, "generation already in progress")
-        _run_generator()
         return {"ok": True, "started_at": _STATE.started_at}
 
     @router.post("/api/wiki/update")
@@ -526,10 +544,9 @@ def create_wiki_router(
                 "updated_files": manifest.get("files_analyzed", 0),
                 "error": None,
             }
-        if _STATE.running:
+        if not _run_generator():
             raise HTTPException(409, "generation already in progress")
         before = len(_flat_docs())
-        _run_generator()
         for _ in range(60):  # up to ~6s
             if not _STATE.running:
                 break
