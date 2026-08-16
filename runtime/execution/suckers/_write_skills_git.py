@@ -7,7 +7,9 @@ skills (status / diff / log / add / commit / branch).
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +28,49 @@ _GIT_OUTPUT_CAP = 200_000
 # different pnpm major installed, and with no TTY it cannot ask for the
 # confirmation — ``ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY``.
 _GIT_HOOK_PNPM_RISK_RE = re.compile(r"\bpnpm\s+(exec|install|add|rebuild|dlx)\b")
+
+
+def _node_bin_dirs() -> list[str]:
+    """Locate a usable ``node`` binary's bin dir for git hook subprocesses.
+
+    A repo's husky/commitlint hooks invoke ``node`` from PATH; when the
+    server process was launched without a node dir on PATH (common on
+    macOS, where node lives under ``~/.local/node/bin`` or ``~/node``),
+    hooks die with ``node: not found`` and every ``git commit`` fails.
+    This returns candidate dirs derived from ``which node`` plus the
+    conventional install locations, so hooks resolve ``node`` even when
+    the server PATH omits it.
+    """
+    seen: list[str] = []
+    candidates: list[str] = []
+    which_node = shutil.which("node")
+    if which_node:
+        candidates.append(str(Path(which_node).resolve().parent))
+    home = Path.home()
+    for rel in (
+        ".local/node/bin",
+        ".node/bin",
+        "node/bin",
+        ".local/bin",
+        ".volta/bin",
+        ".nvm/versions/node/current/bin",
+    ):
+        candidates.append(str(home / rel))
+    for cand in candidates:
+        if (Path(cand) / "node").is_file() and cand not in seen:
+            seen.append(cand)
+    return seen
+
+
+def _git_env_with_node(base_env: dict[str, str] | None = None) -> dict[str, str]:
+    """Return ``base_env`` (or os.environ) with node bin dirs on PATH."""
+    src = dict(base_env) if base_env is not None else dict(os.environ)
+    existing_path = src.get("PATH") or ""
+    extra = [d for d in _node_bin_dirs() if d and d not in existing_path.split(os.pathsep)]
+    if not extra:
+        return src
+    src["PATH"] = os.pathsep.join([*extra, existing_path]) if existing_path else os.pathsep.join(extra)
+    return src
 
 
 def _run_git(
@@ -51,6 +96,7 @@ def _run_git(
         full_argv,
         timeout=timeout_s,
         output_cap_bytes=_GIT_OUTPUT_CAP,
+        env=_git_env_with_node(),
         sandbox_dir=sandbox_dir,
         allow_network=allow_network,
         sandbox_required=True,
