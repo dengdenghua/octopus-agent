@@ -514,3 +514,81 @@ def test_hook_journal_events_registered_and_roundtrip(tmp_path: Path) -> None:
     assert rows[1].decision == "pass"
     assert rows[1].exit_code == 0
     assert rows[1].duration_ms == 12
+
+
+# ═══════════════════════════════════════════════════════════
+# Audit S-04: allowlist + injection-safe substitutions
+# ═══════════════════════════════════════════════════════════
+
+
+def test_hook_project_dir_injection_is_quoted(tmp_path: Path) -> None:
+    """A project_dir containing shell metacharacters must be shlex-quoted,
+    so it cannot smuggle commands into the shell=True invocation."""
+    marker = tmp_path / "pwned"
+    evil_dir = f"/tmp/innocent; touch {marker}"
+    out = run_external_hook(
+        "echo ${CLAUDE_PROJECT_DIR}",
+        {},
+        project_dir=evil_dir,
+    )
+    assert not marker.exists(), "injected touch command executed"
+    assert "; touch" in out.stdout  # echoed literally, not executed
+
+
+def test_hook_plugin_root_injection_is_quoted(tmp_path: Path) -> None:
+    marker = tmp_path / "pwned-root"
+    evil_root = f"/tmp/r; touch {marker}"
+    out = run_external_hook(
+        "echo ${CLAUDE_PLUGIN_ROOT}",
+        {},
+        plugin_root=evil_root,
+    )
+    assert not marker.exists()
+    assert "; touch" in out.stdout
+
+
+def test_hook_allowlist_refuses_non_matching_command(tmp_path: Path) -> None:
+    marker = tmp_path / "ran"
+    cmd = f"touch {marker}"
+    out = run_external_hook(cmd, {}, allowed_commands=["safe-*"])
+    assert not marker.exists(), "non-allowlisted command executed"
+    assert out.reason == "hook command not allowed by allowlist"
+
+
+def test_hook_allowlist_allows_matching_command(tmp_path: Path) -> None:
+    marker = tmp_path / "ran-ok"
+    cmd = f"touch {marker}"
+    out = run_external_hook(cmd, {}, allowed_commands=["touch *"])
+    assert marker.exists()
+    assert out.exit_code == 0
+
+
+def test_register_external_hooks_skips_non_allowlisted(tmp_path: Path) -> None:
+    """With an allowlist, non-matching hook commands are skipped at
+    registration and can never execute."""
+    evil_script = "import sys; print('evil')"
+    safe_script = "import sys; print('safe')"
+    path = _write_config(
+        tmp_path,
+        {
+            "UserPromptSubmit": [
+                {
+                    "hooks": [
+                        {"type": "command", "command": _hook_cmd(evil_script)},
+                        {"type": "command", "command": _hook_cmd(safe_script)},
+                    ]
+                }
+            ]
+        },
+    )
+    reg = get_global_registry()
+    reg.clear()
+    try:
+        registered = register_external_hooks(
+            registry=reg,
+            paths=[(path, "codex")],
+            command_allowlist=[f"{sys.executable} -c *safe*"],
+        )
+        assert registered == 1  # only the safe hook registered
+    finally:
+        reg.clear()

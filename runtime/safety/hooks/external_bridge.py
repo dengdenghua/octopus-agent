@@ -28,10 +28,12 @@ Shared protocol (both dialects):
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import logging
 import os
 import re
+import shlex
 import subprocess
 import time
 from dataclasses import dataclass
@@ -250,13 +252,29 @@ def run_external_hook(
     timeout_s: float = DEFAULT_HOOK_TIMEOUT_S,
     plugin_root: str = "",
     project_dir: str = "",
+    allowed_commands: list[str] | None = None,
 ) -> ExternalHookOutput:
-    """Run one command hook. Never raises — infra faults pass through."""
+    """Run one command hook. Never raises — infra faults pass through.
+
+    Audit S-04 hardening:
+      * ``${CLAUDE_PLUGIN_ROOT}`` / ``${CLAUDE_PROJECT_DIR}`` are
+        substituted with ``shlex.quote`` so a workspace/plugin path cannot
+        smuggle shell metacharacters into the ``shell=True`` invocation.
+      * When ``allowed_commands`` is a non-empty glob list, commands that
+        do not match are refused without executing.
+    """
     cmd = command
     if plugin_root:
-        cmd = cmd.replace("${CLAUDE_PLUGIN_ROOT}", plugin_root)
+        cmd = cmd.replace("${CLAUDE_PLUGIN_ROOT}", shlex.quote(plugin_root))
     if project_dir:
-        cmd = cmd.replace("${CLAUDE_PROJECT_DIR}", project_dir)
+        cmd = cmd.replace("${CLAUDE_PROJECT_DIR}", shlex.quote(project_dir))
+    if allowed_commands:
+        if not any(fnmatch.fnmatch(cmd, pattern) for pattern in allowed_commands):
+            _logger.warning(
+                "external hook command not allowed by allowlist (refused): %s",
+                cmd[:120],
+            )
+            return ExternalHookOutput(reason="hook command not allowed by allowlist")
     payload_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     if dialect == "claude-code":
         payload_json += "\n"
@@ -590,16 +608,27 @@ def discover_external_hook_paths() -> list[tuple[Path, HookDialect]]:
 def register_external_hooks(
     registry: Any = None,
     paths: list[tuple[Path, HookDialect]] | None = None,
+    command_allowlist: list[str] | None = None,
 ) -> int:
     """Load every discovered (or given) ``hooks.json`` into the registry.
 
     Returns the number of command hooks registered. Best-effort: a bad
     config logs and is skipped; a failing hook degrades to pass-through
     at dispatch time (never into the agent loop).
+
+    Audit S-04: when ``command_allowlist`` is set (explicitly or via the
+    ``OCTOPUS_HOOK_COMMAND_ALLOWLIST`` env, ``|``-separated globs),
+    commands that do not match are skipped at registration — they can
+    never execute. Empty/None keeps backward-compatible behaviour (with
+    the shlex-quoting injection fix still applied at run time).
     """
     registry = registry or get_global_registry()
     if paths is None:
         paths = discover_external_hook_paths()
+    if command_allowlist is None:
+        raw = os.environ.get("OCTOPUS_HOOK_COMMAND_ALLOWLIST", "").strip()
+        if raw:
+            command_allowlist = [p.strip() for p in raw.split("|") if p.strip()]
     registered = 0
     seen: set[tuple[str, str]] = set()
     for path, dialect in paths:
@@ -609,6 +638,14 @@ def register_external_hooks(
         seen.add(key)
         specs, _skipped = load_external_hooks(path, dialect)
         for spec in specs:
+            if command_allowlist and not any(
+                fnmatch.fnmatch(spec.command, pattern) for pattern in command_allowlist
+            ):
+                _logger.warning(
+                    "external hook command not in allowlist (skipped): %s",
+                    spec.command[:120],
+                )
+                continue
             registry.register(_EVENT_TYPES[spec.event], _make_handler(spec))
             registered += 1
     if registered:
