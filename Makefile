@@ -89,6 +89,9 @@ security:  ## Run security scans (bandit + pip-audit)
 	$(PYTHON) -m pip_audit --ignore-vuln PYSEC-2026-2858
 
 # ─── Clean ───────────────────────────────────────────
+clean-noise:  ## Remove workspace noise + list stray root entries (audit A-09)
+	./scripts/clean_workspace_noise.sh
+
 clean:  ## Clean caches
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
