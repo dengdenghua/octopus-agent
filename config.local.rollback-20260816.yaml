@@ -1,0 +1,106 @@
+preset: null
+
+name: my-octopus
+version_compat: "0.2"
+
+planner:
+  type: llm
+  # Must name a model an entry in data/custom_models.json actually serves.
+  # This value is also the fallback every ephemeral sub-agent runs on when no
+  # per-dispatch override or cheap model is configured
+  # (_app_stack: default_model = planner.planner_model), so a model no
+  # configured provider serves fails every delegated sub-agent with http_400.
+  model: deepseek-v4-flash
+  mock_response: null
+  max_nodes: 10
+
+evolve:
+  strategy: inherit
+  model: null
+  base_url: null
+  api_key_env: null
+
+budget:
+  max_tokens: 200000
+  max_usd: 2.00
+  max_latency_ms: 600000
+  model_iteration_timeout_s: 240
+  budget_auto_pause: true
+
+immunity:
+  trusted_sources:
+    - "skill://public/*"
+    - "skill://all_skills/plugin-creator"
+    - "mcp://anthropic/*"
+    - "mcp://fs/*"
+  self_whitelist:
+    - "cerebrum"
+    - "ganglia"
+    - "arms/*"
+    - "react_loop"
+    - "react_arm"
+    - "intel_collector/*"
+  unknown_policy: quarantine
+  attack_threshold: 3
+  attack_window_seconds: 3600
+  enable_adaptive: true
+  adaptive_window_size: 200
+  adaptive_quarantine_threshold: 0.7
+
+intel_sources: []
+
+mcp_servers: []
+
+learn:
+  learn_from_journal: null
+  min_hits: 3
+  max_rules: 30
+  learn_memories_from_journal: null
+  learn_kg_from_journal: null
+  kg_max_triples: 15
+  rewrite_from_journal: null
+  rewrite_min_confidence: 0.7
+  rewrite_min_severity: mid
+  assess_recipe_from_journal: null
+
+journal_file: null
+enable_web_skills: true
+default_arm_id: code_arm
+
+oct:
+  enabled: false
+  base_url: https://api.octoapk.com
+  default_model: qwen3.5-flash
+  request_timeout_seconds: 15
+  llm_timeout_seconds: 120
+  mock_mode: true
+  jwt_secret: "test-secret-key-for-local-development-only-1234567890"
+  jwt_expire_seconds: 2592000
+  jwt_issuer: octopus-agent
+
+local_auth:
+  enabled: false
+  allow_any_username: true
+  allowed_usernames: []
+  jwt_secret: "test-secret-key-for-local-development-only-1234567890"
+  jwt_expire_seconds: 604800
+  jwt_issuer: octopus-agent
+  actor_prefix: "local:"
+  default_roles: [user, local]
+
+safety:
+  disabled_guards: []
+  enable_trust_signal: false
+  enable_llm_judge: false
+  # This config is only for the trusted, single-user local desktop runtime.
+  # It lets the UI's “全权执行” mode reach the realtime approval policy
+  # instead of being silently downgraded to on-request by the server.
+  allow_client_approval_bypass: true
+  guard_overrides: {}
+
+execution:
+  # Trusted single-user local desktop runtime: default-execute so tools
+  # (node/pnpm/git) actually run with the host PATH instead of failing inside
+  # a stripped seatbelt profile.  Escalation paths still gate via approval.
+  deployment_mode: local
+  process_sandbox: soft
