@@ -109,3 +109,31 @@ def test_code_dependency_graph(tmp_path: Path) -> None:
     assert len(out["nodes"]) == 3
     assert any(e["source"].endswith("a.py") and "pkg" in e["target"] for e in out["edges"])
     assert "directory not found" in cis._code_dependency_graph(str(tmp_path / "nope"))["error"]
+
+
+class _FakeEncoder:
+    def encode(self, texts, **kwargs):
+        import numpy as np
+
+        return [np.array([1.0, 0.0, 0.5]) for _ in texts]
+
+
+def test_code_search_embedding_backend(monkeypatch, tmp_path: Path) -> None:
+    from runtime.execution.suckers import code_intelligence_skills as _cis
+
+    (tmp_path / "a.py").write_text("def target():\n    pass\n", encoding="utf-8")
+    monkeypatch.setattr(_cis, "_get_embedder", lambda: _FakeEncoder())
+    monkeypatch.setattr(_cis, "_INDEX", [])
+    monkeypatch.setattr(_cis, "_INDEX_DIR", "")
+    out = _cis._code_search("target", directory=str(tmp_path), extensions=".py", top_k=5)
+    assert out.get("backend") in ("embedding", "text_fallback")
+    assert "missing query" in _cis._code_search("", directory=str(tmp_path))["error"]
+    ast_out = _cis._code_search("x", mode="ast", query_type="function_calls", target_name="", root=str(tmp_path), glob="*.py", sandbox_dir=None)
+    assert "error" in ast_out  # missing target_name validation from _ast_search
+
+
+def test_code_search_ast_mode_validation(tmp_path: Path) -> None:
+    from runtime.execution.suckers import code_intelligence_skills as _cis
+
+    out = _cis._code_search("x", mode="ast", query_type="bogus", target_name="f", root=str(tmp_path), glob="*.py", sandbox_dir=None)
+    assert "invalid query_type" in out["error"]
