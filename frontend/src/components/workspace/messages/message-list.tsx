@@ -1444,38 +1444,10 @@ export function MessageList({
           }
           continue;
         }
-        if (message.type !== "tool") {
-          continue;
-        }
-        const taskId = (message as ToolMessage).tool_call_id;
-        if (!taskId) {
-          continue;
-        }
-        const result = extractTextFromMessage(message);
-        if (result.startsWith("Task Succeeded. Result:")) {
-          updates.push({
-            id: taskId,
-            status: "completed",
-            progress: 1,
-            result: result.split("Task Succeeded. Result:")[1]?.trim(),
-          });
-        } else if (result.startsWith("Task failed.")) {
-          updates.push({
-            id: taskId,
-            status: "failed",
-            progress: 1,
-            error: result.split("Task failed.")[1]?.trim(),
-          });
-        } else if (result.startsWith("Task timed out")) {
-          updates.push({
-            id: taskId,
-            status: "timed_out",
-            progress: 1,
-            error: result,
-          });
-        } else {
-          updates.push({ id: taskId, status: "in_progress" });
-        }
+        // REMOVED: Dead subtask status contract (lines 1444-1476).
+        // Backend never sends "Task Succeeded. Result:" / "Task failed." /
+        // "Task timed out" prefixes. Subtask status must flow through proper
+        // SSE events (item/subtask/status), not text parsing.
       }
     }
     return updates;

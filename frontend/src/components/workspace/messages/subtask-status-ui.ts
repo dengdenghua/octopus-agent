@@ -26,7 +26,7 @@ export function subtaskProgress(
     return 1;
   }
   if (task.status === "pending") return 0.08;
-  return Math.max(0.18, Math.min(0.92, task.progress || 0.45));
+  return Math.max(0.18, Math.min(0.92, task.progress ?? 0.45));
 }
 
 /**

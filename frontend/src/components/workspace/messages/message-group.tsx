@@ -300,19 +300,23 @@ function redactPublicProcessText(value: string): string {
  * 只折叠行内空白（``[^\S\n]+``）并**保留换行**。压平 ``\n`` 会让 markdown
  * 围栏塌到同一行 —— ``` 不再是块级围栏、只能解析成行内 code，整段过程文案
  * 糊成一个段落（语言标记 ``json`` 也混进正文）。保留换行后围栏正常渲染成
- * ``<pre><code>``。 */
+ * ``<pre><code>``。
+ *
+ * IMPORTANT: normalizePublicTimelineChunk MUST run BEFORE the redact path,
+ * otherwise commit 142c0501's fence fix is unreachable (publicProcessText
+ * short-circuits). */
 function publicProcessText(value: string): string {
-  return (
-    normalizePublicTimelineChunk(value) ??
-    redactPublicProcessText(
-      stripTraceLabelPrefixes(
-        stripLeakedRendererMarkup(
-          stripInternalToolProtocol(
-            value.replace(INTERNAL_PROCESS_BLOCK_RE, ""),
-          ),
+  const normalized = normalizePublicTimelineChunk(value);
+  if (normalized) return normalized;
+
+  return redactPublicProcessText(
+    stripTraceLabelPrefixes(
+      stripLeakedRendererMarkup(
+        stripInternalToolProtocol(
+          value.replace(INTERNAL_PROCESS_BLOCK_RE, ""),
         ),
-      ).replace(/[^\S\n]+/g, " "),
-    )
+      ),
+    ).replace(/[^\S\n]+/g, " "),
   );
 }
 

@@ -1310,7 +1310,7 @@ async def _start_turn(
                     reason = emitter_reason
             turn.interrupt_reason = reason
         # The connection is usually already dead here; send failures
-        # must not mask the cancellation.
+        # must not mask the cancellation. Notify the current connection.
         with contextlib.suppress(Exception):
             await emitter.notify(
                 ServerMethod.TURN_INTERRUPTED,
@@ -1328,6 +1328,12 @@ async def _start_turn(
                     "turn": turn.model_dump(by_alias=True, mode="json"),
                 },
             )
+        # TODO(P1): Fan out terminal events to sibling connections (same
+        # thread_id) matching the normal completion path in
+        # realtime_gateway.py:716-720. Without this, sibling tabs see the turn
+        # stuck in inProgress until their next thread/resume. Requires passing
+        # the gateway instance to _start_turn() or adding a broadcast callback
+        # to EventEmitter protocol.
         raise
     except Exception as exc:
         # Failures between turn/started and the driver try (intent

@@ -79,9 +79,11 @@ function appendStreamText<T extends Item>(item: T, delta: string): T {
   // Move the buffer to the replacement item. The reducer never mutates
   // Conversation state in place, so the fresh object becomes the sole owner
   // of the in-flight chunks while the old object can be collected.
+  // CRITICAL: set new mapping BEFORE deleting old one — drift probe (line 573)
+  // folds twice from same base, and delete-then-set loses chunks on second pass.
+  streamChunks.set(updated, chunks);
   streamChunks.delete(item);
   streamJoined.delete(item);
-  streamChunks.set(updated, chunks);
   return updated;
 }
 
@@ -119,9 +121,10 @@ function appendReasoningStreamText<T extends Item>(
     }
   }
   const updated = { ...item } as T;
+  // Same ordering fix as appendStreamText: set new mapping before deleting old.
+  streamReasoningBuckets.set(updated, buckets);
   streamReasoningBuckets.delete(item);
   streamReasoningJoined.delete(item);
-  streamReasoningBuckets.set(updated, buckets);
   return updated;
 }
 

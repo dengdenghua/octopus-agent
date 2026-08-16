@@ -1142,10 +1142,16 @@ export function useRealtimeThread(
         reason: "turn interrupted",
       });
     }
-    await client.request("turn/interrupt", {
+    // Fire the interrupt request but don't await — update local UI immediately.
+    // If the network call fails, the UI still shows interrupted (better UX than
+    // leaving the turn stuck in inProgress on transient network errors).
+    client.request("turn/interrupt", {
       threadId: args.threadId,
       turnId: active.id,
+    }).catch((err) => {
+      console.error("[realtime] turn/interrupt request failed:", err);
     });
+
     persistTurnTelemetry(active.id, "interrupted");
     applyEvent({
       method: "turn/interrupted",
