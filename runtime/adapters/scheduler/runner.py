@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import concurrent.futures.thread as _cf_thread
 import contextvars
 import logging
 import random
 import threading
 import time
+import weakref
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -56,6 +58,42 @@ class PeriodicTask:
         return self.cron_expr is not None
 
 
+class _DaemonThreadPoolExecutor(ThreadPoolExecutor):
+    """ThreadPoolExecutor whose worker threads are daemon threads.
+
+    ``BackgroundRunner.stop`` gives up on a stuck callback after its
+    cooperative budget and then calls ``shutdown(wait=False)``.  A normal
+    executor keeps non-daemon worker threads alive, so a hung callback
+    would still block interpreter exit.  Daemon workers let the process
+    terminate cleanly while the stuck callback simply drops (audit P-09).
+    """
+
+    def _adjust_thread_count(self) -> None:
+        if self._idle_semaphore.acquire(timeout=0):
+            return
+
+        def weakref_cb(_, q=self._work_queue):
+            q.put(None)
+
+        num_threads = len(self._threads)
+        if num_threads < self._max_workers:
+            thread_name = "%s_%d" % (self._thread_name_prefix or self, num_threads)
+            t = threading.Thread(
+                name=thread_name,
+                target=_cf_thread._worker,
+                args=(
+                    weakref.ref(self, weakref_cb),
+                    self._work_queue,
+                    self._initializer,
+                    self._initargs,
+                ),
+                daemon=True,
+            )
+            t.start()
+            self._threads.add(t)
+            _cf_thread._threads_queues[t] = self._work_queue
+
+
 class BackgroundRunner:
     def __init__(
         self,
@@ -85,7 +123,7 @@ class BackgroundRunner:
             self._state = "running"
             self._stop_event.clear()
             if self.max_workers > 1:
-                self._pool = ThreadPoolExecutor(
+                self._pool = _DaemonThreadPoolExecutor(
                     max_workers=self.max_workers,
                     thread_name_prefix=f"{self.name}-worker",
                 )
