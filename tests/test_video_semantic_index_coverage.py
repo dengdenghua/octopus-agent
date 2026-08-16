@@ -101,3 +101,32 @@ def test_search_video_by_text_with_index(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("OCTOPUS_VIDEO_SEMANTIC", "0")
     assert vsi.search_video_by_text("x", db_path=db) is None
     assert vsi.search_video_by_text("x", db_path=tmp_path / "nope.db") is None
+
+
+def test_search_video_by_image_with_index(monkeypatch, tmp_path: Path) -> None:
+    from PIL import Image
+
+    monkeypatch.setenv("OCTOPUS_VIDEO_SEMANTIC", "auto")
+    monkeypatch.setattr(vsi, "_image_model", lambda: _FakeEmbed())
+    db = tmp_path / "v2.db"
+    conn = vsi._open(db)
+    conn.execute(
+        "INSERT INTO video_keyframes (video_path, time_sec, clip_embedding) VALUES (?, ?, ?)",
+        ("clip2.mp4", 2.5, vsi._vec_to_blob([1.0, 0.0, 0.5])),
+    )
+    conn.commit()
+    conn.close()
+
+    img = tmp_path / "query.png"
+    Image.new("RGB", (8, 8), (5, 5, 5)).save(img)
+
+    hits = vsi.search_video_by_image(str(img), db_path=db, top_k=3)
+    assert hits is not None and len(hits) == 1
+    assert hits[0]["video_path"] == "clip2.mp4"
+    assert abs(hits[0]["time_sec"] - 2.5) < 0.01
+
+    # error paths
+    assert vsi.search_video_by_image("", db_path=db) is None
+    monkeypatch.setattr(vsi, "_image_model", lambda: None)
+    assert vsi.search_video_by_image(str(img), db_path=db) is None
+    assert vsi.search_video_by_image(str(tmp_path / "missing.png"), db_path=db) is None
