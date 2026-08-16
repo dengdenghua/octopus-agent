@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, memo } from "react";
+import { lazy, Suspense, useDeferredValue, useMemo, memo } from "react";
 import type { AnchorHTMLAttributes, HTMLAttributes, ReactElement } from "react";
 import type { BundledLanguage } from "shiki";
 
@@ -137,6 +137,17 @@ export const MarkdownContent = memo(
       remarkPlugins ?? streamdownPlugins.remarkPlugins;
     const proseSizeClass =
       CHAT_PROSE_SIZE[chatFontSizeProp ?? settings.display.chat_font_size];
+    // Defer the full-text cleaning so a streaming burst (many content updates
+    // per frame) coalesces into fewer passes instead of re-running the two
+    // whole-string regexes on every single token.
+    const deferredContent = useDeferredValue(content);
+    const publicContent = useMemo(
+      () =>
+        stabilizeMarkdownTableCodePipes(
+          stripLeakedControlMarkup(deferredContent),
+        ),
+      [deferredContent],
+    );
     const components = useMemo(() => {
       return {
         a: (props: AnchorHTMLAttributes<HTMLAnchorElement>) => {
@@ -233,9 +244,6 @@ export const MarkdownContent = memo(
     }, [componentsFromProps, isLoading]);
 
     if (!content) return null;
-    const publicContent = stabilizeMarkdownTableCodePipes(
-      stripLeakedControlMarkup(content),
-    );
     if (!publicContent) return null;
 
     // Pass the prose-size variant *into* MessageResponse's className rather

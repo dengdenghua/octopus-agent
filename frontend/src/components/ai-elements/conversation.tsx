@@ -126,7 +126,9 @@ export const ConversationScrollButton = ({
 
   const handleScrollToBottom = useCallback(() => {
     setPendingActivityCount(0);
-    scrollToBottom({ animation: "instant" });
+    // Smooth for the explicit button so the jump doesn't feel abrupt; the
+    // streaming auto-follow above stays "instant" to avoid jitter.
+    scrollToBottom({ animation: "smooth" });
   }, [scrollToBottom]);
 
   const label =
