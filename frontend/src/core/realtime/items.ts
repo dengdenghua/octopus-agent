@@ -5,37 +5,30 @@
 // Item with stable id and tagged ``type``. The realtime reducer rebuilds
 // Conversation state from item/* notifications keyed on ``id``.
 
-/**
- * Runtime-visible mirror of ``runtime/protocol/items.py``'s ItemStatus.
- * The protocol-enum-parity test compares THIS array against the backend
- * enum, so a status added or renamed on either side fails CI.
- */
-export const ITEM_STATUSES = [
-  "inProgress",
-  "completed",
-  "failed",
-  "interrupted",
-  "declined",
-] as const;
-
-export type ItemStatus = (typeof ITEM_STATUSES)[number];
-
-export type ItemType =
-  | "userMessage"
-  | "steeringUserMessage"
-  | "agentMessage"
-  | "reasoning"
-  | "plan"
-  | "todo-list"
-  | "commandExecution"
-  | "fileChange"
-  | "mcpToolCall"
-  | "subagent"
-  | "approval"
-  | "verification"
-  | "visibility"
-  | "artifact"
-  | "error";
+// Audit A-04: enums are generated from runtime/protocol/items.py by
+// scripts/gen_realtime_protocol_enums.py — the source of truth is the
+// Python definitions; this file imports them for its interfaces and
+// re-exports them for consumers.
+import {
+  ITEM_STATUSES,
+  ITEM_TYPES,
+  TURN_STATUSES,
+} from "./protocol-enums.generated";
+import type {
+  ItemStatus,
+  ItemType,
+  TurnStatus,
+} from "./protocol-enums.generated";
+export {
+  ITEM_STATUSES,
+  ITEM_TYPES,
+  TURN_STATUSES,
+};
+export type {
+  ItemStatus,
+  ItemType,
+  TurnStatus,
+};
 
 export interface ItemBase {
   id: string;
@@ -327,20 +320,6 @@ export type Item =
   | ArtifactItem
   | ErrorItem;
 
-/**
- * Runtime-visible mirror of ``runtime/protocol/items.py``'s TurnStatus.
- * See ITEM_STATUSES.
- */
-export const TURN_STATUSES = [
-  "inProgress",
-  "completed",
-  "paused",
-  "cancelled",
-  "interrupted",
-  "failed",
-] as const;
-
-export type TurnStatus = (typeof TURN_STATUSES)[number];
 
 /** Soft hand-off hint payload from ``turn/metaSkill/hint``.
  *
