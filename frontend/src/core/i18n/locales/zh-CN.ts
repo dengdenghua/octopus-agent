@@ -113,13 +113,6 @@ export const zhCN: Translations = {
   // Input Box
   inputBox: {
     placeholder: "@ 引用对话文件，/ 调用技能与指令，直接说需求...",
-    createSkillPrompt:
-      "你可以使用 skill-creator 技能来创建自定义技能。请描述你想要创建的技能的功能:",
-    addAttachments: "添加附件",
-    startVoiceInput: "开始语音输入",
-    stopVoiceInput: "停止语音输入",
-    stop: "停止",
-    send: "发送",
     mode: "模式",
     flashMode: "对话",
     flashModeDescription: "快速响应",

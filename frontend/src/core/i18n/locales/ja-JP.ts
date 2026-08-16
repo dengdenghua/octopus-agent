@@ -114,13 +114,6 @@ export const jaJP: Translations = {
   // Input Box
   inputBox: {
     placeholder: "今日はどのようなご用件ですか？",
-    createSkillPrompt:
-      "`skill-creator` を使って新しいスキルをステップバイステップで作成します。まず、このスキルに何をさせたいですか？",
-    addAttachments: "添付ファイルを追加",
-    startVoiceInput: "音声入力を開始",
-    stopVoiceInput: "音声入力を停止",
-    stop: "停止",
-    send: "送信",
     mode: "モード",
     flashMode: "チャット",
     flashModeDescription: "高速応答",

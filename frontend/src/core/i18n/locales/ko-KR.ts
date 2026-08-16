@@ -114,13 +114,6 @@ export const koKR: Translations = {
   // Input Box
   inputBox: {
     placeholder: "오늘 무엇을 도와드릴까요?",
-    createSkillPrompt:
-      "`skill-creator`로 새 스킬을 단계별로 만들어 보겠습니다. 먼저 이 스킬이 무엇을 하기를 원하시나요?",
-    addAttachments: "첨부 파일 추가",
-    startVoiceInput: "음성 입력 시작",
-    stopVoiceInput: "음성 입력 중지",
-    stop: "중지",
-    send: "보내기",
     mode: "모드",
     flashMode: "채팅",
     flashModeDescription: "빠른 응답",

@@ -16,11 +16,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import {
-  PromptInput,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTextarea,
-} from "@/components/ai-elements/prompt-input";
+  ChatInputBox,
+} from "@/components/workspace/chat-input-box";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -972,18 +969,14 @@ export default function NewAgentPage() {
                     </div>
                   </div>
                 ) : (
-                  <PromptInput
+                  <ChatInputBox
+                    threadId={threadId}
                     onSubmit={({ text }) => void handleChatSubmit(text)}
-                  >
-                    <PromptInputTextarea
-                      autoFocus
-                      placeholder={t.agents.createPageSubtitle}
-                      disabled={thread.isLoading}
-                    />
-                    <PromptInputFooter className="justify-end">
-                      <PromptInputSubmit disabled={thread.isLoading} />
-                    </PromptInputFooter>
-                  </PromptInput>
+                    disabled={thread.isLoading}
+                    placeholder={t.agents.createPageSubtitle}
+                    autoFocus
+                    showPet={false}
+                  />
                 )}
               </div>
             </div>

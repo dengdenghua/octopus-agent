@@ -4,7 +4,7 @@ import { useThreadChat } from "@/components/workspace/chats";
 import { useThreadSettings } from "@/core/settings";
 import type { BaseStream } from "@/core/api/use-stream-types";
 import type { AgentThreadState } from "@/core/threads";
-import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
+import type { PromptInputMessage } from "@/core/uploads";
 import { extractTextFromMessage } from "@/core/messages/utils";
 
 export function useRegenerateHandler(

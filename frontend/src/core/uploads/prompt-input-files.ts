@@ -5,6 +5,12 @@ export type PromptInputFilePart = FileUIPart & {
   file?: File;
 };
 
+/** A composed message from the input box: plain text plus uploaded files. */
+export type PromptInputMessage = {
+  text: string;
+  files: PromptInputFilePart[];
+};
+
 export async function promptInputFilePartToFile(
   filePart: PromptInputFilePart,
 ): Promise<File | null> {

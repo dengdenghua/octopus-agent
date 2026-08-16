@@ -39,7 +39,6 @@ import type {
 } from "@/core/realtime/items";
 
 import type { BaseStream } from "@/core/api/use-stream-types";
-import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import type { LiveToolEvent } from "@/components/workspace/live-tool-timeline";
 import type { AgentThreadState, ReasoningEffort } from "@/core/threads/types";
 import type { ToolEndEvent } from "@/core/threads/hooks";
@@ -52,6 +51,7 @@ import {
 import {
   promptInputFilePartToFile,
   uploadFiles,
+  type PromptInputMessage,
   type UploadedFileInfo,
 } from "@/core/uploads";
 import {

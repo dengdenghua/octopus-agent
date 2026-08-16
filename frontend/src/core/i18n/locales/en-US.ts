@@ -114,13 +114,6 @@ export const enUS: Translations = {
   // Input Box
   inputBox: {
     placeholder: "How can I assist you today?",
-    createSkillPrompt:
-      "We're going to build a new skill step by step with `skill-creator`. To start, what do you want this skill to do?",
-    addAttachments: "Add attachments",
-    startVoiceInput: "Start voice input",
-    stopVoiceInput: "Stop voice input",
-    stop: "Stop",
-    send: "Send",
     mode: "Mode",
     flashMode: "Chat",
     flashModeDescription: "Fast response",

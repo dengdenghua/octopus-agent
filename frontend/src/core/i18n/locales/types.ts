@@ -95,12 +95,6 @@ export interface Translations {
   // Input Box
   inputBox: {
     placeholder: string;
-    createSkillPrompt: string;
-    addAttachments: string;
-    startVoiceInput: string;
-    stopVoiceInput: string;
-    stop: string;
-    send: string;
     mode: string;
     flashMode: string;
     flashModeDescription: string;
