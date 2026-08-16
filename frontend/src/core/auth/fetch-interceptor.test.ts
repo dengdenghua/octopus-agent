@@ -28,6 +28,7 @@ afterEach(() => {
   calls.length = 0;
   mockFetch.mockClear();
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 const authOf = (i = 0): string | null =>
@@ -35,19 +36,19 @@ const authOf = (i = 0): string | null =>
 
 describe("installAuthFetchInterceptor", () => {
   it("attaches the bearer token to backend /api requests", async () => {
-    localStorage.setItem("octopus_auth_token", "tok123");
+    sessionStorage.setItem("octopus_auth_token", "tok123");
     await window.fetch("/api/cli-team/status");
     expect(authOf()).toBe("Bearer tok123");
   });
 
   it("does not leak the token to third-party URLs", async () => {
-    localStorage.setItem("octopus_auth_token", "tok123");
+    sessionStorage.setItem("octopus_auth_token", "tok123");
     await window.fetch("https://evil.example.com/api/steal");
     expect(authOf()).toBeNull();
   });
 
   it("never overrides an Authorization header the caller set", async () => {
-    localStorage.setItem("octopus_auth_token", "tok123");
+    sessionStorage.setItem("octopus_auth_token", "tok123");
     await window.fetch("/api/x", {
       headers: { Authorization: "Bearer caller-set" },
     });
@@ -60,8 +61,14 @@ describe("installAuthFetchInterceptor", () => {
   });
 
   it("ignores the legacy guest sentinel", async () => {
-    localStorage.setItem("octopus_auth_token", "__guest__");
+    sessionStorage.setItem("octopus_auth_token", "__guest__");
     await window.fetch("/api/x");
     expect(authOf()).toBeNull();
+  });
+
+  it("falls back to a legacy localStorage token until migration scrubs it", async () => {
+    localStorage.setItem("octopus_auth_token", "legacy");
+    await window.fetch("/api/x");
+    expect(authOf()).toBe("Bearer legacy");
   });
 });

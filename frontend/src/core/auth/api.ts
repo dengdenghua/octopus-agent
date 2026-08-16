@@ -18,9 +18,35 @@ function canUseBrowserStorage(): boolean {
   return typeof window !== "undefined" && import.meta.env.MODE !== "test";
 }
 
+/**
+ * Audit S-07: the JWT must not live in localStorage (persistent, readable by
+ * any script). Tokens are kept in sessionStorage instead. This migrates a
+ * legacy localStorage session over once (so existing users are not logged
+ * out), then scrubs localStorage entirely.
+ */
+function _migrateLegacyLocalStorage(): void {
+  if (!canUseBrowserStorage()) return;
+  try {
+    const legacyToken = window.localStorage.getItem(TOKEN_KEY);
+    if (legacyToken && !window.sessionStorage.getItem(TOKEN_KEY)) {
+      window.sessionStorage.setItem(TOKEN_KEY, legacyToken);
+      const user = window.localStorage.getItem(USER_KEY);
+      if (user) window.sessionStorage.setItem(USER_KEY, user);
+      const ts = window.localStorage.getItem(TOKEN_TIMESTAMP_KEY);
+      if (ts) window.sessionStorage.setItem(TOKEN_TIMESTAMP_KEY, ts);
+    }
+    window.localStorage.removeItem(TOKEN_KEY);
+    window.localStorage.removeItem(USER_KEY);
+    window.localStorage.removeItem(TOKEN_TIMESTAMP_KEY);
+  } catch {
+    // best-effort migration must never throw
+  }
+}
+
 function _isSessionExpired(): boolean {
   if (!canUseBrowserStorage()) return true;
-  const ts = window.localStorage.getItem(TOKEN_TIMESTAMP_KEY);
+  _migrateLegacyLocalStorage();
+  const ts = window.sessionStorage.getItem(TOKEN_TIMESTAMP_KEY);
   if (!ts) return false;
   const elapsed = Date.now() - Number(ts);
   return elapsed > SESSION_TIMEOUT_MS;
@@ -32,19 +58,18 @@ function _readToken(): string | null {
     _clearTokens();
     return null;
   }
-  return (
-    window.localStorage.getItem(TOKEN_KEY) ||
-    window.sessionStorage.getItem(TOKEN_KEY)
-  );
+  return window.sessionStorage.getItem(TOKEN_KEY);
 }
 
 export function _writeToken(token: string, user: unknown): void {
   if (!canUseBrowserStorage()) return;
-  window.localStorage.setItem(TOKEN_KEY, token);
-  window.localStorage.setItem(USER_KEY, JSON.stringify(user));
-  window.localStorage.setItem(TOKEN_TIMESTAMP_KEY, String(Date.now()));
-  window.sessionStorage.removeItem(TOKEN_KEY);
-  window.sessionStorage.removeItem(USER_KEY);
+  // Audit S-07: sessionStorage only — no token in localStorage.
+  window.sessionStorage.setItem(TOKEN_KEY, token);
+  window.sessionStorage.setItem(USER_KEY, JSON.stringify(user));
+  window.sessionStorage.setItem(TOKEN_TIMESTAMP_KEY, String(Date.now()));
+  window.localStorage.removeItem(TOKEN_KEY);
+  window.localStorage.removeItem(USER_KEY);
+  window.localStorage.removeItem(TOKEN_TIMESTAMP_KEY);
 }
 
 export function _clearTokens(): void {
@@ -54,6 +79,7 @@ export function _clearTokens(): void {
   window.localStorage.removeItem(TOKEN_TIMESTAMP_KEY);
   window.sessionStorage.removeItem(TOKEN_KEY);
   window.sessionStorage.removeItem(USER_KEY);
+  window.sessionStorage.removeItem(TOKEN_TIMESTAMP_KEY);
 }
 
 export function authHeaders(): Record<string, string> {
@@ -74,8 +100,9 @@ export function jsonAuthHeaders(): Record<string, string> {
  */
 export function currentActorId(): string {
   if (!canUseBrowserStorage()) return "anonymous";
+  _migrateLegacyLocalStorage();
   try {
-    const raw = window.localStorage.getItem(USER_KEY);
+    const raw = window.sessionStorage.getItem(USER_KEY);
     if (!raw) return "anonymous";
     const parsed = JSON.parse(raw) as Record<string, unknown> | null;
     if (!parsed || typeof parsed !== "object") return "anonymous";
@@ -212,8 +239,8 @@ export function getToken(): string | null {
 
 export function getUser(): User | null {
   if (typeof window === "undefined") return null;
-  const userStr =
-    localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY);
+  _migrateLegacyLocalStorage();
+  const userStr = sessionStorage.getItem(USER_KEY);
   if (!userStr) return null;
   try {
     return JSON.parse(userStr) as User;

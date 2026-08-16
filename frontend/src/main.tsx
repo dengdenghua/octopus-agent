@@ -21,6 +21,7 @@ import { installPageAgentBridge } from "./core/page-agent-bridge";
 import { installHashRouterShellUrlNormalizer } from "./core/router/hash-shell-url";
 import { normalizeLoopbackOrigin } from "./core/router/loopback-origin";
 import { installAuthFetchInterceptor } from "./core/auth/fetch-interceptor";
+import { getToken } from "./core/auth/api";
 
 import { loadTranslations } from "./core/i18n/translations";
 
@@ -58,7 +59,7 @@ function handleAuthFailure(): void {
   // further 401 sees no token and returns here.
   let tok: string | null = null;
   try {
-    tok = localStorage.getItem("octopus_auth_token");
+    tok = getToken();
   } catch (e) {
     swallow(e, "storage");
     return;
@@ -66,9 +67,13 @@ function handleAuthFailure(): void {
   if (!tok || tok === "__guest__") return;
   authBounced = true;
   try {
-    AUTH_TOKEN_KEYS.forEach((k) => localStorage.removeItem(k));
+    // Audit S-07: clear both storages (legacy localStorage leftovers too).
+    AUTH_TOKEN_KEYS.forEach((k) => {
+      localStorage.removeItem(k);
+      sessionStorage.removeItem(k);
+    });
   } catch {
-    // localStorage may be unavailable; the reload still re-runs auth bootstrap.
+    // storage may be unavailable; the reload still re-runs auth bootstrap.
   }
   // AuthProvider's bootstrap shows the login screen when no token is present.
   window.location.reload();

@@ -65,7 +65,12 @@ export function installAuthFetchInterceptor(): void {
 
   window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
     try {
-      const token = window.localStorage.getItem(TOKEN_KEY);
+      // Audit S-07: the token lives in sessionStorage. The localStorage
+      // fallback only covers a legacy session before the one-time migration
+      // (core/auth/api) has scrubbed it.
+      const token =
+        window.sessionStorage.getItem(TOKEN_KEY) ||
+        window.localStorage.getItem(TOKEN_KEY);
       if (token && token !== GUEST_SENTINEL && isBackendApiRequest(urlOf(input))) {
         // Merge the Request's own headers (if any) with init's, so passing a
         // fresh `headers` to fetch doesn't drop headers the caller set.
