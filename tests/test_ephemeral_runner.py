@@ -608,6 +608,49 @@ def test_agentic_loop_does_not_stall_on_polling_tools():
     assert len(router.call_log) == 5
 
 
+def test_agentic_loop_hands_back_partial_findings_on_round_budget():
+    """A sub-agent that produced findings and then runs out of round budget
+    should return them as a partial result instead of a hard failure — a
+    converging auditor shouldn't lose its work to the cap."""
+    from runtime.execution.suckers.ephemeral_runner import (
+        make_llm_ephemeral_runner,
+    )
+
+    # Round 0 is length-limited text (so the loop keeps going), then tool
+    # calls keep it alive until the reviewer default cap (5) is reached.
+    script = [
+        "findings: observer rescans each chunk",
+        [{"name": "read_file", "input": {"path": "a.ts"}}],
+        [{"name": "read_file", "input": {"path": "b.ts"}}],
+        [{"name": "read_file", "input": {"path": "c.ts"}}],
+        [{"name": "read_file", "input": {"path": "d.ts"}}],
+    ]
+    router = _ScriptedAgenticRouter(script=script, finish_reasons=["length"])
+    registry = _StubRegistry({"read_file": lambda **kw: {"ok": True}})
+    runner = make_llm_ephemeral_runner(
+        router,
+        registry=registry,
+        default_model="m",
+    )
+    call = _make_call(role_id="reviewer")  # default cap 5
+
+    # Must NOT raise EphemeralRoundCapExceeded: partial findings are returned.
+    out = runner(call)
+    assert isinstance(out, str)
+    assert out.startswith("findings: observer rescans each chunk")
+    assert "保留当前结果" in out
+
+
+def test_explorer_has_no_hard_round_cap():
+    """Explorer/audit roles are no longer capped by an arbitrary round count
+    (they are bounded by the wall-clock timeout and convergence guard)."""
+    from runtime.execution.suckers.ephemeral_runner import (
+        EPHEMERAL_MAX_ROUNDS_BY_ROLE,
+    )
+
+    assert EPHEMERAL_MAX_ROUNDS_BY_ROLE["explorer"] is None
+
+
 class TestTokenBudget:
     def test_length_limited_text_continues_in_next_round(self):
         """A sub-agent that hits the provider output cap should not

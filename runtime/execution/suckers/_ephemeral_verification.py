@@ -118,7 +118,7 @@ def is_verification_tool(name: str, tool_input: Any) -> bool:
 def verification_gate_nudge(
     executed_tools: list[dict[str, Any]],
     *,
-    max_rounds: int,
+    max_rounds: int | None,
     current_round: int,
 ) -> str | None:
     """Return a verification nudge message, or ``None`` when no gate applies.
@@ -128,7 +128,7 @@ def verification_gate_nudge(
     after it). Skips when the round budget is exhausted so we never deadlock
     the run — the agent concludes with whatever it has.
     """
-    if current_round + 1 >= max_rounds:
+    if max_rounds is not None and current_round + 1 >= max_rounds:
         return None
 
     last_write_idx: int | None = None

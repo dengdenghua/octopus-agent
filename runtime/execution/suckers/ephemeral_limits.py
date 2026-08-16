@@ -5,10 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 EPHEMERAL_MAX_ROUNDS: int = 5
-EPHEMERAL_MAX_ROUNDS_BY_ROLE: dict[str, int] = {
+EPHEMERAL_MAX_ROUNDS_BY_ROLE: dict[str, int | None] = {
     "researcher": 40,
     "synthesizer": 20,
-    "explorer": 35,
+    "explorer": None,
     "implementer": 50,
     "debugger": 40,
     "architect": 25,

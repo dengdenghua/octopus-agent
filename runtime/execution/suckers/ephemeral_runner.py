@@ -56,6 +56,7 @@ the parent decides whether to re-spawn or move on.
 
 from __future__ import annotations
 
+import itertools
 import logging
 import time
 from collections.abc import Callable
@@ -86,10 +87,10 @@ EPHEMERAL_MAX_ROUNDS: int = 5  # default for simple roles
 
 # Per-role overrides for roles that need deeper exploration/execution.
 # Target: align with Claude Code depth (20-30 rounds for research tasks).
-EPHEMERAL_MAX_ROUNDS_BY_ROLE: dict[str, int] = {
+EPHEMERAL_MAX_ROUNDS_BY_ROLE: dict[str, int | None] = {
     "researcher": 40,  # web_search + fetch + synthesize (deep research)
     "synthesizer": 20,  # gather sibling evidence + write/read-back artifact
-    "explorer": 35,  # file traversal + grep + read
+    "explorer": None,  # no hard round cap: bounded by timeout + convergence guard
     "implementer": 50,  # edit + verify + test cycles
     "debugger": 40,  # trace + hypothesis + verify
     "architect": 25,  # read + analyze + design
@@ -111,6 +112,27 @@ EPHEMERAL_TOKEN_BUDGET: int = 0
 # converged instead of burning the whole round cap and surfacing a hard
 # "exceeded round cap" error to the user.
 EPHEMERAL_STALL_ROUNDS: int = 3
+
+# Margin below the parent/bridge timeout so the loop can hand back partial
+# findings before the bridge force-kills the whole sub-agent call on timeout.
+_LOOP_DEADLINE_MARGIN_S = 10.0
+
+
+def _loop_budget_seconds(call: Any) -> float:
+    """Wall-clock budget (seconds from now) for the tool loop.
+
+    Mirrors the parent/bridge ``timeout_s`` so a sub-agent is bounded by time
+    rather than an arbitrary round count. Falls back to 900s when the bridge
+    did not stamp a timeout.
+    """
+    raw = (call.context or {}).get("timeout_s")
+    try:
+        budget = float(raw) if raw is not None else 0.0
+    except (TypeError, ValueError):
+        budget = 0.0
+    if budget <= 0:
+        budget = 900.0
+    return max(60.0, budget - _LOOP_DEADLINE_MARGIN_S)
 
 # Tools that legitimately re-invoke the same signature while a long-running
 # background job is still working. Polling a stable task_id is real progress
@@ -645,8 +667,12 @@ def make_llm_ephemeral_runner(
         # the surface user lane is reconstructable from the log alone.
         _emit_sub_user_message(_ctx_session_id, call.user_prompt)
 
-        # Role-specific round cap (align with Claude Code depth for research tasks)
+        # Role-specific round cap. ``None`` means no hard round cap: the role
+        # runs until the wall-clock deadline (the parent/bridge timeout) or the
+        # convergence guard stops it, so a converging auditor is never hard-failed
+        # mid-work by an arbitrary round count.
         max_rounds = EPHEMERAL_MAX_ROUNDS_BY_ROLE.get(call.role.id, EPHEMERAL_MAX_ROUNDS)
+        loop_deadline = time.monotonic() + _loop_budget_seconds(call)
 
         messages: list[Any] = [
             Message(role="system", content=call.composed_system_prompt),
@@ -660,7 +686,14 @@ def make_llm_ephemeral_runner(
         # plus a once-per-run flag so we never loop the nudge forever.
         executed_tools: list[dict[str, Any]] = []
         verification_nudged = False
-        for round_i in range(max_rounds):
+        # Bound the loop by time (and the optional role round cap), not by a
+        # round count alone. ``itertools.count`` keeps the body's existing
+        # ``continue`` semantics intact while we break on the deadline/cap.
+        for round_i in itertools.count():
+            if time.monotonic() >= loop_deadline:
+                break
+            if max_rounds is not None and round_i >= max_rounds:
+                break
             req = ModelRequest(
                 model=effective_model,
                 messages=messages,
@@ -766,7 +799,9 @@ def make_llm_ephemeral_runner(
 
             # Done · LLM produced text but no more tool calls.
             if not tool_calls:
-                if _is_length_limited_finish(finish_reason_round) and round_i + 1 < max_rounds:
+                if _is_length_limited_finish(finish_reason_round) and (
+                    max_rounds is None or round_i + 1 < max_rounds
+                ):
                     _log.info(
                         "ephemeral agentic runner · role=%s model=%s "
                         "round=%d · continuing after finish_reason=%s",
@@ -785,7 +820,7 @@ def make_llm_ephemeral_runner(
                     continue
                 if (
                     not _is_length_limited_finish(finish_reason_round)
-                    and round_i + 1 < max_rounds
+                    and (max_rounds is None or round_i + 1 < max_rounds)
                     and _looks_truncated_text(
                         text,
                         output_tokens=output_tokens_round,
@@ -1005,12 +1040,22 @@ def make_llm_ephemeral_runner(
                             role_id=call.role.id,
                         )
 
-        # Hit the round cap. Raise so the bridge can surface a real
-        # failure (success=false + error) instead of returning a
-        # placeholder string that callers misinterpret as success.
+        # Ran out of time / round budget. If the sub-agent already produced
+        # findings, hand them back as a partial result instead of a hard
+        # failure — a converging auditor shouldn't lose its work to the cap.
+        if accumulated_text:
+            notice = "\n\n[已到运行时长上限，保留当前结果；父代理可基于此部分结果继续]"
+            _emit_sub_text_delta(
+                call.role.id,
+                round_i + 1,
+                notice,
+                session_id=_ctx_session_id,
+                emitter=_ctx_emitter,
+            )
+            return accumulated_text + notice
         raise EphemeralRoundCapExceeded(
             partial_text=accumulated_text,
-            rounds=max_rounds,
+            rounds=max_rounds if max_rounds is not None else 0,
             role_id=call.role.id,
         )
 
