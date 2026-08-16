@@ -319,7 +319,7 @@ async def _drive_react(
                 # Loop closed or consumer wedged — drop the decorative delta.
                 _logger.debug(
                     "react bridge coalesced-delta drop (consumer slow) event=%s",
-                    event.get("type"),
+                    event.get("type") if isinstance(event, dict) else None,
                 )
             return
         try:
