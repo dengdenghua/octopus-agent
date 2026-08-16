@@ -25,7 +25,11 @@ class LoopControllerPromptMixin:
         source = self.store.get(run.parent_run_id)
         if source is None:
             return ""
-        if source.status not in {LoopRunStatus.FAILED, LoopRunStatus.CANCELLED}:
+        if source.status not in {
+            LoopRunStatus.FAILED,
+            LoopRunStatus.CANCELLED,
+            LoopRunStatus.INTERRUPTED,
+        }:
             return ""
         return build_loop_run_resume_prompt(
             source,

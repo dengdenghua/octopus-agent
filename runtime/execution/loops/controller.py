@@ -78,6 +78,7 @@ class LoopController(
             LoopRunStatus.COMPLETED,
             LoopRunStatus.FAILED,
             LoopRunStatus.CANCELLED,
+            LoopRunStatus.INTERRUPTED,
         }:
             return run
         with self._lock:
@@ -106,6 +107,7 @@ class LoopController(
             LoopRunStatus.COMPLETED,
             LoopRunStatus.FAILED,
             LoopRunStatus.CANCELLED,
+            LoopRunStatus.INTERRUPTED,
         }:
             return run
         cancel_reason = str(reason or "").strip() or "cancelled by operator"
@@ -164,7 +166,11 @@ class LoopController(
         source = self.store.get(run_id)
         if source is None:
             raise KeyError(run_id)
-        if source.status not in {LoopRunStatus.FAILED, LoopRunStatus.CANCELLED}:
+        if source.status not in {
+            LoopRunStatus.FAILED,
+            LoopRunStatus.CANCELLED,
+            LoopRunStatus.INTERRUPTED,
+        }:
             raise ValueError("loop run is not resumable")
         return self._spawn_child_run(
             source,

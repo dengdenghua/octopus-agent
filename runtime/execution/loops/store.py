@@ -97,6 +97,51 @@ class LoopRunStore:
     ) -> int:
         return len(self.list(owner_id=owner_id, status=status, mode=mode, limit=1_000_000))
 
+    #: Run statuses that mean "in flight". After a restart nothing is
+    #: driving them (no dispatcher future, no controller thread), so the
+    #: startup sweep folds them into INTERRUPTED (audit R-02).
+    _ACTIVE_STATUSES = frozenset({"pending", "running", "verifying", "repairing"})
+
+    def reconcile_interrupted(self) -> list[str]:
+        """Fold runs left ACTIVE by a crashed/stopped process into
+        ``interrupted``.
+
+        Startup reconciliation (audit R-02): without this sweep a run
+        that was mid-flight when the process died stays ``running``
+        forever — resume/restart reject it ("still active") and the UI
+        keeps showing it as in progress. Idempotent; writes only when
+        something changed. Attempts are preserved so the run stays
+        resumable. Returns the affected run ids.
+        """
+        from runtime.execution.loops.models import LoopRunStatus
+
+        with self._write_lock():
+            payload = self._read_payload()
+            runs = self._read_runs_from_payload(payload)
+            now = _now_iso()
+            affected: list[str] = []
+            next_runs: list[LoopRun] = []
+            for run in runs:
+                if str(run.status.value) not in self._ACTIVE_STATUSES:
+                    next_runs.append(run)
+                    continue
+                affected.append(run.run_id)
+                next_runs.append(
+                    run.model_copy(
+                        update={
+                            "status": LoopRunStatus.INTERRUPTED,
+                            "updated_at": now,
+                            "last_error": run.last_error
+                            or "interrupted by process restart while the run was active",
+                        }
+                    )
+                )
+            if affected:
+                payload["runs"] = self._dump_runs(next_runs)
+                payload["lastUpdated"] = now
+                self._write_payload(payload)
+            return affected
+
     def save(self, run: LoopRun) -> LoopRun:
         return self.mutate(run.run_id, lambda _: run)
 

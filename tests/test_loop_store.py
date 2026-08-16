@@ -272,3 +272,44 @@ def test_loop_verifier_classification_prefers_execution_policy_result() -> None:
         )
         == "verification_cancelled"
     )
+
+
+def test_reconcile_interrupted_folds_active_runs_and_preserves_attempts(tmp_path) -> None:
+    """Audit R-02: runs left ACTIVE by a crashed process become
+    ``interrupted`` (resumable), terminal runs are untouched, attempts
+    survive, and the sweep is idempotent."""
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+
+    running = LoopRun(
+        goal="was mid-flight",
+        status=LoopRunStatus.RUNNING,
+        attempts=[LoopAttempt(attempt_index=1, prompt="work", status="running")],
+    )
+    verifying = LoopRun(goal="in verify", status=LoopRunStatus.VERIFYING)
+    pending = LoopRun(goal="never dispatched", status=LoopRunStatus.PENDING)
+    done = LoopRun(goal="finished", status=LoopRunStatus.COMPLETED)
+    failed = LoopRun(goal="already failed", status=LoopRunStatus.FAILED)
+    for run in (running, verifying, pending, done, failed):
+        store.create(run)
+
+    affected = store.reconcile_interrupted()
+    assert sorted(affected) == sorted([running.run_id, verifying.run_id, pending.run_id])
+
+    assert store.get(running.run_id).status is LoopRunStatus.INTERRUPTED
+    assert store.get(verifying.run_id).status is LoopRunStatus.INTERRUPTED
+    assert store.get(pending.run_id).status is LoopRunStatus.INTERRUPTED
+    assert store.get(done.run_id).status is LoopRunStatus.COMPLETED
+    assert store.get(failed.run_id).status is LoopRunStatus.FAILED
+
+    # Attempts are preserved so the run stays resumable.
+    assert len(store.get(running.run_id).attempts) == 1
+    # A reconciliation reason is recorded when the run had none.
+    assert "restart" in store.get(verifying.run_id).last_error
+
+    # Idempotent: a second sweep finds nothing active.
+    assert store.reconcile_interrupted() == []
+
+
+def test_reconcile_interrupted_on_empty_store(tmp_path) -> None:
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    assert store.reconcile_interrupted() == []

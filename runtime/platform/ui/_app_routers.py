@@ -251,6 +251,23 @@ def mount_routers_a(
 
         _loop_workspace_root = ctx.thread_workspace_root or (app_paths().data_dir / "workspaces")
         _loop_store = LoopRunStore(app_paths().loop_runs_path)
+        # Audit R-02: startup reconciliation — runs left ACTIVE by the
+        # previous process (crash/upgrade/restart) have nothing driving
+        # them; fold them into ``interrupted`` before any request can
+        # observe them stuck as "running". Best-effort: a reconciliation
+        # failure must not block boot.
+        try:
+            _reconciled = _loop_store.reconcile_interrupted()
+            if _reconciled:
+                logging.getLogger(__name__).info(
+                    "loop runs reconciled after restart: %d interrupted (%s)",
+                    len(_reconciled),
+                    ", ".join(_reconciled),
+                )
+        except Exception as _reconcile_exc:  # noqa: BLE001
+            logging.getLogger(__name__).warning(
+                "loop run startup reconciliation failed: %s", _reconcile_exc
+            )
         _loop_review_queue = ReviewQueue(app_paths().review_queue_path)
         _loop_controller = (
             LoopController(

@@ -93,7 +93,11 @@ def create_loop_router(
         resume = raw_resume if isinstance(raw_resume, dict) else {}
         raw_review_replay = review.get("replay")
         review_replay = raw_review_replay if isinstance(raw_review_replay, dict) else {}
-        resume_available = run.status in {LoopRunStatus.FAILED, LoopRunStatus.CANCELLED}
+        resume_available = run.status in {
+            LoopRunStatus.FAILED,
+            LoopRunStatus.CANCELLED,
+            LoopRunStatus.INTERRUPTED,
+        }
         resume_checkpoint_id = checkpoint.get("id")
         if isinstance(resume, dict):
             raw_latest = resume.get("latest_checkpoint")
@@ -282,7 +286,13 @@ def create_loop_router(
         return review
 
     def _resumable_or_raise(run: LoopRun) -> LoopRun:
-        if run.status not in {LoopRunStatus.FAILED, LoopRunStatus.CANCELLED}:
+        # INTERRUPTED (audit R-02): reconciled from an active status at
+        # startup after the process died mid-run — terminal, so resumable.
+        if run.status not in {
+            LoopRunStatus.FAILED,
+            LoopRunStatus.CANCELLED,
+            LoopRunStatus.INTERRUPTED,
+        }:
             raise HTTPException(409, "loop run is not resumable")
         return run
 

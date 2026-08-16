@@ -29,6 +29,10 @@ class LoopRunStatus(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    # Startup reconciliation (audit R-02): the process exited while the
+    # run was in flight. Terminal (nothing is driving it after a
+    # restart) but resumable — attempts are preserved.
+    INTERRUPTED = "interrupted"
 
 
 class LoopMode(StrEnum):

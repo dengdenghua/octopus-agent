@@ -132,7 +132,11 @@ class _StubController:
         source = self.store.get(run_id)
         if source is None:
             raise KeyError(run_id)
-        if source.status not in {LoopRunStatus.FAILED, LoopRunStatus.CANCELLED}:
+        if source.status not in {
+            LoopRunStatus.FAILED,
+            LoopRunStatus.CANCELLED,
+            LoopRunStatus.INTERRUPTED,
+        }:
             raise ValueError("loop run is not resumable")
         return self._spawn_child(
             source,
@@ -503,6 +507,45 @@ def test_loop_router_resume_rejects_completed_run(tmp_path) -> None:
     assert resumed.status_code == 409
     assert resumed.json()["detail"] == "loop run is not resumable"
     assert controller.resume_calls == [source.run_id]
+
+
+def test_loop_router_can_resume_interrupted_run(tmp_path) -> None:
+    """Audit R-02: a run reconciled to ``interrupted`` at startup (the
+    process died mid-run) must be resumable like a failed run, not stuck
+    behind "loop run is still active"."""
+    client, controller, dispatcher, store, _task_supervisor = _build_client(tmp_path)
+    source = store.create(
+        LoopRun(
+            owner_id="alice",
+            goal="Crashed mid-flight",
+            thread_id="thread-interrupted",
+            workspace_path=str(tmp_path / "workspace"),
+            status=LoopRunStatus.RUNNING,
+        )
+    )
+
+    # Simulate the startup sweep that folds orphaned active runs.
+    assert store.reconcile_interrupted() == [source.run_id]
+    assert store.get(source.run_id).status is LoopRunStatus.INTERRUPTED
+
+    resumed = client.post(
+        f"/api/loops/{source.run_id}/resume",
+        json={
+            "execute": True,
+            "background": True,
+            "thread_id": "thread-resumed",
+            "reuse_workspace": False,
+        },
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+
+    assert resumed.status_code == 200
+    child = resumed.json()
+    assert child["status"] == "pending"
+    assert child["goal"] == source.goal
+    assert child["parent_run_id"] == source.run_id
+    assert controller.resume_calls == [source.run_id]
+    assert dispatcher.calls == [child["run_id"]]
 
 
 def test_loop_router_can_resume_failed_run_in_background(tmp_path) -> None:
