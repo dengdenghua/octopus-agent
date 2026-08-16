@@ -219,6 +219,49 @@ describe("workspace sidebar project grouping", () => {
     ]);
   });
 
+  test("derives transient thread mode from the route prefix", () => {
+    expect(__testing.transientThreadModeFromHref("/workspace/team/room-1")).toBe(
+      "team",
+    );
+    expect(
+      __testing.transientThreadModeFromHref("/workspace/realtime/thread-1"),
+    ).toBe("chat");
+  });
+
+  test("sorts timestamp-less transient threads first within the same status", () => {
+    const threads = [
+      {
+        id: "timed",
+        title: "timed",
+        updatedAt: "2026-07-05T00:00:00Z",
+        mode: "code",
+        href: "/workspace/realtime/timed",
+        agents: ["eve"],
+      },
+      {
+        id: "transient",
+        title: "transient",
+        updatedAt: "",
+        mode: "chat",
+        href: "/workspace/realtime/transient",
+        agents: ["eve"],
+      },
+    ];
+
+    const ongoing = __testing.buildOngoingThreadSummaries({
+      threads,
+      runStatusByHref: new Map([
+        ["/workspace/realtime/timed", "running"],
+        ["/workspace/realtime/transient", "running"],
+      ]),
+    });
+
+    expect(ongoing.map((thread) => thread.id)).toEqual([
+      "transient",
+      "timed",
+    ]);
+  });
+
   test("orders failed work before waiting, running, and pending work", () => {
     const threads = [
       {

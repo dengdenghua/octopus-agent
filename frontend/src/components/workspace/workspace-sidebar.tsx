@@ -147,6 +147,11 @@ const PRIMARY_WORKSPACE_ROUTE = "/workspace/realtime/new";
 /** 助理固定对话线程 id —— 像微信一样共用一个持久会话，不随每次进入新建。
  *  侧边栏据此识别助理对话，避免生成指向自身的"当前任务会话"条目。 */
 const OCTOPUS_THREAD_ID = "octopus-assistant";
+// Safety net for live run-status lights that never got an explicit clear
+// (abnormal turn termination, crashed producer). Generous: a long turn
+// legitimately streams for many minutes between status events.
+const LIVE_RUN_STATUS_TTL_MS = 30 * 60 * 1000;
+const LIVE_RUN_STATUS_PRUNE_INTERVAL_MS = 60 * 1000;
 
 const CHAT_CAPABILITY_ROUTES: NavRoute[] = [
   {
@@ -301,6 +306,13 @@ function readProjectGroupingEnabled(): boolean {
   }
 }
 
+/** 瞬时补位会话（运行中但未进历史列表 / 深链进入）拿不到线程元数据：
+ *  team 路由可按前缀识别；其余沿用域层默认--无元数据按 chat 归入对话列表。 */
+function transientThreadModeFromHref(href: string): string {
+  if (/^\/workspace\/team\//.test(href)) return "team";
+  return "chat";
+}
+
 function buildOngoingThreadSummaries({
   threads,
   runStatusByHref,
@@ -328,7 +340,15 @@ function buildOngoingThreadSummaries({
       const byStatus =
         statusPriority[b.runStatus] - statusPriority[a.runStatus];
       if (byStatus !== 0) return byStatus;
-      return (b.updatedAt || "").localeCompare(a.updatedAt || "");
+      const aTime = a.updatedAt || "";
+      const bTime = b.updatedAt || "";
+      // 瞬时进行中会话没有时间戳：视为最新，排在同状态条目最前，
+      // 避免正在跑的会话因空时间戳沉底。
+      if (!aTime || !bTime) {
+        if (!aTime && !bTime) return a.id.localeCompare(b.id);
+        return aTime ? 1 : -1;
+      }
+      return bTime.localeCompare(aTime);
     })
     .slice(0, limit);
 }
@@ -748,8 +768,12 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       mergedProjectRaw.map((thread) => [thread.thread_id, threadHref(thread)]),
     );
   }, [mergedProjectRaw]);
+  // Live run status with a last-touch timestamp. Bare statuses never
+  // expire: a turn that terminated without a clearing event (crashed tab,
+  // abnormal stream end) left its light stuck on "running" forever. The
+  // TTL below is the safety net - page unmount still clears immediately.
   const [liveThreadRunStatusByHref, setLiveThreadRunStatusByHref] = useState<
-    Map<string, ThreadRunStatus>
+    Map<string, { status: ThreadRunStatus; at: number }>
   >(() => new Map());
   useEvent(
     "thread:run-status",
@@ -761,7 +785,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
         if (!status && !prev.has(targetHref)) return prev;
         const next = new Map(prev);
         if (status) {
-          next.set(targetHref, status);
+          next.set(targetHref, { status, at: Date.now() });
         } else {
           next.delete(targetHref);
         }
@@ -770,12 +794,35 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     },
     [threadHrefById],
   );
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setLiveThreadRunStatusByHref((prev) => {
+        if (prev.size === 0) return prev;
+        const now = Date.now();
+        const next = new Map(prev);
+        let changed = false;
+        for (const [href, entry] of prev) {
+          if (now - entry.at > LIVE_RUN_STATUS_TTL_MS) {
+            next.delete(href);
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, LIVE_RUN_STATUS_PRUNE_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, []);
   const runStatusByHref = useMemo(
     () =>
       buildThreadRunStatusByHref({
         activeTeamTasks,
         backgroundTasks: backgroundTasksQuery.data,
-        liveThreadRunStatusByHref,
+        liveThreadRunStatusByHref: new Map(
+          Array.from(liveThreadRunStatusByHref, ([href, entry]) => [
+            href,
+            entry.status,
+          ]),
+        ),
         threadHrefById,
       }),
     [
@@ -873,8 +920,16 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     const knownHrefs = new Set(
       [...projectThreads, ...conversationThreads].map((thread) => thread.href),
     );
+    // Only the ACTIVE route may synthesize a "当前任务会话" row - its
+    // agent/workspace attribution comes from the current route, so a row
+    // for any other href would be mislabeled, and stale statuses for
+    // sessions you already left would linger as ghost rows in 进行中.
+    const activeThreadHref = sidebarPathname?.startsWith("/workspace/realtime/")
+      ? sidebarPathname
+      : null;
     return Array.from(runStatusByHref.keys()).flatMap((href) => {
       if (knownHrefs.has(href)) return [];
+      if (!activeThreadHref || href !== activeThreadHref) return [];
       const id = activeWorkspaceThreadIdFromPathname(href);
       if (!id) return [];
       if (id === OCTOPUS_THREAD_ID) return [];
@@ -883,7 +938,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
           id,
           title: t.sidebar.currentTaskSession,
           updatedAt: "",
-          mode: "code",
+          mode: transientThreadModeFromHref(href),
           href,
           workspacePath: activeTaskWorkspacePath ?? undefined,
           agents: activeAgentId ? [activeAgentId] : [],
@@ -896,6 +951,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     conversationThreads,
     projectThreads,
     runStatusByHref,
+    sidebarPathname,
     t.sidebar.currentTaskSession,
   ]);
   const ongoingThreads = useMemo(
@@ -933,7 +989,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
         id: activeId,
         title: t.sidebar.currentTaskSession,
         updatedAt: "",
-        mode: "code",
+        mode: transientThreadModeFromHref(sidebarPathname),
         href: sidebarPathname,
         workspacePath: activeTaskWorkspacePath ?? undefined,
         agents: activeAgentId ? [activeAgentId] : [],
@@ -1453,6 +1509,7 @@ export const __testing = {
   buildProjectSectionActions,
   buildChatsSectionActions,
   buildOngoingThreadSummaries,
+  transientThreadModeFromHref,
   excludeActiveThread,
   prioritizeActiveThread,
   projectThreadsForPreview,
@@ -1714,8 +1771,8 @@ function ThreadRunStatusLight({
         className={cn(
           "relative inline-flex size-2 shrink-0 items-center justify-center rounded-full",
           active
-            ? "border border-muted-foreground/20 bg-muted-foreground/35"
-            : "border border-muted-foreground/40 bg-transparent",
+            ? "border border-muted-foreground/40 bg-muted-foreground/60"
+            : "border border-muted-foreground/60 bg-muted-foreground/20",
           className,
         )}
         data-thread-queue-indicator="idle"
@@ -2103,7 +2160,7 @@ function ProjectGroup({
                         <ThreadRunStatusLight idle="queue" status={runStatus} />
                       )}
                     </span>
-                    <span className="min-w-0 flex-1 truncate leading-tight">
+                    <span className="line-clamp-2 min-w-0 flex-1 break-words leading-tight">
                       {thread.title}
                     </span>
                     <span
