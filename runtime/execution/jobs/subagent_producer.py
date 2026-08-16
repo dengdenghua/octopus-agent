@@ -3,8 +3,9 @@
 Runs one ``call_subagent`` on a worker thread and settles the job when the
 child run ends. Final-output only: ``read()`` returns the terminal output
 idempotently after settlement (dsh one-shot background has no stream).
-Cancellation is cooperative — the child run is not interrupted, the job
-settles as ``killed`` once its work actually stops.
+Cancellation bridges to the child run (audit T-03): ``cancel()`` fires a
+CancellationSource installed around ``call_subagent``, so the in-flight
+subagent stops promptly and the job settles as ``killed``.
 """
 
 from __future__ import annotations
@@ -127,6 +128,18 @@ def build_subagent_job_start(
         loop = asyncio.get_running_loop()
         done: asyncio.Future[JobOutcome] = loop.create_future()
         cancelled = threading.Event()
+        # Audit T-03: cancellation must reach the in-flight child run, not
+        # just label the outcome after the fact. ``call_subagent`` links its
+        # own child source to the AMBIENT cancellation token, so we install
+        # our own source around the call and let ``cancel()`` fire it — the
+        # child run stops promptly and the job settles as ``killed``.
+        from runtime.safety.approval.cancellation import (
+            CancellationSource,
+            scoped_cancellation,
+        )
+
+        cancel_source = CancellationSource()
+        cancel_reason: list[str] = []
 
         def _work() -> None:
             scope = None
@@ -134,19 +147,23 @@ def build_subagent_job_start(
                 if parent is not None:
                     scope = session_scope(parent)
                     scope.__enter__()
-                result = call_subagent(
-                    agent_id=agent_id,
-                    prompt=prompt,
-                    context=context,
-                    timeout_s=timeout_s,
-                    session=parent,
-                    **call_kwargs,
-                )
+                with scoped_cancellation(cancel_source.token):
+                    result = call_subagent(
+                        agent_id=agent_id,
+                        prompt=prompt,
+                        context=context,
+                        timeout_s=timeout_s,
+                        session=parent,
+                        **call_kwargs,
+                    )
             except Exception as error:  # noqa: BLE001 — producer containment
                 outcome = JobOutcome(status="failed", detail=f"{type(error).__name__}: {error}")
             else:
                 if cancelled.is_set():
-                    outcome = JobOutcome(status="killed", detail="cancelled")
+                    outcome = JobOutcome(
+                        status="killed",
+                        detail=cancel_reason[-1] if cancel_reason else "cancelled",
+                    )
                 else:
                     outcome = _outcome_from_result(result)
             finally:
@@ -165,6 +182,12 @@ def build_subagent_job_start(
 
         def cancel(reason: str | None = None) -> None:
             cancelled.set()
+            # Bridge the kill to the child run's cancellation source (audit
+            # T-03): the in-flight subagent sees the cancel via the ambient
+            # token and stops instead of running to completion in the
+            # background. The reason rides through to the terminal outcome.
+            cancel_source.cancel(reason=reason or "cancelled")
+            cancel_reason.append(reason or "cancelled")
 
         return JobHooks(cancel=cancel, done=done, read_output=None)
 

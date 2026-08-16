@@ -355,3 +355,43 @@ def test_rounds_completed_reflects_progress_before_timeout():
 
     assert result["status"] == "timeout"
     assert result["rounds_completed"] == 2
+
+
+# ─── Audit T-03: background producer cancel bridges to the child run ────────
+
+
+def test_job_producer_cancel_bridges_to_inflight_child_run(monkeypatch):
+    """A background subagent job's cancel() must reach the in-flight child
+    run (via the ambient cancellation token), not merely label the outcome
+    after the child finishes."""
+    import asyncio
+
+    from runtime.execution.jobs import subagent_producer as sp
+    from runtime.execution.jobs.subagent_producer import build_subagent_job_start
+
+    registered = threading.Event()
+    cancel_observed = threading.Event()
+    release = threading.Event()
+
+    def fake_call_subagent(**kwargs):
+        from runtime.safety.approval.cancellation import current_cancellation_token
+
+        current_cancellation_token().on_cancelled(lambda reason: cancel_observed.set())
+        registered.set()
+        release.wait(5)  # block until the test releases; cancel fires meanwhile
+        return {"success": True, "output": "ran"}
+
+    monkeypatch.setattr(sp, "call_subagent", fake_call_subagent)
+
+    async def scenario():
+        start = build_subagent_job_start(agent_id="a", prompt="p")
+        hooks = start.run()
+        assert registered.wait(3), "worker thread did not register the child"
+        hooks.cancel("test kill")
+        assert cancel_observed.wait(3), "cancel never reached the child run"
+        release.set()
+        return await asyncio.wait_for(hooks.done, timeout=5)
+
+    outcome = asyncio.run(scenario())
+    assert outcome.status == "killed"
+    assert "test kill" in (outcome.detail or "")
