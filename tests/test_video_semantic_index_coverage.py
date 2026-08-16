@@ -54,3 +54,50 @@ def test_extract_frame_jpeg_without_av(tmp_path: Path) -> None:
     p.write_bytes(b"not-a-real-video")
     out = vsi.extract_frame_jpeg(p, time_sec=0.5)
     assert out is None or isinstance(out, bytes)
+
+
+class _FakeEmbed:
+    def embed(self, items):
+        return [[1.0, 0.0, 0.5] for _ in items]
+
+
+def test_build_video_index_error_paths(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("OCTOPUS_VIDEO_SEMANTIC", "0")
+    assert vsi.build_video_index(str(tmp_path))["error"] == "disabled"
+    monkeypatch.setenv("OCTOPUS_VIDEO_SEMANTIC", "auto")
+    # av missing -> av_unavailable
+    import sys
+
+    monkeypatch.setitem(sys.modules, "av", None)
+    out = vsi.build_video_index(str(tmp_path))
+    assert out["error"] == "av_unavailable"
+    # av present but no clip model
+    fake_av = type("Av", (), {})()
+    monkeypatch.setitem(sys.modules, "av", fake_av)
+    monkeypatch.setattr(vsi, "_image_model", lambda: None)
+    out2 = vsi.build_video_index(str(tmp_path))
+    assert "clip_vision_unavailable" in out2["error"]
+
+
+def test_search_video_by_text_with_index(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("OCTOPUS_VIDEO_SEMANTIC", "auto")
+    monkeypatch.setattr(vsi, "_text_model", lambda: _FakeEmbed())
+    db = tmp_path / "v.db"
+    conn = vsi._open(db)
+    conn.execute(
+        "INSERT INTO video_keyframes (video_path, time_sec, clip_embedding) VALUES (?, ?, ?)",
+        ("clip.mp4", 1.5, vsi._vec_to_blob([1.0, 0.0, 0.5])),
+    )
+    conn.commit()
+    conn.close()
+
+    hits = vsi.search_video_by_text("a scene", db_path=db, top_k=5)
+    assert hits is not None and len(hits) == 1
+    assert hits[0]["video_path"] == "clip.mp4"
+    assert abs(hits[0]["time_sec"] - 1.5) < 0.01
+    assert vsi.search_video_by_text("", db_path=db) is None
+    monkeypatch.setattr(vsi, "_text_model", lambda: None)
+    assert vsi.search_video_by_text("x", db_path=db) is None
+    monkeypatch.setenv("OCTOPUS_VIDEO_SEMANTIC", "0")
+    assert vsi.search_video_by_text("x", db_path=db) is None
+    assert vsi.search_video_by_text("x", db_path=tmp_path / "nope.db") is None
