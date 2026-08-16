@@ -32,6 +32,88 @@ from runtime.core.cerebrum.todo_protocol import render_todo_protocol_guidance
 
 _logger = logging.getLogger(__name__)
 
+_DELEGATION_HYGIENE = (
+    "- Ask workers for compact, evidence-backed findings and any files "
+    "touched. After the observation returns, synthesize the outputs "
+    "yourself, resolve conflicts, verify critical claims, and produce one "
+    "integrated final result.\n"
+    "- Never finish with raw worker logs or a partial plan. If workers fail "
+    "partially, use the surviving outputs and state the residual risk.\n"
+)
+
+
+def _build_auto_delegation_guidance(state: _AssemblyState) -> str:
+    """Delegation guidance for a non-swarm turn.
+
+    Two variants, because the DEFAULT one actively contradicts the
+    ``audit.ultracode`` preset. That preset's contract is "orchestrate by
+    default, the bar is inverted" — while this block used to open with
+    "Current mode is single-agent", tell the model that simple or sequential
+    work should be done alone, and cap fan-out at "exactly one
+    ``call_agent_parallel`` batch for the current turn". A live run confirmed
+    the cost: with the preset text present and ``run_orchestration`` in the
+    catalog, the model still ran 17 atomic tool calls and zero spawns. The
+    nearest, most concrete instruction wins, and this block sits ~14 lines
+    below the preset.
+
+    The operational hygiene (synthesize yourself, never ship raw worker logs)
+    is orthogonal to how wide to go, so both variants keep it.
+    """
+    preset = str(state.workflow_preset_value or "").strip().lower()
+    if preset == "audit.ultracode":
+        return (
+            "\n<agent-auto-delegation-guidance>\n"
+            "This turn runs the ultracode deep workflow. You are the lead of a "
+            "multi-agent run, NOT a single agent: the <workflow-preset> block "
+            "above is authoritative on how wide to go, and nothing here "
+            "narrows it.\n"
+            "\n"
+            "- Prefer `run_orchestration` as the primary driver; it fans out, "
+            "dedupes, optionally votes, and loops until no new findings.\n"
+            "- Fan out DURING the understanding phase, not after it. Workers "
+            "carry their own tools and read files themselves, so you do not "
+            "need to build context for them first. Allow yourself 1-2 "
+            "locating calls (list a dir, glob a path) and then orchestrate. "
+            "Reading the codebase yourself before delegating is the failure "
+            "mode this block exists to prevent: it consumes the whole "
+            "iteration budget and ships zero spawns.\n"
+            "- `call_agent_parallel` is for one-off lanes you place yourself. "
+            "Multiple batches across the turn are expected and correct — "
+            "chain them by phase, orchestrating each phase rather than doing "
+            "the early phases alone.\n"
+            "- Pick roles from the actual lanes (researcher, explorer, "
+            "debugger, reviewer, architect, security-review). Do not call "
+            "serial `call_agent` for work that can run concurrently.\n"
+            "- Doing the whole task yourself with atomic tools is the "
+            "exception here, reserved for genuinely trivial work.\n"
+            + _DELEGATION_HYGIENE
+            + "</agent-auto-delegation-guidance>"
+        )
+    return (
+        "\n<agent-auto-delegation-guidance>\n"
+        "Current mode is single-agent Agent/ReAct. You remain the lead, "
+        "but you may use real subagents when parallelism will materially "
+        "improve speed or quality.\n"
+        "\n"
+        "Use `call_agent_parallel` proactively when the task has 2-4 "
+        "independent work lanes: e.g. market research lanes, competitor "
+        "comparison lanes, frontend/backend/test investigation lanes, "
+        "or reproduce/read-code/review lanes. This tool spawns real "
+        "specialist turns concurrently; it is not a display shortcut.\n"
+        "\n"
+        "Decision policy:\n"
+        "- Simple or sequential work: do it yourself with atomic tools.\n"
+        "- Large ambiguous work: first clarify if needed, then "
+        "todo_write a visible plan before fan-out.\n"
+        "- If using subagents, make exactly one `call_agent_parallel` "
+        "batch for the current turn. Pick roles from the actual lanes "
+        "(researcher, explorer, debugger, reviewer, architect, "
+        "security-review). Do not call serial `call_agent`.\n"
+        + _DELEGATION_HYGIENE
+        + "</agent-auto-delegation-guidance>"
+    )
+
+
 # Explicit repair authorisation inside an audit turn. Deliberately requires an
 # imperative verb of *action*, not a mere mention of problems: "有哪些问题需要
 # 修复" is a question about repairs, not a mandate to perform them, and a false
@@ -450,35 +532,7 @@ def _assemble_delegation_guidance(state: _AssemblyState) -> None:
         "</user-facing-process-language>"
     )
     if not state.is_swarm_mode and state.mode_value not in {"chat", "flash", "inspiration"}:
-        state.system_parts.append(
-            "\n<agent-auto-delegation-guidance>\n"
-            "Current mode is single-agent Agent/ReAct. You remain the lead, "
-            "but you may use real subagents when parallelism will materially "
-            "improve speed or quality.\n"
-            "\n"
-            "Use `call_agent_parallel` proactively when the task has 2-4 "
-            "independent work lanes: e.g. market research lanes, competitor "
-            "comparison lanes, frontend/backend/test investigation lanes, "
-            "or reproduce/read-code/review lanes. This tool spawns real "
-            "specialist turns concurrently; it is not a display shortcut.\n"
-            "\n"
-            "Decision policy:\n"
-            "- Simple or sequential work: do it yourself with atomic tools.\n"
-            "- Large ambiguous work: first clarify if needed, then "
-            "todo_write a visible plan before fan-out.\n"
-            "- If using subagents, make exactly one `call_agent_parallel` "
-            "batch for the current turn. Pick roles from the actual lanes "
-            "(researcher, explorer, debugger, reviewer, architect, "
-            "security-review). Do not call serial `call_agent`.\n"
-            "- Ask workers for compact, evidence-backed findings and any "
-            "files touched. After the observation returns, synthesize the "
-            "outputs yourself, resolve conflicts, verify critical claims, "
-            "and produce one integrated final result.\n"
-            "- Never finish with raw worker logs or a partial plan. If "
-            "workers fail partially, use the surviving outputs and state "
-            "the residual risk.\n"
-            "</agent-auto-delegation-guidance>"
-        )
+        state.system_parts.append(_build_auto_delegation_guidance(state))
     if state.is_swarm_mode:
         state.system_parts.append(
             "\n<swarm-orchestration-guidance>\n"
