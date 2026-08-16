@@ -613,3 +613,56 @@ class TestCronImDelivery:
         holder.append(cm)
         captured["callback"]()
         assert cm.calls == [("c1", "th1", "[章鱼助手 · 定时订阅] job\n状态：ok\ndone")]
+
+
+class TestCronSchedulerDecoupling:
+    """Audit T-11/R-05: cron subprocess waits run off the shared scheduler."""
+
+    def test_cron_tick_does_not_block_scheduler_thread(self, monkeypatch) -> None:
+        import threading
+        import time
+
+        import runtime.cli_serve as cli_serve
+
+        captured: dict = {}
+
+        class _FakeRunner:
+            def add_periodic(self, name, *, interval_s, callback, jitter_s, run_on_start):
+                captured["callback"] = callback
+
+        monkeypatch.setenv("OCTOPUS_CRON_EXECUTOR", "1")
+        monkeypatch.setenv("OCTOPUS_CRON_EXECUTOR_POLL_SECONDS", "30")
+
+        calls = []
+        started = threading.Event()
+        release = threading.Event()
+
+        def _blocking_tick(deliver=None):
+            calls.append("start")
+            started.set()
+            release.wait(10)
+            calls.append("end")
+
+        import runtime.execution.cron_executor as cron_exec
+
+        monkeypatch.setattr(cron_exec, "run_due_cron_jobs", _blocking_tick)
+
+        cli_serve.register_cron_executor_task(_FakeRunner(), [])
+        tick = captured["callback"]
+
+        # First tick: dispatch is async — the scheduler thread must NOT wait.
+        t0 = time.monotonic()
+        tick()
+        assert time.monotonic() - t0 < 2.0, "tick blocked the scheduler thread"
+        assert started.wait(5), "tick never started on the cron worker"
+
+        # Overlap guard: a second tick while the first is draining is a no-op.
+        tick()
+        time.sleep(0.2)
+        assert calls.count("start") == 1, "overlapping tick was submitted"
+
+        release.set()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and "end" not in calls:
+            time.sleep(0.05)
+        assert "end" in calls

@@ -346,10 +346,38 @@ def register_cron_executor_task(runner: Any, channel_manager_holder: list | None
         except Exception:  # noqa: BLE001 — delivery must never break the cron tick
             logging.getLogger(__name__).exception("cron delivery failed for %r", name)
 
+    # Audit T-11 / R-05: cron subprocess waits (up to the 1800s prompt
+    # timeout) must NOT occupy the shared scheduler pool — a long job would
+    # block every other periodic task (intel, governance audit, memory
+    # distill) for its whole duration. Dispatch each tick to a dedicated
+    # cron executor and skip overlapping ticks: the in-flight markers
+    # (audit T-02) plus the flock already prevent double-firing, so the
+    # scheduler thread only ever does a fast submit.
+    import threading as _threading
+    from concurrent.futures import ThreadPoolExecutor as _TPE
+
+    _cron_pool = _TPE(max_workers=2, thread_name_prefix="cron-exec")
+    _tick_in_flight = _threading.Event()
+
     def _tick() -> None:
+        if _tick_in_flight.is_set():
+            return  # previous tick still draining; the next poll retries
         from runtime.execution.cron_executor import run_due_cron_jobs
 
-        run_due_cron_jobs(deliver=_deliver)
+        def _run() -> None:
+            try:
+                run_due_cron_jobs(deliver=_deliver)
+            except Exception:  # noqa: BLE001 — a tick fault must not kill the cron pool
+                logging.getLogger(__name__).exception("cron tick failed")
+            finally:
+                _tick_in_flight.clear()
+
+        _tick_in_flight.set()
+        try:
+            _cron_pool.submit(_run)
+        except RuntimeError:
+            # Pool shut down while serve is stopping — drop this tick.
+            _tick_in_flight.clear()
 
     runner.add_periodic(
         "cron_job_executor",
