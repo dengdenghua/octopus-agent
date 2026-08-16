@@ -117,3 +117,21 @@ def test_run_skills_requires_market_op() -> None:
         color=False,
     )
     assert rc in (0, 2)
+
+
+# ── run_backup / run_restore (round-trip) ───────────────────
+
+
+def test_backup_restore_roundtrip(tmp_path: Path) -> None:
+    base = tmp_path / "octo"
+    base.mkdir(parents=True)
+    (base / "config.yaml").write_text("name: test\n", encoding="utf-8")
+    artifact = tmp_path / "backup.tar.gz"
+    rc, _ = _run(cc.run_backup, output=artifact, base_dir=str(base), color=False)
+    assert rc == 0
+    assert artifact.exists(), "no backup artifact produced"
+
+    restored_base = tmp_path / "restored"
+    rc2, _ = _run(cc.run_restore, input_path=artifact, base_dir=str(restored_base), color=False)
+    assert rc2 == 0
+    assert (restored_base / "config.yaml").exists(), "restore did not recreate config"
