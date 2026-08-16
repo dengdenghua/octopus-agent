@@ -182,6 +182,48 @@ def _skipped_node(node_id: str, reason: str) -> dict[str, Any]:
     return {"id": node_id, "output": "", "ok": False, "skipped": True, "error": reason}
 
 
+def _node_cache_key(
+    node: dict[str, Any],
+    default_role: str,
+    context: dict[str, Any] | None,
+) -> str:
+    """Content hash of one node's spawn, computed AFTER prompt resolution.
+
+    Resolution first is what makes the cache graph-aware for free: a
+    downstream prompt embeds its upstream outputs, so an unchanged upstream
+    replays -> identical resolved prompt -> identical key -> downstream
+    replays too, while a changed upstream shifts every dependent's key and
+    exactly those nodes respawn.
+    """
+    from ._delegation_skills_common import _role_defaults_to_cheap
+    from .delegation_result_cache import compute_spawn_cache_key
+
+    agent_id = node["agent_id"] or default_role
+    return compute_spawn_cache_key(
+        agent_id=agent_id,
+        prompt=node["resolved_prompt"],
+        cheap=_role_defaults_to_cheap(str(agent_id)),
+        context=context,
+        extra={
+            "output_schema": node.get("output_schema") or None,
+            # Isolated lanes are excluded from caching entirely, but keep the
+            # flag in the key so the exclusion can never collide a cached
+            # non-isolated result with an isolated spawn of the same prompt.
+            "isolate": bool(node.get("isolate")),
+        },
+    )
+
+
+def _replayed_node(node_id: str, agent_id: Any, hit: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": node_id,
+        "agent_id": agent_id,
+        "output": str(hit.get("output") or ""),
+        "ok": True,
+        "replayed": True,
+    }
+
+
 def _run_agent_graph(
     nodes: Any = None,
     *,
@@ -189,12 +231,20 @@ def _run_agent_graph(
     timeout_s: int | str = _DEFAULT_SUBAGENT_TIMEOUT_S,
     context: dict[str, Any] | None = None,
     session: Any = None,
+    resume_token: str = "",
     **_kw: Any,
 ) -> dict[str, Any]:
     """Run a declared DAG of subagents, resolving fan-in server-side.
 
     Nodes with no unmet dependency run concurrently; a node whose prompt cites
     ``{other.output}`` receives the substituted text at spawn time.
+
+    ``resume_token`` replays completed nodes instead of respawning them: pass
+    back the token a previous run returned and every node whose content (role,
+    resolved prompt, context, schema) is unchanged replays its recorded
+    result. Only completed, non-empty results are ever replayed - a failed,
+    empty, or never-finished node re-runs. The token is issued by the trusted
+    side; an unknown token is an error, not a silent cold run.
     """
     from runtime.execution.suckers.delegation_skills import (
         _call_agent_parallel,
@@ -234,6 +284,24 @@ def _run_agent_graph(
     outputs: dict[str, Any] = {}
     results: dict[str, dict[str, Any]] = {}
     layers_run = 0
+    replayed_ids: list[str] = []
+
+    from .delegation_result_cache import create_spawn_cache, load_spawn_cache
+
+    token = str(resume_token or _kw.get("cache_token") or "").strip()
+    if token:
+        cache = load_spawn_cache(token)
+        if cache is None:
+            # Fail loud on an unknown token: the caller believes completed work
+            # is cached, and a silent cold re-run would spend the spawns the
+            # resume was supposed to save - while looking like it worked.
+            return _error(
+                f"unknown or expired resume_token {token!r} - run once without "
+                "a token, then pass back the token that run returned."
+            )
+    else:
+        cache = create_spawn_cache()
+        token = cache.token
 
     for layer in layers:
         # A node whose dependency failed cannot receive the output it was
@@ -257,8 +325,34 @@ def _run_agent_graph(
                 continue
             runnable.append({**node, "resolved_prompt": prompt})
 
-        if not runnable:
+        # Replay before spawning: a node whose content hash is in the token's
+        # cache gets its recorded result and never reaches the spawn path.
+        # Isolated nodes opt out - their product is a diff against a worktree
+        # that no longer exists, and replaying it would hand the caller a diff
+        # with no branch behind it.
+        to_spawn: list[dict[str, Any]] = []
+        spawn_keys: dict[int, str] = {}
+        for node in runnable:
+            if node.get("isolate"):
+                to_spawn.append(node)
+                continue
+            key = _node_cache_key(node, default_role, context)
+            hit = cache.get(key)
+            if hit is not None:
+                node_id = node["id"]
+                parsed = hit.get("parsed")
+                outputs[node_id] = (
+                    parsed if isinstance(parsed, dict) else str(hit.get("output") or "")
+                )
+                results[node_id] = _replayed_node(node_id, node["agent_id"] or default_role, hit)
+                replayed_ids.append(node_id)
+            else:
+                spawn_keys[len(to_spawn)] = key
+                to_spawn.append(node)
+
+        if not to_spawn:
             continue
+        runnable = to_spawn
 
         env = _call_agent_parallel(
             specs=[
@@ -298,6 +392,15 @@ def _run_agent_graph(
                 "output": text,
                 "ok": True,
             }
+            # Record for future resumes. ``put`` refuses anything that is not a
+            # completed, non-empty success, so a lane that came back empty or
+            # half-finished is exactly the work the next resume will redo.
+            pos_any: Any = succ.get("spec_index")
+            if not isinstance(pos_any, int) or not (0 <= pos_any < len(runnable)):
+                pos_any = next((i for i, n in enumerate(runnable) if n["id"] == node_id), None)
+            succ_key = spawn_keys.get(pos_any) if pos_any is not None else None
+            if succ_key and str(succ.get("output") or "").strip():
+                cache.put(succ_key, succ)
         for fail in env.get("failures", []):
             node_id = str(fail.get("bb_key") or "").strip()
             if not node_id or node_id not in by_id:
@@ -327,4 +430,8 @@ def _run_agent_graph(
             for n in cleaned
             if not any(n["id"] in other["depends_on"] for other in cleaned)
         ],
+        # Pass this back as ``resume_token`` to re-run the same graph without
+        # respawning completed nodes. In-memory only: it dies with the process.
+        "resume_token": token,
+        "replayed": replayed_ids,
     }

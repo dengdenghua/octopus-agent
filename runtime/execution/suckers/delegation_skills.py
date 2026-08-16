@@ -739,7 +739,8 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         f"agent_id?: str, output_schema?: object, isolate?: bool}}] "
         f"(up to {_MAX_GRAPH_NODES}), "
         "default_agent_id?: str (default researcher), "
-        "timeout_s?: int (per-subagent, default 900)}.\n"
+        "timeout_s?: int (per-subagent, default 900), "
+        "resume_token?: str (from a previous run's return)}.\n"
         "\n"
         "`isolate: true` gives that node its own git worktree — set it on nodes "
         "that EDIT FILES so concurrent writers in the same layer cannot collide. "
@@ -755,6 +756,13 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         "\n"
         "Budget: one graph costs ONE against the 5/turn delegation cap; "
         "per-node spawns are charged against the internal spawn budget."
+        "\n\n"
+        "Resume: pass the returned `resume_token` back to re-run the same "
+        "graph without respawning completed nodes - unchanged nodes replay "
+        "their recorded result (0 spawns), a node whose prompt/role/schema "
+        "changed respawns, and failed or empty nodes always re-run. The "
+        "token is in-memory only (not valid across process restarts) and an "
+        "unknown token is an error, not a cold run."
     )
     registry.register(
         Skill(
