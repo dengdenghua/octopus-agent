@@ -2921,6 +2921,13 @@ export function convertToSteps(messages: Message[]): CoTStep[] {
   let iteration = 1;
   let lastStepType: "reasoning" | "toolCall" | null = null;
   let deferredPrelude: { message: Message; commentary: string } | null = null;
+  // A message's ``reasoning_duration_ms`` is the TOTAL thinking time for the
+  // whole message's reasoning, not a per-chunk figure. splitReasoning cuts one
+  // message into many chunks; attributing the full duration to every chunk
+  // makes a merged group over-count by the chunk count and makes tool-separated
+  // chunks all repeat the same total. Attribute it once, to the first kept
+  // reasoning step of the message.
+  const durationAssignedForMessage = new Set<string>();
 
   const pushReasoningStep = (
     message: Message,
@@ -2934,6 +2941,16 @@ export function convertToSteps(messages: Message[]): CoTStep[] {
     seenReasoningNarrative.add(fingerprint);
     if (lastStepType === "toolCall") {
       iteration++;
+    }
+    const durationMs =
+      (typeof message.id !== "string" ||
+        !durationAssignedForMessage.has(message.id)) &&
+      typeof message.additional_kwargs?.reasoning_duration_ms === "number" &&
+      Number.isFinite(message.additional_kwargs.reasoning_duration_ms)
+        ? message.additional_kwargs.reasoning_duration_ms
+        : undefined;
+    if (durationMs !== undefined && typeof message.id === "string") {
+      durationAssignedForMessage.add(message.id);
     }
     steps.push({
       id: `${message.id}-${idSuffix}`,
@@ -2956,11 +2973,7 @@ export function convertToSteps(messages: Message[]): CoTStep[] {
         typeof message.additional_kwargs?.timeline_sequence === "number"
           ? message.additional_kwargs.timeline_sequence
           : undefined,
-      durationMs:
-        typeof message.additional_kwargs?.reasoning_duration_ms === "number" &&
-        Number.isFinite(message.additional_kwargs.reasoning_duration_ms)
-          ? message.additional_kwargs.reasoning_duration_ms
-          : undefined,
+      durationMs,
       groundingMessage,
       iteration,
     });

@@ -54,6 +54,34 @@ describe("MessageGroup todo_write rendering", () => {
     ).toEqual(["所有文件读取任务已完成。"]);
   });
 
+  it("attributes reasoning_duration_ms once per message, not per split chunk", () => {
+    // A single AI message can carry a long reasoning stream that is cut into
+    // several chunks. reasoning_duration_ms is the TOTAL for the whole
+    // message; it must be attached to the first chunk only, otherwise every
+    // chunk (and any merged group) over-counts the thinking time by the
+    // chunk count — e.g. many consecutive "思考了 38.7秒" blocks.
+    const message: AIMessage = {
+      id: "ai-think-1",
+      type: "ai",
+      content: "",
+      additional_kwargs: {
+        reasoning_content: "第一段思考。\n\n第二段思考。\n\n第三段思考。",
+        reasoning_duration_ms: 38700,
+      },
+    };
+    const steps = convertToSteps([message]);
+    const reasoningSteps = steps.filter(
+      (step): step is TimelineItem & { reasoning: string } =>
+        "reasoning" in step,
+    );
+    expect(reasoningSteps.length).toBeGreaterThan(1);
+    const durations = reasoningSteps.map((step) => step.durationMs);
+    expect(durations[0]).toBe(38700);
+    for (let index = 1; index < durations.length; index += 1) {
+      expect(durations[index]).toBeUndefined();
+    }
+  });
+
   it("hides todo_write tool calls from the execution timeline", () => {
     const message: AIMessage = {
       id: "ai-1",
