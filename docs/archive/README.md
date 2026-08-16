@@ -17,5 +17,6 @@ that should not sit in the main docs path.
 | `subagent-alignment-phase1-2-summary.md` | Past subagent alignment phase 1/2 summary |
 | `OPTIMIZATION_SUMMARY.md` | One-off optimization summary; kept out of the root allow-list (audit A-02/Q-03) |
 | `octopus-agent-core-analysis.md` | One-off core architecture analysis report; kept out of the root allow-list (audit A-02/Q-03) |
+| `audit-2026-08-17.md` | Dated project audit log — moved out of docs top level (audit A-06) |
 
 Keep new user-facing docs out of this folder.
