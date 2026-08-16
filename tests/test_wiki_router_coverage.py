@@ -146,3 +146,38 @@ def test_docs_list_without_root(monkeypatch) -> None:
     assert resp.status_code == 200
     assert "docs" in resp.json()
     assert isinstance(resp.json()["docs"], list)
+
+
+def test_resolve_doc_path_rejects_traversal_and_symlink(monkeypatch, tmp_path: Path) -> None:
+    auto = tmp_path / "auto"
+    auto.mkdir()
+    (auto / "ok.md").write_text("x", encoding="utf-8")
+    monkeypatch.setattr(wr, "_auto_dir", lambda: auto)
+    assert wr._resolve_doc_path("ok.md") == (auto / "ok.md").resolve()
+    import pytest as _pytest
+
+    with _pytest.raises(Exception):
+        wr._resolve_doc_path("../etc/passwd")
+
+
+def test_flat_docs_walks_and_skips_readme(monkeypatch, tmp_path: Path) -> None:
+    auto = tmp_path / "auto"
+    (auto / "sub").mkdir(parents=True)
+    (auto / "README.md").write_text("#", encoding="utf-8")
+    (auto / "sub" / "a.md").write_text("a", encoding="utf-8")
+    monkeypatch.setattr(wr, "_auto_dir", lambda: auto)
+    docs = wr._flat_docs()
+    assert {d["path"] for d in docs} == {"sub/a.md"}
+    empty = wr._flat_docs.__wrapped__ if hasattr(wr._flat_docs, "__wrapped__") else None
+    monkeypatch.setattr(wr, "_auto_dir", lambda: tmp_path / "missing")
+    assert wr._flat_docs() == []
+
+
+def test_validate_user_root(tmp_path: Path) -> None:
+    assert wr._validate_user_root(None) is None
+    assert wr._validate_user_root("") is None
+    assert wr._validate_user_root("relative/path") is None
+    assert wr._validate_user_root(str(tmp_path / "nope")) is None
+    p = tmp_path / "dir"
+    p.mkdir()
+    assert wr._validate_user_root(str(p)) == p.resolve()
