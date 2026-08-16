@@ -139,15 +139,32 @@ __all__ = [
 
 
 class InMemoryJournal(Journal):
-    def __init__(self) -> None:
+    def __init__(self, max_events: int = 0) -> None:
+        """In-memory journal.
+
+        ``max_events`` (audit R-04): ring-buffer cap. ``0`` keeps the old
+        unbounded behaviour; a positive value drops the OLDEST events once
+        the cap is reached so a long-running process's journal cannot grow
+        without limit. ``CC-5`` continues to guard each append as a pure
+        append (no in-place mutation); capacity eviction is an explicit
+        ring policy applied outside the guarded call.
+        """
         self._events = AppendOnlyList[JournalEvent](rule_id="CC-5")
+        self._max_events = max(0, int(max_events))
         self._lock = Lock()
 
     @enforces("CC-5")
+    def _append(self, event: JournalEvent) -> None:
+        self._events.append(event)
+
     def write(self, event: JournalEvent) -> None:
         event = self._apply_context(event)
         with self._lock:
-            self._events.append(event)
+            self._append(event)
+            if self._max_events > 0:
+                overflow = len(self._events) - self._max_events
+                if overflow > 0:
+                    self._events.drop_oldest(overflow)
 
     def read_all(self, *, scope: TenantScope | None = None) -> list[JournalEvent]:
         with self._lock:

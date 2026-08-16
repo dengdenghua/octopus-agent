@@ -82,6 +82,19 @@ class BuiltStack:
         self.mcp_clients.clear()
 
 
+def _in_memory_journal_cap(max_bytes: int | None) -> int:
+    """Approximate event cap for the in-memory ring journal (audit R-04).
+
+    The JSONL journal bounds by bytes; the in-memory journal bounds by event
+    count. Assume ~1KiB per event (a conservative average for tool args /
+    steps), so the default 50MB maps to ~50k events. ``None``/``<=0`` keeps
+    the journal unbounded (explicit opt-out).
+    """
+    if max_bytes is None or max_bytes <= 0:
+        return 0
+    return max(1_000, int(max_bytes) // 1024)
+
+
 def build_from_config(config: AgentConfig) -> BuiltStack:
     """Assemble the complete runtime stack from ``AgentConfig``."""
     # 1. SkillRegistry: always retain the complete local coding surface.
@@ -103,7 +116,7 @@ def build_from_config(config: AgentConfig) -> BuiltStack:
         if client is not None:
             mcp_clients.append(client)
 
-    # 3. Journal
+# 3. Journal
     # Default-on secret redaction: the journal is the source-of-truth audit log
     # and records tool args/outputs, so run every payload through the redactor
     # before persistence to keep accidental secrets (.env values, keys) off disk.
@@ -115,7 +128,7 @@ def build_from_config(config: AgentConfig) -> BuiltStack:
             redactor=Redactor(),
         )
         if config.journal_file
-        else InMemoryJournal()
+        else InMemoryJournal(max_events=_in_memory_journal_cap(config.journal_max_bytes))
     )
 
     # 4. Immunity

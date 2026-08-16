@@ -185,6 +185,7 @@ learn:
 # enable_web_skills: 自动注册 fetch_url / web_search 技能（需 httpx 可用）
 # default_arm_id:   默认腕足 ID（用于单腕任务分配）
 journal_file: null
+# journal_max_bytes: 50000000  # Audit R-04: 有界默认 50MB；JSONL 到上限轮转，内存 journal 用环形缓冲（~1KiB/事件）
 enable_web_skills: true
 default_arm_id: code_arm
 

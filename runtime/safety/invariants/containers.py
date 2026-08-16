@@ -23,6 +23,18 @@ class AppendOnlyList(Generic[T]):
     def extend(self, items: list[T]) -> None:
         self._data.extend(items)
 
+    def drop_oldest(self, n: int) -> None:
+        """Ring-buffer capacity policy: drop the oldest ``n`` items.
+
+        This is the explicit eviction counterpart to ``append`` — used by
+        bounded journals (audit R-04) so an in-memory event log cannot grow
+        without limit. ``append``/``extend`` remain pure appends; eviction is
+        a separate operation callers invoke only when they intend a ring.
+        """
+        if n <= 0:
+            return
+        del self._data[: int(n)]
+
     def __len__(self) -> int:
         return len(self._data)
 

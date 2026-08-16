@@ -25,6 +25,8 @@ from runtime.platform.config import (
 
 class TestSchemaDefaults:
     def test_empty_config_valid(self):
+        cfg = load_from_dict({})
+        assert cfg.journal_max_bytes == 50_000_000  # Audit R-04: bounded default
         cfg = AgentConfig()
         assert cfg.name == "octopus-agent"
         assert cfg.planner.type == "static"

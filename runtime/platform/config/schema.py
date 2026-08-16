@@ -467,7 +467,10 @@ class AgentConfig(BaseModel):
     # Journal rotation cap in bytes. When the journal exceeds this size, the
     # oldest events are dropped to keep the file bounded. None (default) disables
     # rotation. Recommended: 10-50 MB (10485760-52428800 bytes) for demo/dev.
-    journal_max_bytes: int | None = Field(default=None, ge=1_000_000)
+    # Audit R-04: bounded by default so a long-running journal cannot grow
+    # without limit (JSONL rotates at the cap; the in-memory journal uses a
+    # ring buffer sized from it). Explicitly set null to opt out.
+    journal_max_bytes: int | None = Field(default=50_000_000, ge=1_000_000)
     # Disable external web/browser skill groups while retaining local coding,
     # filesystem, git, shell, quality and desktop tools.
     enable_web_skills: bool = True

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from runtime.memory.journal import (
+    JournalEvent,
     BudgetBreakerResetEvent,
     BudgetEvent,
     CurriculumGoalDecisionEvent,
@@ -198,3 +200,57 @@ class TestJSONLJournal:
         assert events[0].drift_id == 42
         assert events[0].protocol_id == "http_api_contract"
         assert events[0].status == "acknowledged"
+
+
+class TestInMemoryJournalRing:
+    """Audit R-04: the in-memory journal is a ring buffer when capped."""
+
+    def test_ring_drops_oldest_beyond_cap(self):
+        from uuid import uuid4
+
+        j = InMemoryJournal(max_events=3)
+        ids = [str(uuid4()) for _ in range(5)]
+        for i, tid in enumerate(ids):
+            j.write(
+                JournalEvent(
+                    event_type="task_started",
+                    ts=datetime(2026, 1, 1, 0, 0, i % 60),
+                    thread_id="t",
+                    task_id=tid,
+                )
+            )
+        assert len(j) == 3
+        kept = {str(e.task_id) for e in j.read_all()}
+        assert kept == set(ids[2:])  # oldest two evicted, newest three kept
+
+    def test_unbounded_default_keeps_all(self):
+        from uuid import uuid4
+
+        j = InMemoryJournal()
+        for _ in range(10):
+            j.write(
+                JournalEvent(
+                    event_type="task_started",
+                    ts=datetime(2026, 1, 1, 0, 0, 0),
+                    thread_id="t",
+                    task_id=str(uuid4()),
+                )
+            )
+        assert len(j) == 10
+
+    def test_append_only_invariant_still_guards_writes(self):
+        from uuid import uuid4
+
+        j = InMemoryJournal(max_events=5)
+        j.write(
+            JournalEvent(
+                event_type="task_started",
+                ts=datetime(2026, 1, 1, 0, 0, 0),
+                thread_id="t",
+                task_id=str(uuid4()),
+            )
+        )
+        before = list(j._events)
+        with pytest.raises(InvariantViolation):
+            j._events.pop()
+        assert list(j._events) == before
