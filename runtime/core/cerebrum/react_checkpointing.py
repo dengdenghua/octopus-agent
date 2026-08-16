@@ -27,12 +27,14 @@ _logger = logging.getLogger(__name__)
 # loop writes the same shape of checkpoint that pause writes, so a
 # resume request can pick up at the last completed iteration.
 #
-# On by default (after every completed iteration). Override via
-# ``OCTOPUS_CHECKPOINT_EVERY_N`` env var (e.g. "5" for more frequent,
+# Audit T-14: a full snapshot every iteration is O(n^2) for long turns —
+# the default is now every 10 iterations (an order of magnitude less disk
+# I/O); a hard kill loses at most one interval of progress. Override via
+# ``OCTOPUS_CHECKPOINT_EVERY_N`` env var (e.g. "1" for every iteration,
 # "0" to disable). Errors during checkpoint write are swallowed; turn
 # proceeds normally.
 
-_DEFAULT_CHECKPOINT_INTERVAL = 1
+_DEFAULT_CHECKPOINT_INTERVAL = 10
 
 
 def _checkpoint_interval() -> int:

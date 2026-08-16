@@ -7149,7 +7149,9 @@ def test_react_writes_trajectory_on_success() -> None:
 def test_react_default_checkpoint_captures_each_iteration_and_final_state(
     monkeypatch,
 ) -> None:
-    monkeypatch.delenv("OCTOPUS_CHECKPOINT_EVERY_N", raising=False)
+    # Audit T-14: the shipped default interval is 10; pin every-iteration
+    # behaviour explicitly here so this test keeps its original intent.
+    monkeypatch.setenv("OCTOPUS_CHECKPOINT_EVERY_N", "1")
     stack = _build_stack_with_journal()
     stack.planner.router = _ScriptedRouter(
         [

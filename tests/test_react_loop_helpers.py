@@ -151,3 +151,20 @@ def test_model_deadline_closes_underlying_stream() -> None:
     assert closed.wait(1), "underlying stream was not closed after the deadline"
     # The deadline marker is yielded before the generator returns.
     assert events and events[-1] is _MODEL_STREAM_DEADLINE
+
+
+
+# ─── Audit T-14: default checkpoint interval is throttled ───────────────────
+
+
+def test_default_checkpoint_interval_is_throttled(monkeypatch) -> None:
+    """The shipped default writes a full snapshot every 10 iterations, not
+    every iteration — an order of magnitude less disk I/O for long turns."""
+    from runtime.core.cerebrum import react_checkpointing as rc
+
+    monkeypatch.delenv("OCTOPUS_CHECKPOINT_EVERY_N", raising=False)
+    interval = rc._checkpoint_interval()
+    assert interval == 10
+    # The cadence helper fires on multiples of the interval.
+    assert rc._should_auto_checkpoint(10, interval) is True
+    assert rc._should_auto_checkpoint(5, interval) is False
