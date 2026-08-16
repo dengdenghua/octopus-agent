@@ -180,10 +180,38 @@ def _findings_from_success(s: dict[str, Any]) -> list[str]:
     return _split_findings(str(s.get("output") or ""))
 
 
-def _finder_prompt(goal: str, seen: list[str]) -> str:
-    base = (
-        "You are one worker in a parallel discovery pass.\n\n"
-        f"GOAL:\n{goal}\n\n"
+# Per-role lens directives. ``_coerce_roles`` promises that a role LIST buys
+# "diverse lenses [that] surface more than N copies of one role", but every
+# worker used to receive a byte-identical ``_finder_prompt`` — the only thing
+# that differed was ``agent_id``, i.e. which role template the ephemeral runner
+# loaded. Same goal + same instructions + same already-seen list makes N
+# near-duplicate searches, which is exactly what the dedupe pass then throws
+# away. Giving each role an explicit angle is what makes the fan-out pay.
+_ROLE_LENS: dict[str, str] = {
+    "researcher": "Search broadly for facts, prior art and documented behaviour.",
+    "explorer": "Map structure and entry points; find where things live and how they connect.",
+    "reviewer": "Judge quality and correctness of what exists; look for defects and omissions.",
+    "debugger": "Hunt concrete failure modes: what breaks, under which inputs or states.",
+    "architect": "Assess boundaries, coupling and design fit; find structural problems.",
+    "security-review": "Look for unsafe handling: authz, injection, secrets, unchecked input.",
+    "planner": "Identify missing steps, ordering constraints and unstated prerequisites.",
+    "designer": "Examine the surface a user or caller touches; find friction and gaps.",
+    "implementer": "Look for what is stubbed, partial, or wired but unreachable.",
+    "synthesizer": "Look for cross-cutting themes that only appear when parts are compared.",
+}
+
+
+def _finder_prompt(goal: str, seen: list[str], role: str = "") -> str:
+    lens = _ROLE_LENS.get(str(role).strip())
+    base = f"You are one worker in a parallel discovery pass.\n\nGOAL:\n{goal}\n\n"
+    if lens:
+        base += (
+            f"YOUR LENS ({role}): {lens}\n"
+            "Other workers cover other lenses in parallel — do not try to cover "
+            "everything yourself. Report what YOUR lens surfaces; a narrow, "
+            "specific set beats a broad restatement of the goal.\n\n"
+        )
+    base += (
         "Report your findings as JSON: a `findings` array where each element is "
         "ONE atomic finding (a short string). No preamble or commentary — just "
         'the findings. If you have nothing, return {"findings": []}.'
@@ -196,6 +224,22 @@ def _finder_prompt(goal: str, seen: list[str]) -> str:
             f"{shown}"
         )
     return base
+
+
+def _finder_spec(role: str, goal: str, collected: list[str]) -> dict[str, Any]:
+    """One discovery worker's spec.
+
+    ``cheap`` is left unset on purpose: ``_call_agent_parallel`` then applies
+    ``_role_defaults_to_cheap``, so a role roster of researcher/explorer routes
+    to the cheap model while architect/implementer keep the primary one. The
+    roster is the model-tier control, which is why passing a heterogeneous list
+    is worth more than the role label alone.
+    """
+    return {
+        "agent_id": role,
+        "prompt": _finder_prompt(goal, collected, role),
+        "output_schema": _FINDER_SCHEMA,
+    }
 
 
 def _synthesis_prompt(goal: str, findings: list[str]) -> str:
@@ -213,6 +257,25 @@ def _synthesis_prompt(goal: str, findings: list[str]) -> str:
         f"CONFIRMED FINDINGS:\n{numbered}\n\n"
         "Return the synthesized answer as plain text — no preamble."
     )
+
+
+def _synthesis_spec(goal: str, confirmed: list[str]) -> dict[str, Any]:
+    """The closing synthesizer's spec.
+
+    Pinned to the ``synthesizer`` role rather than ``roles[0]``. With the
+    default roster that was ``researcher``, which ``_role_defaults_to_cheap``
+    routes to the CHEAP model — the single most reasoning-heavy step of an
+    orchestration ran on the weakest model available. ``synthesizer`` is in
+    ``_NON_CHEAP_ROLES``, so this both loads a fit-for-purpose role template and
+    keeps the primary model.
+
+    No ``output_schema``: the synthesizer returns prose, and the finder schema
+    would reject it.
+    """
+    return {
+        "agent_id": "synthesizer",
+        "prompt": _synthesis_prompt(goal, confirmed),
+    }
 
 
 def _coerce_roles(agent_id: Any) -> list[str]:
@@ -416,14 +479,7 @@ def _run_orchestration(
                 stopped = "budget"
                 break
             env = _call_agent_parallel(
-                specs=[
-                    {
-                        "agent_id": roles[i % len(roles)],
-                        "prompt": _finder_prompt(goal, collected),
-                        "output_schema": _FINDER_SCHEMA,
-                    }
-                    for i in range(n)
-                ],
+                specs=[_finder_spec(roles[i % len(roles)], goal, collected) for i in range(n)],
                 timeout_s=timeout_s,
                 context=context,
                 session=session,
@@ -516,12 +572,7 @@ def _run_orchestration(
         # else; a failed/empty synthesis leaves ``confirmed`` untouched.
         if synthesize and confirmed and budget.has_room():
             synth_env = _call_agent_parallel(
-                specs=[
-                    {
-                        "agent_id": roles[0],
-                        "prompt": _synthesis_prompt(goal, confirmed),
-                    }
-                ],
+                specs=[_synthesis_spec(goal, confirmed)],
                 timeout_s=timeout_s,
                 context=context,
                 session=session,
