@@ -118,3 +118,31 @@ def test_generate_conflict_when_running(tmp_path: Path, monkeypatch) -> None:
     client = TestClient(app)
     resp = client.post("/api/wiki/generate")
     assert resp.status_code == 409
+
+
+def test_ask_with_model_router(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    import runtime.memory.hemolymph.repo_context as rc
+
+    monkeypatch.setattr(rc, "build_codebase_context", lambda q: ("wiki context", [{"title": "t"}]))
+    app = FastAPI()
+
+    class _FakeRouter:
+        def call(self, request):
+            return SimpleNamespace(text="cited answer")
+
+    app.include_router(wr.create_wiki_router(model_router=_FakeRouter(), model="m"))
+    client = TestClient(app)
+    resp = client.post("/api/wiki/ask", json={"question": "what?"})
+    assert resp.status_code == 200
+    assert resp.json()["grounded"] is True
+    assert "cited" in resp.json()["answer"]
+
+
+def test_docs_list_without_root(monkeypatch) -> None:
+    client = _make_client(monkeypatch)
+    resp = client.get("/api/wiki/docs")
+    assert resp.status_code == 200
+    assert "docs" in resp.json()
+    assert isinstance(resp.json()["docs"], list)
