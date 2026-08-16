@@ -344,6 +344,10 @@ function turnToMessages(turn: Turn): Message[] {
     // the UI to start the live thinking timer at the true first-token
     // arrival time instead of the React render frame.
     reasoningStartedAt: string | null;
+    // ISO timestamp of the earliest item feeding this AI message — used by
+    // the UI to show when the answer started (reasoning first, else the
+    // answer prose item).
+    createdAt: string | null;
   };
   const newPending = (): PendingAi => ({
     reasoning: [],
@@ -351,6 +355,7 @@ function turnToMessages(turn: Turn): Message[] {
     toolCalls: [],
     reasoningDurationMs: null,
     reasoningStartedAt: null,
+    createdAt: null,
   });
   let pending: PendingAi = newPending();
 
@@ -455,6 +460,7 @@ function turnToMessages(turn: Turn): Message[] {
         ) {
           pending.reasoningStartedAt = r.createdAt;
         }
+        if (r.createdAt) pending.createdAt ??= r.createdAt;
         break;
       }
       case "plan": {
@@ -522,6 +528,7 @@ function turnToMessages(turn: Turn): Message[] {
       }
       case "agentMessage": {
         const am = item as AgentMessageItem;
+        if (am.createdAt) pending.createdAt ??= am.createdAt;
         const isInterruptedMessage = am.id === interruptedMessageId;
         const isFailedMessage = am.status === "failed";
         const split = splitReactTrace(itemStreamText(am));
@@ -1176,9 +1183,12 @@ function userMessageToHuman(item: UserMessageItem): HumanMessage {
     type: "human",
     id: item.id,
     content: item.text,
-    ...(item.attachments && item.attachments.length > 0
-      ? { additional_kwargs: { attachments: item.attachments } }
-      : {}),
+    additional_kwargs: {
+      ...(item.attachments && item.attachments.length > 0
+        ? { attachments: item.attachments }
+        : {}),
+      created_at: item.createdAt,
+    },
   };
 }
 
@@ -1207,6 +1217,7 @@ function buildAiAdditionalKwargs(pending: {
   plan: string | null;
   reasoningDurationMs?: number | null;
   reasoningStartedAt?: string | null;
+  createdAt?: string | null;
 }): Record<string, unknown> {
   const kwargs: Record<string, unknown> = {};
   if (pending.reasoning.length > 0) {
@@ -1220,6 +1231,9 @@ function buildAiAdditionalKwargs(pending: {
   }
   if (pending.reasoningStartedAt) {
     kwargs.reasoning_started_at = pending.reasoningStartedAt;
+  }
+  if (pending.createdAt) {
+    kwargs.created_at = pending.createdAt;
   }
   return kwargs;
 }

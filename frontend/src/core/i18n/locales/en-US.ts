@@ -332,7 +332,7 @@ export const enUS: Translations = {
     fileOperationsCountWithDiff: (n: number, added: number, removed: number) =>
       `${n} file operation${n === 1 ? "" : "s"} (+${added} / -${removed})`,
     toolCallsCount: (n: number) => `${n} action record${n === 1 ? "" : "s"}`,
-    diffTruncated: (n: number) => `… truncated, ${n} more line${n === 1 ? "" : "s"} hidden …`,
+    diffLinesHidden: (n: number) => `… truncated, ${n} more line${n === 1 ? "" : "s"} hidden …`,
     loadOlderTurns: "Load older turns",
     loadingOlderTurns: "Loading older turns…",
   },
@@ -3110,6 +3110,8 @@ export const enUS: Translations = {
     iteration: (count: number) => `Round ${count}`,
     toolCalls: (count: number) => `${count} call${count === 1 ? "" : "s"}`,
     generating: "Generating…",
+    codeBlockWrap: "Soft wrap",
+    codeBlockScroll: "Horizontal scroll",
   },
 
   subagents: {

@@ -325,7 +325,7 @@ export const koKR: Translations = {
     fileOperationsCountWithDiff: (n: number, added: number, removed: number) =>
       `파일 작업 ${n}회 (+${added} / -${removed})`,
     toolCallsCount: (n: number) => `작업 기록 ${n}개`,
-    diffTruncated: (n: number) => `… 잘림: 나머지 ${n}줄 숨김 …`,
+    diffLinesHidden: (n: number) => `… 잘림: 나머지 ${n}줄 숨김 …`,
     loadOlderTurns: "이전 턴 불러오기",
     loadingOlderTurns: "이전 턴 불러오는 중…",
   },
@@ -3041,6 +3041,8 @@ export const koKR: Translations = {
     iteration: (count: number) => `${count}번째 라운드`,
     toolCalls: (count: number) => `${count}회 호출`,
     generating: "생성 중…",
+    codeBlockWrap: "줄 바꿈",
+    codeBlockScroll: "가로 스크롤",
   },
 
   subagents: {

@@ -264,7 +264,7 @@ export interface Translations {
       removed: number,
     ) => string;
     toolCallsCount: (n: number) => string;
-    diffTruncated: (n: number) => string;
+    diffLinesHidden: (n: number) => string;
     loadOlderTurns: string;
     loadingOlderTurns: string;
   };
@@ -2487,6 +2487,8 @@ export interface Translations {
     iteration: (count: number) => string;
     toolCalls: (count: number) => string;
     generating: string;
+    codeBlockWrap: string;
+    codeBlockScroll: string;
   };
 
   subagents: {

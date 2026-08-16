@@ -210,6 +210,7 @@ describe("conversationToAgentThreadState · userMessage", () => {
     const state = conversationToAgentThreadState(makeConv([makeTurn([u])]));
     expect(state.messages[0]?.additional_kwargs).toEqual({
       attachments: [{ name: "a.txt", size: 10 }],
+      created_at: "2026-05-09T00:00:00Z",
     });
   });
 });
@@ -265,6 +266,21 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
       timelineSequence: 2,
       parentItemId: "progress",
     });
+  });
+
+  it("stamps the AI message with the earliest reasoning createdAt", () => {
+    const state = conversationToAgentThreadState(
+      makeConv([
+        makeTurn(
+          [reasoning("thinking hard"), agentMsg("The answer.", "a-ans")],
+          "completed",
+        ),
+      ]),
+    );
+    const ai = state.messages.find((message) => message.type === "ai") as
+      | AIMessage
+      | undefined;
+    expect(ai?.additional_kwargs?.created_at).toBe("2026-05-09T00:00:00Z");
   });
 
   it("preserves public commentary as distinct non-terminal messages", () => {

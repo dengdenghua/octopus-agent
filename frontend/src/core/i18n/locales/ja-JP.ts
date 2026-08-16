@@ -326,7 +326,7 @@ export const jaJP: Translations = {
     fileOperationsCountWithDiff: (n: number, added: number, removed: number) =>
       `ファイル操作 ${n} 回 (+${added} / -${removed})`,
     toolCallsCount: (n: number) => `操作記録 ${n} 件`,
-    diffTruncated: (n: number) => `… 省略: 残り ${n} 行 …`,
+    diffLinesHidden: (n: number) => `… 省略: 残り ${n} 行 …`,
     loadOlderTurns: "古いターンを読み込む",
     loadingOlderTurns: "古いターンを読み込み中…",
   },
@@ -3096,6 +3096,8 @@ export const jaJP: Translations = {
     iteration: (count: number) => `第 ${count} ラウンド`,
     toolCalls: (count: number) => `${count} 回呼び出し`,
     generating: "生成中…",
+    codeBlockWrap: "折り返し",
+    codeBlockScroll: "横スクロール",
   },
 
   subagents: {

@@ -140,7 +140,7 @@ function DiffLines({ diffs }: { diffs: unknown }) {
       ))}
       {truncated > 0 && (
         <div className="px-2 py-1 text-center text-muted-foreground/80 select-none">
-          {t.message.diffTruncated(truncated)}
+          {t.message.diffLinesHidden(truncated)}
         </div>
       )}
     </div>

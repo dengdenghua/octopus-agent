@@ -319,7 +319,7 @@ export const zhCN: Translations = {
     fileOperationsCountWithDiff: (n: number, added: number, removed: number) =>
       `操作文件 ${n} 次 (+${added} / -${removed})`,
     toolCallsCount: (n: number) => `${n} 条操作记录`,
-    diffTruncated: (n: number) => `… 已截断，隐藏其余 ${n} 行 …`,
+    diffLinesHidden: (n: number) => `… 已截断，隐藏其余 ${n} 行 …`,
     loadOlderTurns: "加载更早的对话",
     loadingOlderTurns: "正在加载更早的对话…",
   },
@@ -2880,6 +2880,8 @@ export const zhCN: Translations = {
     iteration: (count: number) => `第 ${count} 轮`,
     toolCalls: (count: number) => `${count} 次调用`,
     generating: "生成中…",
+    codeBlockWrap: "软换行",
+    codeBlockScroll: "横向滚动",
   },
 
   subagents: {

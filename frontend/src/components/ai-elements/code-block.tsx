@@ -3,8 +3,9 @@ import { swallow } from "@/core/utils/log";
 import { copyTextToClipboard } from "@/core/clipboard";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
-import { CheckIcon, CopyIcon } from "lucide-react";
+import { ArrowLeftRight, CheckIcon, CopyIcon, WrapText } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useLocalStorage } from "@/hooks/use-local-storage";
 import {
   type ComponentProps,
   createContext,
@@ -81,15 +82,22 @@ export async function highlightCode(
  */
 const PRE_CLASS_OVERRIDES =
   "[&>pre]:m-0 [&>pre]:p-4 [&>pre]:text-sm [&>pre]:leading-6 " +
-  "[&>pre]:whitespace-pre-wrap [&>pre]:bg-transparent! " +
-  "[&_code]:font-mono [&_code]:text-sm";
+  "[&>pre]:bg-transparent! [&_code]:font-mono [&_code]:text-sm";
 
-function LightweightCodeBlock({ code }: { code: string }) {
+const WRAP_PRE_CLASS = "[&>pre]:whitespace-pre-wrap";
+const SCROLL_PRE_CLASS = "[&>pre]:whitespace-pre";
+
+function LightweightCodeBlock({ code, wrap }: { code: string; wrap: boolean }) {
   // Exactly the same <pre> shape the Shiki output uses — just without
   // syntax coloring. The `overflow-auto` wrapper and class contract
   // matches the highlighted variant below.
   return (
-    <pre className="m-0 p-4 text-sm leading-6 whitespace-pre-wrap bg-transparent font-mono">
+    <pre
+      className={cn(
+        "m-0 p-4 text-sm leading-6 bg-transparent font-mono",
+        wrap ? "whitespace-pre-wrap" : "whitespace-pre",
+      )}
+    >
       <code>{code}</code>
       <span className="inline-block w-0.5 h-4 bg-primary/60 ml-0.5 align-middle animate-pulse" />
     </pre>
@@ -110,6 +118,7 @@ export const CodeBlock = ({
   const isDark = resolvedTheme === "dark";
   const shikiTheme = isDark ? "one-dark-pro" : "one-light";
   const [html, setHtml] = useState<string>("");
+  const [wrap, setWrap] = useLocalStorage("octopus:code-block-wrap", true);
   const mountedRef = useRef(false);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const highlightRequestRef = useRef(0);
@@ -194,21 +203,39 @@ export const CodeBlock = ({
               </>
             )}
           </div>
-          {children && (
-            <div className="flex items-center gap-2">{children}</div>
-          )}
+          <div className="flex items-center gap-2">
+            {!isStreaming && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="shrink-0 h-6 w-6"
+                title={
+                  wrap ? t.streaming.codeBlockScroll : t.streaming.codeBlockWrap
+                }
+                onClick={() => setWrap((value) => !value)}
+              >
+                {wrap ? <ArrowLeftRight size={12} /> : <WrapText size={12} />}
+              </Button>
+            )}
+            {children}
+          </div>
         </div>
 
         <div className="relative size-full">
           {showHighlighted ? (
             <div
-              className={cn("size-full overflow-auto", PRE_CLASS_OVERRIDES)}
+              className={cn(
+                "size-full overflow-auto",
+                PRE_CLASS_OVERRIDES,
+                wrap ? WRAP_PRE_CLASS : SCROLL_PRE_CLASS,
+              )}
               // biome-ignore lint/security/noDangerouslySetInnerHtml: "shiki output is sanitized html"
               dangerouslySetInnerHTML={{ __html: html }}
             />
           ) : (
             <div className="size-full overflow-auto">
-              <LightweightCodeBlock code={code} />
+              <LightweightCodeBlock code={code} wrap={wrap} />
             </div>
           )}
         </div>

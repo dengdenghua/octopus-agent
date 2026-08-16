@@ -65,10 +65,52 @@ import { useThreadStreaming, useThreadValues } from "./context";
 import { useStreamingTextBuffer } from "@/hooks/use-streaming-text-buffer";
 import { ClarificationChoiceCard } from "./clarification-choice-card";
 import { GroundingChip } from "./grounding-chip";
+import { useConversationDetailLevel } from "./use-conversation-detail-level";
 import { extractClarificationQuestionnaire } from "../clarification-questionnaire";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Format an ISO timestamp as local HH:mm, returning "" when unparseable. */
+function formatMessageTime(createdAt: string): string {
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/**
+ * Small muted HH:mm label shown under a message bubble. Visible on hover of
+ * the message, or always when the conversation detail level is "high".
+ */
+export function MessageTimestamp({
+  createdAt,
+  alwaysVisible,
+  align = "start",
+}: {
+  createdAt?: string;
+  alwaysVisible?: boolean;
+  align?: "start" | "end";
+}) {
+  if (!createdAt) return null;
+  const formatted = formatMessageTime(createdAt);
+  if (!formatted) return null;
+  return (
+    <span
+      className={cn(
+        "text-micro text-muted-foreground/60 select-none",
+        align === "end" ? "self-end" : "self-start",
+        alwaysVisible
+          ? "opacity-100"
+          : "opacity-0 transition-opacity group-hover/conversation-message:opacity-100",
+      )}
+    >
+      {formatted}
+    </span>
+  );
 }
 
 const INTERNAL_TRACE_DETAILS_RE =
@@ -277,6 +319,10 @@ export const MessageListItem = memo(function MessageListItem({
       (assistantIsSettledAnswer && clipboardText.length > 0 && isLastMessage));
   const params = useParams();
   const threadIdForFeedback = params.threadId ?? params.thread_id ?? null;
+  const { level } = useConversationDetailLevel();
+  const createdAt = (
+    message.additional_kwargs as { created_at?: string } | undefined
+  )?.created_at;
   const submitFeedback = useCallback(
     async (sentiment: "liked" | "disliked") => {
       const content =
@@ -327,6 +373,11 @@ export const MessageListItem = memo(function MessageListItem({
         chatFontSize={chatFontSize}
         suppressReasoningPanel={suppressReasoningPanel}
         enableClarificationActions={enableClarificationActions}
+      />
+      <MessageTimestamp
+        createdAt={createdAt}
+        alwaysVisible={level === "high"}
+        align={isHuman ? "end" : "start"}
       />
       {afterContent}
       {showMessageActions && (

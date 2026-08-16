@@ -1710,3 +1710,161 @@ describe("reducer", () => {
     expect(unknown.changedTurnIds).toEqual([]);
   });
 });
+
+// ===========================================================================
+// Out-of-order event matrix
+//
+// The reducer's race safety currently lives in comments (mergeStartedTurn
+// guards terminal turns; mergeDelta drops late deltas; mergeCompletedTurn
+// keeps a completed snapshot authoritative). This block pins those
+// invariants down with exhaustive orderings so a future refactor can't
+// silently reopen a terminal turn, regress settled text, or crash on a
+// reordered stream.
+// ===========================================================================
+
+function permute<T>(arr: T[]): T[][] {
+  if (arr.length <= 1) return [arr];
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += 1) {
+    const rest = [...arr.slice(0, i), ...arr.slice(i + 1)];
+    for (const tail of permute(rest)) {
+      out.push([arr[i]!, ...tail]);
+    }
+  }
+  return out;
+}
+
+describe("reducer · out-of-order event matrix", () => {
+  const FINAL_ITEM = {
+    id: "itm-a",
+    type: "agentMessage" as const,
+    status: "completed" as const,
+    createdAt: T0_ISO,
+    text: "final answer",
+    timelineSequence: 1,
+  };
+  const INFLIGHT_ITEM = { ...FINAL_ITEM, status: "inProgress" as const, text: "" };
+
+  const events = () => [
+    {
+      method: "turn/started",
+      params: { threadId: "th", turn: blankTurn("trn-1", "th") },
+    },
+    {
+      method: "item/started",
+      params: { threadId: "th", turnId: "trn-1", item: INFLIGHT_ITEM },
+    },
+    {
+      method: "item/agentMessage/delta",
+      params: {
+        threadId: "th",
+        turnId: "trn-1",
+        itemId: FINAL_ITEM.id,
+        // Prefix of the settled snapshot so an authoritative snapshot
+        // always supersedes the accumulated live text (see
+        // preserveCompletedStreamText).
+        delta: "final ",
+      },
+    },
+    {
+      method: "item/completed",
+      params: { threadId: "th", turnId: "trn-1", item: FINAL_ITEM },
+    },
+    {
+      method: "turn/completed",
+      params: {
+        threadId: "th",
+        turn: {
+          ...blankTurn("trn-1", "th"),
+          status: "completed",
+          completedAt: T0_ISO,
+          items: [FINAL_ITEM],
+        },
+      },
+    },
+  ];
+
+  it("converges to a completed turn with full text under every lifecycle ordering", () => {
+    for (const order of permute(events())) {
+      const label = order.map((e) => e.method).join("→");
+      const state = apply(emptyConversation("th"), ...order);
+      const turn = state.turns[0];
+      expect(turn?.status, label).toBe("completed");
+      expect(turn?.id, label).toBe("trn-1");
+      const item = turn?.items.find((i) => i.id === FINAL_ITEM.id);
+      expect(item?.status, label).toBe("completed");
+      if (item?.type === "agentMessage") {
+        expect(item.text, label).toBe("final answer");
+      }
+    }
+  });
+
+  it("never reopens a terminal turn or regresses settled text with a late started/delta", () => {
+    // Start from the converged terminal state, then replay the earliest
+    // events (stale turn/started, stale inflight item, stale delta) on top.
+    const converged = apply(emptyConversation("th"), ...events());
+    const stale = [
+      {
+        method: "turn/started",
+        params: { threadId: "th", turn: blankTurn("trn-1", "th") },
+      },
+      {
+        method: "item/started",
+        params: { threadId: "th", turnId: "trn-1", item: INFLIGHT_ITEM },
+      },
+      {
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          itemId: FINAL_ITEM.id,
+          delta: " late",
+        },
+      },
+    ];
+    const state = apply(converged, ...stale);
+    expect(state.turns[0]?.status).toBe("completed");
+    const item = state.turns[0]?.items.find((i) => i.id === FINAL_ITEM.id);
+    expect(item?.status).toBe("completed");
+    if (item?.type === "agentMessage") expect(item.text).toBe("final answer");
+  });
+
+  it("keeps the turn terminal when interrupt and completed arrive in any order", () => {
+    const start = {
+      method: "turn/started",
+      params: { threadId: "th", turn: blankTurn("trn-1", "th") },
+    };
+    const interrupted = {
+      method: "turn/interrupted",
+      params: { threadId: "th", turnId: "trn-1" },
+    };
+    const completed = {
+      method: "turn/completed",
+      params: {
+        threadId: "th",
+        turn: {
+          ...blankTurn("trn-1", "th"),
+          status: "completed",
+          completedAt: T0_ISO,
+          items: [FINAL_ITEM],
+        },
+      },
+    };
+    for (const order of permute([start, interrupted, completed])) {
+      const label = order.map((e) => e.method).join("→");
+      const state = apply(emptyConversation("th"), ...order);
+      const status = state.turns[0]?.status;
+      // Last terminal lifecycle event is authoritative; a terminal turn is
+      // never left in-progress regardless of arrival order.
+      expect(["completed", "interrupted"], label).toContain(status);
+      expect(status, label).not.toBe("inProgress");
+    }
+  });
+
+  it("replaying the same completed sequence twice is idempotent", () => {
+    const once = apply(emptyConversation("th"), ...events());
+    const twice = apply(once, ...events());
+    expect(twice.turns).toEqual(once.turns);
+    expect(twice.turns[0]?.status).toBe("completed");
+  });
+});
