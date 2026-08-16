@@ -153,3 +153,87 @@ def test_run_export(tmp_path: Path) -> None:
     rc, _ = _run(cc.run_export, output=out, base_dir=str(base), color=False)
     assert rc == 0
     assert out.exists()
+
+
+def test_run_setup_delegates_to_wizard(monkeypatch, tmp_path: Path) -> None:
+    recorded: dict = {}
+
+    class _FakeWizard:
+        def __init__(self, output_path, non_interactive):
+            recorded["output"] = output_path
+            recorded["non_interactive"] = non_interactive
+
+        def run(self):
+            recorded["ran"] = True
+
+    import runtime.platform.lifecycle.setup_wizard as sw
+
+    monkeypatch.setattr(sw, "SetupWizard", _FakeWizard)
+    out = tmp_path / "cfg.yaml"
+    rc, _ = _run(cc.run_setup, output=out, non_interactive=True, color=False)
+    assert rc == 0
+    assert recorded["output"] == out
+    assert recorded["non_interactive"] is True
+    assert recorded["ran"] is True
+
+
+def test_run_ui_import_error(tmp_path: Path, monkeypatch) -> None:
+    import sys
+
+    monkeypatch.setitem(sys.modules, "uvicorn", None)  # import uvicorn -> ImportError
+    rc, out = _run(cc.run_ui, host="127.0.0.1", port=8000, journal_path=tmp_path / "j.jsonl")
+    assert rc == 2
+
+
+def test_run_ui_starts_server(tmp_path: Path, monkeypatch) -> None:
+    import sys
+
+    ran: dict = {}
+    fake_uvicorn = type("Uv", (), {"run": staticmethod(lambda _app, **kw: ran.update(kw))})
+    monkeypatch.setitem(sys.modules, "uvicorn", fake_uvicorn)
+    monkeypatch.setattr("runtime.platform.ui.create_app", lambda **kw: object())
+    rc, out = _run(cc.run_ui, host="127.0.0.1", port=8000, journal_path=tmp_path / "j.jsonl")
+    assert rc == 0
+    assert ran.get("port") == 8000
+
+
+def test_run_quickstart_with_force(monkeypatch, tmp_path: Path) -> None:
+    setup_calls: list[Path] = []
+    monkeypatch.setattr(cc, "run_setup", lambda **kw: (setup_calls.append(kw["output"]) or 0))
+    monkeypatch.setattr(cc, "run_doctor", lambda **kw: 0)
+    monkeypatch.setattr(cc, "run_serve", lambda **kw: 0)
+
+    out = tmp_path / "cfg.yaml"
+    rc, text = _run(
+        cc.run_quickstart,
+        output=out,
+        non_interactive=True,
+        force=True,
+        host="127.0.0.1",
+        port=8000,
+        serve=False,
+        learn_interval_s=3600,
+        color=False,
+    )
+    assert rc == 0
+    assert setup_calls == [out]
+    assert "ready" in text
+
+
+def test_run_quickstart_doctor_failure(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(cc, "run_setup", lambda **kw: 0)
+    monkeypatch.setattr(cc, "run_doctor", lambda **kw: 1)
+    out = tmp_path / "cfg.yaml"
+    rc, text = _run(
+        cc.run_quickstart,
+        output=out,
+        non_interactive=True,
+        force=True,
+        host="127.0.0.1",
+        port=8000,
+        serve=False,
+        learn_interval_s=3600,
+        color=False,
+    )
+    assert rc == 1
+    assert "doctor" in text.lower()
