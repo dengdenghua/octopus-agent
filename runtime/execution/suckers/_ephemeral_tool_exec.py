@@ -37,7 +37,9 @@ def _ephemeral_write_confine_block(call: Any, skill: Any) -> str | None:
     inject the locked root as ``sandbox_dir`` so the skill's own ``check_path``
     confines relative writes into the worktree and blocks escapes. A write skill
     that can't take a sandbox_dir is blocked (fail-closed) rather than allowed to
-    escape. Returns a block message, or None to proceed.
+    escape. Shell/exec-class tools are blocked outright (audit F-02) — a cwd
+    nudge is not a sandbox for a command interpreter. Returns a block message,
+    or None to proceed.
     """
     from runtime.platform.process.session import current_session
 
@@ -49,6 +51,20 @@ def _ephemeral_write_confine_block(call: Any, skill: Any) -> str | None:
     affinity = [str(a).lower() for a in (getattr(skill, "affinity", None) or [])]
     call_input = getattr(call, "input", None)
     args = call_input if isinstance(call_input, dict) else {}
+    # Audit F-02: shell/exec-class tools cannot be confined to the locked
+    # worktree — injecting ``cwd`` is a nudge, not a sandbox (the command
+    # can cd anywhere and write straight into the main tree). Fail closed
+    # inside an isolated spawn instead of letting the sub-agent escape.
+    shell_affinity = any(a in ("shell", "exec") for a in affinity)
+    shell_name = any(
+        tok in name for tok in ("exec_shell", "background_exec", "run_command")
+    )
+    if shell_affinity or shell_name:
+        return (
+            f"(blocked: '{getattr(call, 'name', '?')}' is a shell/exec tool and "
+            f"cannot be confined to the locked worktree — isolated spawns run "
+            f"without shell access)"
+        )
     path_payload = any(key in args for key in ("path", "file_path", "filepath", "root", "patch"))
     filesystem_affinity = any(
         a in ("file", "io", "filesystem", "file-read", "file-write", "write", "edit")

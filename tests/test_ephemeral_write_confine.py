@@ -137,3 +137,60 @@ def test_write_detected_by_affinity(_session):
     # name has no write/edit token, but affinity marks it as a write
     assert _ephemeral_write_confine_block(call, _Skill(_writer, ["write"])) is None
     assert call.input["sandbox_dir"] == "/wt"
+
+
+def test_lock_blocks_shell_tool_by_affinity(_session):
+    """Audit F-02: a cwd nudge is not a sandbox for a command interpreter.
+    Inside an isolated spawn, shell/exec tools are refused outright."""
+    _session({"_locked_write_root": "/wt"})
+
+    def _shell(command: str = "", *, cwd: str | None = None):
+        return None
+
+    call = _Call("exec_shell", {"command": "echo escape"})
+    block = _ephemeral_write_confine_block(
+        call, _Skill(_shell, ["shell", "exec", "dangerous"])
+    )
+    assert block is not None
+    assert "shell/exec" in block
+    # No confinement args may have been injected before the refusal.
+    assert "sandbox_dir" not in call.input
+
+
+def test_lock_blocks_exec_affinity_tools_without_shell_name(_session):
+    _session({"_locked_write_root": "/wt"})
+
+    def _runner(code: str = ""):
+        return None
+
+    call = _Call("run_python", {"code": "print(1)"})
+    block = _ephemeral_write_confine_block(
+        call, _Skill(_runner, ["python", "analysis", "exec", "dangerous"])
+    )
+    assert block is not None
+    assert "shell/exec" in block
+
+
+def test_lock_blocks_shell_tool_by_name_without_affinity(_session):
+    _session({"_locked_write_root": "/wt"})
+
+    def _bg(command: str = ""):
+        return None
+
+    call = _Call("background_exec", {"command": "sleep 1"})
+    block = _ephemeral_write_confine_block(call, _Skill(_bg))
+    assert block is not None
+    assert "shell/exec" in block
+
+
+def test_shell_tool_allowed_without_locked_root(_session):
+    _session({})
+
+    def _shell(command: str = "", *, cwd: str | None = None):
+        return None
+
+    call = _Call("exec_shell", {"command": "ls"})
+    assert (
+        _ephemeral_write_confine_block(call, _Skill(_shell, ["shell", "exec"]))
+        is None
+    )
