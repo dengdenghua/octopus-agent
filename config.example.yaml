@@ -323,7 +323,7 @@ execution:
   deployment_mode: local
   # auto selects the best backend; commercial modes still fail closed if the
   # host has no hard backend. Use strict/bwrap/seatbelt to pin one explicitly.
-  process_sandbox: auto
+  process_sandbox: auto  # 风险边界见 docs/security/sandbox-risk-boundary.md (audit S-06)
 
   # ─── Process sandbox backend (exec_shell / verify / git / quality) ───
   # Runtime env var OCTOPUS_PROCESS_SANDBOX can override this in deployments.
