@@ -584,7 +584,6 @@ function AgentWorkbenchPanelImpl({
         onTabClick={handleOpenTab}
         onTabClose={handleCloseTab}
         locatableTranscriptEventId={locatableTranscriptEventId}
-        onClose={onClose}
         visibleDiffEntries={visibleDiffEntries}
         threadId={threadId}
         inferredWorkDir={inferredWorkDir}
@@ -691,7 +690,6 @@ function AgentWorkbenchPanelImpl({
         onTabClick={handleOpenTab}
         onTabClose={handleCloseTab}
         locatableTranscriptEventId={locatableTranscriptEventId}
-        onClose={onClose}
         workspaceLabel={workspaceLabel}
         showWorkspaceLabel
         mainRunStatusLabel={mainRunStatus.label}

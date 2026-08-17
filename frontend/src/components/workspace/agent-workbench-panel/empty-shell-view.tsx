@@ -19,7 +19,6 @@ export function EmptyShellView({
   onTabClick,
   onTabClose,
   locatableTranscriptEventId,
-  onClose,
   visibleDiffEntries,
   threadId,
   inferredWorkDir,
@@ -48,7 +47,6 @@ export function EmptyShellView({
   onTabClick: (tabId: AgentWorkbenchTabId) => void;
   onTabClose: (tabId: AgentWorkbenchTabId) => void;
   locatableTranscriptEventId: string;
-  onClose?: () => void;
   visibleDiffEntries: DiffEntry[];
   threadId?: string | null;
   inferredWorkDir?: string;
@@ -101,7 +99,6 @@ export function EmptyShellView({
         onTabClick={onTabClick}
         onTabClose={onTabClose}
         locatableTranscriptEventId={locatableTranscriptEventId}
-        onClose={onClose}
       />
       <section
         aria-label={t.sidebar.ariaAgentWorkbench}

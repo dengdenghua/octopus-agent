@@ -4,7 +4,6 @@ import {
   CheckIcon,
   LayoutGridIcon,
   LocateFixedIcon,
-  PanelRightCloseIcon,
   XIcon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -39,7 +38,6 @@ function WorkbenchTabHeaderImpl({
   onTabClick,
   onTabClose,
   locatableTranscriptEventId,
-  onClose,
   workspaceLabel,
   showWorkspaceLabel,
   mainRunStatusLabel,
@@ -58,7 +56,6 @@ function WorkbenchTabHeaderImpl({
   onTabClick: (tabId: AgentWorkbenchTabId) => void;
   onTabClose: (tabId: AgentWorkbenchTabId) => void;
   locatableTranscriptEventId: string;
-  onClose?: () => void;
   workspaceLabel?: string;
   showWorkspaceLabel?: boolean;
   mainRunStatusLabel?: string;
@@ -193,18 +190,6 @@ function WorkbenchTabHeaderImpl({
               }}
             >
               <LocateFixedIcon className="size-3.5" />
-            </button>
-          </Tooltip>
-        ) : null}
-        {onClose ? (
-          <Tooltip content={t.agentWorkbenchPanel.collapseWorkbench}>
-            <button
-              type="button"
-              className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
-              aria-label={t.agentWorkbenchPanel.collapseWorkbench}
-              onClick={onClose}
-            >
-              <PanelRightCloseIcon className="size-3.5" />
             </button>
           </Tooltip>
         ) : null}
