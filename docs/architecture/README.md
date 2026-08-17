@@ -12,7 +12,8 @@ This folder contains the current architecture map for Octopus-Agent.
 ## Current notes
 
 - `chat-modes.md` explains the remaining workspace modes and their boundaries.
-- `blocks-commit-checklist.md` is the 7-commit, verify-each-step landing plan for the composition layer.
+- `blocks-commit-checklist.md` is the landed 13-commit record of the composition layer.
+- `user-work-commit-plan.md` is a read-only suggested grouping of the worktree's uncommitted work.
 - `blocks.md` defines the composition layer (BlockManifest + ServiceBus + lifecycle + event conventions) — the "building blocks" contract.
 - Historical snapshots have moved to `../archive/`.
 - The root organ `README.md` files are compatibility notes, not the primary
