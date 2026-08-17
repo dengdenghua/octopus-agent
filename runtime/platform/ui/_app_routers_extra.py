@@ -507,14 +507,25 @@ def mount_routers_b(
     # frontend config UI via plugin.yaml + ModulePlugin subclass.
     try:
         from runtime.platform.plugins.plugin_hub import PluginHub
+        from runtime.platform.process.composition import build_default_service_bus
         from runtime.sensing.gateway.plugin_hub_router import (
             create_plugin_hub_router,
         )
+
+        # Composition layer: bind kernel services (journal / memory) and let
+        # plugins declare provides/consumes against them. Exposed on app.state
+        # so future blocks (arms, model router) register here too.
+        _service_bus = build_default_service_bus(
+            journal=getattr(state, "journal", None),
+            event_bus=None,
+        )
+        app.state.service_bus = _service_bus
 
         _hub = PluginHub(
             skill_registry=state.registry,
             channel_manager=ctx.channel_manager,
             fastapi_app=app,
+            service_bus=_service_bus,
         )
         _loaded = _hub.load_all()
         if _loaded:
