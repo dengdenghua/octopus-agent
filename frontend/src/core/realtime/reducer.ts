@@ -429,6 +429,22 @@ export type ConversationEvent =
       };
     }
   | {
+      // Workflow (multi-agent orchestration) completion notification.
+      // Informational — the reducer records it on the conversation so the
+      // UI can surface a completion banner/chip; nothing else depends on it.
+      method: "workflow/completed";
+      params: {
+        threadId: string;
+        workflowName: string;
+        workflowDescription: string;
+        runId: string;
+        stopReason: string;
+        success: boolean;
+        agentsStarted: number;
+        error?: string | null;
+      };
+    }
+  | {
       method: "error";
       params: {
         threadId: string;
@@ -799,6 +815,29 @@ export function reduce(
         errorInfo: null,
       };
       return upsertItem(state, turnId, errorItem, "started");
+    }
+    case "workflow/completed": {
+      const n = evt.params;
+      const notification = {
+        threadId: n.threadId,
+        workflowName: n.workflowName,
+        workflowDescription: n.workflowDescription,
+        runId: n.runId,
+        stopReason: n.stopReason,
+        success: n.success,
+        agentsStarted: n.agentsStarted,
+        error: n.error ?? null,
+        receivedAt: new Date().toISOString(),
+      };
+      const workflowNotifications = [
+        ...state.workflowNotifications,
+        notification,
+      ].slice(-20);
+      return {
+        next: { ...state, workflowNotifications },
+        changedTurnIds: [],
+        changedItemIds: [],
+      };
     }
     default:
       return { next: state, changedTurnIds: [], changedItemIds: [] };

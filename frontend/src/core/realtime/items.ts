@@ -434,6 +434,24 @@ export interface Conversation {
    * `loadOlderTurns()`.
    */
   hasMoreTurns: boolean;
+  /**
+   * Workflow (multi-agent orchestration) completion notifications pushed
+   * over the realtime channel via `workflow/completed`. Kept bounded —
+   * the UI shows the most recent one as a banner/chip.
+   */
+  workflowNotifications: WorkflowNotification[];
+}
+
+export interface WorkflowNotification {
+  threadId: string;
+  workflowName: string;
+  workflowDescription: string;
+  runId: string;
+  stopReason: string;
+  success: boolean;
+  agentsStarted: number;
+  error?: string | null;
+  receivedAt: string;
 }
 
 export interface PendingApproval {
@@ -451,5 +469,6 @@ export function emptyConversation(threadId: string): Conversation {
     tokenUsage: null,
     resumeState: "needsResume",
     hasMoreTurns: false,
+    workflowNotifications: [],
   };
 }

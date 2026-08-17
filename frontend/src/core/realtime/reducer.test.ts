@@ -1867,4 +1867,48 @@ describe("reducer · out-of-order event matrix", () => {
     expect(twice.turns).toEqual(once.turns);
     expect(twice.turns[0]?.status).toBe("completed");
   });
+
+  it("workflow/completed records a bounded notification list", () => {
+    const evt: ConversationEvent = {
+      method: "workflow/completed",
+      params: {
+        threadId: "th",
+        workflowName: "deploy",
+        workflowDescription: "ship it",
+        runId: "run-1",
+        stopReason: "completed",
+        success: true,
+        agentsStarted: 3,
+        error: null,
+      },
+    };
+    const state = apply(emptyConversation("th"), evt);
+    expect(state.workflowNotifications).toHaveLength(1);
+    const note = state.workflowNotifications[0]!;
+    expect(note.workflowName).toBe("deploy");
+    expect(note.runId).toBe("run-1");
+    expect(note.success).toBe(true);
+    expect(note.agentsStarted).toBe(3);
+    expect(note.receivedAt).toBeTruthy();
+
+    // Bounded: 21 notifications keep only the latest 20.
+    const many = apply(
+      emptyConversation("th"),
+      ...Array.from({ length: 21 }, (_, i) => ({
+        method: "workflow/completed" as const,
+        params: {
+          threadId: "th",
+          workflowName: `wf-${i}`,
+          workflowDescription: "",
+          runId: `run-${i}`,
+          stopReason: "done",
+          success: true,
+          agentsStarted: 1,
+          error: null,
+        },
+      })),
+    );
+    expect(many.workflowNotifications).toHaveLength(20);
+    expect(many.workflowNotifications[19]!.workflowName).toBe("wf-20");
+  });
 });
