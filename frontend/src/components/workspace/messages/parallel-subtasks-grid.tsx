@@ -538,11 +538,13 @@ export function ParallelSubtasksGrid({
   isLoading,
   onTaskClick,
   compact = false,
+  forceCollapsed,
 }: {
   taskIds: string[];
   isLoading: boolean;
   onTaskClick?: (taskId: string) => void;
   compact?: boolean;
+  forceCollapsed?: boolean;
 }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
@@ -557,9 +559,12 @@ export function ParallelSubtasksGrid({
   const shouldCollapse = compact
     ? taskIds.length > MAX_VISIBLE_TASKS
     : taskIds.length > AUTO_COLLAPSE_THRESHOLD;
+
+  // Use forceCollapsed if provided, otherwise use local expanded state
+  const effectivelyExpanded = forceCollapsed === true ? false : forceCollapsed === false ? true : expanded;
   const visibleLimit = compact ? MAX_VISIBLE_TASKS : AUTO_VISIBLE_TASKS;
   const visibleIds =
-    shouldCollapse && !expanded ? taskIds.slice(0, visibleLimit) : taskIds;
+    shouldCollapse && !effectivelyExpanded ? taskIds.slice(0, visibleLimit) : taskIds;
   const hiddenCount = taskIds.length - visibleIds.length;
 
   // 整体进度统计
@@ -641,13 +646,13 @@ export function ParallelSubtasksGrid({
       ) : (
         visibleIds.map(renderTask)
       )}
-      {shouldCollapse && (
+      {shouldCollapse && forceCollapsed === undefined && (
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
           className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-border-default py-1.5 text-xs text-muted-foreground transition-colors hover:border-border hover:bg-muted/35 hover:text-foreground"
         >
-          {expanded ? (
+          {effectivelyExpanded ? (
             <>
               <ChevronUpIcon className="size-3" />
               <span>{t.message.collapseAgents}</span>

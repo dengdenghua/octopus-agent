@@ -820,6 +820,17 @@ function SubagentClusterSection({
           <span className="font-mono text-xs tabular-nums text-muted-foreground">
             {progressPercent}%
           </span>
+          {/* Expand/Collapse All button */}
+          {subagentEvents.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setAllCollapsed(!allCollapsed)}
+              className="ml-2 flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title={allCollapsed ? t.subagents.expandAll : t.subagents.collapseAll}
+            >
+              {allCollapsed ? t.subagents.expandAll : t.subagents.collapseAll}
+            </button>
+          )}
         </div>
       </div>
 
@@ -829,6 +840,7 @@ function SubagentClusterSection({
           key={"parallel-grid-live-" + (groupId ?? "unknown")}
           taskIds={subagentEvents.map((e) => e.id)}
           isLoading={isLoading}
+          forceCollapsed={allCollapsed}
         />
       ) : (
         subagentEvents.map((event) => (
