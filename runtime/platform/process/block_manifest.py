@@ -34,6 +34,12 @@ from pydantic import (
 
 _BLOCK_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 
+# Wire-protocol version of the block manifest shape (P4 · protocol versioning).
+# Bump on incompatible field changes; a runtime must reject manifests from a
+# NEWER schema it cannot parse instead of misreading them. Mirrors the
+# journal's ``CURRENT_SCHEMA_VERSION`` pattern.
+BLOCK_MANIFEST_SCHEMA_VERSION = 1
+
 
 class BlockKind(StrEnum):
     """One of the seven block types from the design taxonomy (§2)."""
@@ -93,6 +99,7 @@ class BlockManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(..., min_length=1, max_length=128)
+    schema_version: int = Field(default=BLOCK_MANIFEST_SCHEMA_VERSION, ge=1)
     version: str = "0.1.0"
     kind: BlockKind = BlockKind.PLUGIN
     description: str = ""
@@ -113,6 +120,17 @@ class BlockManifest(BaseModel):
 
     # Widget-only: where the panel registers in the workbench.
     frontend: dict[str, Any] | None = None
+
+    @field_validator("schema_version")
+    @classmethod
+    def _schema_must_be_supported(cls, value: int) -> int:
+        if value > BLOCK_MANIFEST_SCHEMA_VERSION:
+            raise ValueError(
+                f"manifest schema v{value} is not supported by this runtime "
+                f"(supports <= v{BLOCK_MANIFEST_SCHEMA_VERSION}); upgrade the "
+                "runtime or downgrade the block manifest"
+            )
+        return value
 
     @field_validator("name")
     @classmethod

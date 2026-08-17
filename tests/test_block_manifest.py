@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from runtime.platform.process.block_manifest import (
+    BLOCK_MANIFEST_SCHEMA_VERSION,
     ApprovalMode,
     BlockKind,
     BlockManifest,
@@ -24,6 +25,21 @@ def _valid() -> dict:
         "subscribes": ["journal.appended"],
         "capabilities": ["vector_store"],
     }
+
+
+def test_schema_version_defaults_to_current():
+    manifest = BlockManifest.from_dict(_valid())
+    assert manifest.schema_version == BLOCK_MANIFEST_SCHEMA_VERSION
+
+
+def test_newer_schema_version_rejected():
+    with pytest.raises(ValueError, match="not supported"):
+        BlockManifest.from_dict({**_valid(), "schema_version": 99})
+
+
+def test_zero_schema_version_rejected():
+    with pytest.raises(ValueError):
+        BlockManifest.from_dict({**_valid(), "schema_version": 0})
 
 
 def test_valid_manifest_parses_with_defaults():
