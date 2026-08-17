@@ -74,13 +74,16 @@ export const MessageContent = ({
       // never collapses below it. Assistant bubbles keep `w-full min-w-0`
       // because they need to span and wrap long streamed markdown.
       "group-[.is-user]:ml-auto group-[.is-user]:min-w-fit group-[.is-user]:max-w-[85%] group-[.is-user]:w-auto",
-      // `--primary` / `--primary-foreground` are declared as a matched pair
-      // in every theme in globals.css, so the bubble keeps its contrast
-      // across light, dark and the accent themes without per-theme rules.
-      "group-[.is-user]:bg-primary group-[.is-user]:text-primary-foreground",
+      // A solid `--primary` fill read as a loud colored slab next to the
+      // neutral surfaces the rest of the timeline uses (tool groups,
+      // clarification cards and composer chrome are all `bg-muted/25..40`
+      // + `border-border`). Use that same neutral language: a plain muted
+      // grey bubble, which marks the speaker by shape and alignment rather
+      // than by colour. Text stays `--foreground`.
+      "group-[.is-user]:bg-muted group-[.is-user]:text-foreground",
+      "group-[.is-user]:border group-[.is-user]:border-border",
       "group-[.is-user]:rounded-2xl group-[.is-user]:rounded-br-md",
       "group-[.is-user]:px-3.5 group-[.is-user]:py-2",
-      "group-[.is-user]:shadow-[var(--shadow-xs)]",
       "group-[.is-assistant]:w-full group-[.is-assistant]:min-w-0",
       "group-[.is-assistant]:text-foreground",
       className,

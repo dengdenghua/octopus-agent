@@ -1752,47 +1752,15 @@
     max-width: 100%;
   }
 
-  /* The user's own messages render as a filled bubble (--primary) rather
-     than on the page background. Streamdown's defaults — and the
-     .chat-markdown rules above — tint links and inline code with --primary
-     against a light surface, which disappears on a --primary fill. Re-anchor
-     the nested surfaces to --primary-foreground so they stay legible.
+  /* The user's own messages render in a neutral --muted bubble, so body
+     text stays --foreground and the default --primary-tinted links read
+     correctly against it. Only inline code needs a nudge: its own
+     `--primary 12%` tint sits at nearly the same value as the grey bubble,
+     so the chip loses its edge. Lift it onto the lighter card surface.
      Scoped to .is-user so the assistant stream is untouched. */
-  .is-user :where(a) {
-    color: var(--primary-foreground);
-    text-decoration-color: color-mix(
-      in oklch,
-      var(--primary-foreground) 55%,
-      transparent
-    );
-  }
-
   .is-user :where(code):not(pre code) {
-    background: color-mix(in oklch, var(--primary-foreground) 18%, transparent);
-    color: var(--primary-foreground);
-  }
-
-  .is-user :where(blockquote) {
-    border-left-color: color-mix(
-      in oklch,
-      var(--primary-foreground) 55%,
-      transparent
-    );
-    background: color-mix(in oklch, var(--primary-foreground) 10%, transparent);
-  }
-
-  .is-user :where(strong),
-  .is-user :where(ul li)::marker,
-  .is-user :where(ol li)::marker {
-    color: var(--primary-foreground);
-  }
-
-  .is-user :where(hr) {
-    border-color: color-mix(
-      in oklch,
-      var(--primary-foreground) 35%,
-      transparent
-    );
+    background: color-mix(in oklch, var(--card) 70%, transparent);
+    border: 1px solid var(--border);
   }
 
   /* Public progress is conversation, not telemetry. Keep it on the same
