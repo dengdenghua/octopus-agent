@@ -440,6 +440,7 @@ def _control_tag_leak_guard(final_answer: str) -> str | None:
 
     Coverage:
     - ``<system-reminder>`` / ``<system-prompt>`` / ``<system-context>``
+    - ``<think>`` / ``</think>`` internal reasoning markers
     - Provider tool-call envelopes: ``<|tool_calls_start|>`` etc.
     - Literal "This is a reminder that your todo list" phrasing (agnes shape)
     """
@@ -453,6 +454,8 @@ def _control_tag_leak_guard(final_answer: str) -> str | None:
         "<system-prompt>",
         "<system-context>",
         "<system-message>",
+        "<think>",
+        "</think>",
         "<|tool_calls_start|>",
         "<|tool_calls_end|>",
         "<|im_start|>",

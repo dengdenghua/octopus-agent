@@ -79,3 +79,17 @@ def test_fires_on_im_start_end_tags() -> None:
     answer = "<|im_start|>assistant\nHere is the answer<|im_end|>"
     msg = _control_tag_leak_guard(answer)
     assert msg is not None
+
+
+def test_fires_on_think_tags() -> None:
+    # agnes-2.5-flash leaks internal reasoning (thread t5Rxjo_eyk8_HO2CGaN-se turn 3)
+    answer = '你说得对，我漏掉了内容。\n\n{"command": "cat file.md"}\n```\n</think>\n\n继续执行...'
+    msg = _control_tag_leak_guard(answer)
+    assert msg is not None
+    assert "internal control tag" in msg
+
+
+def test_fires_on_opening_think_tag() -> None:
+    answer = "<think>Let me analyze this...</think>\n\nThe answer is 42."
+    msg = _control_tag_leak_guard(answer)
+    assert msg is not None
