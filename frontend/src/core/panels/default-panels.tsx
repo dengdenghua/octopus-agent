@@ -31,7 +31,7 @@ export function ensureDefaultPanels(): void {
     definePanel({
       id: "workbench.system-status",
       title: "System Status",
-      zone: "workbench",
+      zone: "workspace",
       description:
         "Reference PanelManifest template — self-contained and renderable.",
       subscribes: ["turn.started", "turn.completed"],

@@ -17,7 +17,7 @@ describe("PanelHost", () => {
   });
 
   it("renders the registered panels of a zone with context", () => {
-    render(<PanelHost zone="workbench" context={{ threadId: "t-9" }} />);
+    render(<PanelHost zone="workspace" context={{ threadId: "t-9" }} />);
     expect(screen.getByTestId("panel-workbench.system-status")).toBeTruthy();
     expect(screen.getByText("thread: t-9")).toBeTruthy();
   });
@@ -36,7 +36,7 @@ describe("PanelHost", () => {
   it("uses a custom header renderer when provided", () => {
     render(
       <PanelHost
-        zone="workbench"
+        zone="workspace"
         renderHeader={(title) => <div data-testid="custom-header">{title}</div>}
       />,
     );

@@ -15,6 +15,7 @@ import {
   WorkspaceBody,
   WorkspaceContainer,
 } from "@/components/workspace/workspace-container";
+import { PanelHost } from "@/core/panels/panel-host";
 
 export default function IntelligencePage() {
   const [activeTab, setActiveTab] = useState("templates");
@@ -88,6 +89,12 @@ export default function IntelligencePage() {
                 >
                   任务模板
                 </TabsTrigger>
+                <TabsTrigger
+                  value="panels"
+                  className="h-8 px-3 text-xs data-[state=active]:text-primary after:bg-primary"
+                >
+                  面板
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="configured" className="mt-0">
@@ -103,6 +110,12 @@ export default function IntelligencePage() {
                   onUseTemplate={openCreate}
                   onCreateCustom={() => openCreate()}
                 />
+              </TabsContent>
+
+              <TabsContent value="panels" className="mt-0">
+                {/* Composition-layer host: every registered workspace panel
+                    renders here; new panels are register-and-done. */}
+                <PanelHost zone="workspace" />
               </TabsContent>
             </Tabs>
           </div>
