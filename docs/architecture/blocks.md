@@ -248,7 +248,7 @@ flowchart LR
 | **P1** | `ServiceBus` 接入 `PluginHub`；记忆块、模型路由块接口化 | ✅ 已落地：`PluginHub(service_bus=…)` 拓扑加载 + blocked 跳过 + unload 解绑 + 集成测试；`MemoryProvider` 协议 + journal 默认实现 + 应用侧接线（`app.state.service_bus`）；`ModelSelector` 协议（`platform.models.selector`）+ `DefaultModelSelector` 默认实现（优先级链：显式覆盖 > 角色声明 > cheap > 默认）+ 注册为 `model_router` 服务 |
 | **P2** | 执行臂按技能族抽 `arm` 插件；声明式编排 DSL | ✅ 全部落地：arm 模板 + 真实 memory 技能族抽取（幂等兼容层）+ 内核服务种子；**声明式 workflow DSL**（`workflow_dsl.py`：YAML 解析/校验/映射/调度，`demos/workflows/research-report.yaml` 参考）；其余技能族批量抽取待做 |
 | **P3** | 前端 `PanelManifest`；拆 `workspace-sidebar` / `[thread_id]/page.tsx` | ✅ 契约层 + 消费原语已落地：`frontend/src/core/panels/`（类型 + 注册表 + hooks + `PanelHost` + 参考面板），14 vitest + typecheck + eslint 全绿；页面拆分（把工作台 tab 改为 `PanelHost` 渲染）待做 |
-| **P4** | 网关事件 schema 版本化；开发期热重载 | ✅ 第一步已落地：`BlockManifest.schema_version`（`BLOCK_MANIFEST_SCHEMA_VERSION=1`，镜像 journal 模式，新版本 manifest 明确拒绝）+ 3 测试；网关事件版本化 + 热重载待做 |
+| **P4** | 网关事件 schema 版本化；开发期热重载 | ✅ 前两步已落地：`BlockManifest.schema_version` + `DomainEvent.protocol_version`（`CURRENT_EVENT_PROTOCOL_VERSION=1`，事件信封版本化 + 新版本拒绝 + 6 测试）；网关 SSE 事件版本化 + 热重载待做 |
 
 每阶段独立可交付、可回滚；**先定契约再拆代码**，拆一个跑一遍测试。
 

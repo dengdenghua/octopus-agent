@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from runtime.platform.models import now_utc
 
@@ -16,15 +16,37 @@ _LOG = logging.getLogger("octopus.platform.eventbus")
 
 E = TypeVar("E", bound="DomainEvent")
 
+# Wire-protocol version of the typed event envelope (P4 · protocol versioning).
+# Bump on incompatible envelope changes; consumers must reject events from a
+# NEWER protocol instead of misreading them. Mirrors the journal / block
+# manifest ``schema_version`` pattern.
+CURRENT_EVENT_PROTOCOL_VERSION = 1
+
 
 class DomainEvent(BaseModel):
     model_config = ConfigDict(frozen=True)
 
+    protocol_version: int = Field(
+        default=CURRENT_EVENT_PROTOCOL_VERSION,
+        ge=1,
+        description="Event envelope wire-protocol version.",
+    )
     event_id: str = Field(default="")
     event_type: str = Field(default="")
     agent_id: str = ""
     ts: datetime = Field(default_factory=now_utc)
     payload: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("protocol_version")
+    @classmethod
+    def _protocol_must_be_supported(cls, value: int) -> int:
+        if value > CURRENT_EVENT_PROTOCOL_VERSION:
+            raise ValueError(
+                f"event protocol v{value} is not supported by this runtime "
+                f"(supports <= v{CURRENT_EVENT_PROTOCOL_VERSION}); upgrade the "
+                "runtime or reject the upstream event"
+            )
+        return value
 
 
 class FitnessComputed(DomainEvent):

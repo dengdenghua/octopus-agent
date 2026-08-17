@@ -53,7 +53,8 @@ Octopus 已经拥有多个"块"体系——`agents/`（Agent 定义）、`skills
 - `runtime/execution/parallel_agents/workflow_dsl.py` + `demos/workflows/
   research-report.yaml` — 声明式 workflow DSL（P2）：YAML 解析/校验/
   映射/调度，关闭 DSH「缺少声明式 DSL」差距；
-- `runtime/platform/process/block_manifest.py` — `schema_version` 字段 + 兼容校验（P4 第一步，镜像 journal 模式）；
+- `runtime/platform/process/block_manifest.py` — `schema_version` 字段 + 兼容校验（P4，镜像 journal 模式）；
+- `runtime/platform/process/eventbus.py` — `DomainEvent.protocol_version`（`CURRENT_EVENT_PROTOCOL_VERSION=1`，事件信封版本化 + 新版本拒绝，P4）；
 - `frontend/src/core/panels/` — PanelManifest 契约层 + 消费原语（P3）：
   类型 + 注册表（重复 id 拒绝 / zone/permission 过滤 / 版本号订阅）+
   `usePanels`/`usePanel`（`useSyncExternalStore`）+ `PanelHost`（按 zone
