@@ -29,8 +29,9 @@
 
 > 消息建议：`feat(subagent): lifecycle event streaming + workbench lanes`
 
-> ⚠️ 此主题含 `test_subagent_react_chain` 的失败断点（子代理未走主 react 循环）——
-> 提交前需先修复该行为或更新测试预期。
+> ⚠️ 此主题含 `test_subagent_react_chain` 失败——精确诊断见
+> [react-chain-failure-diagnosis.md](./react-chain-failure-diagnosis.md)（只读分析：
+> `subagent_session_id` 与 react-drive 的交互冲突 + 三种修复选项）。
 
 ## U2 · 递归委托（hierarchical delegation）
 
