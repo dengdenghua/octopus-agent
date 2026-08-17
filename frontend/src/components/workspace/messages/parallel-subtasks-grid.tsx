@@ -71,11 +71,13 @@ function MiniSubtaskRow({
   isLoading: _isLoading,
   onClick,
   onDetailsClick,
+  compact,
 }: {
   taskId: string;
   isLoading: boolean;
   onClick?: () => void;
   onDetailsClick?: () => void;
+  compact?: boolean;
 }) {
   const task = useSubtask(taskId);
   const { t } = useI18n();
@@ -132,7 +134,8 @@ function MiniSubtaskRow({
           invalid HTML and breaks keyboard/screen-reader semantics. */}
       <div
         className={cn(
-          "relative flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs transition-all",
+          "relative flex w-full items-center gap-2 rounded-lg border text-left text-xs transition-all",
+          compact ? "px-2 py-1.5" : "px-3 py-2",
           runState === "running"
             ? agentRunPanelClass("running")
             : "border-border bg-muted/30",
@@ -151,7 +154,10 @@ function MiniSubtaskRow({
         />
         {task.avatarEmoji && (
           <span
-            className="flex size-6 shrink-0 items-center justify-center rounded-lg text-xs"
+            className={cn(
+              "flex shrink-0 items-center justify-center rounded-lg",
+              compact ? "size-5 text-xs" : "size-6 text-xs"
+            )}
             style={
               task.hue != null
                 ? { background: `hsl(${task.hue} 70% 92%)` }
@@ -167,15 +173,19 @@ function MiniSubtaskRow({
             <span className="truncate font-medium">
               {task.name ?? task.description}
             </span>
-            <span className="shrink-0 rounded bg-muted/50 px-1 py-0.5 text-xs font-medium text-muted-foreground">
-              {roleName}
-            </span>
+            {!compact && (
+              <span className="shrink-0 rounded bg-muted/50 px-1 py-0.5 text-xs font-medium text-muted-foreground">
+                {roleName}
+              </span>
+            )}
           </div>
-          <div className="text-muted-foreground mt-0.5 truncate">
-            {task.description}
-          </div>
+          {!compact && (
+            <div className="text-muted-foreground mt-0.5 truncate">
+              {task.description}
+            </div>
+          )}
           {/* 实时进度条 */}
-          <div className="mt-1.5 flex items-center gap-1.5">
+          <div className={cn("flex items-center gap-1.5", compact ? "mt-1" : "mt-1.5")}>
             <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted/60">
               <div
                 className={cn(
@@ -601,6 +611,7 @@ export function ParallelSubtasksGrid({
       isLoading={isLoading}
       onClick={onTaskClick ? () => onTaskClick(taskId) : undefined}
       onDetailsClick={() => setSelectedTaskId(taskId)}
+      compact={compact}
     />
   );
 
@@ -630,7 +641,7 @@ export function ParallelSubtasksGrid({
           )}
         </div>
       )}
-      {isGrid ? (
+      {isGrid && !compact ? (
         <div
           className={cn(
             "grid gap-2",
@@ -644,7 +655,9 @@ export function ParallelSubtasksGrid({
           {visibleIds.map(renderTask)}
         </div>
       ) : (
-        visibleIds.map(renderTask)
+        <div className="space-y-1.5">
+          {visibleIds.map(renderTask)}
+        </div>
       )}
       {shouldCollapse && forceCollapsed === undefined && (
         <button

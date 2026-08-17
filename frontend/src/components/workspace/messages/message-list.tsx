@@ -7,6 +7,8 @@ import {
   ChevronUpIcon,
   XCircleIcon,
   UsersIcon,
+  LayoutGridIcon,
+  LayoutListIcon,
 } from "lucide-react";
 import {
   Fragment,
@@ -742,6 +744,7 @@ function SubagentClusterSection({
 }) {
   const { t } = useI18n();
   const [allCollapsed, setAllCollapsed] = useState(false);
+  const [compactView, setCompactView] = useState(false);
   const { tasks } = useSubtaskContext();
 
   // Calculate statistics
@@ -822,14 +825,29 @@ function SubagentClusterSection({
           </span>
           {/* Expand/Collapse All button */}
           {subagentEvents.length > 1 && (
-            <button
-              type="button"
-              onClick={() => setAllCollapsed(!allCollapsed)}
-              className="ml-2 flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              title={allCollapsed ? t.subagents.expandAll : t.subagents.collapseAll}
-            >
-              {allCollapsed ? t.subagents.expandAll : t.subagents.collapseAll}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setAllCollapsed(!allCollapsed)}
+                className="ml-2 flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                title={allCollapsed ? t.subagents.expandAll : t.subagents.collapseAll}
+              >
+                {allCollapsed ? t.subagents.expandAll : t.subagents.collapseAll}
+              </button>
+              {/* View mode toggle */}
+              <button
+                type="button"
+                onClick={() => setCompactView(!compactView)}
+                className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                title={compactView ? "Grid View" : "Compact View"}
+              >
+                {compactView ? (
+                  <LayoutGridIcon className="size-3.5" />
+                ) : (
+                  <LayoutListIcon className="size-3.5" />
+                )}
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -841,6 +859,7 @@ function SubagentClusterSection({
           taskIds={subagentEvents.map((e) => e.id)}
           isLoading={isLoading}
           forceCollapsed={allCollapsed}
+          compact={compactView}
         />
       ) : (
         subagentEvents.map((event) => (

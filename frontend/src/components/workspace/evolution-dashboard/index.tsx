@@ -190,260 +190,22 @@ export function EvolutionDashboard({ className }: { className?: string }) {
 
   return (
     <div className={cn("space-y-5", className)}>
-      <PlainEvolutionStory story={story} />
-
-      <details className="group rounded-lg border border-border-default bg-card">
-        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium text-foreground marker:hidden">
-          <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
-          {t.evolutionDashboard.technicalDetails}
-          <span className="ml-auto text-xs font-normal text-muted-foreground">
-            {t.evolutionDashboard.metricsNotEvolutionNote}
-          </span>
-        </summary>
-        <div className="space-y-4 border-t border-border-subtle p-4">
-          <GrowthStoryHero
-            overview={overview}
-            memorySparkline={memorySparkline}
-            recommendationCount={recommendations.length}
-          />
-          <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-            <LearningStory data={learningCurve} />
-            <SkillStory data={topSkills} />
-          </div>
-          <RecommendationsStory data={recommendations} />
-        </div>
-      </details>
+      <GrowthStoryHero
+        overview={overview}
+        story={story}
+        memorySparkline={memorySparkline}
+        recommendationCount={recommendations.length}
+      />
+      <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+        <LearningStory data={learningCurve} />
+        <SkillStory data={topSkills} />
+      </div>
+      <RecommendationsStory data={recommendations} />
     </div>
   );
 }
 
 export default EvolutionDashboard;
-
-function PlainEvolutionStory({
-  story,
-}: {
-  story: EvolutionStory | null;
-}) {
-  const { t } = useI18n();
-  const observedCount = story?.observed_task_count ?? 0;
-  const durableCount = story?.durable_change_count ?? 0;
-  const lessonCount = (story?.rule_count ?? 0) + (story?.memory_count ?? 0);
-  const hasRealChange = Boolean(story?.has_real_change && durableCount > 0);
-
-  return (
-    <section className="space-y-4">
-      <div
-        className={cn(
-          "rounded-xl border p-5",
-          hasRealChange
-            ? "border-success/25 bg-success/5"
-            : "border-warning/30 bg-warning/5",
-        )}
-      >
-        <div className="flex items-start gap-3">
-          <span
-            className={cn(
-              "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full",
-              hasRealChange
-                ? "bg-success/15 text-success"
-                : "bg-warning/15 text-warning",
-            )}
-          >
-            {hasRealChange ? (
-              <CheckCircle2Icon className="size-5" />
-            ) : (
-              <CircleDashedIcon className="size-5" />
-            )}
-          </span>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-base font-semibold text-foreground">
-                {hasRealChange
-                  ? t.evolutionDashboard.storyRealChangeTitle(durableCount)
-                  : t.evolutionDashboard.storyNoRealChangeTitle}
-              </h2>
-              {!hasRealChange ? (
-                <span className="rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning">
-                  {t.evolutionDashboard.notEvolutionBadge}
-                </span>
-              ) : null}
-            </div>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
-              {hasRealChange
-                ? t.evolutionDashboard.storyRealChangeDescription(durableCount)
-                : t.evolutionDashboard.storyNoRealChangeDescription(
-                    observedCount,
-                  )}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-5 grid items-stretch gap-2 md:grid-cols-[1fr_auto_1fr_auto_1fr]">
-          <PlainStep
-            number={observedCount}
-            label={t.evolutionDashboard.observedTasks}
-            description={t.evolutionDashboard.observedTasksPlainDescription}
-            active={observedCount > 0}
-          />
-          <ArrowRightIcon className="mx-auto hidden size-4 self-center text-muted-foreground/50 md:block" />
-          <PlainStep
-            number={lessonCount}
-            label={t.evolutionDashboard.savedLessons}
-            description={t.evolutionDashboard.savedLessonsPlainDescription}
-            active={lessonCount > 0}
-          />
-          <ArrowRightIcon className="mx-auto hidden size-4 self-center text-muted-foreground/50 md:block" />
-          <PlainStep
-            number={durableCount}
-            label={t.evolutionDashboard.changedBehaviors}
-            description={t.evolutionDashboard.changedBehaviorsPlainDescription}
-            active={durableCount > 0}
-          />
-        </div>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <section className="rounded-lg border border-border-default bg-card p-4">
-          <SectionTitle
-            icon={BrainCircuitIcon}
-            title={t.evolutionDashboard.actualChangesTitle}
-          />
-          {story?.changes.length ? (
-            <div className="mt-3 space-y-2">
-              {story.changes.slice(0, 6).map((change, index) => (
-                <div
-                  key={`${change.kind}-${change.title}-${index}`}
-                  className="rounded-lg border border-border-subtle bg-muted/15 px-3 py-3"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                      {change.kind === "rule"
-                        ? t.evolutionDashboard.changeRuleLabel
-                        : change.kind === "memory"
-                          ? t.evolutionDashboard.changeMemoryLabel
-                          : t.evolutionDashboard.changeSkillLabel}
-                    </span>
-                    {change.kind === "skill" ? (
-                      <span className="truncate text-xs font-medium">
-                        {change.title}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="mt-2 text-sm leading-6 text-foreground">
-                    {change.content}
-                  </p>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    {change.kind === "rule"
-                      ? t.evolutionDashboard.ruleFutureEffect
-                      : change.kind === "memory"
-                        ? t.evolutionDashboard.memoryFutureEffect
-                        : t.evolutionDashboard.skillFutureEffect}
-                  </p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-3 space-y-4">
-              <div className="rounded-lg border border-dashed border-warning/35 bg-warning/5 px-4 py-5">
-                <p className="text-sm font-medium text-foreground">
-                  {t.evolutionDashboard.actualChangesEmptyTitle}
-                </p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {t.evolutionDashboard.actualChangesEmptyDescription}
-                </p>
-              </div>
-              {observedCount > 0 ? (
-                <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-4">
-                  <p className="text-xs font-semibold text-primary">
-                    {t.evolutionDashboard.nextActionTitle}
-                  </p>
-                  <p className="mt-2 text-sm font-medium text-foreground">
-                    {t.evolutionDashboard.reflectionActionTitle(observedCount)}
-                  </p>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    {t.evolutionDashboard.reflectionActionDescription}
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          )}
-        </section>
-
-        <section className="rounded-lg border border-border-default bg-card p-4">
-          <SectionTitle
-            icon={ActivityIcon}
-            title={t.evolutionDashboard.observationsTitle}
-          />
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            {t.evolutionDashboard.observationsDescription}
-          </p>
-          <div className="mt-3 space-y-2">
-            {(story?.observations ?? []).slice(0, 5).map((observation) => (
-              <div
-                key={observation.task_id}
-                className="rounded-lg border border-border-subtle bg-muted/15 px-3 py-2.5"
-              >
-                <div className="flex items-start gap-2">
-                  <span
-                    className={cn(
-                      "mt-1 size-2 shrink-0 rounded-full",
-                      observation.success ? "bg-success" : "bg-warning",
-                    )}
-                  />
-                  <div className="min-w-0">
-                    <p className="line-clamp-2 text-xs font-medium leading-5 text-foreground">
-                      {observation.title ||
-                        t.evolutionDashboard.unnamedObservedTask}
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {observation.success
-                        ? t.evolutionDashboard.taskCompleted
-                        : t.evolutionDashboard.taskNotCompleted}
-                      {" · "}
-                      {t.evolutionDashboard.taskSteps(observation.step_count)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-
-    </section>
-  );
-}
-
-function PlainStep({
-  number,
-  label,
-  description,
-  active,
-}: {
-  number: number;
-  label: string;
-  description: string;
-  active: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-lg border px-4 py-3",
-        active
-          ? "border-primary/25 bg-background/80"
-          : "border-border-subtle bg-muted/20",
-      )}
-    >
-      <div className="text-2xl font-bold tabular-nums text-foreground">
-        {number}
-      </div>
-      <div className="mt-1 text-sm font-medium text-foreground">{label}</div>
-      <div className="mt-1 text-xs leading-5 text-muted-foreground">
-        {description}
-      </div>
-    </div>
-  );
-}
 
 function formatPercent(value: unknown, digits = 0): string {
   return `${fixed(numberOrZero(value) * 100, digits)}%`;
@@ -451,10 +213,12 @@ function formatPercent(value: unknown, digits = 0): string {
 
 function GrowthStoryHero({
   overview,
+  story,
   memorySparkline,
   recommendationCount,
 }: {
   overview: EvolutionOverview | null;
+  story: EvolutionStory | null;
   memorySparkline: number[];
   recommendationCount: number;
 }) {
@@ -464,36 +228,31 @@ function GrowthStoryHero({
   );
   const skills = overview?.skills;
   const memory = overview?.memory;
-  const learningEvents = numberOrZero(overview?.learning_events);
-  const improvementScore = numberOrZero(overview?.improvement_score);
-  const improvementPct = Math.round(improvementScore * 100);
+  const observedCount = story?.observed_task_count ?? 0;
+  const durableCount = story?.durable_change_count ?? 0;
+  const lessonCount = (story?.rule_count ?? 0) + (story?.memory_count ?? 0);
+  const hasRealChange = Boolean(story?.has_real_change && durableCount > 0);
   const totalSkills = numberOrZero(skills?.total);
   const autoSkills = numberOrZero(skills?.auto_extracted);
-  const totalMemories = numberOrZero(memory?.total_facts);
   const ruleCount = numberOrZero(memory?.categories?.rules);
-  const hasEvidence =
-    totalSkills > 0 ||
-    totalMemories > 0 ||
-    learningEvents > 0 ||
-    recommendationCount > 0;
   const stages = [
     {
       key: "tasks",
       icon: ActivityIcon,
       title: t.evolutionDashboard.observeTasks,
-      value: learningEvents,
+      value: observedCount,
       unit: t.evolutionDashboard.unitTimes,
-      done: learningEvents > 0,
-      description: t.evolutionDashboard.observeTasksDescription,
+      done: observedCount > 0,
+      description: t.evolutionDashboard.observationsDescription,
     },
     {
       key: "memories",
       icon: DatabaseIcon,
       title: t.evolutionDashboard.accumulateMemories,
-      value: totalMemories,
+      value: lessonCount,
       unit: t.evolutionDashboard.unitItems,
-      done: totalMemories > 0,
-      description: t.evolutionDashboard.accumulateMemoriesDescription,
+      done: lessonCount > 0,
+      description: t.evolutionDashboard.savedLessonsPlainDescription,
     },
     {
       key: "metric-skills",
@@ -516,6 +275,24 @@ function GrowthStoryHero({
   ];
   const metrics = [
     {
+      key: "observed",
+      icon: ActivityIcon,
+      title: t.evolutionDashboard.observedTasks,
+      value: observedCount,
+      detail: t.evolutionDashboard.observedTasksPlainDescription,
+    },
+    {
+      key: "metric-memories",
+      icon: DatabaseIcon,
+      title: t.evolutionDashboard.savedLessons,
+      value: lessonCount,
+      detail:
+        ruleCount > 0
+          ? t.evolutionDashboard.ruleMemoryCount(ruleCount)
+          : t.evolutionDashboard.actualChangesEmptyTitle,
+      sparkline: memorySparkline.length >= 2 ? memorySparkline : undefined,
+    },
+    {
       key: "skills",
       icon: BookOpenIcon,
       title: t.evolutionDashboard.autoExtractedSkills,
@@ -526,27 +303,6 @@ function GrowthStoryHero({
               formatPercent(autoSkills / Math.max(totalSkills, 1)),
             )
           : t.evolutionDashboard.waitingForSkillAccumulation,
-    },
-    {
-      key: "metric-memories",
-      icon: DatabaseIcon,
-      title: t.evolutionDashboard.reusableMemoryLibrary,
-      value: totalMemories,
-      detail:
-        ruleCount > 0
-          ? t.evolutionDashboard.ruleMemoryCount(ruleCount)
-          : t.evolutionDashboard.memoryDetailDefault,
-      sparkline: memorySparkline.length >= 2 ? memorySparkline : undefined,
-    },
-    {
-      key: "metric-improvements",
-      icon: LightbulbIcon,
-      title: t.evolutionDashboard.nextSteps,
-      value: recommendationCount,
-      detail:
-        recommendationCount > 0
-          ? t.evolutionDashboard.nextStepsAvailable
-          : t.evolutionDashboard.nextStepsNone,
     },
   ];
   const selectedStage = stages.find(
@@ -579,33 +335,30 @@ function GrowthStoryHero({
           <div className="min-w-0">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <BrainCircuitIcon className="size-4 text-primary" />
-              {t.evolutionDashboard.recentEvolutionTitle}
+              {hasRealChange
+                ? t.evolutionDashboard.storyRealChangeTitle(durableCount)
+                : t.evolutionDashboard.storyNoRealChangeTitle}
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              {hasEvidence
-                ? t.evolutionDashboard.growthSummary(
-                    totalMemories,
-                    autoSkills,
-                    learningEvents,
-                  )
-                : t.evolutionDashboard.noEvidenceDescription}
+              {hasRealChange
+                ? t.evolutionDashboard.storyRealChangeDescription(durableCount)
+                : t.evolutionDashboard.storyNoRealChangeDescription(
+                    observedCount,
+                  )}
             </p>
           </div>
           <div className="shrink-0 rounded-lg border border-primary/20 bg-background/80 px-4 py-3 text-right shadow-[var(--shadow-xs)]">
             <div className="text-xs text-muted-foreground">
-              {t.evolutionDashboard.overallImprovementLabel}
+              {t.evolutionDashboard.changedBehaviors}
             </div>
             <div
-              aria-label={`${t.evolutionDashboard.overallImprovementLabel}: ${improvementPct} ${t.evolutionDashboard.of100}`}
-              className={cn(
-                "mt-1 text-3xl font-bold tabular-nums",
-                scoreColor(improvementScore),
-              )}
+              aria-label={`${t.evolutionDashboard.changedBehaviors}: ${durableCount}`}
+              className={cn("mt-1 text-3xl font-bold tabular-nums", hasRealChange ? "text-success" : "text-warning")}
             >
-              {improvementPct}
+              {durableCount}
             </div>
             <div className="text-xs text-muted-foreground">
-              {t.evolutionDashboard.of100}
+              {t.evolutionDashboard.unitItems}
             </div>
           </div>
         </div>
@@ -643,7 +396,35 @@ function GrowthStoryHero({
               </span>
             </div>
           </div>
-        ) : null}
+        ) : (
+          <div className="mt-3 rounded-lg border border-border-subtle bg-background/70 px-4 py-3">
+            <h3 className="text-sm font-semibold text-foreground">
+              {t.evolutionDashboard.actualChangesTitle}
+            </h3>
+            {story?.changes.length ? (
+              <div className="mt-2 space-y-2">
+                {story.changes.slice(0, 3).map((change, index) => (
+                  <p
+                    key={`${change.kind}-${change.title}-${index}`}
+                    className="text-xs leading-5 text-muted-foreground"
+                  >
+                    <span className="font-medium text-foreground">{change.content}</span>
+                    {" · "}
+                    {change.kind === "rule"
+                      ? t.evolutionDashboard.ruleFutureEffect
+                      : change.kind === "memory"
+                        ? t.evolutionDashboard.memoryFutureEffect
+                        : t.evolutionDashboard.skillFutureEffect}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {t.evolutionDashboard.actualChangesEmptyDescription}
+              </p>
+            )}
+          </div>
+        )}
 
         <GeneLockControlCard compact className="mt-3" />
       </div>

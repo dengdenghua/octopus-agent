@@ -119,11 +119,9 @@ describe("EvolutionDashboard states", () => {
 
     renderWithProviders(<EvolutionDashboard />, { locale: "zh-CN" });
 
-    await user.click(screen.getByText("查看运行数据（高级）"));
-
     expect(
       screen.getByRole("heading", {
-        name: "这段时间它进化了什么",
+        name: "这段时间真正学会了 1 件事",
         level: 2,
       }),
     ).toBeInTheDocument();
@@ -168,7 +166,6 @@ describe("EvolutionDashboard states", () => {
 
     renderWithProviders(<EvolutionDashboard />, { locale: "zh-CN" });
 
-    await user.click(screen.getByText("查看运行数据（高级）"));
     const stage = screen.getByRole("button", { name: /观察任务/ });
     await user.click(stage);
     expect(stage).toHaveAttribute("aria-expanded", "true");
