@@ -4,14 +4,28 @@
 
 ## 目的
 
-把组合层（P0–P3）分 **7 个可独立验证的提交** 落地，并与工作区里
-**既有的未提交改动（约 80 个 frontend/runtime/tests 文件）严格隔离**。
+把组合层（P0–P4）以**可独立验证的提交**落地到 `main`，并与工作区里
+**既有的未提交改动（frontend/runtime/tests 文件）严格隔离**。
 
-## 铁律
+## ✅ 已全部落地（2026-08-18 · 12 个提交在 main）
 
-- 每次只 `git add <显式路径>`，**绝不 `git add -A` / `git add .`**；
-- 每个提交组先跑验证命令，全绿再提交；
-- 建议按 C1 → C7 顺序提交（依赖方向：核心 → 服务 → 集成 → 抽取 → DSL → 前端 → 文档）。
+| # | commit | 内容 |
+|---|---|---|
+| C1 | `30eb459e` | BlockManifest + ServiceBus 拓扑加载 |
+| C2 | `1c56edca` | memory + model-router 内核服务 |
+| C3 | `e5efdccc` | PluginHub 消费 ServiceBus |
+| C4 | `c338af52` | 参考 arm 加载真实 memory 技能族 |
+| C5 | `7dd8e9ee` | 声明式 workflow DSL |
+| C6 | `445a756b` | PanelManifest registry + usePanels + PanelHost |
+| C7 | `e53eb6c8` | 设计文档 + ADR-012 + 本清单 |
+| C8 | `9fe4af8e` | P4 · manifest schema 版本化 |
+| C9 | `0fe6ed4a` | P4 · 事件信封版本化 |
+| C10 | `c1fc1e89` | P3 · intelligence 页经 PanelHost 渲染面板 |
+| C11 | `35801811` | docs · P3 页面接入 |
+| C12 | `34dd5c40` | P4 · BlockWatcher 开发期热重载 |
+
+**执行铁律（当时遵守）**：每次只 `git add <显式路径>`、每组先跑验证、按依赖方向排序。
+下方 C1–C7 为原计划（已执行），C8–C12 为后续追加。
 
 ---
 
@@ -99,13 +113,17 @@ git add docs/architecture/blocks.md docs/architecture/blocks-commit-checklist.md
 
 如需一次性查看差异：`git diff --stat HEAD`（应只显示用户既有改动 + 本清单已跟踪文件的改动）。
 
-## 验证汇总
+## 验证汇总（落地后）
 
 | 组 | 测试 | 状态 |
 |---|---|---|
-| C1 | 25 | ✅ 本清单编制时全绿 |
-| C2 | 20 | ✅ |
-| C3 | 6 + 存量插件 | ✅ |
-| C4 | 4 + 19 | ✅ |
-| C5 | 9 + 44 | ✅ |
-| C6 | 14 + typecheck + eslint | ✅ |
+| C1 | 25 | ✅ 已执行 |
+| C2 | 20 | ✅ 已执行 |
+| C3 | 6 + 存量插件 | ✅ 已执行 |
+| C4 | 4 + 19 | ✅ 已执行 |
+| C5 | 9 + 44 | ✅ 已执行 |
+| C6 | 14 + typecheck + eslint | ✅ 已执行 |
+| C8/C9 | 6（event protocol）+ 3（schema） | ✅ 已执行 |
+| C10 | 15（panels + intelligence 页） | ✅ 已执行 |
+| C12 | 6（BlockWatcher） | ✅ 已执行 |
+| 全量回归 | 后端 12526+ passed · 前端 2035 passed | ✅ 零确定性回归 |
