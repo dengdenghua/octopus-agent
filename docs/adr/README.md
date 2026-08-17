@@ -67,3 +67,4 @@ What this costs us / what breaks / what we now can't do easily.
 - [ADR-009 · OKF as the knowledge substrate](009-okf-knowledge-substrate.md) (Proposed)
 - [ADR-010 · Swarm resource contention](010-swarm-resource-contention.md)
 - [ADR-011 · Octopus mobile](011-octopus-mobile.md)
+- [ADR-012 · 组合层](012-composition-layer.md)
