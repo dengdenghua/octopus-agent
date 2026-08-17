@@ -75,6 +75,7 @@ from runtime.core.cerebrum.react_concurrency_guards import (  # noqa: F401 — r
 )
 from runtime.core.cerebrum.react_final_answer_content_guards import (  # noqa: F401 — re-exported
     _answer_item_count_guard,
+    _control_tag_leak_guard,
     _fabricated_citation_guard,
     _incomplete_final_answer_guard,
     _research_missing_lookup_guard,
@@ -193,6 +194,10 @@ def _invoke_inspection_answer_fragment(ctx: GuardContext) -> str | None:
 
 def _invoke_incomplete_final(ctx: GuardContext) -> str | None:
     return _incomplete_final_answer_guard(ctx.final_answer)
+
+
+def _invoke_control_tag_leak(ctx: GuardContext) -> str | None:
+    return _control_tag_leak_guard(ctx.final_answer)
 
 
 def _invoke_answer_item_count(ctx: GuardContext) -> str | None:
@@ -412,6 +417,7 @@ GUARD_REGISTRY: list[GuardSpec] = [
     GuardSpec("consecutive-timeout guard", "protocol", _invoke_consecutive_timeout),
     GuardSpec("timeout-policy guard", "protocol", _invoke_timeout_policy),
     # ── Tool-availability / inspection-evidence ──
+    GuardSpec("control-tag leak guard", "protocol", _invoke_control_tag_leak),
     GuardSpec("final-answer completeness guard", "protocol", _invoke_incomplete_final),
     GuardSpec("answer-item-count guard", "protocol", _invoke_answer_item_count),
     GuardSpec("inspection-evidence guard", "protocol", _invoke_missing_inspection),
@@ -532,6 +538,7 @@ _HARD_GUARD_LABELS = frozenset(
         "shell-injection guard",
         "unsafe-deser guard",
         "path-boundary decode guard",
+        "control-tag leak guard",
         "citation-grounding guard",
         "final-answer completeness guard",
         "implementation-write guard",

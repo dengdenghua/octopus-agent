@@ -421,9 +421,68 @@ def _answer_item_count_guard(goal: str, final_answer: str) -> str | None:
     )
 
 
+def _control_tag_leak_guard(final_answer: str) -> str | None:
+    """Reject internal control tags leaking into the user-visible final answer.
+
+    Some model providers (e.g. agnes-2.5-flash via apihub.agnes-ai.com)
+    occasionally echo internal control markers — ``<system-reminder>`` todo
+    lists, ``<system-prompt>`` fragments, or private tool envelopes like
+    ``<|tool_calls_start|>`` — as assistant text instead of keeping them in
+    the inference scaffolding layer. When streamed to the user as a final
+    answer, these markers expose internal runtime state and replace the actual
+    response the user asked for.
+
+    This guard rejects any final answer containing these control tags and
+    nudges the model to continue working instead of treating a leaked reminder
+    as a terminal reply. The rejection is **hard** (not advisory): delivering
+    internal control text as the user-facing answer is never acceptable, even
+    on pure-research turns where other protocol guards are relaxed.
+
+    Coverage:
+    - ``<system-reminder>`` / ``<system-prompt>`` / ``<system-context>``
+    - Provider tool-call envelopes: ``<|tool_calls_start|>`` etc.
+    - Literal "This is a reminder that your todo list" phrasing (agnes shape)
+    """
+    text = str(final_answer or "").strip()
+    if not text:
+        return None
+
+    # XML-style control tags
+    control_tags = [
+        "<system-reminder>",
+        "<system-prompt>",
+        "<system-context>",
+        "<system-message>",
+        "<|tool_calls_start|>",
+        "<|tool_calls_end|>",
+        "<|im_start|>",
+        "<|im_end|>",
+    ]
+    for tag in control_tags:
+        if tag in text.lower():
+            return (
+                f"The proposed Final Answer contains an internal control tag ({tag}) "
+                "that must never be shown to the user. This is a system marker, not "
+                "actual response content. Continue working on the user's request and "
+                "produce a real answer without any control tags or internal reminders."
+            )
+
+    # Literal reminder phrasing (agnes-2.5-flash echoes this verbatim)
+    if "This is a reminder that your todo list" in text:
+        return (
+            'The proposed Final Answer is an internal todo-list reminder ("This is '
+            'a reminder that your todo list..."), not the user-facing response. '
+            "Continue executing the pending tasks and deliver the actual research "
+            "findings, analysis, or completed work the user asked for."
+        )
+
+    return None
+
+
 __all__ = [
     "_answer_item_count",
     "_answer_item_count_guard",
+    "_control_tag_leak_guard",
     "_fabricated_citation_guard",
     "_incomplete_final_answer_guard",
     "_requested_answer_item_count",
