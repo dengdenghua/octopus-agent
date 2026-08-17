@@ -77,7 +77,17 @@ class PluginHub:
         channel_manager: Any = None,
         fastapi_app: Any = None,
         event_bus: Any = None,
+        service_bus: Any = None,
     ) -> None:
+        """Create the hub.
+
+        ``service_bus`` (a :class:`~runtime.platform.process.service_bus.ServiceBus`)
+        is the composition-layer socket. When provided, ``load_all`` resolves a
+        topological load order from each plugin's ``provides``/``consumes`` and
+        every loaded plugin's provided services become queryable through the
+        bus. When omitted (the default), the hub keeps today's behaviour
+        exactly — existing plugins are unaffected.
+        """
         self._dir = Path(plugin_dir) if plugin_dir else _DEFAULT_PLUGIN_DIR
         self._bundled_dir = (
             Path(bundled_plugin_dir)
@@ -88,6 +98,7 @@ class PluginHub:
         self._channel_manager = channel_manager
         self._fastapi_app = fastapi_app
         self._event_bus = event_bus
+        self._service_bus = service_bus
 
         # Loaded plugin instances: name -> ModulePlugin
         self._plugins: dict[str, ModulePlugin] = {}
@@ -224,7 +235,27 @@ class PluginHub:
                 config_schema=manifest_data.get("config_schema", {}),
                 subscribes=manifest_data.get("subscribes", []),
                 provides=manifest_data.get("provides", []),
+                # Composition layer: a plugin may declare the services it
+                # consumes. ``consumes`` is the canonical new key; legacy
+                # ``requires`` is accepted for compatibility.
+                requires=manifest_data.get("consumes", manifest_data.get("requires", [])),
             )
+
+            # Composition layer pre-check: a block whose consumes are not yet
+            # satisfiable is blocked (warn + skip), never fatal. Mirrors the
+            # "degrade, don't crash" contract of extensions.py.
+            if self._service_bus is not None:
+                from runtime.platform.process.block_manifest import BlockManifest
+
+                block_manifest = BlockManifest.from_plugin_manifest(manifest)
+                ok, missing = self._service_bus.can_bind(block_manifest)
+                if not ok:
+                    _LOG.warning(
+                        "Plugin %s blocked: missing services %s (declared consumes)",
+                        name,
+                        sorted(missing),
+                    )
+                    return None
 
             ctx = ModuleContext(
                 plugin_name=name,
@@ -235,6 +266,7 @@ class PluginHub:
                 channel_manager=self._channel_manager,
                 fastapi_app=self._fastapi_app,
                 event_bus=self._event_bus,
+                service_bus=self._service_bus,
                 config=effective_config,
             )
 
@@ -244,6 +276,12 @@ class PluginHub:
             except Exception as exc:
                 _LOG.error("Plugin %s on_load failed: %s", name, exc, exc_info=True)
                 return None
+
+            # 5.5 Composition layer: bind the plugin's provided services so
+            # later consumers can resolve them through the ServiceBus.
+            if self._service_bus is not None:
+                for service in block_manifest.provides:
+                    self._service_bus.register(service, name, instance=instance)
 
             # 6. Auto-mount webhook routes from manifest
             self._mount_webhooks(name, manifest_data, plugin_dir)
@@ -296,12 +334,75 @@ class PluginHub:
             )
 
     def load_all(self) -> list[str]:
-        """Discover and load all plugins in the plugin directory."""
-        loaded: list[str] = []
-        for item in self.discover():
-            pname = item["id"]
-            if self.load(pname):
-                loaded.append(pname)
+        """Discover and load all plugins in the plugin directory.
+
+        With a ServiceBus injected, load order follows each plugin's declared
+        ``provides``/``consumes`` (topological); plugins whose dependencies are
+        missing are logged as blocked and skipped, and a dependency cycle is a
+        logged error — neither crashes the hub. Without a ServiceBus this is
+        exactly the legacy discovery-order load.
+        """
+        if self._service_bus is None:
+            loaded: list[str] = []
+            for item in self.discover():
+                pname = item["id"]
+                if self.load(pname):
+                    loaded.append(pname)
+            return loaded
+
+        from runtime.platform.plugins.plugin_loader import PluginManifest
+        from runtime.platform.process.block_manifest import BlockManifest
+        from runtime.platform.process.service_bus import (
+            BlockDependencyCycleError,
+            resolve_load_order,
+        )
+
+        discovered = self.discover()
+        manifests: list[BlockManifest] = []
+        for item in discovered:
+            manifest_data = self._read_manifest_file(Path(item["dir"]))
+            if not manifest_data:
+                continue
+            pm = PluginManifest(
+                name=manifest_data.get("name", item["id"]),
+                version=manifest_data.get("version", "0.1.0"),
+                description=manifest_data.get("description", ""),
+                author=manifest_data.get("author", ""),
+                config_schema=manifest_data.get("config_schema", {}),
+                subscribes=manifest_data.get("subscribes", []),
+                provides=manifest_data.get("provides", []),
+                requires=manifest_data.get("consumes", manifest_data.get("requires", [])),
+            )
+            try:
+                manifests.append(
+                    BlockManifest.from_plugin_manifest(pm, kind=manifest_data.get("kind"))
+                )
+            except ValueError as exc:
+                _LOG.warning("Plugin %s skipped (invalid manifest): %s", item["id"], exc)
+
+        try:
+            ordered, blocked = resolve_load_order(
+                manifests,
+                available_services=self._service_bus.provided_services(),
+            )
+        except BlockDependencyCycleError as exc:
+            _LOG.error("Plugin dependency cycle — skipping affected plugins: %s", exc)
+            return []
+
+        for manifest in blocked:
+            missing = sorted(set(manifest.consumes))
+            _LOG.warning(
+                "Plugin %s blocked: missing services %s (declared consumes)",
+                manifest.name,
+                missing,
+            )
+
+        # Load in topological order, not discovery order: a consumer must
+        # load only after every service it consumes is bound.
+        loaded = []
+        for manifest in ordered:
+            if self.load(manifest.name):
+                loaded.append(manifest.name)
         return loaded
 
     def unload(self, name: str) -> bool:
@@ -311,6 +412,14 @@ class PluginHub:
             ctx = self._contexts.pop(name, None)
             if instance is None:
                 return False
+
+            # Composition layer: remove every service this block provided,
+            # so a reload binds them fresh and no consumer keeps a stale ref.
+            if self._service_bus is not None:
+                try:
+                    self._service_bus.unbind(name)
+                except Exception as exc:  # noqa: BLE001 — teardown is best-effort
+                    _LOG.debug("Plugin %s service unbind error: %s", name, exc)
 
             if ctx:
                 try:

@@ -67,6 +67,7 @@ class ModuleContext:
     channel_manager: Any = None  # runtime.adapters.channels.manager.ChannelManager
     fastapi_app: Any = None  # FastAPI application
     event_bus: Any = None  # runtime.platform.process.eventbus.EventBus
+    service_bus: Any = None  # runtime.platform.process.service_bus.ServiceBus
 
     # Plugin's own persisted config (from plugin.yaml ``config`` field)
     config: dict[str, Any] = field(default_factory=dict)
