@@ -751,6 +751,7 @@ export function MessageList({
   onOpenArtifact,
   lastTurnToolEvents,
   liveToolEvents,
+  allToolEvents,
   currentAgent,
   agentRoster = EMPTY_AGENT_ROSTER,
   completedAgentOutput = false,
@@ -776,6 +777,7 @@ export function MessageList({
   onOpenArtifact?: (path: string) => void;
   lastTurnToolEvents?: LiveToolEvent[];
   liveToolEvents?: LiveToolEvent[];
+  allToolEvents?: LiveToolEvent[];
   completedAgentOutput?: boolean;
   currentAgent?: {
     name: string;
@@ -1708,6 +1710,49 @@ export function MessageList({
               msg === outputHostMessage ? outputSummary : undefined,
             );
       });
+      // Check for subagents spawned via run_orchestration in the current turn.
+      // These appear as LiveToolEvents with name="subagent" but don't create
+      // tool_calls in the message, so hasSubagent() misses them.
+      const subagentEventsInTurn = (() => {
+        // Try liveToolEvents first (for current streaming turn), then fall back
+        // to allToolEvents filtered by iteration (for historical turns).
+        const eventsToSearch = liveToolEvents && liveToolEvents.length > 0
+          ? liveToolEvents
+          : allToolEvents ?? [];
+
+        if (eventsToSearch.length === 0) return [];
+
+        const isLive = eventsToSearch === liveToolEvents;
+
+        // For historical turns, we need to determine which iteration (turn index)
+        // this group belongs to.
+        const currentIteration = (() => {
+          if (isLive) return -1; // Not needed for live events
+
+          // Find which turn this group belongs to
+          const turns = partitionMessageGroupsIntoTurns(groupedMessages);
+          const groupIndex = groupedMessages.indexOf(group);
+
+          for (let i = 0; i < turns.length; i++) {
+            if (turns[i]!.groupIndexes.includes(groupIndex)) {
+              return i;
+            }
+          }
+          return -1;
+        })();
+
+        return eventsToSearch.filter((event) => {
+          if (event.name !== "subagent") return false;
+          if (!event.lifecycle || event.lifecycle !== "spawned") return false;
+
+          // For live events, include all subagents.
+          // For historical events, only include those matching this turn's iteration.
+          return isLive || event.iteration === currentIteration;
+        });
+      })();
+
+      const hasSubagentsInTurn = subagentEventsInTurn.length > 0;
+
       return (
         <>
           {group.type === "assistant" && !showAssistantAvatar ? (
@@ -1716,6 +1761,38 @@ export function MessageList({
             renderedMessages
           )}
           {outputSummary && !outputHostMessage && outputSummary}
+          {hasSubagentsInTurn && group.type === "assistant" && (
+            <div className="mt-4 ml-11">
+              <div className="text-muted-foreground font-normal pt-2 text-sm mb-2">
+                {t.subagents.executing(subagentEventsInTurn.length)}
+              </div>
+              {subagentEventsInTurn.length > 1 ? (
+                <ParallelSubtasksGrid
+                  key={"parallel-grid-live-" + group.id}
+                  taskIds={subagentEventsInTurn.map((e) => e.id)}
+                  isLoading={
+                    thread.isLoading &&
+                    group.messages.some(
+                      (m) => m.id === thread.streamingMessage?.id,
+                    )
+                  }
+                />
+              ) : (
+                subagentEventsInTurn.map((event) => (
+                  <SubtaskCard
+                    key={"task-live-" + event.id}
+                    taskId={event.id}
+                    isLoading={
+                      thread.isLoading &&
+                      group.messages.some(
+                        (m) => m.id === thread.streamingMessage?.id,
+                      )
+                    }
+                  />
+                ))
+              )}
+            </div>
+          )}
         </>
       );
     }

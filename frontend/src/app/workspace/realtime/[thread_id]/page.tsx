@@ -185,6 +185,7 @@ import {
   extractTextFromMessage,
   isSettledAssistantAnswer,
   latestAssistantTerminalState,
+  assistantAnswerRequestsUserInput,
 } from "@/core/messages/utils";
 import { useModels } from "@/core/models/hooks";
 import { resolveModelContextWindow } from "@/core/models/context-window";
@@ -2713,15 +2714,28 @@ function RealtimePageContent({
   );
   const agentRunInterrupted = lastTurnTerminalState === "interrupted";
   const agentRunPaused = lastTurnTerminalState === "paused";
-  const agentRunBlocked = lastTurnTerminalState === "blocked";
+  const legacyBlockedOnUser = useMemo(
+    () =>
+      lastTurnTerminalState === null &&
+      assistantAnswerRequestsUserInput(lastTurnMessages),
+    [lastTurnMessages, lastTurnTerminalState],
+  );
+  const agentRunBlocked =
+    lastTurnTerminalState === "blocked" || legacyBlockedOnUser;
   const hasAgentAnswer = useMemo(
     () =>
       lastTurnTerminalState === null &&
+      !agentRunBlocked &&
       (hasFinalArtifact ||
         lastTurnMessages.some((message) =>
           isSettledAssistantAnswer(message, { minTextLength: 80 }),
         )),
-    [hasFinalArtifact, lastTurnMessages, lastTurnTerminalState],
+    [
+      agentRunBlocked,
+      hasFinalArtifact,
+      lastTurnMessages,
+      lastTurnTerminalState,
+    ],
   );
   const canSettleStaleLiveEvents =
     !thread.isLoading &&
@@ -2732,11 +2746,13 @@ function RealtimePageContent({
     !thread.isLoading &&
     (!hasRunningAgentEvents ||
       canSettleStaleLiveEvents ||
-      lastTurnTerminalState !== null) &&
+      lastTurnTerminalState !== null ||
+      agentRunBlocked) &&
     !hasActiveBackgroundTask &&
     (!hasPausedOrPendingBackgroundTask || agentRunPaused);
   const hasCompletedAgentOutput =
     lastTurnTerminalState === null &&
+    !agentRunBlocked &&
     (!thread.error || hasFinalArtifact) &&
     agentRunSettled &&
     (!requiresReportDeliverable || hasReportArtifact || hasFinalArtifact);
@@ -3720,6 +3736,7 @@ function RealtimePageContent({
                   mode={effectiveMode}
                   liveToolEvents={lastTurnToolEvents}
                   lastTurnToolEvents={lastTurnToolEvents}
+                  allToolEvents={allToolEvents}
                   completedAgentOutput={hasCompletedAgentOutput}
                   currentAgent={currentAgent}
                   agentRoster={
@@ -3927,6 +3944,7 @@ function RealtimePageContent({
                     runSettled={agentRunSettled}
                     runFailed={agentRunFailed}
                     runInterrupted={agentRunInterrupted}
+                    runBlocked={agentRunBlocked}
                     paused={hasPausedOrPendingBackgroundTask}
                     threadId={threadId}
                     workDir={workDir}
