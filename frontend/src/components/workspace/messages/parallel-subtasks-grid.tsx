@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { memo } from "react";
 import { DotProgress } from "@/components/workspace/swarm/dot-progress";
 import { emitAgentWorkbenchFocus } from "@/components/workspace/agent-workbench-events";
 import { useI18n } from "@/core/i18n/hooks";
@@ -66,7 +67,7 @@ function getStatusIcon(status: SubtaskStatus) {
   return null;
 }
 
-function MiniSubtaskRow({
+const MiniSubtaskRow = memo(function MiniSubtaskRow({
   taskId,
   isLoading: _isLoading,
   onClick,
@@ -272,9 +273,9 @@ function MiniSubtaskRow({
       />
     </div>
   );
-}
+});
 
-export function SubtaskHoverPreview({
+export const SubtaskHoverPreview = memo(function SubtaskHoverPreview({
   task,
   statusLabel,
   id,
@@ -442,7 +443,7 @@ export function SubtaskHoverPreview({
       </div>
     </div>
   );
-}
+});
 
 /**
  * 紧凑版角色身份卡 — 复用 HUD AgentCreationCard 的视觉语言。
@@ -542,6 +543,8 @@ const MAX_VISIBLE_TASKS = 4;
 // turn into a wall of cards.
 const AUTO_COLLAPSE_THRESHOLD = 8;
 const AUTO_VISIBLE_TASKS = 6;
+// In compact mode, allow more visible tasks since they take less space
+const COMPACT_VISIBLE_TASKS = 12;
 
 export function ParallelSubtasksGrid({
   taskIds,
@@ -572,7 +575,7 @@ export function ParallelSubtasksGrid({
 
   // Use forceCollapsed if provided, otherwise use local expanded state
   const effectivelyExpanded = forceCollapsed === true ? false : forceCollapsed === false ? true : expanded;
-  const visibleLimit = compact ? MAX_VISIBLE_TASKS : AUTO_VISIBLE_TASKS;
+  const visibleLimit = compact ? COMPACT_VISIBLE_TASKS : (compact === false ? MAX_VISIBLE_TASKS : AUTO_VISIBLE_TASKS);
   const visibleIds =
     shouldCollapse && !effectivelyExpanded ? taskIds.slice(0, visibleLimit) : taskIds;
   const hiddenCount = taskIds.length - visibleIds.length;

@@ -9,9 +9,6 @@ import {
   LightbulbIcon,
   RefreshCwIcon,
   ChevronDownIcon,
-  ArrowRightIcon,
-  CheckCircle2Icon,
-  CircleDashedIcon,
 } from "lucide-react";
 
 import {
@@ -35,12 +32,6 @@ import { GeneLockControlCard } from "@/components/workspace/gene-lock-badge";
 import { Button } from "@/components/ui/button";
 
 import { SparklineChart } from "./sparkline-chart";
-
-function scoreColor(value: number): string {
-  if (value >= 0.7) return "text-success";
-  if (value >= 0.4) return "text-warning";
-  return "text-destructive";
-}
 
 function numberOrZero(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
