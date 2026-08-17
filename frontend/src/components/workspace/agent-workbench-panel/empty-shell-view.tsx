@@ -4,7 +4,6 @@ import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 import { TerminalPanel } from "../terminal-panel";
 import { AgentDiffPage } from "../agent-workbench-pages";
-import { SubAgentBusStreamPanel } from "@/core/threads/subagent-bus-stream-panel";
 import { WorkbenchEmptyPage } from "../agent-workbench-pages";
 import type { AgentWorkbenchTabId, DiffEntry } from "../agent-workbench-utils";
 import { WorkbenchTabHeader, type WorkbenchTab } from "./workbench-tab-header";
@@ -43,8 +42,7 @@ export function EmptyShellView({
     | "diff"
     | "terminal"
     | "browser"
-    | "artifacts"
-    | "substream";
+    | "artifacts";
   onTabClick: (tabId: AgentWorkbenchTabId) => void;
   onTabClose: (tabId: AgentWorkbenchTabId) => void;
   locatableTranscriptEventId: string;
@@ -72,8 +70,6 @@ export function EmptyShellView({
       />
     ) : effectiveActiveTab === "browser" ? (
       browserTabPage
-    ) : effectiveActiveTab === "substream" ? (
-      <SubAgentBusStreamPanel rootThreadId={threadId} showAll />
     ) : (
       <WorkbenchEmptyPage
         title={t.agentWorkbenchPanel.robot}

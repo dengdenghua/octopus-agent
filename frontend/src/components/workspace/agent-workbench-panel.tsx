@@ -4,7 +4,6 @@ import {
   DownloadIcon,
   GlobeIcon,
   PackageIcon,
-  RadioIcon,
   SparklesIcon,
   TerminalIcon,
 } from "lucide-react";
@@ -29,7 +28,6 @@ import { useArtifactContent } from "@/core/artifacts/hooks";
 import type { OutlineRound } from "@/core/threads/progress-outline";
 import type { GroundingSource } from "@/core/realtime/items";
 import { TerminalPanel } from "@/components/workspace/terminal-panel";
-import { SubAgentBusStreamPanel } from "@/core/threads/subagent-bus-stream-panel";
 import { ToolEffectDetailPanel } from "@/components/workspace/tool-effect-detail-panel";
 import { useArtifacts } from "@/components/workspace/artifacts/context";
 import { ArtifactLink } from "@/components/workspace/citations/artifact-link";
@@ -440,8 +438,7 @@ function AgentWorkbenchPanelImpl({
     | "diff"
     | "terminal"
     | "browser"
-    | "artifacts"
-    | "substream" =
+    | "artifacts" =
     requestedActiveTab === "subagents" || requestedActiveTab === "plan"
       ? "agent"
       : requestedActiveTab;
@@ -467,13 +464,8 @@ function AgentWorkbenchPanelImpl({
         label: t.conversation.artifactsTitle,
         Icon: PackageIcon,
       },
-      {
-        id: "substream",
-        label: t.agentWorkbenchPanel.substreamTab,
-        Icon: RadioIcon,
-      },
     ],
-    [t.agentWorkbenchPages, t.conversation, t.agentWorkbenchPanel],
+    [t.agentWorkbenchPages, t.conversation],
   );
 
   // Auto-open a tab if it becomes the effective active tab
@@ -670,17 +662,6 @@ function AgentWorkbenchPanelImpl({
         runBlocked={runBlocked}
         runSettled={runSettled}
         isLoading={isLoading}
-      />
-    ) : effectiveActiveTab === "substream" ? (
-      <SubAgentBusStreamPanel
-        rootThreadId={threadId}
-        showAll
-        dispatchFailed={events.some(
-          (event) =>
-            (event.name === "call_agent_parallel" ||
-              event.name === "team_swarm") &&
-            event.status === "error",
-        )}
       />
     ) : (
       agentKanbanPage
