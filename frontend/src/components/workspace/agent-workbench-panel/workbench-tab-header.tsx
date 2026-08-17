@@ -101,7 +101,7 @@ function WorkbenchTabHeaderImpl({
               <div
                 key={id}
                 className={cn(
-                  "group inline-flex h-8 max-w-[11rem] shrink-0 items-center gap-1.5 rounded-lg border border-transparent text-sm font-medium shadow-none transition-colors",
+                  "group inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-transparent text-sm font-medium shadow-none transition-colors",
                   active
                     ? "border-border-subtle bg-background text-foreground"
                     : "text-muted-foreground hover:border-border-subtle hover:bg-background/45 hover:text-foreground",
@@ -113,10 +113,12 @@ function WorkbenchTabHeaderImpl({
                   aria-selected={active}
                   title={label}
                   onClick={() => onTabClick(id)}
-                  className="flex h-full min-w-0 items-center gap-1.5 pl-2.5"
+                  className="flex h-full min-w-0 items-center gap-1.5 px-2.5"
                 >
                   <Icon className="size-4 shrink-0" />
-                  <span className="truncate">{label}</span>
+                  <span className="max-w-0 truncate opacity-0 transition-all group-hover:max-w-[8rem] group-hover:opacity-100">
+                    {label}
+                  </span>
                 </button>
                 <Tooltip content={t.editorTabs.closeTabAria(label)}>
                   <button
