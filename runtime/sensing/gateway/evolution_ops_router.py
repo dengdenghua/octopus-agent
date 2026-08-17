@@ -244,6 +244,70 @@ def create_evolution_ops_router(
                     items.append(stripped[2:].strip())
             return items
 
+        def _message_text(content: Any) -> str:
+            if isinstance(content, str):
+                return content.strip()
+            if not isinstance(content, list):
+                return ""
+            parts: list[str] = []
+            for block in content:
+                if isinstance(block, str):
+                    parts.append(block)
+                elif isinstance(block, dict):
+                    text = block.get("text") or block.get("content")
+                    if isinstance(text, str):
+                        parts.append(text)
+            return "\n".join(parts).strip()
+
+        def _learning_points(answer: str) -> list[str]:
+            """Extract concise claims from a real answer without inventing a summary."""
+            import re
+
+            def _is_learning(value: str) -> bool:
+                status_phrases = (
+                    "当前进度已暂停",
+                    "等待继续",
+                    "点击继续",
+                    "我不确定",
+                    "请补充信息",
+                    "请简要说明",
+                )
+                return not any(phrase in value for phrase in status_phrases)
+
+            lines = [line.strip() for line in answer.splitlines()]
+            points: list[str] = []
+            in_conclusion = False
+            for line in lines:
+                if re.search(r"核心结论|主要结论|关键结论|结论摘要", line):
+                    in_conclusion = True
+                    continue
+                if in_conclusion and line.startswith("##"):
+                    break
+                if in_conclusion and re.match(r"^[-*]\s+", line):
+                    value = re.sub(r"^[-*]\s+", "", line).strip()
+                    value = re.sub(r"[*_`]+", "", value)
+                    if value and _is_learning(value):
+                        points.append(value[:220])
+                if len(points) >= 3:
+                    return points
+
+            if points:
+                return points
+
+            for line in lines:
+                if not line or line.startswith(("#", "---", "```", "|")):
+                    continue
+                value = re.sub(r"^[-*\d.、)\s]+", "", line)
+                value = re.sub(r"[*_`]+", "", value).strip()
+                if len(value) < 12 or value.startswith(("文件位置", "报告完成日期")):
+                    continue
+                if not _is_learning(value):
+                    continue
+                points.append(value[:220])
+                if len(points) >= 2:
+                    break
+            return points
+
         rules = _section_items(getattr(planner, "learned_rules_section", ""))
         memories = _section_items(getattr(planner, "learned_memories_section", ""))
         auto_skills = [
@@ -328,6 +392,7 @@ def create_evolution_ops_router(
                     "success": success,
                     "step_count": len(getattr(trajectory, "steps", []) or []),
                     "tools": tools[:6],
+                    "learning_points": [],
                 }
             )
             if len(observations) >= limit:
@@ -351,6 +416,7 @@ def create_evolution_ops_router(
                 values = thread.get("values") if isinstance(thread.get("values"), dict) else {}
                 messages = values.get("messages") if isinstance(values.get("messages"), list) else []
                 human_text = ""
+                latest_answer = ""
                 tool_count = 0
                 for message in messages:
                     if not isinstance(message, dict):
@@ -358,6 +424,13 @@ def create_evolution_ops_router(
                     if not human_text and message.get("type") == "human":
                         content = message.get("content")
                         human_text = str(content if isinstance(content, str) else "").strip()
+                    if message.get("type") == "ai":
+                        extra = message.get("additional_kwargs")
+                        kind = extra.get("message_kind") if isinstance(extra, dict) else None
+                        if kind == "answer":
+                            answer_text = _message_text(message.get("content"))
+                            if answer_text:
+                                latest_answer = answer_text
                     calls = message.get("tool_calls")
                     if isinstance(calls, list):
                         tool_count += len(calls)
@@ -379,6 +452,7 @@ def create_evolution_ops_router(
                         "success": status not in {"error", "failed", "cancelled"},
                         "step_count": tool_count,
                         "tools": [],
+                        "learning_points": _learning_points(latest_answer),
                     }
                 )
                 observed_thread_ids.add(thread_id)

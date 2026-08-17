@@ -296,6 +296,20 @@ function GrowthStoryHero({
           : t.evolutionDashboard.waitingForSkillAccumulation,
     },
   ];
+  const learnedItems = [
+    ...(story?.changes ?? []).map((change, index) => ({
+      key: `change-${change.kind}-${index}`,
+      source: change.title,
+      content: change.content,
+    })),
+    ...(story?.observations ?? []).flatMap((observation) =>
+      (observation.learning_points ?? []).map((content, index) => ({
+        key: `observation-${observation.task_id}-${index}`,
+        source: observation.title,
+        content,
+      })),
+    ),
+  ].slice(0, 4);
   const selectedStage = stages.find(
     (stage) => stage.key === selectedInsightKey,
   );
@@ -392,26 +406,25 @@ function GrowthStoryHero({
             <h3 className="text-sm font-semibold text-foreground">
               {t.evolutionDashboard.actualChangesTitle}
             </h3>
-            {story?.changes.length ? (
-              <div className="mt-2 space-y-2">
-                {story.changes.slice(0, 3).map((change, index) => (
-                  <p
-                    key={`${change.kind}-${change.title}-${index}`}
-                    className="text-xs leading-5 text-muted-foreground"
+            {learnedItems.length ? (
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {learnedItems.map((item) => (
+                  <div
+                    key={item.key}
+                    className="rounded-md border border-border-subtle bg-card/70 px-3 py-2.5"
                   >
-                    <span className="font-medium text-foreground">{change.content}</span>
-                    {" · "}
-                    {change.kind === "rule"
-                      ? t.evolutionDashboard.ruleFutureEffect
-                      : change.kind === "memory"
-                        ? t.evolutionDashboard.memoryFutureEffect
-                        : t.evolutionDashboard.skillFutureEffect}
-                  </p>
+                    <p className="line-clamp-3 text-xs font-medium leading-5 text-foreground">
+                      {item.content}
+                    </p>
+                    <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                      {item.source}
+                    </p>
+                  </div>
                 ))}
               </div>
             ) : (
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                {t.evolutionDashboard.actualChangesEmptyDescription}
+                {t.evolutionDashboard.actualChangesEmptyTitle}
               </p>
             )}
           </div>

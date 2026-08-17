@@ -100,6 +100,7 @@ export interface EvolutionStoryObservation {
   success: boolean;
   step_count: number;
   tools: string[];
+  learning_points: string[];
 }
 
 export interface EvolutionStory {

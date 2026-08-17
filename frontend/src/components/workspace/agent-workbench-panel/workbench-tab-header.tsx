@@ -3,15 +3,12 @@ import { memo } from "react";
 import {
   CheckIcon,
   LayoutGridIcon,
-  LocateFixedIcon,
   XIcon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
-import { activateTimelineItem } from "@/core/threads/timeline-linkage";
-import { emitLocateAgentWorkbenchEvent } from "../agent-workbench-events";
 import type { AgentWorkbenchTabId } from "../agent-workbench-utils";
 import {
   DropdownMenu,
@@ -172,39 +169,6 @@ function WorkbenchTabHeaderImpl({
             })}
           </DropdownMenuContent>
         </DropdownMenu>
-        {locatableTranscriptEventId ? (
-          <Tooltip content={t.agentWorkbenchPanel.locateTranscriptEvent}>
-            <button
-              type="button"
-              className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
-              aria-label={t.agentWorkbenchPanel.locateTranscriptEvent}
-              onClick={() => {
-                // Use the shared timeline linkage so aggregated tool groups
-                // expand before the conversation scrolls to the exact step.
-                activateTimelineItem(locatableTranscriptEventId, "sidebar");
-                // Keep the legacy event for older message renderers and
-                // direct transcript anchors.
-                emitLocateAgentWorkbenchEvent({
-                  eventId: locatableTranscriptEventId,
-                });
-              }}
-            >
-              <LocateFixedIcon className="size-3.5" />
-            </button>
-          </Tooltip>
-        ) : null}
-        {onClose ? (
-          <Tooltip content={t.agentWorkbenchPanel.collapseWorkbench}>
-            <button
-              type="button"
-              className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
-              aria-label={t.agentWorkbenchPanel.collapseWorkbench}
-              onClick={onClose}
-            >
-              <XIcon className="size-3.5" />
-            </button>
-          </Tooltip>
-        ) : null}
       </div>
     </header>
   );

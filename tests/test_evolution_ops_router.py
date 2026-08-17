@@ -670,7 +670,12 @@ def test_evolution_story_uses_threads_only_as_observation_evidence() -> None:
             "title": "帮我检查登录页",
             "messages": [
                 {"type": "human", "content": "帮我检查登录页"},
-                {"type": "ai", "content": "检查完成", "tool_calls": [{"name": "read_file"}]},
+                {
+                    "type": "ai",
+                    "content": "## 核心结论\n- 登录页在小屏幕上按钮会被遮挡\n- 表单缺少错误提示",
+                    "additional_kwargs": {"message_kind": "answer"},
+                    "tool_calls": [{"name": "read_file"}],
+                },
             ],
         }
     )
@@ -684,6 +689,10 @@ def test_evolution_story_uses_threads_only_as_observation_evidence() -> None:
     assert story["observed_task_count"] == 1
     assert story["observations"][0]["thread_id"] == thread["thread_id"]
     assert story["observations"][0]["title"] == "帮我检查登录页"
+    assert story["observations"][0]["learning_points"] == [
+        "登录页在小屏幕上按钮会被遮挡",
+        "表单缺少错误提示",
+    ]
 
 
 def test_evolution_overview_reflects_intelligence_reports(
