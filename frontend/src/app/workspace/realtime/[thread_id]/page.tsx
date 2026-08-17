@@ -448,12 +448,6 @@ function RightPanelMenu({
 
   if (!hasAnyPanel) return null;
 
-  // The Agent workbench already owns a visible, labelled collapse control in
-  // its header. Hiding this global toggle while that panel is open avoids two
-  // different buttons performing the same close action; once collapsed, the
-  // global button returns as the stable way to reopen it.
-  if (activePage === "agent") return null;
-
   const openDefaultPanel = () => {
     if (hasAgentWorkbench) {
       onOpenAgent();
