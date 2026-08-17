@@ -59,9 +59,11 @@ export const MessageContent = ({
   <div
     className={cn(
       "flex max-w-full flex-col gap-2 overflow-visible select-text",
-      // Codex-flat: no bubble, no shadow. Users get a soft left accent bar
-      // + left padding so the speaker is still distinguishable from the
-      // assistant stream without visual weight.
+      // Chat-bubble style for the user side (messenger convention): a
+      // filled, right-aligned bubble so your own messages read as distinct
+      // from the assistant's flat streamed output. The assistant stays
+      // bubble-less because it streams long markdown, code and traces that
+      // a tinted container would fight with.
       //
       // Width behavior split by role to avoid the CJK vertical-stacking
       // bug: `w-fit min-w-0` together with `word-break:break-word` defaults
@@ -72,9 +74,13 @@ export const MessageContent = ({
       // never collapses below it. Assistant bubbles keep `w-full min-w-0`
       // because they need to span and wrap long streamed markdown.
       "group-[.is-user]:ml-auto group-[.is-user]:min-w-fit group-[.is-user]:max-w-[85%] group-[.is-user]:w-auto",
-      "group-[.is-user]:border-l-2 group-[.is-user]:border-[color:color-mix(in_oklch,var(--primary)_60%,transparent)]",
-      "group-[.is-user]:pl-3 group-[.is-user]:pr-1 group-[.is-user]:py-0.5",
-      "group-[.is-user]:text-foreground",
+      // `--primary` / `--primary-foreground` are declared as a matched pair
+      // in every theme in globals.css, so the bubble keeps its contrast
+      // across light, dark and the accent themes without per-theme rules.
+      "group-[.is-user]:bg-primary group-[.is-user]:text-primary-foreground",
+      "group-[.is-user]:rounded-2xl group-[.is-user]:rounded-br-md",
+      "group-[.is-user]:px-3.5 group-[.is-user]:py-2",
+      "group-[.is-user]:shadow-[var(--shadow-xs)]",
       "group-[.is-assistant]:w-full group-[.is-assistant]:min-w-0",
       "group-[.is-assistant]:text-foreground",
       className,

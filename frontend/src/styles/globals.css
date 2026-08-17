@@ -1752,6 +1752,49 @@
     max-width: 100%;
   }
 
+  /* The user's own messages render as a filled bubble (--primary) rather
+     than on the page background. Streamdown's defaults — and the
+     .chat-markdown rules above — tint links and inline code with --primary
+     against a light surface, which disappears on a --primary fill. Re-anchor
+     the nested surfaces to --primary-foreground so they stay legible.
+     Scoped to .is-user so the assistant stream is untouched. */
+  .is-user :where(a) {
+    color: var(--primary-foreground);
+    text-decoration-color: color-mix(
+      in oklch,
+      var(--primary-foreground) 55%,
+      transparent
+    );
+  }
+
+  .is-user :where(code):not(pre code) {
+    background: color-mix(in oklch, var(--primary-foreground) 18%, transparent);
+    color: var(--primary-foreground);
+  }
+
+  .is-user :where(blockquote) {
+    border-left-color: color-mix(
+      in oklch,
+      var(--primary-foreground) 55%,
+      transparent
+    );
+    background: color-mix(in oklch, var(--primary-foreground) 10%, transparent);
+  }
+
+  .is-user :where(strong),
+  .is-user :where(ul li)::marker,
+  .is-user :where(ol li)::marker {
+    color: var(--primary-foreground);
+  }
+
+  .is-user :where(hr) {
+    border-color: color-mix(
+      in oklch,
+      var(--primary-foreground) 35%,
+      transparent
+    );
+  }
+
   /* Public progress is conversation, not telemetry. Keep it on the same
      reading axis as the answer and reserve icons/muted type for actual tool
      actions. This mirrors a person saying what they are doing between steps. */
