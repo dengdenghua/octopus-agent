@@ -98,3 +98,48 @@ def test_request_accepts_forcing_with_tools() -> None:
     )
     assert req.require_tool_use is True
     assert req.tools[0].name == "edit_file"
+
+
+# ── zero-action protocol reminder ──────────────────────────────────────────
+
+
+def test_plain_narration_gets_the_protocol_reminder() -> None:
+    """GLM-5.3 shape: intent prose with no Update: line and no Action anchor.
+
+    Regression for the "光说不做" turns (e.g. tI7UmTEB5PEOz7YZNtOMWQ,
+    2026-08-17 01:26Z): iter 1 narrated "我来查一下…", got no corrective
+    observation (the old nudge required an Update: line), repeated the
+    narration on iter 2, and the turn ended with zero tool executions.
+    """
+    from runtime.core.cerebrum.react_phase_6c import _zero_action_protocol_reminder
+
+    step = _step(action="", public_update="", thought="我来查一下工作区状态和最近提交")
+    reminder = _zero_action_protocol_reminder(step, consecutive_format_violations=1)
+    assert reminder is not None
+    assert reminder.startswith("[protocol-reminder]")
+    assert "Action:" in reminder
+    assert "narrated" in reminder
+
+
+def test_update_only_round_keeps_its_reminder() -> None:
+    """Kimi K3 shape: Update published, Action missing."""
+    from runtime.core.cerebrum.react_phase_6c import _zero_action_protocol_reminder
+
+    step = _step(action="", public_update="正在检查 git 状态")
+    reminder = _zero_action_protocol_reminder(step, consecutive_format_violations=1)
+    assert reminder is not None
+    assert "published an Update" in reminder
+
+
+def test_no_reminder_for_first_round_or_acted_steps() -> None:
+    """Round 0 narration is normal prelude; acted steps need no reminder."""
+    from runtime.core.cerebrum.react_phase_6c import _zero_action_protocol_reminder
+
+    # No violation counted yet: narrating before any strike stays unjudged.
+    assert _zero_action_protocol_reminder(_step(action=""), 0) is None
+    # An executed action needs no reminder.
+    acted = _step(action='read_file({"path": "x"})')
+    assert _zero_action_protocol_reminder(acted, 2) is None
+    # An existing observation (another guard already spoke) is not overwritten.
+    observed = _step(action="", observation="[other-guard] already injected")
+    assert _zero_action_protocol_reminder(observed, 1) is None

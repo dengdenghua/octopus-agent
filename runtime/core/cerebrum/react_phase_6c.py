@@ -95,6 +95,42 @@ def _next_zero_action_rounds(
     return current + 1
 
 
+def _zero_action_protocol_reminder(step: Any, consecutive_format_violations: int) -> str | None:
+    """Corrective observation for an act-less, conclusion-less round.
+
+    Two narration shapes need it:
+
+    * the step published an ``Update:`` line but no ``Action:`` (Kimi K3
+      style - stops after the progress line);
+    * plain narration with neither anchor (GLM-5.3 style: "我来查一下…"
+      prose that never mentions the protocol). The Update-only reminder
+      misses this shape, and without any corrective observation the next
+      round sees the model's own prose as the last word, repeats it, and
+      the two-strike bail ends the turn with zero tool executions while
+      the user was promised action.
+    """
+    if getattr(step, "action", ""):
+        return None
+    if getattr(step, "observation", None):
+        return None
+    if getattr(step, "public_update", None):
+        return (
+            "[protocol-reminder] Your previous turn published an Update but "
+            "did not emit an Action tool call. The task is not complete. "
+            'Emit exactly one Action: skill_name({"arg": "value"}) now '
+            "to make progress - do not write another Update without an Action."
+        )
+    if consecutive_format_violations:
+        return (
+            "[protocol-reminder] Your previous reply narrated what you "
+            "intend to do but executed nothing - narration is not action. "
+            'Emit exactly one Action: skill_name({"arg": "value"}) now, '
+            "or, if and only if the task is already complete, a "
+            "Final Answer."
+        )
+    return None
+
+
 def _phase_6c_parse_and_guard(
     state: _LoopState,
     *,
@@ -662,18 +698,10 @@ def _phase_6c_parse_and_guard(
         # they narrate intent without executing. Inject a compact system
         # nudge so the next round emits the actual tool call instead of
         # repeating another Update-only turn until max_iterations.
-        if (
-            not step.action
-            and not maybe_final
-            and getattr(step, "public_update", None)
-            and not getattr(step, "observation", None)
-        ):
-            step.observation = (
-                "[protocol-reminder] Your previous turn published an Update but "
-                "did not emit an Action tool call. The task is not complete. "
-                'Emit exactly one Action: skill_name({"arg": "value"}) now '
-                "to make progress — do not write another Update without an Action."
-            )
+        if not step.action and not maybe_final:
+            _reminder = _zero_action_protocol_reminder(step, consecutive_format_violations)
+            if _reminder:
+                step.observation = _reminder
 
         if resp_thinking and not step.thought:
             step.thought = resp_thinking
