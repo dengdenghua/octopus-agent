@@ -22,6 +22,7 @@ tier: "core"
 
 | Module | Summary |
 | --- | --- |
+| `_image_semantic_vectors.py` | Pure image/vector helpers for the semantic image index. |
 | `code_index.py` | Auto-retrieve relevant *source* chunks for planner grounding. |
 | `composer.py` | — |
 | `embedding_backend.py` | Unified, configurable text embedder for octopus's code index. |
