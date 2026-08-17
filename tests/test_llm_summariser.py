@@ -158,6 +158,62 @@ class TestSummariserPure:
         assert req.max_tokens == 42
         assert req.temperature == 0.7
 
+    def test_default_model_resolves_via_smart_routing(self) -> None:
+        # No pinned model → the cheap slot the main chat path uses,
+        # not a hard-coded vendor id that may not exist in this stack.
+        from runtime.memory.threads.llm_summariser import (
+            _resolve_value_tier_model,
+        )
+
+        router = _RecordingRouter()
+        summariser = make_llm_summariser(router)
+        summariser([_turn(0, user="u", agent="a")])
+        req = router.calls[0]
+        assert req.model == _resolve_value_tier_model()
+        assert req.model  # never empty
+
+    def test_resolver_falls_back_to_haiku_pin(self) -> None:
+        # The tier lookup blowing up must degrade to the historical
+        # pin inside _resolve_value_tier_model's own guard — never
+        # propagate out of summarise, never yield an empty model id.
+        import runtime.core.cerebrum.turn_complexity as tc
+        from runtime.memory.threads.llm_summariser import (
+            _resolve_value_tier_model,
+        )
+
+        def _boom(tier: str) -> str | None:
+            raise RuntimeError("smart routing unavailable")
+
+        original = tc._resolve_tier_model
+        tc._resolve_tier_model = _boom  # type: ignore[assignment]
+        try:
+            assert _resolve_value_tier_model() == "claude-haiku-4-5-20251001"
+        finally:
+            tc._resolve_tier_model = original  # type: ignore[assignment]
+
+    def test_explicit_model_skips_resolution(self) -> None:
+        import runtime.memory.threads.llm_summariser as mod
+
+        calls: list[str] = []
+
+        def _spy() -> str:
+            calls.append("resolved")
+            return "glm-4-flash"
+
+        original = mod._resolve_value_tier_model
+        mod._resolve_value_tier_model = _spy  # type: ignore[assignment]
+        try:
+            router = _RecordingRouter()
+            summariser = make_llm_summariser(
+                router,
+                config=LlmSummariserConfig(model="pinned-model"),
+            )
+            summariser([_turn(0, user="u", agent="a")])
+        finally:
+            mod._resolve_value_tier_model = original  # type: ignore[assignment]
+        assert calls == []  # pinned id short-circuits the resolver
+        assert router.calls[0].model == "pinned-model"
+
     def test_transcript_renders_operational_item_types(self) -> None:
         router = _RecordingRouter()
         summariser = make_llm_summariser(router)

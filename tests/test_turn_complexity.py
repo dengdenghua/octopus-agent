@@ -18,6 +18,7 @@ from runtime.core.cerebrum.turn_complexity import (
     estimate_turn_complexity,
     get_tier_config,
     is_smart_routing_enabled,
+    resolve_tier_model,
     select_model_for_complexity,
 )
 
@@ -156,6 +157,22 @@ def test_resolve_tier_local_unconfigured(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_resolve_tier_local_via_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OCTOPUS_MODEL_LOCAL", "ollama/qwen2.5:7b")
     assert _resolve_tier_model("local") == "ollama/qwen2.5:7b"
+
+
+def test_public_resolve_tier_model_delegates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Public alias mirrors private resolution and stays a live
+    delegate - patching the private symbol shows through the alias
+    (the design contract the summariser failure-injection tests rely
+    on)."""
+    monkeypatch.setenv("OCTOPUS_MODEL_VALUE", "value-model")
+    assert resolve_tier_model("value") == "value-model"
+    monkeypatch.setattr(
+        "runtime.core.cerebrum.turn_complexity._resolve_tier_model",
+        lambda tier: f"patched-{tier}",
+    )
+    assert resolve_tier_model("value") == "patched-value"
 
 
 def test_resolve_tier_value_default(monkeypatch: pytest.MonkeyPatch) -> None:

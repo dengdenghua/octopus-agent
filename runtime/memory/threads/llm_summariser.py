@@ -68,13 +68,16 @@ _SYSTEM_PROMPT = (
 class LlmSummariserConfig:
     """How the router is invoked.
 
-    ``model`` names the upstream model id — use the user's preferred
-    small / cheap one (e.g. ``claude-haiku-4-5-20251001``). ``max_tokens``
-    caps the summary length; remember this shows up verbatim inside
-    every future turn's context.
+    ``model`` names the upstream model id. ``None`` (the default)
+    resolves through the project's smart-routing *value* tier — the
+    same cheap slot the main chat path uses (``OCTOPUS_MODEL_VALUE``
+    env → ``smart_routing.value`` config → custom-model catalog
+    auto-derivation → ``glm-4-flash``). A literal id pins the call, as
+    before. ``max_tokens`` caps the summary length; remember this
+    shows up verbatim inside every future turn's context.
     """
 
-    model: str = "claude-haiku-4-5-20251001"
+    model: str | None = None
     system_provider: str = "anthropic"
     max_tokens: int = 600
     temperature: float = 0.2
@@ -82,6 +85,24 @@ class LlmSummariserConfig:
     """Hard cap on characters sent to the model per compaction. We
     trim the tail first (older turns are kept, newer stale turns
     are the first to be summarised — trimming loses less)."""
+
+
+def _resolve_value_tier_model() -> str:
+    """Cheap-slot model id via smart routing, hard-pinned last resort.
+
+    Resolution failure anywhere in the chain (import guard included)
+    falls back to the historical Haiku pin so the summariser keeps
+    working on stacks where turn-complexity wiring is unavailable.
+    """
+    try:
+        from runtime.core.cerebrum.turn_complexity import resolve_tier_model
+
+        resolved = resolve_tier_model("value")
+        if resolved and resolved.strip():
+            return resolved.strip()
+    except Exception:  # noqa: BLE001 — never block compaction on a probe
+        pass
+    return "claude-haiku-4-5-20251001"
 
 
 def make_llm_summariser(
@@ -96,11 +117,18 @@ def make_llm_summariser(
     mechanical default summariser from :mod:`runtime.memory.threads.compaction`.
     """
     cfg = config or LlmSummariserConfig()
+    # Resolve lazily (first summarise call) and cache: smart-routing
+    # config may still be settling when the runtime wires this up, and
+    # re-resolving per compaction would re-read provider state for a
+    # value that effectively never changes mid-session.
+    _resolved_model: list[str] = []
 
     def summarise(turns: Sequence[Turn]) -> str:
+        if not _resolved_model:
+            _resolved_model.append(cfg.model if cfg.model else _resolve_value_tier_model())
         transcript = _render_transcript(turns, cfg.transcript_char_budget)
         request = ModelRequest(
-            model=cfg.model,
+            model=_resolved_model[0],
             system_provider=cfg.system_provider,
             max_tokens=cfg.max_tokens,
             temperature=cfg.temperature,

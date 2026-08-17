@@ -88,6 +88,15 @@ def is_smart_routing_enabled() -> bool:
     return True
 
 
+def resolve_tier_model(tier: str) -> str | None:
+    """Public alias for :func:`_resolve_tier_model`.
+
+    Kept as a thin runtime delegate so tests that monkeypatch the
+    private symbol keep working; external callers should use this name.
+    """
+    return _resolve_tier_model(tier)
+
+
 def _resolve_tier_model(tier: str) -> str | None:
     """Resolve the model name configured for a tier, or None.
 
@@ -545,5 +554,6 @@ __all__ = [
     "is_smart_routing_enabled",
     "select_model_for_complexity",
     "_resolve_code_model",
+    "resolve_tier_model",
     "_resolve_tier_model",
 ]

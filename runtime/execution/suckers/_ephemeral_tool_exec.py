@@ -63,7 +63,10 @@ def _ephemeral_write_confine_block(call: Any, skill: Any) -> str | None:
         return (
             f"(blocked: '{getattr(call, 'name', '?')}' is a shell/exec tool and "
             f"cannot be confined to the locked worktree — isolated spawns run "
-            f"without shell access)"
+            f"without shell access. Do not retry shell tools here; use the "
+            f"read-only retrieval tools instead: read_file, read_file_range, "
+            f"grep_text, glob_files, list_cwd, tree, code_search. If a command "
+            f"must really run, report it as a finding for the parent session.)"
         )
     path_payload = any(key in args for key in ("path", "file_path", "filepath", "root", "patch"))
     filesystem_affinity = any(
