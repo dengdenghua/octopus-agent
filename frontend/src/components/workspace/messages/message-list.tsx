@@ -796,7 +796,8 @@ function SubagentClusterSection({
             </div>
             <div className="text-xs text-muted-foreground">
               {stats.completed}/{stats.total} {t.subagents.completed}
-              {stats.running > 0 && ` · ${stats.running} ${t.subagents.running}`}
+              {stats.running > 0 &&
+                ` · ${stats.running} ${t.subagents.running}`}
               {stats.failed > 0 && ` · ${stats.failed} ${t.subagents.failed}`}
             </div>
           </div>
@@ -1833,9 +1834,10 @@ export function MessageList({
       const subagentEventsInTurn = (() => {
         // Try liveToolEvents first (for current streaming turn), then fall back
         // to allToolEvents filtered by iteration (for historical turns).
-        const eventsToSearch = liveToolEvents && liveToolEvents.length > 0
-          ? liveToolEvents
-          : allToolEvents ?? [];
+        const eventsToSearch =
+          liveToolEvents && liveToolEvents.length > 0
+            ? liveToolEvents
+            : (allToolEvents ?? []);
 
         if (eventsToSearch.length === 0) return [];
 
@@ -1884,9 +1886,7 @@ export function MessageList({
               groupId={group.id ?? group.messages[0]?.id ?? "assistant"}
               isLoading={
                 thread.isLoading &&
-                group.messages.some(
-                  (m) => m.id === thread.streamingMessage?.id,
-                )
+                group.messages.some((m) => m.id === thread.streamingMessage?.id)
               }
             />
           )}

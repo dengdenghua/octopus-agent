@@ -118,6 +118,7 @@ def create_evolution_ops_router(
     journal: Any = None,
     registry: Any = None,
     planner: Any = None,
+    thread_store: Any = None,
     forged_skill_dir: Path | str | None = None,
     identity_store: Any = None,
     require_auth: bool = False,
@@ -332,9 +333,61 @@ def create_evolution_ops_router(
             if len(observations) >= limit:
                 break
 
+        # Thread history is durable while some lightweight journal backends are
+        # process-local. Use recent conversations as observation-only evidence
+        # when trajectories are absent; they never count as learned changes.
+        observed_thread_ids = {
+            str(item.get("thread_id") or "") for item in observations if item.get("thread_id")
+        }
+        if len(observations) < limit and thread_store is not None:
+            try:
+                recent_threads = thread_store.search(limit=limit * 3, sort_by="updated_at")
+            except (AttributeError, TypeError, OSError):
+                recent_threads = []
+            for thread in recent_threads:
+                thread_id = str(thread.get("thread_id") or "")
+                if not thread_id or thread_id in observed_thread_ids:
+                    continue
+                values = thread.get("values") if isinstance(thread.get("values"), dict) else {}
+                messages = values.get("messages") if isinstance(values.get("messages"), list) else []
+                human_text = ""
+                tool_count = 0
+                for message in messages:
+                    if not isinstance(message, dict):
+                        continue
+                    if not human_text and message.get("type") == "human":
+                        content = message.get("content")
+                        human_text = str(content if isinstance(content, str) else "").strip()
+                    calls = message.get("tool_calls")
+                    if isinstance(calls, list):
+                        tool_count += len(calls)
+                title = str(values.get("title") or "").strip()
+                if title.lower() in {"new chat", "untitled", "新对话", "未命名"}:
+                    title = ""
+                if not title:
+                    title = human_text
+                if not title and not messages:
+                    continue
+                status = str(thread.get("status") or "idle")
+                observations.append(
+                    {
+                        "task_id": thread_id,
+                        "thread_id": thread_id,
+                        "title": title,
+                        "timestamp": str(thread.get("updated_at") or thread.get("created_at") or ""),
+                        "status": status,
+                        "success": status not in {"error", "failed", "cancelled"},
+                        "step_count": tool_count,
+                        "tools": [],
+                    }
+                )
+                observed_thread_ids.add(thread_id)
+                if len(observations) >= limit:
+                    break
+
         return {
             "has_real_change": bool(changes),
-            "observed_task_count": len(seen_tasks),
+            "observed_task_count": len(observations),
             "durable_change_count": len(changes),
             "rule_count": len(rules),
             "memory_count": len(memories),

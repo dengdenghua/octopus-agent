@@ -67,7 +67,8 @@ describe("EvolutionDashboard states", () => {
     }
   });
 
-  it("labels populated trend and skill charts", () => {
+  it("labels populated trend and skill charts", async () => {
+    const user = userEvent.setup();
     queries.overview.data = {
       skills: { total: 1, auto_extracted: 1 },
       memory: { total_facts: 2, categories: { rules: 1 } },
@@ -117,6 +118,8 @@ describe("EvolutionDashboard states", () => {
     };
 
     renderWithProviders(<EvolutionDashboard />, { locale: "zh-CN" });
+
+    await user.click(screen.getByText("查看运行数据（高级）"));
 
     expect(
       screen.getByRole("heading", {

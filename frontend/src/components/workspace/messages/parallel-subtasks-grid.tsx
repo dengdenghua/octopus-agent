@@ -26,7 +26,26 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   ArrowRightIcon,
+  FileIcon,
+  RefreshCwIcon,
 } from "lucide-react";
+
+/**
+ * Format duration in milliseconds to human-readable string
+ */
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) {
+    return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+}
 
 function getStatusIcon(status: SubtaskStatus) {
   if (status === "completed")
@@ -188,6 +207,18 @@ function MiniSubtaskRow({
                 {statusLabel}
               </span>
             ) : null}
+            {/* 迭代次数 */}
+            {task.iterationCount && task.iterationCount > 0 && (
+              <span className="shrink-0 text-xs text-muted-foreground">
+                · {task.iterationCount}x
+              </span>
+            )}
+            {/* 文件修改数 */}
+            {task.filesTouched && task.filesTouched.length > 0 && (
+              <span className="shrink-0 flex items-center gap-0.5 text-xs text-muted-foreground">
+                · <FileIcon className="size-3" /> {task.filesTouched.length}
+              </span>
+            )}
             {/* 角色说明 toggle — stacked above the stretched button */}
             <button
               type="button"
@@ -327,6 +358,35 @@ export function SubtaskHoverPreview({
                 </span>
               )}
             </div>
+            {/* 额外的统计信息 */}
+            {(task.iterationCount || task.filesTouched?.length || task.duration) && (
+              <div className="mt-3 flex items-center gap-4 text-xs">
+                {task.iterationCount && task.iterationCount > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <RefreshCwIcon className="size-3 text-muted-foreground" />
+                    <span className="text-muted-foreground">
+                      {task.iterationCount} {t.subagents.iterations}
+                    </span>
+                  </div>
+                )}
+                {task.filesTouched && task.filesTouched.length > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <FileIcon className="size-3 text-muted-foreground" />
+                    <span className="text-muted-foreground">
+                      {task.filesTouched.length} {t.subagents.filesModified}
+                    </span>
+                  </div>
+                )}
+                {task.duration && (
+                  <div className="flex items-center gap-1.5">
+                    <ClockIcon className="size-3 text-muted-foreground" />
+                    <span className="text-muted-foreground">
+                      {formatDuration(task.duration)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
         <div className="mt-4 max-h-64 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-muted/35 p-3 text-sm leading-6 text-foreground">
