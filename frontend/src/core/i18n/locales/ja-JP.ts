@@ -1357,6 +1357,8 @@ export const jaJP: Translations = {
     subagentBusStreamLive: "リアルタイム",
     subagentBusStreamConnecting: "接続中…",
     subagentBusStreamError: "ストリームエラー — 再接続中",
+    subagentDispatchFailed:
+      "並列委任は開始されず、サブエージェントは作成されませんでした。",
     subagentBusStreamEmpty: "サブエージェントのアクティビティはまだありません",
     subagentBusStreamEvents: (count) => `${count} 件のイベント`,
     substreamTab: "サブスレッドのイベントストリーム",
@@ -3097,6 +3099,7 @@ export const jaJP: Translations = {
     subagent: "Sub-agent",
     executing: (count: number) =>
       `${count === 1 ? "" : count + " 個の"}サブ Agent を${count === 1 ? "" : "並列"}実行`,
+    parallelExecution: "並列実行",
     pending: "Waiting",
     reasoning: "Reasoning",
     iterating: "Iterating",
@@ -3104,10 +3107,19 @@ export const jaJP: Translations = {
     analyzing: "Analyzing",
     summarizing: "Summarizing",
     in_progress: "サブエージェント実行中",
-    completed: "サブエージェント完了",
-    failed: "サブエージェント失敗",
+    completed: "完了",
+    failed: "失敗",
     cancelled: "Cancelled",
     timed_out: "タイムアウト",
+    running: "実行中",
+    expandAll: "すべて展開",
+    collapseAll: "すべて折りたたむ",
+    iterations: "回の反復",
+    duration: "実行時間",
+    filesModified: "ファイル変更",
+    executionHistory: "実行履歴",
+    modifiedFiles: "変更されたファイル",
+    viewDetails: "詳細を表示",
   },
 
   todoList: {
@@ -5986,15 +5998,52 @@ export const jaJP: Translations = {
     noTrendYet:
       "まだ傾向が形成されていません。タスクを数回実行すると、成功率と所要時間の変化が表示されます。",
     recentChange: "最近の変化",
-    currentSuccessRate: "現在の成功率",
+    currentSuccessRate: "ツール呼び出し成功率",
     recentSkillCalls: "最近のスキル呼び出し",
-    strongerSkills: "成長したスキル",
+    strongerSkills: "よく使うスキルの実績",
     noSkillPerformanceYet:
       "スキルの実績データはまだありません。使用回数と成功率に基づいて、よく使う能力が表示されます。",
     skillCalls: (count: number) => `${count} 回呼び出し`,
     howToImproveNext: "次にどう改善するか",
     noPendingRecommendations:
       "保留中の提案はありません。改善点が見つかると、分かりやすい提案としてここに表示されます。",
+    storyNoRealChangeTitle: "この期間に本当の進化はありませんでした",
+    storyRealChangeTitle: (count: number) => `${count} 件を本当に学習しました`,
+    storyNoRealChangeDescription: (count: number) =>
+      `${count} 件のタスクを観察しましたが、記憶・ルール・スキルとして保存されていません。実行と進化は別です。`,
+    storyRealChangeDescription: (count: number) =>
+      `${count} 件の変更が保存され、今後のタスクに影響します。`,
+    notEvolutionBadge: "観察のみ・進化ではありません",
+    observedTasks: "観察したタスク",
+    observedTasksPlainDescription: "実行記録を残しました",
+    savedLessons: "保存した経験",
+    savedLessonsPlainDescription: "似たタスクで再利用できます",
+    changedBehaviors: "変わった行動",
+    changedBehaviorsPlainDescription: "次回の実行に影響します",
+    actualChangesTitle: "実際に何を学んだか",
+    actualChangesEmptyTitle: "再利用できる新しい学びはまだありません",
+    actualChangesEmptyDescription:
+      "タスクの記録はありますが、振り返りと保存はまだです。",
+    changeRuleLabel: "失敗を回避",
+    changeMemoryLabel: "経験を記憶",
+    changeSkillLabel: "新しい能力",
+    ruleFutureEffect: "似たタスクの前にこの回避ルールを適用します。",
+    memoryFutureEffect: "似た状況でこの経験を思い出せます。",
+    skillFutureEffect: "今後この能力を直接呼び出せます。",
+    observationsTitle: "最近観察したタスク",
+    observationsDescription:
+      "これは学習素材です。上の一覧にないものは行動をまだ変えていません。",
+    unnamedObservedTask: "無題のタスク",
+    taskCompleted: "完了",
+    taskNotCompleted: "未完了",
+    taskSteps: (count: number) => `${count} 実行ステップ`,
+    nextActionTitle: "本当に進化させるには",
+    reflectionActionTitle: (count: number) => `直近 ${count} 件を振り返る`,
+    reflectionActionDescription:
+      "成功と失敗のパターンをルールとして保存すると、次回の行動が変わります。",
+    technicalDetails: "実行指標を見る（上級）",
+    metricsNotEvolutionNote:
+      "成功率と時間は実行状況であり、学習結果ではありません",
   },
 
   // Wiki Panel
@@ -6158,6 +6207,8 @@ export const jaJP: Translations = {
     pageOpenedAndExtracted: "ページを開き、本文を抽出しました。",
     parallelDispatching: (count) =>
       `並列サブタスクを${count ? ` ${count} 個` : ""}ディスパッチ中`,
+    parallelDispatchFailed: (count) =>
+      `並列委任に失敗${count ? ` · ${count} 件は未開始` : ""}`,
     parallelTasksReturned: (count) =>
       `並列サブタスクが返却${count ? ` · ${count} 個` : ""}`,
     rolesWithNextStep: (roles) =>

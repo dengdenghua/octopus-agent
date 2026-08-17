@@ -1343,6 +1343,8 @@ export const koKR: Translations = {
     subagentBusStreamLive: "실시간",
     subagentBusStreamConnecting: "연결 중…",
     subagentBusStreamError: "스트림 오류 — 재연결 중",
+    subagentDispatchFailed:
+      "병렬 위임이 시작되지 않아 서브 에이전트가 생성되지 않았습니다.",
     subagentBusStreamEmpty: "아직 서브 에이전트 활동 없음",
     subagentBusStreamEvents: (count) => `${count} 개 이벤트`,
     substreamTab: "서브 스레드 이벤트 스트림",
@@ -3042,6 +3044,7 @@ export const koKR: Translations = {
     subagent: "서브 Agent",
     executing: (count: number) =>
       `${count > 1 ? "병렬 " : ""}${count}개 서브 Agent 실행 중`,
+    parallelExecution: "병렬 실행",
     pending: "Waiting",
     reasoning: "Reasoning",
     iterating: "Iterating",
@@ -3049,10 +3052,19 @@ export const koKR: Translations = {
     analyzing: "Analyzing",
     summarizing: "Summarizing",
     in_progress: "서브 Agent 실행 중",
-    completed: "서브 Agent 완료",
-    failed: "서브 Agent 실패",
+    completed: "완료됨",
+    failed: "실패",
     cancelled: "Cancelled",
     timed_out: "시간 초과됨",
+    running: "실행 중",
+    expandAll: "모두 펼치기",
+    collapseAll: "모두 접기",
+    iterations: "반복",
+    duration: "실행 시간",
+    filesModified: "파일 수정됨",
+    executionHistory: "실행 기록",
+    modifiedFiles: "수정된 파일",
+    viewDetails: "세부 정보 보기",
   },
 
   todoList: {
@@ -5899,15 +5911,53 @@ export const koKR: Translations = {
     noTrendYet:
       "아직 추이가 형성되지 않았습니다. 작업을 몇 차례 수행하면 성공률과 소요 시간 변화가 표시됩니다.",
     recentChange: "최근 변화",
-    currentSuccessRate: "현재 성공률",
+    currentSuccessRate: "도구 호출 성공률",
     recentSkillCalls: "최근 스킬 호출",
-    strongerSkills: "성장한 스킬",
+    strongerSkills: "자주 쓰는 스킬 성과",
     noSkillPerformanceYet:
       "아직 스킬 성능 데이터가 없습니다. 사용 횟수와 성공률에 따라 자주 사용하는 역량이 표시됩니다.",
     skillCalls: (count: number) => `${count}회 호출`,
     howToImproveNext: "다음에는 어떻게 더 좋아질까요",
     noPendingRecommendations:
       "대기 중인 제안이 없습니다. 최적화 기회를 발견하면 이해하기 쉬운 제안으로 여기에 표시됩니다.",
+    storyNoRealChangeTitle: "이 기간에는 실제 진화가 없었습니다",
+    storyRealChangeTitle: (count: number) =>
+      `${count}가지를 실제로 학습했습니다`,
+    storyNoRealChangeDescription: (count: number) =>
+      `${count}개 작업을 관찰했지만 기억, 규칙 또는 기술로 저장하지 않았습니다. 실행과 진화는 다릅니다.`,
+    storyRealChangeDescription: (count: number) =>
+      `${count}개의 변경이 저장되어 이후 작업에 영향을 줍니다.`,
+    notEvolutionBadge: "관찰만 함 · 진화 아님",
+    observedTasks: "관찰한 작업",
+    observedTasksPlainDescription: "실행 기록을 남겼습니다",
+    savedLessons: "저장한 경험",
+    savedLessonsPlainDescription: "비슷한 작업에서 다시 사용합니다",
+    changedBehaviors: "달라진 행동",
+    changedBehaviorsPlainDescription: "다음 실행에 영향을 줍니다",
+    actualChangesTitle: "실제로 무엇을 배웠나",
+    actualChangesEmptyTitle: "재사용할 새 학습이 아직 없습니다",
+    actualChangesEmptyDescription:
+      "작업 기록만 있으며 아직 회고하고 저장하지 않았습니다.",
+    changeRuleLabel: "실수 방지",
+    changeMemoryLabel: "경험 기억",
+    changeSkillLabel: "새 능력",
+    ruleFutureEffect: "비슷한 작업 전에 이 방지 규칙을 적용합니다.",
+    memoryFutureEffect: "비슷한 상황에서 이 경험을 떠올릴 수 있습니다.",
+    skillFutureEffect: "이후 작업에서 이 능력을 직접 호출할 수 있습니다.",
+    observationsTitle: "최근 관찰한 작업",
+    observationsDescription:
+      "학습 재료일 뿐입니다. 위 목록에 없다면 아직 행동이 바뀌지 않았습니다.",
+    unnamedObservedTask: "이름 없는 작업",
+    taskCompleted: "완료",
+    taskNotCompleted: "미완료",
+    taskSteps: (count: number) => `실행 ${count}단계`,
+    nextActionTitle: "실제로 진화시키는 방법",
+    reflectionActionTitle: (count: number) => `최근 ${count}개 작업 회고`,
+    reflectionActionDescription:
+      "반복된 성공과 실패를 규칙으로 저장해야 다음 실행이 달라집니다.",
+    technicalDetails: "실행 지표 보기(고급)",
+    metricsNotEvolutionNote:
+      "성공률과 시간은 실행 상태이며 학습 결과가 아닙니다",
   },
 
   // Wiki Panel
@@ -6065,6 +6115,8 @@ export const koKR: Translations = {
     pageOpenedAndExtracted: "페이지를 열고 주요 내용을 추출했습니다.",
     parallelDispatching: (count) =>
       `병렬 하위 작업${count ? ` ${count}개` : ""} 분배 중`,
+    parallelDispatchFailed: (count) =>
+      `병렬 위임 실패${count ? ` · ${count}개 작업 미시작` : ""}`,
     parallelTasksReturned: (count) =>
       `병렬 하위 작업 반환${count ? ` · ${count}개` : ""}`,
     rolesWithNextStep: (roles) =>

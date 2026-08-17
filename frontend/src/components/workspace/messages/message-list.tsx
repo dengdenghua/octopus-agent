@@ -6,6 +6,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   XCircleIcon,
+  UsersIcon,
 } from "lucide-react";
 import {
   Fragment,
@@ -40,7 +41,8 @@ import {
 import { useRehypeSplitWordsIntoSpans } from "@/core/rehype";
 import type { StreamVitals } from "@/core/realtime/stream-vitals";
 import type { Subtask } from "@/core/tasks";
-import { useUpdateSubtask } from "@/core/tasks/context";
+import { useUpdateSubtask, useSubtaskContext } from "@/core/tasks/context";
+import { isSubtaskActive } from "@/core/tasks/types";
 import type { AgentThreadState } from "@/core/threads";
 import {
   findTimelineItemElement,
@@ -724,6 +726,121 @@ const MemoizedGroup = memo(
     prev.groupFailure === next.groupFailure &&
     prev.showAssistantAvatar === next.showAssistantAvatar,
 );
+
+/**
+ * Enhanced cluster header section for subagent groups.
+ * Shows overall progress, statistics, and controls.
+ */
+function SubagentClusterSection({
+  subagentEvents,
+  groupId,
+  isLoading,
+}: {
+  subagentEvents: Array<{ id: string }>;
+  groupId: string | undefined;
+  isLoading: boolean;
+}) {
+  const { t } = useI18n();
+  const [allCollapsed, setAllCollapsed] = useState(false);
+  const { tasks } = useSubtaskContext();
+
+  // Calculate statistics
+  const stats = useMemo(() => {
+    const result = {
+      total: subagentEvents.length,
+      completed: 0,
+      running: 0,
+      pending: 0,
+      failed: 0,
+    };
+
+    for (const event of subagentEvents) {
+      const task = tasks[event.id];
+      if (!task) {
+        result.pending += 1;
+        continue;
+      }
+
+      if (task.status === "completed") {
+        result.completed += 1;
+      } else if (
+        task.status === "failed" ||
+        task.status === "timed_out" ||
+        task.status === "cancelled"
+      ) {
+        result.failed += 1;
+      } else if (isSubtaskActive(task.status)) {
+        result.running += 1;
+      } else {
+        result.pending += 1;
+      }
+    }
+
+    return result;
+  }, [subagentEvents, tasks]);
+
+  const progressPercent =
+    stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
+
+  return (
+    <div className="mt-4 ml-11">
+      {/* Enhanced cluster header */}
+      <div className="mb-3 flex items-center justify-between rounded-lg border border-border-default bg-muted/20 px-4 py-2.5">
+        <div className="flex items-center gap-3">
+          <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+            <UsersIcon className="size-4 text-primary" />
+          </div>
+          <div>
+            <div className="text-sm font-semibold">
+              {t.subagents.parallelExecution}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {stats.completed}/{stats.total} {t.subagents.completed}
+              {stats.running > 0 && ` · ${stats.running} ${t.subagents.running}`}
+              {stats.failed > 0 && ` · ${stats.failed} ${t.subagents.failed}`}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {/* Overall progress bar */}
+          <div className="h-1.5 w-32 overflow-hidden rounded-full bg-muted/60">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all duration-500",
+                stats.running > 0
+                  ? "bg-success animate-pulse"
+                  : stats.failed > 0 && stats.completed === 0
+                    ? "bg-destructive"
+                    : "bg-success",
+              )}
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+          <span className="font-mono text-xs tabular-nums text-muted-foreground">
+            {progressPercent}%
+          </span>
+        </div>
+      </div>
+
+      {/* Subagent grid or cards */}
+      {subagentEvents.length > 1 ? (
+        <ParallelSubtasksGrid
+          key={"parallel-grid-live-" + (groupId ?? "unknown")}
+          taskIds={subagentEvents.map((e) => e.id)}
+          isLoading={isLoading}
+        />
+      ) : (
+        subagentEvents.map((event) => (
+          <SubtaskCard
+            key={"task-live-" + event.id}
+            taskId={event.id}
+            isLoading={isLoading}
+          />
+        ))
+      )}
+    </div>
+  );
+}
 
 /**
  * Unified chat message list.
@@ -1762,36 +1879,16 @@ export function MessageList({
           )}
           {outputSummary && !outputHostMessage && outputSummary}
           {hasSubagentsInTurn && group.type === "assistant" && (
-            <div className="mt-4 ml-11">
-              <div className="text-muted-foreground font-normal pt-2 text-sm mb-2">
-                {t.subagents.executing(subagentEventsInTurn.length)}
-              </div>
-              {subagentEventsInTurn.length > 1 ? (
-                <ParallelSubtasksGrid
-                  key={"parallel-grid-live-" + group.id}
-                  taskIds={subagentEventsInTurn.map((e) => e.id)}
-                  isLoading={
-                    thread.isLoading &&
-                    group.messages.some(
-                      (m) => m.id === thread.streamingMessage?.id,
-                    )
-                  }
-                />
-              ) : (
-                subagentEventsInTurn.map((event) => (
-                  <SubtaskCard
-                    key={"task-live-" + event.id}
-                    taskId={event.id}
-                    isLoading={
-                      thread.isLoading &&
-                      group.messages.some(
-                        (m) => m.id === thread.streamingMessage?.id,
-                      )
-                    }
-                  />
-                ))
-              )}
-            </div>
+            <SubagentClusterSection
+              subagentEvents={subagentEventsInTurn}
+              groupId={group.id ?? group.messages[0]?.id ?? "assistant"}
+              isLoading={
+                thread.isLoading &&
+                group.messages.some(
+                  (m) => m.id === thread.streamingMessage?.id,
+                )
+              }
+            />
           )}
         </>
       );

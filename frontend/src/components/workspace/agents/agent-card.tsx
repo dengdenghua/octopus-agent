@@ -50,7 +50,7 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
 
   return (
     <>
-      <Card className="group flex flex-col overflow-hidden rounded-lg border-border-default bg-card/86 py-0 shadow-[var(--shadow-xs)] transition-all duration-base sm:min-h-[176px] hover:-translate-y-0.5 hover:border-primary/30 hover:bg-card hover:shadow-[var(--shadow-sm)]">
+      <Card className="group flex flex-col overflow-hidden rounded-lg border-border-default bg-card/86 py-0 shadow-[var(--shadow-xs)] transition-all duration-base sm:min-h-[164px] hover:-translate-y-0.5 hover:border-primary/30 hover:bg-card hover:shadow-[var(--shadow-sm)]">
         <button
           type="button"
           disabled={!onSelect}
@@ -102,7 +102,10 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
               </div>
             </div>
             {agent.description && (
-              <CardDescription className="mt-2 line-clamp-2 min-h-8 text-xs leading-4 sm:line-clamp-3 sm:min-h-12">
+              <CardDescription
+                className="mt-2 line-clamp-2 min-h-8 text-xs leading-4"
+                title={agent.description}
+              >
                 {agent.description}
               </CardDescription>
             )}

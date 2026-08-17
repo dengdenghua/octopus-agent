@@ -72,7 +72,7 @@ function AgentKanbanViewImpl({
   groundingSources: GroundingSource[];
   preferStructuredReferences: boolean;
   mainAgentName: string | null | undefined;
-  terminalState: "interrupted" | "failed" | null;
+  terminalState: "interrupted" | "failed" | "blocked" | null;
   contextTokens?: number;
   maxContextTokens?: number;
   isCompressingContext?: boolean;

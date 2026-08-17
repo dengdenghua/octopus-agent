@@ -1160,6 +1160,7 @@ export interface Translations {
     subagentBusStreamLive: string;
     subagentBusStreamConnecting: string;
     subagentBusStreamError: string;
+    subagentDispatchFailed: string;
     subagentBusStreamEmpty: string;
     subagentBusStreamEvents: (count: number) => string;
     substreamTab: string;
@@ -2488,6 +2489,7 @@ export interface Translations {
   subagents: {
     subagent: string;
     executing: (count: number) => string;
+    parallelExecution: string;
     pending: string;
     reasoning: string;
     iterating: string;
@@ -2499,6 +2501,15 @@ export interface Translations {
     failed: string;
     cancelled: string;
     timed_out: string;
+    running: string;
+    expandAll: string;
+    collapseAll: string;
+    iterations: string;
+    duration: string;
+    filesModified: string;
+    executionHistory: string;
+    modifiedFiles: string;
+    viewDetails: string;
   };
 
   todoList: {
@@ -5183,6 +5194,37 @@ export interface Translations {
     // Recommendations story
     howToImproveNext: string;
     noPendingRecommendations: string;
+    storyNoRealChangeTitle: string;
+    storyRealChangeTitle: (count: number) => string;
+    storyNoRealChangeDescription: (count: number) => string;
+    storyRealChangeDescription: (count: number) => string;
+    notEvolutionBadge: string;
+    observedTasks: string;
+    observedTasksPlainDescription: string;
+    savedLessons: string;
+    savedLessonsPlainDescription: string;
+    changedBehaviors: string;
+    changedBehaviorsPlainDescription: string;
+    actualChangesTitle: string;
+    actualChangesEmptyTitle: string;
+    actualChangesEmptyDescription: string;
+    changeRuleLabel: string;
+    changeMemoryLabel: string;
+    changeSkillLabel: string;
+    ruleFutureEffect: string;
+    memoryFutureEffect: string;
+    skillFutureEffect: string;
+    observationsTitle: string;
+    observationsDescription: string;
+    unnamedObservedTask: string;
+    taskCompleted: string;
+    taskNotCompleted: string;
+    taskSteps: (count: number) => string;
+    nextActionTitle: string;
+    reflectionActionTitle: (count: number) => string;
+    reflectionActionDescription: string;
+    technicalDetails: string;
+    metricsNotEvolutionNote: string;
   };
 
   // Wiki Panel
@@ -5332,6 +5374,7 @@ export interface Translations {
     sourceFrom: (source: string) => string;
     pageOpenedAndExtracted: string;
     parallelDispatching: (count?: number) => string;
+    parallelDispatchFailed: (count?: number) => string;
     parallelTasksReturned: (count?: number) => string;
     rolesWithNextStep: (roles: string) => string;
     subtaskAggregation: string;

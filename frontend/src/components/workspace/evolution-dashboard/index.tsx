@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   BrainCircuitIcon,
   TrendingUpIcon,
@@ -8,6 +8,10 @@ import {
   BookOpenIcon,
   LightbulbIcon,
   RefreshCwIcon,
+  ChevronDownIcon,
+  ArrowRightIcon,
+  CheckCircle2Icon,
+  CircleDashedIcon,
 } from "lucide-react";
 
 import {
@@ -16,12 +20,14 @@ import {
   useSkillPerformance,
   useMemoryGrowth,
   useRecommendations,
+  useEvolutionStory,
 } from "@/core/evolution/hooks";
 import type {
   EvolutionOverview,
   LearningCurvePoint,
   SkillPerformance,
   Recommendation,
+  EvolutionStory,
 } from "@/core/evolution/api";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -57,20 +63,23 @@ export function EvolutionDashboard({ className }: { className?: string }) {
   const skillPerformanceQ = useSkillPerformance();
   const memoryGrowthQ = useMemoryGrowth();
   const recommendationsQ = useRecommendations();
+  const storyQ = useEvolutionStory();
 
   const isLoading =
     overviewQ.isLoading ||
     learningCurveQ.isLoading ||
     skillPerformanceQ.isLoading ||
     memoryGrowthQ.isLoading ||
-    recommendationsQ.isLoading;
+    recommendationsQ.isLoading ||
+    storyQ.isLoading;
 
   const firstError =
     overviewQ.error ||
     learningCurveQ.error ||
     skillPerformanceQ.error ||
     memoryGrowthQ.error ||
-    recommendationsQ.error;
+    recommendationsQ.error ||
+    storyQ.error;
 
   const retryAll = () => {
     void Promise.allSettled([
@@ -79,6 +88,7 @@ export function EvolutionDashboard({ className }: { className?: string }) {
       skillPerformanceQ.refetch(),
       memoryGrowthQ.refetch(),
       recommendationsQ.refetch(),
+      storyQ.refetch(),
     ]);
   };
 
@@ -168,6 +178,7 @@ export function EvolutionDashboard({ className }: { className?: string }) {
   const learningCurve = learningCurveQ.data ?? [];
   const skillPerformance = skillPerformanceQ.data ?? [];
   const recommendations = recommendationsQ.data ?? [];
+  const story = storyQ.data;
   const topSkills = [...skillPerformance]
     .filter(
       (skill) =>
@@ -179,23 +190,264 @@ export function EvolutionDashboard({ className }: { className?: string }) {
 
   return (
     <div className={cn("space-y-5", className)}>
-      <GrowthStoryHero
-        overview={overview}
-        memorySparkline={memorySparkline}
-        recommendationCount={recommendations.length}
-      />
+      <PlainEvolutionStory story={story} recommendations={recommendations} />
 
-      <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <LearningStory data={learningCurve} />
-        <SkillStory data={topSkills} />
-      </div>
-
-      <RecommendationsStory data={recommendations} />
+      <details className="group rounded-lg border border-border-default bg-card">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium text-foreground marker:hidden">
+          <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
+          {t.evolutionDashboard.technicalDetails}
+          <span className="ml-auto text-xs font-normal text-muted-foreground">
+            {t.evolutionDashboard.metricsNotEvolutionNote}
+          </span>
+        </summary>
+        <div className="space-y-4 border-t border-border-subtle p-4">
+          <GrowthStoryHero
+            overview={overview}
+            memorySparkline={memorySparkline}
+            recommendationCount={recommendations.length}
+          />
+          <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+            <LearningStory data={learningCurve} />
+            <SkillStory data={topSkills} />
+          </div>
+          <RecommendationsStory data={recommendations} />
+        </div>
+      </details>
     </div>
   );
 }
 
 export default EvolutionDashboard;
+
+function PlainEvolutionStory({
+  story,
+  recommendations,
+}: {
+  story: EvolutionStory | null;
+  recommendations: Recommendation[];
+}) {
+  const { t } = useI18n();
+  const observedCount = story?.observed_task_count ?? 0;
+  const durableCount = story?.durable_change_count ?? 0;
+  const lessonCount = (story?.rule_count ?? 0) + (story?.memory_count ?? 0);
+  const hasRealChange = Boolean(story?.has_real_change && durableCount > 0);
+  const reflectionRecommendation = recommendations.find(
+    (item) => item.type === "extraction_opportunity",
+  );
+
+  return (
+    <section className="space-y-4">
+      <div
+        className={cn(
+          "rounded-xl border p-5",
+          hasRealChange
+            ? "border-success/25 bg-success/5"
+            : "border-warning/30 bg-warning/5",
+        )}
+      >
+        <div className="flex items-start gap-3">
+          <span
+            className={cn(
+              "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full",
+              hasRealChange
+                ? "bg-success/15 text-success"
+                : "bg-warning/15 text-warning",
+            )}
+          >
+            {hasRealChange ? (
+              <CheckCircle2Icon className="size-5" />
+            ) : (
+              <CircleDashedIcon className="size-5" />
+            )}
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold text-foreground">
+                {hasRealChange
+                  ? t.evolutionDashboard.storyRealChangeTitle(durableCount)
+                  : t.evolutionDashboard.storyNoRealChangeTitle}
+              </h2>
+              {!hasRealChange ? (
+                <span className="rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning">
+                  {t.evolutionDashboard.notEvolutionBadge}
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+              {hasRealChange
+                ? t.evolutionDashboard.storyRealChangeDescription(durableCount)
+                : t.evolutionDashboard.storyNoRealChangeDescription(
+                    observedCount,
+                  )}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid items-stretch gap-2 md:grid-cols-[1fr_auto_1fr_auto_1fr]">
+          <PlainStep
+            number={observedCount}
+            label={t.evolutionDashboard.observedTasks}
+            description={t.evolutionDashboard.observedTasksPlainDescription}
+            active={observedCount > 0}
+          />
+          <ArrowRightIcon className="mx-auto hidden size-4 self-center text-muted-foreground/50 md:block" />
+          <PlainStep
+            number={lessonCount}
+            label={t.evolutionDashboard.savedLessons}
+            description={t.evolutionDashboard.savedLessonsPlainDescription}
+            active={lessonCount > 0}
+          />
+          <ArrowRightIcon className="mx-auto hidden size-4 self-center text-muted-foreground/50 md:block" />
+          <PlainStep
+            number={durableCount}
+            label={t.evolutionDashboard.changedBehaviors}
+            description={t.evolutionDashboard.changedBehaviorsPlainDescription}
+            active={durableCount > 0}
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+        <section className="rounded-lg border border-border-default bg-card p-4">
+          <SectionTitle
+            icon={BrainCircuitIcon}
+            title={t.evolutionDashboard.actualChangesTitle}
+          />
+          {story?.changes.length ? (
+            <div className="mt-3 space-y-2">
+              {story.changes.slice(0, 6).map((change, index) => (
+                <div
+                  key={`${change.kind}-${change.title}-${index}`}
+                  className="rounded-lg border border-border-subtle bg-muted/15 px-3 py-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                      {change.kind === "rule"
+                        ? t.evolutionDashboard.changeRuleLabel
+                        : change.kind === "memory"
+                          ? t.evolutionDashboard.changeMemoryLabel
+                          : t.evolutionDashboard.changeSkillLabel}
+                    </span>
+                    {change.kind === "skill" ? (
+                      <span className="truncate text-xs font-medium">
+                        {change.title}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-foreground">
+                    {change.content}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    {change.kind === "rule"
+                      ? t.evolutionDashboard.ruleFutureEffect
+                      : change.kind === "memory"
+                        ? t.evolutionDashboard.memoryFutureEffect
+                        : t.evolutionDashboard.skillFutureEffect}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-3 rounded-lg border border-dashed border-warning/35 bg-warning/5 px-4 py-5">
+              <p className="text-sm font-medium text-foreground">
+                {t.evolutionDashboard.actualChangesEmptyTitle}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {t.evolutionDashboard.actualChangesEmptyDescription}
+              </p>
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-lg border border-border-default bg-card p-4">
+          <SectionTitle
+            icon={ActivityIcon}
+            title={t.evolutionDashboard.observationsTitle}
+          />
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {t.evolutionDashboard.observationsDescription}
+          </p>
+          <div className="mt-3 space-y-2">
+            {(story?.observations ?? []).slice(0, 5).map((observation) => (
+              <div
+                key={observation.task_id}
+                className="rounded-lg border border-border-subtle bg-muted/15 px-3 py-2.5"
+              >
+                <div className="flex items-start gap-2">
+                  <span
+                    className={cn(
+                      "mt-1 size-2 shrink-0 rounded-full",
+                      observation.success ? "bg-success" : "bg-warning",
+                    )}
+                  />
+                  <div className="min-w-0">
+                    <p className="line-clamp-2 text-xs font-medium leading-5 text-foreground">
+                      {observation.title ||
+                        t.evolutionDashboard.unnamedObservedTask}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {observation.success
+                        ? t.evolutionDashboard.taskCompleted
+                        : t.evolutionDashboard.taskNotCompleted}
+                      {" · "}
+                      {t.evolutionDashboard.taskSteps(observation.step_count)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      {!hasRealChange && reflectionRecommendation ? (
+        <section className="rounded-lg border border-primary/25 bg-primary/5 p-4">
+          <SectionTitle
+            icon={LightbulbIcon}
+            title={t.evolutionDashboard.nextActionTitle}
+          />
+          <p className="mt-2 text-sm font-medium text-foreground">
+            {t.evolutionDashboard.reflectionActionTitle(observedCount)}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {t.evolutionDashboard.reflectionActionDescription}
+          </p>
+        </section>
+      ) : null}
+    </section>
+  );
+}
+
+function PlainStep({
+  number,
+  label,
+  description,
+  active,
+}: {
+  number: number;
+  label: string;
+  description: string;
+  active: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-lg border px-4 py-3",
+        active
+          ? "border-primary/25 bg-background/80"
+          : "border-border-subtle bg-muted/20",
+      )}
+    >
+      <div className="text-2xl font-bold tabular-nums text-foreground">
+        {number}
+      </div>
+      <div className="mt-1 text-sm font-medium text-foreground">{label}</div>
+      <div className="mt-1 text-xs leading-5 text-muted-foreground">
+        {description}
+      </div>
+    </div>
+  );
+}
 
 function formatPercent(value: unknown, digits = 0): string {
   return `${fixed(numberOrZero(value) * 100, digits)}%`;
@@ -211,6 +463,9 @@ function GrowthStoryHero({
   recommendationCount: number;
 }) {
   const { t } = useI18n();
+  const [selectedInsightKey, setSelectedInsightKey] = useState<string | null>(
+    null,
+  );
   const skills = overview?.skills;
   const memory = overview?.memory;
   const learningEvents = numberOrZero(overview?.learning_events);
@@ -227,6 +482,7 @@ function GrowthStoryHero({
     recommendationCount > 0;
   const stages = [
     {
+      key: "tasks",
       icon: ActivityIcon,
       title: t.evolutionDashboard.observeTasks,
       value: learningEvents,
@@ -235,6 +491,7 @@ function GrowthStoryHero({
       description: t.evolutionDashboard.observeTasksDescription,
     },
     {
+      key: "memories",
       icon: DatabaseIcon,
       title: t.evolutionDashboard.accumulateMemories,
       value: totalMemories,
@@ -243,14 +500,16 @@ function GrowthStoryHero({
       description: t.evolutionDashboard.accumulateMemoriesDescription,
     },
     {
+      key: "metric-skills",
       icon: BookOpenIcon,
       title: t.evolutionDashboard.formSkills,
-      value: totalSkills,
+      value: autoSkills,
       unit: t.evolutionDashboard.unitSkills,
-      done: totalSkills > 0,
+      done: autoSkills > 0,
       description: t.evolutionDashboard.formSkillsDescription,
     },
     {
+      key: "improvements",
       icon: LightbulbIcon,
       title: t.evolutionDashboard.proposeImprovements,
       value: recommendationCount,
@@ -259,6 +518,63 @@ function GrowthStoryHero({
       description: t.evolutionDashboard.proposeImprovementsDescription,
     },
   ];
+  const metrics = [
+    {
+      key: "skills",
+      icon: BookOpenIcon,
+      title: t.evolutionDashboard.autoExtractedSkills,
+      value: autoSkills,
+      detail:
+        totalSkills > 0
+          ? t.evolutionDashboard.autoExtractedSkillsShare(
+              formatPercent(autoSkills / Math.max(totalSkills, 1)),
+            )
+          : t.evolutionDashboard.waitingForSkillAccumulation,
+    },
+    {
+      key: "metric-memories",
+      icon: DatabaseIcon,
+      title: t.evolutionDashboard.reusableMemoryLibrary,
+      value: totalMemories,
+      detail:
+        ruleCount > 0
+          ? t.evolutionDashboard.ruleMemoryCount(ruleCount)
+          : t.evolutionDashboard.memoryDetailDefault,
+      sparkline: memorySparkline.length >= 2 ? memorySparkline : undefined,
+    },
+    {
+      key: "metric-improvements",
+      icon: LightbulbIcon,
+      title: t.evolutionDashboard.nextSteps,
+      value: recommendationCount,
+      detail:
+        recommendationCount > 0
+          ? t.evolutionDashboard.nextStepsAvailable
+          : t.evolutionDashboard.nextStepsNone,
+    },
+  ];
+  const selectedStage = stages.find(
+    (stage) => stage.key === selectedInsightKey,
+  );
+  const selectedMetric = metrics.find(
+    (metric) => metric.key === selectedInsightKey,
+  );
+  const selectedInsight = selectedStage
+    ? {
+        title: selectedStage.title,
+        detail: selectedStage.description,
+        valueLabel: `${selectedStage.value}${selectedStage.unit}`,
+      }
+    : selectedMetric
+      ? {
+          title: selectedMetric.title,
+          detail: selectedMetric.detail,
+          valueLabel: String(selectedMetric.value),
+        }
+      : null;
+  const toggleInsight = (key: string) => {
+    setSelectedInsightKey((current) => (current === key ? null : key));
+  };
 
   return (
     <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
@@ -273,7 +589,7 @@ function GrowthStoryHero({
               {hasEvidence
                 ? t.evolutionDashboard.growthSummary(
                     totalMemories,
-                    totalSkills,
+                    autoSkills,
                     learningEvents,
                   )
                 : t.evolutionDashboard.noEvidenceDescription}
@@ -300,47 +616,51 @@ function GrowthStoryHero({
 
         <ol className="mt-5 grid gap-3 md:grid-cols-4">
           {stages.map((stage, index) => (
-            <EvolutionStage key={stage.title} stage={stage} index={index + 1} />
+            <EvolutionStage
+              key={stage.title}
+              stage={stage}
+              index={index + 1}
+              selected={selectedInsightKey === stage.key}
+              onActivate={() => toggleInsight(stage.key)}
+            />
           ))}
         </ol>
+
+        {selectedInsight ? (
+          <div
+            className="mt-3 rounded-lg border border-primary/25 bg-background/80 px-4 py-3 shadow-[var(--shadow-xs)]"
+            role="region"
+            aria-live="polite"
+            aria-label={selectedInsight.title}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">
+                  {selectedInsight.title}
+                </h3>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  {selectedInsight.detail}
+                </p>
+              </div>
+              <span className="shrink-0 text-sm font-semibold tabular-nums text-primary">
+                {selectedInsight.valueLabel}
+              </span>
+            </div>
+          </div>
+        ) : null}
 
         <GeneLockControlCard compact className="mt-3" />
       </div>
 
       <div className="grid h-fit gap-3 self-start sm:grid-cols-3 xl:grid-cols-3">
-        <StoryMetric
-          icon={BookOpenIcon}
-          title={t.evolutionDashboard.autoExtractedSkills}
-          value={autoSkills}
-          detail={
-            totalSkills > 0
-              ? t.evolutionDashboard.autoExtractedSkillsShare(
-                  formatPercent(autoSkills / Math.max(totalSkills, 1)),
-                )
-              : t.evolutionDashboard.waitingForSkillAccumulation
-          }
-        />
-        <StoryMetric
-          icon={DatabaseIcon}
-          title={t.evolutionDashboard.reusableMemoryLibrary}
-          value={totalMemories}
-          detail={
-            ruleCount > 0
-              ? t.evolutionDashboard.ruleMemoryCount(ruleCount)
-              : t.evolutionDashboard.memoryDetailDefault
-          }
-          sparkline={memorySparkline.length >= 2 ? memorySparkline : undefined}
-        />
-        <StoryMetric
-          icon={LightbulbIcon}
-          title={t.evolutionDashboard.nextSteps}
-          value={recommendationCount}
-          detail={
-            recommendationCount > 0
-              ? t.evolutionDashboard.nextStepsAvailable
-              : t.evolutionDashboard.nextStepsNone
-          }
-        />
+        {metrics.map(({ key, ...metric }) => (
+          <StoryMetric
+            key={key}
+            {...metric}
+            selected={selectedInsightKey === key}
+            onActivate={() => toggleInsight(key)}
+          />
+        ))}
       </div>
     </section>
   );
@@ -349,8 +669,11 @@ function GrowthStoryHero({
 function EvolutionStage({
   stage,
   index,
+  selected,
+  onActivate,
 }: {
   stage: {
+    key: string;
     icon: React.ElementType;
     title: string;
     value: number;
@@ -359,40 +682,56 @@ function EvolutionStage({
     description: string;
   };
   index: number;
+  selected: boolean;
+  onActivate: () => void;
 }) {
   const Icon = stage.icon;
   return (
     <li
       className={cn(
-        "relative rounded-lg border px-3 py-3",
+        "relative overflow-hidden rounded-lg border",
+        selected && "ring-2 ring-primary/25",
         stage.done
           ? "border-primary/30 bg-primary/5"
           : "border-border-default bg-muted/25 text-muted-foreground",
       )}
     >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span
-            className={cn(
-              "flex size-6 items-center justify-center rounded-full text-xs font-semibold",
-              stage.done
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground",
-            )}
-          >
-            {index}
+      <button
+        type="button"
+        className="w-full px-3 py-3 text-left transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        aria-expanded={selected}
+        onClick={onActivate}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span
+              className={cn(
+                "flex size-6 items-center justify-center rounded-full text-xs font-semibold",
+                stage.done
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground",
+              )}
+            >
+              {index}
+            </span>
+            <Icon className={cn("size-3.5", stage.done && "text-primary")} />
+          </div>
+          <span className="ml-auto text-xs tabular-nums">
+            {stage.value}
+            {stage.unit}
           </span>
-          <Icon className={cn("size-3.5", stage.done && "text-primary")} />
+          <ChevronDownIcon
+            className={cn(
+              "size-3.5 text-muted-foreground transition-transform",
+              selected && "rotate-180",
+            )}
+          />
         </div>
-        <span className="text-xs tabular-nums">
-          {stage.value}
-          {stage.unit}
-        </span>
-      </div>
-      <h3 className="mt-3 text-sm font-semibold">{stage.title}</h3>
-      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-        {stage.description}
-      </p>
+        <h3 className="mt-3 text-sm font-semibold">{stage.title}</h3>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          {stage.description}
+        </p>
+      </button>
     </li>
   );
 }
@@ -403,15 +742,27 @@ function StoryMetric({
   value,
   detail,
   sparkline,
+  selected,
+  onActivate,
 }: {
   icon: React.ElementType;
   title: string;
   value: number;
   detail: string;
   sparkline?: number[];
+  selected: boolean;
+  onActivate: () => void;
 }) {
   return (
-    <div className="rounded-lg border border-border-default bg-card px-4 py-3">
+    <button
+      type="button"
+      aria-expanded={selected}
+      onClick={onActivate}
+      className={cn(
+        "rounded-lg border border-border-default bg-card px-4 py-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[var(--shadow-xs)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        selected && "border-primary/35 bg-primary/5 ring-2 ring-primary/20",
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
@@ -423,16 +774,24 @@ function StoryMetric({
             {detail}
           </div>
         </div>
-        {sparkline && (
-          <SparklineChart
-            data={sparkline}
-            color="#3b82f6"
-            width={64}
-            height={24}
+        <div className="flex shrink-0 items-start gap-1">
+          {sparkline && (
+            <SparklineChart
+              data={sparkline}
+              color="#3b82f6"
+              width={64}
+              height={24}
+            />
+          )}
+          <ChevronDownIcon
+            className={cn(
+              "size-3.5 text-muted-foreground transition-transform",
+              selected && "rotate-180",
+            )}
           />
-        )}
+        </div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -456,6 +815,7 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
   const firstRate = numberOrZero(first?.success_rate);
   const lastRate = numberOrZero(last?.success_rate);
   const delta = lastRate - firstRate;
+  const hasTrend = compact.length > 1;
   const avgDuration =
     compact.reduce(
       (sum, point) => sum + numberOrZero(point.avg_duration_ms),
@@ -473,11 +833,16 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
           <div
             className={cn(
               "text-sm font-semibold tabular-nums",
-              delta >= 0 ? "text-success" : "text-destructive",
+              !hasTrend
+                ? "text-muted-foreground"
+                : delta >= 0
+                  ? "text-success"
+                  : "text-destructive",
             )}
           >
-            {delta >= 0 ? "+" : ""}
-            {formatPercent(delta, 0)}
+            {hasTrend
+              ? `${delta >= 0 ? "+" : ""}${formatPercent(delta, 0)}`
+              : "—"}
           </div>
           <div className="text-xs text-muted-foreground">
             {t.evolutionDashboard.recentChange}
@@ -493,9 +858,11 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
         <MiniStat
           label={t.evolutionDashboard.avgDuration}
           value={
-            avgDuration >= 1000
-              ? `${fixed(avgDuration / 1000, 1)}s`
-              : `${Math.round(avgDuration)}ms`
+            avgDuration <= 0
+              ? "—"
+              : avgDuration >= 1000
+                ? `${fixed(avgDuration / 1000, 1)}s`
+                : `${Math.round(avgDuration)}ms`
           }
         />
         <MiniStat
@@ -625,6 +992,7 @@ function SkillStory({ data }: { data: SkillPerformance[] }) {
 
 function RecommendationsStory({ data }: { data: Recommendation[] }) {
   const { t } = useI18n();
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   if (data.length === 0) {
     return (
       <section className="rounded-md border border-border-default bg-card p-3">
@@ -645,9 +1013,14 @@ function RecommendationsStory({ data }: { data: Recommendation[] }) {
       />
       <div className="mt-3 grid gap-3 lg:grid-cols-3">
         {data.slice(0, 3).map((rec, index) => (
-          <div
+          <button
+            type="button"
             key={`${rec.title}-${index}`}
-            className="rounded-lg border border-border-default bg-muted/20 px-3 py-3"
+            aria-expanded={expandedIndex === index}
+            onClick={() =>
+              setExpandedIndex((current) => (current === index ? null : index))
+            }
+            className="rounded-lg border border-border-default bg-muted/20 px-3 py-3 text-left transition-all hover:border-primary/30 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
             <div className="flex items-center gap-2">
               <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
@@ -656,11 +1029,22 @@ function RecommendationsStory({ data }: { data: Recommendation[] }) {
               <h3 className="min-w-0 truncate text-sm font-semibold">
                 {rec.title}
               </h3>
+              <ChevronDownIcon
+                className={cn(
+                  "ml-auto size-3.5 shrink-0 text-muted-foreground transition-transform",
+                  expandedIndex === index && "rotate-180",
+                )}
+              />
             </div>
-            <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
+            <p
+              className={cn(
+                "mt-2 text-xs leading-relaxed text-muted-foreground",
+                expandedIndex !== index && "line-clamp-3",
+              )}
+            >
               {rec.description}
             </p>
-          </div>
+          </button>
         ))}
       </div>
     </section>

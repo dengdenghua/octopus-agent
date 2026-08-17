@@ -612,7 +612,7 @@ export function AgentsTab({
       {visibleAgents.length > 0 ? (
         <div
           data-testid="agents-card-grid"
-          className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 min-[1800px]:grid-cols-4"
         >
           {visibleAgents.map((agent) =>
             agent.is_installed ? (

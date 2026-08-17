@@ -223,6 +223,126 @@ def create_evolution_ops_router(
             "source": "journal",
         }
 
+    @router.get("/api/evolution/story")
+    def evolution_story(
+        limit: int = Query(default=8, ge=1, le=30),
+    ) -> dict[str, Any]:
+        """Plain-language evidence for what the system actually learned.
+
+        Trajectories are observations, not evolution outcomes. This endpoint
+        keeps them separate from durable planner rules, memories, and forged
+        skills so the UI cannot imply that merely running a task changed the
+        agent's future behaviour.
+        """
+
+        def _section_items(value: Any) -> list[str]:
+            items: list[str] = []
+            for line in str(value or "").splitlines():
+                stripped = line.lstrip()
+                if stripped.startswith("- ["):
+                    items.append(stripped[2:].strip())
+            return items
+
+        rules = _section_items(getattr(planner, "learned_rules_section", ""))
+        memories = _section_items(getattr(planner, "learned_memories_section", ""))
+        auto_skills = [
+            name
+            for name in _registry_skill_names(registry)
+            if _registry_skill_is_auto(registry, name)
+        ]
+
+        changes: list[dict[str, Any]] = []
+        changes.extend(
+            {
+                "kind": "rule",
+                "title": "Learned a safer recovery rule",
+                "content": rule,
+                "effect": "This rule is injected into future planning before tools run.",
+            }
+            for rule in rules
+        )
+        changes.extend(
+            {
+                "kind": "memory",
+                "title": "Remembered a reusable pattern",
+                "content": memory,
+                "effect": "This memory is available when a similar task appears again.",
+            }
+            for memory in memories
+        )
+        for name in auto_skills:
+            description = ""
+            try:
+                description = str(getattr(registry.get(name), "description", "") or "")
+            except (AttributeError, KeyError, TypeError):
+                pass
+            changes.append(
+                {
+                    "kind": "skill",
+                    "title": name,
+                    "content": description or name,
+                    "effect": "The agent can call this learned skill in future tasks.",
+                }
+            )
+
+        task_titles: dict[str, str] = {}
+        if journal is not None:
+            try:
+                user_events = list(journal.read_by_type("user/message"))
+            except (AttributeError, TypeError, OSError):
+                user_events = []
+            for event in user_events:
+                task_id = str(getattr(event, "task_id", "") or "")
+                text = str(getattr(event, "text", "") or "").strip()
+                if task_id and text:
+                    task_titles[task_id] = text
+
+        trajectory_rows = sorted(
+            _trajectory_rows(journal),
+            key=lambda row: _as_dt(getattr(row[1], "completed_at", None)) or _utcnow(),
+            reverse=True,
+        )
+        observations: list[dict[str, Any]] = []
+        seen_tasks: set[str] = set()
+        for _event, trajectory in trajectory_rows:
+            task_id = str(getattr(trajectory, "task_id", "") or "")
+            if task_id in seen_tasks:
+                continue
+            seen_tasks.add(task_id)
+            tools: list[str] = []
+            for step in getattr(trajectory, "steps", []) or []:
+                name = str(getattr(getattr(step, "action", None), "sucker_id", "") or "")
+                if name and name not in tools:
+                    tools.append(name)
+            outcome = getattr(trajectory, "outcome", None)
+            disposition = str(getattr(outcome, "disposition", "") or "")
+            success = bool(getattr(outcome, "success", False))
+            observations.append(
+                {
+                    "task_id": task_id,
+                    "thread_id": getattr(trajectory, "thread_id", None),
+                    "title": task_titles.get(task_id, ""),
+                    "timestamp": _iso(getattr(trajectory, "completed_at", None)),
+                    "status": disposition or ("completed" if success else "failed"),
+                    "success": success,
+                    "step_count": len(getattr(trajectory, "steps", []) or []),
+                    "tools": tools[:6],
+                }
+            )
+            if len(observations) >= limit:
+                break
+
+        return {
+            "has_real_change": bool(changes),
+            "observed_task_count": len(seen_tasks),
+            "durable_change_count": len(changes),
+            "rule_count": len(rules),
+            "memory_count": len(memories),
+            "skill_count": len(auto_skills),
+            "changes": changes,
+            "observations": observations,
+        }
+
     @router.get("/api/evolution/skills/history")
     def evolution_skill_history(
         limit: int = Query(default=100, ge=1, le=500),

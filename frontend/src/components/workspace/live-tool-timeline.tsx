@@ -703,13 +703,17 @@ function swarmLogText(
     const count = specs.length;
     return {
       label:
-        event.status === "running"
-          ? t.liveToolTimeline.parallelDispatching(count || undefined)
-          : t.liveToolTimeline.parallelTasksReturned(count || undefined),
+        event.status === "error"
+          ? t.liveToolTimeline.parallelDispatchFailed(count || undefined)
+          : event.status === "running"
+            ? t.liveToolTimeline.parallelDispatching(count || undefined)
+            : t.liveToolTimeline.parallelTasksReturned(count || undefined),
       detail:
-        roles.length > 0
-          ? t.liveToolTimeline.rolesWithNextStep(roles.join(" / "))
-          : t.liveToolTimeline.subtaskAggregation,
+        event.status === "error"
+          ? undefined
+          : roles.length > 0
+            ? t.liveToolTimeline.rolesWithNextStep(roles.join(" / "))
+            : t.liveToolTimeline.subtaskAggregation,
     };
   }
 

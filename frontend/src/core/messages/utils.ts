@@ -667,6 +667,35 @@ export function latestAssistantTerminalState(
   return null;
 }
 
+/**
+ * Older saved turns predate `response_state: "blocked"` and therefore look
+ * completed even when the final assistant message is explicitly handing the
+ * turn back to the user. Keep this deliberately conservative: only inspect
+ * the latest visible, non-process assistant answer and only match direct
+ * requests for input or confirmation.
+ */
+export function assistantAnswerRequestsUserInput(messages: Message[]): boolean {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.type !== "ai") continue;
+    if (
+      message.additional_kwargs?.public_progress === true ||
+      message.additional_kwargs?.message_kind === "commentary" ||
+      hasToolCalls(message)
+    ) {
+      continue;
+    }
+    const content = extractContentFromMessage(message)
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!content) continue;
+    return /(?:请|麻烦)(?:你)?(?:确认|提供|告诉|选择|回复|上传|授权|补充)|(?:需要|还需要)(?:你|您)(?:来)?(?:确认|提供|告诉|选择|回复|上传|授权|补充)|等待(?:你|您|用户)(?:的)?(?:输入|确认|回复)|(?:please|could you|can you)\s+(?:confirm|provide|tell|choose|reply|upload|authorize|share)|(?:i|we)\s+need\s+you\s+to\s+(?:confirm|provide|tell|choose|reply|upload|authorize|share)/i.test(
+      content,
+    );
+  }
+  return false;
+}
+
 export function extractReasoningContentFromMessage(message: Message) {
   if (message.type !== "ai") {
     return null;

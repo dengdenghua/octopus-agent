@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Message } from "@/core/api/types";
 
 import {
+  assistantAnswerRequestsUserInput,
   extractContentFromMessage,
   extractPresentFilesFromMessage,
   extractTextFromMessage,
@@ -135,6 +136,24 @@ describe("settled assistant answer detection", () => {
         ai("blocked handoff", { response_state: "blocked" }),
       ]),
     ).toBe("blocked");
+  });
+
+  it("recovers blocked state from legacy final answers", () => {
+    expect(
+      assistantAnswerRequestsUserInput([
+        ai("我已经检查完现有信息。请提供项目路径，我才能继续。"),
+      ]),
+    ).toBe(true);
+    expect(
+      assistantAnswerRequestsUserInput([
+        ai("I need you to confirm which workspace should be changed."),
+      ]),
+    ).toBe(true);
+    expect(
+      assistantAnswerRequestsUserInput([
+        ai("项目已经完成；如果需要，我可以继续补充测试。"),
+      ]),
+    ).toBe(false);
   });
 });
 

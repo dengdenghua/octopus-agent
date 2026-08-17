@@ -84,6 +84,35 @@ export interface Recommendation {
   meta: Record<string, unknown>;
 }
 
+export interface EvolutionStoryChange {
+  kind: "rule" | "memory" | "skill";
+  title: string;
+  content: string;
+  effect: string;
+}
+
+export interface EvolutionStoryObservation {
+  task_id: string;
+  thread_id: string | null;
+  title: string;
+  timestamp: string;
+  status: string;
+  success: boolean;
+  step_count: number;
+  tools: string[];
+}
+
+export interface EvolutionStory {
+  has_real_change: boolean;
+  observed_task_count: number;
+  durable_change_count: number;
+  rule_count: number;
+  memory_count: number;
+  skill_count: number;
+  changes: EvolutionStoryChange[];
+  observations: EvolutionStoryObservation[];
+}
+
 export interface FitnessReport {
   ok: boolean;
   agent_id: string;
@@ -140,6 +169,15 @@ export async function getEvolutionOverview(): Promise<EvolutionOverview> {
   if (!res.ok)
     throw new Error(`Failed to load evolution overview: ${res.statusText}`);
   return (await res.json()) as EvolutionOverview;
+}
+
+export async function getEvolutionStory(): Promise<EvolutionStory> {
+  const res = await evolutionFetch("/api/evolution/story", {
+    headers: authHeaders(),
+  });
+  if (!res.ok)
+    throw new Error(`Failed to load evolution story: ${res.statusText}`);
+  return (await res.json()) as EvolutionStory;
 }
 
 export async function getLearningCurve(

@@ -653,6 +653,11 @@ def test_evolution_dashboard_endpoints_are_derived_from_runtime() -> None:
 
     assert client.get("/api/evolution/memory/growth").status_code == 200
     assert client.get("/api/evolution/recommendations").status_code == 200
+    story = client.get("/api/evolution/story").json()
+    assert story["observed_task_count"] == 1
+    assert story["durable_change_count"] == 1
+    assert story["changes"][0]["kind"] == "skill"
+    assert story["observations"][0]["tools"] == ["list_cwd"]
     sync = client.post("/api/evolution/learn-from-intel").json()
     assert sync["skills_created"] == []
 

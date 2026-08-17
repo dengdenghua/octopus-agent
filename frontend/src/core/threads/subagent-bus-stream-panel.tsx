@@ -27,12 +27,14 @@ export function SubAgentBusStreamPanel({
   rootThreadId,
   className,
   showAll = false,
+  dispatchFailed = false,
 }: {
   rootThreadId?: string | null;
   className?: string;
   /** When true, show every bus event; otherwise show the live + recent
    * window the main workbench timeline defaults to. */
   showAll?: boolean;
+  dispatchFailed?: boolean;
 }) {
   const { events, status } = useSubAgentBusStream(rootThreadId);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -57,7 +59,7 @@ export function SubAgentBusStreamPanel({
     <div className={cn("flex h-full min-h-0 flex-col", className)}>
       <PanelHeader status={status} eventCount={events.length} />
       {events.length === 0 ? (
-        <EmptyState status={status} />
+        <EmptyState status={status} dispatchFailed={dispatchFailed} />
       ) : (
         <div
           ref={scrollRef}
@@ -121,14 +123,22 @@ function PanelHeader({
   );
 }
 
-function EmptyState({ status }: { status: SubAgentBusStatus }) {
+function EmptyState({
+  status,
+  dispatchFailed,
+}: {
+  status: SubAgentBusStatus;
+  dispatchFailed: boolean;
+}) {
   const { t } = useI18n();
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center px-5 text-sm text-muted-foreground">
-      {status === "error" ? (
+      {status === "error" || dispatchFailed ? (
         <span className="flex items-center gap-2">
           <AlertCircleIcon className="size-4 text-red-500" />
-          {t.agentWorkbenchPanel.subagentBusStreamError}
+          {dispatchFailed
+            ? t.agentWorkbenchPanel.subagentDispatchFailed
+            : t.agentWorkbenchPanel.subagentBusStreamError}
         </span>
       ) : (
         t.agentWorkbenchPanel.subagentBusStreamEmpty

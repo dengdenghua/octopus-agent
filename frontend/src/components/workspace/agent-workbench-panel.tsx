@@ -93,6 +93,7 @@ function AgentWorkbenchPanelImpl({
   runSettled,
   runFailed,
   runInterrupted,
+  runBlocked,
   paused,
   className,
   threadId,
@@ -148,6 +149,7 @@ function AgentWorkbenchPanelImpl({
   runSettled?: boolean;
   runFailed?: boolean;
   runInterrupted?: boolean;
+  runBlocked?: boolean;
   threadId?: string | null;
   workDir?: string;
   paused?: boolean;
@@ -404,10 +406,11 @@ function AgentWorkbenchPanelImpl({
     settled: runSettled,
     failed: runFailed,
     interrupted: runInterrupted,
+    blocked: runBlocked,
   });
   const mainRunState: AgentRunState = runFailed
     ? "error"
-    : runInterrupted
+    : runInterrupted || runBlocked
       ? "waiting"
       : isLoading
         ? "running"
@@ -591,6 +594,7 @@ function AgentWorkbenchPanelImpl({
         isLoading={isLoading}
         className={className}
         machineRail={machineRail}
+        onClose={onClose}
       />
     );
   }
@@ -614,7 +618,13 @@ function AgentWorkbenchPanelImpl({
       preferStructuredReferences={evidence.length > 0}
       mainAgentName={mainAgentName}
       terminalState={
-        runInterrupted ? "interrupted" : runFailed ? "failed" : null
+        runInterrupted
+          ? "interrupted"
+          : runFailed
+            ? "failed"
+            : runBlocked
+              ? "blocked"
+              : null
       }
       contextTokens={contextTokens}
       maxContextTokens={maxContextTokens}
@@ -657,9 +667,21 @@ function AgentWorkbenchPanelImpl({
       <ArtifactInlinePreviewEmbedded
         threadId={threadId}
         currentTurnEntries={visibleDiffEntries}
+        runBlocked={runBlocked}
+        runSettled={runSettled}
+        isLoading={isLoading}
       />
     ) : effectiveActiveTab === "substream" ? (
-      <SubAgentBusStreamPanel rootThreadId={threadId} showAll />
+      <SubAgentBusStreamPanel
+        rootThreadId={threadId}
+        showAll
+        dispatchFailed={events.some(
+          (event) =>
+            (event.name === "call_agent_parallel" ||
+              event.name === "team_swarm") &&
+            event.status === "error",
+        )}
+      />
     ) : (
       agentKanbanPage
     );
@@ -693,6 +715,7 @@ function AgentWorkbenchPanelImpl({
         workspaceLabel={workspaceLabel}
         showWorkspaceLabel
         mainRunStatusLabel={mainRunStatus.label}
+        onClose={onClose}
       />
 
       {threadId ? (
@@ -737,9 +760,15 @@ const LazyStreamdown = lazy(
 function ArtifactInlinePreviewEmbedded({
   threadId,
   currentTurnEntries = [],
+  runBlocked,
+  runSettled,
+  isLoading,
 }: {
   threadId: string;
   currentTurnEntries?: DiffEntry[];
+  runBlocked?: boolean;
+  runSettled?: boolean;
+  isLoading?: boolean;
 }) {
   const {
     artifacts,
@@ -803,9 +832,26 @@ function ArtifactInlinePreviewEmbedded({
   }, []);
 
   if (allFiles.length === 0) {
+    const detail = runBlocked
+      ? t.streaming.blockedOnUser
+      : isLoading
+        ? t.agentWorkbenchPanel.agentStatusRunning
+        : runSettled
+          ? t.conversation.noPreviewArtifacts
+          : t.agentWorkbenchPanel.agentStatusPending;
     return (
-      <div className="flex flex-1 items-center justify-center p-4 text-sm text-muted-foreground">
-        {t.conversation.noPreviewArtifacts}
+      <div className="flex flex-1 items-center justify-center p-6">
+        <div className="flex max-w-xs flex-col items-center text-center">
+          <div className="mb-3 flex size-10 items-center justify-center rounded-xl border border-border-subtle bg-muted/45">
+            <PackageIcon className="size-4 text-muted-foreground" />
+          </div>
+          <p className="text-sm font-medium text-foreground">
+            {t.conversation.noPreviewArtifacts}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {detail}
+          </p>
+        </div>
       </div>
     );
   }

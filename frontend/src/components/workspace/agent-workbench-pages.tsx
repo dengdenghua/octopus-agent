@@ -950,7 +950,7 @@ export function AgentSummaryPage({
   groundingSources?: GroundingSource[];
   /** Ignore legacy tool-text inference once the server supplies evidence. */
   preferStructuredReferences?: boolean;
-  terminalState?: "interrupted" | "failed" | null;
+  terminalState?: "interrupted" | "failed" | "blocked" | null;
   contextTokens?: number;
   maxContextTokens?: number;
   isCompressingContext?: boolean;
@@ -1298,20 +1298,22 @@ export function AgentSummaryPage({
                 {progressSectionLabel}
               </h3>
               <span className="ml-auto truncate text-xs text-muted-foreground">
-                {terminalState === "interrupted"
-                  ? phases.length > 0
-                    ? `${displayedDonePhaseCount}/${phases.length} ${t.agentWorkbenchPages.statusDone} · ${t.backgroundTasks.interrupted}`
-                    : t.backgroundTasks.interrupted
-                  : terminalState === "failed"
-                    ? t.agentWorkbench.statusError
-                    : phases.length > 0
-                      ? `${donePhaseCount}/${phases.length} ${phaseStatusText(
-                          runningPhase ? "running" : "done",
-                        )}`
-                      : t.agentWorkbenchPages.roundActivitySummary(
-                          outlineExecutionCount,
-                          outlineFactCount,
-                        )}
+                {terminalState === "blocked"
+                  ? t.streaming.blockedOnUser
+                  : terminalState === "interrupted"
+                    ? phases.length > 0
+                      ? `${displayedDonePhaseCount}/${phases.length} ${t.agentWorkbenchPages.statusDone} · ${t.backgroundTasks.interrupted}`
+                      : t.backgroundTasks.interrupted
+                    : terminalState === "failed"
+                      ? t.agentWorkbench.statusError
+                      : phases.length > 0
+                        ? `${donePhaseCount}/${phases.length} ${phaseStatusText(
+                            runningPhase ? "running" : "done",
+                          )}`
+                        : t.agentWorkbenchPages.roundActivitySummary(
+                            outlineExecutionCount,
+                            outlineFactCount,
+                          )}
                 {phases.length > 0 && errorPhaseCount > 0
                   ? ` · ${errorPhaseCount} ${phaseStatusText("error")}`
                   : ""}

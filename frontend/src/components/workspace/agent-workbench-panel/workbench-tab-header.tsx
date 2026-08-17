@@ -41,6 +41,7 @@ function WorkbenchTabHeaderImpl({
   workspaceLabel,
   showWorkspaceLabel,
   mainRunStatusLabel,
+  onClose,
 }: {
   mainButton: {
     active: boolean;
@@ -59,6 +60,7 @@ function WorkbenchTabHeaderImpl({
   workspaceLabel?: string;
   showWorkspaceLabel?: boolean;
   mainRunStatusLabel?: string;
+  onClose?: () => void;
 }) {
   const { t } = useI18n();
   return (
@@ -160,9 +162,7 @@ function WorkbenchTabHeaderImpl({
                 <DropdownMenuItem
                   key={id}
                   className="gap-2"
-                  onClick={() =>
-                    visible ? onTabClose(id) : onTabClick(id)
-                  }
+                  onClick={() => (visible ? onTabClose(id) : onTabClick(id))}
                 >
                   <Icon className="size-4 shrink-0 text-muted-foreground" />
                   <span className="flex-1 truncate">{label}</span>
@@ -190,6 +190,18 @@ function WorkbenchTabHeaderImpl({
               }}
             >
               <LocateFixedIcon className="size-3.5" />
+            </button>
+          </Tooltip>
+        ) : null}
+        {onClose ? (
+          <Tooltip content={t.agentWorkbenchPanel.collapseWorkbench}>
+            <button
+              type="button"
+              className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
+              aria-label={t.agentWorkbenchPanel.collapseWorkbench}
+              onClick={onClose}
+            >
+              <XIcon className="size-3.5" />
             </button>
           </Tooltip>
         ) : null}

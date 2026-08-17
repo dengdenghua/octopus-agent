@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   getEvolutionOverview,
+  getEvolutionStory,
   getLearningCurve,
   getSkillPerformance,
   getMemoryGrowth,
@@ -18,6 +19,17 @@ export function useEvolutionOverview() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: queryKeys.evolution.overview,
     queryFn: getEvolutionOverview,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+    retry: false,
+  });
+  return { data: data ?? null, isLoading, error, refetch };
+}
+
+export function useEvolutionStory() {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: [...queryKeys.evolution.overview, "story"],
+    queryFn: getEvolutionStory,
     refetchInterval: 60_000,
     staleTime: 30_000,
     retry: false,

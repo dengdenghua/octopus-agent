@@ -17,6 +17,7 @@ const queries = vi.hoisted(() => ({
     error: null,
     refetch: vi.fn(),
   },
+  story: { data: null, isLoading: false, error: null, refetch: vi.fn() },
 }));
 
 vi.mock("@/core/evolution/hooks", () => ({
@@ -25,6 +26,7 @@ vi.mock("@/core/evolution/hooks", () => ({
   useSkillPerformance: () => queries.skills,
   useMemoryGrowth: () => queries.memory,
   useRecommendations: () => queries.recommendations,
+  useEvolutionStory: () => queries.story,
 }));
 
 vi.mock("@/components/workspace/gene-lock-badge", () => ({
@@ -96,6 +98,23 @@ describe("EvolutionDashboard states", () => {
     ];
     queries.memory.data = [];
     queries.recommendations.data = [];
+    queries.story.data = {
+      has_real_change: true,
+      observed_task_count: 2,
+      durable_change_count: 1,
+      rule_count: 0,
+      memory_count: 0,
+      skill_count: 1,
+      changes: [
+        {
+          kind: "skill",
+          title: "source-check",
+          content: "Cross-check sources before answering.",
+          effect: "Used on future tasks.",
+        },
+      ],
+      observations: [],
+    };
 
     renderWithProviders(<EvolutionDashboard />, { locale: "zh-CN" });
 
@@ -114,5 +133,53 @@ describe("EvolutionDashboard states", () => {
         name: "source-check · 成功率",
       }),
     ).toHaveAttribute("aria-valuenow", "88");
+  });
+
+  it("opens stage, metric, and recommendation details", async () => {
+    const user = userEvent.setup();
+    queries.overview.data = {
+      skills: { total: 3, auto_extracted: 1 },
+      memory: { total_facts: 2, categories: { rules: 1 } },
+      learning_events: 5,
+      improvement_score: 0.6,
+    };
+    queries.learning.data = [];
+    queries.skills.data = [];
+    queries.memory.data = [];
+    queries.recommendations.data = [
+      {
+        title: "运行反思",
+        description: "复盘最近任务并提取可以复用的改进规则。",
+      },
+    ];
+    queries.story.data = {
+      has_real_change: false,
+      observed_task_count: 5,
+      durable_change_count: 0,
+      rule_count: 0,
+      memory_count: 0,
+      skill_count: 0,
+      changes: [],
+      observations: [],
+    };
+
+    renderWithProviders(<EvolutionDashboard />, { locale: "zh-CN" });
+
+    await user.click(screen.getByText("查看运行数据（高级）"));
+    const stage = screen.getByRole("button", { name: /观察任务/ });
+    await user.click(stage);
+    expect(stage).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("region", { name: "观察任务" })).toBeVisible();
+
+    const metric = screen.getByRole("button", { name: /自动形成的技能/ });
+    await user.click(metric);
+    expect(metric).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("region", { name: "自动形成的技能" }),
+    ).toBeVisible();
+
+    const recommendation = screen.getByRole("button", { name: /运行反思/ });
+    await user.click(recommendation);
+    expect(recommendation).toHaveAttribute("aria-expanded", "true");
   });
 });

@@ -26,6 +26,7 @@ export function EmptyShellView({
   isLoading,
   className,
   machineRail,
+  onClose,
 }: {
   mainButton: {
     active: boolean;
@@ -54,6 +55,7 @@ export function EmptyShellView({
   isLoading?: boolean;
   className?: string;
   machineRail: ReactNode;
+  onClose?: () => void;
 }) {
   const { t } = useI18n();
   const emptyEmbeddedPage =
@@ -99,6 +101,7 @@ export function EmptyShellView({
         onTabClick={onTabClick}
         onTabClose={onTabClose}
         locatableTranscriptEventId={locatableTranscriptEventId}
+        onClose={onClose}
       />
       <section
         aria-label={t.sidebar.ariaAgentWorkbench}

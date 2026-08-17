@@ -325,7 +325,8 @@ export const enUS: Translations = {
     fileOperationsCountWithDiff: (n: number, added: number, removed: number) =>
       `${n} file operation${n === 1 ? "" : "s"} (+${added} / -${removed})`,
     toolCallsCount: (n: number) => `${n} action record${n === 1 ? "" : "s"}`,
-    diffLinesHidden: (n: number) => `… truncated, ${n} more line${n === 1 ? "" : "s"} hidden …`,
+    diffLinesHidden: (n: number) =>
+      `… truncated, ${n} more line${n === 1 ? "" : "s"} hidden …`,
     loadOlderTurns: "Load older turns",
     loadingOlderTurns: "Loading older turns…",
   },
@@ -1377,6 +1378,8 @@ export const enUS: Translations = {
     subagentBusStreamLive: "Live",
     subagentBusStreamConnecting: "Connecting…",
     subagentBusStreamError: "Stream error — reconnecting",
+    subagentDispatchFailed:
+      "Parallel delegation did not start, so no subagents were created.",
     subagentBusStreamEmpty: "No subagent activity yet",
     subagentBusStreamEvents: (count) => `${count} events`,
     substreamTab: "Subagent event stream",
@@ -3111,6 +3114,7 @@ export const enUS: Translations = {
     subagent: "Sub-agent",
     executing: (count: number) =>
       `Executing ${count === 1 ? "" : count + " "}sub-agent${count === 1 ? "" : "s in parallel"}`,
+    parallelExecution: "Parallel Execution",
     pending: "Waiting",
     reasoning: "Reasoning",
     iterating: "Iterating",
@@ -3118,10 +3122,19 @@ export const enUS: Translations = {
     analyzing: "Analyzing",
     summarizing: "Summarizing",
     in_progress: "Sub-agent running",
-    completed: "Sub-agent completed",
-    failed: "Sub-agent failed",
+    completed: "Completed",
+    failed: "Failed",
     cancelled: "Cancelled",
     timed_out: "Timed out",
+    running: "Running",
+    expandAll: "Expand All",
+    collapseAll: "Collapse All",
+    iterations: "iterations",
+    duration: "Duration",
+    filesModified: "Files Modified",
+    executionHistory: "Execution History",
+    modifiedFiles: "Modified Files",
+    viewDetails: "View Details",
   },
 
   todoList: {
@@ -6005,15 +6018,55 @@ Strategy:
     noTrendYet:
       "No trend has formed yet. After a few rounds of tasks, success rate and duration changes will be shown here.",
     recentChange: "Recent change",
-    currentSuccessRate: "Current success rate",
+    currentSuccessRate: "Tool-call success rate",
     recentSkillCalls: "Recent skill calls",
-    strongerSkills: "Stronger skills",
+    strongerSkills: "Frequently used skills",
     noSkillPerformanceYet:
       "No skill performance data yet. The most used capabilities will be shown by usage and success rate.",
     skillCalls: (count: number) => `Called ${count} times`,
     howToImproveNext: "How to improve next",
     noPendingRecommendations:
       "No pending recommendations. When optimization opportunities are found, they will appear here as plain-language suggestions.",
+    storyNoRealChangeTitle: "No real evolution happened in this period",
+    storyRealChangeTitle: (count: number) =>
+      `Actually learned ${count} new things`,
+    storyNoRealChangeDescription: (count: number) =>
+      `The system observed ${count} tasks, but did not save a new memory, rule, or skill. Running tasks is not the same as evolving.`,
+    storyRealChangeDescription: (count: number) =>
+      `These ${count} durable changes are stored and can affect future tasks.`,
+    notEvolutionBadge: "Observed only — not evolution",
+    observedTasks: "Tasks observed",
+    observedTasksPlainDescription: "Execution records were captured",
+    savedLessons: "Lessons saved",
+    savedLessonsPlainDescription: "Can be recalled on similar tasks",
+    changedBehaviors: "Behaviors changed",
+    changedBehaviorsPlainDescription: "Will affect the next execution",
+    actualChangesTitle: "What it actually learned",
+    actualChangesEmptyTitle: "No reusable lesson has been learned yet",
+    actualChangesEmptyDescription:
+      "The records only show that tasks ran. They have not been reflected on and saved for future use.",
+    changeRuleLabel: "Avoid a mistake",
+    changeMemoryLabel: "Remember a lesson",
+    changeSkillLabel: "New capability",
+    ruleFutureEffect: "This rule will be applied before similar tasks run.",
+    memoryFutureEffect: "This lesson can be recalled in a similar situation.",
+    skillFutureEffect:
+      "This capability can be called directly in future tasks.",
+    observationsTitle: "Tasks it recently observed",
+    observationsDescription:
+      "These are learning materials only. If they are not listed above, behavior has not changed yet.",
+    unnamedObservedTask: "Untitled task",
+    taskCompleted: "Completed",
+    taskNotCompleted: "Not fully completed",
+    taskSteps: (count: number) => `${count} execution steps`,
+    nextActionTitle: "How to make it truly evolve",
+    reflectionActionTitle: (count: number) =>
+      `Reflect on the latest ${count} tasks`,
+    reflectionActionDescription:
+      "Extract repeated successes and failures into saved rules. Future behavior changes only after that.",
+    technicalDetails: "View runtime metrics (advanced)",
+    metricsNotEvolutionNote:
+      "Success rate and latency describe operation, not learning",
   },
 
   // Wiki Panel
@@ -6177,6 +6230,8 @@ Strategy:
     pageOpenedAndExtracted: "Page opened and main content extracted.",
     parallelDispatching: (count) =>
       `Dispatching${count ? ` ${count}` : ""} parallel subtasks`,
+    parallelDispatchFailed: (count) =>
+      `Parallel delegation failed${count ? ` · ${count} subtasks not started` : ""}`,
     parallelTasksReturned: (count) =>
       `Parallel subtasks returned${count ? ` · ${count}` : ""}`,
     rolesWithNextStep: (roles) =>

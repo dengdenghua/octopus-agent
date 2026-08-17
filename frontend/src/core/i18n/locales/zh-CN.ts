@@ -1316,6 +1316,7 @@ export const zhCN: Translations = {
     subagentBusStreamLive: "实时",
     subagentBusStreamConnecting: "连接中…",
     subagentBusStreamError: "流异常 — 重连中",
+    subagentDispatchFailed: "并行委派未启动，未创建子智能体。",
     subagentBusStreamEmpty: "暂无子智能体活动",
     subagentBusStreamEvents: (count) => `${count} 条事件`,
     substreamTab: "子线程事件流",
@@ -2881,6 +2882,7 @@ export const zhCN: Translations = {
     subagent: "子智能体",
     executing: (count: number) =>
       `${count > 1 ? "并行" : ""}执行 ${count} 个子智能体`,
+    parallelExecution: "并行执行",
     pending: "等待中",
     reasoning: "正在推理",
     iterating: "正在迭代",
@@ -2888,10 +2890,19 @@ export const zhCN: Translations = {
     analyzing: "正在分析",
     summarizing: "正在总结",
     in_progress: "子智能体执行中",
-    completed: "子智能体执行完成",
-    failed: "子智能体执行失败",
+    completed: "已完成",
+    failed: "执行失败",
     cancelled: "已取消",
     timed_out: "已超时",
+    running: "运行中",
+    expandAll: "展开全部",
+    collapseAll: "折叠全部",
+    iterations: "次迭代",
+    duration: "执行时长",
+    filesModified: "文件修改",
+    executionHistory: "执行历史",
+    modifiedFiles: "修改的文件",
+    viewDetails: "查看详情",
   },
 
   todoList: {
@@ -5636,10 +5647,10 @@ export const zhCN: Translations = {
       totalSkills: number,
       learningEvents: number,
     ) =>
-      `它已经沉淀了 ${totalMemories} 条记忆、${totalSkills} 个技能，并从 ${learningEvents} 次学习事件里提炼经验。`,
+      `它已经沉淀了 ${totalMemories} 条记忆，并从 ${learningEvents} 次学习事件中自动形成 ${totalSkills} 个技能。`,
     noEvidenceDescription:
       "还没有足够的进化证据。跑过更多任务后，这里会自动变成可读的成长记录。",
-    overallImprovementLabel: "综合提升感",
+    overallImprovementLabel: "综合提升评分",
     observeTasks: "观察任务",
     observeTasksDescription: "从真实对话和执行过程里找经验。",
     accumulateMemories: "沉淀记忆",
@@ -5665,15 +5676,51 @@ export const zhCN: Translations = {
     noTrendYet:
       "还没有形成趋势。等它跑过几轮任务后，这里会展示成功率和耗时变化。",
     recentChange: "最近变化",
-    currentSuccessRate: "当前成功率",
+    currentSuccessRate: "工具调用成功率",
     recentSkillCalls: "最近技能调用",
-    strongerSkills: "变强的能力",
+    strongerSkills: "常用能力表现",
     noSkillPerformanceYet:
       "暂时还没有技能表现数据。后续会按使用次数和成功率展示最常用能力。",
     skillCalls: (count: number) => `调用 ${count} 次`,
     howToImproveNext: "下一步怎么变强",
     noPendingRecommendations:
       "目前没有待处理建议。系统会在发现可优化点时，把它翻译成这里的普通话建议。",
+    storyNoRealChangeTitle: "这段时间还没有真正进化",
+    storyRealChangeTitle: (count: number) => `这段时间真正学会了 ${count} 件事`,
+    storyNoRealChangeDescription: (count: number) =>
+      `系统看过 ${count} 次任务，但还没有把经验写成记忆、规则或新技能。完成任务不等于已经进化。`,
+    storyRealChangeDescription: (count: number) =>
+      `下面 ${count} 项内容已经写入系统，会影响之后遇到类似任务时的做法。`,
+    notEvolutionBadge: "只是观察，还不算进化",
+    observedTasks: "看过的任务",
+    observedTasksPlainDescription: "系统留下了执行记录",
+    savedLessons: "保存的经验",
+    savedLessonsPlainDescription: "能在类似任务中再次想起",
+    changedBehaviors: "真正改变的做法",
+    changedBehaviorsPlainDescription: "会影响下一次执行",
+    actualChangesTitle: "它具体学会了什么",
+    actualChangesEmptyTitle: "目前还没有学会可复用的新东西",
+    actualChangesEmptyDescription:
+      "现有记录只说明任务运行过，尚未经过复盘并沉淀成下一次能直接使用的经验。",
+    changeRuleLabel: "学会避坑",
+    changeMemoryLabel: "记住经验",
+    changeSkillLabel: "新增能力",
+    ruleFutureEffect: "以后规划类似任务时，会先应用这条避坑规则。",
+    memoryFutureEffect: "以后遇到相似情况时，可以直接想起这条经验。",
+    skillFutureEffect: "以后可以直接调用这项新能力完成相似步骤。",
+    observationsTitle: "它最近看过哪些任务",
+    observationsDescription:
+      "这些只是学习素材；没有进入上面的列表，就还没有改变行为。",
+    unnamedObservedTask: "一次未命名任务",
+    taskCompleted: "任务已完成",
+    taskNotCompleted: "任务未完整完成",
+    taskSteps: (count: number) => `${count} 个执行步骤`,
+    nextActionTitle: "怎样才能真的进化",
+    reflectionActionTitle: (count: number) => `复盘最近 ${count} 次任务`,
+    reflectionActionDescription:
+      "把反复出现的成功做法和失败原因提炼成规则；只有写入后，下一次执行才会真正不同。",
+    technicalDetails: "查看运行数据（高级）",
+    metricsNotEvolutionNote: "成功率和耗时只代表运行情况，不代表学会了新东西",
   },
 
   // Wiki Panel
@@ -5834,6 +5881,8 @@ export const zhCN: Translations = {
     pageOpenedAndExtracted: "已打开页面并提取正文线索。",
     parallelDispatching: (count) =>
       `正在并行分派${count ? ` ${count} 个` : ""}子任务`,
+    parallelDispatchFailed: (count) =>
+      `并行委派失败${count ? ` · ${count} 个子任务未启动` : ""}`,
     parallelTasksReturned: (count) =>
       `并行子任务已返回${count ? ` · ${count} 个` : ""}`,
     rolesWithNextStep: (roles) =>

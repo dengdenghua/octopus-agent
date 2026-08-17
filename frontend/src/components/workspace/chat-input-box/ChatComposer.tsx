@@ -131,10 +131,11 @@ export function ChatComposer({
       void pet.stop().catch(() => {});
     }
   }, [petVisible]);
-  const [draft, setDraft] = useState(() =>
-    // A per-thread draft survives thread switches and reloads. defaultValue
-    // (external injection, e.g. "retry this message") wins when present.
-    defaultValue || (loadComposerDraft(threadId) ?? ""),
+  const [draft, setDraft] = useState(
+    () =>
+      // A per-thread draft survives thread switches and reloads. defaultValue
+      // (external injection, e.g. "retry this message") wins when present.
+      defaultValue || (loadComposerDraft(threadId) ?? ""),
   );
   // Restore the stored draft when the composer moves to a different thread
   // (the component is reused across navigation).
@@ -992,8 +993,8 @@ export function ChatComposer({
           }
         }}
       />
-      <div className="composer-footer flex items-center justify-between gap-2 border-t border-transparent px-2 py-1 transition-colors group-hover:border-border-subtle">
-        <div className="flex items-center gap-0.5">
+      <div className="composer-footer flex flex-col items-stretch gap-1 border-t border-transparent px-2 py-1 transition-colors group-hover:border-border-subtle sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+        <div className="flex min-w-0 items-center gap-0.5">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -1112,7 +1113,7 @@ export function ChatComposer({
             />
           )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex min-w-0 items-center justify-end gap-1">
           {showInspirationToggle && (
             <button
               type="button"
