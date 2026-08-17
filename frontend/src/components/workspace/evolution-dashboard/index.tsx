@@ -190,7 +190,7 @@ export function EvolutionDashboard({ className }: { className?: string }) {
 
   return (
     <div className={cn("space-y-5", className)}>
-      <PlainEvolutionStory story={story} recommendations={recommendations} />
+      <PlainEvolutionStory story={story} />
 
       <details className="group rounded-lg border border-border-default bg-card">
         <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium text-foreground marker:hidden">
@@ -221,19 +221,14 @@ export default EvolutionDashboard;
 
 function PlainEvolutionStory({
   story,
-  recommendations,
 }: {
   story: EvolutionStory | null;
-  recommendations: Recommendation[];
 }) {
   const { t } = useI18n();
   const observedCount = story?.observed_task_count ?? 0;
   const durableCount = story?.durable_change_count ?? 0;
   const lessonCount = (story?.rule_count ?? 0) + (story?.memory_count ?? 0);
   const hasRealChange = Boolean(story?.has_real_change && durableCount > 0);
-  const reflectionRecommendation = recommendations.find(
-    (item) => item.type === "extraction_opportunity",
-  );
 
   return (
     <section className="space-y-4">
@@ -348,13 +343,28 @@ function PlainEvolutionStory({
               ))}
             </div>
           ) : (
-            <div className="mt-3 rounded-lg border border-dashed border-warning/35 bg-warning/5 px-4 py-5">
-              <p className="text-sm font-medium text-foreground">
-                {t.evolutionDashboard.actualChangesEmptyTitle}
-              </p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                {t.evolutionDashboard.actualChangesEmptyDescription}
-              </p>
+            <div className="mt-3 space-y-4">
+              <div className="rounded-lg border border-dashed border-warning/35 bg-warning/5 px-4 py-5">
+                <p className="text-sm font-medium text-foreground">
+                  {t.evolutionDashboard.actualChangesEmptyTitle}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  {t.evolutionDashboard.actualChangesEmptyDescription}
+                </p>
+              </div>
+              {observedCount > 0 ? (
+                <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-4">
+                  <p className="text-xs font-semibold text-primary">
+                    {t.evolutionDashboard.nextActionTitle}
+                  </p>
+                  <p className="mt-2 text-sm font-medium text-foreground">
+                    {t.evolutionDashboard.reflectionActionTitle(observedCount)}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    {t.evolutionDashboard.reflectionActionDescription}
+                  </p>
+                </div>
+              ) : null}
             </div>
           )}
         </section>
@@ -400,20 +410,6 @@ function PlainEvolutionStory({
         </section>
       </div>
 
-      {!hasRealChange && reflectionRecommendation ? (
-        <section className="rounded-lg border border-primary/25 bg-primary/5 p-4">
-          <SectionTitle
-            icon={LightbulbIcon}
-            title={t.evolutionDashboard.nextActionTitle}
-          />
-          <p className="mt-2 text-sm font-medium text-foreground">
-            {t.evolutionDashboard.reflectionActionTitle(observedCount)}
-          </p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            {t.evolutionDashboard.reflectionActionDescription}
-          </p>
-        </section>
-      ) : null}
     </section>
   );
 }

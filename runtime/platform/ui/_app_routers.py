@@ -469,7 +469,6 @@ def mount_routers_a(
             journal=state.journal,
             registry=state.registry,
             planner=getattr(stack, "planner", None) if stack is not None else None,
-            thread_store=ctx.thread_store,
             effect_store=(
                 getattr(stack.executor, "effect_store", None)
                 if stack is not None and getattr(stack, "executor", None) is not None

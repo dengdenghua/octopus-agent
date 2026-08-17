@@ -16,6 +16,7 @@ import {
 } from "../agent-run-status";
 import { subtaskProgress, subtaskProgressPercent, subtaskRunState } from "./subtask-status-ui";
 import { friendlyRoleName } from "../agent-workbench-pages";
+import { SubagentDetailsPanel } from "./subagent-details-panel";
 import {
   CheckCircleIcon,
   Loader2Icon,
@@ -69,10 +70,12 @@ function MiniSubtaskRow({
   taskId,
   isLoading: _isLoading,
   onClick,
+  onDetailsClick,
 }: {
   taskId: string;
   isLoading: boolean;
   onClick?: () => void;
+  onDetailsClick?: () => void;
 }) {
   const task = useSubtask(taskId);
   const { t } = useI18n();
@@ -251,7 +254,12 @@ function MiniSubtaskRow({
           <AgentIdentityCard task={task} onClose={() => setShowIdentity(false)} />
         </div>
       )}
-      <SubtaskHoverPreview task={task} statusLabel={statusLabel} id={previewId} />
+      <SubtaskHoverPreview
+        task={task}
+        statusLabel={statusLabel}
+        id={previewId}
+        onDetailsClick={onDetailsClick}
+      />
     </div>
   );
 }
@@ -260,10 +268,12 @@ export function SubtaskHoverPreview({
   task,
   statusLabel,
   id,
+  onDetailsClick,
 }: {
   task: Subtask;
   statusLabel: string;
   id?: string;
+  onDetailsClick?: () => void;
 }) {
   const { t } = useI18n();
   const body =
@@ -401,6 +411,18 @@ export function SubtaskHoverPreview({
             <ArrowRightIcon className="size-3" />
             {t.message.viewProcess}
           </button>
+          {onDetailsClick && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDetailsClick();
+              }}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-muted"
+            >
+              {t.subagents.viewDetails}
+            </button>
+          )}
           {isCompleted && task.result && (
             <span className="ml-auto text-xs text-muted-foreground">
               {t.message.completedChanges}
@@ -524,7 +546,10 @@ export function ParallelSubtasksGrid({
 }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const { tasks } = useSubtaskContext();
+
+  const selectedTask = selectedTaskId ? tasks[selectedTaskId] : null;
 
   if (taskIds.length === 0) return null;
 
@@ -570,11 +595,13 @@ export function ParallelSubtasksGrid({
       taskId={taskId}
       isLoading={isLoading}
       onClick={onTaskClick ? () => onTaskClick(taskId) : undefined}
+      onDetailsClick={() => setSelectedTaskId(taskId)}
     />
   );
 
   return (
-    <div className="space-y-2">
+    <>
+      <div className="space-y-2">
       {showSummary && (
         <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
           <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted/60">
@@ -634,5 +661,15 @@ export function ParallelSubtasksGrid({
         </button>
       )}
     </div>
+
+    {/* 详情侧边栏 */}
+    <SubagentDetailsPanel
+      task={selectedTask ?? null}
+      open={selectedTaskId !== null}
+      onOpenChange={(open) => {
+        if (!open) setSelectedTaskId(null);
+      }}
+    />
+  </>
   );
 }
