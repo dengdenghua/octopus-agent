@@ -181,11 +181,7 @@ def _resolve_session_reference_mentions(
     """
     if not text:
         return text, None
-    if (
-        "@session:" not in text
-        and "@subagent:" not in text
-        and "dsh-session:" not in text
-    ):
+    if "@session:" not in text and "@subagent:" not in text and "dsh-session:" not in text:
         return text, None
     try:
         from runtime.execution.subagents.sessions import (
@@ -521,7 +517,7 @@ async def _start_turn(
             _logger.debug("user-message anchor skipped", exc_info=True)
 
         # ── PHASE 4 · intent build + resume check ──────────────────
-        conversation_messages: list[dict[str, str]] = []
+        conversation_messages: list[dict[str, Any]] = []
         with contextlib.suppress(Exception):
             conversation_messages = _conversation_messages_for_react(log.replay())
 

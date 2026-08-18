@@ -150,6 +150,11 @@ def _fetch_url(
 # web_search
 # ═══════════════════════════════════════════════════════════
 
+# Snippets were hard-truncated to 400 chars, which silently dropped the
+# exact numbers/figures the model needs (e.g. "17.6 亿美元"). Raise the cap
+# and keep it in one place so every backend stays consistent.
+_SNIPPET_CAP = 2000
+
 
 def _resolve_backend() -> str:
     explicit = (os.environ.get("WEB_SEARCH_BACKEND") or "").strip().lower()
@@ -236,7 +241,7 @@ def _doubao_search(client: Any, api_key: str, query: str, max_results: int) -> d
             json={
                 "query": query,
                 "doc_count": max_results,
-                "max_snippet_length": 600,
+                "max_snippet_length": _SNIPPET_CAP,
                 "max_image_count_per_doc": 0,
             },
             headers={
@@ -268,7 +273,7 @@ def _doubao_search(client: Any, api_key: str, query: str, max_results: int) -> d
             {
                 "title": item.get("Title") or "",
                 "url": item.get("Url") or "",
-                "snippet": "\n".join(snippets)[:400],
+                "snippet": "\n".join(snippets)[:_SNIPPET_CAP],
                 "host": (item.get("HostInfo") or {}).get("Hostname") or "",
                 "publish_time": doc_info.get("PublishTime") or "",
             }
@@ -291,7 +296,7 @@ def _tavily_search(client: Any, api_key: str, query: str, max_results: int) -> d
         {
             "title": item.get("title", ""),
             "url": item.get("url", ""),
-            "snippet": item.get("content", "")[:400],
+            "snippet": item.get("content", "")[:_SNIPPET_CAP],
         }
         for item in data.get("results", [])[:max_results]
     ]
@@ -318,7 +323,7 @@ def _brave_search(client: Any, api_key: str, query: str, max_results: int) -> di
         {
             "title": item.get("title", ""),
             "url": item.get("url", ""),
-            "snippet": (item.get("description") or "")[:400],
+            "snippet": (item.get("description") or "")[:_SNIPPET_CAP],
         }
         for item in web[:max_results]
     ]
@@ -342,7 +347,7 @@ def _serper_search(client: Any, api_key: str, query: str, max_results: int) -> d
         {
             "title": item.get("title", ""),
             "url": item.get("link", ""),
-            "snippet": (item.get("snippet") or "")[:400],
+            "snippet": (item.get("snippet") or "")[:_SNIPPET_CAP],
         }
         for item in organic[:max_results]
     ]
@@ -371,7 +376,7 @@ def _searxng_search(client: Any, base_url: str, query: str, max_results: int) ->
         {
             "title": item.get("title", ""),
             "url": item.get("url", ""),
-            "snippet": (item.get("content") or "")[:400],
+            "snippet": (item.get("content") or "")[:_SNIPPET_CAP],
         }
         for item in items[:max_results]
     ]
@@ -410,7 +415,7 @@ def _ddg_search(client: Any, query: str, max_results: int) -> dict[str, Any]:
             {
                 "title": _clean(title),
                 "url": url,
-                "snippet": _clean(snippet)[:400],
+                "snippet": _clean(snippet)[:_SNIPPET_CAP],
             }
         )
     return {"query": query, "backend": "ddg", "results": results}

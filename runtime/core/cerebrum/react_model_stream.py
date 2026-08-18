@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import re
 import time
 from collections.abc import Callable, Generator
 from typing import Any
@@ -70,6 +71,59 @@ def _stream_answer_body(text: str) -> str:
 
     final_match = _FINAL_RE.search(text or "")
     return final_match.group(1) if final_match else (text or "")
+
+
+_PUBLIC_UPDATE_LINE_RE = re.compile(r"^\s*(?:Update|Progress)\s*:", re.IGNORECASE)
+
+
+def _strip_public_update_paragraphs(text: str) -> str:
+    """Remove ``Update:``/``Progress:`` checkpoint paragraphs from the answer lane.
+
+    In the ReAct protocol these paragraphs are public progress checkpoints that
+    PHASE 6d surfaces as commentary (``commentary_delta``), never as answer
+    prose. When the model writes them inside plain zero-anchor text the
+    ``Final Answer:`` anchor is absent, so ``_stream_answer_body`` would
+    otherwise leak the whole checkpoint into the visible answer message and the
+    same sentence would appear twice (answer tail + commentary). Stripping here
+    keeps the answer lane clean while the parser still recovers the checkpoint
+    text for the commentary channel.
+
+    A checkpoint paragraph starts at a line whose first token is
+    ``Update:``/``Progress:`` and runs until the next blank line or end of
+    text. The paragraph's trailing blank line is dropped too so the answer
+    never ends up with a doubled separator.
+    """
+    if not text:
+        return text
+    out: list[str] = []
+    skipping = False
+    for line in text.split("\n"):
+        stripped = line.lstrip()
+        if skipping:
+            if not stripped:
+                # Blank line terminates the paragraph; swallow it so the
+                # separator that preceded the checkpoint is the only one kept.
+                skipping = False
+            continue
+        if _PUBLIC_UPDATE_LINE_RE.match(line):
+            skipping = True
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
+def _stream_answer_lane(text: str) -> str:
+    """Return the visible answer lane, stripping public checkpoints.
+
+    Anchored text (has a ``Final Answer:``/``<final_answer>`` marker) is
+    terminal prose and is returned as-is. Zero-anchor prose additionally
+    strips ``Update:``/``Progress:`` paragraphs so the parser's checkpoint
+    (surfaced by PHASE 6d as commentary) does not also leak into the answer.
+    """
+    body = _stream_answer_body(text)
+    if _FINAL_RE.search(text or ""):
+        return body
+    return _strip_public_update_paragraphs(body)
 
 
 def _safe_stream_end(text: str) -> int:
@@ -360,7 +414,7 @@ def _phase_6b_model_stream(
                         # prose, and the marker itself may straddle chunks.
                         if evt.delta:
                             joined = "".join(text_parts)
-                            answer_so_far = _stream_answer_body(joined)
+                            answer_so_far = _stream_answer_lane(joined)
                             if (
                                 _stream_has_protocol(answer_so_far)
                                 or _looks_like_observation_echo(answer_so_far)
@@ -543,10 +597,14 @@ def _phase_6b_model_stream(
                             # frontend typewriter has real deltas to play —
                             # yielding the whole joined buffer here would
                             # dump the 24+ chars accumulated so far in one
-                            # frame, defeating the streaming UX.
-                            safe_end = _safe_stream_end(joined)
+                            # frame, defeating the streaming UX. The lane is
+                            # the raw zero-anchor prose minus any
+                            # ``Update:``/``Progress:`` checkpoints (PHASE 6d
+                            # surfaces those as commentary, not answer text).
+                            answer_so_far = _stream_answer_lane(joined)
+                            safe_end = _safe_stream_end(answer_so_far)
                             if safe_end > _streamed_final_chars:
-                                delta_out = joined[_streamed_final_chars:safe_end]
+                                delta_out = answer_so_far[_streamed_final_chars:safe_end]
                                 _emit_assistant_chunk(
                                     stack,
                                     iteration=i + 1,
@@ -604,7 +662,7 @@ def _phase_6b_model_stream(
                     # and obtain a fresh, clean final answer on the next round.
                     if _final_stream_started and not _final_stream_guarded:
                         joined = "".join(text_parts)
-                        answer_so_far = _stream_answer_body(joined)
+                        answer_so_far = _stream_answer_lane(joined)
                         if (
                             _stream_has_protocol(answer_so_far)
                             or _looks_like_observation_echo(answer_so_far)

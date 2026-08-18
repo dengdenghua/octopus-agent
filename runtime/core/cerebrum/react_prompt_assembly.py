@@ -71,6 +71,7 @@ class _PromptAssembly:
     observed_read_sequence: bool = False
     final_guard_grounded_source_paths: Any = None
     guard_impasse_state: dict = field(default_factory=dict)
+    prior_grounding_text: str = ""
     budget_auto_pause_enabled: bool = False
     budget_pause_threshold: float = 0.0
     realtime_public_orientation_requested: bool = False
@@ -155,6 +156,7 @@ def _assemble_prompt_and_messages(
         observed_read_sequence=state.observed_read_sequence,
         final_guard_grounded_source_paths=state.final_guard_grounded_source_paths,
         guard_impasse_state=state.guard_impasse_state,
+        prior_grounding_text=state.prior_grounding_text,
         budget_auto_pause_enabled=state.budget_auto_pause_enabled,
         budget_pause_threshold=state.budget_pause_threshold,
         realtime_public_orientation_requested=state.realtime_public_orientation_requested,

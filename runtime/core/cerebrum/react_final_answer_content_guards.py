@@ -38,7 +38,7 @@ def _incomplete_final_answer_guard(final_answer: str) -> str | None:
     # Their absence let "我来查看黑板…" through as a terminal answer three turns
     # running (thread teD7hPf9dkGOExwO0dIiBE), each time with zero tool calls.
     preparatory_start = re.match(
-        r"^(?:我(?:会|将|先|来|要|想|这就|马上|直接|接下来|这就开始|马上开始|"
+        r"^(?:我(?:会|将|先|来|要|想|需要|这就|马上|直接|接下来|这就开始|马上开始|"
         r"现在(?:立刻|马上|直接)?|开始)|接下来|下一步|准备|"
         r"let me|i(?:'ll| will| first| am going to)|next[,：:]?)",
         visible,
@@ -47,6 +47,10 @@ def _incomplete_final_answer_guard(final_answer: str) -> str | None:
     evidence_action = re.search(
         r"\b(?:grep|read|inspect|check|verify|search|open)\b|"
         r"(?:核对|核实|检查|读取|再读|查看|搜索|检索|调研|打开|确认|探清|摸清|摸透|理清|弄清|摸底|盘点|收集|拉取|采集|搜集|定位|查找|明确|梳理|审查|评估|开始|过一遍|逐项过|"
+        # 未来意图的裸动词:查/找/读/搜/分析(如"我来帮你查这三组数据"/"我需要找一下…")。
+        # 只有与 preparatory_start/future_action 同时出现才判定为占位,过去式
+        # ("我查了…"/"我找到了…"/"我分析了…")因缺少意图前缀仍放行,不会误伤已交付报告。
+        r"查(?:一下|一遍|一查)?|找(?:一下|一遍)?|读(?:一下|一遍|一读)?|搜(?:一下|一搜)?|分析|"
         # 看/扫 的意向式("看一下/看看/扫一遍")是"待办动作",不是已交付结论;但"看了/看过/
         # 看见/看法"是过去式或名词,不能当证据动作(否则把已完成的报告误判成预告)。
         r"看(?:一下|一眼|看|一遍|下)|扫(?:一遍|一眼))"
@@ -163,8 +167,18 @@ _FETCH_TOOL_HINTS = (
 )
 
 
-def _turn_fetched_external_content(steps: list[ReActStep]) -> tuple[bool, str]:
-    """Return ``(a fetch/search/browser tool ran, all observation text)``."""
+def _turn_fetched_external_content(
+    steps: list[ReActStep],
+    *,
+    prior_observations: str = "",
+) -> tuple[bool, str]:
+    """Return ``(a fetch/search/browser tool ran, all observation text)``.
+
+    ``prior_observations`` merges tool observations from EARLIER turns of the
+    same thread, so a fact the model grounded in a previous turn and reuses
+    here counts as evidence — the guard polices fabrication, not multi-turn
+    research synthesis.
+    """
     fetched = False
     blobs: list[str] = []
     for step in steps:
@@ -181,15 +195,24 @@ def _turn_fetched_external_content(steps: list[ReActStep]) -> tuple[bool, str]:
                 fetched = True
         if step.observation:
             blobs.append(step.observation)
+    if prior_observations:
+        blobs.append(prior_observations)
     return fetched, "\n".join(blobs)
 
 
-def _fabricated_citation_guard(steps: list[ReActStep], final_answer: str) -> str | None:
+def _fabricated_citation_guard(
+    steps: list[ReActStep],
+    final_answer: str,
+    *,
+    prior_observations: str = "",
+) -> str | None:
     """Reject a research/chat final that cites source links it never fetched."""
     cited = _MD_CITATION_RE.findall(final_answer or "")
     if not cited:
         return None
-    fetched, observations = _turn_fetched_external_content(steps)
+    fetched, observations = _turn_fetched_external_content(
+        steps, prior_observations=prior_observations
+    )
     if not fetched:
         # No research happened this turn — any links are the model's own
         # knowledge, not sources claimed from this turn. Don't police them.
@@ -200,7 +223,7 @@ def _fabricated_citation_guard(steps: list[ReActStep], final_answer: str) -> str
         return None
     return (
         f"Your answer cites {len(fabricated)} source link(s) that never "
-        f"appeared in this turn's tool results (e.g. {fabricated[0]}). Do not "
+        f"appeared in this conversation's tool results (e.g. {fabricated[0]}). Do not "
         "present a URL as a source unless you actually fetched it. Either "
         "fetch/verify the link now, cite only URLs that appear in your "
         "search/fetch observations, or drop the link and state the point as "
@@ -231,7 +254,7 @@ def _fabricated_citation_guard(steps: list[ReActStep], final_answer: str) -> str
 # a guard that flags its own escape hatch wedges the loop.
 _EXTERNAL_FACT_RE = re.compile(
     r"(?:[¥$€£]\s*)\d{1,3}(?:,\d{3})*(?:\.\d+)?"  # currency-prefixed ¥1,200 / $0.80
-    r"|\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*(?:元|美元|人民币)"  # currency-suffixed 1,200元
+    r"|\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*(?:亿|万)?\s*(?:元|美元|人民币)"  # currency-suffixed 1,200元 / 17.6 亿美元
     r"|\d+(?:\.\d+)?\s*%"  # percentage
     r"|\b\d+\.\d+\.\d+(?:[-.]\w+)*\b"  # version N.N.N
     r"|\b(?:19|20)\d{2}[-年]\d{1,2}(?:[-月]\d{1,2}日?)?\b"  # dated fact YYYY-M(-D)
@@ -282,9 +305,16 @@ _NUMBER_CONTEXT_BEFORE = 18
 _NUMBER_CONTEXT_AFTER = 4
 
 
-def _ungrounded_external_fact_guard(steps: list[ReActStep], final_answer: str) -> str | None:
+def _ungrounded_external_fact_guard(
+    steps: list[ReActStep],
+    final_answer: str,
+    *,
+    prior_observations: str = "",
+) -> str | None:
     """Reject a research/chat final that asserts external facts it never fetched."""
-    fetched, observations = _turn_fetched_external_content(steps)
+    fetched, observations = _turn_fetched_external_content(
+        steps, prior_observations=prior_observations
+    )
     if not fetched:
         # No research happened this turn — any number is the model's own
         # knowledge or reasoning, not a fact claimed from this turn.
@@ -311,8 +341,8 @@ def _ungrounded_external_fact_guard(steps: list[ReActStep], final_answer: str) -
     shown = ", ".join(dict.fromkeys(ungrounded))
     return (
         f"Your answer asserts external fact(s) — {shown} — that never "
-        "appeared in this turn's search/fetch results. Presenting a number "
-        "as a sourced fact it wasn't sourced from is fabrication. Either "
+        "appeared in this conversation's search/fetch results (this turn or earlier turns). "
+        "Presenting a number as a sourced fact it wasn't sourced from is fabrication. Either "
         "cite the observation the figure actually came from, or soften to "
         'an approximation / your own understanding (e.g. "约 ¥…" / '
         '"据我了解…" / "approximately …").'

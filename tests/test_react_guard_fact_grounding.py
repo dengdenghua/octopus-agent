@@ -148,3 +148,50 @@ def test_end_to_end_via_registry() -> None:
     label, msg = hit
     assert label == "fact-grounding guard"
     assert "35%" in msg
+
+
+# ── Cross-turn grounding ────────────────────────────────────────────────
+# A figure sourced by a search in an EARLIER turn of the same thread and
+# reused in this turn is grounded, not fabricated. The guard must merge
+# prior-turn observations (thread txhjBkLKtmrjdfdJp0FQhN regressed here:
+# turn-1 search facts reused in the turn-2 report were falsely flagged,
+# and the model's "收到 grounding 检查…" acknowledgment leaked into the
+# user-visible answer).
+
+
+def test_no_fire_when_fact_grounded_in_prior_turn_observation() -> None:
+    steps = [_search_step("本轮只补了竞争格局。")]
+    prior = "Global Market Insights: 2025 智能床垫市场 17.6 亿美元，CAGR 6.6%。"
+    msg = _ungrounded_external_fact_guard(steps, "全球智能床垫 2025 年约 17.6 亿美元，CAGR 6.6%。", prior_observations=prior)
+    assert msg is None
+
+
+def test_fires_when_fact_absent_from_both_current_and_prior() -> None:
+    steps = [_search_step("本轮只补了竞争格局。")]
+    # NB: no hedge marker ("约" etc.) in the number's context window, so the
+    # fact is presented as a sourced figure and must be policed.
+    prior = "Global Market Insights: 智能床垫 2025 年全球规模 33.4 亿美元。"
+    msg = _ungrounded_external_fact_guard(
+        steps, "全球智能床垫 2025 年全球规模 17.6 亿美元。", prior_observations=prior
+    )
+    assert msg is not None
+    assert "17.6 亿" in msg or "17.6亿美元" in msg
+
+
+def test_prior_observations_flow_through_invoke_wrapper() -> None:
+    steps = [_search_step("本轮只补了竞争格局。")]
+    ctx = _ctx(
+        steps,
+        "全球智能床垫 2025 年约 17.6 亿美元。",
+    )
+    ctx.prior_grounding_text = "Global Market Insights: 智能床垫市场 17.6 亿美元。"
+    assert _invoke_ungrounded_fact(ctx) is None
+
+
+def test_fires_on_ungrounded_yiyuan_figure_after_fetch() -> None:
+    # "X 亿美元" is the canonical shape for market-size figures; the guard
+    # must recognize the 亿 (hundred-million) classifier before 美元.
+    steps = [_search_step("Analysts noted strong growth.")]
+    msg = _ungrounded_external_fact_guard(steps, "智能床垫全球规模 17.6 亿美元。")
+    assert msg is not None
+    assert "17.6 亿美元" in msg

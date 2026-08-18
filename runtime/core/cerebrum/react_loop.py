@@ -305,6 +305,7 @@ def _stream_react_loop_impl(
         _budget_pause_threshold = _assembly.budget_pause_threshold
         _realtime_public_orientation_requested = _assembly.realtime_public_orientation_requested
         _grounding_sources = _assembly.grounding_sources
+        _prior_grounding_text = _assembly.prior_grounding_text
         _is_swarm_mode = _assembly.is_swarm_mode
         _is_research_mode = _assembly.is_research_mode
         _active_max_tokens_budget = _assembly.active_max_tokens_budget
@@ -615,6 +616,7 @@ def _stream_react_loop_impl(
         format_violation_bail_at=_format_violation_bail_at,
         final_guard_grounded_source_paths=_final_guard_grounded_source_paths,
         guard_impasse_state=_guard_impasse_state,
+        prior_grounding_text=_prior_grounding_text,
         intent=intent,
         agent=agent,
         thread_id=thread_id,
@@ -1018,6 +1020,7 @@ def _stream_react_loop_impl(
             goal=intent.normalized_goal,
             browser_operation_mode=_browser_operation_mode,
             final_guard_grounded_source_paths=_final_guard_grounded_source_paths,
+            prior_grounding_text=_prior_grounding_text,
             final_answer_emitted=final_answer_emitted,
             model_iteration_timeout_s=_model_iteration_timeout_s,
             model_iteration_timeout_s_config=_model_iteration_timeout_s_config,

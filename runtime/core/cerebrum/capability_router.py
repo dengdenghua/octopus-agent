@@ -461,6 +461,16 @@ def _context_text(goal: str, user_context: dict[str, Any] | None) -> tuple[str, 
                 content = item.get("content")
                 if isinstance(content, str):
                     pieces.append(content)
+                elif isinstance(content, list):
+                    # A turn that carried an image upload is a multimodal block
+                    # list. Its text still has to reach capability routing, or
+                    # attaching a picture would silently change which skills
+                    # the request is allowed to reach.
+                    pieces.extend(
+                        str(part.get("text", ""))
+                        for part in content
+                        if isinstance(part, dict) and part.get("text")
+                    )
     return "\n".join(pieces).lower(), mode
 
 

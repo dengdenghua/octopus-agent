@@ -392,9 +392,14 @@ def _phase_6d_dispatch_and_observe(
                 )
         _model_supplied_update = bool(step.public_update)
         _public_update_key = re.sub(r"\s+", " ", step.public_update).strip().casefold()
+        # Model-supplied ``Update:``/``Progress:`` checkpoints are stripped
+        # from the zero-anchor streamed answer lane (react_model_stream), so
+        # they must be surfaced here even when this iteration has no tool
+        # action — otherwise the checkpoint would be lost entirely. Final
+        # answers still suppress commentary so a checkpoint embedded in a
+        # Final Answer body is not duplicated against the delivered answer.
         if (
             step.public_update
-            and tool_action_requested
             and maybe_final is None
             and _public_update_key != _last_public_update_key
         ):

@@ -250,6 +250,7 @@ def _evaluate_final_answer_guards(
     grounded_source_paths: frozenset[str] = frozenset(),
     categories: frozenset[str] | set[str] | None = None,
     model: str = "",
+    prior_grounding_text: str = "",
 ) -> tuple[str, str] | None:
     """Run the final-answer guard registry for regular and salvage paths."""
     from runtime.core.cerebrum.react_guards import (
@@ -274,6 +275,7 @@ def _evaluate_final_answer_guards(
             browser_operation_mode=browser_operation_mode,
             grounded_source_paths=grounded_source_paths,
             model=model,
+            prior_grounding_text=prior_grounding_text,
             execution_degraded=_trajectory_execution_degraded(all_steps),
         ),
         recorder=_guard_hit_recorder(
@@ -397,16 +399,26 @@ def _trajectory_has_successful_tool_evidence(steps: list[ReActStep]) -> bool:
 def _guard_repair_feedback(label: str, message: str, steps: list[ReActStep]) -> str:
     """Build the next-round instruction without causing redundant tool work."""
 
-    if label != "final-answer completeness guard" or not _trajectory_has_successful_tool_evidence(
+    if label == "final-answer completeness guard" and _trajectory_has_successful_tool_evidence(
         steps
     ):
-        return message
+        return (
+            "The candidate was a progress promise, not a final answer. Successful tool evidence "
+            "already exists in the recorded Observations. Do not call another tool, repeat an "
+            "inspection, or announce future work. Synthesize the complete Final Answer now from "
+            "the existing evidence: lead with the concrete result, include the material findings "
+            "and verification outcome, and mention only genuine remaining limitations."
+        )
+    # Every other rejection: the repair instruction is internal loop machinery,
+    # not user content. The model must never quote/acknowledge it in the
+    # user-facing answer — a leaked "收到 grounding 检查…" prefix is exactly
+    # what surfaced as a broken-layout report (thread txhjBkLKtmrjdfdJp0FQhN).
     return (
-        "The candidate was a progress promise, not a final answer. Successful tool evidence "
-        "already exists in the recorded Observations. Do not call another tool, repeat an "
-        "inspection, or announce future work. Synthesize the complete Final Answer now from "
-        "the existing evidence: lead with the concrete result, include the material findings "
-        "and verification outcome, and mention only genuine remaining limitations."
+        f"{message}\n\n"
+        "This feedback is internal loop machinery, not content for the user. "
+        "Do NOT quote, translate, summarize, or acknowledge it in your "
+        "user-facing Final Answer. Output the corrected final answer directly "
+        "and nothing else."
     )
 
 
@@ -818,6 +830,7 @@ def _phase_6e_guards_and_step_emit(
                 goal=intent.normalized_goal,
                 browser_operation_mode=_browser_operation_mode,
                 grounded_source_paths=_final_guard_grounded_source_paths,
+                prior_grounding_text=state.prior_grounding_text,
             )
             if _guard_hit is not None:
                 # Solution-A: a guard rejection that is purely a leaked ReAct

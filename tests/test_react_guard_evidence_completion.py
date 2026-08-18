@@ -453,3 +453,33 @@ def test_incomplete_final_answer_still_accepts_delivered_failure_analysis() -> N
         )
         is None
     )
+
+
+def test_incomplete_final_answer_rejects_bare_intention_verbs() -> None:
+    """Future-intent bare verbs (查/找/读/搜/分析) are plan statements, not
+    delivered answers. Regression: the realtime thread txhjBkLKtmrjdfdJp0FQhN
+    opened with "我来帮你查这三组数据…" which slipped through because bare 查
+    was not an evidence-action verb, so the generic opener streamed to the user
+    as the answer before any real work."""
+    assert (
+        _incomplete_final_answer_guard(
+            "我来帮你查这三组数据：智能床垫全球体量、传统床/床品全球体量、"
+            "温度影响睡眠的科学依据，最后汇总成带来源的清单。"
+        )
+        is not None
+    )
+    assert _incomplete_final_answer_guard("我来找一下相关文档再回答。") is not None
+    assert _incomplete_final_answer_guard("我来读一下配置文件，然后再给结论。") is not None
+    assert _incomplete_final_answer_guard("我先搜一下官方资料。") is not None
+    assert _incomplete_final_answer_guard("我需要找一下资料再回答。") is not None
+
+
+def test_incomplete_final_answer_accepts_past_tense_bare_intention_verbs() -> None:
+    """Completed, past-tense statements with the same characters must keep
+    passing — only the future-intent prefix triggers the guard."""
+    assert (
+        _incomplete_final_answer_guard("我查了资料，结论是智能床垫市场规模 17.6 亿美元。")
+        is None
+    )
+    assert _incomplete_final_answer_guard("我找到了答案：两者的定义完全一致。") is None
+    assert _incomplete_final_answer_guard("我分析了数据，得出三点结论。") is None

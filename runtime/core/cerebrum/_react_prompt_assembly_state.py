@@ -11,6 +11,7 @@ any react_* sibling, so there is no import cycle.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -73,6 +74,10 @@ class _AssemblyState:
     grounding_sources: list = field(default_factory=list)
     grounded_source_paths: frozenset = frozenset()
     final_guard_grounded_source_paths: frozenset = frozenset()
+    # Tool observations from EARLIER turns of this thread, extracted from the
+    # assembled conversation history. Threaded into the research grounding
+    # guards so cross-turn facts aren't misflagged as fabricated.
+    prior_grounding_text: str = ""
     browser_operation_mode: bool = False
     chrome_operation_mode: bool = False
     guard_impasse_state: dict = field(default_factory=dict)
@@ -186,6 +191,116 @@ def _assemble_memory_sections(state: _AssemblyState) -> None:
         state.volatile_parts.append(state.camouflage_suffix)
 
 
+# ── Vague-user-input guidance (P3) ────────────────────────────────
+# A bare ``？`` / ``??`` / ``啥`` follow-up after a broken exchange (most
+# commonly an image that never arrived) almost always means the user is
+# pushing back on the previous reply. Handing that goal straight to the LLM
+# produces a generic "请说明您需要我处理的具体内容" template — exactly what
+# happened in thread txhjBkLKtmrjdfdJp0FQhN after the image silently failed.
+# These helpers detect that shape and let the assembly inject context-aware
+# steering so the model addresses the real (recent) issue instead.
+
+# Bare punctuation: ``?`` ``？？`` ``。`` ``。。`` ``...`` — no words at all.
+_VAGUE_GOAL_PUNCT_RE = re.compile(r"^[\s\u3000]*[?？!！。，,、~～.]{1,8}[\s\u3000]*$")
+# Words that are inherently a "what? / huh?" pushback even without a mark.
+_VAGUE_BARE_WORDS = frozenset({"啥", "什么", "咋", "咋了", "干嘛", "what", "huh", "wut"})
+# Interjections that only read as pushback when followed by a question mark
+# ("嗯？"), otherwise they are acknowledgments ("嗯" = got it) and must NOT
+# trigger the steering.
+_VAGUE_MARK_REQUIRED = frozenset({"嗯", "额", "呃", "啊", "哦", "em", "uh"})
+
+
+def _vague_user_goal(goal: str) -> bool:
+    """Whether the current user input is a bare, context-less interjection."""
+    raw = (goal or "").strip().strip("\u3000")
+    if not raw:
+        return False
+    if _VAGUE_GOAL_PUNCT_RE.match(raw):
+        return True
+    stripped = raw.casefold()
+    m = re.match(r"^([^\s?？!！。，,、~～.]+)\s*[?？!！。，,、~～.]*$", stripped)
+    core = m.group(1) if m else stripped
+    if core in _VAGUE_BARE_WORDS:
+        return True
+    if core in _VAGUE_MARK_REQUIRED:
+        return bool(re.search(r"[?？!！]", stripped))
+    return False
+
+
+_ATTACHMENT_NOT_RECEIVED_RE = re.compile(
+    r"没有收到|未收到|收不到|不支持视觉|视觉输入|无法查看|看不了|看不到|未能送达|"
+    r"didn'?t\s+receive|not\s+received|can'?t\s+see|no\s+image",
+    re.IGNORECASE,
+)
+_ATTACHMENT_TERM_RE = re.compile(
+    r"图片|截图|图像|附件|image|screenshot|attachment",
+    re.IGNORECASE,
+)
+
+
+def _recent_attachment_issue(conv_history: Any) -> bool:
+    """Whether a recent turn mentions an image/attachment that was not
+    received or could not be seen (the ``？`` right after such a hiccup is
+    almost always the user pushing back on it)."""
+    if not isinstance(conv_history, list) or not conv_history:
+        return False
+    for item in conv_history[-8:]:
+        if not isinstance(item, dict):
+            continue
+        content = item.get("content")
+        texts: list[str] = []
+        if isinstance(content, str):
+            texts.append(content)
+        elif isinstance(content, list):
+            texts.extend(
+                str(block.get("text") or "")
+                for block in content
+                if isinstance(block, dict) and block.get("text")
+            )
+        blob = "\n".join(texts)
+        if _ATTACHMENT_TERM_RE.search(blob) and _ATTACHMENT_NOT_RECEIVED_RE.search(blob):
+            return True
+    return False
+
+
+_VAGUE_ATTACHMENT_GUIDANCE = (
+    "<vague-user-followup>\n"
+    "用户这条消息非常简短（如\"？\"），几乎肯定是在追问或表达对上一轮回复的不满。\n"
+    "最近对话里出现过用户图片/附件未能送达或无法查看的迹象。请直接围绕这一点回应：\n"
+    "· 先说明当前到底能不能看到用户的图片，以及为什么（如模型不支持视觉输入 / 附件未上传成功）；\n"
+    "· 给出可操作的下一步（重新上传、切换到支持图片的模型/会话，或请用户改用文字描述内容）；\n"
+    "· 不要使用\"请说明您需要我处理的具体内容\"这类空泛澄清模板——用户已经表达过诉求。\n"
+    "</vague-user-followup>"
+)
+
+
+def _extract_prior_observations(conv_history: Any) -> str:
+    """Join tool observations recorded in EARLIER turns of the same thread.
+
+    Each finished ReAct step is persisted back into the conversation history
+    as a ``user`` message whose content starts with ``Observation:``. These
+    carry the search/fetch/web evidence the model legitimately grounded on in
+    previous turns. Returning them as one text blob lets the fact/citation
+    grounding guards treat a figure sourced earlier in the same conversation
+    as grounded instead of a fabrication.
+    """
+    if not isinstance(conv_history, list):
+        return ""
+    blobs: list[str] = []
+    for item in conv_history:
+        if not isinstance(item, dict):
+            continue
+        if item.get("role") != "user":
+            continue
+        content = item.get("content")
+        if not isinstance(content, str):
+            continue
+        stripped = content.strip()
+        if stripped.startswith("Observation:"):
+            blobs.append(stripped)
+    return "\n".join(blobs)
+
+
 def _assemble_messages(state: _AssemblyState) -> None:
     """Compose the initial ``messages`` list from the assembled parts."""
     _volatile_text = "\n\n".join(state.volatile_parts).strip() if state.volatile_parts else ""
@@ -201,6 +316,7 @@ def _assemble_messages(state: _AssemblyState) -> None:
         )
     _uc = state.user_context
     conv_history = _uc.get("conversation_messages")
+    state.prior_grounding_text = _extract_prior_observations(conv_history)
     if isinstance(conv_history, list) and conv_history:
         profile_mems = _uc.get("profile_memories")
         if isinstance(profile_mems, list) and profile_mems:
@@ -282,6 +398,14 @@ def _assemble_messages(state: _AssemblyState) -> None:
             ),
         ),
     )
+    # Bare interjection follow-up (``？``) on top of a recent image/attachment
+    # failure: steer the model to address that concrete issue instead of
+    # falling back to a generic "please clarify" template.
+    if (
+        _vague_user_goal(_current_goal)
+        and _recent_attachment_issue(conv_history)
+    ):
+        messages.append(Message(role="system", content=_VAGUE_ATTACHMENT_GUIDANCE))
     if state.user_context.get("live_steering"):
         from runtime.core.cerebrum.live_steering import (
             insert_live_steering_protocol,

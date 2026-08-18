@@ -42,8 +42,12 @@ def _build_user_message_content(
     filename. When there are no image blocks, the result stays a plain string.
     """
     text = (text or "").strip()
-    image_blocks = _image_blocks_from_attachments(attachments)
-    attachment_text = _attachment_context_appendix(attachments)
+    image_blocks, consumed = _image_blocks_from_attachments(attachments)
+    # Anything that looked like an image but produced no usable block (e.g. a
+    # hosted-only upload whose artifact URL is server-relative) still has to
+    # reach the model somehow — list it in the manifest so it can be read from
+    # disk instead of disappearing from both channels.
+    attachment_text = _attachment_context_appendix(attachments, consumed=consumed)
     if not image_blocks and not attachment_text:
         return text
     combined_text = text
@@ -60,15 +64,27 @@ def _build_user_message_content(
     return blocks
 
 
-def _attachment_context_appendix(attachments: Any) -> str | None:
-    """Build a bounded, model-visible manifest for non-image attachments."""
+def _attachment_context_appendix(
+    attachments: Any,
+    *,
+    consumed: set[int] | None = None,
+) -> str | None:
+    """Build a bounded, model-visible manifest for non-image attachments.
+
+    ``consumed`` holds the positions of attachments already delivered as
+    inline image blocks. An image-looking attachment that is NOT in that set
+    never made it into the visual channel, so it is listed here instead.
+    """
 
     if not isinstance(attachments, list):
         return None
+    delivered = consumed or set()
     records: list[str] = []
     preview_chars = 0
-    for item in attachments:
-        if not isinstance(item, dict) or _looks_like_image_attachment(item):
+    for index, item in enumerate(attachments):
+        if not isinstance(item, dict):
+            continue
+        if index in delivered:
             continue
         filename = item.get("filename") or item.get("name") or "attachment"
         record: dict[str, Any] = {"filename": str(filename)}
@@ -108,22 +124,33 @@ def _attachment_context_appendix(attachments: Any) -> str | None:
     )
 
 
-def _image_blocks_from_attachments(attachments: Any) -> list[dict[str, Any]]:
+def _image_blocks_from_attachments(
+    attachments: Any,
+) -> tuple[list[dict[str, Any]], set[int]]:
     """Extract OpenAI-shaped image_url blocks from raw attachment dicts.
 
     Recognized shapes (any of these is enough):
 
     - ``data_url`` field with a ``data:image/...;base64,...`` string
     - ``url`` field that is itself a ``data:image/...`` URL
-    - ``url`` field with ``mediaType`` / ``mime_type`` starting with
-      ``image/`` (we trust the caller, no fetch)
+    - absolute ``http(s)`` ``url`` with ``mediaType`` / ``mime_type``
+      starting with ``image/`` (we trust the caller, no fetch)
 
     Filename-extension is a last-resort hint when no media type is set.
+
+    A server-relative reference (``/api/threads/<id>/artifacts/x.png``) is
+    deliberately NOT emitted: no upstream provider can resolve it, so it
+    would either 400 the request or be silently ignored. Those attachments
+    are reported in the returned index set as *not* consumed, and the caller
+    lists them in the file manifest instead.
+
+    Returns the blocks and the set of attachment indices they came from.
     """
     if not isinstance(attachments, list):
-        return []
+        return [], set()
     blocks: list[dict[str, Any]] = []
-    for item in attachments:
+    consumed: set[int] = set()
+    for index, item in enumerate(attachments):
         if not isinstance(item, dict):
             continue
         url = ""
@@ -135,13 +162,20 @@ def _image_blocks_from_attachments(attachments: Any) -> list[dict[str, Any]]:
             if (
                 isinstance(raw_url, str)
                 and raw_url.strip()
-                and (raw_url.startswith("data:image/") or _looks_like_image_attachment(item))
+                and (
+                    raw_url.startswith("data:image/")
+                    or (
+                        raw_url.startswith(("http://", "https://"))
+                        and _looks_like_image_attachment(item)
+                    )
+                )
             ):
                 url = raw_url
         if not url:
             continue
+        consumed.add(index)
         blocks.append({"type": "image_url", "image_url": {"url": url}})
-    return blocks
+    return blocks, consumed
 
 
 def _looks_like_image_attachment(item: dict[str, Any]) -> bool:

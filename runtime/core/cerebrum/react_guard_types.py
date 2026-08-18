@@ -36,6 +36,13 @@ class GuardContext:
     browser_operation_mode: bool = False
     grounded_source_paths: frozenset[str] = frozenset()
     model: str = ""  # New: model name for model-aware guard routing
+    # Tool observations fetched in EARLIER turns of the same thread (as
+    # ``Observation:`` user messages in the assembled conversation history).
+    # Research guards (fact/citation grounding) merge this into the evidence
+    # stream so a figure sourced in a previous turn and reused here isn't
+    # falsely flagged as fabricated — the guard must police fabrication, not
+    # multi-turn research synthesis.
+    prior_grounding_text: str = ""
     # Execution-environment health signal, computed live from the trajectory
     # (≥2 environmental tool failures — sandbox/network denials the model
     # cannot fix by retrying). When True, execution-evidence repair guards

@@ -132,6 +132,7 @@ def _finalize_react_turn(
     goal: str,
     browser_operation_mode: bool,
     final_guard_grounded_source_paths: Any,
+    prior_grounding_text: str = "",
     final_answer_emitted: bool,
     model_iteration_timeout_s: Callable[[float | None], float],
     model_iteration_timeout_s_config: float | None = None,
@@ -300,6 +301,7 @@ def _finalize_react_turn(
                     browser_operation_mode=browser_operation_mode,
                     grounded_source_paths=final_guard_grounded_source_paths,
                     model=effective_model,
+                    prior_grounding_text=prior_grounding_text,
                 )
                 if _guard_hit is not None:
                     # The terminal convergence call is the last chance to

@@ -414,6 +414,7 @@ def _phase_6c_parse_and_guard(
                 browser_operation_mode=_browser_operation_mode,
                 grounded_source_paths=_final_guard_grounded_source_paths,
                 model=state.effective_model,
+                prior_grounding_text=state.prior_grounding_text,
                 categories=(
                     None
                     if (_browser_operation_mode or _is_code_mode)
@@ -596,6 +597,7 @@ def _phase_6c_parse_and_guard(
                             browser_operation_mode=_browser_operation_mode,
                             grounded_source_paths=_final_guard_grounded_source_paths,
                             model=state.effective_model,
+                            prior_grounding_text=state.prior_grounding_text,
                             categories=(
                                 None
                                 if (_browser_operation_mode or _is_code_mode)

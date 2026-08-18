@@ -46,6 +46,24 @@ _PUBLIC_UPDATE_BOILERPLATE_RE = re.compile(
     r"(?:think|work|process|analy[sz]e|execute))[。.!！\s]*$",
     re.IGNORECASE,
 )
+# A pure clarification request ("请说明您需要我处理的具体内容") is NOT public
+# progress — it is an answer the model should deliver through the normal answer
+# channel (where the completion guards and _final_answer_requests_user_help can
+# handle it), not an Update: checkpoint. Surfacing it as the first visible
+# commentary is exactly the "先泛化一句、让人感觉敷衍" experience. Only suppress
+# when the whole checkpoint is a generic ask, so a real plan that happens to
+# end in "请告诉我" still streams.
+_PUBLIC_UPDATE_GENERIC_CLARIFY_RE = re.compile(
+    r"^(?:"
+    r"请(?:您|你)?(?:再|详细|具体)?(?:说明|告诉我|告诉我您|告诉我你|提供|描述|补充说明|把需求说清楚)[^。.!！]{0,50}"
+    r"|(?:您|你)(?:需要|想要|希望)我(?:处理|做什么|提供|给出)[^。.!！]{0,40}"
+    r"|我(?:需要|想|希望)(?:您|你)(?:告诉我|提供|说明|描述)[^。.!！]{0,40}"
+    r"|请提供更多信息|请详细描述|请补充说明|请把需求说清楚"
+    r")[。.!！]?\s*$",
+    re.IGNORECASE,
+)
+
+
 _PUBLIC_UPDATE_CODE_RE = re.compile(
     r"(?:^|\n)\s*(?:async\s+)?(?:def|class|function|const|let|var|return|raise)\b"
     r"|(?:^|\n)\s*[@#][A-Za-z_]\w*|[{}]\s*$",
@@ -75,6 +93,9 @@ def _safe_public_update(value: str | None) -> str:
     if _PUBLIC_UPDATE_TOOL_CALL_RE.search(cleaned) or _looks_like_special_tool_envelope(cleaned):
         return ""
     if _PUBLIC_UPDATE_BOILERPLATE_RE.fullmatch(cleaned):
+        return ""
+    if _PUBLIC_UPDATE_GENERIC_CLARIFY_RE.match(cleaned):
+        # A clarification is not progress; let it go through the answer lane.
         return ""
     # Public progress is a conversational beat, never a source excerpt. Some
     # OpenAI-compatible providers echo retrieved context as ordinary text next

@@ -540,3 +540,79 @@ def test_anthropic_attaches_screenshots_onto_plain_text_user() -> None:
         "source": {"type": "base64", "media_type": "image/png", "data": "SEFL"},
     }
     assert content[1] == {"type": "text", "text": "hello"}
+
+
+# ═══════════════════════════════════════════════════════════
+# undeclared models · inline uploads are transcribed, not silently dropped
+# (regression: thread txhjBkLKtmrjdfdJp0FQhN — the model answered
+# "No image attached" because a text relay dropped the image_url block
+# without a 4xx, so pass-through + crash recovery never fired)
+
+
+def test_apply_vision_guard_undeclared_transcribes_inline_upload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _vision_mode(monkeypatch, None)  # undeclared
+    calls = _mock_agnes(monkeypatch, reply="一张红色图片")
+    req = _req(
+        messages=[
+            _inline(
+                [
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}},
+                    {"type": "text", "text": "describe"},
+                ]
+            )
+        ]
+    )
+    guarded = vg.apply_vision_guard(req)
+    assert vg.request_has_images(guarded) is False
+    blocks = guarded.messages[-1].content
+    assert isinstance(blocks, list)
+    # transcription replaced the image block; text survives
+    assert "红色图片" in str(blocks)
+    assert any(b.get("type") == "text" for b in blocks)
+    assert calls  # whale_eye was actually consulted
+
+
+def test_apply_vision_guard_undeclared_keeps_b64_screenshot_untouched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _vision_mode(monkeypatch, None)  # undeclared
+    calls = _mock_agnes(monkeypatch)
+    req = _req(images_b64=["AAAA"])
+    guarded = vg.apply_vision_guard(req)
+    assert guarded is req  # raw-screenshot channel still pass-through
+    assert calls == []  # no transcription for computer-use screenshots
+
+
+def test_apply_vision_guard_undeclared_no_image_note_without_agnes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _vision_mode(monkeypatch, None)  # undeclared
+    _mock_agnes(monkeypatch, reply=None)  # agnes unavailable
+    req = _req(
+        messages=[
+            _inline([{"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}])
+        ]
+    )
+    guarded = vg.apply_vision_guard(req)
+    assert vg.request_has_images(guarded) is False
+    content = guarded.messages[0].content
+    assert isinstance(content, list) and content
+    assert content[0]["type"] == "text"
+    assert "图片已移除" in content[0]["text"]
+
+
+def test_apply_vision_guard_declared_vision_passes_inline_through(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _vision_mode(monkeypatch, True)  # declared vision
+    _mock_agnes(monkeypatch)
+    req = _req(
+        messages=[
+            _inline([{"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}])
+        ]
+    )
+    guarded = vg.apply_vision_guard(req)
+    assert guarded is req  # raw image delivered to a vision model
+    assert vg.request_has_images(guarded) is True

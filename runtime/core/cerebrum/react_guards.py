@@ -275,7 +275,11 @@ def _invoke_fabricated_citation(ctx: GuardContext) -> str | None:
     # their own verification cluster.
     if ctx.is_code_mode:
         return None
-    return _fabricated_citation_guard(ctx.steps, ctx.final_answer)
+    return _fabricated_citation_guard(
+        ctx.steps,
+        ctx.final_answer,
+        prior_observations=ctx.prior_grounding_text,
+    )
 
 
 def _invoke_ungrounded_fact(ctx: GuardContext) -> str | None:
@@ -283,7 +287,11 @@ def _invoke_ungrounded_fact(ctx: GuardContext) -> str | None:
     # (language / path / typecheck / test-coverage guards).
     if ctx.is_code_mode:
         return None
-    return _ungrounded_external_fact_guard(ctx.steps, ctx.final_answer)
+    return _ungrounded_external_fact_guard(
+        ctx.steps,
+        ctx.final_answer,
+        prior_observations=ctx.prior_grounding_text,
+    )
 
 
 def _invoke_browser_completion(ctx: GuardContext) -> str | None:

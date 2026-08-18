@@ -6,11 +6,13 @@ import pytest
 
 from runtime.execution.suckers import SkillRegistry
 from runtime.execution.suckers.web_skills import (
+    _SNIPPET_CAP,
     HTTPX_AVAILABLE,
     TRAFILATURA_AVAILABLE,
     WEB_SKILL_NAMES,
     _brave_search,
     _ddg_search,
+    _doubao_search,
     _fetch_url,
     _resolve_backend,
     _searxng_search,
@@ -390,6 +392,97 @@ class TestSearxngSearch:
         _searxng_search(client, "https://searx.example/", "q", max_results=1)
         method, url, _ = client.calls[0]
         assert url == "https://searx.example/search"
+
+
+# ═══════════════════════════════════════════════════════════
+# Snippet cap — the 400-char truncation silently dropped figures
+# the model needs (e.g. "17.6 亿美元"); the cap is now 2000.
+# ═══════════════════════════════════════════════════════════
+
+
+def _long_snippet(tail: str = "…17.6 亿美元") -> str:
+    # ~900 chars: well past the old 400-char cap but under the new 2000 cap,
+    # so the trailing figure survives only if the truncation was raised.
+    filler = "数据" * 150  # 300 chars of filler
+    return "背景" * 300 + filler + tail
+
+
+class TestSnippetCap:
+    def test_constant_is_raised(self):
+        assert _SNIPPET_CAP >= 2000
+
+    def test_doubao_keeps_long_snippet_and_asks_for_enough(self):
+        text = _long_snippet()
+        payload = {
+            "Result": {
+                "Documents": [
+                    {
+                        "Title": "报告",
+                        "Url": "https://example.com/d",
+                        "Snippet": [{"Type": "text", "Text": text}],
+                        "HostInfo": {"Hostname": "example.com"},
+                        "DocumentInfo": {},
+                    }
+                ]
+            }
+        }
+        client = _MockClient(post_response=_MockResponse(status_code=200, json_data=payload))
+        result = _doubao_search(client, "fake-key", "q", max_results=5)
+        snip = result["results"][0]["snippet"]
+        assert snip.endswith("…17.6 亿美元")
+        assert len(snip) <= _SNIPPET_CAP
+        assert "max_snippet_length" in client.calls[0][2]["json"]
+        assert client.calls[0][2]["json"]["max_snippet_length"] == _SNIPPET_CAP
+
+    def test_tavily_keeps_long_snippet(self):
+        payload = {
+            "results": [
+                {"title": "AI", "url": "https://example.com/a", "content": _long_snippet()}
+            ]
+        }
+        client = _MockClient(post_response=_MockResponse(status_code=200, json_data=payload))
+        result = _tavily_search(client, "k", "q", max_results=5)
+        snip = result["results"][0]["snippet"]
+        assert snip.endswith("…17.6 亿美元")
+        assert len(snip) <= _SNIPPET_CAP
+
+    def test_brave_keeps_long_snippet(self):
+        payload = {"web": {"results": [{"title": "B", "url": "u", "description": _long_snippet()}]}}
+        client = _MockClient(get_response=_MockResponse(status_code=200, json_data=payload))
+        result = _brave_search(client, "k", "q", max_results=5)
+        snip = result["results"][0]["snippet"]
+        assert snip.endswith("…17.6 亿美元")
+        assert len(snip) <= _SNIPPET_CAP
+
+    def test_serper_keeps_long_snippet(self):
+        payload = {"organic": [{"title": "S", "link": "u", "snippet": _long_snippet()}]}
+        client = _MockClient(post_response=_MockResponse(status_code=200, json_data=payload))
+        result = _serper_search(client, "k", "q", max_results=5)
+        snip = result["results"][0]["snippet"]
+        assert snip.endswith("…17.6 亿美元")
+        assert len(snip) <= _SNIPPET_CAP
+
+    def test_searxng_keeps_long_snippet(self):
+        payload = {"results": [{"title": "SX", "url": "u", "content": _long_snippet()}]}
+        client = _MockClient(get_response=_MockResponse(status_code=200, json_data=payload))
+        result = _searxng_search(client, "https://searx.example/", "q", max_results=5)
+        snip = result["results"][0]["snippet"]
+        assert snip.endswith("…17.6 亿美元")
+        assert len(snip) <= _SNIPPET_CAP
+
+    def test_ddg_keeps_long_snippet(self):
+        import html as _html
+
+        text = _html.escape(_long_snippet())
+        sample = (
+            '<a class="result__a" href="https://example.com/p1">First</a>'
+            '<a class="result__snippet">' + text + "</a>"
+        )
+        client = _MockClient(post_response=_MockResponse(status_code=200, text=sample))
+        result = _ddg_search(client, "q", max_results=5)
+        snip = result["results"][0]["snippet"]
+        assert snip.endswith("…17.6 亿美元")
+        assert len(snip) <= _SNIPPET_CAP
 
 
 class TestResolveBackend:

@@ -23,15 +23,28 @@ The guard is wired into ``ModelDispatchRouter.call`` / ``call_stream``:
 * pre-guard: a model declared ``supports_vision: false`` in
   ``custom_models.json`` never sees raw image blocks — they are
   transcribed (or stripped) before the upstream call.
-* crash recovery: when an undeclared / declared-vision model rejects an
-  image payload with a 4xx, the request is retried once with images
-  transcribed (or stripped) so the turn continues instead of dying. The
-  rejection classifier matches the same bare ``400``/``422`` markers as
-  the config-test vision probe, which covers every router's error shape
-  (``http_400`` prefixes and the anthropic SDK's ``Error code: 400``).
-  This router-level retry is the ONLY same-turn defense — the react
-  loop's retry path re-sends the identical image-bearing request, so a
-  rejection it can't classify would kill the turn after its own retries.
+* pre-guard, undeclared models with inline uploads: user image blocks
+  (built by ``_react_context_attachments``) are ALSO transcribed (or
+  stripped) when the model's vision capability is undeclared. Text-model
+  relays often accept an ``image_url`` block and silently drop it without
+  a 4xx, so the crash-recovery path can never fire and the model ends up
+  claiming "no image attached" (thread txhjBkLKtmrjdfdJp0FQhN). Treating
+  unknown as non-vision trades raw-image fidelity on undeclared vision
+  models for a guaranteed, honest signal on text models; operators can
+  restore raw pass-through by declaring ``supports_vision: true``.
+  The raw-screenshot ``images_b64`` channel (computer-use) keeps its
+  pass-through + 4xx-recovery behavior, because screen pixels need to
+  survive intact and the channel already recovers on rejection.
+* crash recovery: when a declared-vision model (or an undeclared model
+  carrying ``images_b64``) rejects an image payload with a 4xx, the
+  request is retried once with images transcribed (or stripped) so the
+  turn continues instead of dying. The rejection classifier matches the
+  same bare ``400``/``422`` markers as the config-test vision probe,
+  which covers every router's error shape (``http_400`` prefixes and the
+  anthropic SDK's ``Error code: 400``).  This router-level retry is the
+  ONLY same-turn defense — the react loop's retry path re-sends the
+  identical image-bearing request, so a rejection it can't classify
+  would kill the turn after its own retries.
 
 A stripped retry that also fails re-raises the ORIGINAL error, so a
 picture never silently swaps a real failure for a confusing secondary
@@ -80,18 +93,32 @@ def model_known_non_vision(model: str) -> bool:
 
 
 def apply_vision_guard(request: ModelRequest) -> ModelRequest:
-    """Pre-guard: transcribe/strip images for models declared non-vision.
+    """Pre-guard: transcribe/strip images for models that can't see them.
 
-    Vision-capable and undeclared models pass through untouched — the
-    dispatcher relies on crash recovery for those instead. Image-less
-    requests short-circuit before the custom-models lookup, keeping the
-    guard off the hot path of plain text turns.
+    * Declared ``supports_vision: true`` models pass through untouched.
+    * Declared ``supports_vision: false`` models get every image channel
+      transcribed (or stripped) up front.
+    * Undeclared models get inline user-uploaded image blocks transcribed
+      (or stripped) as well — a text relay silently drops ``image_url``
+      blocks without a 4xx, so pass-through + crash recovery can't detect
+      the loss (thread txhjBkLKtmrjdfdJp0FQhN). The ``images_b64``
+      computer-use channel stays pass-through + 4xx-recovery.
+
+    Image-less requests short-circuit before the custom-models lookup,
+    keeping the guard off the hot path of plain text turns.
     """
     if not request_has_images(request):
         return request
-    if not model_known_non_vision(request.model):
+    declared = model_supports_vision(request.model)
+    if declared is True:
         return request
-    return transcribe_or_strip_images(request)
+    if declared is False:
+        return transcribe_or_strip_images(request)
+    # Undeclared: transcribe inline uploads, keep images_b64 untouched
+    # (computer-use screenshots need raw pixels + their own 4xx recovery).
+    if not any(_has_image_blocks(message.content) for message in request.messages):
+        return request
+    return transcribe_or_strip_images(request, include_b64=False)
 
 
 def build_without_images(request: ModelRequest) -> ModelRequest:
@@ -119,13 +146,15 @@ def classify_image_rejection(exc: BaseException) -> bool:
     return "400" in message or "422" in message
 
 
-def transcribe_or_strip_images(request: ModelRequest) -> ModelRequest:
+def transcribe_or_strip_images(request: ModelRequest, *, include_b64: bool = True) -> ModelRequest:
     """Replace every image with a transcription (best effort) or a note.
 
-    Returns a new frozen request with ``images_b64`` cleared and inline
-    image blocks replaced by text blocks. ``images_b64`` transcriptions
-    are appended to the last user message's text — the same message the
-    routers attach them to.
+    Returns a new frozen request with ``images_b64`` cleared (when
+    ``include_b64``) and inline image blocks replaced by text blocks.
+    ``images_b64`` transcriptions are appended to the last user message's
+    text — the same message the routers attach them to. ``include_b64=False``
+    leaves the raw-screenshot channel alone so undeclared computer-use
+    screenshots keep pass-through + 4xx-recovery.
     """
     if not request_has_images(request):
         return request
@@ -135,15 +164,19 @@ def transcribe_or_strip_images(request: ModelRequest) -> ModelRequest:
     budget: list[int] = [_MAX_TRANSCRIBE]
 
     b64_texts: list[str] = []
-    for b64 in request.images_b64:
-        b64_texts.append(_transcribe_or_note(b64, budget))
+    if include_b64:
+        for b64 in request.images_b64:
+            b64_texts.append(_transcribe_or_note(b64, budget))
 
     messages = [_rebuild_message(message, budget) for message in request.messages]
     if b64_texts:
         messages = _append_to_last_user(messages, b64_texts)
 
     return request.model_copy(
-        update={"images_b64": [], "messages": messages},
+        update={
+            "images_b64": [] if include_b64 else request.images_b64,
+            "messages": messages,
+        },
     )
 
 

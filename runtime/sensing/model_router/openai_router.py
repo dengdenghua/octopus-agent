@@ -953,7 +953,15 @@ def _messages_to_openai(messages: list[Message]) -> list[dict[str, Any]]:
             # Separate tool_result blocks from text content.
             # Tool results become standalone ``{"role":"tool"}``
             # messages; any stray text goes into a user message.
+            #
+            # Image blocks must survive as blocks: a user upload arrives as
+            # an ``image_url`` block (built by ``_react_context_attachments``)
+            # and OpenAI's only way to carry it is multimodal list content.
+            # Collapsing the message to a joined string here silently dropped
+            # every uploaded image — the model was told about the text and
+            # never saw the picture.
             text_parts = []
+            image_blocks: list[dict[str, Any]] = []
             for b in blocks:
                 if not isinstance(b, dict):
                     continue
@@ -975,7 +983,20 @@ def _messages_to_openai(messages: list[Message]) -> list[dict[str, Any]]:
                     )
                 elif btype == "text":
                     text_parts.append(str(b.get("text", "")))
-            if text_parts:
+                elif btype in ("image_url", "image"):
+                    normalized = _image_block_to_openai(b)
+                    if normalized is not None:
+                        image_blocks.append(normalized)
+            if image_blocks:
+                # Text first mirrors ``_build_user_message_content``'s order
+                # and how vision providers expect the prompt to read.
+                content_blocks: list[dict[str, Any]] = []
+                joined = "".join(text_parts)
+                if joined:
+                    content_blocks.append({"type": "text", "text": joined})
+                content_blocks.extend(image_blocks)
+                out.append({"role": "user", "content": content_blocks})
+            elif text_parts:
                 out.append(
                     {
                         "role": "user",
@@ -994,22 +1015,64 @@ def _messages_to_openai(messages: list[Message]) -> list[dict[str, Any]]:
     return out
 
 
+def _image_block_to_openai(block: dict[str, Any]) -> dict[str, Any] | None:
+    """Normalize one image block to OpenAI's ``image_url`` shape.
+
+    Accepts both the OpenAI shape we build internally and the Anthropic
+    ``{"type": "image", "source": {...}}`` variant, so a message that took
+    a detour through an Anthropic-shaped path still delivers its picture.
+    Returns ``None`` when the block carries no usable reference — dropping
+    an empty block beats sending one the upstream will 400 on.
+    """
+    if block.get("type") == "image_url":
+        raw = block.get("image_url")
+        url = raw.get("url") if isinstance(raw, dict) else raw
+        if not isinstance(url, str) or not url:
+            return None
+        return {"type": "image_url", "image_url": {"url": url}}
+    source = block.get("source")
+    if not isinstance(source, dict):
+        return None
+    if source.get("type") == "url":
+        url = source.get("url")
+        return (
+            {"type": "image_url", "image_url": {"url": url}}
+            if isinstance(url, str) and url
+            else None
+        )
+    data = source.get("data")
+    if not isinstance(data, str) or not data:
+        return None
+    media_type = str(source.get("media_type") or "image/png")
+    return {
+        "type": "image_url",
+        "image_url": {"url": f"data:{media_type};base64,{data}"},
+    }
+
+
 def _attach_images_to_last_user_openai(
     msgs: list[dict[str, Any]],
     images_b64: list[str],
 ) -> None:
     for i in range(len(msgs) - 1, -1, -1):
         if msgs[i].get("role") == "user":
-            text = msgs[i].get("content", "")
-            blocks: list[dict[str, Any]] = []
-            for b64 in images_b64:
-                blocks.append(
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/png;base64,{b64}"},
-                    }
-                )
-            if text:
-                blocks.append({"type": "text", "text": text})
+            existing = msgs[i].get("content", "")
+            screenshots: list[dict[str, Any]] = [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{b64}"},
+                }
+                for b64 in images_b64
+            ]
+            if isinstance(existing, list):
+                # The message already carries multimodal blocks (a user
+                # upload). Append the screenshots instead of wrapping the
+                # whole list into a text block, which would both stringify
+                # the upload away and 400 on strict providers.
+                msgs[i]["content"] = list(existing) + screenshots
+                return
+            blocks: list[dict[str, Any]] = list(screenshots)
+            if existing:
+                blocks.append({"type": "text", "text": existing})
             msgs[i]["content"] = blocks
             return

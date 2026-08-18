@@ -44,6 +44,10 @@ class _LoopState:
     format_violation_bail_at: int = 2
     final_guard_grounded_source_paths: Any = None
     guard_impasse_state: dict = field(default_factory=dict)
+    # Tool observations from EARLIER turns of this thread (``Observation:``
+    # user messages in the assembled history). Research guards merge this into
+    # their evidence stream so cross-turn facts aren't flagged as fabricated.
+    prior_grounding_text: str = ""
     intent: Any = None
     agent: Any = None
     thread_id: str = ""
