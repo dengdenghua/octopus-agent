@@ -1,4 +1,4 @@
-import { FileTextIcon, Settings2Icon, XIcon } from "lucide-react";
+import { Settings2Icon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { FinalArtifactCompletionNotice } from "@/components/workspace/realtime/final-artifact-completion-notice";
