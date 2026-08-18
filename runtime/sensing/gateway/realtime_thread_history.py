@@ -434,11 +434,123 @@ def _flatten_turns_to_messages(
     return messages, artifacts, todos
 
 
+# Total base64 bytes of rehydrated history images allowed per request. ~4 MiB
+# of data URL is roughly 1.3M characters — already a large slice of any
+# context window, and beyond it providers start rejecting the request outright.
+_HISTORY_IMAGE_BYTE_BUDGET = 4 * 1024 * 1024
+
+
+def _user_message_attachments_by_id(turns: list[Turn]) -> dict[str, list[dict[str, Any]]]:
+    """Map ``userMessage`` item id → its persisted attachments.
+
+    ``_flatten_turns_to_messages`` deliberately keeps its output shape narrow
+    for the UI snapshot, so attachments never reach it. Rather than widen that
+    contract, the model-context adapter re-joins on the item id.
+    """
+
+    by_id: dict[str, list[dict[str, Any]]] = {}
+    for turn in turns:
+        for item in getattr(turn, "items", None) or []:
+            if getattr(item, "type", None) != "userMessage":
+                continue
+            item_id = getattr(item, "id", None)
+            attachments = getattr(item, "attachments", None)
+            if (
+                isinstance(item_id, str)
+                and item_id
+                and isinstance(attachments, list)
+                and attachments
+            ):
+                by_id[item_id] = attachments
+    return by_id
+
+
+def _history_image_blocks(
+    attachments: list[dict[str, Any]],
+    *,
+    budget: int,
+    byte_budget: int,
+) -> tuple[list[dict[str, Any]], int]:
+    """Return inline image blocks for a past user message, within both budgets.
+
+    Reuses the same builder the live turn uses, so a rehydrated image is
+    shaped exactly like a freshly uploaded one (and inherits its refusal to
+    emit unresolvable server-relative URLs).
+
+    A count cap alone is not enough: a phone screenshot is 200 KiB–3 MiB of
+    base64, so four of them would add ~10 MiB to every subsequent request.
+    Oversized images are skipped rather than truncated — half a data URL is
+    not a picture. Returns the blocks and the bytes they consumed.
+    """
+
+    if budget <= 0 or byte_budget <= 0:
+        return [], 0
+    from runtime.core.cerebrum._react_context_attachments import (
+        _image_blocks_from_attachments,
+    )
+
+    blocks, _consumed = _image_blocks_from_attachments(attachments)
+    kept: list[dict[str, Any]] = []
+    spent = 0
+    for block in blocks[:budget]:
+        url = block.get("image_url", {}).get("url", "")
+        cost = len(url) if isinstance(url, str) else 0
+        # A hosted https URL is a few dozen bytes; only data URLs are heavy.
+        if spent + cost > byte_budget:
+            continue
+        spent += cost
+        kept.append(block)
+    return kept, spent
+
+
+def _tool_summary_note(item: dict[str, Any], anchor: str = "") -> str | None:
+    """Return a model-facing note listing the tools an AI turn executed.
+
+    Kept in English on purpose: this is protocol scaffolding, not prose, and
+    the previous Chinese marker was injected verbatim into English threads.
+
+    The note is **self-anchoring**: it quotes the opening of the assistant turn
+    it describes instead of saying "the previous turn". Position is not portable
+    across providers -- ``anthropic_router._split_system`` and
+    ``gemini_router._split_system_and_contents`` both hoist every ``system``
+    message out of the conversation and concatenate them into the top-level
+    system prompt, so a positional phrasing would end up describing whichever
+    turn the model guesses, and several notes would pile up unordered. Quoting
+    the turn survives hoisting. (``openai_router`` keeps position; it also drops
+    all system messages for ``glm-5.1``, where the note is simply lost -- that
+    degrades continuity without leaking, which is the safe direction.)
+    """
+
+    tool_calls = item.get("tool_calls")
+    if not isinstance(tool_calls, list) or not tool_calls:
+        return None
+    tool_names: list[str] = []
+    for call in tool_calls:
+        if not isinstance(call, dict):
+            continue
+        name = call.get("name")
+        if isinstance(name, str) and name and name not in tool_names:
+            tool_names.append(name)
+    if not tool_names:
+        return None
+    summary = ", ".join(tool_names[:6])
+    if len(tool_names) > 6:
+        summary += f" (+{len(tool_names) - 6} more)"
+    quoted = " ".join(anchor.split())[:60].strip()
+    subject = f'the assistant reply starting "{quoted}"' if quoted else "an earlier assistant reply"
+    return (
+        f"Context: {subject} was produced after running these tools: {summary}. "
+        "This note is internal context, not part of the conversation -- never quote it."
+    )
+
+
 def _conversation_messages_for_react(
     turns: list[Turn],
     *,
     max_messages: int = 24,
-) -> list[dict[str, str]]:
+    max_history_images: int = 4,
+    max_history_image_bytes: int = _HISTORY_IMAGE_BYTE_BUDGET,
+) -> list[dict[str, Any]]:
     """Return recent OpenAI-style chat history for ``stream_react_loop``.
 
     The realtime UI reconstructs visible history from the EventLog, but
@@ -447,51 +559,117 @@ def _conversation_messages_for_react(
     follow-up replies like "yes" or "go check it" anchored to the same
     thread without making the frontend resend the whole transcript.
 
-    For AI turns that executed tools, a compact ``[上轮操作: ...]`` summary
-    is prepended to the content so the next round's model can see what was
-    actually done without inflating the transcript with raw tool I/O.
+    For AI turns that executed tools, a compact tool summary follows the
+    assistant message as its own ``system`` entry, so the next round's model
+    can see what was actually done without inflating the transcript with raw
+    tool I/O. It deliberately does **not** ride inside the assistant content:
+    doing that made the model read the marker as its own prior speech and
+    reproduce it verbatim in fresh replies, leaking scaffolding like
+    ``[上轮操作: web_search]`` into user-visible output.
+
+    User messages that carried image uploads are rehydrated as multimodal
+    block lists. Without this, an image was visible only on the turn it was
+    sent: asking "and what about the top-left corner?" one message later left
+    the model blind. ``max_history_images`` caps how many past images are
+    re-sent (newest first) because each data URL costs real tokens and the
+    frame budget is finite.
     """
 
     legacy_messages, _, _ = _flatten_turns_to_messages(
         turns,
         include_failed_drafts=False,
     )
+    attachments_by_id = _user_message_attachments_by_id(turns) if max_history_images > 0 else {}
     role_by_type = {
         "human": "user",
         "ai": "assistant",
         "system": "system",
     }
-    history: list[dict[str, str]] = []
+    history: list[dict[str, Any]] = []
+    image_carrying_indices: list[int] = []
     for item in legacy_messages:
         if not isinstance(item, dict):
             continue
         role = role_by_type.get(str(item.get("type") or ""))
+        if role is None:
+            continue
         content = item.get("content")
-        if role is None or not isinstance(content, str) or not content.strip():
+        # An assistant turn that only ran tools has empty prose but still
+        # carries ``tool_calls``. Surface a compact "what the last turn did"
+        # note so the next model stays anchored -- the old code dropped these
+        # messages because empty content failed the ``content.strip()`` gate,
+        # which silently discarded the tool-action context and weakened
+        # cross-turn grounding.
+        if (
+            role == "assistant"
+            and isinstance(item.get("tool_calls"), list)
+            and item["tool_calls"]
+            and not (isinstance(content, str) and content.strip())
+        ):
+            tool_note = _tool_summary_note(item)
+            if tool_note is not None:
+                history.append({"role": "system", "content": tool_note, "_tool_note": True})
+            continue
+        if not isinstance(content, str) or not content.strip():
             continue
         content = content.strip()
-        # Attach a compact tool-action summary so the next turn's model
+        # Carry a compact tool-action summary so the next turn's model
         # understands what the previous round actually did, not just the
-        # final prose. This is the cheapest way to give multi-turn
-        # conversations continuity without rehydrating full step history.
-        if role == "assistant":
-            tool_calls = item.get("tool_calls")
-            if isinstance(tool_calls, list) and tool_calls:
-                tool_names: list[str] = []
-                for call in tool_calls:
-                    if not isinstance(call, dict):
-                        continue
-                    name = call.get("name")
-                    if isinstance(name, str) and name and name not in tool_names:
-                        tool_names.append(name)
-                if tool_names:
-                    summary = "、".join(tool_names[:6])
-                    if len(tool_names) > 6:
-                        summary += f" 等 {len(tool_names)} 个操作"
-                    content = f"[上轮操作: {summary}]\n{content}"
+        # final prose. It is emitted as a separate system entry below rather
+        # than folded into the assistant text -- see the docstring.
+        tool_note = _tool_summary_note(item, anchor=content) if role == "assistant" else None
+        if role == "user":
+            item_id = item.get("id")
+            if isinstance(item_id, str) and item_id in attachments_by_id:
+                image_carrying_indices.append(len(history))
+                history.append(
+                    {
+                        "role": role,
+                        "content": content,
+                        "_attachment_id": item_id,
+                    }
+                )
+                continue
         history.append({"role": role, "content": content})
+        if tool_note is not None:
+            history.append({"role": "system", "content": tool_note, "_tool_note": True})
     if max_messages > 0 and len(history) > max_messages:
-        return history[-max_messages:]
+        dropped = len(history) - max_messages
+        history = history[-max_messages:]
+        image_carrying_indices = [i - dropped for i in image_carrying_indices if i >= dropped]
+        # Truncation can behead a note's assistant message. A note about a turn
+        # the model can no longer see is just noise, so drop it.
+        while history and history[0].get("_tool_note"):
+            history.pop(0)
+            image_carrying_indices = [i - 1 for i in image_carrying_indices if i >= 1]
+    # Spend the image budget newest-first: a recent picture is far more likely
+    # to be what a follow-up question refers to. The final entry is skipped —
+    # it is the message being sent right now, and prompt assembly rebuilds it
+    # from ``user_context["attachments"]`` after dropping it from history.
+    remaining = max_history_images
+    remaining_bytes = max_history_image_bytes
+    for index in reversed(image_carrying_indices):
+        entry = history[index]
+        item_id = entry.pop("_attachment_id", None)
+        if index == len(history) - 1 or remaining <= 0 or not isinstance(item_id, str):
+            continue
+        blocks, spent = _history_image_blocks(
+            attachments_by_id[item_id],
+            budget=remaining,
+            byte_budget=remaining_bytes,
+        )
+        if not blocks:
+            continue
+        remaining -= len(blocks)
+        remaining_bytes -= spent
+        text = entry.get("content")
+        content_blocks: list[dict[str, Any]] = []
+        if isinstance(text, str) and text:
+            content_blocks.append({"type": "text", "text": text})
+        content_blocks.extend(blocks)
+        entry["content"] = content_blocks
+    for entry in history:
+        entry.pop("_tool_note", None)
     return history
 
 
