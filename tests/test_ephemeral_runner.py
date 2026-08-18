@@ -1265,6 +1265,44 @@ class TestEphemeralInjectionTaintGate:
         assert ran["exec"] is True
         assert "prompt_injection_taint" not in output
 
+    def test_relative_file_tool_uses_inherited_artifact_root(
+        self, tmp_path, monkeypatch
+    ):
+        from runtime.execution.suckers import SkillRegistry
+        from runtime.execution.suckers.builtins import register_builtins
+        from runtime.execution.suckers.ephemeral_runner import (
+            _execute_tool_in_subagent,
+        )
+        from runtime.platform.process.session import Session, session_scope
+
+        monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path))
+        artifact_root = tmp_path / "parent-final"
+        artifact_root.mkdir()
+        (artifact_root / "agent-regression.json").write_text(
+            '{"schema":"octopus.regression.v1"}',
+            encoding="utf-8",
+        )
+        registry = register_builtins(SkillRegistry())
+        call = self._call(
+            "read_file",
+            {"path": "agent-regression.json"},
+            context={},
+        )
+        child = Session(
+            thread_id="child-thread",
+            metadata={
+                "mode": "code",
+                "_artifact_output_root": str(artifact_root),
+            },
+        )
+
+        with session_scope(child):
+            output, is_error = _execute_tool_in_subagent(registry, call)
+
+        assert is_error is False
+        assert "octopus.regression.v1" in output
+        assert str(artifact_root / "agent-regression.json") in output
+
 
 class TestVerificationGate:
     """The ephemeral runner refuses to conclude with unverified code."""

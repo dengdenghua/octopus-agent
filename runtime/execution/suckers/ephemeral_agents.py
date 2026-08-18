@@ -747,6 +747,18 @@ def _compose_system_prompt(
             "conflict.\n\n"
             f"{addendum.strip()}"
         )
+
+    # Hierarchical delegation guidance: when this sub-agent is allowed to spawn
+    # its own sub-agents, inject role-specific orchestration guidance.
+    delegation_guidance = (context or {}).get("delegation_guidance")
+    if isinstance(delegation_guidance, str) and delegation_guidance.strip():
+        parts.append(
+            "## Hierarchical Orchestration\n\n"
+            "You can delegate work to specialist sub-agents using `call_agent_parallel`. "
+            "Use this capability to decompose your task into parallel dimensions.\n\n"
+            f"{delegation_guidance.strip()}"
+        )
+
     workspace_path = (context or {}).get("workspace_path")
     delivery_roles = {"generator", "implementer", "synthesizer"}
     if role.id in delivery_roles and isinstance(workspace_path, str) and workspace_path.strip():

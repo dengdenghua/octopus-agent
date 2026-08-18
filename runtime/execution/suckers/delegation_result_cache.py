@@ -91,7 +91,6 @@ def _digest_input_files(paths: Any) -> str:
 
 
 def _digest_one_path(p: Any) -> str:
-    from pathlib import Path
 
     try:
         if p.is_file():

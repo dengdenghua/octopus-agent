@@ -443,6 +443,39 @@ def test_prompt_only_spec_defaults_to_researcher(monkeypatch):
     assert seen == ["researcher"]
 
 
+def test_legacy_role_goal_spec_is_accepted_without_retry(monkeypatch):
+    """A live lead model still emitted the older role/goal shape.
+
+    Accepting it at the boundary avoids a failed visible call followed by an
+    otherwise identical retry with agent_id/prompt.
+    """
+    from runtime.execution.suckers.delegation_skills import _call_agent_parallel
+
+    seen: list[tuple[str, str]] = []
+
+    def _fake_call_subagent(agent_id="", prompt="", **_kw):
+        seen.append((agent_id, prompt))
+        return {
+            "agent_id": agent_id,
+            "output": "done",
+            "success": True,
+            "error": None,
+        }
+
+    monkeypatch.setattr(
+        "runtime.execution.subagents.call_subagent",
+        _fake_call_subagent,
+    )
+
+    result = _call_agent_parallel(
+        specs=[{"role": "schema_reader", "goal": "Read the schema once"}],
+    )
+
+    assert result["ok"] is True
+    assert len(seen) == 1
+    assert "Read the schema once" in seen[0][1]
+
+
 def test_all_three_fail(monkeypatch):
     from runtime.execution.suckers.delegation_skills import _call_agent_parallel
 

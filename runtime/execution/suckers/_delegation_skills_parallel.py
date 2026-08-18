@@ -158,6 +158,7 @@ def _call_agent_parallel(
             or raw.get("query")
             or raw.get("description")
             or raw.get("instruction")
+            or raw.get("goal")
             or ""
         )
         if not aid_raw and prm:
@@ -203,6 +204,9 @@ def _call_agent_parallel(
                 # aim confinement at a directory of its choosing, and this flag
                 # must not become a way around that.
                 "isolate": bool(raw.get("isolate")),
+                # Hierarchical delegation: allow this sub-agent to spawn its own
+                # sub-agents if explicitly enabled in the spec.
+                "allow_subdelegation": bool(raw.get("allow_subdelegation", False)),
             }
         )
 
@@ -218,6 +222,15 @@ def _call_agent_parallel(
     parent_sess, turn_id = _resolve_session_and_turn()
     if session is None:
         session = parent_sess
+    parent_meta = getattr(session, "metadata", None) if session is not None else None
+    try:
+        from runtime.platform.process.session import current_parent_tool_use_id
+
+        parent_tool_use_id = str(current_parent_tool_use_id() or "")
+    except (ImportError, AttributeError):
+        parent_tool_use_id = ""
+    if not parent_tool_use_id and isinstance(parent_meta, dict):
+        parent_tool_use_id = str(parent_meta.get("_active_parent_tool_use_id") or "")
     # Captured on THIS (calling) thread so the pool workers can charge it via
     # closure — the ContextVar itself doesn't propagate into the pool.
     orch_budget = _current_orchestration_budget()
@@ -361,6 +374,62 @@ def _call_agent_parallel(
                 "subagent_route_decision": route_decision,
             }
         call_context = dict(spec.get("context") or {})
+        # Keep the operator/model-declared lane identity separate from the
+        # builtin role selected by fallback routing. Several custom lanes can
+        # legitimately resolve to the same builtin (for example
+        # ``reader_readme`` and ``reader_pyproject`` -> ``explorer``); using the
+        # resolved role as the public id makes those parallel children collapse
+        # into one card in live/replay observability.
+        call_context["requested_agent_id"] = str(original_id)
+        call_context["resolved_agent_id"] = str(spec["agent_id"])
+
+        # Hierarchical delegation: propagate depth and budget to sub-agents
+        parent_depth = context.get("delegation_depth", 0) if context else 0
+        parent_budget = context.get("subdelegation_budget", 0) if context else 0
+
+        # ROOT LAYER AUTO-SEEDING: If this is depth=0 and no subdelegation_budget
+        # was explicitly set, but orchestration_token_budget is available,
+        # automatically allocate 1/4 of the orchestration budget for recursive delegation
+        if parent_depth == 0 and parent_budget == 0 and context:
+            orch_budget_val = context.get("orchestration_token_budget", 0)
+            if orch_budget_val > 0:
+                # Auto-seed: allocate 25% of orchestration budget for subdelegation
+                parent_budget = orch_budget_val // 4
+
+        # Always propagate depth (even from depth=0)
+        call_context["delegation_depth"] = parent_depth + 1
+
+        # Propagate budget if available
+        if parent_budget > 0:
+            # Split budget among siblings (simplified: equal distribution)
+            per_node_budget = parent_budget // len(cleaned) if cleaned else 0
+            call_context["orchestration_token_budget"] = per_node_budget
+            call_context["subdelegation_budget"] = per_node_budget // 2
+            # Allow subdelegation if spec explicitly enables it AND depth limit allows
+            # Import MAX_DELEGATION_DEPTH from ephemeral_runner to avoid duplication
+            from runtime.execution.suckers.ephemeral_runner import MAX_DELEGATION_DEPTH
+
+            next_depth = parent_depth + 1
+            can_spawn_further = next_depth < MAX_DELEGATION_DEPTH
+            call_context["allow_subdelegation"] = (
+                spec.get("allow_subdelegation", False)
+                and can_spawn_further
+            )
+
+            # Inject role-specific delegation guidance when subdelegation is allowed
+            if call_context.get("allow_subdelegation"):
+                try:
+                    from runtime.execution.suckers.role_delegation_guidance import (
+                        get_delegation_guidance,
+                    )
+
+                    guidance = get_delegation_guidance(spec["agent_id"])
+                    if guidance:
+                        call_context["delegation_guidance"] = guidance
+                except (ImportError, KeyError, AttributeError):
+                    pass  # Guidance is optional
+        if parent_tool_use_id:
+            call_context["parent_tool_use_id"] = parent_tool_use_id
         if call_context.get("react_stack") is None and _ambient_react_stack is not None:
             call_context["react_stack"] = _ambient_react_stack
         call_context["subagent_route_decision"] = route_decision
@@ -386,7 +455,14 @@ def _call_agent_parallel(
             }
         try:
             result = _invoke(spec, call_context)
-        except (ConnectionError, TimeoutError, TypeError, ValueError, OSError, subprocess.SubprocessError) as exc:  # noqa: BLE001
+        except (
+            ConnectionError,
+            TimeoutError,
+            TypeError,
+            ValueError,
+            OSError,
+            subprocess.SubprocessError,
+        ) as exc:  # noqa: BLE001
             # OSError joins the list because worktree creation touches git and
             # the filesystem; an isolation failure must degrade to one failed
             # lane, not take down the whole batch.
@@ -431,7 +507,14 @@ def _call_agent_parallel(
                         result["error"] = (
                             f"{existing_err} (retry also failed: {retry.get('error') or 'unknown'})"
                         )
-                except (ConnectionError, TimeoutError, TypeError, ValueError, OSError, subprocess.SubprocessError):
+                except (
+                    ConnectionError,
+                    TimeoutError,
+                    TypeError,
+                    ValueError,
+                    OSError,
+                    subprocess.SubprocessError,
+                ):
                     # OSError: the retry's worktree creation can fail on its own.
                     result["retried"] = True
         # Record this spec's outcome against the smart-budget. Each
@@ -473,7 +556,13 @@ def _call_agent_parallel(
         for f in done:
             try:
                 results.append(f.result(timeout=1))
-            except (ConnectionError, TimeoutError, TypeError, ValueError, subprocess.SubprocessError) as exc:  # noqa: BLE001
+            except (
+                ConnectionError,
+                TimeoutError,
+                TypeError,
+                ValueError,
+                subprocess.SubprocessError,
+            ) as exc:  # noqa: BLE001
                 spec = future_specs.get(f, {})
                 task_label = (
                     spec.get("bb_key") or spec.get("role_label") or spec.get("agent_id_original")
