@@ -55,7 +55,6 @@ def test_stop_with_pool_drains_cleanly() -> None:
 def test_daemon_pool_does_not_block_interpreter() -> None:
     """Worker threads of the pool are daemon, so a stuck callback cannot
     keep the interpreter alive after stop gives up on it."""
-    import threading as _t
 
     runner = BackgroundRunner(max_workers=2)
     runner.start()

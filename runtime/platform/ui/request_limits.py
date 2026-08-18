@@ -22,7 +22,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import Any
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -82,7 +81,7 @@ class RequestTimeoutMiddleware:
 
         try:
             await asyncio.wait_for(_app_wrapper(), timeout=self.timeout_s)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _log.warning(
                 "http request timed out after %.0fs: %s %s",
                 self.timeout_s,

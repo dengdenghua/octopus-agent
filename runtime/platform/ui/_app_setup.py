@@ -63,9 +63,9 @@ def setup_app(
     # those). Env overrides: OCTOPUS_HTTP_REQUEST_TIMEOUT_S (0 disables),
     # OCTOPUS_HTTP_MAX_CONCURRENCY (0 disables).
     from runtime.platform.ui.request_limits import (
-        ConcurrencyCapMiddleware,
         DEFAULT_MAX_CONCURRENCY,
         DEFAULT_TIMEOUT_S,
+        ConcurrencyCapMiddleware,
         RequestTimeoutMiddleware,
         _env_float,
         _env_int,
