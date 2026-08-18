@@ -1,10 +1,11 @@
-import {
-  FileTextIcon,
-  PanelRightIcon,
-  Settings2Icon,
-  XIcon,
-} from "lucide-react";
+import { FileTextIcon, Settings2Icon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { FinalArtifactCompletionNotice } from "@/components/workspace/realtime/final-artifact-completion-notice";
+import {
+  RightPanelMenu,
+  type RightPanelPage,
+} from "@/components/workspace/realtime/right-panel-menu";
 
 import { ChatHeaderRecButton } from "@/components/workspace/realtime/chat-header-rec-button";
 
@@ -67,7 +68,6 @@ import { DeepResearchPanel } from "@/components/workspace/deep-research-panel";
 import {
   FINAL_DELIVERABLE_PATTERN,
   finalOutputArtifactEntries,
-  type DiffEntry,
 } from "@/components/workspace/agent-workbench-utils";
 import {
   MESSAGE_LIST_DEFAULT_PADDING_BOTTOM,
@@ -369,137 +369,6 @@ function estimateCurrentContextTokens(messages: Message[]): number {
   const latestUsage = latestModelContextTokens(messages);
   const retainedEstimate = estimateRetainedContextTokens(messages);
   return Math.max(latestUsage ?? 0, retainedEstimate);
-}
-
-type RightPanelPage =
-  | "agent"
-  | "artifacts"
-  | "plan"
-  | "preview"
-  | "research"
-  | "history";
-
-function RightPanelMenu({
-  activePage,
-  onClosePanel,
-  onOpenAgent,
-  onOpenArtifacts,
-  onOpenPlan,
-  onOpenPreview,
-  onOpenResearch,
-  onOpenResearchHistory,
-  hasAgentWorkbench,
-  hasPlan,
-  hasPreview,
-  hasResearch,
-  hasResearchHistory,
-  artifactCount,
-}: {
-  activePage: RightPanelPage | null;
-  artifactCount: number;
-  hasAgentWorkbench: boolean;
-  hasPlan: boolean;
-  hasPreview: boolean;
-  hasResearch: boolean;
-  hasResearchHistory: boolean;
-  onClosePanel: () => void;
-  onOpenAgent: () => void;
-  onOpenArtifacts: () => void;
-  onOpenPlan: () => void;
-  onOpenPreview: () => void;
-  onOpenResearch: () => void;
-  onOpenResearchHistory: () => void;
-}) {
-  const { t } = useI18n();
-  const hasAnyPanel =
-    hasAgentWorkbench ||
-    hasPlan ||
-    artifactCount > 0 ||
-    hasPreview ||
-    hasResearch ||
-    hasResearchHistory;
-
-  if (!hasAnyPanel) return null;
-
-  const openDefaultPanel = () => {
-    if (hasAgentWorkbench) {
-      onOpenAgent();
-    } else if (artifactCount > 0) {
-      onOpenArtifacts();
-    } else if (hasPlan) {
-      onOpenPlan();
-    } else if (hasPreview) {
-      onOpenPreview();
-    } else if (hasResearch) {
-      onOpenResearch();
-    } else if (hasResearchHistory) {
-      onOpenResearchHistory();
-    }
-  };
-  const handleTogglePanel = () => {
-    if (activePage) {
-      onClosePanel();
-      return;
-    }
-    openDefaultPanel();
-  };
-
-  const panelToggleLabel = activePage
-    ? t.realtime.panelToggle.close
-    : t.realtime.panelToggle.open;
-
-  return (
-    <Button
-      type="button"
-      aria-label={panelToggleLabel}
-      title={panelToggleLabel}
-      onClick={handleTogglePanel}
-      className={cn(
-        "flex size-[42px] items-center justify-center rounded-lg border shadow-none transition-all duration-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 sm:size-8",
-        activePage
-          ? "border-transparent bg-transparent text-foreground/82 hover:border-border-default hover:bg-muted/55 hover:text-foreground"
-          : "border-transparent bg-transparent text-muted-foreground hover:border-border-default hover:bg-muted/55 hover:text-foreground",
-      )}
-    >
-      <PanelRightIcon className="size-4" />
-    </Button>
-  );
-}
-
-function FinalArtifactCompletionNotice({
-  entries,
-  onOpen,
-}: {
-  entries: DiffEntry[];
-  onOpen: () => void;
-}) {
-  const { t } = useI18n();
-  const first = entries[0];
-  if (!first) return null;
-  const extraCount = Math.max(0, entries.length - 1);
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="my-2 ml-11 flex max-w-full items-center gap-2 rounded-md border border-success/25 bg-success/10 px-3 py-2 text-left text-xs text-success transition-colors hover:bg-success/15"
-    >
-      <FileTextIcon className="size-4 shrink-0" />
-      <span className="min-w-0 flex-1">
-        <span className="font-medium">
-          {t.realtime.finalArtifact.generated}
-        </span>
-        <span className="ml-2 font-mono text-xs text-success/80">
-          {first.path || first.title}
-        </span>
-        {extraCount > 0 && (
-          <span className="ml-2 text-success/80">+{extraCount}</span>
-        )}
-      </span>
-      <span className="shrink-0 text-xs text-success/75">
-        {t.realtime.finalArtifact.view}
-      </span>
-    </button>
-  );
 }
 
 function recordFromUnknown(value: unknown): Record<string, unknown> | null {
