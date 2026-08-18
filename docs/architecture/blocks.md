@@ -246,7 +246,7 @@ flowchart LR
 |---|---|---|
 | **P0（本文档）** | 块类型 + manifest schema + 依赖方向 | ✅ 已落地：`block_manifest.py` + `service_bus.py` + 24 测试全绿（2026-08-18） |
 | **P1** | `ServiceBus` 接入 `PluginHub`；记忆块、模型路由块接口化 | ✅ 已落地：`PluginHub(service_bus=…)` 拓扑加载 + blocked 跳过 + unload 解绑 + 集成测试；`MemoryProvider` 协议 + journal 默认实现 + 应用侧接线（`app.state.service_bus`）；`ModelSelector` 协议（`platform.models.selector`）+ `DefaultModelSelector` 默认实现（优先级链：显式覆盖 > 角色声明 > cheap > 默认）+ 注册为 `model_router` 服务 |
-| **P2** | 执行臂按技能族抽 `arm` 插件；声明式编排 DSL | ✅ 全部落地：arm 模板 + 真实 memory 技能族抽取（幂等兼容层）+ 内核服务种子；**声明式 workflow DSL**（`workflow_dsl.py`：YAML 解析/校验/映射/调度，`demos/workflows/research-report.yaml` 参考）；其余技能族批量抽取待做 |
+| **P2** | 执行臂按技能族抽 `arm` 插件；声明式编排 DSL | ✅ 全部落地：arm 模板 + 真实 memory 技能族 + **第二参考 arm（blackboard 协作族，无依赖形态）** + 幂等兼容层 + 内核服务种子；声明式 workflow DSL；批量抽取待做 |
 | **P3** | 前端 `PanelManifest`；拆 `workspace-sidebar` / `[thread_id]/page.tsx` | ✅ 契约层 + 消费原语 + **真实页面接入**：`intelligence`（自动化）页新增「面板」tab 经 `PanelHost` 渲染注册面板（15 vitest + typecheck + eslint 全绿）；`workspace-sidebar` / `[thread_id]` 大规模拆分待做 |
 | **P4** | 网关事件 schema 版本化；开发期热重载 | ✅ **全部落地**：`BlockManifest.schema_version` + `DomainEvent.protocol_version`（事件信封版本化）+ `BlockWatcher` 热重载 + **前端协议快照门禁**（`gen_realtime_protocol_enums.py --check` + `protocol-enum-parity.test.ts`，实时枚举以 `runtime/protocol/items.py` 为源生成、漂移即红） |
 
