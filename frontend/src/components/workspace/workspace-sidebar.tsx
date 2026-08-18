@@ -90,9 +90,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getAPIClient } from "@/core/api";
-import { getBackendBaseURL } from "@/core/config";
 import { pickLocalDirectory } from "@/core/workspace/pick-local-directory";
-import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import { useI18n } from "@/core/i18n/hooks";
 import {
   useDeleteThread,
@@ -124,6 +122,8 @@ import {
 } from "@/core/threads/sidebar";
 import type { AgentThread } from "@/core/threads/types";
 import { useTasks } from "@/core/tasks/hooks";
+
+import { AvatarCell } from "@/components/workspace/avatar-cell";
 
 import { ThreadRunStatusLight } from "@/components/workspace/thread-run-status-light";
 import { useTeamTasks } from "@/core/team-tasks";
@@ -1629,40 +1629,6 @@ function ThreadAvatar({
         />
       ))}
     </span>
-  );
-}
-
-function AvatarCell({
-  agentId,
-  className,
-}: {
-  agentId: string;
-  className?: string;
-}) {
-  const [failed, setFailed] = useState(false);
-  if (failed) {
-    return (
-      <span
-        className={cn(
-          "flex items-center justify-center bg-muted text-micro font-semibold uppercase text-muted-foreground",
-          className,
-        )}
-        title={agentId}
-      >
-        {(agentId[0] || "?").toUpperCase()}
-      </span>
-    );
-  }
-  return (
-    <img
-      src={withAgentAvatarVersion(
-        `${getBackendBaseURL()}/api/agents/${encodeURIComponent(agentId)}/avatar`,
-      )}
-      alt={agentId}
-      title={agentId}
-      onError={() => setFailed(true)}
-      className={cn("object-cover", className)}
-    />
   );
 }
 
