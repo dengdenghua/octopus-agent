@@ -683,7 +683,7 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def create_evolution_ops_router(journal, registry, planner, forged_skill_dir, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, jwt_leeway_seconds)` | Create evolution operator control-plane routes. |
+| func | `def create_evolution_ops_router(journal, registry, planner, thread_store, forged_skill_dir, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, jwt_leeway_seconds)` | Create evolution operator control-plane routes. |
 
 ### `evolution_router.py`
 

@@ -4030,7 +4030,8 @@
           "repairing",
           "completed",
           "failed",
-          "cancelled"
+          "cancelled",
+          "interrupted"
         ],
         "title": "LoopRunStatus",
         "type": "string"
@@ -22890,6 +22891,54 @@
         "summary": "Api Evolution Status",
         "tags": [
           "observability"
+        ]
+      }
+    },
+    "/api/evolution/story": {
+      "get": {
+        "description": "Plain-language evidence for what the system actually learned.\n\nTrajectories are observations, not evolution outcomes. This endpoint\nkeeps them separate from durable planner rules, memories, and forged\nskills so the UI cannot imply that merely running a task changed the\nagent's future behaviour.",
+        "operationId": "evolution_story_api_evolution_story_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 8,
+              "maximum": 30,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Evolution Story Api Evolution Story Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evolution Story",
+        "tags": [
+          "evolution-ops"
         ]
       }
     },

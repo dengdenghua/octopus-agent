@@ -121,6 +121,7 @@ Suckers = skill pool.
 | `plan_mode.py` | — |
 | `rate_limit.py` | Per-skill rate limiter — runaway-loop protection for LLM agents. |
 | `registry.py` | — |
+| `role_delegation_guidance.py` | Role-specific delegation guidance for hierarchical orchestration. |
 | `search.py` | Semantic skill search — TF-IDF-based skill discovery. |
 | `skill_library_skills.py` | skill_library_skills · expose Kimi-style "learned skills" as 3 skills. |
 | `storage_skills.py` | File Agent document search via the octopus-storage sibling service. |
@@ -380,6 +381,7 @@ Suckers = skill pool.
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def register_delegation_skills(registry)` | Register `call_agent` for sub-agent delegation. Returns count. |
+| func | `def register_call_agent_parallel(registry, max_spawns, depth)` | Register `call_agent_parallel` for hierarchical sub-delegation. |
 
 ### `desktop_grounding.py`
 
@@ -571,6 +573,12 @@ Suckers = skill pool.
 | class | `class Skill(BaseModel)` |  |
 | class | `class SkillNotFound(KeyError)` |  |
 | class | `class SkillRegistry` |  |
+
+### `role_delegation_guidance.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def get_delegation_guidance(role_id)` | Get delegation guidance for a role, if available. |
 
 ### `search.py`
 

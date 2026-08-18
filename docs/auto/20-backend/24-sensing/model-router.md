@@ -38,6 +38,7 @@ tier: "standard"
 - `OpenAIRouterError`
 - `PooledModelRouter`
 - `PoolReport`
+- `DefaultModelSelector`
 - `Provider`
 - `ProviderCapabilities`
 - `RouteAttempt`
@@ -78,6 +79,7 @@ tier: "standard"
 | `prompt_cache.py` | Anthropic prompt-cache hint helpers. |
 | `provider.py` | — |
 | `rescue_policy.py` | Compatibility exports for the canonical platform model-rescue policy. |
+| `selector.py` | Default model-selection block for the composition layer. |
 | `vision_guard.py` | Runtime vision capability guard. |
 
 ## Key classes & functions
@@ -271,6 +273,12 @@ tier: "standard"
 | class | `class ProviderCapabilities` | Declarative flags describing what an LLM adapter can do. |
 | class | `class Provider` | Mixin: opt-in capability declaration for ``ModelRouter`` subclasses. |
 
+### `selector.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class DefaultModelSelector` | Reproduce the runtime's established model-selection precedence. |
+
 ### `vision_guard.py`
 
 | Kind | Symbol | Doc |
@@ -285,7 +293,7 @@ tier: "standard"
 
 ## Who imports this
 
-**39** file(s) reference this package:
+**40** file(s) reference this package:
 
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
@@ -296,13 +304,13 @@ tier: "standard"
 - **`runtime/execution/`** · 2 file(s)
   - `runtime/execution/suckers/computer_use_loop.py`
   - `runtime/execution/suckers/ephemeral_runner.py`
-- **`runtime/platform/`** · 7 file(s)
+- **`runtime/platform/`** · 8 file(s)
   - `runtime/platform/config/builder.py`
   - `runtime/platform/lifecycle/demo.py`
   - `runtime/platform/llm_infra/llm_caller.py`
+  - `runtime/platform/process/composition.py`
   - `runtime/platform/process/session.py`
-  - `runtime/platform/ui/_app_fallback_routers.py`
-  - _… and 2 more_
+  - _… and 3 more_
 - **`runtime/projectos/`** · 1 file(s)
   - `runtime/projectos/llm_hooks.py`
 - **`runtime/research/`** · 2 file(s)
