@@ -228,6 +228,44 @@ describe("work blocks", () => {
     expect(workBlockTitle(blocks[0])).toBe("Read missing.ts");
   });
 
+  test("renders nested child-agent read and report events as public actions", () => {
+    const blocks = toWorkBlocks([
+      event({
+        id: "child-read",
+        name: "read_file",
+        agentId: "schema_reader",
+        input: {
+          server: "subagent",
+          arguments: {
+            agent_id: "schema_reader",
+            input: { path: "output/final/agent-regression.json" },
+          },
+        },
+      }),
+      event({
+        id: "child-report",
+        name: "report",
+        agentId: "schema_reader",
+        input: {
+          server: "subagent",
+          arguments: {
+            agent_id: "schema_reader",
+            input: { output: "octopus.regression.v1" },
+          },
+        },
+      }),
+    ]);
+
+    expect(blocks[0]).toMatchObject({
+      actionKey: "read",
+      target: "agent-regression.json",
+      subtitle: "agent-regression.json",
+    });
+    expect(workBlockTitle(blocks[0])).toBe("Read agent-regression.json");
+    expect(blocks[1].actionKey).toBe("submitResult");
+    expect(workBlockActionLabel(blocks[1])).toBe("Submit result");
+  });
+
   test("uses explicit terminal failure wording for command errors", () => {
     const blocks = toWorkBlocks([
       event({

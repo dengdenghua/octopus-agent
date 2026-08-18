@@ -1,6 +1,8 @@
 import {
   ArrowLeftIcon,
+  AlertTriangleIcon,
   BotIcon,
+  CheckCircle2Icon,
   ChevronDownIcon,
   ChevronRightIcon,
   BrainCircuitIcon,
@@ -12,6 +14,7 @@ import {
   Loader2Icon,
   MonitorIcon,
   MoreHorizontalIcon,
+  TargetIcon,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -104,6 +107,30 @@ export function WorkbenchEmptyPage({
           {description}
         </p>
       </div>
+    </div>
+  );
+}
+
+function ReceiptMetric({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: "success" | "warning" | "neutral" | "muted";
+}) {
+  return (
+    <div
+      className={cn(
+        "truncate rounded-md border px-2.5 py-2 text-xs",
+        tone === "success" && "border-success/20 bg-success/5 text-success",
+        tone === "warning" &&
+          "border-warning/25 bg-warning/5 text-warning-foreground",
+        tone === "neutral" && "border-border-subtle bg-muted/25 text-foreground",
+        tone === "muted" && "border-border-subtle bg-muted/15 text-muted-foreground",
+      )}
+      title={label}
+    >
+      {label}
     </div>
   );
 }
@@ -932,6 +959,7 @@ export function AgentSummaryPage({
   onCompressContext,
   onSelectTab,
   onOpenArtifact,
+  resultPreviewUrl,
 }: {
   phases: AgentPhase[];
   diffEntries: DiffEntry[];
@@ -957,6 +985,8 @@ export function AgentSummaryPage({
   onCompressContext?: () => void | Promise<void>;
   onSelectTab?: (tabId: AgentWorkbenchTabId) => void;
   onOpenArtifact?: (path: string) => void;
+  /** A deployed or local result preview for the current completed case. */
+  resultPreviewUrl?: string | null;
 }) {
   const { t } = useI18n();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
@@ -995,7 +1025,11 @@ export function AgentSummaryPage({
     (phase) =>
       phase.status === "running" || phase.status === "waiting_approval",
   );
-  const runActive = Boolean(runningPhase);
+  const liveAgentCount = agentTiles.filter(
+    (agent) => agent.status === "running" || agent.status === "pending",
+  ).length;
+  const hasLiveAgents = liveAgentCount > 0;
+  const runActive = Boolean(runningPhase || hasLiveAgents);
   const hasTodoPlan =
     phases.length > 0 && blocks.some((block) => block.kind === "todo");
   const interruptedTaskIndex =
@@ -1154,6 +1188,45 @@ export function AgentSummaryPage({
     return { done, failed, failedLabels, pending, running, total };
   }, [agentTiles]);
 
+  const currentObjective =
+    runningPhase ??
+    phases.find((phase) => phase.status === "error") ??
+    phases.find((phase) => phase.status === "pending") ??
+    phases[phases.length - 1] ??
+    null;
+  const objectiveStatus =
+    currentObjective && hasLiveAgents && !runningPhase
+      ? ("running" as const)
+      : currentObjective?.status;
+  const objectiveDetail = currentObjective?.detail || null;
+  const recoveredCount = blocks.filter(
+    (block) => block.status === "warning",
+  ).length;
+  const latestRecovery = [...blocks]
+    .reverse()
+    .find((block) => block.status === "warning");
+  const latestAttention = [...blocks]
+    .reverse()
+    .find(
+      (block) =>
+        block.status === "error" || block.status === "waiting_approval",
+    );
+  const unresolvedCount =
+    errorPhaseCount +
+    phases.filter((phase) => phase.status === "waiting_approval").length;
+  const showResultReceipt =
+    !runActive ||
+    diffEntries.length > 0 ||
+    recoveredCount > 0 ||
+    unresolvedCount > 0;
+  const objectiveHint =
+    objectiveDetail ||
+    (objectiveStatus === "done"
+      ? t.agentWorkbench.phaseCompleted
+      : objectiveStatus === "error"
+        ? t.agentWorkbenchPages.statusError
+        : t.agentWorkbenchPages.currentObjectiveHint);
+
   // 上下文容量估算
   const contextStats = useMemo(() => {
     // 粗略估算：每4个字符约等于1个token
@@ -1278,7 +1351,70 @@ export function AgentSummaryPage({
 
   return (
     <div className="stable-scroll-viewport flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
-      <div className="mx-auto w-full max-w-2xl px-5 py-4">
+      <div className="mx-auto w-full max-w-2xl px-5 py-4 pb-8">
+        {currentObjective && (
+          <section
+            className={cn(
+              "mb-2 rounded-xl border px-4 py-3",
+              objectiveStatus === "error"
+                ? "border-destructive/25 bg-destructive/5"
+                : objectiveStatus === "waiting_approval"
+                  ? "border-warning/30 bg-warning/5"
+                  : objectiveStatus === "done"
+                    ? "border-success/20 bg-success/5"
+                    : "border-info/25 bg-info/5",
+            )}
+            data-testid="workbench-current-objective"
+          >
+            <div className="flex items-start gap-3">
+              {objectiveStatus === "error" ? (
+                <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
+              ) : objectiveStatus === "done" ? (
+                <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-success" />
+              ) : (
+                <TargetIcon className="mt-0.5 size-4 shrink-0 text-info" />
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-micro font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                    {t.agentWorkbenchPages.currentObjective}
+                  </span>
+                  <span className="ml-auto shrink-0 text-micro text-muted-foreground">
+                    {objectiveStatus === "running"
+                      ? t.agentWorkbenchPages.statusRunning
+                      : objectiveStatus === "waiting_approval"
+                        ? t.agentWorkbenchPages.statusWaitingApproval
+                        : objectiveStatus === "error"
+                          ? t.agentWorkbenchPages.statusError
+                          : t.agentWorkbenchPages.statusDone}
+                  </span>
+                </div>
+                <div className="mt-1 text-sm font-medium leading-5 text-foreground">
+                  {agentPhaseDisplayTitle(currentObjective, t.agentPhases)}
+                </div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                  {objectiveHint}
+                </div>
+                {phases.length > 1 && (
+                  <div className="mt-3 flex items-center gap-2">
+                    <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-background/70">
+                      <div
+                        className="h-full rounded-full bg-info transition-all"
+                        style={{
+                          width: `${Math.round((Math.max(0, donePhaseCount) / phases.length) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <span className="shrink-0 font-mono text-micro text-muted-foreground">
+                      {donePhaseCount}/{phases.length}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* 思考/执行详情均在对话框内完整展示，右侧不再重复渲染。
             The task plan stays visible even when a transcript process event is
             focused: selecting evidence must not erase the user's todo list. */}
@@ -1309,7 +1445,11 @@ export function AgentSummaryPage({
                       : phases.length > 0
                         ? `${donePhaseCount}/${phases.length} ${phaseStatusText(
                             runningPhase ? "running" : "done",
-                          )}`
+                          )}${
+                            hasLiveAgents
+                              ? ` · ${t.agentWorkbenchPages.subagentsRunning(liveAgentCount)}`
+                              : ""
+                          }`
                         : t.agentWorkbenchPages.roundActivitySummary(
                             outlineExecutionCount,
                             outlineFactCount,
@@ -1424,6 +1564,103 @@ export function AgentSummaryPage({
                   ))}
                 </ul>
               ))}
+          </section>
+        )}
+
+        {showResultReceipt && (
+          <section
+            className="border-b border-border-subtle py-4"
+            data-testid="workbench-result-receipt"
+          >
+            <div className="flex items-start gap-3">
+              <CheckCircle2Icon
+                className={cn(
+                  "mt-0.5 size-4 shrink-0",
+                  unresolvedCount > 0 ? "text-warning" : "text-success",
+                )}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-medium text-foreground">
+                    {t.agentWorkbenchPages.resultReceipt}
+                  </h3>
+                  <span className="ml-auto text-micro text-muted-foreground">
+                    {runActive
+                      ? t.agentWorkbenchPages.statusRunning
+                      : unresolvedCount > 0
+                        ? t.agentWorkbenchPages.statusError
+                        : t.agentWorkbenchPages.statusDone}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  {t.agentWorkbenchPages.resultReceiptDescription}
+                </p>
+                {latestAttention?.subtitle && (
+                  <p className="mt-2 rounded-md border border-warning/20 bg-warning/5 px-2.5 py-2 text-xs leading-5 text-warning-foreground">
+                    <span className="font-medium">
+                      {t.agentWorkbenchPages.errorLabel}
+                    </span>{" "}
+                    {latestAttention.subtitle}
+                  </p>
+                )}
+                {!latestAttention && latestRecovery?.subtitle && (
+                  <p className="mt-2 rounded-md border border-success/15 bg-success/5 px-2.5 py-2 text-xs leading-5 text-muted-foreground">
+                    <span className="font-medium text-success">
+                      {t.agentWorkbenchPages.recoveredOperations(1)}
+                    </span>{" "}
+                    {latestRecovery.subtitle}
+                  </p>
+                )}
+                <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+                  <ReceiptMetric
+                    label={t.agentWorkbenchPages.verifiedSteps(donePhaseCount)}
+                    tone="success"
+                  />
+                  <ReceiptMetric
+                    label={
+                      diffEntries.length > 0
+                        ? `${t.agentWorkbenchPages.artifacts} ${diffEntries.length}`
+                        : `${t.agentWorkbenchPages.artifacts} 0`
+                    }
+                    tone={diffEntries.length > 0 ? "neutral" : "muted"}
+                  />
+                  <ReceiptMetric
+                    label={
+                      unresolvedCount > 0
+                        ? t.agentWorkbenchPages.unresolvedSteps(unresolvedCount)
+                        : runActive
+                          ? t.agentWorkbenchPages.statusRunning
+                          : recoveredCount > 0
+                          ? t.agentWorkbenchPages.recoveredOperations(recoveredCount)
+                          : t.agentWorkbenchPages.statusDone
+                    }
+                    tone={unresolvedCount > 0 ? "warning" : "neutral"}
+                  />
+                </div>
+                {(resultPreviewUrl || diffEntries.length > 0) && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {resultPreviewUrl && (
+                      <button
+                        type="button"
+                        onClick={() => onSelectTab?.("browser")}
+                        className="rounded-md border border-border-subtle bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/55"
+                      >
+                        {t.agentWorkbenchPages.browserTab}
+                      </button>
+                    )}
+                    {diffEntries.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => onSelectTab?.("diff")}
+                        className="rounded-md border border-border-subtle bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/55"
+                      >
+                        {t.agentWorkbenchPages.diffTab}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </section>
         )}
 

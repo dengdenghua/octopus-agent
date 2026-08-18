@@ -21,7 +21,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from runtime.memory.journal import SubToolEndEvent, SubToolStartEvent
+from runtime.memory.journal import SubTextDeltaEvent, SubToolEndEvent, SubToolStartEvent
 from runtime.memory.journal._journal_base import Journal
 from runtime.platform.models import TaskId
 from runtime.protocol import (
@@ -32,10 +32,13 @@ from runtime.protocol import (
 )
 from runtime.sensing.gateway._realtime_react_stream_drive import (
     _emit_subagent_lifecycle_item,
+    _emit_subagent_progress_item,
     _parse_lifecycle_preview,
     _start_subagent_lifecycle_bridge,
     _subagent_lifecycle_item_from_journal,
     _subagent_lifecycle_matches,
+    _subagent_progress_item_from_journal,
+    _subagent_tool_item_from_journal,
 )
 
 SPAWN_MARKER = ItemMarker.SUBAGENT_SPAWNED.value
@@ -199,6 +202,111 @@ def test_event_id_compacted_to_16_hex() -> None:
     assert len(item.id) == len("subagent_spawn_") + 16
 
 
+def test_real_subagent_tool_pair_maps_to_one_durable_item() -> None:
+    task_id = uuid4()
+    started = SubToolStartEvent(
+        task_id=TaskId(task_id),
+        role_id="researcher",
+        tool_call_id="call-search-1",
+        tool_name="web_search",
+        iteration=2,
+        args_preview=json.dumps({"query": "Octopus Agent"}),
+        parent_tool_use_id="orchestration-1",
+    )
+    start_item = _subagent_tool_item_from_journal(
+        started,
+        identity={
+            "agent_id": "researcher-a",
+            "role": "researcher",
+            "codename": "Spark-a1",
+            "avatar": "🔎",
+        },
+    )
+    assert start_item is not None
+    assert start_item.status == ItemStatus.IN_PROGRESS
+    assert start_item.server == "subagent"
+    assert start_item.tool == "web_search"
+    assert start_item.arguments["input"] == {"query": "Octopus Agent"}
+    assert start_item.arguments["subagent_codename"] == "Spark-a1"
+
+    finished = SubToolEndEvent(
+        task_id=TaskId(task_id),
+        role_id="researcher",
+        tool_call_id="call-search-1",
+        tool_name="web_search",
+        iteration=2,
+        duration_ms=320,
+        output_preview="3 results",
+        parent_tool_use_id="orchestration-1",
+    )
+    end_item = _subagent_tool_item_from_journal(
+        finished,
+        identity={"agent_id": "researcher-a", "codename": "Spark-a1"},
+        started_item=start_item,
+    )
+    assert end_item is not None
+    assert end_item.id == start_item.id
+    assert end_item.created_at == start_item.created_at
+    assert end_item.status == ItemStatus.COMPLETED
+    assert end_item.duration_ms == 320
+    assert end_item.result == {"output_preview": "3 results", "status": "success"}
+
+
+def test_subagent_text_delta_maps_to_incremental_public_progress() -> None:
+    event = SubTextDeltaEvent(
+        task_id=TaskId(uuid4()),
+        session_id="session-a",
+        agent_id="researcher-a",
+        codename="Spark-a1",
+        avatar="🔎",
+        role_id="researcher",
+        round=2,
+        delta="正在核对第三个来源",
+        parent_tool_use_id="orchestration-1",
+    )
+    item = _subagent_progress_item_from_journal(
+        event,
+        identity={"role": "researcher"},
+        accumulated="已查看两个来源，正在核对第三个来源",
+    )
+    assert item is not None
+    assert item.tool == "__subagent_progress__"
+    assert item.status == ItemStatus.IN_PROGRESS
+    assert item.arguments["agent_id"] == "researcher-a"
+    assert item.arguments["subagent_codename"] == "Spark-a1"
+    assert item.progress is not None
+    assert item.progress.preview == "已查看两个来源，正在核对第三个来源"
+
+
+def test_same_role_parallel_agents_keep_distinct_progress_lanes() -> None:
+    first = SubTextDeltaEvent(
+        task_id=TaskId(uuid4()),
+        session_id="session-a",
+        agent_id="researcher-a",
+        codename="Spark-a1",
+        role_id="researcher",
+        round=1,
+        delta="A",
+    )
+    second = SubTextDeltaEvent(
+        task_id=first.task_id,
+        session_id="session-b",
+        agent_id="researcher-b",
+        codename="Prism-b2",
+        role_id="researcher",
+        round=1,
+        delta="B",
+    )
+
+    first_item = _subagent_progress_item_from_journal(first, accumulated="A")
+    second_item = _subagent_progress_item_from_journal(second, accumulated="B")
+
+    assert first_item is not None and second_item is not None
+    assert first_item.id != second_item.id
+    assert first_item.arguments["agent_id"] == "researcher-a"
+    assert second_item.arguments["agent_id"] == "researcher-b"
+
+
 # ---------------------------------------------------------------------------
 # _subagent_lifecycle_matches
 # ---------------------------------------------------------------------------
@@ -299,7 +407,7 @@ class _FakeStreamingJournal:
         return _unsubscribe
 
 
-def test_bridge_subscribes_and_filters_lifecycle_events(
+def test_bridge_subscribes_and_filters_subagent_events(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     journal = _FakeStreamingJournal()
@@ -332,7 +440,7 @@ def test_bridge_subscribes_and_filters_lifecycle_events(
     assert len(journal._callbacks) == 1
     callback = journal._callbacks[0]
 
-    # Non-marker event for the same task: dropped.
+    # A real child tool for the same task is now lifted too.
     callback(
         SubToolStartEvent(
             task_id=TaskId(task_id),
@@ -340,21 +448,21 @@ def test_bridge_subscribes_and_filters_lifecycle_events(
             args_preview="{}",
         )
     )
-    assert scheduled == []
+    assert len(scheduled) == 1
 
     # Lifecycle event for a different task: dropped.
     callback(_spawn_event(uuid4()))
-    assert scheduled == []
+    assert len(scheduled) == 1
 
     # Lifecycle event for this task: scheduled on the driver's loop.
     callback(_spawn_event(task_id))
-    assert len(scheduled) == 1
-    coro = scheduled[0]
+    assert len(scheduled) == 2
+    coro = scheduled[1]
     assert asyncio.iscoroutine(coro)
 
     # Finish (terminal) event: scheduled with terminal=True.
     callback(_finish_event(task_id))
-    assert len(scheduled) == 2
+    assert len(scheduled) == 3
 
     # Unsubscribe stops the fan-out.
     unsubscribe()
@@ -400,6 +508,7 @@ class _FakeEventLog:
     def __init__(self) -> None:
         self.started: list[McpToolCallItem] = []
         self.completed: list[McpToolCallItem] = []
+        self.deltas: list[tuple[str, str, Any]] = []
 
     def item_started(self, thread_id: str, turn_id: str, item: McpToolCallItem):
         del thread_id, turn_id
@@ -411,6 +520,18 @@ class _FakeEventLog:
         self.completed.append(item)
         return SimpleNamespace(event_id="log-2")
 
+    def item_delta(
+        self,
+        thread_id: str,
+        turn_id: str,
+        item_id: str,
+        kind: str,
+        delta: Any,
+    ):
+        del thread_id, turn_id
+        self.deltas.append((item_id, kind, delta))
+        return SimpleNamespace(event_id="log-3")
+
 
 class _FakeEmitter:
     def __init__(self) -> None:
@@ -418,6 +539,63 @@ class _FakeEmitter:
 
     async def notify(self, method: Any, payload: dict[str, Any]) -> None:
         self.notified.append((method, payload))
+
+
+@pytest.mark.asyncio()
+async def test_finish_closes_matching_public_progress_lane() -> None:
+    journal = _FakeStreamingJournal()
+    runtime = _fake_runtime(journal)
+    turn = SimpleNamespace(thread_id="t1", id="turn-1", items=[])
+    log = _FakeEventLog()
+    emitter = _FakeEmitter()
+    loop = asyncio.get_running_loop()
+    task_id = uuid4()
+    unsubscribe = _start_subagent_lifecycle_bridge(
+        runtime,
+        turn,
+        log,
+        emitter,
+        loop,
+        str(task_id),
+    )
+    assert unsubscribe is not None
+    callback = journal._callbacks[0]
+
+    callback(
+        SubTextDeltaEvent(
+            task_id=TaskId(task_id),
+            session_id="session-a",
+            agent_id="researcher-a",
+            codename="Spark-a1",
+            role_id="researcher",
+            round=1,
+            delta="正在收集证据",
+        )
+    )
+    await asyncio.sleep(0)
+    callback(
+        _finish_event(
+            task_id,
+            preview=json.dumps(
+                {
+                    "agent_id": "researcher-a",
+                    "codename": "Spark-a1",
+                    "role": "researcher",
+                    "ok": True,
+                    "output": "完成",
+                }
+            ),
+        )
+    )
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    unsubscribe()
+
+    progress_item = next(item for item in turn.items if item.tool == "__subagent_progress__")
+    assert progress_item.status == ItemStatus.COMPLETED
+    assert progress_item.progress is not None
+    assert progress_item.progress.status == "done"
+    assert any(item.id == progress_item.id for item in log.completed)
 
 
 @pytest.mark.asyncio()
@@ -472,3 +650,47 @@ async def test_emit_tolerates_notify_failure() -> None:
     )
     assert turn.items == [spawn_item]
     assert log.started == [spawn_item]
+
+
+@pytest.mark.asyncio()
+async def test_emit_progress_starts_then_updates_same_item() -> None:
+    turn = SimpleNamespace(thread_id="t1", id="turn-1", items=[])
+    log = _FakeEventLog()
+    emitter = _FakeEmitter()
+    source = SubTextDeltaEvent(
+        task_id=TaskId(uuid4()),
+        session_id="session-a",
+        role_id="researcher",
+        round=1,
+        delta="第一段",
+    )
+    first = _subagent_progress_item_from_journal(source, accumulated="第一段")
+    assert first is not None
+    await _emit_subagent_progress_item(
+        turn,
+        log,
+        emitter,
+        first,
+        started=True,
+    )
+
+    second = _subagent_progress_item_from_journal(
+        source,
+        accumulated="第一段第二段",
+    )
+    assert second is not None
+    second = second.model_copy(update={"created_at": first.created_at})
+    await _emit_subagent_progress_item(
+        turn,
+        log,
+        emitter,
+        second,
+        started=False,
+    )
+
+    assert len(turn.items) == 1
+    assert turn.items[0].progress.preview == "第一段第二段"
+    assert len(log.started) == 1
+    assert log.deltas[0][1] == "mcpToolProgress"
+    assert log.deltas[0][2]["preview"] == "第一段第二段"
+    assert emitter.notified[-1][0] is ServerMethod.ITEM_MCP_TOOL_CALL_PROGRESS

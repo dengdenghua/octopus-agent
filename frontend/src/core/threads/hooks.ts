@@ -82,7 +82,8 @@ function parseCapabilityDisabled(
 ): { group: string; config_flag: string } | undefined {
   if (!isRecord(value)) return undefined;
   const group = stringValue(value.group);
-  const configFlag = stringValue(value.config_flag) ?? stringValue(value.configFlag);
+  const configFlag =
+    stringValue(value.config_flag) ?? stringValue(value.configFlag);
   if (!group || !configFlag) return undefined;
   return { group, config_flag: configFlag };
 }
@@ -133,6 +134,19 @@ export function normalizeCustomToolEvent(
   );
   const output =
     event.output_preview ?? event.output ?? event.result ?? event.observation;
+  const subAgentRole =
+    stringValue(event.sub_agent_role) ?? stringValue(event.subAgentRole);
+  const subagentCodename =
+    stringValue(event.subagent_codename) ??
+    stringValue(event.subagentCodename) ??
+    stringValue(event.codename);
+  const rawAgentId = stringValue(event.agent_id) ?? stringValue(event.agentId);
+  const agentId =
+    stringValue(event.requested_agent_id) ??
+    stringValue(event.requestedAgentId) ??
+    (rawAgentId && rawAgentId !== subAgentRole
+      ? rawAgentId
+      : (subagentCodename ?? rawAgentId));
 
   return {
     id: rawId,
@@ -146,7 +160,7 @@ export function normalizeCustomToolEvent(
       ? undefined
       : numberValue(event.duration_ms ?? event.durationMs),
     iteration: numberValue(event.iteration) ?? 0,
-    agentId: stringValue(event.agent_id) ?? stringValue(event.agentId),
+    agentId,
     agentName:
       stringValue(event.agent_name) ??
       stringValue(event.agentName) ??
@@ -157,8 +171,12 @@ export function normalizeCustomToolEvent(
     parentToolUseId:
       stringValue(event.parent_tool_use_id) ??
       stringValue(event.parentToolUseId),
-    subAgentRole:
-      stringValue(event.sub_agent_role) ?? stringValue(event.subAgentRole),
+    subAgentRole,
+    subagentCodename,
+    subagentAvatar:
+      stringValue(event.subagent_avatar) ??
+      stringValue(event.subagentAvatar) ??
+      stringValue(event.avatar),
     thought: stringValue(event.thought),
     observation: stringValue(event.observation),
     capabilityDisabled: parseCapabilityDisabled(event.capability_disabled),

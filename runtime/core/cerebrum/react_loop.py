@@ -7,6 +7,7 @@ from collections.abc import Callable, Generator
 from typing import TYPE_CHECKING, Any
 
 from runtime.core.cerebrum._react_loop_reexports import *  # noqa: F403
+from runtime.core.cerebrum.pause_control import turn_wall_time_cap_s
 from runtime.core.cerebrum.react_action_outcomes import (
     _action_batch_fingerprint,
     _deduplicate_actions,
@@ -68,7 +69,6 @@ from runtime.core.cerebrum.react_quiet_evidence import (
     _result_checkpoint_is_meaningful,
     _should_accumulate_quiet_evidence,
 )
-from runtime.core.cerebrum.pause_control import turn_wall_time_cap_s
 from runtime.core.cerebrum.react_resume import (
     _resume_or_register_turn,
 )

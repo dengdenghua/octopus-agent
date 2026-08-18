@@ -23,6 +23,22 @@ export type AgentWorkbenchFocusView = "summary" | "screen" | "role";
 export type AgentWorkbenchEventView = "summary" | "trace" | "screen";
 export type AgentWorkbenchProcessEventKind = "thinking" | "execution";
 
+/** Public identity carried with a focus intent so a historical conversation
+ * card remains inspectable after the workbench has advanced to a newer turn. */
+export type AgentWorkbenchFocusAgentSnapshot = {
+  id: string;
+  name: string;
+  role?: string;
+  avatar?: string;
+  status: "running" | "done" | "error" | "waiting";
+  task: string;
+  summary?: string;
+  iterationCount?: number;
+  filesTouchedCount?: number;
+  error?: string;
+  index?: number;
+};
+
 export type AgentWorkbenchProcessEventSnapshot = {
   /** Only explicitly public text belongs here; never raw provider reasoning. */
   summary: string;
@@ -37,6 +53,10 @@ export type AgentWorkbenchProcessEventSnapshot = {
 
 export type AgentWorkbenchFocusDetail = {
   agentId: string;
+  agent?: AgentWorkbenchFocusAgentSnapshot;
+  /** Owning conversation turn. Lets the workbench replay a historical run
+   * instead of silently falling back to the latest turn. */
+  turnIndex?: number;
   tab?: AgentWorkbenchTab;
   view?: AgentWorkbenchFocusView;
 };

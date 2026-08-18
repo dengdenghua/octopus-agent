@@ -268,7 +268,11 @@ export const MarkdownContent = memo(
     return (
       <MessageResponse
         key={isLoading ? "streaming" : "settled"}
-        className={cn("chat-markdown", proseSizeClass, className)}
+        className={cn(
+          "chat-markdown whitespace-pre-wrap",
+          proseSizeClass,
+          className,
+        )}
         remarkPlugins={resolvedRemarkPlugins}
         rehypePlugins={rehypePlugins}
         components={components}

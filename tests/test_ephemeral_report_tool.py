@@ -77,17 +77,17 @@ def test_report_exposed_with_session_and_guidance() -> None:
     assert "output" in spec.input_schema["properties"]
     system = router.call_log[0].messages[0].content
     assert "## report tool" in system
-    assert "reporting never ends your turn" in system
+    assert "successful report ends this child run immediately" in system
 
 
-def test_report_delivers_mid_round(tmp_path) -> None:
+def test_report_delivers_and_ends_child_run(tmp_path) -> None:
     store = _store(tmp_path)
     session = store.create(agent_id="researcher", thread_id="t-1")
     runner, router, call = _make_runner(
         [[{"name": "report", "input": {"output": "mid finding"}}], "final answer"],
         context={"subagent_session_id": session.session_id},
     )
-    assert runner(call) == "final answer"
+    assert runner(call) == "mid finding"
 
     pending = store.pending_reports(session.session_id)
     assert len(pending) == 1
@@ -95,12 +95,9 @@ def test_report_delivers_mid_round(tmp_path) -> None:
     assert report.content == "mid finding"
     assert report.delivery == "wakeup"
     assert index == 0
-    # The ack came back into the round as a tool_result.
-    user_msg = router.call_log[1].messages[-1].content
-    assert user_msg[0]["type"] == "tool_result"
-    assert "Report delivered" in user_msg[0]["content"]
-    assert "messageId=report-0" in user_msg[0]["content"]
-    assert user_msg[0].get("is_error") is not True
+    # A successful report is terminal; the scripted follow-up round is never
+    # requested, so a model cannot repeatedly report the same result.
+    assert len(router.call_log) == 1
 
 
 def test_report_quiet_delivery_policy(tmp_path) -> None:
@@ -113,7 +110,8 @@ def test_report_quiet_delivery_policy(tmp_path) -> None:
             "subagent_report_delivery": "quiet",
         },
     )
-    assert runner(call) == "done"
+    assert runner(call) == "quiet note"
+    assert len(router.call_log) == 1
     _index, report = store.pending_reports(session.session_id)[0]
     assert report.delivery == "quiet"
 
@@ -126,14 +124,32 @@ def test_report_queued_while_parent_busy(tmp_path) -> None:
         [[{"name": "report", "input": {"output": "busy finding"}}], "done"],
         context={"subagent_session_id": session.session_id},
     )
-    assert runner(call) == "done"
+    assert runner(call) == "busy finding"
 
     _index, report = store.pending_reports(session.session_id)[0]
     assert report.delivery == "queued"
-    user_msg = router.call_log[1].messages[-1].content
-    assert user_msg[0]["type"] == "tool_result"
-    assert "parent is busy" in user_msg[0]["content"]
-    assert "was not woken" in user_msg[0]["content"]
+    assert len(router.call_log) == 1
+
+
+def test_report_ignores_later_tools_in_same_model_response(tmp_path) -> None:
+    store = _store(tmp_path)
+    session = store.create(agent_id="researcher", thread_id="t-1")
+    runner, router, call = _make_runner(
+        [
+            [
+                {"name": "report", "input": {"output": "final finding"}},
+                {"name": "read_file", "input": {"path": "too-late.txt"}},
+            ],
+            "unreachable",
+        ],
+        context={"subagent_session_id": session.session_id},
+    )
+
+    assert runner(call) == "final finding"
+    assert len(router.call_log) == 1
+    assert [report.content for _, report in store.pending_reports(session.session_id)] == [
+        "final finding"
+    ]
 
 
 def test_report_failure_is_error_but_round_continues(tmp_path) -> None:

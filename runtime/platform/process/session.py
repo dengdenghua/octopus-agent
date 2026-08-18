@@ -67,6 +67,15 @@ _current_agent_id: ContextVar[str | None] = ContextVar(
     default=None,
 )
 
+# The concrete parent tool call currently executing on this context.  Session
+# metadata also mirrors this value for older dispatchers, but metadata is a
+# shared mutable dict and therefore cannot distinguish two parallel parent
+# tool calls.  A ContextVar gives every worker its own exact causal parent.
+_current_parent_tool_use_id: ContextVar[str | None] = ContextVar(
+    "current_parent_tool_use_id",
+    default=None,
+)
+
 
 # ═══════════════════════════════════════════════════════════
 # Session dataclass
@@ -138,6 +147,21 @@ def current_agent_id() -> str | None:
         return s.agent_id
     # Legacy fallback: pure ContextVar without a Session.
     return _current_agent_id.get()
+
+
+def current_parent_tool_use_id() -> str | None:
+    """Return the parent tool-use id bound to the current execution context."""
+    return _current_parent_tool_use_id.get()
+
+
+@contextmanager
+def parent_tool_use_scope(tool_use_id: str) -> Iterator[str]:
+    """Bind one tool call as the causal parent for nested delegated work."""
+    token = _current_parent_tool_use_id.set(tool_use_id or None)
+    try:
+        yield tool_use_id
+    finally:
+        _current_parent_tool_use_id.reset(token)
 
 
 @contextmanager

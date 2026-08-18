@@ -44,6 +44,7 @@ def test_emit_lifecycle_writes_spawned_event_to_journal() -> None:
     journal = InMemoryJournal()
     payload = {
         "agent_id": "researcher_a",
+        "requested_agent_id": "vendor_reader",
         "role": "researcher",
         "codename": "Spark-abc",
         "avatar": "🔍",
@@ -60,10 +61,13 @@ def test_emit_lifecycle_writes_spawned_event_to_journal() -> None:
     assert isinstance(ev, SubToolStartEvent)
     assert ev.tool_name == ItemMarker.SUBAGENT_SPAWNED.value
     assert ev.role_id == "researcher"
+    assert ev.agent_id == "vendor_reader"
+    assert ev.codename == "Spark-abc"
     decoded = json.loads(ev.args_preview)
     assert decoded["codename"] == "Spark-abc"
     assert decoded["avatar"] == "🔍"
     assert decoded["role"] == "researcher"
+    assert decoded["requested_agent_id"] == "vendor_reader"
 
 
 def test_emit_lifecycle_writes_finished_event_to_journal() -> None:

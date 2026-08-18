@@ -1,5 +1,6 @@
 import { swallow } from "@/core/utils/log";
 import type { LiveToolEvent } from "./live-tool-timeline";
+import { effectiveToolInput } from "./messages/action-display";
 
 export type WorkBlockKind =
   | "agent"
@@ -18,6 +19,7 @@ export type WorkBlockActionKey =
   | "finishAgent"
   | "writeTodoList"
   | "parallelDispatch"
+  | "submitResult"
   | "loadSkill"
   | "terminalFailed"
   | "terminalRecovered"
@@ -103,6 +105,7 @@ const DEFAULT_WORK_BLOCK_LABELS: WorkBlockLabels = {
     finishAgent: "Agent finished",
     writeTodoList: "Write to-do list",
     parallelDispatch: "Dispatch in parallel",
+    submitResult: "Submit result",
     loadSkill: "Load skill",
     terminalFailed: "Terminal run failed",
     terminalRecovered: "Terminal recovered",
@@ -512,6 +515,7 @@ function workActionKey(
   }
   if (event.name === "todo_write") return "writeTodoList";
   if (event.name === "call_agent_parallel") return "parallelDispatch";
+  if (normalizedToolName(event.name) === "report") return "submitResult";
   if (kind === "skill") return "loadSkill";
   if (kind === "terminal") {
     if (status === "error") return "terminalFailed";
@@ -609,7 +613,7 @@ function agentDisplayName(event: LiveToolEvent): string {
 }
 
 function progressRecord(event: LiveToolEvent): Record<string, unknown> | null {
-  const progress = event.input?.progress;
+  const progress = effectiveToolInput(event.input).progress;
   if (!progress || typeof progress !== "object" || Array.isArray(progress)) {
     return null;
   }
@@ -648,7 +652,7 @@ function numberValue(value: unknown): number | null {
 }
 
 function specCount(input: Record<string, unknown> | undefined): number {
-  const specs = input?.specs;
+  const specs = effectiveToolInput(input).specs;
   return Array.isArray(specs) ? specs.length : 0;
 }
 
@@ -668,7 +672,8 @@ function skillTitle(event: LiveToolEvent): WorkBlockTitle {
 }
 
 function todoTitle(input: Record<string, unknown> | undefined) {
-  const raw = input?.items ?? input?.todos;
+  const effective = effectiveToolInput(input);
+  const raw = effective.items ?? effective.todos;
   const items = Array.isArray(raw) ? raw : [];
   const current =
     items.find(
@@ -692,9 +697,9 @@ function firstString(
   input: Record<string, unknown> | undefined,
   keys: string[],
 ) {
-  if (!input) return "";
+  const effective = effectiveToolInput(input);
   for (const key of keys) {
-    const value = input[key];
+    const value = effective[key];
     if (typeof value === "string" && value.trim()) return value.trim();
     if (typeof value === "number") return String(value);
   }
@@ -705,7 +710,7 @@ function firstChangeString(
   input: Record<string, unknown> | undefined,
   keys: string[],
 ) {
-  const changes = input?.changes;
+  const changes = effectiveToolInput(input).changes;
   if (!Array.isArray(changes)) return "";
   for (const change of changes) {
     if (!change || typeof change !== "object" || Array.isArray(change)) {
@@ -719,6 +724,10 @@ function firstChangeString(
 
 function basename(path: string) {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}
+
+function normalizedToolName(name: string): string {
+  return name.trim().toLowerCase().replace(/^mcp:/, "");
 }
 
 function hostOf(url: string) {

@@ -1506,14 +1506,6 @@ export function BrowserPreviewPanel({
         >
           <RefreshCwIcon className="size-3.5" />
         </button>
-        <button
-          type="button"
-          onClick={() => void handleAttachScreenshotToComposer()}
-          className="grid size-7 place-items-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border-default hover:bg-muted/65 hover:text-foreground"
-          title={bp.attachScreenshotToComposer}
-        >
-          <ImageIcon className="size-3.5" />
-        </button>
 
         <form
           onSubmit={(e) => {

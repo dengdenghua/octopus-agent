@@ -11,6 +11,7 @@ import type {
   McpToolCallItem,
   PlanItem,
   ReasoningItem,
+  SteeringUserMessageItem,
   TodoListItem,
   Turn,
   UserMessageItem,
@@ -212,6 +213,56 @@ describe("conversationToAgentThreadState · userMessage", () => {
       attachments: [{ name: "a.txt", size: 10 }],
       created_at: "2026-05-09T00:00:00Z",
     });
+  });
+
+  it("keeps child reports inside the owning assistant turn", () => {
+    const childReport: SteeringUserMessageItem = {
+      id: "child-report-1",
+      type: "steeringUserMessage",
+      status: "completed",
+      createdAt: "2026-05-09T00:00:00Z",
+      text: "[子代理报告] README 已完成",
+      targetTurnId: "t1",
+      source: "subagent_report",
+    };
+    const state = conversationToAgentThreadState(
+      makeConv([
+        makeTurn([
+          userMsg("检查两个文件"),
+          agentMsg("正在并行检查", "a-progress"),
+          childReport,
+          agentMsg("检查完成", "a-final"),
+        ]),
+      ]),
+    );
+
+    expect(
+      state.messages.filter((message) => message.type === "human"),
+    ).toHaveLength(1);
+    expect(
+      state.messages.some((message) =>
+        String(message.content).includes("[子代理报告]"),
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps ordinary human steering visible", () => {
+    const steering: SteeringUserMessageItem = {
+      id: "human-steering-1",
+      type: "steeringUserMessage",
+      status: "completed",
+      createdAt: "2026-05-09T00:00:00Z",
+      text: "顺便检查许可证",
+      targetTurnId: "t1",
+      source: "user",
+    };
+    const state = conversationToAgentThreadState(
+      makeConv([makeTurn([userMsg("检查项目"), steering])]),
+    );
+
+    expect(
+      state.messages.filter((message) => message.type === "human"),
+    ).toHaveLength(2);
   });
 });
 

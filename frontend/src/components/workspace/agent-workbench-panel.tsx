@@ -35,6 +35,7 @@ import { checkCodeFile, getFileIcon, getFileName } from "@/core/utils/files";
 import { useStreamdownPlugins } from "@/core/streamdown";
 import type {
   AgentWorkbenchEventView,
+  AgentWorkbenchFocusAgentSnapshot,
   AgentWorkbenchProcessEventSnapshot,
   AgentWorkbenchProcessEventKind,
 } from "./agent-workbench-events";
@@ -76,6 +77,7 @@ function AgentWorkbenchPanelImpl({
   groundingSources,
   focusedAgentId,
   focusedAgentView,
+  focusedAgentSnapshot,
   focusedAgentNonce,
   focusedEventId,
   focusedEventKind,
@@ -120,6 +122,9 @@ function AgentWorkbenchPanelImpl({
   /** Which activity view a focusedAgentId intent lands on; defaults to the
    * live computer screen when the caller doesn't say. */
   focusedAgentView?: "summary" | "screen" | "role" | null;
+  /** Public fallback used when a historical chat card no longer belongs to
+   * the latest-turn event snapshot shown by the workbench. */
+  focusedAgentSnapshot?: AgentWorkbenchFocusAgentSnapshot | null;
   /** Bumped by the parent on every focus emission. Without it, a second
    * intent for the same agent (e.g. 查看过程 then 查看电脑 on one row) would be
    * swallowed by the consume-once guard below. */
@@ -310,9 +315,31 @@ function AgentWorkbenchPanelImpl({
       deriveAgentPhases(events, { hasAnswer, runSettled, runFailed, paused }),
     [events, hasAnswer, runSettled, runFailed, paused],
   );
+  const hasTerminalAgentFailure = agentTiles.some(
+    (agent) => agent.status === "error",
+  );
   const phases = useMemo<AgentPhase[]>(() => {
-    return snapshotPhases.length > 0 ? snapshotPhases : directDerived.phases;
-  }, [snapshotPhases, directDerived.phases]);
+    const source =
+      snapshotPhases.length > 0 ? snapshotPhases : directDerived.phases;
+    if (!runSettled || runFailed || paused) return source;
+    // A replayed snapshot can preserve its last in-flight phase even though
+    // the owning turn has a terminal answer. The terminal run signal is more
+    // authoritative than that stale progress frame.
+    return source.map((phase) =>
+      phase.status === "running" ||
+      phase.status === "waiting_approval" ||
+      (phase.status === "error" && !hasTerminalAgentFailure)
+        ? { ...phase, status: "done" as const }
+        : phase,
+    );
+  }, [
+    snapshotPhases,
+    directDerived.phases,
+    paused,
+    runFailed,
+    runSettled,
+    hasTerminalAgentFailure,
+  ]);
   const currentPhase =
     phases.find((phase) => phase.status === "waiting_approval") ??
     phases.find((phase) => phase.status === "running") ??
@@ -323,18 +350,14 @@ function AgentWorkbenchPanelImpl({
     selectedEffectKey,
     setSelectedEffectKey,
     setActivityView,
-    locatableTranscriptEventId,
     selectedAgent,
     screenBlocks,
     mainBlocks,
     mainPhases,
     screenFrame,
-    screenProgress,
     visibleRosterSeats,
     leaderRosterSeat,
     selectedRosterSeat,
-    rosterBlocks,
-    activeScreenBlocks,
     openMainProcess,
     openSubagentProcess,
     openRosterProcess,
@@ -348,13 +371,13 @@ function AgentWorkbenchPanelImpl({
     agentTiles,
     focusedAgentId,
     focusedAgentView,
+    focusedAgentSnapshot,
     focusedAgentNonce,
     focusedEventId,
     focusedEventKind,
     focusedEventView,
     focusedEventNonce,
     focusedEffectKey,
-    focusedProcessEvent,
     rosterSeats,
     onSelectTab,
   });
@@ -398,6 +421,7 @@ function AgentWorkbenchPanelImpl({
   const emptyShell =
     blocks.length === 0 &&
     agentTiles.length === 0 &&
+    !selectedAgent &&
     visibleRosterSeats.length === 0 &&
     (progressOutline?.length ?? 0) === 0;
   const mainRunStatus = workbenchStatus(mainBlocks, mainPhases, {
@@ -578,7 +602,6 @@ function AgentWorkbenchPanelImpl({
         effectiveActiveTab={effectiveActiveTab}
         onTabClick={handleOpenTab}
         onTabClose={handleCloseTab}
-        locatableTranscriptEventId={locatableTranscriptEventId}
         visibleDiffEntries={visibleDiffEntries}
         threadId={threadId}
         inferredWorkDir={inferredWorkDir}
@@ -586,7 +609,6 @@ function AgentWorkbenchPanelImpl({
         isLoading={isLoading}
         className={className}
         machineRail={machineRail}
-        onClose={onClose}
       />
     );
   }
@@ -609,6 +631,7 @@ function AgentWorkbenchPanelImpl({
       groundingSources={effectiveGroundingSources}
       preferStructuredReferences={evidence.length > 0}
       mainAgentName={mainAgentName}
+      resultPreviewUrl={resultPreviewUrl}
       terminalState={
         runInterrupted
           ? "interrupted"
@@ -692,11 +715,9 @@ function AgentWorkbenchPanelImpl({
         effectiveActiveTab={effectiveActiveTab}
         onTabClick={handleOpenTab}
         onTabClose={handleCloseTab}
-        locatableTranscriptEventId={locatableTranscriptEventId}
         workspaceLabel={workspaceLabel}
         showWorkspaceLabel
         mainRunStatusLabel={mainRunStatus.label}
-        onClose={onClose}
       />
 
       {threadId ? (

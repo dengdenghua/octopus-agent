@@ -111,6 +111,10 @@ class SteeringUserMessageItem(_ItemBase):
     type: Literal[ItemType.STEERING_USER_MESSAGE] = ItemType.STEERING_USER_MESSAGE
     text: str
     target_turn_id: str | None = Field(default=None, alias="targetTurnId")
+    # Human steering is rendered as a user message. Internal child reports use
+    # the same live queue for model context but must remain inside the owning
+    # assistant turn rather than manufacturing new visible user turns.
+    source: Literal["user", "subagent_report"] = "user"
 
 
 class AgentMessageItem(_ItemBase):

@@ -312,9 +312,7 @@ function publicProcessText(value: string): string {
   return redactPublicProcessText(
     stripTraceLabelPrefixes(
       stripLeakedRendererMarkup(
-        stripInternalToolProtocol(
-          value.replace(INTERNAL_PROCESS_BLOCK_RE, ""),
-        ),
+        stripInternalToolProtocol(value.replace(INTERNAL_PROCESS_BLOCK_RE, "")),
       ),
     ).replace(/[^\S\n]+/g, " "),
   );
@@ -531,6 +529,7 @@ export function MessageGroup({
   isLoading = false,
   keepOpen = false,
   codeMode = false,
+  suppressSubagentRows = false,
 }: {
   className?: string;
   enableClarificationActions?: boolean;
@@ -540,6 +539,8 @@ export function MessageGroup({
   // Code mode auto-expands only while the turn is live. Once a turn is saved,
   // historical work logs fold behind a compact replay disclosure.
   codeMode?: boolean;
+  /** A turn-level Agent cluster card already owns delegation lifecycle UI. */
+  suppressSubagentRows?: boolean;
 }) {
   const { t } = useI18n();
   const { receiptsByCallId } = useToolEffects();
@@ -880,6 +881,8 @@ export function MessageGroup({
       }
     }
 
+    const delegationSummaryById = buildDelegationSummary(items);
+
     return items.map((item) => {
       // Conversation detail level "low": hide intermediate activity rows
       // (thinking / tool execution / process narration) so the transcript
@@ -895,6 +898,13 @@ export function MessageGroup({
         return null;
       }
       const step = lastTimelineStep(item);
+      const delegationSummary = delegationSummaryById.get(item.id);
+      if (
+        delegationSummary &&
+        delegationSummary.firstId !== item.id
+      ) {
+        return null;
+      }
       const phaseItems = step.phaseId
         ? historicalPhaseItems.get(step.phaseId)
         : undefined;
@@ -1213,6 +1223,7 @@ export function MessageGroup({
         !isThinking &&
         ((item.type === "toolCall" && isTeamCallToolName(item.step.name)) ||
           (isAggregatedGroup && item.aggregateKind === "teammate"));
+
       const subagentIdentity = isSubagentRow
         ? subagentIdentityFromArgs(
             isAggregatedGroup
@@ -1240,6 +1251,9 @@ export function MessageGroup({
         }
         return null;
       })();
+
+      // Hide both subagent tool calls AND their child operations
+      if (suppressSubagentRows && (isSubagentRow || owningSubagent)) return null;
 
       const summary =
         item.type === "reasoningGroup"
@@ -1336,9 +1350,8 @@ export function MessageGroup({
         // A single message's internal self-talk (all chunks share one
         // message id) is muted; a chain of distinct reasoning messages or
         // structured reasoning keeps its content summary.
-        new Set(
-          item.steps.map((step) => step.messageId).filter(Boolean),
-        ).size === 1 &&
+        new Set(item.steps.map((step) => step.messageId).filter(Boolean))
+          .size === 1 &&
         item.steps.every((step) => !step.phaseId) &&
         !timelineItems.some((tl) => tl.type === "commentary");
       const thinkingDisclosureLabel = isDeepThinking
@@ -1511,9 +1524,13 @@ export function MessageGroup({
                       )}
                     </span>
                   )}
-                {count > 1 && !isAggregatedGroup && !groupedTargetSummary && (
+                {(count > 1 || (delegationSummary?.count ?? 0) > 1) &&
+                  !isAggregatedGroup &&
+                  !groupedTargetSummary && (
                   <span className="shrink-0 tabular-nums whitespace-nowrap text-mini text-muted-foreground/50">
-                    {t.messageGrouping.countItems(count)}
+                    {t.messageGrouping.countItems(
+                      delegationSummary?.count ?? count,
+                    )}
                   </span>
                 )}
                 {needsEffectReview && (
@@ -1925,6 +1942,71 @@ export type TimelineItem =
   | CommentaryTimelineItem
   | ToolCallTimelineItem
   | AggregatedToolGroupTimelineItem;
+
+type DelegationSummary = {
+  firstId: string;
+  count: number;
+  label: string;
+};
+
+function buildDelegationSummary(
+  items: TimelineItem[],
+): Map<string, DelegationSummary> {
+  const byTarget = new Map<string, DelegationSummary>();
+  const byId = new Map<string, DelegationSummary>();
+  for (const item of items) {
+    const label = delegationLabel(item);
+    if (!label) continue;
+    const existing = byTarget.get(label);
+    const summary = existing ?? { firstId: item.id, count: 0, label };
+    summary.count +=
+      item.type === "aggregatedToolGroup" ? item.count : item.type === "actionCallbackGroup" ? item.steps.length : 1;
+    byTarget.set(label, summary);
+    byId.set(item.id, summary);
+  }
+  return byId;
+}
+
+function delegationLabel(item: TimelineItem): string | null {
+  if (item.type === "aggregatedToolGroup") {
+    if (item.aggregateKind !== "teammate") return null;
+    return teammateLabelFromArgs(item.items[0]?.step.args ?? {});
+  }
+  if (item.type === "toolCall") {
+    if (getActionDisplay(item.step.name, item.step.args).aggregateKind !== "teammate") {
+      return null;
+    }
+    return teammateLabelFromArgs(item.step.args);
+  }
+  if (item.type === "actionCallbackGroup") {
+    const text = item.steps.map((step) => step.actionText).join(" ");
+    if (!/委派任务|delegate|teammate|subagent|call_agent/i.test(text)) {
+      return null;
+    }
+    const match = text.match(/(?:给|to)\s+([^\n,，]+)/i);
+    return match?.[1]?.trim() || "other";
+  }
+  return null;
+}
+
+function teammateLabelFromArgs(args: Record<string, unknown>): string {
+  for (const key of [
+    "agent_name",
+    "display_name",
+    "role_display_name",
+    "codename",
+    "agent_id",
+    "subagent_type",
+    "name",
+    "role",
+  ]) {
+    const value = args[key];
+    if (typeof value === "string" && value.trim()) {
+      return friendlyRoleName(value.trim());
+    }
+  }
+  return "other";
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -2411,6 +2493,8 @@ function localizedActionVerb(
       return labels.useCapability;
     case "delegate_task":
       return labels.delegateTask;
+    case "submit_result":
+      return labels.submitResult;
     case "delete_file":
       return labels.deleteFile;
     case "move_file":

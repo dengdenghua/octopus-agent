@@ -12,7 +12,7 @@ import {
   getTimelineLinkageState,
   subscribeTimelineLinkage,
 } from "@/core/threads/timeline-linkage";
-import { pickCurrentWorkBlock, progressForWorkBlocks } from "../work-blocks";
+import { pickCurrentWorkBlock } from "../work-blocks";
 import {
   agentTileForBlock,
   findAgentTileByFocusId,
@@ -21,11 +21,13 @@ import {
   currentScreenFrame,
   screenBlocksForAgent,
 } from "../agent-workbench-snapshot";
-import type { AgentWorkbenchEventView } from "../agent-workbench-events";
-import type {
-  AgentWorkbenchProcessEventSnapshot,
-  AgentWorkbenchProcessEventKind,
+import {
+  AGENT_WORKBENCH_FOCUS_EVENT,
+  type AgentWorkbenchEventView,
+  type AgentWorkbenchFocusAgentSnapshot,
+  type AgentWorkbenchFocusDetail,
 } from "../agent-workbench-events";
+import type { AgentWorkbenchProcessEventKind } from "../agent-workbench-events";
 import type { AgentTile, AgentWorkbenchTabId } from "../agent-workbench-utils";
 import type { WorkBlock } from "../work-blocks";
 import type { AgentPhase } from "../agent-phases";
@@ -39,13 +41,13 @@ type WorkbenchSelectionInput = {
   agentTiles: AgentTile[];
   focusedAgentId?: string | null;
   focusedAgentView?: "summary" | "screen" | "role" | null;
+  focusedAgentSnapshot?: AgentWorkbenchFocusAgentSnapshot | null;
   focusedAgentNonce?: number;
   focusedEventId?: string | null;
   focusedEventKind?: AgentWorkbenchProcessEventKind | null;
   focusedEventView?: AgentWorkbenchEventView | null;
   focusedEventNonce?: number;
   focusedEffectKey?: string | null;
-  focusedProcessEvent?: AgentWorkbenchProcessEventSnapshot | null;
   rosterSeats: WorkbenchRosterSeat[];
   onSelectTab?: (tab: AgentWorkbenchTabId) => void;
 };
@@ -57,13 +59,13 @@ export function useWorkbenchSelection({
   agentTiles,
   focusedAgentId,
   focusedAgentView,
+  focusedAgentSnapshot,
   focusedAgentNonce,
   focusedEventId,
   focusedEventKind,
   focusedEventView,
   focusedEventNonce,
   focusedEffectKey,
-  focusedProcessEvent,
   rosterSeats,
   onSelectTab,
 }: WorkbenchSelectionInput) {
@@ -89,24 +91,57 @@ export function useWorkbenchSelection({
   );
   const selectedBlock =
     phaseBlocks.find((block) => block.id === selectedBlockId) ?? defaultBlock;
-  const locatableTranscriptEventId: string =
-    focusedEventId?.trim() ||
-    (selectedBlock
-      ? selectedBlock.event.id || selectedBlock.id
-      : focusedProcessEvent
-        ? (focusedEventId?.trim() ?? "")
-        : "");
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [selectedRosterSeatId, setSelectedRosterSeatId] = useState<
     string | null
   >(null);
+  const focusedFallbackAgent = useMemo<AgentTile | null>(() => {
+    if (!focusedAgentSnapshot) return null;
+    const label = focusedAgentSnapshot.index
+      ? String(focusedAgentSnapshot.index).padStart(2, "0")
+      : focusedAgentSnapshot.name;
+    return {
+      id: focusedAgentSnapshot.id,
+      name: focusedAgentSnapshot.name,
+      label,
+      status:
+        focusedAgentSnapshot.status === "waiting"
+          ? "waiting_approval"
+          : focusedAgentSnapshot.status,
+      task: focusedAgentSnapshot.task,
+      prompt: focusedAgentSnapshot.task,
+      avatar: focusedAgentSnapshot.avatar,
+      codename:
+        focusedAgentSnapshot.name !== focusedAgentSnapshot.id
+          ? focusedAgentSnapshot.name
+          : undefined,
+      role: focusedAgentSnapshot.role,
+      resultSummary: focusedAgentSnapshot.summary,
+      iterationCount: focusedAgentSnapshot.iterationCount,
+      blackboardWrites: [],
+      filesTouched: [],
+      error: focusedAgentSnapshot.error,
+      eventCount: focusedAgentSnapshot.iterationCount ?? 0,
+      startedAt: 0,
+    };
+  }, [focusedAgentSnapshot]);
+  const selectableAgentTiles = useMemo(() => {
+    if (
+      !focusedFallbackAgent ||
+      findAgentTileByFocusId(focusedFallbackAgent.id, agentTiles)
+    ) {
+      return agentTiles;
+    }
+    return [focusedFallbackAgent, ...agentTiles];
+  }, [agentTiles, focusedFallbackAgent]);
   const selectableAgentIds = useMemo(
-    () => new Set(agentTiles.map((agent) => agent.id)),
-    [agentTiles],
+    () => new Set(selectableAgentTiles.map((agent) => agent.id)),
+    [selectableAgentTiles],
   );
   const selectedAgent =
     selectedAgentId && selectableAgentIds.has(selectedAgentId)
-      ? (agentTiles.find((agent) => agent.id === selectedAgentId) ?? null)
+      ? (selectableAgentTiles.find((agent) => agent.id === selectedAgentId) ??
+        null)
       : null;
   const screenBlocks = useMemo(
     () => screenBlocksForAgent(blocks, selectedAgent?.id ?? null),
@@ -142,12 +177,6 @@ export function useWorkbenchSelection({
       ),
     [manualBlockSelection, screenBlocks, selectedBlockId],
   );
-  const screenProgress = useMemo(() => {
-    if (!screenFrame.block || screenBlocks.length === 0) {
-      return { current: 0, total: 0 };
-    }
-    return progressForWorkBlocks(screenBlocks, screenFrame.block);
-  }, [screenBlocks, screenFrame.block]);
   useEffect(() => {
     if (manualBlockSelection) {
       // A manual pick is made against what the active view actually shows:
@@ -219,14 +248,19 @@ export function useWorkbenchSelection({
     // switches); it must be part of the consumed key, not the plain id.
     const intentKey = `${focusedAgentNonce ?? 0}:${focusedAgentId}`;
     if (consumedFocusedAgentIdRef.current === intentKey) return;
-    if (agentTiles.length === 0) return;
-    const target = findAgentTileByFocusId(focusedAgentId, agentTiles);
+    if (selectableAgentTiles.length === 0) return;
+    const target = findAgentTileByFocusId(focusedAgentId, selectableAgentTiles);
     if (!target) return;
     consumedFocusedAgentIdRef.current = intentKey;
     setSelectedAgentId(target.id);
     setSelectedRosterSeatId(null);
     setActivityView(focusedAgentView ?? "screen");
-  }, [focusedAgentId, focusedAgentView, focusedAgentNonce, agentTiles]);
+  }, [
+    focusedAgentId,
+    focusedAgentView,
+    focusedAgentNonce,
+    selectableAgentTiles,
+  ]);
 
   // Transcript rows and workbench blocks share the tool-call event id. A
   // click can therefore land on the exact replay frame instead of merely
@@ -331,11 +365,6 @@ export function useWorkbenchSelection({
         : null,
     );
   }, [rosterSeats]);
-  const rosterBlocks = useMemo(
-    () => screenBlocksForAgent(blocks, selectedRosterSeat?.id),
-    [blocks, selectedRosterSeat?.id],
-  );
-  const activeScreenBlocks = selectedRosterSeat ? rosterBlocks : screenBlocks;
   const openRosterProcess = useCallback(
     (seatId: string) => {
       setSelectedEffectKey(null);
@@ -348,6 +377,39 @@ export function useWorkbenchSelection({
     [onSelectTab],
   );
 
+  // Listen to agent workbench focus events from child components
+  useEffect(() => {
+    const handleFocus = (event: Event) => {
+      const { agentId, tab, view } = (
+        event as CustomEvent<AgentWorkbenchFocusDetail>
+      ).detail;
+
+      if (!agentId) return;
+
+      // Main-chat cards often carry the stable codename/role while the
+      // workbench tile carries a runtime id. Resolve all supported aliases.
+      const target = findAgentTileByFocusId(agentId, selectableAgentTiles);
+      if (!target) return;
+
+      // Switch to the agent's view
+      setSelectedEffectKey(null);
+      setSelectedAgentId(target.id);
+      setSelectedRosterSeatId(null);
+      setActivityView(view ?? "screen");
+      setManualBlockSelection(false);
+
+      // Switch to the specified tab if provided
+      if (tab) {
+        onSelectTab?.(tab);
+      }
+    };
+
+    window.addEventListener(AGENT_WORKBENCH_FOCUS_EVENT, handleFocus);
+    return () => {
+      window.removeEventListener(AGENT_WORKBENCH_FOCUS_EVENT, handleFocus);
+    };
+  }, [onSelectTab, selectableAgentTiles]);
+
   return {
     selectedBlockId,
     setSelectedBlockId,
@@ -358,18 +420,14 @@ export function useWorkbenchSelection({
     activityView,
     setActivityView,
     selectedBlock,
-    locatableTranscriptEventId,
     selectedAgent,
     screenBlocks,
     mainBlocks,
     mainPhases,
     screenFrame,
-    screenProgress,
     visibleRosterSeats,
     leaderRosterSeat,
     selectedRosterSeat,
-    rosterBlocks,
-    activeScreenBlocks,
     openMainProcess,
     openSubagentProcess,
     openRosterProcess,

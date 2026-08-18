@@ -213,6 +213,38 @@ function commandItemToLiveEvent(
   };
 }
 
+function requestedAgentIdFromPrompt(value: unknown): string | undefined {
+  const prompt = stringValue(value);
+  if (!prompt) return undefined;
+  return stringValue(prompt.match(/^#\s*Role:\s*([^\s]+)\s*$/im)?.[1]);
+}
+
+/** Stable public lane id for one child.
+ *
+ * The backend can resolve many custom ids to one builtin role (for example
+ * reader_readme + reader_pyproject -> explorer). Prefer the requested id;
+ * older histories did not persist it, so recover it from the wrapped prompt
+ * or fall back to the unique codename when agent_id is merely the shared role.
+ */
+function canonicalSubagentId(
+  args: Record<string, unknown>,
+  options: {
+    role?: string;
+    codename?: string;
+    prompt?: unknown;
+  } = {},
+): string | undefined {
+  const requested =
+    stringValue(args.requested_agent_id) ??
+    stringValue(args.requestedAgentId) ??
+    requestedAgentIdFromPrompt(options.prompt);
+  if (requested) return requested;
+
+  const raw = stringValue(args.agent_id) ?? stringValue(args.agentId);
+  if (raw && raw !== options.role) return raw;
+  return options.codename ?? raw ?? options.role;
+}
+
 function mcpItemToLiveEvent(
   item: McpToolCallItem,
   turn: Turn,
@@ -240,8 +272,11 @@ function mcpItemToLiveEvent(
       typeof args.role_description === "string"
         ? args.role_description
         : undefined;
-    const agentId =
-      typeof args.agent_id === "string" ? args.agent_id : undefined;
+    const agentId = canonicalSubagentId(args, {
+      role,
+      codename,
+      prompt: args.prompt_preview,
+    });
     const parentToolUseId =
       typeof args.parent_tool_use_id === "string"
         ? args.parent_tool_use_id
@@ -273,8 +308,7 @@ function mcpItemToLiveEvent(
     const avatar =
       typeof result.avatar === "string" ? result.avatar : undefined;
     const role = typeof result.role === "string" ? result.role : undefined;
-    const agentId =
-      typeof result.agent_id === "string" ? result.agent_id : undefined;
+    const agentId = canonicalSubagentId(result, { role, codename });
     const parentToolUseId =
       typeof result.parent_tool_use_id === "string"
         ? result.parent_tool_use_id
@@ -342,6 +376,80 @@ function mcpItemToLiveEvent(
       output: result,
     };
   }
+  if (item.tool === "__subagent_progress__") {
+    const args = (item.arguments ?? {}) as Record<string, unknown>;
+    const preview = item.progress?.preview;
+    return {
+      id: item.id,
+      name: "subagent_progress",
+      status,
+      startedAt,
+      iteration,
+      agentId: canonicalSubagentId(args, {
+        role:
+          typeof args.sub_agent_role === "string"
+            ? args.sub_agent_role
+            : undefined,
+        codename:
+          typeof args.subagent_codename === "string"
+            ? args.subagent_codename
+            : undefined,
+      }),
+      subAgentRole:
+        typeof args.sub_agent_role === "string"
+          ? args.sub_agent_role
+          : undefined,
+      subagentCodename:
+        typeof args.subagent_codename === "string"
+          ? args.subagent_codename
+          : undefined,
+      subagentAvatar:
+        typeof args.subagent_avatar === "string"
+          ? args.subagent_avatar
+          : undefined,
+      parentToolUseId:
+        typeof args.parent_tool_use_id === "string"
+          ? args.parent_tool_use_id
+          : undefined,
+      input: { ...args, progress: item.progress ?? null },
+      output: preview,
+      observation:
+        typeof preview === "string" && preview.trim()
+          ? preview.trim()
+          : undefined,
+      ...finishFields(status, startedAt, turn, item.durationMs),
+    };
+  }
+  const args = (item.arguments ?? {}) as Record<string, unknown>;
+  const isSubagentTool = item.server === "subagent";
+  const childRole =
+    typeof args.sub_agent_role === "string"
+      ? args.sub_agent_role
+      : typeof args.role === "string"
+        ? args.role
+        : undefined;
+  const childCodename =
+    typeof args.subagent_codename === "string"
+      ? args.subagent_codename
+      : typeof args.codename === "string"
+        ? args.codename
+        : undefined;
+  const childAgentId = canonicalSubagentId(args, {
+    role: childRole,
+    codename: childCodename,
+  });
+  const childAvatar =
+    typeof args.subagent_avatar === "string"
+      ? args.subagent_avatar
+      : typeof args.avatar === "string"
+        ? args.avatar
+        : undefined;
+  const childParentId =
+    typeof args.parent_tool_use_id === "string"
+      ? args.parent_tool_use_id
+      : typeof args.parentToolUseId === "string"
+        ? args.parentToolUseId
+        : undefined;
   const toolName =
     item.server === "team" && item.tool === "team_swarm"
       ? "team_swarm"
@@ -350,14 +458,19 @@ function mcpItemToLiveEvent(
         : "mcp";
   return {
     id: item.id,
-    name: toolName,
+    name: isSubagentTool && item.tool ? item.tool : toolName,
     status,
     startedAt,
     iteration,
+    agentId: childAgentId,
+    subAgentRole: childRole,
+    subagentCodename: childCodename,
+    subagentAvatar: childAvatar,
+    parentToolUseId: childParentId,
     input: {
       server: item.server,
       tool: item.tool,
-      arguments: item.arguments,
+      arguments: args,
       progress: item.progress ?? null,
     },
     output: item.error
@@ -662,6 +775,7 @@ interface CachedItemEvent {
   event: LiveToolEvent;
   turnCompletedAt: Turn["completedAt"] | undefined;
   iteration: number;
+  turnIndex: number;
 }
 interface CachedPhaseEvent {
   event: LiveToolEvent;
@@ -672,6 +786,7 @@ interface CachedPhaseEvent {
   workspaceFocus: WorkspaceFocus | null | undefined;
   workbenchSnapshot: WorkbenchSnapshotV2 | null | undefined;
   iteration: number;
+  turnIndex: number;
 }
 interface CachedApprovalEvent {
   event: LiveToolEvent;
@@ -720,21 +835,26 @@ function cachedItemToLiveEvent(
   item: Item,
   turn: Turn,
   iteration: number,
+  turnIndex: number,
 ): LiveToolEvent | null {
   const hit = cache.items.get(item);
   if (
     hit &&
     hit.turnCompletedAt === turn.completedAt &&
-    hit.iteration === iteration
+    hit.iteration === iteration &&
+    hit.turnIndex === turnIndex
   ) {
     return hit.event;
   }
   const event = itemToLiveEvent(item, turn, iteration);
   if (event) {
+    event.turnId = turn.id;
+    event.turnIndex = turnIndex;
     cache.items.set(item, {
       event: withReportLikeFlag(event),
       turnCompletedAt: turn.completedAt,
       iteration,
+      turnIndex,
     });
   }
   return event;
@@ -747,6 +867,7 @@ function cachedPhaseSnapshotsToLiveEvent(
   cache: LiveEventScopeCache,
   turn: Turn,
   iteration: number,
+  turnIndex: number,
 ): LiveToolEvent | null {
   const phases = turn.phases;
   if (!phases || phases.length === 0) return null;
@@ -759,12 +880,15 @@ function cachedPhaseSnapshotsToLiveEvent(
     hit.completedAt === turn.completedAt &&
     hit.workspaceFocus === turn.workspaceFocus &&
     hit.workbenchSnapshot === turn.workbenchSnapshot &&
-    hit.iteration === iteration
+    hit.iteration === iteration &&
+    hit.turnIndex === turnIndex
   ) {
     return hit.event;
   }
   const event = phaseSnapshotsToLiveEvent(turn, iteration);
   if (event) {
+    event.turnId = turn.id;
+    event.turnIndex = turnIndex;
     cache.phases.set(phases, {
       event: withReportLikeFlag(event),
       turnId: turn.id,
@@ -774,6 +898,7 @@ function cachedPhaseSnapshotsToLiveEvent(
       workspaceFocus: turn.workspaceFocus,
       workbenchSnapshot: turn.workbenchSnapshot,
       iteration,
+      turnIndex,
     });
   }
   return event;
@@ -791,6 +916,35 @@ function cachedApprovalToLiveEvent(
   return event;
 }
 
+/** Normalize aliases within one turn after all items have been mapped.
+ *
+ * Legacy lifecycle snapshots only persisted the requested custom id on the
+ * spawn prompt; finish/tool rows used the generated codename. The spawn mapper
+ * recovers the custom id, then this pass rewrites sibling rows to that same id
+ * so every consumer (dock, workbench filtering, process trace) sees one lane.
+ */
+function normalizeTurnSubagentAliases(
+  events: LiveToolEvent[],
+): LiveToolEvent[] {
+  const aliases = new Map<string, string>();
+  for (const event of events) {
+    if (
+      event.lifecycle === "spawned" &&
+      event.agentId &&
+      event.agentId !== "__main__" &&
+      event.subagentCodename &&
+      event.subagentCodename !== event.agentId
+    ) {
+      aliases.set(event.subagentCodename, event.agentId);
+    }
+  }
+  if (aliases.size === 0) return events;
+  return events.map((event) => {
+    const canonical = event.agentId ? aliases.get(event.agentId) : undefined;
+    return canonical ? { ...event, agentId: canonical } : event;
+  });
+}
+
 export function liveToolEventsFromConversation(
   conv: Conversation,
 ): LiveToolEvent[] {
@@ -799,20 +953,23 @@ export function liveToolEventsFromConversation(
     return cached.events;
   }
   const itemEvents = conv.turns.flatMap((turn, turnIndex) => {
-    const events = turn.items
+    const rawEvents = turn.items
       .map((item, itemIndex) =>
         cachedItemToLiveEvent(
           conversationEventCache,
           item,
           turn,
           turnIndex + itemIndex + 1,
+          turnIndex,
         ),
       )
       .filter((event): event is LiveToolEvent => event !== null);
+    const events = normalizeTurnSubagentAliases(rawEvents);
     const phaseEvent = cachedPhaseSnapshotsToLiveEvent(
       conversationEventCache,
       turn,
       turnIndex + turn.items.length + 1,
+      turnIndex,
     );
     return phaseEvent ? [...events, phaseEvent] : events;
   });
@@ -855,15 +1012,23 @@ export function liveToolEventsFromLastTurn(
   if (cached && cached.pendingApprovals === conv.pendingApprovals) {
     return cached.events;
   }
-  const itemEvents = last.items
+  const rawItemEvents = last.items
     .map((item, index) =>
-      cachedItemToLiveEvent(lastTurnEventCache, item, last, index + 1),
+      cachedItemToLiveEvent(
+        lastTurnEventCache,
+        item,
+        last,
+        index + 1,
+        conv.turns.length - 1,
+      ),
     )
     .filter((event): event is LiveToolEvent => event !== null);
+  const itemEvents = normalizeTurnSubagentAliases(rawItemEvents);
   const phaseEvent = cachedPhaseSnapshotsToLiveEvent(
     lastTurnEventCache,
     last,
     itemEvents.length + 1,
+    conv.turns.length - 1,
   );
   const eventsWithPhase = phaseEvent ? [...itemEvents, phaseEvent] : itemEvents;
   const events = [

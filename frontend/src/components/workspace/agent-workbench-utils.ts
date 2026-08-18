@@ -393,6 +393,23 @@ export function errorFromAgentEvent(event: LiveToolEvent): string | undefined {
   return event.name;
 }
 
+/** Internal auto-parallel bootstrap can fail before producing any usable
+ * child output, then deliberately fall back to the main model. Keep that
+ * diagnostic in the execution trace, but do not present it as a real Agent
+ * seat beside the successful explicit delegation that follows. */
+export function isInternalAutoParallelFailure(event: LiveToolEvent): boolean {
+  if (event.name !== "subagent" || event.status !== "error") return false;
+  const error = [
+    event.error,
+    stringFromKeys(event.output, ["error", "error_type", "message"]),
+    stringFromKeys(event.input, ["error", "error_type", "message"]),
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+    .toLowerCase();
+  return error.includes("empty_result_contract_violation");
+}
+
 export function compactDetail(text: string, max = 160) {
   const clean = repairMojibakeText(text).replace(/\s+/g, " ").trim();
   return clean.length <= max ? clean : `${clean.slice(0, max - 1)}…`;

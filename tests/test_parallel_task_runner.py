@@ -5,8 +5,6 @@ from __future__ import annotations
 import threading
 from types import SimpleNamespace
 
-import pytest
-
 from runtime.execution.misc.parallel_runner import (
     ParallelTask,
     ParallelTaskRunner,

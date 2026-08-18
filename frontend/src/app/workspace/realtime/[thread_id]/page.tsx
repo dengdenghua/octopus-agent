@@ -30,6 +30,7 @@ import {
   AGENT_WORKBENCH_FOCUS_EVENT,
   AGENT_WORKBENCH_OPEN_EVENT,
   type AgentWorkbenchEventView,
+  type AgentWorkbenchFocusAgentSnapshot,
   type AgentWorkbenchFocusDetail,
   type AgentWorkbenchFocusView,
   type AgentWorkbenchOpenDetail,
@@ -73,6 +74,7 @@ import { convertToSteps } from "@/components/workspace/messages/message-group";
 import { extractResultUrl } from "@/components/workspace/messages/message-output-summary";
 import { LoadOlderTurnsBanner } from "@/components/workspace/messages/load-older-turns-banner";
 import { ThreadProviders } from "@/components/workspace/messages/context";
+import { liveEventIsReportLike } from "@/core/threads/report-deliverable";
 import { ThreadTitle } from "@/components/workspace/thread-title";
 import { ShareMenu } from "@/components/workspace/share-menu";
 import { AgentAvatar } from "@/components/workspace/sidebar-footer";
@@ -330,13 +332,6 @@ type CompactableThread = {
 };
 
 const URL_PATTERN = /https?:\/\/[^\s，,]+/gi;
-
-// Tool names / payloads that imply the run must end with a report-style
-// deliverable before it can be considered settled. Word boundaries keep the
-// bare `research` from matching `researcher` inside a run_orchestration
-// payload (see core/threads/report-deliverable.ts for the same literal).
-const REPORT_DELIVERABLE_PATTERN =
-  /\b(?:report|docx|pptx|pdf|research|swarm)\b|deep[-_]research/i;
 
 function extractResearchUrls(text: string): { topic: string; urls: string[] } {
   const urls = Array.from(new Set(text.match(URL_PATTERN) ?? []));
@@ -1168,6 +1163,11 @@ function RealtimePageContent({
   // focusedWorkbenchAgentId (set together, cleared together).
   const [focusedWorkbenchAgentView, setFocusedWorkbenchAgentView] =
     useState<AgentWorkbenchFocusView | null>(null);
+  const [focusedWorkbenchAgentSnapshot, setFocusedWorkbenchAgentSnapshot] =
+    useState<AgentWorkbenchFocusAgentSnapshot | null>(null);
+  const [focusedWorkbenchTurnIndex, setFocusedWorkbenchTurnIndex] = useState<
+    number | null
+  >(null);
   // Bumped on every focus emission so the panel treats a repeat focus of the
   // same agent (e.g. a view switch) as a fresh intent.
   const [focusedWorkbenchAgentNonce, setFocusedWorkbenchAgentNonce] =
@@ -1370,6 +1370,8 @@ function RealtimePageContent({
   useEffect(() => {
     setFocusedWorkbenchAgentId(null);
     setFocusedWorkbenchAgentView(null);
+    setFocusedWorkbenchAgentSnapshot(null);
+    setFocusedWorkbenchTurnIndex(null);
     setFocusedWorkbenchEventId(null);
     setFocusedWorkbenchEventKind(null);
     setFocusedWorkbenchEventView(null);
@@ -2615,6 +2617,12 @@ function RealtimePageContent({
     () => [...lastTurnToolEvents, ...restoredTodoEvents],
     [lastTurnToolEvents, restoredTodoEvents],
   );
+  const workbenchDisplayEvents = useMemo(() => {
+    if (focusedWorkbenchTurnIndex === null) return agentDisplayEvents;
+    return allToolEvents.filter(
+      (event) => event.turnIndex === focusedWorkbenchTurnIndex,
+    );
+  }, [agentDisplayEvents, allToolEvents, focusedWorkbenchTurnIndex]);
   const latestWorkspaceFocusTab = useMemo(
     () => workspaceFocusTabFromEvents(agentDisplayEvents),
     [agentDisplayEvents],
@@ -2675,19 +2683,7 @@ function RealtimePageContent({
         // undefined means the event bypassed that layer (e.g. restored
         // todo events), so fall back to matching here.
         if (event.isReportLike !== undefined) return event.isReportLike;
-        // Structured name check first — serializing payloads is the expensive
-        // fallback (command outputs accumulate without bound while streaming).
-        if (REPORT_DELIVERABLE_PATTERN.test(event.name)) return true;
-        if (
-          event.input != null &&
-          REPORT_DELIVERABLE_PATTERN.test(JSON.stringify(event.input))
-        ) {
-          return true;
-        }
-        return (
-          event.output != null &&
-          REPORT_DELIVERABLE_PATTERN.test(JSON.stringify(event.output))
-        );
+        return liveEventIsReportLike(event);
       }),
     [agentDisplayEvents],
   );
@@ -2728,7 +2724,12 @@ function RealtimePageContent({
       !agentRunBlocked &&
       (hasFinalArtifact ||
         lastTurnMessages.some((message) =>
-          isSettledAssistantAnswer(message, { minTextLength: 80 }),
+          // Realtime history folds a completed tool call and the concise
+          // final answer into the same AI message. Tool presence therefore
+          // cannot mean "still running" once the message is explicitly an
+          // answer; commentary/streaming metadata is already rejected by the
+          // helper. A short two-line answer is still a valid terminal answer.
+          isSettledAssistantAnswer(message, { allowToolCalls: true }),
         )),
     [
       agentRunBlocked,
@@ -3025,6 +3026,10 @@ function RealtimePageContent({
       if (!agentId) return;
       setFocusedWorkbenchAgentId(agentId);
       setFocusedWorkbenchAgentView(detail?.view ?? null);
+      setFocusedWorkbenchAgentSnapshot(detail?.agent ?? null);
+      setFocusedWorkbenchTurnIndex(
+        typeof detail?.turnIndex === "number" ? detail.turnIndex : null,
+      );
       setFocusedWorkbenchAgentNonce((n) => n + 1);
       setFocusedWorkbenchEventId(null);
       setFocusedWorkbenchEventKind(null);
@@ -3051,6 +3056,8 @@ function RealtimePageContent({
       const detail = (event as CustomEvent<AgentWorkbenchOpenDetail>).detail;
       setFocusedWorkbenchAgentId(null);
       setFocusedWorkbenchAgentView(null);
+      setFocusedWorkbenchAgentSnapshot(null);
+      setFocusedWorkbenchTurnIndex(null);
       setFocusedWorkbenchEventId(detail?.eventId?.trim() || null);
       setFocusedWorkbenchEventKind(detail?.eventKind ?? null);
       setFocusedWorkbenchEventView(detail?.view ?? null);
@@ -3926,12 +3933,21 @@ function RealtimePageContent({
                 showAgentWorkbench ? (
                   <AgentWorkbenchPanel
                     activeTab={agentWorkbenchTab}
-                    events={agentDisplayEvents}
+                    events={workbenchDisplayEvents}
                     progressOutline={progressOutline}
-                    userInput={lastTurnUserInput}
+                    userInput={
+                      focusedWorkbenchTurnIndex === null
+                        ? lastTurnUserInput
+                        : {
+                            text: focusedWorkbenchAgentSnapshot?.task ?? "",
+                            uploadedFiles: [],
+                            attachments: [],
+                          }
+                    }
                     groundingSources={thread.values.latest_grounding ?? []}
                     focusedAgentId={focusedWorkbenchAgentId}
                     focusedAgentView={focusedWorkbenchAgentView}
+                    focusedAgentSnapshot={focusedWorkbenchAgentSnapshot}
                     focusedAgentNonce={focusedWorkbenchAgentNonce}
                     focusedEventId={focusedWorkbenchEventId}
                     focusedEventKind={focusedWorkbenchEventKind}
@@ -3939,10 +3955,26 @@ function RealtimePageContent({
                     focusedEventNonce={focusedWorkbenchEventNonce}
                     focusedProcessEvent={focusedWorkbenchProcessEvent}
                     focusedEffectKey={focusedWorkbenchEffectKey}
-                    hasAnswer={hasCompletedAgentOutput}
-                    isLoading={thread.isLoading}
-                    runSettled={agentRunSettled}
-                    runFailed={agentRunFailed}
+                    hasAnswer={
+                      focusedWorkbenchTurnIndex === null
+                        ? hasCompletedAgentOutput
+                        : true
+                    }
+                    isLoading={
+                      focusedWorkbenchTurnIndex === null
+                        ? thread.isLoading
+                        : false
+                    }
+                    runSettled={
+                      focusedWorkbenchTurnIndex === null
+                        ? agentRunSettled
+                        : true
+                    }
+                    runFailed={
+                      focusedWorkbenchTurnIndex === null
+                        ? agentRunFailed
+                        : focusedWorkbenchAgentSnapshot?.status === "error"
+                    }
                     runInterrupted={agentRunInterrupted}
                     runBlocked={agentRunBlocked}
                     paused={hasPausedOrPendingBackgroundTask}

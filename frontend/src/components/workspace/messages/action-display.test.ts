@@ -57,6 +57,28 @@ describe("getActionDisplay", () => {
     expect(d.aggregateKind).toBe("file_read");
   });
 
+  it("unwraps the nested input carried by child-agent MCP events", () => {
+    const d = getActionDisplay("read_file", {
+      server: "subagent",
+      tool: "read_file",
+      arguments: {
+        agent_id: "schema_reader",
+        input: { path: "output/final/agent-regression.json" },
+      },
+    });
+    expect(d.labelKey).toBe("read_file");
+    expect(d.object).toBe("agent-regression.json");
+  });
+
+  it("presents report as a product action instead of an internal tool name", () => {
+    const d = getActionDisplay("report", {
+      arguments: { input: { output: "done" } },
+    });
+    expect(d.labelKey).toBe("submit_result");
+    expect(d.verb).toBe("提交结果");
+    expect(d.iconName).toBe("check-circle");
+  });
+
   it("maps ls/list_cwd to view_directory label", () => {
     expect(getActionDisplay("ls", {}).labelKey).toBe("view_directory");
     expect(getActionDisplay("list_cwd", {}).labelKey).toBe("view_directory");

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Sheet,
   SheetContent,
@@ -16,7 +15,6 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/core/i18n/hooks";
 import type { Subtask } from "@/core/tasks/types";
-import { cn } from "@/lib/utils";
 
 interface SubagentDetailsPanelProps {
   task: Subtask | null;
@@ -109,19 +107,22 @@ export function SubagentDetailsPanel({
                   {isCompleted && (
                     <CheckCircleIcon className="size-4 text-success" />
                   )}
-                  {isFailed && <XCircleIcon className="size-4 text-destructive" />}
+                  {isFailed && (
+                    <XCircleIcon className="size-4 text-destructive" />
+                  )}
                   {isRunning && (
                     <Loader2Icon className="size-4 animate-spin text-primary" />
                   )}
-                  <span className="text-xs text-muted-foreground">
-                    Status
-                  </span>
+                  <span className="text-xs text-muted-foreground">Status</span>
                 </div>
                 <div className="mt-1 font-semibold">
                   {isCompleted && t.subagents.completed}
                   {isFailed && t.subagents.failed}
                   {isRunning && t.subagents.in_progress}
-                  {!isCompleted && !isFailed && !isRunning && t.subagents.pending}
+                  {!isCompleted &&
+                    !isFailed &&
+                    !isRunning &&
+                    t.subagents.pending}
                 </div>
               </div>
 
@@ -134,7 +135,9 @@ export function SubagentDetailsPanel({
                       {t.subagents.iterations}
                     </span>
                   </div>
-                  <div className="mt-1 font-semibold">{task.iterationCount}</div>
+                  <div className="mt-1 font-semibold">
+                    {task.iterationCount}
+                  </div>
                 </div>
               )}
 
@@ -172,7 +175,9 @@ export function SubagentDetailsPanel({
               {task.tokenUsed !== undefined && (
                 <div className="rounded-lg border border-border bg-muted/30 p-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Tokens</span>
+                    <span className="text-xs text-muted-foreground">
+                      Tokens
+                    </span>
                   </div>
                   <div className="mt-1 font-semibold">
                     {task.tokenUsed.toLocaleString()}
@@ -185,9 +190,7 @@ export function SubagentDetailsPanel({
           {/* 任务描述 */}
           {task.prompt && (
             <div>
-              <h3 className="mb-2 text-sm font-semibold">
-                Task Description
-              </h3>
+              <h3 className="mb-2 text-sm font-semibold">Task Description</h3>
               <div className="whitespace-pre-wrap rounded-lg border border-border bg-muted/20 p-4 text-sm">
                 {task.prompt}
               </div>

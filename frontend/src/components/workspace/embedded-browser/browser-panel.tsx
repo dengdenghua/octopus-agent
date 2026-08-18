@@ -91,17 +91,17 @@ export function BrowserPanel() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-background">
-      {/* Implementation note. */}
-      <div className="flex min-h-11 items-center gap-1 border-b border-border-subtle bg-background px-2 py-1.5">
+      {/* Simplified browser toolbar */}
+      <div className="flex min-h-10 items-center gap-1.5 border-b border-border-subtle bg-muted/30 px-2.5 py-1.5">
         <Button
           variant="ghost"
           size="icon"
           onClick={goBack}
           disabled={!canGoBack}
           aria-label={t.browser.back}
-          className="size-8"
+          className="size-7 hover:bg-muted/80"
         >
-          <ArrowLeftIcon className="size-4 text-muted-foreground" />
+          <ArrowLeftIcon className="size-3.5 text-muted-foreground" />
         </Button>
         <Button
           variant="ghost"
@@ -109,18 +109,18 @@ export function BrowserPanel() {
           onClick={goForward}
           disabled={!canGoForward}
           aria-label={t.browser.forward}
-          className="size-8"
+          className="size-7 hover:bg-muted/80"
         >
-          <ArrowRightIcon className="size-4 text-muted-foreground" />
+          <ArrowRightIcon className="size-3.5 text-muted-foreground" />
         </Button>
         <Button
           variant="ghost"
           size="icon"
           onClick={handleRefresh}
           aria-label={t.browser.reload}
-          className="size-8"
+          className="size-7 hover:bg-muted/80"
         >
-          <RefreshCwIcon className="size-4 text-muted-foreground" />
+          <RefreshCwIcon className="size-3.5 text-muted-foreground" />
         </Button>
         <Input
           type="text"
@@ -130,7 +130,7 @@ export function BrowserPanel() {
           onBlur={handleNavigate}
           placeholder={t.browser.urlPlaceholder}
           aria-label={t.browser.urlPlaceholder}
-          className="flex-1 rounded-md border-0 bg-muted/60 px-3 py-1 text-sm shadow-none focus-visible:bg-background focus-visible:ring-1 focus-visible:ring-primary"
+          className="flex-1 h-7 rounded-md border-0 bg-background/60 px-2.5 text-xs shadow-none focus-visible:bg-background focus-visible:ring-1 focus-visible:ring-border-default"
         />
       </div>
 

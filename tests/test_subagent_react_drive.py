@@ -613,6 +613,18 @@ class TestRestrictedDispatchGate:
             assert runner(call) == "mini-loop fallback answer"
         assert calls == []
 
+    def test_durable_report_session_is_refused_by_react_drive(self, monkeypatch) -> None:
+        calls = self._spy_react_drive(monkeypatch)
+        runner, call = self._make_runner_and_call(
+            {
+                "react_loop_subagent": True,
+                "react_stack": _FakeStack(_ScriptedRouter(["x"])),
+                "subagent_session_id": "session-with-report-lane",
+            }
+        )
+        assert runner(call) == "mini-loop fallback answer"
+        assert calls == []
+
     def test_unrestricted_dispatch_still_uses_react_drive(self, monkeypatch) -> None:
         calls = self._spy_react_drive(monkeypatch)
         runner, call = self._make_runner_and_call(

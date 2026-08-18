@@ -134,31 +134,36 @@ def _publish_bus_lifecycle(kind: str, event: dict, session: Any) -> None:
                 "sub_started",
                 {
                     "role": role,
+                    "agent_id": event.get("requested_agent_id") or event.get("agent_id") or "",
+                    "resolved_agent_id": event.get("agent_id") or "",
                     "codename": event.get("codename") or "",
                     "avatar": event.get("avatar") or "",
                     "prompt_preview": (event.get("prompt_preview") or "")[:200],
                     "started_at": event.get("started_at"),
+                    "parent_tool_use_id": event.get("parent_tool_use_id") or "",
                 },
                 thread_id=thread_id,
                 root_thread_id=root,
             )
         else:
             ok = bool(event.get("ok"))
-            bus_type = (
-                "sub_concluded"
-                if ok and not event.get("error")
-                else "sub_failed"
-            )
+            bus_type = "sub_concluded" if ok and not event.get("error") else "sub_failed"
             publish_subagent_event(
                 bus_type,
                 {
                     "role": role,
+                    "agent_id": event.get("requested_agent_id") or event.get("agent_id") or "",
+                    "resolved_agent_id": event.get("agent_id") or "",
+                    "codename": event.get("codename") or "",
+                    "avatar": event.get("avatar") or "",
                     "ok": ok,
                     "error": event.get("error") or "",
                     "duration_s": event.get("duration_s"),
                     "iteration_count": event.get("iteration_count"),
                     "files_touched": event.get("files_touched") or 0,
                     "status": event.get("status") or "",
+                    "output": event.get("output") or "",
+                    "parent_tool_use_id": event.get("parent_tool_use_id") or "",
                 },
                 thread_id=thread_id,
                 root_thread_id=root,
@@ -252,6 +257,25 @@ def call_subagent(
             "error": "prompt is required",
         }
 
+    # Public lane identity is the id requested by the delegating call. It is
+    # intentionally distinct from ``agent_id`` below, which can be a generic
+    # builtin selected by fallback routing. Without this distinction two
+    # custom lanes that both resolve to ``explorer`` overwrite each other in
+    # realtime and replay observability.
+    _requested_agent_id = (
+        str((context or {}).get("requested_agent_id") or agent_id).strip() or agent_id
+    )
+    _session_meta = getattr(session, "metadata", None) if session is not None else None
+    _parent_tool_use_id = str(
+        (context or {}).get("parent_tool_use_id")
+        or (
+            (_session_meta or {}).get("_active_parent_tool_use_id")
+            if isinstance(_session_meta, dict)
+            else ""
+        )
+        or ""
+    ).strip()
+
     required = tuple(requires_capabilities or ())
     if required and _REGISTRY is not None and _REGISTRY.has(agent_id):
         definition = _REGISTRY.get(agent_id)
@@ -280,6 +304,12 @@ def call_subagent(
             session = current_session()
         except (ImportError, AttributeError):
             session = None
+    if not _parent_tool_use_id and session is not None:
+        _resolved_session_meta = getattr(session, "metadata", None)
+        if isinstance(_resolved_session_meta, dict):
+            _parent_tool_use_id = str(
+                _resolved_session_meta.get("_active_parent_tool_use_id") or ""
+            ).strip()
 
     # Capture the parent turn's react stack (ambient ContextVar set around
     # the main conversation's ``stream_react_loop``) so the runner can drive
@@ -416,9 +446,7 @@ def call_subagent(
         # created by another thread must read as unknown (cross-tenant IDOR
         # guard — mirrors the owner-binding on control sessions/terminals).
         loaded = (
-            _session_store.get(
-                continue_session_id, scope_thread_id=_memory_thread_id
-            )
+            _session_store.get(continue_session_id, scope_thread_id=_memory_thread_id)
             if _session_store
             else None
         )
@@ -471,6 +499,8 @@ def call_subagent(
     _spawn_event = {
         "type": "subagent_spawned",
         "agent_id": agent_id,
+        "requested_agent_id": _requested_agent_id,
+        "parent_tool_use_id": _parent_tool_use_id or None,
         "role": _role_label,
         "codename": _codename,
         "avatar": _avatar,
@@ -494,9 +524,7 @@ def call_subagent(
             thread_id=_memory_thread_id,
             agent_id=agent_id,
             subagent_type=_role_label or agent_id,
-            prompt_preview=(
-                prompt[:500] if isinstance(prompt, str) else ""
-            ),
+            prompt_preview=(prompt[:500] if isinstance(prompt, str) else ""),
             session_id=str(_active_session.get("session_id") or ""),
         )
     except Exception:  # noqa: BLE001 — hooks are best-effort, never break the call
@@ -519,6 +547,8 @@ def call_subagent(
             _attach_trace_fields(event, _trace_context)
             if event.get("type") in {"sub_tool_start", "sub_tool_end"}:
                 event.setdefault("agent_id", agent_id)
+                event.setdefault("requested_agent_id", _requested_agent_id)
+                event.setdefault("parent_tool_use_id", _parent_tool_use_id or None)
                 event.setdefault("subagent_codename", _codename)
                 event.setdefault("subagent_avatar", _avatar)
         except Exception:  # noqa: BLE001 — annotation is best-effort
@@ -595,6 +625,31 @@ def call_subagent(
         _extra_meta: dict[str, Any] = {}
         if _locked_root:
             _extra_meta["_locked_write_root"] = _locked_root
+        elif session is not None:
+            # A realtime child may flip to its own thread id.  The default
+            # chat/artifact scope is derived from ``Session.thread_id``, so a
+            # flipped child would otherwise resolve relative file tools into
+            # a fresh, empty child workspace instead of the parent's visible
+            # ``output/final`` folder.  Pin the parent's artifact root before
+            # changing identity; project sessions still use their inherited
+            # ``workspace_path`` as the primary read root.
+            try:
+                from runtime.platform.process.scope import thread_artifact_root
+
+                _parent_meta = getattr(session, "metadata", None) or {}
+                _parent_artifact_root = _parent_meta.get("_artifact_output_root")
+                if not (isinstance(_parent_artifact_root, str) and _parent_artifact_root.strip()):
+                    _parent_thread_id = str(
+                        getattr(session, "thread_id", None)
+                        or getattr(session, "conversation_id", None)
+                        or ""
+                    ).strip()
+                    if _parent_thread_id:
+                        _parent_artifact_root = str(thread_artifact_root(_parent_thread_id))
+                if isinstance(_parent_artifact_root, str) and _parent_artifact_root.strip():
+                    _extra_meta["_artifact_output_root"] = _parent_artifact_root.strip()
+            except (ImportError, OSError, ValueError):
+                pass
         # Stamp the per-child codename onto the run Session so the typed
         # event-bus helpers (which key lanes by codename) can attribute tool /
         # conclude / fail events to the right sub-agent thread — even when
@@ -602,6 +657,12 @@ def call_subagent(
         # identity, read from ``session.metadata`` inside the child run.
         if _codename:
             _extra_meta["subagent_codename"] = _codename
+        _extra_meta["subagent_agent_id"] = _requested_agent_id
+        _extra_meta["subagent_resolved_agent_id"] = agent_id
+        if _parent_tool_use_id:
+            _extra_meta["_active_parent_tool_use_id"] = _parent_tool_use_id
+        _extra_meta["subagent_role"] = _role_label
+        _extra_meta["subagent_avatar"] = _avatar
         from runtime.platform.process.session import Session
 
         if session is not None and isinstance(session, Session):
@@ -641,8 +702,21 @@ def call_subagent(
                 # so the in-process runner can expose the child's ``report``
                 # tool. Only present when a durable session exists; one-shot
                 # children and remote providers never see it.
+                #
+                # A react-driven child is the exception: the main react loop
+                # cannot bind a per-session report handler (react_drive
+                # refuses such dispatches), so stamping the id here would
+                # silently force every react child onto the mini-loop and
+                # starve the react-drive end-state model. React children run
+                # on the main loop without the in-run report tool; explicit
+                # report lanes (caller-supplied ``subagent_session_id`` /
+                # ``subagent_report_delivery``) still take the mini-loop.
                 dispatch_context = context
-                if _active_session["session_id"]:
+                _react_driven = bool(
+                    (context or {}).get("react_loop_subagent")
+                    and (context or {}).get("react_stack") is not None
+                )
+                if _active_session["session_id"] and not _react_driven:
                     dispatch_context = {
                         **(context or {}),
                         "subagent_session_id": _active_session["session_id"],
@@ -822,6 +896,7 @@ def call_subagent(
         result.setdefault("codename", _codename)
         result.setdefault("avatar", _avatar)
         result.setdefault("role", _role_label)
+        result.setdefault("requested_agent_id", _requested_agent_id)
         # Lifecycle: finish. Mirrors the spawn event so the frontend
         # can mark the tile complete + show duration / iteration /
         # files-touched stats. ``ok`` is the canonical success flag;
@@ -938,6 +1013,8 @@ def call_subagent(
         _finish_event = {
             "type": "subagent_finished",
             "agent_id": agent_id,
+            "requested_agent_id": _requested_agent_id,
+            "parent_tool_use_id": _parent_tool_use_id or None,
             "role": _role_label,
             "codename": _codename,
             "avatar": _avatar,
@@ -967,9 +1044,7 @@ def call_subagent(
                 ok=bool(ok),
                 duration_ms=round(float(elapsed) * 1000),
                 output_preview=(
-                    result.get("output", "")[:500]
-                    if isinstance(result.get("output"), str)
-                    else ""
+                    result.get("output", "")[:500] if isinstance(result.get("output"), str) else ""
                 ),
             )
         except Exception:  # noqa: BLE001 — hooks are best-effort, never break the call
@@ -1084,6 +1159,8 @@ def call_subagent(
                     _cancel_event = {
                         "type": "subagent_finished",
                         "agent_id": agent_id,
+                        "requested_agent_id": _requested_agent_id,
+                        "parent_tool_use_id": _parent_tool_use_id or None,
                         "role": _role_label,
                         "codename": _codename,
                         "avatar": _avatar,
@@ -1099,6 +1176,7 @@ def call_subagent(
                     _attach_trace_fields(_cancel_event, _trace_context)
                     _safe_emit(event_emitter, _cancel_event)
                     _safe_journal_emit(_cancel_event)
+                    _publish_bus_lifecycle("subagent_finished", _cancel_event, session)
                     return _attach_trace_fields(
                         {
                             "status": "cancelled",
@@ -1150,6 +1228,8 @@ def call_subagent(
             _timeout_event = {
                 "type": "subagent_finished",
                 "agent_id": agent_id,
+                "requested_agent_id": _requested_agent_id,
+                "parent_tool_use_id": _parent_tool_use_id or None,
                 "role": _role_label,
                 "codename": _codename,
                 "avatar": _avatar,
@@ -1163,6 +1243,7 @@ def call_subagent(
             _attach_trace_fields(_timeout_event, _trace_context)
             _safe_emit(event_emitter, _timeout_event)
             _safe_journal_emit(_timeout_event)
+            _publish_bus_lifecycle("subagent_finished", _timeout_event, session)
             return _attach_trace_fields(
                 {
                     "status": "timeout",

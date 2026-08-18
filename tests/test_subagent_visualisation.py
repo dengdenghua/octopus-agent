@@ -80,6 +80,38 @@ def test_spawn_event_emitted_before_runner_runs() -> None:
         _restore_runner(orig)
 
 
+def test_spawn_and_finish_preserve_requested_lane_and_parent_call() -> None:
+    received: list[dict[str, Any]] = []
+
+    def _runner(prompt, *, subagent_name, context):
+        return "done"
+
+    orig = bridge._RUNNER
+    bridge._RUNNER = _runner
+    try:
+        bridge.call_subagent(
+            agent_id="explorer",
+            prompt="inspect README",
+            context={
+                "requested_agent_id": "reader_readme",
+                "parent_tool_use_id": "parallel-call-1",
+            },
+            event_emitter=received.append,
+        )
+    finally:
+        _restore_runner(orig)
+
+    lifecycle = [
+        event
+        for event in received
+        if event.get("type") in {"subagent_spawned", "subagent_finished"}
+    ]
+    assert len(lifecycle) == 2
+    assert {event["agent_id"] for event in lifecycle} == {"explorer"}
+    assert {event["requested_agent_id"] for event in lifecycle} == {"reader_readme"}
+    assert {event["parent_tool_use_id"] for event in lifecycle} == {"parallel-call-1"}
+
+
 def test_finish_event_emitted_with_stats() -> None:
     received: list[dict[str, Any]] = []
 

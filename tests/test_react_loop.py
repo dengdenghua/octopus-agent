@@ -4572,6 +4572,52 @@ def test_execute_action_via_beak_success() -> None:
     assert step is not None  # Implementation note.
 
 
+def test_execute_action_binds_parent_tool_use_id_for_nested_handlers() -> None:
+    captured: dict[str, str | None] = {}
+    registry = SkillRegistry()
+
+    def nested_handler(**_kwargs):
+        from runtime.platform.process.session import (
+            current_parent_tool_use_id,
+            current_session,
+        )
+
+        captured["context"] = current_parent_tool_use_id()
+        session = current_session()
+        captured["metadata"] = (
+            (session.metadata or {}).get("_active_parent_tool_use_id")
+            if session is not None
+            else None
+        )
+        return "ok"
+
+    registry.register(
+        Skill(
+            name="nested_handler",
+            description="Capture parent call scope.",
+            trusted_source="skill://public/nested_handler",
+            handler=nested_handler,
+        ),
+        verify_tests=False,
+    )
+    stack = _FakeStack(None)
+    stack.executor = ToolExecutor(registry, TrustEngine())
+    session = Session(thread_id="parent-thread", metadata={})
+
+    with session_scope(session):
+        observation, step = _execute_action_via_beak(
+            stack,
+            "nested_handler({})",
+            react_task_id=TaskId(uuid4()),
+            react_step_counter=7,
+        )
+
+    assert step is not None
+    assert observation is not None
+    assert captured == {"context": "react:7", "metadata": "react:7"}
+    assert "_active_parent_tool_use_id" not in session.metadata
+
+
 def test_identical_failed_tool_call_is_not_executed_a_third_time() -> None:
     router = _ScriptedRouter(
         [

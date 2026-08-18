@@ -17,6 +17,7 @@ Contains:
 from __future__ import annotations
 
 import contextlib
+import json
 from typing import Any
 
 from runtime.protocol.text_limits import MAX_SUBAGENT_ANSWER_CHARS
@@ -41,7 +42,6 @@ def _safe_ctx_emit(emitter: Any, event: dict) -> None:
         return
     with contextlib.suppress(Exception):
         emitter(event)
-
 
 
 def _publish_to_bus(type: str, payload: dict) -> None:
@@ -142,6 +142,9 @@ def _emit_sub_text_delta(
             SubTextDeltaEvent(
                 task_id=meta.get("task_id"),
                 session_id=session_id,
+                agent_id=str(meta.get("subagent_agent_id") or role_id),
+                codename=str(meta.get("subagent_codename") or ""),
+                avatar=str(meta.get("subagent_avatar") or ""),
                 role_id=role_id,
                 round=int(round),
                 delta=delta,
@@ -333,12 +336,14 @@ def _emit_sub_tool_event(
         "sub_agent_role": role_id,
     }
     if kind == "sub_tool_end":
-        # Compute status for the bus mirror before we mutate ``payload``.
-        _bus_status = "error" if is_error else "success"
-        _bus_duration = int(duration_ms or 0) if duration_ms is not None else None
-    else:
-        _bus_status = ""
-        _bus_duration = None
+        # Truncate output preview · same 200-char cap as parent
+        # loop's tool_end event so the SSE frame stays small.
+        if output is not None:
+            payload["output"] = str(output)[:200]
+        payload["is_error"] = bool(is_error)
+        payload["status"] = "error" if is_error else "success"
+        if duration_ms is not None:
+            payload["duration_ms"] = int(duration_ms)
     _publish_to_bus(
         kind,
         {
@@ -348,19 +353,13 @@ def _emit_sub_tool_event(
             "tool": payload.get("name") or "",
             "tool_call_id": payload.get("id") or "",
             "parent_tool_use_id": payload.get("parent_tool_use_id") or "",
-            "status": _bus_status,
-            "duration_ms": _bus_duration,
+            "input": payload.get("input") if kind == "sub_tool_start" else None,
+            "status": payload.get("status") or "",
+            "duration_ms": payload.get("duration_ms"),
+            "output_preview": payload.get("output"),
+            "error": payload.get("output") if payload.get("is_error") else "",
         },
     )
-    if kind == "sub_tool_end":
-        # Truncate output preview · same 200-char cap as parent
-        # loop's tool_end event so the SSE frame stays small.
-        if output is not None:
-            payload["output"] = str(output)[:200]
-        payload["is_error"] = bool(is_error)
-        payload["status"] = "error" if is_error else "success"
-        if duration_ms is not None:
-            payload["duration_ms"] = int(duration_ms)
     if q is not None:
         with contextlib.suppress(Exception):
             q.put_nowait((kind, payload, None))
@@ -390,18 +389,32 @@ def _emit_sub_tool_event(
 
         task_id_obj = meta.get("task_id")
         if kind == "sub_tool_start":
+            try:
+                args_preview = json.dumps(
+                    payload.get("input") or {},
+                    ensure_ascii=False,
+                    default=str,
+                )[:1000]
+            except (TypeError, ValueError):
+                args_preview = str(payload.get("input") or "")[:1000]
             ev = SubToolStartEvent(
                 task_id=task_id_obj,
+                agent_id=str(meta.get("subagent_agent_id") or role_id),
+                codename=str(meta.get("subagent_codename") or ""),
+                avatar=str(meta.get("subagent_avatar") or ""),
                 role_id=role_id,
                 tool_call_id=str(getattr(tool_call, "id", "") or ""),
                 tool_name=str(getattr(tool_call, "name", "") or ""),
                 iteration=int(iteration),
-                args_preview=str(payload.get("input") or "")[:200],
+                args_preview=args_preview,
                 parent_tool_use_id=parent_id or None,
             )
         else:
             ev = SubToolEndEvent(
                 task_id=task_id_obj,
+                agent_id=str(meta.get("subagent_agent_id") or role_id),
+                codename=str(meta.get("subagent_codename") or ""),
+                avatar=str(meta.get("subagent_avatar") or ""),
                 role_id=role_id,
                 tool_call_id=str(getattr(tool_call, "id", "") or ""),
                 tool_name=str(getattr(tool_call, "name", "") or ""),
@@ -420,6 +433,8 @@ def _emit_sub_tool_event(
 def _emit_subagent_lifecycle_event(
     kind: str,
     payload: dict[str, Any] | None,
+    *,
+    publish_bus: bool = True,
 ) -> None:
     """Best-effort push of a sub-agent lifecycle event to the genome
     journal so the realtime gateway / observability panel can render
@@ -474,40 +489,42 @@ def _emit_subagent_lifecycle_event(
     if journal is None:
         return
 
-    # Mirror onto the typed event bus (Workbench subscription stream).
-    _bus_role = str(payload.get("role") or payload.get("agent_id") or "")
-    if kind == "subagent_spawned":
-        _publish_to_bus(
-            "sub_started",
-            {
-                "role": _bus_role,
-                "codename": payload.get("codename") or "",
-                "avatar": payload.get("avatar") or "",
-                "prompt_preview": (payload.get("prompt_preview") or "")[:200],
-                "started_at": payload.get("started_at"),
-            },
-        )
-    elif kind == "subagent_finished":
-        _bus_type = (
-            "sub_concluded"
-            if payload.get("ok") and not payload.get("error")
-            else "sub_failed"
-        )
-        _publish_to_bus(
-            _bus_type,
-            {
-                "role": _bus_role,
-                "codename": _current_subagent_codename() or payload.get("codename") or "",
-                "ok": bool(payload.get("ok")),
-                "error": payload.get("error") or "",
-                "duration_s": payload.get("duration_s"),
-                "iteration_count": payload.get("iteration_count"),
-                "files_touched": payload.get("files_touched") or 0,
-                "status": payload.get("status") or "",
-            },
-        )
+    if publish_bus:
+        # Mirror onto the typed event bus for direct callers of this helper.
+        # The higher-level bridge opts out because it publishes with its
+        # explicit caller session (and therefore the correct root thread).
+        _bus_role = str(payload.get("role") or payload.get("agent_id") or "")
+        if kind == "subagent_spawned":
+            _publish_to_bus(
+                "sub_started",
+                {
+                    "role": _bus_role,
+                    "codename": payload.get("codename") or "",
+                    "avatar": payload.get("avatar") or "",
+                    "prompt_preview": (payload.get("prompt_preview") or "")[:200],
+                    "started_at": payload.get("started_at"),
+                },
+            )
+        elif kind == "subagent_finished":
+            _bus_type = (
+                "sub_concluded" if payload.get("ok") and not payload.get("error") else "sub_failed"
+            )
+            _publish_to_bus(
+                _bus_type,
+                {
+                    "role": _bus_role,
+                    "codename": (_current_subagent_codename() or payload.get("codename") or ""),
+                    "ok": bool(payload.get("ok")),
+                    "error": payload.get("error") or "",
+                    "duration_s": payload.get("duration_s"),
+                    "iteration_count": payload.get("iteration_count"),
+                    "files_touched": payload.get("files_touched") or 0,
+                    "status": payload.get("status") or "",
+                    "output": payload.get("output") or "",
+                },
+            )
     role_id = str(payload.get("role") or payload.get("agent_id") or "")
-    parent_id = meta.get("_active_parent_tool_use_id") or None
+    parent_id = payload.get("parent_tool_use_id") or meta.get("_active_parent_tool_use_id") or None
     task_id_obj = meta.get("task_id")
     try:
         args_preview = _json.dumps(
@@ -516,6 +533,7 @@ def _emit_subagent_lifecycle_event(
                 "avatar": payload.get("avatar"),
                 "role": payload.get("role"),
                 "agent_id": payload.get("agent_id"),
+                "requested_agent_id": payload.get("requested_agent_id"),
                 "role_display_name": payload.get("role_display_name"),
                 "role_description": payload.get("role_description"),
                 "prompt_preview": payload.get("prompt_preview"),
@@ -537,6 +555,9 @@ def _emit_subagent_lifecycle_event(
         if kind == "subagent_spawned":
             ev = SubToolStartEvent(
                 task_id=task_id_obj,
+                agent_id=str(payload.get("requested_agent_id") or payload.get("agent_id") or ""),
+                codename=str(payload.get("codename") or ""),
+                avatar=str(payload.get("avatar") or ""),
                 role_id=role_id,
                 tool_call_id=str(payload.get("agent_id") or ""),
                 tool_name=ItemMarker.SUBAGENT_SPAWNED.value,
@@ -552,6 +573,7 @@ def _emit_subagent_lifecycle_event(
                         "avatar": payload.get("avatar"),
                         "role": payload.get("role"),
                         "agent_id": payload.get("agent_id"),
+                        "requested_agent_id": payload.get("requested_agent_id"),
                         "ok": payload.get("ok"),
                         "duration_s": payload.get("duration_s"),
                         "iteration_count": payload.get("iteration_count"),
@@ -573,6 +595,9 @@ def _emit_subagent_lifecycle_event(
                 duration_ms = 0
             ev = SubToolEndEvent(
                 task_id=task_id_obj,
+                agent_id=str(payload.get("requested_agent_id") or payload.get("agent_id") or ""),
+                codename=str(payload.get("codename") or ""),
+                avatar=str(payload.get("avatar") or ""),
                 role_id=role_id,
                 tool_call_id=str(payload.get("agent_id") or ""),
                 tool_name=ItemMarker.SUBAGENT_FINISHED.value,

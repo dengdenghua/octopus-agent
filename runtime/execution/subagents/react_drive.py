@@ -51,6 +51,19 @@ def dispatch_is_restricted(
       (``tool_allowlist_read_only`` → ``select_tool_specs(read_only=...)``),
     * the write-confinement block for isolated spawns
       (``_locked_write_root`` → ``_ephemeral_write_confine_block``).
+    * the durable child→parent ``report`` tool. It is injected dynamically by
+      the mini-loop and a successful report terminates that child run; the
+      shared ReAct registry cannot safely bind a per-session handler.
+
+    A react-driven judge would therefore receive the full tool surface and
+    an isolated spawn would write into the main tree while its envelope
+    still claimed ``isolated: true``. Restricted dispatches fall back to
+    the mini-loop where both gates are enforced. Fail closed: any marker
+    present blocks the react-drive fast path.
+
+    * the durable child→parent ``report`` tool. It is injected dynamically by
+      the mini-loop and a successful report terminates that child run; the
+      shared ReAct registry cannot safely bind a per-session handler.
 
     A react-driven judge would therefore receive the full tool surface and
     an isolated spawn would write into the main tree while its envelope
@@ -60,8 +73,10 @@ def dispatch_is_restricted(
     """
     ctx = context or {}
     meta = session_metadata or {}
-    return bool(ctx.get("tool_allowlist_read_only")) or bool(
-        meta.get("_locked_write_root")
+    return (
+        bool(ctx.get("tool_allowlist_read_only"))
+        or bool(meta.get("_locked_write_root"))
+        or bool(ctx.get("subagent_session_id"))
     )
 
 
@@ -308,9 +323,7 @@ def run_subagent_react_loop(
         return None
 
     if result is None or not getattr(result, "success", True):
-        reason = failure or (
-            getattr(result, "terminated_reason", None) or "incomplete"
-        )
+        reason = failure or (getattr(result, "terminated_reason", None) or "incomplete")
         _publish_to_bus(
             "sub_failed",
             {

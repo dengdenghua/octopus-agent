@@ -158,6 +158,10 @@ export interface LiveToolEvent {
   id: string;
   name: string;
   status: "running" | "done" | "error" | "waiting_approval";
+  /** Durable owning turn coordinates. `iteration` is an event-local
+   * execution/ordering coordinate and must not be used to infer chat turns. */
+  turnId?: string;
+  turnIndex?: number;
   /** Why this failed, when the source event carried a reason. Kept separate
    * from `output` so a renderer can show the cause without stringifying and
    * truncating a whole payload. Only meaningful with status "error". */
@@ -257,12 +261,14 @@ export function LiveToolTimeline({
   groupByAgent,
   runningOnly = false,
   showAll = false,
+  compactDelegations = false,
 }: {
   events: LiveToolEvent[];
   className?: string;
   groupByAgent?: boolean;
   runningOnly?: boolean;
   showAll?: boolean;
+  compactDelegations?: boolean;
 }) {
   const { t } = useI18n();
   const toolLabels = useMemo(() => getToolLabels(t), [t]);
@@ -274,6 +280,10 @@ export function LiveToolTimeline({
           ? getRunningEvents(events)
           : getVisibleEvents(events),
     [events, runningOnly, showAll],
+  );
+  const displayEvents = useMemo(
+    () => (compactDelegations ? compactDelegationEvents(visibleEvents) : visibleEvents.map((event) => ({ kind: "event" as const, event }))),
+    [compactDelegations, visibleEvents],
   );
 
   if (visibleEvents.length === 0) {
@@ -297,15 +307,95 @@ export function LiveToolTimeline({
   return (
     <div className={cn("space-y-1 py-1.5", className)}>
       <SwarmRunOverview events={events} />
-      {visibleEvents.map((event) => (
-        <ParentWithChildren
-          key={event.id}
-          event={event}
-          allEvents={events}
-          toolLabels={toolLabels}
-          t={t}
-        />
+      {displayEvents.map((item) => (
+        item.kind === "event" ? (
+          <ParentWithChildren
+            key={item.event.id}
+            event={item.event}
+            allEvents={events}
+            toolLabels={toolLabels}
+            t={t}
+          />
+        ) : (
+          <DelegationSummaryRow
+            key={`delegation-summary:${item.target}`}
+            events={item.events}
+            target={item.target}
+            t={t}
+          />
+        )
       ))}
+    </div>
+  );
+}
+
+type TimelineDisplayItem =
+  | { kind: "event"; event: LiveToolEvent }
+  | { kind: "delegation"; events: LiveToolEvent[]; target: string };
+
+function compactDelegationEvents(
+  events: LiveToolEvent[],
+): TimelineDisplayItem[] {
+  const items: TimelineDisplayItem[] = [];
+  const buckets = new Map<string, Extract<TimelineDisplayItem, { kind: "delegation" }>>();
+  for (const event of events) {
+    if (event.lifecycle || !/agent|delegate|orchestrat/i.test(event.name)) {
+      items.push({ kind: "event", event });
+      continue;
+    }
+    const input = event.input ?? {};
+    const target = [
+      "agent_id",
+      "subagent_id",
+      "subagent_name",
+      "role",
+      "agent",
+      "name",
+    ]
+      .map((key) => input[key])
+      .find((value): value is string => typeof value === "string" && Boolean(value.trim()))
+      ?.trim() || event.subAgentRole || event.agentName || "other";
+    const existing = buckets.get(target);
+    if (existing) {
+      existing.events.push(event);
+      continue;
+    }
+    const summary = { kind: "delegation" as const, events: [event], target };
+    buckets.set(target, summary);
+    items.push(summary);
+  }
+  return items.flatMap((item) =>
+    item.kind === "delegation" && item.events.length === 1
+      ? [{ kind: "event" as const, event: item.events[0]! }]
+      : [item],
+  );
+}
+
+function DelegationSummaryRow({
+  events,
+  target,
+  t,
+}: {
+  events: LiveToolEvent[];
+  target: string;
+  t: TimelineT;
+}) {
+  const running = events.some((event) => event.status === "running");
+  const error = events.some((event) => event.status === "error");
+  return (
+    <div className="flex items-center gap-2 py-1.5 pl-2 text-xs text-muted-foreground">
+      {running ? (
+        <Loader2Icon className="size-3.5 shrink-0 animate-spin text-success" />
+      ) : error ? (
+        <XCircleIcon className="size-3.5 shrink-0 text-destructive" />
+      ) : (
+        <CheckCircle2Icon className="size-3.5 shrink-0 text-success" />
+      )}
+      <BrainCircuitIcon className="size-3.5 shrink-0 text-chart-6" />
+      <span className="min-w-0 truncate text-sm font-medium text-foreground">
+        {t.liveToolTimeline.callSubAgent(target)}
+      </span>
+      <span className="ml-auto shrink-0 tabular-nums">{events.length}×</span>
     </div>
   );
 }
@@ -1567,13 +1657,16 @@ function GroupedTimeline({
 }
 
 function timelineAgentGroupId(event: LiveToolEvent): string | undefined {
-  if (event.parentToolUseId && event.subAgentRole) {
-    return `${event.parentToolUseId}:${event.subAgentRole}`;
-  }
-  return (
-    event.agentId ??
+  const lane =
+    (event.agentId && event.agentId !== event.subAgentRole
+      ? event.agentId
+      : undefined) ??
     event.subagentCodename ??
-    event.subAgentRole ??
-    event.agentName
-  );
+    event.agentId ??
+    event.agentName ??
+    event.subAgentRole;
+  if (event.parentToolUseId && lane) {
+    return `${event.parentToolUseId}:${lane}`;
+  }
+  return lane;
 }

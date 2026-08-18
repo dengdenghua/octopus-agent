@@ -189,7 +189,12 @@ def _execute_action_via_beak(
     try:
         from contextlib import nullcontext
 
-        from runtime.platform.process.session import Session, current_session, session_scope
+        from runtime.platform.process.session import (
+            Session,
+            current_session,
+            parent_tool_use_scope,
+            session_scope,
+        )
 
         session_cm: Any = nullcontext()
         active_session = current_session()
@@ -316,18 +321,40 @@ def _execute_action_via_beak(
                         or user_context.get("browser_regression_enabled") is True
                     )
                 )
-                step = executor.execute_step(
-                    step_id=react_step_counter,
-                    node_id=f"react_n{react_step_counter}",
-                    sucker_id=SkillId(skill_name),
-                    args=args,
-                    caller="react_loop",
-                    task_id=react_task_id,
-                    arm_id=ArmId("react_arm"),
-                    budget=budget,
-                    actor=None,
-                    trusted_browser_loopback=trusted_browser_loopback,
+                # Nested delegation needs the concrete parent tool-use id for
+                # lifecycle correlation. Native tool mode already binds this
+                # scope; the ReAct compatibility dispatcher must do the same.
+                # Mirror it in Session metadata for legacy consumers, while
+                # the ContextVar remains authoritative under parallel calls.
+                executing_session = current_session()
+                executing_meta = getattr(executing_session, "metadata", None)
+                previous_parent = (
+                    executing_meta.get("_active_parent_tool_use_id")
+                    if isinstance(executing_meta, dict)
+                    else None
                 )
+                if isinstance(executing_meta, dict):
+                    executing_meta["_active_parent_tool_use_id"] = call.id
+                try:
+                    with parent_tool_use_scope(call.id):
+                        step = executor.execute_step(
+                            step_id=react_step_counter,
+                            node_id=f"react_n{react_step_counter}",
+                            sucker_id=SkillId(skill_name),
+                            args=args,
+                            caller="react_loop",
+                            task_id=react_task_id,
+                            arm_id=ArmId("react_arm"),
+                            budget=budget,
+                            actor=None,
+                            trusted_browser_loopback=trusted_browser_loopback,
+                        )
+                finally:
+                    if isinstance(executing_meta, dict):
+                        if previous_parent is None:
+                            executing_meta.pop("_active_parent_tool_use_id", None)
+                        else:
+                            executing_meta["_active_parent_tool_use_id"] = previous_parent
             finally:
                 if _sandbox_md is not None:
                     if _sandbox_prev is None:

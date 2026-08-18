@@ -1,4 +1,4 @@
-import type { AIMessage, Message, ToolMessage } from "@/core/api/types";
+import type { AIMessage, Message } from "@/core/api/types";
 import type { BaseStream } from "@/core/api/use-stream-types";
 import type { ReactNode } from "react";
 import {
@@ -6,9 +6,6 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   XCircleIcon,
-  UsersIcon,
-  LayoutGridIcon,
-  LayoutListIcon,
 } from "lucide-react";
 import {
   Fragment,
@@ -43,8 +40,7 @@ import {
 import { useRehypeSplitWordsIntoSpans } from "@/core/rehype";
 import type { StreamVitals } from "@/core/realtime/stream-vitals";
 import type { Subtask } from "@/core/tasks";
-import { useUpdateSubtask, useSubtaskContext } from "@/core/tasks/context";
-import { isSubtaskActive } from "@/core/tasks/types";
+import { useUpdateSubtask } from "@/core/tasks/context";
 import type { AgentThreadState } from "@/core/threads";
 import {
   findTimelineItemElement,
@@ -84,6 +80,12 @@ import { MessageListSkeleton } from "./skeleton";
 import { ParallelSubtasksGrid } from "./parallel-subtasks-grid";
 import { SubtaskCard } from "./subtask-card";
 import { FollowUpSuggestions } from "./follow-up-suggestions";
+import {
+  deriveSubagentsFromMessages,
+  deriveSubagentMissionFromMessages,
+  InlineSubagentCards,
+  type InlineSubagentInfo,
+} from "./inline-subagent-cards";
 
 export const MESSAGE_LIST_DEFAULT_PADDING_BOTTOM = 160;
 export const MESSAGE_LIST_FOLLOWUPS_EXTRA_PADDING_BOTTOM = 80;
@@ -665,6 +667,12 @@ const MemoizedGroup = memo(
     groupAuditNotice,
     groupFailure,
     showAssistantAvatar,
+    subagentAgents,
+    subagentEvents,
+    subagentMission,
+    subagentSettled,
+    subagentTurnIndex,
+    showSubagentCluster,
     renderGroupContent,
   }: {
     group: CoreMessageGroup;
@@ -678,6 +686,12 @@ const MemoizedGroup = memo(
     groupAuditNotice: string | null;
     groupFailure?: FailurePresentation | null;
     showAssistantAvatar: boolean;
+    subagentAgents?: InlineSubagentInfo[];
+    subagentEvents?: LiveToolEvent[];
+    subagentMission?: string;
+    subagentSettled?: boolean;
+    subagentTurnIndex?: number;
+    showSubagentCluster: boolean;
     renderGroupContent: (
       group: CoreMessageGroup,
       beforeAssistantContent?: ReactNode,
@@ -687,6 +701,8 @@ const MemoizedGroup = memo(
       auditNotice?: string | null,
       failure?: FailurePresentation | null,
       showAssistantAvatar?: boolean,
+      beforeProcessingContent?: ReactNode,
+      suppressSubagentRows?: boolean,
     ) => ReactNode;
   }) {
     return (
@@ -710,6 +726,17 @@ const MemoizedGroup = memo(
           groupAuditNotice,
           groupFailure,
           showAssistantAvatar,
+          showSubagentCluster ? (
+            <InlineSubagentCards
+              agents={subagentAgents}
+              events={subagentEvents}
+              mission={subagentMission}
+              settled={subagentSettled}
+              turnIndex={subagentTurnIndex}
+              className="mb-2"
+            />
+          ) : undefined,
+          Boolean(subagentAgents?.length || subagentEvents?.length),
         )}
       </div>
     );
@@ -726,153 +753,14 @@ const MemoizedGroup = memo(
     prev.deferGroupOutputs === next.deferGroupOutputs &&
     prev.groupAuditNotice === next.groupAuditNotice &&
     prev.groupFailure === next.groupFailure &&
-    prev.showAssistantAvatar === next.showAssistantAvatar,
+    prev.showAssistantAvatar === next.showAssistantAvatar &&
+    prev.subagentAgents === next.subagentAgents &&
+    prev.subagentEvents === next.subagentEvents &&
+    prev.subagentMission === next.subagentMission &&
+    prev.subagentSettled === next.subagentSettled &&
+    prev.subagentTurnIndex === next.subagentTurnIndex &&
+    prev.showSubagentCluster === next.showSubagentCluster,
 );
-
-/**
- * Enhanced cluster header section for subagent groups.
- * Shows overall progress, statistics, and controls.
- */
-function SubagentClusterSection({
-  subagentEvents,
-  groupId,
-  isLoading,
-}: {
-  subagentEvents: Array<{ id: string }>;
-  groupId: string | undefined;
-  isLoading: boolean;
-}) {
-  const { t } = useI18n();
-  const [allCollapsed, setAllCollapsed] = useState(false);
-  const [compactView, setCompactView] = useState(false);
-  const { tasks } = useSubtaskContext();
-
-  // Calculate statistics
-  const stats = useMemo(() => {
-    const result = {
-      total: subagentEvents.length,
-      completed: 0,
-      running: 0,
-      pending: 0,
-      failed: 0,
-    };
-
-    for (const event of subagentEvents) {
-      const task = tasks[event.id];
-      if (!task) {
-        result.pending += 1;
-        continue;
-      }
-
-      if (task.status === "completed") {
-        result.completed += 1;
-      } else if (
-        task.status === "failed" ||
-        task.status === "timed_out" ||
-        task.status === "cancelled"
-      ) {
-        result.failed += 1;
-      } else if (isSubtaskActive(task.status)) {
-        result.running += 1;
-      } else {
-        result.pending += 1;
-      }
-    }
-
-    return result;
-  }, [subagentEvents, tasks]);
-
-  const progressPercent =
-    stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
-
-  return (
-    <div className="mt-4 ml-11">
-      {/* Enhanced cluster header */}
-      <div className="mb-3 flex items-center justify-between rounded-lg border border-border-default bg-muted/20 px-4 py-2.5">
-        <div className="flex items-center gap-3">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
-            <UsersIcon className="size-4 text-primary" />
-          </div>
-          <div>
-            <div className="text-sm font-semibold">
-              {t.subagents.parallelExecution}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {stats.completed}/{stats.total} {t.subagents.completed}
-              {stats.running > 0 &&
-                ` · ${stats.running} ${t.subagents.running}`}
-              {stats.failed > 0 && ` · ${stats.failed} ${t.subagents.failed}`}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Overall progress bar */}
-          <div className="h-1.5 w-32 overflow-hidden rounded-full bg-muted/60">
-            <div
-              className={cn(
-                "h-full rounded-full transition-all duration-500",
-                stats.running > 0
-                  ? "bg-success animate-pulse"
-                  : stats.failed > 0 && stats.completed === 0
-                    ? "bg-destructive"
-                    : "bg-success",
-              )}
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-          <span className="font-mono text-xs tabular-nums text-muted-foreground">
-            {progressPercent}%
-          </span>
-          {/* Expand/Collapse All button */}
-          {subagentEvents.length > 1 && (
-            <>
-              <button
-                type="button"
-                onClick={() => setAllCollapsed(!allCollapsed)}
-                className="ml-2 flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                title={allCollapsed ? t.subagents.expandAll : t.subagents.collapseAll}
-              >
-                {allCollapsed ? t.subagents.expandAll : t.subagents.collapseAll}
-              </button>
-              {/* View mode toggle */}
-              <button
-                type="button"
-                onClick={() => setCompactView(!compactView)}
-                className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                title={compactView ? "Grid View" : "Compact View"}
-              >
-                {compactView ? (
-                  <LayoutGridIcon className="size-3.5" />
-                ) : (
-                  <LayoutListIcon className="size-3.5" />
-                )}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Subagent grid or cards */}
-      {subagentEvents.length > 1 ? (
-        <ParallelSubtasksGrid
-          key={"parallel-grid-live-" + (groupId ?? "unknown")}
-          taskIds={subagentEvents.map((e) => e.id)}
-          isLoading={isLoading}
-          forceCollapsed={allCollapsed}
-          compact={compactView}
-        />
-      ) : (
-        subagentEvents.map((event) => (
-          <SubtaskCard
-            key={"task-live-" + event.id}
-            taskId={event.id}
-            isLoading={isLoading}
-          />
-        ))
-      )}
-    </div>
-  );
-}
 
 /**
  * Unified chat message list.
@@ -1734,6 +1622,8 @@ export function MessageList({
     enableClarificationActions = false,
     keepOpen = false,
     showAssistantAvatar = true,
+    beforeProcessingContent?: ReactNode,
+    suppressSubagentRows = false,
   ) => {
     if (!hasVisibleMessageGroupContent(group.messages, t)) return null;
     const aiMessage = group.messages.find(
@@ -1746,19 +1636,23 @@ export function MessageList({
       role: agentRole,
     } = resolveAgentIdentity(aiMessage);
     const content = (
-      <MessageGroup
-        enableClarificationActions={enableClarificationActions}
-        messages={group.messages}
-        keepOpen={keepOpen}
-        codeMode={mode === "code"}
-        isLoading={
-          keepOpen ||
-          (thread.isLoading &&
-            group.messages.some(
-              (message) => message.id === thread.streamingMessage?.id,
-            ))
-        }
-      />
+      <>
+        {beforeProcessingContent}
+        <MessageGroup
+          enableClarificationActions={enableClarificationActions}
+          messages={group.messages}
+          keepOpen={keepOpen}
+          codeMode={mode === "code"}
+          suppressSubagentRows={suppressSubagentRows}
+          isLoading={
+            keepOpen ||
+            (thread.isLoading &&
+              group.messages.some(
+                (message) => message.id === thread.streamingMessage?.id,
+              ))
+          }
+        />
+      </>
     );
     if (!showAssistantAvatar) {
       return <div className="ml-11 w-auto">{content}</div>;
@@ -1783,6 +1677,8 @@ export function MessageList({
     auditNotice: string | null = null,
     failure: FailurePresentation | null = null,
     showAssistantAvatar = true,
+    beforeProcessingContent?: ReactNode,
+    suppressSubagentRows = false,
   ) => {
     if (group.type === "human" || group.type === "assistant") {
       const groupIndex = groupedMessages.indexOf(group);
@@ -1859,50 +1755,6 @@ export function MessageList({
               msg === outputHostMessage ? outputSummary : undefined,
             );
       });
-      // Check for subagents spawned via run_orchestration in the current turn.
-      // These appear as LiveToolEvents with name="subagent" but don't create
-      // tool_calls in the message, so hasSubagent() misses them.
-      const subagentEventsInTurn = (() => {
-        // Try liveToolEvents first (for current streaming turn), then fall back
-        // to allToolEvents filtered by iteration (for historical turns).
-        const eventsToSearch =
-          liveToolEvents && liveToolEvents.length > 0
-            ? liveToolEvents
-            : (allToolEvents ?? []);
-
-        if (eventsToSearch.length === 0) return [];
-
-        const isLive = eventsToSearch === liveToolEvents;
-
-        // For historical turns, we need to determine which iteration (turn index)
-        // this group belongs to.
-        const currentIteration = (() => {
-          if (isLive) return -1; // Not needed for live events
-
-          // Find which turn this group belongs to
-          const turns = partitionMessageGroupsIntoTurns(groupedMessages);
-          const groupIndex = groupedMessages.indexOf(group);
-
-          for (let i = 0; i < turns.length; i++) {
-            if (turns[i]!.groupIndexes.includes(groupIndex)) {
-              return i;
-            }
-          }
-          return -1;
-        })();
-
-        return eventsToSearch.filter((event) => {
-          if (event.name !== "subagent") return false;
-          if (!event.lifecycle || event.lifecycle !== "spawned") return false;
-
-          // For live events, include all subagents.
-          // For historical events, only include those matching this turn's iteration.
-          return isLive || event.iteration === currentIteration;
-        });
-      })();
-
-      const hasSubagentsInTurn = subagentEventsInTurn.length > 0;
-
       return (
         <>
           {group.type === "assistant" && !showAssistantAvatar ? (
@@ -1911,16 +1763,6 @@ export function MessageList({
             renderedMessages
           )}
           {outputSummary && !outputHostMessage && outputSummary}
-          {hasSubagentsInTurn && group.type === "assistant" && (
-            <SubagentClusterSection
-              subagentEvents={subagentEventsInTurn}
-              groupId={group.id ?? group.messages[0]?.id ?? "assistant"}
-              isLoading={
-                thread.isLoading &&
-                group.messages.some((m) => m.id === thread.streamingMessage?.id)
-              }
-            />
-          )}
         </>
       );
     }
@@ -2046,6 +1888,8 @@ export function MessageList({
       enableClarificationActions,
       keepOpen,
       showAssistantAvatar,
+      beforeProcessingContent,
+      suppressSubagentRows,
     );
   };
 
@@ -2142,6 +1986,68 @@ export function MessageList({
     return info;
   }, [messageTurns, groupedMessages, assistantFrameIdentity]);
 
+  const turnSubagentRenderInfo = useMemo(() => {
+    const info = new Map<
+      string,
+      {
+        agents: InlineSubagentInfo[];
+        events: LiveToolEvent[];
+        mission: string;
+        settled: boolean;
+        firstProcessingIndex: number;
+        hasCluster: boolean;
+      }
+    >();
+    for (let turnIndex = 0; turnIndex < messageTurns.length; turnIndex += 1) {
+      const turn = messageTurns[turnIndex]!;
+      const turnMessages =
+        groupTurnRenderInfo.get(turn.groupIndexes[0]!)?.turnMessages ?? [];
+      const agents = deriveSubagentsFromMessages(turnMessages);
+      const mission = deriveSubagentMissionFromMessages(turnMessages);
+      const isLatestTurn = turnIndex === messageTurns.length - 1;
+      const sourceEvents = isLatestTurn
+        ? [...(lastTurnToolEvents ?? []), ...(liveToolEvents ?? [])]
+        : (allToolEvents ?? []).filter(
+            (event) =>
+              event.turnIndex === turnIndex ||
+              (event.turnIndex === undefined && event.iteration === turnIndex),
+          );
+      const seenEventIds = new Set<string>();
+      const events = sourceEvents.filter((event) => {
+        if (seenEventIds.has(event.id)) return false;
+        seenEventIds.add(event.id);
+        return (
+          event.name === "subagent" ||
+          event.lifecycle === "spawned" ||
+          event.lifecycle === "finished" ||
+          Boolean(event.subAgentRole) ||
+          Boolean(event.subagentCodename) ||
+          (Boolean(event.parentToolUseId) && event.agentId !== "__main__")
+        );
+      });
+      const firstProcessingIndex =
+        turn.groupIndexes.find(
+          (index) => groupedMessages[index]?.type === "assistant:processing",
+        ) ?? -1;
+      info.set(turn.key, {
+        agents,
+        events,
+        mission,
+        settled: !isLatestTurn,
+        firstProcessingIndex,
+        hasCluster: agents.length > 0 || events.length > 0,
+      });
+    }
+    return info;
+  }, [
+    allToolEvents,
+    groupTurnRenderInfo,
+    groupedMessages,
+    lastTurnToolEvents,
+    liveToolEvents,
+    messageTurns,
+  ]);
+
   if (thread.isThreadLoading && messages.length === 0) {
     return <MessageListSkeleton />;
   }
@@ -2192,6 +2098,7 @@ export function MessageList({
           })}
         {messageTurns.map((turn, turnIndex) => {
           const isLatestTurn = turnIndex === messageTurns.length - 1;
+          const subagentRenderInfo = turnSubagentRenderInfo.get(turn.key);
           const markerKey = turn.key.startsWith("human:") ? turn.key : null;
           // A submitted turn can spend several seconds waiting for its first
           // model event. During that gap there is no assistant message group
@@ -2312,6 +2219,15 @@ export function MessageList({
                       groupAuditNotice={groupAuditNotice}
                       renderGroupContent={renderGroupContent}
                       showAssistantAvatar={showAssistantAvatar}
+                      subagentAgents={subagentRenderInfo?.agents}
+                      subagentEvents={subagentRenderInfo?.events}
+                      subagentMission={subagentRenderInfo?.mission}
+                      subagentSettled={subagentRenderInfo?.settled}
+                      subagentTurnIndex={turnIndex}
+                      showSubagentCluster={
+                        Boolean(subagentRenderInfo?.hasCluster) &&
+                        index === subagentRenderInfo?.firstProcessingIndex
+                      }
                     />
                   </Fragment>
                 );

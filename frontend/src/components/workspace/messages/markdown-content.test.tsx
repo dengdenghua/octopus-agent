@@ -161,6 +161,16 @@ describe("<MarkdownContent /> streaming state", () => {
     expect(screen.getByText("A compact answer")).toHaveClass("chat-markdown");
   });
 
+  it("preserves intentional soft line breaks in compact answers", () => {
+    const view = renderMarkdown(
+      "schema=octopus.regression.v1\nfinal=output/final",
+    );
+
+    const markdown = view.container.querySelector(".chat-markdown");
+    expect(markdown).toHaveClass("whitespace-pre-wrap");
+    expect(markdown?.textContent).toContain("v1\nfinal=");
+  });
+
   it("hides leaked read-only control tags but preserves the answer", () => {
     renderMarkdown(
       "<read_only>\n</read_only>\n\nPython 与 TypeScript 定义一致。",

@@ -294,12 +294,55 @@ def _flatten_turns_to_messages(
                     }
                 )
             elif t == "mcpToolCall":
+                tool = getattr(item, "tool", "") or ""
+                arguments = _json_safe(getattr(item, "arguments", {}) or {})
+                # Lifecycle finish markers carry their durable identity and
+                # outcome in ``result``. The legacy transcript only has one
+                # tool-call payload lane, so merge that public envelope into
+                # args; otherwise replay degrades to ``args: {}`` after a
+                # refresh even though the realtime item was complete.
+                if tool in {"__subagent_spawned__", "__subagent_finished__"}:
+                    result = _json_safe(getattr(item, "result", None))
+                    if isinstance(result, dict):
+                        arguments = {**result, **arguments}
+                    arguments.setdefault(
+                        "status", getattr(getattr(item, "status", None), "value", None)
+                    )
+                    duration_ms = getattr(item, "duration_ms", None)
+                    if duration_ms is not None:
+                        arguments.setdefault("duration_ms", duration_ms)
                 pending_tool_calls.append(
                     {
                         "id": getattr(item, "id", ""),
-                        "name": f"{getattr(item, 'server', '')}.{getattr(item, 'tool', '')}",
-                        "args": getattr(item, "arguments", {}) or {},
+                        "name": f"{getattr(item, 'server', '')}.{tool}",
+                        "args": arguments,
                         "type": "tool_call",
+                        "timelineSequence": getattr(item, "timeline_sequence", None),
+                        "parentItemId": getattr(item, "parent_item_id", None),
+                        "phaseId": getattr(item, "phase_id", None),
+                    }
+                )
+            elif t == "subagent":
+                pending_tool_calls.append(
+                    {
+                        "id": getattr(item, "id", ""),
+                        "name": "subagent",
+                        "args": {
+                            "subagent_id": getattr(item, "subagent_id", ""),
+                            "role": getattr(item, "role", None),
+                            "name": getattr(item, "name", None),
+                            "codename": getattr(item, "codename", None),
+                            "avatar": getattr(item, "avatar", None),
+                            "status": getattr(getattr(item, "status", None), "value", None),
+                            "summary": getattr(item, "summary", None),
+                            "error": getattr(item, "error", None),
+                            "iteration_count": getattr(item, "iteration_count", None),
+                            "files_touched": _json_safe(getattr(item, "files_touched", []) or []),
+                        },
+                        "type": "tool_call",
+                        "timelineSequence": getattr(item, "timeline_sequence", None),
+                        "parentItemId": getattr(item, "parent_item_id", None),
+                        "phaseId": getattr(item, "phase_id", None),
                     }
                 )
             elif t == "agentMessage":

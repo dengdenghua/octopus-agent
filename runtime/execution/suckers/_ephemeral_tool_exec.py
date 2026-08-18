@@ -153,6 +153,39 @@ def _execute_tool_in_subagent(
     if _confine_block is not None:
         return (_confine_block, True)
 
+    # The mini-loop intentionally bypasses ``executor.execute_step`` so child
+    # memory/blackboard calls stay on the shared Session.  It must still reuse
+    # the executor's Session-derived path preparation: otherwise relative
+    # ``read_file`` / ``list_cwd`` calls fall back to the server process cwd.
+    # That made personal-workspace children search the entire repository even
+    # though the parent had a precise artifact root.  Keep the direct dispatch,
+    # but apply the same trusted cwd/sandbox injection before the safety gate.
+    try:
+        from runtime.platform.process.session import current_session
+
+        _scope_meta = getattr(current_session(), "metadata", None) or {}
+    except (ImportError, AttributeError, LookupError):
+        _scope_meta = {}
+    if (
+        isinstance(getattr(call, "input", None), dict)
+        and not _scope_meta.get("_locked_write_root")
+    ):
+        from runtime.execution.tool_engine._executor_helpers import (
+            _prepare_scoped_args,
+        )
+        from runtime.platform.models import SkillId
+
+        try:
+            _scoped_input = _prepare_scoped_args(
+                skill,
+                SkillId(str(call.name)),
+                dict(call.input),
+            )
+        except PermissionError as exc:
+            return (f"(blocked: {exc})", True)
+        call.input.clear()
+        call.input.update(_scoped_input)
+
     # Direct-dispatch hardening — ephemeral runs bypass the executor
     # chokepoint, so apply the same pre-execution safety gates here (SEC-1/2).
     if isinstance(getattr(call, "input", None), dict):

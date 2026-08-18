@@ -63,7 +63,20 @@ export function useSubAgentBusStream(
         const seq = typeof event.seq === "number" ? event.seq : 0;
         if (seq > cursorRef.current) cursorRef.current = seq;
         setLastSeq(seq);
-        setEvents((prev) => [...prev, live]);
+        setEvents((prev) => {
+          const existingIndex = prev.findIndex((item) => item.id === live.id);
+          if (existingIndex < 0) return [...prev, live];
+          const existing = prev[existingIndex]!;
+          const next = [...prev];
+          next[existingIndex] = {
+            ...existing,
+            ...live,
+            // A terminal bus frame is timestamped when the tool ended. Keep
+            // the paired start time so duration/order remain truthful.
+            startedAt: existing.startedAt,
+          };
+          return next;
+        });
       },
       onError: () => setStatus("error"),
     });

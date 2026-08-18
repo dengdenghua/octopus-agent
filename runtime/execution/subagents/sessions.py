@@ -219,15 +219,9 @@ class SubagentSessionStore:
             )
         self._max_consecutive_wakes = budget
         cache_bound = (
-            DEFAULT_MAX_CACHED_SESSIONS
-            if max_cached_sessions is None
-            else max_cached_sessions
+            DEFAULT_MAX_CACHED_SESSIONS if max_cached_sessions is None else max_cached_sessions
         )
-        if (
-            not isinstance(cache_bound, int)
-            or isinstance(cache_bound, bool)
-            or cache_bound <= 0
-        ):
+        if not isinstance(cache_bound, int) or isinstance(cache_bound, bool) or cache_bound <= 0:
             raise ValueError(
                 f"SubagentSessionStore: max_cached_sessions ({cache_bound!r}) "
                 "must be a positive integer"
@@ -247,16 +241,19 @@ class SubagentSessionStore:
         # react-loop driver marks its thread busy for the turn's duration so a
         # report landing mid-turn queues for every session that thread owns,
         # including ones created during the turn.
-        self._busy_threads: set[str] = set()
+        # Nest-aware busy ownership. Parent + parallel children can execute
+        # ReAct loops on the same public thread; a boolean set lets the first
+        # child to finish clear the parent's busy state and a sibling report
+        # then opens a spurious auto-wake turn. Counts keep the thread busy
+        # until every nested owner exits.
+        self._busy_threads: dict[str, int] = {}
         # Per-thread wakeup hook registry (dsh ``reportDelivery: 'wakeup'``
         # production half): a host that holds a thread's active connection /
         # emitter registers here; ``append_report`` dispatches a wakeup report
         # to the registered handler so the parent can plan a new turn. Falls
         # back to the single constructor ``on_report`` when no per-thread
         # handler is registered. Live state only; best-effort on failure.
-        self._thread_wake_handlers: dict[
-            str, Callable[[str, SubagentReport], None]
-        ] = {}
+        self._thread_wake_handlers: dict[str, Callable[[str, SubagentReport], None]] = {}
         # Per-thread live-injection hooks registered by the realtime gateway
         # while a turn for the thread is active. ``queued`` reports are steered
         # into the running turn via the registered hook instead of importing
@@ -314,11 +311,7 @@ class SubagentSessionStore:
                     continue
                 try:
                     data = json.loads(path.read_text(encoding="utf-8"))
-                    session = (
-                        SubagentSession.from_dict(data)
-                        if isinstance(data, dict)
-                        else None
-                    )
+                    session = SubagentSession.from_dict(data) if isinstance(data, dict) else None
                 except (OSError, ValueError, TypeError):
                     continue
                 if session is not None and session.session_id == session_id:
@@ -327,9 +320,7 @@ class SubagentSessionStore:
             pass
         return loaded
 
-    def _reference_records_locked(
-        self, *, scope_thread_id: str | None = None
-    ) -> list[Any]:
+    def _reference_records_locked(self, *, scope_thread_id: str | None = None) -> list[Any]:
         """Candidate records from cached + durable sessions (dsh listCandidates).
 
         When ``scope_thread_id`` is provided, only sessions owned by that
@@ -377,9 +368,7 @@ class SubagentSessionStore:
             self._write_locked(session)
         return session
 
-    def get(
-        self, session_id: str, *, scope_thread_id: str | None = None
-    ) -> SubagentSession | None:
+    def get(self, session_id: str, *, scope_thread_id: str | None = None) -> SubagentSession | None:
         """Load a session, optionally scoped to a parent thread.
 
         With ``scope_thread_id`` set, a session whose ``thread_id`` differs is
@@ -552,9 +541,7 @@ class SubagentSessionStore:
         with self._lock:
             self._thread_injectors.pop(thread_id, None)
 
-    def registered_thread_injector(
-        self, thread_id: str
-    ) -> Callable[[str], bool] | None:
+    def registered_thread_injector(self, thread_id: str) -> Callable[[str], bool] | None:
         with self._lock:
             return self._thread_injectors.get(thread_id)
 
@@ -599,7 +586,7 @@ class SubagentSessionStore:
             effective_delivery = "wakeup" if delivery != "quiet" else "quiet"
             if effective_delivery == "wakeup":
                 owner_busy = session_id in self._owner_busy or bool(
-                    session.thread_id and session.thread_id in self._busy_threads
+                    session.thread_id and self._busy_threads.get(session.thread_id, 0) > 0
                 )
                 if owner_busy:
                     # dsh ``inject``: a busy owner must not be woken mid-turn;
@@ -612,9 +599,7 @@ class SubagentSessionStore:
                     # The budget is spent the moment we decide to wake — a
                     # concurrent or repeated report must not re-wake the parent.
                     # Mirrors dsh ``spentWakes.set(owner, spent + 1)``.
-                    self._spent_wakes[session_id] = (
-                        self._spent_wakes.get(session_id, 0) + 1
-                    )
+                    self._spent_wakes[session_id] = self._spent_wakes.get(session_id, 0) + 1
             report = SubagentReport(
                 content=content.strip(),
                 delivery=effective_delivery,
@@ -679,7 +664,7 @@ class SubagentSessionStore:
         if not thread_id:
             return
         with self._lock:
-            self._busy_threads.add(thread_id)
+            self._busy_threads[thread_id] = self._busy_threads.get(thread_id, 0) + 1
 
     def mark_thread_idle(self, thread_id: str) -> None:
         """Clear a parent thread's busy state (thread-scoped idle).
@@ -692,7 +677,11 @@ class SubagentSessionStore:
         if not thread_id:
             return
         with self._lock:
-            self._busy_threads.discard(thread_id)
+            remaining = self._busy_threads.get(thread_id, 0) - 1
+            if remaining > 0:
+                self._busy_threads[thread_id] = remaining
+            else:
+                self._busy_threads.pop(thread_id, None)
 
     def refill_thread_wake_budget(self, thread_id: str) -> None:
         """Refill wake budgets for every session a parent thread owns.
@@ -749,9 +738,7 @@ class SubagentSessionStore:
             return []
         with self._lock:
             sessions = [
-                session
-                for session in self._memory.values()
-                if session.thread_id == thread_id
+                session for session in self._memory.values() if session.thread_id == thread_id
             ]
             sessions.extend(
                 session

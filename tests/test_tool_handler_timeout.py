@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+from contextvars import ContextVar
 
 import pytest
 
@@ -33,6 +34,22 @@ def test_fast_handler_with_timeout_returns() -> None:
 
     out, tags = _call_handler_with_transient_retry(fast, {}, timeout_s=5.0)
     assert out == "done"
+    assert tags == []
+
+
+def test_timeout_worker_preserves_call_context() -> None:
+    marker: ContextVar[str] = ContextVar("tool_timeout_context", default="missing")
+    token = marker.set("parent-call")
+    try:
+        out, tags = _call_handler_with_transient_retry(
+            lambda **_kwargs: marker.get(),
+            {},
+            timeout_s=5.0,
+        )
+    finally:
+        marker.reset(token)
+
+    assert out == "parent-call"
     assert tags == []
 
 

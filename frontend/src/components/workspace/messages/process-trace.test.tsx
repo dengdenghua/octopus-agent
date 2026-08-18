@@ -75,4 +75,32 @@ describe("ProcessTrace agent cluster", () => {
       view: "screen",
     });
   });
+
+  test("compacts repeated delegation records by role", () => {
+    const delegationEvent = (
+      id: string,
+      status: LiveToolEvent["status"],
+    ): LiveToolEvent => ({
+      id,
+      name: "call_agent",
+      status,
+      startedAt: Number(id),
+      iteration: Number(id),
+      input: { role: "reviewer", prompt: "review" },
+    });
+    renderWithProviders(
+      <ProcessTrace
+        mode="team"
+        events={[
+          delegationEvent("1", "done"),
+          delegationEvent("2", "done"),
+          delegationEvent("3", "running"),
+        ]}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(screen.getByText(/reviewer/)).toBeInTheDocument();
+    expect(screen.getByText(/3×/)).toBeInTheDocument();
+  });
 });

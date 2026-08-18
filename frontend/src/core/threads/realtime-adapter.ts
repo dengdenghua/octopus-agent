@@ -424,8 +424,19 @@ function turnToMessages(turn: Turn): Message[] {
         break;
       }
       case "steeringUserMessage": {
-        flushPendingAsTrailingAi();
         const steering = item as SteeringUserMessageItem;
+        // Child reports are internal steering: they update the running
+        // parent's model context and are already observable in Agent cards.
+        // Rendering them as human messages creates fake turn 2/3 rows and
+        // makes a single Kimi-style swarm look like several conversations.
+        // Prefix detection keeps old persisted histories clean too.
+        if (
+          steering.source === "subagent_report" ||
+          /^\s*\[子代理报告\]/.test(steering.text)
+        ) {
+          break;
+        }
+        flushPendingAsTrailingAi();
         out.push({
           type: "human",
           id: steering.id,

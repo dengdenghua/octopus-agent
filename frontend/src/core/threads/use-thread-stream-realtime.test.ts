@@ -220,6 +220,8 @@ describe("liveToolEventsFromConversation", () => {
     ]);
     expect(events[0]).toMatchObject({
       id: "cmd-1",
+      turnId: "turn-1",
+      turnIndex: 0,
       status: "done",
       input: {
         path: ".",
@@ -242,6 +244,22 @@ describe("liveToolEventsFromConversation", () => {
       items: [{ content: "Inspect", status: "completed" }],
       explanation: "plan",
     });
+  });
+
+  it("stamps events with their owning turn instead of overloading iteration", () => {
+    const conv = makeConversation([
+      makeTurn([commandItem({ id: "turn-one-tool" })], "turn-one"),
+      makeTurn([commandItem({ id: "turn-two-tool" })], "turn-two"),
+    ]);
+
+    const events = liveToolEventsFromConversation(conv);
+
+    expect(
+      events.map(({ id, turnId, turnIndex }) => ({ id, turnId, turnIndex })),
+    ).toEqual([
+      { id: "turn-one-tool", turnId: "turn-one", turnIndex: 0 },
+      { id: "turn-two-tool", turnId: "turn-two", turnIndex: 1 },
+    ]);
   });
 
   it("renders a user-redirected tool as a neutral finished event", () => {
@@ -560,6 +578,141 @@ describe("liveToolEventsFromConversation", () => {
       subagentCodename: "Spark-abc",
       parentToolUseId: "parent-call-1",
       subagentAvatar: "🔍",
+    });
+  });
+
+  it("recovers the requested lane id when custom siblings share one builtin role", () => {
+    const conv = makeConversation([
+      makeTurn([
+        mcpItem({
+          id: "spawn-custom-reader",
+          status: "inProgress",
+          tool: "__subagent_spawned__",
+          server: "runtime",
+          arguments: {
+            agent_id: "explorer",
+            role: "explorer",
+            codename: "Spark-4f6",
+            prompt_preview:
+              "# Role: reader_readme\n\nYou are acting as reader_readme",
+          },
+          result: null,
+          durationMs: null,
+        }),
+        mcpItem({
+          id: "finish-custom-reader",
+          tool: "__subagent_finished__",
+          server: "runtime",
+          arguments: {},
+          result: {
+            agent_id: "explorer",
+            role: "explorer",
+            codename: "Spark-4f6",
+            ok: true,
+          },
+          durationMs: null,
+        }),
+      ]),
+    ]);
+
+    const events = liveToolEventsFromConversation(conv);
+    expect(events.map((event) => event.agentId)).toEqual([
+      "reader_readme",
+      "reader_readme",
+    ]);
+  });
+
+  it("uses codename for legacy same-role child tools instead of collapsing siblings", () => {
+    const conv = makeConversation([
+      makeTurn([
+        mcpItem({
+          id: "legacy-child-tool",
+          server: "subagent",
+          tool: "read_file",
+          arguments: {
+            agent_id: "explorer",
+            sub_agent_role: "explorer",
+            subagent_codename: "Spark-4f6",
+            input: { path: "README.md" },
+          },
+          result: { output_preview: "ok" },
+        }),
+      ]),
+    ]);
+
+    expect(liveToolEventsFromConversation(conv)[0]?.agentId).toBe("Spark-4f6");
+  });
+
+  it("attributes durable child tool steps to the matching agent lane", () => {
+    const conv = makeConversation([
+      makeTurn([
+        mcpItem({
+          id: "subagent-tool-search",
+          server: "subagent",
+          tool: "web_search",
+          arguments: {
+            agent_id: "researcher-a",
+            sub_agent_role: "researcher",
+            subagent_codename: "Spark-a1",
+            subagent_avatar: "🔎",
+            parent_tool_use_id: "orchestration-1",
+            input: { query: "Octopus Agent" },
+          },
+          result: { output_preview: "3 results", status: "success" },
+          durationMs: 320,
+        }),
+      ]),
+    ]);
+
+    expect(liveToolEventsFromConversation(conv)[0]).toMatchObject({
+      id: "subagent-tool-search",
+      name: "web_search",
+      status: "done",
+      agentId: "researcher-a",
+      subAgentRole: "researcher",
+      subagentCodename: "Spark-a1",
+      subagentAvatar: "🔎",
+      parentToolUseId: "orchestration-1",
+      durationMs: 320,
+    });
+  });
+
+  it("maps streamed child prose to one public progress event", () => {
+    const conv = makeConversation([
+      makeTurn([
+        mcpItem({
+          id: "subagent-progress-a",
+          status: "inProgress",
+          server: "subagent",
+          tool: "__subagent_progress__",
+          arguments: {
+            agent_id: "researcher-a",
+            sub_agent_role: "researcher",
+            subagent_codename: "Spark-a1",
+            subagent_avatar: "🔎",
+            parent_tool_use_id: "orchestration-1",
+            round: 2,
+          },
+          progress: {
+            label: "子智能体输出",
+            status: "running",
+            preview: "已查看两个来源，正在核对第三个来源",
+            updatedAt: BASE_TS,
+          },
+          result: null,
+          durationMs: null,
+        }),
+      ]),
+    ]);
+
+    expect(liveToolEventsFromConversation(conv)[0]).toMatchObject({
+      id: "subagent-progress-a",
+      name: "subagent_progress",
+      status: "running",
+      agentId: "researcher-a",
+      subAgentRole: "researcher",
+      subagentCodename: "Spark-a1",
+      observation: "已查看两个来源，正在核对第三个来源",
     });
   });
 

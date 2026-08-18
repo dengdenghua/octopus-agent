@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 
 import { renderWithProviders } from "@/test/harness";
 
-import { AGENT_WORKBENCH_LOCATE_EVENT } from "./agent-workbench-events";
 import { AgentWorkbenchPanel } from "./agent-workbench-panel";
 
 describe("AgentWorkbenchPanel tool-effect focus", () => {
@@ -32,41 +31,30 @@ describe("AgentWorkbenchPanel tool-effect focus", () => {
     expect(screen.getByText("概要")).toBeInTheDocument();
   });
 
-  it("can locate the selected transcript event from the right rail", () => {
-    const located: string[] = [];
-    const listener = (event: Event) => {
-      const detail = (event as CustomEvent<{ eventId?: string }>).detail;
-      if (detail?.eventId) located.push(detail.eventId);
-    };
-    window.addEventListener(AGENT_WORKBENCH_LOCATE_EVENT, listener);
+  it("does not duplicate transcript-location controls in the workbench header", () => {
+    renderWithProviders(
+      <AgentWorkbenchPanel
+        focusedEventId="thinking-7"
+        focusedEventKind="thinking"
+        focusedEventView="summary"
+        focusedEventNonce={1}
+        focusedProcessEvent={{
+          kind: "thinking",
+          summary: "已确认时间线顺序",
+          detail: "公开进展留在主线，右侧只看细节。",
+          status: "done",
+        }}
+        events={[]}
+      />,
+      { locale: "zh-CN" },
+    );
 
-    try {
-      renderWithProviders(
-        <AgentWorkbenchPanel
-          focusedEventId="thinking-7"
-          focusedEventKind="thinking"
-          focusedEventView="summary"
-          focusedEventNonce={1}
-          focusedProcessEvent={{
-            kind: "thinking",
-            summary: "已确认时间线顺序",
-            detail: "公开进展留在主线，右侧只看细节。",
-            status: "done",
-          }}
-          events={[]}
-        />,
-        { locale: "zh-CN" },
-      );
-
-      fireEvent.click(screen.getByRole("button", { name: "定位到主对话" }));
-      expect(located).toEqual(["thinking-7"]);
-    } finally {
-      window.removeEventListener(AGENT_WORKBENCH_LOCATE_EVENT, listener);
-    }
+    expect(
+      screen.queryByRole("button", { name: "定位到主对话" }),
+    ).not.toBeInTheDocument();
   });
 
-  it("offers a panel-level close action when the parent provides one", () => {
-    let closed = 0;
+  it("does not duplicate the shell-level close action inside the panel", () => {
     renderWithProviders(
       <AgentWorkbenchPanel
         events={[
@@ -79,15 +67,14 @@ describe("AgentWorkbenchPanel tool-effect focus", () => {
             input: { path: "src/app.tsx" },
           },
         ]}
-        onClose={() => {
-          closed += 1;
-        }}
+        onClose={() => {}}
       />,
       { locale: "zh-CN" },
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "收起工作台" }));
-    expect(closed).toBe(1);
+    expect(
+      screen.queryByRole("button", { name: "收起工作台" }),
+    ).not.toBeInTheDocument();
   });
 
   it("closes from Escape without stealing Escape from text inputs", () => {

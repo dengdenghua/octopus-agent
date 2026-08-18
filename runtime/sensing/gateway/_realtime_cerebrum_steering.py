@@ -79,7 +79,12 @@ def _unregister_thread_turn(thread_id: str, runtime: CerebrumRuntime, turn_id: s
             del _THREAD_TURN_REGISTRY[thread_id]
 
 
-def _inject_thread_steering(thread_id: str, text: str) -> bool:
+def _inject_thread_steering(
+    thread_id: str,
+    text: str,
+    *,
+    source: str = "user",
+) -> bool:
     """Queue ``text`` into the thread's running turn's next step (dsh inject).
 
     The react loop drains the turn's steering queue at its nearest step
@@ -115,7 +120,11 @@ def _inject_thread_steering(thread_id: str, text: str) -> bool:
         if budget is not None:
             budget[turn_id] = remaining - 1
         active = runtime._active_turns.get(turn_id)
-        item = SteeringUserMessageItem(text=text, targetTurnId=turn_id)
+        item = SteeringUserMessageItem(
+            text=text,
+            targetTurnId=turn_id,
+            source="subagent_report" if source == "subagent_report" else "user",
+        )
         if active is not None:
             # Make the injection visible in the final turn snapshot. Appending
             # to a list is atomic under the GIL; the loop only reads this list
@@ -157,7 +166,14 @@ def _register_turn_injector(thread_id: str) -> None:
         if store is None:
             return
         store.register_thread_injector(
-            thread_id, lambda text: bool(_inject_thread_steering(thread_id, text))
+            thread_id,
+            lambda text: bool(
+                _inject_thread_steering(
+                    thread_id,
+                    text,
+                    source="subagent_report",
+                )
+            ),
         )
     except Exception:  # noqa: BLE001 — registration is best-effort
         pass

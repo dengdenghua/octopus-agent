@@ -17,7 +17,6 @@ export function EmptyShellView({
   effectiveActiveTab,
   onTabClick,
   onTabClose,
-  locatableTranscriptEventId,
   visibleDiffEntries,
   threadId,
   inferredWorkDir,
@@ -25,7 +24,6 @@ export function EmptyShellView({
   isLoading,
   className,
   machineRail,
-  onClose,
 }: {
   mainButton: {
     active: boolean;
@@ -37,15 +35,9 @@ export function EmptyShellView({
   visibleTabs: WorkbenchTab[];
   workbenchTabs: WorkbenchTab[];
   closedTabs: Set<AgentWorkbenchTabId>;
-  effectiveActiveTab:
-    | "agent"
-    | "diff"
-    | "terminal"
-    | "browser"
-    | "artifacts";
+  effectiveActiveTab: "agent" | "diff" | "terminal" | "browser" | "artifacts";
   onTabClick: (tabId: AgentWorkbenchTabId) => void;
   onTabClose: (tabId: AgentWorkbenchTabId) => void;
-  locatableTranscriptEventId: string;
   visibleDiffEntries: DiffEntry[];
   threadId?: string | null;
   inferredWorkDir?: string;
@@ -53,7 +45,6 @@ export function EmptyShellView({
   isLoading?: boolean;
   className?: string;
   machineRail: ReactNode;
-  onClose?: () => void;
 }) {
   const { t } = useI18n();
   const emptyEmbeddedPage =
@@ -96,8 +87,6 @@ export function EmptyShellView({
         effectiveActiveTab={effectiveActiveTab}
         onTabClick={onTabClick}
         onTabClose={onTabClose}
-        locatableTranscriptEventId={locatableTranscriptEventId}
-        onClose={onClose}
       />
       <section
         aria-label={t.sidebar.ariaAgentWorkbench}

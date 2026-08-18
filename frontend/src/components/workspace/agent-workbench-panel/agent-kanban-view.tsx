@@ -43,6 +43,7 @@ function AgentKanbanViewImpl({
   groundingSources,
   preferStructuredReferences,
   mainAgentName,
+  resultPreviewUrl,
   terminalState,
   contextTokens,
   maxContextTokens,
@@ -72,6 +73,7 @@ function AgentKanbanViewImpl({
   groundingSources: GroundingSource[];
   preferStructuredReferences: boolean;
   mainAgentName: string | null | undefined;
+  resultPreviewUrl?: string | null;
   terminalState: "interrupted" | "failed" | "blocked" | null;
   contextTokens?: number;
   maxContextTokens?: number;
@@ -109,8 +111,8 @@ function AgentKanbanViewImpl({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Keep the workbench focused: computer replay only becomes a peer view
-          when there is a real browser or independent-agent process to show. */}
+      {/* Summary remains the default for the main process. Once an Agent is
+          selected, its computer and role card stay explicitly reachable. */}
       <div className="flex items-center gap-4 border-b border-border-subtle px-5 py-2">
         {[
           { id: "summary" as const, label: t.agentWorkbenchPanel.summaryLabel },
@@ -149,7 +151,7 @@ function AgentKanbanViewImpl({
             {t.agentWorkbenchPanel.latestTurnContext}
           </span>
         )}
-        <span className="ml-auto text-xs text-muted-foreground font-mono">
+        <span className="ml-auto font-mono text-xs text-muted-foreground">
           {selectedRosterSeat
             ? selectedRosterSeat.name
             : (selectedAgent?.label ??
@@ -158,7 +160,6 @@ function AgentKanbanViewImpl({
         </span>
       </div>
 
-      {/* View content */}
       {effectiveActivityView === "summary" ? (
         <AgentSummaryPage
           phases={phases}
@@ -178,6 +179,7 @@ function AgentKanbanViewImpl({
           onCompressContext={onCompressContext}
           onSelectTab={onSelectTab}
           onOpenArtifact={onOpenArtifact}
+          resultPreviewUrl={resultPreviewUrl}
         />
       ) : effectiveActivityView === "screen" && selectedAgent ? (
         <SubagentProcessView
@@ -219,6 +221,7 @@ function AgentKanbanViewImpl({
           onCompressContext={onCompressContext}
           onSelectTab={onSelectTab}
           onOpenArtifact={onOpenArtifact}
+          resultPreviewUrl={resultPreviewUrl}
         />
       )}
 

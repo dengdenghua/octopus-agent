@@ -19,16 +19,8 @@ import type {
   ItemType,
   TurnStatus,
 } from "./protocol-enums.generated";
-export {
-  ITEM_STATUSES,
-  ITEM_TYPES,
-  TURN_STATUSES,
-};
-export type {
-  ItemStatus,
-  ItemType,
-  TurnStatus,
-};
+export { ITEM_STATUSES, ITEM_TYPES, TURN_STATUSES };
+export type { ItemStatus, ItemType, TurnStatus };
 
 export interface ItemBase {
   id: string;
@@ -51,6 +43,7 @@ export interface SteeringUserMessageItem extends ItemBase {
   type: "steeringUserMessage";
   text: string;
   targetTurnId: string | null;
+  source?: "user" | "subagent_report";
 }
 
 export interface AgentMessageItem extends ItemBase {
@@ -319,7 +312,6 @@ export type Item =
   | VisibilityItem
   | ArtifactItem
   | ErrorItem;
-
 
 /** Soft hand-off hint payload from ``turn/metaSkill/hint``.
  *

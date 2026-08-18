@@ -416,6 +416,28 @@ def test_thread_idle_restores_wakeup_for_all_sessions(tmp_path: Path) -> None:
     assert seen == ["woken-2"]
 
 
+def test_nested_thread_busy_owner_cannot_clear_parent_early(tmp_path: Path) -> None:
+    seen: list[str] = []
+    store = SubagentSessionStore(
+        base_dir=tmp_path / "sessions",
+        on_report=lambda sid, report: seen.append(report.content),
+    )
+    session = store.create(agent_id="reader", thread_id="th-parent")
+
+    # Parent loop + one child loop share the public thread.
+    store.mark_thread_busy("th-parent")
+    store.mark_thread_busy("th-parent")
+    store.mark_thread_idle("th-parent")
+    store.append_report(session.session_id, content="sibling still running")
+
+    assert seen == []
+    assert store.get(session.session_id).reports[-1].delivery == "queued"
+
+    store.mark_thread_idle("th-parent")
+    store.append_report(session.session_id, content="all owners idle")
+    assert seen == ["all owners idle"]
+
+
 def test_empty_thread_never_queues_and_markers_are_noop(tmp_path: Path) -> None:
     seen: list[str] = []
     store = SubagentSessionStore(
@@ -499,9 +521,7 @@ def test_react_loop_marks_thread_busy_during_turn_and_idle_after(
         observed: list[str] = []
 
         def busy_probe(stack, intent, agent, **kwargs):  # noqa: ANN001 — test stub
-            store.append_report(
-                session.session_id, content="mid-turn", delivery="wakeup"
-            )
+            store.append_report(session.session_id, content="mid-turn", delivery="wakeup")
             observed.append(store.get(session.session_id).reports[-1].delivery)
             yield {"type": "react_started", "task_id": "t", "thread_id": kwargs["thread_id"]}
             return None
@@ -557,9 +577,7 @@ def _patch_injector() -> list[str]:
     # inject_report_into_thread looks up the *global* store's registered
     # injector, so register on the conftest-provided private store.
     store = get_subagent_session_store()
-    store.register_thread_injector(
-        "th-parent", lambda text: captured.append(text) or True
-    )
+    store.register_thread_injector("th-parent", lambda text: captured.append(text) or True)
     return captured
 
 
@@ -690,10 +708,7 @@ def test_evicted_sessions_stay_discoverable(tmp_path: Path) -> None:
     candidates = store.list_reference_candidates(target_id="th-parent")
     assert [c["sessionId"] for c in candidates] == [first.session_id]
     # Cross-thread discovery stays blocked even after eviction.
-    cross_ids = [
-        c["sessionId"]
-        for c in store.list_reference_candidates(target_id="th-other")
-    ]
+    cross_ids = [c["sessionId"] for c in store.list_reference_candidates(target_id="th-other")]
     assert first.session_id not in cross_ids
 
     out = store.resolve_session_mentions(
@@ -718,17 +733,13 @@ def test_inject_report_into_thread_public_seam(
     previous = get_subagent_session_store()
     set_subagent_session_store(store)
     try:
-        store.register_thread_injector(
-            "th-1", lambda text: captured.append(text) or True
-        )
+        store.register_thread_injector("th-1", lambda text: captured.append(text) or True)
         assert inject_report_into_thread("th-1", "内容") is True
         assert captured == ["[子代理报告] 内容"]
         assert inject_report_into_thread("", "内容") is False
         assert inject_report_into_thread("th-1", "") is False
         assert len(captured) == 1
-        assert inject_report_into_thread(
-            "th-1", "长" * (QUEUED_REPORT_INJECT_MAX_CHARS + 50)
-        )
+        assert inject_report_into_thread("th-1", "长" * (QUEUED_REPORT_INJECT_MAX_CHARS + 50))
         assert len(captured[1]) <= QUEUED_REPORT_INJECT_MAX_CHARS + len("[子代理报告] ")
         # No registered injector for an unknown thread → no-op.
         assert inject_report_into_thread("th-nobody", "内容") is False
@@ -895,9 +906,7 @@ def test_thread_handler_failure_is_swallowed(tmp_path: Path) -> None:
 
 
 def test_thread_handler_not_fired_when_budget_exhausted(tmp_path: Path) -> None:
-    store = SubagentSessionStore(
-        base_dir=tmp_path / "sessions", max_consecutive_wakes=1
-    )
+    store = SubagentSessionStore(base_dir=tmp_path / "sessions", max_consecutive_wakes=1)
     seen: list[str] = []
     store.register_thread_wake_handler("th-1", lambda sid, r: seen.append(r.content))
     session = store.create(agent_id="researcher", thread_id="th-1")

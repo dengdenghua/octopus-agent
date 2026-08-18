@@ -1,10 +1,6 @@
 import { memo } from "react";
 
-import {
-  CheckIcon,
-  LayoutGridIcon,
-  XIcon,
-} from "lucide-react";
+import { CheckIcon, LayoutGridIcon, XIcon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { useI18n } from "@/core/i18n/hooks";
@@ -34,11 +30,9 @@ function WorkbenchTabHeaderImpl({
   effectiveActiveTab,
   onTabClick,
   onTabClose,
-  locatableTranscriptEventId,
   workspaceLabel,
   showWorkspaceLabel,
   mainRunStatusLabel,
-  onClose,
 }: {
   mainButton: {
     active: boolean;
@@ -53,11 +47,9 @@ function WorkbenchTabHeaderImpl({
   effectiveActiveTab: AgentWorkbenchTabId;
   onTabClick: (tabId: AgentWorkbenchTabId) => void;
   onTabClose: (tabId: AgentWorkbenchTabId) => void;
-  locatableTranscriptEventId: string;
   workspaceLabel?: string;
   showWorkspaceLabel?: boolean;
   mainRunStatusLabel?: string;
-  onClose?: () => void;
 }) {
   const { t } = useI18n();
   return (

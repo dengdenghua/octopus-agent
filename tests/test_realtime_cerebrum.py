@@ -318,6 +318,127 @@ def test_flatten_file_change_tool_calls_are_json_serializable() -> None:
     assert change["op"] == "update"
 
 
+def test_flatten_preserves_subagent_lifecycle_result_for_history() -> None:
+    """A refreshed thread must retain the finish marker's public envelope."""
+    from runtime.protocol import Turn
+    from runtime.sensing.gateway.realtime_cerebrum import _flatten_turns_to_messages
+
+    turn = Turn.model_validate(
+        {
+            "id": "turn-subagent-history",
+            "threadId": "thread-subagent-history",
+            "status": "completed",
+            "startedAt": "2026-08-17T08:00:00Z",
+            "completedAt": "2026-08-17T08:00:03Z",
+            "items": [
+                {
+                    "id": "u1",
+                    "type": "userMessage",
+                    "status": "completed",
+                    "createdAt": "2026-08-17T08:00:00Z",
+                    "text": "审计项目",
+                },
+                {
+                    "id": "finish-prism",
+                    "type": "mcpToolCall",
+                    "status": "failed",
+                    "createdAt": "2026-08-17T08:00:03Z",
+                    "server": "runtime",
+                    "tool": "__subagent_finished__",
+                    "arguments": {"parent_tool_use_id": "orchestration-1"},
+                    "result": {
+                        "agent_id": "reviewer",
+                        "role": "reviewer",
+                        "codename": "Prism-fcc",
+                        "ok": False,
+                        "error": "verification failed",
+                        "iteration_count": 4,
+                        "files_touched": ["frontend/src/page.tsx"],
+                    },
+                    "durationMs": 2300,
+                },
+                {
+                    "id": "a1",
+                    "type": "agentMessage",
+                    "status": "completed",
+                    "createdAt": "2026-08-17T08:00:03Z",
+                    "text": "审计结束",
+                },
+            ],
+        }
+    )
+
+    messages, _, _ = _flatten_turns_to_messages([turn])
+
+    finish = messages[-1]["tool_calls"][0]
+    assert finish["name"] == "runtime.__subagent_finished__"
+    assert finish["args"] == {
+        "agent_id": "reviewer",
+        "role": "reviewer",
+        "codename": "Prism-fcc",
+        "ok": False,
+        "error": "verification failed",
+        "iteration_count": 4,
+        "files_touched": ["frontend/src/page.tsx"],
+        "parent_tool_use_id": "orchestration-1",
+        "status": "failed",
+        "duration_ms": 2300,
+    }
+
+
+def test_flatten_preserves_first_class_subagent_item_for_history() -> None:
+    from runtime.protocol import Turn
+    from runtime.sensing.gateway.realtime_cerebrum import _flatten_turns_to_messages
+
+    turn = Turn.model_validate(
+        {
+            "id": "turn-first-class-subagent",
+            "threadId": "thread-first-class-subagent",
+            "status": "completed",
+            "startedAt": "2026-08-17T08:00:00Z",
+            "completedAt": "2026-08-17T08:00:03Z",
+            "items": [
+                {
+                    "id": "u1",
+                    "type": "userMessage",
+                    "status": "completed",
+                    "createdAt": "2026-08-17T08:00:00Z",
+                    "text": "并行审计",
+                },
+                {
+                    "id": "sub-1",
+                    "type": "subagent",
+                    "status": "completed",
+                    "createdAt": "2026-08-17T08:00:01Z",
+                    "subagentId": "reviewer",
+                    "role": "reviewer",
+                    "name": "Prism-fcc",
+                    "codename": "Prism-fcc",
+                    "avatar": "🛡️",
+                    "summary": "检查了前端回放",
+                    "iterationCount": 3,
+                    "filesTouched": ["frontend/src/page.tsx"],
+                },
+                {
+                    "id": "a1",
+                    "type": "agentMessage",
+                    "status": "completed",
+                    "createdAt": "2026-08-17T08:00:03Z",
+                    "text": "完成",
+                },
+            ],
+        }
+    )
+
+    messages, _, _ = _flatten_turns_to_messages([turn])
+
+    tool_call = messages[-1]["tool_calls"][0]
+    assert tool_call["name"] == "subagent"
+    assert tool_call["args"]["codename"] == "Prism-fcc"
+    assert tool_call["args"]["iteration_count"] == 3
+    assert tool_call["args"]["files_touched"] == ["frontend/src/page.tsx"]
+
+
 @pytest.fixture()
 def gateway(tmp_path: Path) -> Any:
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
@@ -490,6 +611,7 @@ def test_thread_steering_injection_into_running_turn() -> None:
         assert item_id
         assert len(turn.items) == 1
         assert turn.items[0].text == "报告文本"
+        assert turn.items[0].source == "user"
     finally:
         _unregister_thread_turn("th-inject", runtime, "turn-1")
 
@@ -562,6 +684,34 @@ def test_drain_returns_injected_steering_text() -> None:
         _unregister_thread_turn("th-inject", runtime, "turn-1")
 
 
+def test_subagent_report_steering_is_marked_internal() -> None:
+    from runtime.sensing.gateway._realtime_cerebrum_steering import (
+        _inject_thread_steering,
+        _register_thread_turn,
+        _unregister_thread_turn,
+    )
+
+    runtime = _SteeringRuntime()
+    turn = _TurnLike()
+    runtime._turn_steering["turn-1"] = runtime._queue_factory()
+    runtime._turn_steering_accepting["turn-1"] = True
+    runtime._active_turns["turn-1"] = (turn, None)
+
+    _register_thread_turn("th-inject", runtime, "turn-1")
+    try:
+        assert (
+            _inject_thread_steering(
+                "th-inject",
+                "[子代理报告] 完成",
+                source="subagent_report",
+            )
+            is True
+        )
+        assert turn.items[0].source == "subagent_report"
+    finally:
+        _unregister_thread_turn("th-inject", runtime, "turn-1")
+
+
 def test_inject_writes_durable_log_and_never_delivers_twice() -> None:
     from runtime.sensing.gateway._realtime_cerebrum_steering import (
         _drain_turn_steering,
@@ -575,9 +725,7 @@ def test_inject_writes_durable_log_and_never_delivers_twice() -> None:
             self.writes: list[dict[str, Any]] = []
 
         def item_completed(self, thread_id: str, turn_id: str, item: Any) -> None:
-            self.writes.append(
-                {"thread_id": thread_id, "turn_id": turn_id, "item": item}
-            )
+            self.writes.append({"thread_id": thread_id, "turn_id": turn_id, "item": item})
 
         def tail_events(self, offset: int) -> tuple[list[Any], int]:
             events = []
@@ -589,9 +737,7 @@ def test_inject_writes_durable_log_and_never_delivers_twice() -> None:
                     {
                         "event": "item_completed",
                         "turn_id": write["turn_id"],
-                        "payload": {
-                            "item": write["item"].model_dump(by_alias=True, mode="json")
-                        },
+                        "payload": {"item": write["item"].model_dump(by_alias=True, mode="json")},
                     },
                 )()
                 events.append(event)
@@ -654,11 +800,7 @@ def test_turn_start_surfaces_pending_thread_reports(gateway: Any, tmp_path: Path
             )
 
         turn = out["response"].result["turn"]
-        steering = [
-            item
-            for item in turn["items"]
-            if item.get("type") == "steeringUserMessage"
-        ]
+        steering = [item for item in turn["items"] if item.get("type") == "steeringUserMessage"]
         texts = [item["text"] for item in steering]
         assert "[子代理报告] 部分发现" in texts
         assert "[子代理报告] 最终结论" in texts
@@ -3273,6 +3415,7 @@ def test_codex_composer_marker_is_stripped_into_intent_metadata() -> None:
     assert intent.user_context["mode_preset"] == "goal.mode"
     assert intent.user_context["workflow_preset"] == "goal.mode"
 
+
 def test_mode_composer_marker_is_stripped_into_intent_metadata() -> None:
     from runtime.protocol import TurnParams
     from runtime.sensing.gateway.realtime_cerebrum import _build_intent
@@ -5354,9 +5497,7 @@ def test_auto_wake_turn_does_not_refill_budget(gateway: Any, tmp_path: Path) -> 
                     "approvalPolicy": "never",
                 },
             )
-            started_count = sum(
-                1 for n in out["notifications"] if n.method == "turn/started"
-            )
+            started_count = sum(1 for n in out["notifications"] if n.method == "turn/started")
             assert started_count == 1
 
             # A HUMAN turn refills the budget; the next wakeup wakes again.

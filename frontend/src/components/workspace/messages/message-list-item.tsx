@@ -1,5 +1,4 @@
 import type { Message } from "@/core/api/types";
-import "katex/dist/katex.min.css";
 import {
   FileIcon,
   GitForkIcon,
@@ -424,7 +423,10 @@ export const MessageListItem = memo(function MessageListItem({
             <button
               onClick={() => {
                 forkThread.mutate(
-                  { threadId: threadIdForFeedback, atMessageIndex: messageIndex },
+                  {
+                    threadId: threadIdForFeedback,
+                    atMessageIndex: messageIndex,
+                  },
                   {
                     onSuccess: (result) => {
                       toast.success(t.conversation.forkedThread);
@@ -602,9 +604,7 @@ function MessageContent_({
     }
     return splitInlineThinkingDetails(
       stripInternalToolProtocol(
-        stripLegacySubagentBudgetPlaceholder(
-          stripInternalTraceDetails(source),
-        ),
+        stripLegacySubagentBudgetPlaceholder(stripInternalTraceDetails(source)),
       ),
     );
   }, [rawContent, isHuman]);
