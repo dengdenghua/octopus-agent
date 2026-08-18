@@ -42,6 +42,11 @@ import { useAuth } from "@/providers/AuthProvider";
 import { CreditsCenterDialog } from "@/components/workspace/credits-center";
 import { getCommunityCredits } from "@/core/credits/ledger";
 import { cn } from "@/lib/utils";
+import { useEvolutionOverview } from "@/core/evolution/hooks";
+import {
+  calculateLevel,
+  calculateStars,
+} from "@/components/workspace/evolution-dashboard/game-data-transformer";
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -174,6 +179,9 @@ export function AgentFooter() {
   const [activeName, setActiveName] = useState<string | null>(() =>
     readActiveAgentName(),
   );
+
+  // Fetch evolution data for the active agent (no agent filter, gets current user's data)
+  const { data: evolutionData } = useEvolutionOverview();
   useEffect(() => {
     return eventBus.on("agent:changed", ({ name }) => {
       setActiveName(name);
@@ -243,14 +251,10 @@ export function AgentFooter() {
     [footerAgents],
   );
   const cliPartnerRows = useMemo<LocalCliPartnerAgent[]>(() => {
-    // Only render partners that are actually detected or already registered
-    // — un-detected catalog entries should not occupy the dropdown as
-    // "未检测到" placeholders. The /api/agents/local-partners endpoint
-    // returns the full catalog with detected flags; the cli-team fallback
-    // (cliPartnerAgents) is inherently detected=true so it passes through.
+    // Only render partners that are already registered (hide unregistered ones)
     const source =
       allCliPartners.length > 0
-        ? allCliPartners.filter((row) => row.detected || row.registered)
+        ? allCliPartners.filter((row) => row.registered)
         : cliPartnerAgents.map((agent) => ({
             agent,
             partnerId:
@@ -258,7 +262,7 @@ export function AgentFooter() {
               agent.name.replace(/^local_/, "").replaceAll("_", "-"),
             detected: true,
             ready: true,
-            registered: false,
+            registered: true,
             status: "detected",
             fixHint: null,
           }));
@@ -406,6 +410,10 @@ export function AgentFooter() {
   const displayAgent = lockedAgent ?? active;
   const accountName = user ? getAccountDisplayName(user) : "";
 
+  // Calculate evolution level and stars
+  const level = evolutionData ? calculateLevel(evolutionData.learning_events) : null;
+  const stars = level !== null ? calculateStars(level) : null;
+
   return (
     <div className="flex items-center gap-1">
       <DropdownMenu>
@@ -435,6 +443,14 @@ export function AgentFooter() {
             <AgentAvatar agent={displayAgent} />
             <span className="min-w-0 flex-1 truncate text-xs font-medium leading-tight group-data-[collapsible=icon]:hidden">
               {displayAgent?.display_name || displayAgent?.name || "Octopus"}
+              {level !== null && (
+                <span className="ml-1.5 text-2xs font-normal text-muted-foreground/80">
+                  Lv.{level}
+                  {stars !== null && stars > 0 && (
+                    <span className="ml-0.5">{"⭐".repeat(Math.min(stars, 5))}</span>
+                  )}
+                </span>
+              )}
             </span>
             {lock ? (
               <span
@@ -534,31 +550,13 @@ export function AgentFooter() {
               <DropdownMenuSeparator />
             </>
           ) : null}
-          <div className="flex items-center gap-2 px-2.5 py-2 text-xs text-muted-foreground">
-            <UserCircleIcon className="size-4 shrink-0 opacity-70" />
-            <span className="min-w-0 flex-1 truncate">{accountName}</span>
-          </div>
           <DropdownMenuItem
             onSelect={() => setCreditsOpen(true)}
-            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs focus:bg-muted/60"
+            className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs focus:bg-muted/60"
           >
-            <CoinsIcon className="size-4 shrink-0 opacity-70" />
-            <span className="min-w-0 flex-1 truncate">积分中心</span>
-            <span className="shrink-0 text-xs font-mono text-foreground/80">
-              {typeof credits === "number"
-                ? (credits + getCommunityCredits()).toLocaleString()
-                : "—"}
-            </span>
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onSelect={() => emitOpenSettings("account")}
-            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs focus:bg-muted/60"
-          >
-            <CoinsIcon className="size-4 shrink-0 opacity-70" />
-            <span className="min-w-0 flex-1 truncate">
-              {t.sidebar.remainingCredits}
-            </span>
+            <UserCircleIcon className="size-4 shrink-0 opacity-70" />
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">{accountName}</span>
+            <CoinsIcon className="size-3.5 shrink-0 opacity-70" />
             <span className="shrink-0 text-xs font-mono text-foreground/80">
               {typeof credits === "number" ? credits.toLocaleString() : "—"}
             </span>
@@ -566,7 +564,7 @@ export function AgentFooter() {
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onSelect={() => void logout()}
-            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs focus:bg-muted/60"
+            className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs focus:bg-muted/60"
           >
             <LogOutIcon className="size-4 shrink-0 opacity-70" />
             <span>{t.sidebar.logout}</span>

@@ -1,4 +1,4 @@
-import { ActivityIcon, GaugeIcon, SparklesIcon } from "lucide-react";
+import { ActivityIcon, GaugeIcon, SparklesIcon, GamepadIcon } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EvolutionControlPanel } from "@/components/workspace/evolution-control-panel";
 import EvolutionDashboard from "@/components/workspace/evolution-dashboard";
+import GameifiedEvolutionDashboard from "@/components/workspace/evolution-dashboard/gamified-evolution-dashboard";
 import EvolutionSettingsPage from "@/components/workspace/settings/evolution-settings-page";
 import {
   WorkspaceBody,
@@ -16,6 +17,7 @@ import { useI18n } from "@/core/i18n/hooks";
 export default function EvolutionPage() {
   const { t } = useI18n();
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [viewMode, setViewMode] = useState<"gamified" | "classic">("gamified");
 
   return (
     <WorkspaceContainer>
@@ -31,6 +33,29 @@ export default function EvolutionPage() {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
+              {/* View Mode Toggle */}
+              <div className="flex gap-1 rounded-md border border-border p-0.5">
+                <Button
+                  type="button"
+                  variant={viewMode === "gamified" ? "secondary" : "ghost"}
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => setViewMode("gamified")}
+                >
+                  <GamepadIcon className="mr-1 size-3" />
+                  游戏化
+                </Button>
+                <Button
+                  type="button"
+                  variant={viewMode === "classic" ? "secondary" : "ghost"}
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => setViewMode("classic")}
+                >
+                  经典视图
+                </Button>
+              </div>
+
               <Button
                 asChild
                 variant="outline"
@@ -60,7 +85,11 @@ export default function EvolutionPage() {
           </header>
 
           <div className="min-h-0 flex-1 overflow-auto bg-card p-3">
-            <EvolutionDashboard />
+            {viewMode === "gamified" ? (
+              <GameifiedEvolutionDashboard />
+            ) : (
+              <EvolutionDashboard />
+            )}
 
             {showAdvanced && (
               <section

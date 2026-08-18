@@ -99,6 +99,11 @@ import {
   useRenameThread,
   useThreads,
 } from "@/core/threads/hooks";
+import { useEvolutionOverview } from "@/core/evolution/hooks";
+import {
+  calculateLevel,
+  calculateStars,
+} from "@/components/workspace/evolution-dashboard/game-data-transformer";
 import {
   buildConversationThreadSummaries,
   buildProjectThreadSummaries,
@@ -229,12 +234,7 @@ type SidebarFileExplorerTarget = {
 const PROJECTS_KEY = "octopus.projects";
 const RECENT_WORKDIRS_KEY = "octopus:recentWorkdirs";
 const PROJECT_GROUPING_KEY = "octopus.sidebar.project-grouping-enabled";
-const ONGOING_THREADS_LIMIT = 5;
 const PROJECT_THREAD_PREVIEW_LIMIT = 6;
-
-type OngoingThreadSummary = ThreadSummary & {
-  runStatus: ThreadRunStatus;
-};
 
 function readUserProjects(): string[] {
   try {
@@ -311,55 +311,6 @@ function readProjectGroupingEnabled(): boolean {
 function transientThreadModeFromHref(href: string): string {
   if (/^\/workspace\/team\//.test(href)) return "team";
   return "chat";
-}
-
-function buildOngoingThreadSummaries({
-  threads,
-  runStatusByHref,
-  limit = ONGOING_THREADS_LIMIT,
-}: {
-  threads: ThreadSummary[];
-  runStatusByHref: Map<string, ThreadRunStatus>;
-  limit?: number;
-}): OngoingThreadSummary[] {
-  const seen = new Set<string>();
-  const statusPriority: Record<ThreadRunStatus, number> = {
-    error: 4,
-    waiting: 3,
-    running: 2,
-    pending: 1,
-  };
-  return threads
-    .flatMap((thread) => {
-      if (seen.has(thread.href)) return [];
-      seen.add(thread.href);
-      const runStatus = runStatusByHref.get(thread.href);
-      return runStatus ? [{ ...thread, runStatus }] : [];
-    })
-    .sort((a, b) => {
-      const byStatus =
-        statusPriority[b.runStatus] - statusPriority[a.runStatus];
-      if (byStatus !== 0) return byStatus;
-      const aTime = a.updatedAt || "";
-      const bTime = b.updatedAt || "";
-      // 瞬时进行中会话没有时间戳：视为最新，排在同状态条目最前，
-      // 避免正在跑的会话因空时间戳沉底。
-      if (!aTime || !bTime) {
-        if (!aTime && !bTime) return a.id.localeCompare(b.id);
-        return aTime ? 1 : -1;
-      }
-      return bTime.localeCompare(aTime);
-    })
-    .slice(0, limit);
-}
-
-function excludeActiveThread<T extends ThreadSummary>(
-  threads: T[],
-  pathname: string,
-): T[] {
-  const activeId = activeWorkspaceThreadIdFromPathname(pathname);
-  if (!activeId) return threads;
-  return threads.filter((thread) => thread.id !== activeId);
 }
 
 function prioritizeActiveThread<T extends ThreadSummary>(
@@ -916,61 +867,6 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     ...sidebarConversationThreads,
     ...ungroupedProjectThreads,
   ].sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
-  const transientOngoingThreads = useMemo<ThreadSummary[]>(() => {
-    const knownHrefs = new Set(
-      [...projectThreads, ...conversationThreads].map((thread) => thread.href),
-    );
-    // Only the ACTIVE route may synthesize a "当前任务会话" row - its
-    // agent/workspace attribution comes from the current route, so a row
-    // for any other href would be mislabeled, and stale statuses for
-    // sessions you already left would linger as ghost rows in 进行中.
-    const activeThreadHref = sidebarPathname?.startsWith("/workspace/realtime/")
-      ? sidebarPathname
-      : null;
-    return Array.from(runStatusByHref.keys()).flatMap((href) => {
-      if (knownHrefs.has(href)) return [];
-      if (!activeThreadHref || href !== activeThreadHref) return [];
-      const id = activeWorkspaceThreadIdFromPathname(href);
-      if (!id) return [];
-      if (id === OCTOPUS_THREAD_ID) return [];
-      return [
-        {
-          id,
-          title: t.sidebar.currentTaskSession,
-          updatedAt: "",
-          mode: transientThreadModeFromHref(href),
-          href,
-          workspacePath: activeTaskWorkspacePath ?? undefined,
-          agents: activeAgentId ? [activeAgentId] : [],
-        },
-      ];
-    });
-  }, [
-    activeAgentId,
-    activeTaskWorkspacePath,
-    conversationThreads,
-    projectThreads,
-    runStatusByHref,
-    sidebarPathname,
-    t.sidebar.currentTaskSession,
-  ]);
-  const ongoingThreads = useMemo(
-    () =>
-      buildOngoingThreadSummaries({
-        threads: [
-          ...projectThreads,
-          ...conversationThreads,
-          ...transientOngoingThreads,
-        ],
-        runStatusByHref,
-      }),
-    [
-      conversationThreads,
-      projectThreads,
-      runStatusByHref,
-      transientOngoingThreads,
-    ],
-  );
   // Keep a fallback summary for an older/deep-linked task that was not present
   // in the bounded history queries. It is inserted into the normal Chat list
   // below instead of becoming a separate pinned conversation above navigation.
@@ -981,7 +877,6 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     if (activeId === OCTOPUS_THREAD_ID) return null;
     return (
       [
-        ...ongoingThreads,
         ...projectThreads,
         ...conversationThreads,
         ...allHistoryThreads,
@@ -1000,15 +895,10 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     activeTaskWorkspacePath,
     allHistoryThreads,
     conversationThreads,
-    ongoingThreads,
     projectThreads,
     sidebarPathname,
     t.sidebar.currentTaskSession,
   ]);
-  const backgroundOngoingThreads = useMemo(
-    () => excludeActiveThread(ongoingThreads, sidebarPathname),
-    [ongoingThreads, sidebarPathname],
-  );
   const sidebarHistoryThreads = useMemo(() => {
     if (!activeThreadSummary) return allHistoryThreads;
     const activeIsProjectThread = projectThreads.some(
@@ -1064,10 +954,6 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
               workspacePath={activeTaskWorkspacePath}
             />
           </SidebarGroup>
-          <OngoingThreadsSection
-            threads={backgroundOngoingThreads}
-            pathname={sidebarPathname}
-          />
           {/* Unified sidebar — no more surface branching. All navigation
             items are always visible regardless of the current route. */}
           <NavSection items={chatCapabilityItems} pathname={pathname} />
@@ -1508,9 +1394,7 @@ export const __testing = {
   withThreadSidebarMode,
   buildProjectSectionActions,
   buildChatsSectionActions,
-  buildOngoingThreadSummaries,
   transientThreadModeFromHref,
-  excludeActiveThread,
   prioritizeActiveThread,
   projectThreadsForPreview,
   syncedSidebarPathname,
@@ -1647,6 +1531,7 @@ function SurfaceCreateButton({
 function NavRow({ item, pathname }: { item: NavItem; pathname: string }) {
   const active = isNavRouteActive(pathname, item.to);
   const Icon = item.icon;
+
   return (
     <SidebarMenuItem className="justify-center">
       <SidebarMenuButton
@@ -1677,7 +1562,7 @@ function NavRow({ item, pathname }: { item: NavItem; pathname: string }) {
           >
             <Icon className="size-[16px]" />
           </span>
-          <span className="group-data-[collapsible=icon]:hidden">
+          <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">
             {item.label}
           </span>
         </Link>
@@ -1859,97 +1744,6 @@ function AvatarCell({
 
 function ProjectGroupIcon({ project: _project }: { project: string }) {
   return <FolderIcon className="size-[18px] shrink-0 opacity-70" />;
-}
-
-function threadRunStatusLabel(
-  status: ThreadRunStatus,
-  t: ReturnType<typeof useI18n>["t"],
-): string {
-  if (status === "running") return t.sidebar.taskStatusRunning;
-  if (status === "error") return t.sidebar.taskStatusFailed;
-  if (status === "waiting") return t.agentWorkbench.waitingToContinue;
-  return t.sidebar.taskStatusPending;
-}
-
-function OngoingThreadsSection({
-  pathname,
-  threads,
-}: {
-  pathname: string;
-  threads: OngoingThreadSummary[];
-}) {
-  const { t } = useI18n();
-  if (threads.length === 0) return null;
-
-  return (
-    <SidebarGroup className="p-0 px-1 pb-0.5 group-data-[collapsible=icon]:hidden">
-      <div className="mb-1 flex items-center gap-1.5 px-2 text-mini font-medium text-muted-foreground/72">
-        <ListTodoIcon className="size-3.5" />
-        <span>{t.sidebar.sectionOngoing}</span>
-        <span className="ml-auto font-mono text-micro text-muted-foreground/55">
-          {threads.length}
-        </span>
-      </div>
-      <SidebarMenu className="gap-0.5">
-        {threads.map((thread) => {
-          const active =
-            activeWorkspaceThreadIdFromPathname(pathname) === thread.id;
-          const statusLabel = threadRunStatusLabel(thread.runStatus, t);
-          return (
-            <SidebarMenuItem key={thread.href} className="group/ongoing">
-              <SidebarMenuButton
-                isActive={active}
-                asChild
-                tooltip={`${statusLabel} · ${thread.title}`}
-                className={cn(
-                  "h-auto min-h-9 rounded-lg border border-transparent px-2 py-1.5",
-                  "bg-[color:color-mix(in_oklch,var(--sidebar-accent)_38%,transparent)] text-foreground/86",
-                  "hover:border-border-subtle hover:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_60%,transparent)] hover:text-foreground",
-                  active &&
-                    "border-sidebar-primary/18 bg-[color:color-mix(in_oklch,var(--sidebar-accent)_78%,transparent)] text-foreground",
-                )}
-              >
-                <Link
-                  to={thread.href}
-                  state={{
-                    threadOwnerAgentId:
-                      thread.agents.length === 1 ? thread.agents[0] : undefined,
-                    workspacePath: thread.workspacePath,
-                  }}
-                  onMouseDown={() => syncThreadAgentSelection(thread.agents)}
-                  aria-current={active ? "page" : undefined}
-                  title={`${statusLabel} · ${thread.title}`}
-                >
-                  <span aria-hidden="true" className="relative shrink-0">
-                    <ThreadAvatar
-                      agents={thread.agents}
-                      className="size-5 shrink-0"
-                    />
-                    <ThreadRunStatusLight
-                      status={thread.runStatus}
-                      className="absolute -bottom-0.5 -right-0.5 ring-2 ring-sidebar"
-                    />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs leading-tight">
-                      {thread.title}
-                    </span>
-                    <span className="mt-0.5 flex min-w-0 items-center gap-1 text-micro leading-none text-muted-foreground/72">
-                      <span className="truncate">{statusLabel}</span>
-                      <span aria-hidden="true">·</span>
-                      <span className="shrink-0 font-mono">
-                        {formatCompactRelativeTimestamp(thread.updatedAt)}
-                      </span>
-                    </span>
-                  </span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          );
-        })}
-      </SidebarMenu>
-    </SidebarGroup>
-  );
 }
 
 function ProjectGroup({
@@ -2828,6 +2622,7 @@ function ChatsSection({
     </div>
   );
 }
+
 export function CollapseToggle({ compact = false }: { compact?: boolean }) {
   const { open, toggleSidebar, state } = useSidebar();
   const { t } = useI18n();

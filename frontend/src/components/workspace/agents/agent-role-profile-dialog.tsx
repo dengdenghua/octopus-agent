@@ -15,6 +15,18 @@ import {
   Wrench,
   X,
 } from "lucide-react";
+import { useEvolutionOverview, useSkillPerformance, useEvolutionStory } from "@/core/evolution/hooks";
+import {
+  calculateLevel,
+  calculateXP,
+  calculateStars,
+  transformToSkills,
+} from "@/components/workspace/evolution-dashboard/game-data-transformer";
+import { calculateAbilityScores } from "@/components/workspace/evolution-dashboard/ability-radar-chart";
+import { AbilityRadarChart } from "@/components/workspace/evolution-dashboard/ability-radar-chart";
+import { SkillTree } from "@/components/workspace/evolution-dashboard/skill-tree";
+import { GrowthTimeline } from "@/components/workspace/evolution-dashboard/growth-timeline";
+import type { TimelineEvent } from "@/components/workspace/evolution-dashboard/growth-timeline";
 import { toast } from "sonner";
 
 import { AuthenticatedImage } from "@/components/ui/authenticated-image";
@@ -1062,6 +1074,9 @@ export function AgentRoleProfileDialog({
   const [armsInitialTab, setArmsInitialTab] = useState<
     "arms" | "skills" | "permissions" | "routing"
   >("arms");
+  const [activeBottomTab, setActiveBottomTab] = useState<
+    "overview" | "growth" | "radar" | "skills"
+  >("overview");
   const [form, setForm] = useState<EditableAgentConfig>({
     description: "",
     model: "",
@@ -1079,12 +1094,50 @@ export function AgentRoleProfileDialog({
   const updateAgent = useUpdateAgent();
   const saveRegistry = useSaveAgentToolRegistry(agent?.name ?? "");
 
+  // Fetch evolution data
+  const evolutionQuery = useEvolutionOverview();
+  const evolutionData = evolutionQuery.data;
+  const skillPerformanceQuery = useSkillPerformance();
+  const skillPerformances = skillPerformanceQuery.data;
+  const evolutionStoryQuery = useEvolutionStory();
+  const evolutionStory = evolutionStoryQuery.data;
+
   const fullAgent = agentQuery.agent;
   const registry = registryQuery.data;
   const characterProfile = useMemo(
     () => (agent ? buildCharacterProfile(agent, t) : null),
     [agent, t],
   );
+
+  // Transform evolution data for tabs
+  const tabData = useMemo(() => {
+    if (!evolutionData || !skillPerformances) return null;
+
+    const skills = transformToSkills(skillPerformances);
+    const abilityScores = calculateAbilityScores(evolutionData, skillPerformances, "general");
+
+    // Generate timeline events from evolution story
+    const timelineEvents: TimelineEvent[] = [];
+
+    if (evolutionStory?.changes) {
+      evolutionStory.changes.slice(0, 10).forEach((change: any, idx: number) => {
+        timelineEvents.push({
+          id: `event-${idx}`,
+          type: change.category === 'skill_added' ? 'skill' :
+                change.category === 'rule_added' ? 'rule' : 'achievement',
+          timestamp: new Date(Date.now() - idx * 86400000).toISOString(),
+          title: change.description || '未知事件',
+          description: change.category,
+        });
+      });
+    }
+
+    return {
+      skills,
+      abilityScores,
+      timelineEvents,
+    };
+  }, [evolutionData, skillPerformances, evolutionStory]);
 
   const meta = useMemo(() => {
     if (!agent) return null;
@@ -1360,6 +1413,45 @@ export function AgentRoleProfileDialog({
                       <p className="mt-3 text-xl font-medium leading-7 text-[#f4e86f]">
                         {characterProfile.epithet}
                       </p>
+
+                      {/* Evolution Level Display */}
+                      {evolutionData && (() => {
+                        const level = calculateLevel(evolutionData.learning_events);
+                        const stars = calculateStars(level);
+                        const { progress } = calculateXP(evolutionData.learning_events);
+                        const getStars = (count: number) => "⭐".repeat(count);
+                        const getTitle = (lvl: number) => {
+                          if (lvl <= 5) return "新手";
+                          if (lvl <= 10) return "学徒";
+                          if (lvl <= 20) return "熟手";
+                          if (lvl <= 35) return "专家";
+                          if (lvl <= 50) return "大师";
+                          if (lvl <= 75) return "宗师";
+                          return "传奇";
+                        };
+
+                        return (
+                          <div className="mt-3">
+                            <div className="flex items-center gap-2 text-sm">
+                              <span className="font-semibold text-primary">Lv.{level}</span>
+                              <span className="text-xs">{getStars(stars)}</span>
+                              <span className="text-white/60">· 🎯 {getTitle(level)}</span>
+                            </div>
+                            <div className="mt-2">
+                              <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                                <div
+                                  className="h-full rounded-full bg-[#f4e86f] transition-all duration-500"
+                                  style={{ width: `${progress}%` }}
+                                />
+                              </div>
+                              <p className="mt-1 text-xs text-white/50">
+                                {progress}% → Lv.{level + 1}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       <div className="mt-4 grid grid-cols-3 gap-px overflow-hidden rounded-sm border border-white/10 bg-white/10">
                         {identityRows.map(([label, value]) => (
                           <div
@@ -1512,6 +1604,131 @@ export function AgentRoleProfileDialog({
                         </div>
                       ) : null}
                     </div>
+                  </div>
+                </div>
+
+                {/* Bottom Tabs Section */}
+                <div className="mt-3 shrink-0 space-y-2">
+                  {/* Tab Navigation */}
+                  <div className="flex items-center gap-1 border-b border-white/10 pb-0">
+                    {[
+                      { id: "overview", label: "概览", icon: "📋" },
+                      { id: "growth", label: "成长数据", icon: "📈" },
+                      { id: "radar", label: "能力雷达", icon: "🎯" },
+                      { id: "skills", label: "技能树", icon: "🌳" },
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        className={cn(
+                          "relative flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition",
+                          activeBottomTab === tab.id
+                            ? "text-primary"
+                            : "text-white/50 hover:text-white/80"
+                        )}
+                        onClick={() => setActiveBottomTab(tab.id as any)}
+                      >
+                        <span>{tab.icon}</span>
+                        <span>{tab.label}</span>
+                        {activeBottomTab === tab.id && (
+                          <span className="absolute inset-x-0 bottom-0 h-0.5 bg-primary" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Tab Content */}
+                  <div className="max-h-[180px] overflow-y-auto rounded-sm border border-white/10 bg-black/10 p-3 [scrollbar-width:thin]">
+                    {activeBottomTab === "overview" && (
+                      <div className="space-y-2">
+                        <div className="font-mono text-xs uppercase tracking-eyebrow text-white/48">
+                          角色概览
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="rounded-sm border border-white/8 bg-white/[0.025] p-2">
+                            <div className="text-white/50">总任务数</div>
+                            <div className="mt-1 text-lg font-semibold text-white">
+                              {evolutionData?.learning_events || 0}
+                            </div>
+                          </div>
+                          <div className="rounded-sm border border-white/8 bg-white/[0.025] p-2">
+                            <div className="text-white/50">成功率</div>
+                            <div className="mt-1 text-lg font-semibold text-primary">
+                              {evolutionData?.skills?.avg_success_rate
+                                ? `${Math.round(evolutionData.skills.avg_success_rate * 100)}%`
+                                : "N/A"}
+                            </div>
+                          </div>
+                          <div className="rounded-sm border border-white/8 bg-white/[0.025] p-2">
+                            <div className="text-white/50">技能数</div>
+                            <div className="mt-1 text-lg font-semibold text-white">
+                              {skillPerformances?.length || 0}
+                            </div>
+                          </div>
+                          <div className="rounded-sm border border-white/8 bg-white/[0.025] p-2">
+                            <div className="text-white/50">规则数</div>
+                            <div className="mt-1 text-lg font-semibold text-white">
+                              {evolutionData?.memory?.categories?.rules || 0}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {activeBottomTab === "growth" && (
+                      <div className="space-y-2">
+                        <div className="font-mono text-xs uppercase tracking-eyebrow text-white/48">
+                          成长时间线
+                        </div>
+                        {tabData?.timelineEvents && tabData.timelineEvents.length > 0 ? (
+                          <GrowthTimeline
+                            events={tabData.timelineEvents}
+                            className="max-h-[120px]"
+                          />
+                        ) : (
+                          <div className="py-4 text-center text-xs text-white/40">
+                            暂无成长记录
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {activeBottomTab === "radar" && (
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="font-mono text-xs uppercase tracking-eyebrow text-white/48">
+                          六维能力图
+                        </div>
+                        {tabData?.abilityScores && tabData.abilityScores.length > 0 ? (
+                          <AbilityRadarChart
+                            data={tabData.abilityScores}
+                            size={140}
+                            className="scale-90"
+                          />
+                        ) : (
+                          <div className="py-8 text-center text-xs text-white/40">
+                            暂无能力数据
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {activeBottomTab === "skills" && (
+                      <div className="space-y-2">
+                        <div className="font-mono text-xs uppercase tracking-eyebrow text-white/48">
+                          技能树
+                        </div>
+                        {tabData?.skills && tabData.skills.length > 0 ? (
+                          <SkillTree
+                            skills={tabData.skills}
+                            className="max-h-[120px]"
+                          />
+                        ) : (
+                          <div className="py-4 text-center text-xs text-white/40">
+                            暂无技能数据
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 

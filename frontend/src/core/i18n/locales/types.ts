@@ -525,6 +525,7 @@ export interface Translations {
       updatePlan: string;
       useCapability: string;
       delegateTask: string;
+      submitResult: string;
       deleteFile: string;
       moveFile: string;
       startPreview: string;
@@ -1026,6 +1027,14 @@ export interface Translations {
     statusError: string;
     statusDone: string;
     progress: string;
+    currentObjective: string;
+    currentObjectiveHint: string;
+    resultReceipt: string;
+    resultReceiptDescription: string;
+    recoveredOperations: (count: number) => string;
+    verifiedSteps: (count: number) => string;
+    unresolvedSteps: (count: number) => string;
+    noResultYet: string;
     thinkingDetail: string;
     thinkingInProgress: string;
     thinkingDone: string;
@@ -1570,8 +1579,6 @@ export interface Translations {
     openThreadFilesTooltip: string;
     // Surface switch + task statuses
     navBrowserSurface: string;
-    sectionOngoing: string;
-    noOngoingTasks: string;
     sectionTaskHistory: string;
     noTaskHistory: string;
     unnamedTask: string;
@@ -7789,6 +7796,7 @@ export interface Translations {
       finishAgent: string;
       writeTodoList: string;
       parallelDispatch: string;
+      submitResult: string;
       loadSkill: string;
       terminalFailed: string;
       terminalRecovered: string;
