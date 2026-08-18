@@ -1,0 +1,6 @@
+# 覆盖仓库根 .gitignore 的 data/ 规则:
+# storefront 的核心商城数据必须入库(供发布脚本与离线回退使用)。
+!data/
+data/*
+!data/expert-store.json
+!data/skill-registry.json

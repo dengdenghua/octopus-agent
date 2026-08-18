@@ -1,0 +1,344 @@
+"""Cloud Expert Store — WorkBuddy 全量专家商城云端源.
+
+把发布在 GitHub Pages 的 WorkBuddy 专家商城(expert-store.json,421 位专家)
+接进 octopus 的 agent 市场:浏览/搜索/详情 + 一键下载 bundle 并导入为原生 agent。
+
+数据源(可配置):
+  - 远程: https://raw.githubusercontent.com/dengdenghua/workbuddy-expert-market/gh-pages/data/expert-store.json
+  - 本地镜像(网络不可用时的回退): extensions/workbuddy-experts/storefront/data/expert-store.json
+  - 环境变量 OCTOPUS_CLOUD_EXPERT_URL 可覆盖远程地址
+
+安装流程:
+  1) 按 bundleUrl 下载 <plugin>.tar.gz(WorkBuddy 专家 bundle,内含
+     .codebuddy-plugin/plugin.json + agents/*.md + skills/**/SKILL.md)
+  2) 解压到临时目录
+  3) 复用 runtime.execution.misc.agent_packs.import_agent_from_pack
+     (已支持 .codebuddy-plugin 格式)导入为 agents/<slug>/ 标准 agent
+"""
+from __future__ import annotations
+
+import contextlib
+import json
+import os
+import shutil
+import tarfile
+import tempfile
+import urllib.request
+from pathlib import Path
+from typing import Any
+
+from runtime.execution.agents.loader import default_agents_root
+from runtime.platform.process.paths import resources_root
+from runtime.sensing.gateway._agent_world_helpers import _category_for
+
+# 远程商城数据(发布脚本 scripts/publish-cloud.py 推到 gh-pages)
+REMOTE_STORE_URL = os.environ.get(
+    "OCTOPUS_CLOUD_EXPERT_URL",
+    "https://raw.githubusercontent.com/dengdenghua/workbuddy-expert-market/gh-pages/data/expert-store.json",
+)
+LOCAL_MIRROR = (
+    Path(__file__).resolve().parents[3]
+    / "extensions" / "workbuddy-experts" / "storefront" / "data" / "expert-store.json"
+)
+# 缓存远程数据,避免每次请求都拉全量(796KB)
+CACHE_DIR = Path(os.path.expanduser("~/.octopus/cache"))
+CACHE_FILE = CACHE_DIR / "cloud-expert-store.json"
+
+
+def _load_remote(url: str) -> dict[str, Any] | None:
+    """拉取远程 expert-store.json;失败返回 None。"""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "octopus-agent/1.0"})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception:  # noqa: BLE001 — 网络/解析失败统一走本地镜像
+        return None
+
+
+def _load_local_mirror() -> dict[str, Any] | None:
+    if LOCAL_MIRROR.exists():
+        try:
+            return json.loads(LOCAL_MIRROR.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):  # noqa: BLE001
+            return None
+    return None
+
+
+class CloudExpertStore:
+    """WorkBuddy 专家商城云端源。"""
+
+    def __init__(
+        self,
+        *,
+        url: str | None = None,
+        use_cache: bool = True,
+        use_remote: bool = True,
+    ) -> None:
+        self._url = url or REMOTE_STORE_URL
+        self._use_cache = use_cache
+        self._use_remote = use_remote
+        self._store: dict[str, Any] | None = None
+
+    # ── 数据加载 ──────────────────────────────────────────────
+    def _load(self) -> dict[str, Any]:
+        if self._store is not None:
+            return self._store
+
+        store = None
+        # 1) 内存缓存/磁盘缓存
+        if self._use_cache and CACHE_FILE.exists():
+            try:
+                store = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):  # noqa: BLE001
+                store = None
+
+        # 2) 远程
+        if store is None and self._use_remote:
+            remote = _load_remote(self._url)
+            if remote and remote.get("experts"):
+                store = remote
+                if self._use_cache:
+                    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                    with contextlib.suppress(OSError):
+                        CACHE_FILE.write_text(
+                            json.dumps(store, ensure_ascii=False), encoding="utf-8"
+                        )
+
+        # 3) 本地镜像
+        if store is None:
+            store = _load_local_mirror()
+
+        if not store or not store.get("experts"):
+            raise RuntimeError("cloud expert store unavailable (remote + local mirror both failed)")
+
+        self._store = store
+        return store
+
+    def refresh(self) -> None:
+        self._store = None
+        if self._use_cache and CACHE_FILE.exists():
+            CACHE_FILE.unlink(missing_ok=True)
+        return self._load()
+
+    # ── 元数据 ────────────────────────────────────────────────
+    def meta(self) -> dict[str, Any]:
+        return dict(self._load().get("meta") or {})
+
+    def categories(self) -> list[dict[str, Any]]:
+        return list(self._load().get("categories") or [])
+
+    def get(self, expert_id: str) -> dict[str, Any] | None:
+        for e in self._load().get("experts", []):
+            if e.get("id") == expert_id or e.get("plugin") == expert_id:
+                return e
+        return None
+
+    # ── 转成 agent-market wire 形状(与 _list_local_agents 同构) ──
+    def to_agent_dict(self, e: dict[str, Any], *, installed: set[str]) -> dict[str, Any]:
+        is_team = e.get("expertType") == "team"
+        plugin = e.get("plugin") or e.get("id")
+        agent_id = f"wb_{plugin}" if plugin else e.get("id")
+
+        def zh(o: Any) -> str:
+            return (o or {}).get("zh") or (o or {}).get("en") or ""
+
+        tags = [t.get("zh") or t.get("en") or "" for t in (e.get("tags") or [])]
+        return {
+            "id": agent_id,
+            "name": agent_id,
+            "display_name": zh(e.get("displayName")) or e.get("id"),
+            "description": zh(e.get("description")) or "",
+            "author": "WorkBuddy(腾讯)",
+            "category": _category_for(e.get("id")) or str(e.get("categoryId") or ""),
+            "category_id": e.get("categoryId"),
+            "tags": tags,
+            "icon": "👥" if is_team else "🧑‍💼",
+            "avatar_url": e.get("avatar") or "",
+            "visual_urls": [],
+            "character_profile": None,
+            "model": "",
+            "tool_groups": [],
+            "extra_affinity": {},
+            "private_skills": [],
+            "capabilities": {},
+            "version": "1.0.0",
+            "downloads": 0,
+            "rating": 4.6 if not is_team else 4.8,
+            "rating_count": 0,
+            "is_featured": False,
+            "is_official": True,
+            "is_installed": agent_id in installed,
+            "is_team": is_team,
+            "created_at": str(e.get("updatedAt") or ""),
+            "bundle_url": e.get("bundleUrl") or "",
+            "quick_prompts": [p.get("zh") or p.get("en") or "" for p in (e.get("quickPrompts") or [])],
+            "profession": zh(e.get("profession")),
+            "source": "workbuddy-cloud",
+        }
+
+    def list_experts(
+        self,
+        *,
+        category: str | None = None,
+        search: str | None = None,
+        sort: str = "updated",
+        offset: int = 0,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        store = self._load()
+        installed = self._installed_set()
+        experts = [self.to_agent_dict(e, installed=installed) for e in store.get("experts", [])]
+
+        if category and category != "all":
+            qcat = category
+            # 支持按中文分类名或 id
+            for c in store.get("categories", []):
+                if c.get("id") == category or (c.get("name") or {}).get("zh") == category:
+                    qcat = c.get("id")
+                    break
+            experts = [a for a in experts if a.get("category_id") == qcat]
+
+        if search:
+            q = search.lower()
+            experts = [
+                a
+                for a in experts
+                if q in a["display_name"].lower()
+                or q in a["description"].lower()
+                or q in a["id"].lower()
+                or any(q in t.lower() for t in a["tags"])
+                or q in a["profession"].lower()
+            ]
+
+        if sort == "name":
+            experts.sort(key=lambda a: a["display_name"].lower())
+        elif sort == "rating":
+            experts.sort(key=lambda a: a["rating"], reverse=True)
+        else:
+            experts.sort(key=lambda a: a["created_at"], reverse=True)
+
+        total = len(experts)
+        paged = experts[offset : offset + limit]
+        page = offset // limit + 1 if limit else 1
+        return {"agents": paged, "total": total, "page": page, "page_size": limit}
+
+    def _installed_set(self) -> set[str]:
+        installed: set[str] = set()
+        root = default_agents_root()
+        if root.is_dir():
+            for d in root.iterdir():
+                if d.is_dir() and not d.name.startswith("_"):
+                    installed.add(d.name)
+        return installed
+
+    # ── 安装 ──────────────────────────────────────────────────
+    def install_expert(
+        self,
+        expert_id: str,
+        *,
+        agents_root: str | Path | None = None,
+        skills_root: str | Path | None = None,
+    ) -> dict[str, Any]:
+        from runtime.execution.misc.agent_packs import (
+            AgentPackAgentNotFound,
+            import_agent_from_pack,
+        )
+
+        e = self.get(expert_id)
+        if not e:
+            raise KeyError(f"expert not found in cloud store: {expert_id}")
+
+        bundle_url = e.get("bundleUrl") or e.get("bundle_url")
+        if not bundle_url:
+            raise ValueError(f"expert has no bundle url: {expert_id}")
+
+        agents_root = Path(agents_root or default_agents_root())
+        skills_root = Path(skills_root or resources_root() / "skills" / "public")
+
+        # 先检查是否已装
+        agent_id = f"wb_{e.get('plugin')}" if e.get("plugin") else expert_id
+        if (agents_root / agent_id).exists():
+            return {
+                "installed": True,
+                "already_exists": True,
+                "agent_id": agent_id,
+                "message": f"agent already exists: {agent_id}",
+            }
+
+        tmpdir = tempfile.mkdtemp(prefix="wb-bundle-")
+        try:
+            bundle_path = self._download(bundle_url, tmpdir, e.get("plugin") or expert_id)
+            unpack_root = self._unpack(bundle_path, tmpdir)
+            # 找到含 .codebuddy-plugin 的插件根
+            pack_root = _find_pack_root(unpack_root)
+            agent_name = _find_agent_name(pack_root, e)
+            result = import_agent_from_pack(
+                pack_root,
+                agent_name,
+                agents_root=agents_root,
+                skills_root=skills_root,
+            )
+            return {
+                "installed": True,
+                "already_exists": result.already_exists,
+                "agent_id": result.agent_id,
+                "agent_name": result.agent_name,
+                "agent_path": result.agent_path,
+                "copied_skills": result.copied_skills,
+                "warnings": result.warnings,
+                "source": "workbuddy-cloud",
+            }
+        except (AgentPackAgentNotFound, ValueError, KeyError):
+            raise
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    @staticmethod
+    def _download(url: str, dest_dir: Path, plugin: str) -> Path:
+        out = Path(dest_dir) / f"{plugin}.tar.gz"
+        req = urllib.request.Request(url, headers={"User-Agent": "octopus-agent/1.0"})
+        with urllib.request.urlopen(req, timeout=120) as resp, open(out, "wb") as f:
+            shutil.copyfileobj(resp, f)
+        return out
+
+    @staticmethod
+    def _unpack(bundle_path: Path, dest_dir: Path) -> Path:
+        out = Path(dest_dir) / "unpack"
+        out.mkdir(exist_ok=True)
+        with tarfile.open(bundle_path, "r:gz") as tf:
+            # Path-traversal-safe extraction (Python 3.9 compatible)
+            dest_res = out.resolve()
+            for member in tf.getmembers():
+                target = (dest_res / member.name).resolve()
+                if dest_res not in target.parents and target != dest_res:
+                    raise ValueError(f"unsafe tar path: {member.name}")
+            tf.extractall(dest_res)
+        return out
+
+    def clear_cache(self) -> None:
+        self._store = None
+        if CACHE_FILE.exists():
+            CACHE_FILE.unlink(missing_ok=True)
+
+
+def _find_pack_root(unpack_root: Path) -> Path:
+    """在解压目录里找含 .codebuddy-plugin 的插件根(可能多套一层)。"""
+    for marker in (".codebuddy-plugin", ".claude-plugin", ".codex-plugin"):
+        hits = list(unpack_root.rglob(marker))
+        if hits:
+            return hits[0].parent
+    # 没有插件清单时,直接用解压根(仍可能扫到 agents/*.md)
+    return unpack_root
+
+
+def _find_agent_name(pack_root: Path, e: dict[str, Any]) -> str:
+    """优先用插件里的 lead agent 名;退化用 manifest 里的 agentName。"""
+    agents_dir = pack_root / "agents"
+    if agents_dir.is_dir():
+        files = sorted(agents_dir.glob("*.md"))
+        if files:
+            return files[0].stem
+    return e.get("plugin") or e.get("id")
+
+
+__all__ = ["CloudExpertStore", "REMOTE_STORE_URL", "LOCAL_MIRROR"]

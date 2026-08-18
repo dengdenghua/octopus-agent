@@ -573,6 +573,70 @@ def create_agent_world_router(
     def api_agent_market_social(agent_name: str) -> dict[str, Any]:
         return {"relationships": []}
 
+    # ── WorkBuddy 专家商城 · 云端源 ──────────────────────────────
+    # 数据来自发布到 GitHub Pages 的 expert-store.json(421 位专家/专家团,
+    # 见 extensions/workbuddy-experts + scripts/publish-cloud.py)。
+    def _cloud_store() -> Any:
+        from runtime.platform.plugins.cloud_expert_store import CloudExpertStore
+
+        return CloudExpertStore()
+
+    @router.get("/api/agent-market/cloud/store")
+    def api_agent_market_cloud_store(
+        category: str | None = None,
+        search: str | None = None,
+        sort: str = "updated",
+        refresh: int = 0,
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=20, ge=1, le=500),
+    ) -> dict[str, Any]:
+        store = _cloud_store()
+        if refresh:
+            store.refresh()
+        return store.list_experts(
+            category=category, search=search, sort=sort, offset=offset, limit=limit
+        )
+
+    @router.get("/api/agent-market/cloud/store/categories")
+    def api_agent_market_cloud_categories() -> dict[str, Any]:
+        store = _cloud_store()
+        return {"categories": store.categories(), "meta": store.meta()}
+
+    @router.get("/api/agent-market/cloud/store/{expert_id}")
+    def api_agent_market_cloud_detail(expert_id: str) -> dict[str, Any]:
+        store = _cloud_store()
+        e = store.get(expert_id)
+        if not e:
+            raise HTTPException(404, f"cloud expert not found: {expert_id}")
+        installed = store._installed_set()
+        agent = store.to_agent_dict(e, installed=installed)
+        agent["bundle_url"] = e.get("bundleUrl") or ""
+        agent["quick_prompts"] = [
+            p.get("zh") or p.get("en") or "" for p in (e.get("quickPrompts") or [])
+        ]
+        agent["prompt_file"] = e.get("promptFile") or ""
+        return agent
+
+    @router.post("/api/agent-market/cloud/store/{expert_id}/install")
+    def api_agent_market_cloud_install(expert_id: str) -> dict[str, Any]:
+        from runtime.execution.misc.agent_packs import AgentPackAgentNotFound
+
+        store = _cloud_store()
+        try:
+            return store.install_expert(
+                expert_id,
+                agents_root=default_agents_root(),
+                skills_root=resources_root() / "skills" / "public",
+            )
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except AgentPackAgentNotFound as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
     return router
 
 

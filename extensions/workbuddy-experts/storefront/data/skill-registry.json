@@ -1,0 +1,265 @@
+{
+ "meta": {
+  "title": "Octopus Skill Hub — WorkBuddy 技能镜像",
+  "count": 19,
+  "source": "https://raw.githubusercontent.com/dengdenghua/workbuddy-expert-market/gh-pages/data/skill-registry.json"
+ },
+ "skills": [
+  {
+   "name": "fullstack-dev",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:senior-developer",
+   "description": "Full-stack development architecture & build guide",
+   "tags": [
+    "engineering",
+    "workbuddy",
+    "senior-developer"
+   ],
+   "source": "workbuddy",
+   "download_url": ""
+  },
+  {
+   "name": "frontend-dev",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:senior-developer",
+   "description": "Frontend UI/CSS/component development with AI media generation",
+   "tags": [
+    "engineering",
+    "workbuddy",
+    "senior-developer"
+   ],
+   "source": "workbuddy",
+   "download_url": ""
+  },
+  {
+   "name": "browser-use",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:senior-developer",
+   "description": "Browser automation: navigate, click, screenshot, extract",
+   "tags": [
+    "automation",
+    "workbuddy",
+    "senior-developer"
+   ],
+   "source": "workbuddy",
+   "download_url": ""
+  },
+  {
+   "name": "capability-evolver",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:senior-developer",
+   "description": "AI agent self-evolution engine over run history",
+   "tags": [
+    "meta",
+    "workbuddy",
+    "senior-developer"
+   ],
+   "source": "workbuddy",
+   "download_url": ""
+  },
+  {
+   "name": "seo-analysis",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:seo-content-team",
+   "description": "SEO on-page analysis & keyword clustering",
+   "tags": [
+    "marketing",
+    "workbuddy",
+    "seo-content-team"
+   ],
+   "source": "workbuddy",
+   "download_url": ""
+  },
+  {
+   "name": "content-writing",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:seo-content-team",
+   "description": "SEO long-form content writing workflow",
+   "tags": [
+    "marketing",
+    "workbuddy",
+    "seo-content-team"
+   ],
+   "source": "workbuddy",
+   "download_url": ""
+  },
+  {
+   "name": "cro-optimization",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:seo-content-team",
+   "description": "CRO & landing-page conversion optimization",
+   "tags": [
+    "marketing",
+    "workbuddy",
+    "seo-content-team"
+   ],
+   "source": "workbuddy",
+   "download_url": ""
+  },
+  {
+   "name": "westock-data",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:stock-partner-team",
+   "description": "Fetch quotes/financials via Tencent westock connector",
+   "tags": [
+    "finance",
+    "workbuddy",
+    "stock-partner-team"
+   ],
+   "source": "workbuddy",
+   "download_url": ""
+  },
+  {
+   "name": "westock-tool",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:stock-partner-team",
+   "description": "Stock screening & watchlist tools via westock",
+   "tags": [
+    "finance",
+    "workbuddy",
+    "stock-partner-team"
+   ],
+   "source": "workbuddy",
+   "download_url": ""
+  },
+  {
+   "name": "md-to-html",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:stock-partner-team",
+   "description": "Render markdown research reports to styled HTML",
+   "tags": [
+    "finance",
+    "workbuddy",
+    "stock-partner-team"
+   ],
+   "source": "workbuddy",
+   "download_url": ""
+  },
+  {
+   "name": "general-writer",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:tencent-docx",
+   "description": "WorkBuddy writing expert: general-writer",
+   "tags": [
+    "writing",
+    "docx",
+    "workbuddy",
+    "expert"
+   ],
+   "source": "workbuddy",
+   "download_url": ""
+  },
+  {
+   "name": "academic-paper-expert",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:tencent-docx",
+   "description": "WorkBuddy writing expert: academic-paper-expert",
+   "tags": [
+    "writing",
+    "docx",
+    "workbuddy",
+    "expert"
+   ],
+   "source": "workbuddy",
+   "download_url": ""
+  },
+  {
+   "name": "business-copy-expert",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:tencent-docx",
+   "description": "WorkBuddy writing expert: business-copy-expert",
+   "tags": [
+    "writing",
+    "docx",
+    "workbuddy",
+    "expert"
+   ],
+   "source": "workbuddy",
+   "download_url": ""
+  },
+  {
+   "name": "legal-contract-expert",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:tencent-docx",
+   "description": "WorkBuddy writing expert: legal-contract-expert",
+   "tags": [
+    "writing",
+    "docx",
+    "workbuddy",
+    "expert"
+   ],
+   "source": "workbuddy",
+   "download_url": ""
+  },
+  {
+   "name": "poetry-prose-expert",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:tencent-docx",
+   "description": "WorkBuddy writing expert: poetry-prose-expert",
+   "tags": [
+    "writing",
+    "docx",
+    "workbuddy",
+    "expert"
+   ],
+   "source": "workbuddy",
+   "download_url": ""
+  },
+  {
+   "name": "science-writing-expert",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:tencent-docx",
+   "description": "WorkBuddy writing expert: science-writing-expert",
+   "tags": [
+    "writing",
+    "docx",
+    "workbuddy",
+    "expert"
+   ],
+   "source": "workbuddy",
+   "download_url": ""
+  },
+  {
+   "name": "stock-research-report-expert",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:tencent-docx",
+   "description": "WorkBuddy writing expert: stock-research-report-expert",
+   "tags": [
+    "writing",
+    "docx",
+    "workbuddy",
+    "expert"
+   ],
+   "source": "workbuddy",
+   "download_url": ""
+  },
+  {
+   "name": "tech-blog-expert",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:tencent-docx",
+   "description": "WorkBuddy writing expert: tech-blog-expert",
+   "tags": [
+    "writing",
+    "docx",
+    "workbuddy",
+    "expert"
+   ],
+   "source": "workbuddy",
+   "download_url": ""
+  },
+  {
+   "name": "work-report-expert",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:tencent-docx",
+   "description": "WorkBuddy writing expert: work-report-expert",
+   "tags": [
+    "writing",
+    "docx",
+    "workbuddy",
+    "expert"
+   ],
+   "source": "workbuddy",
+   "download_url": ""
+  }
+ ]
+}

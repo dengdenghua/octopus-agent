@@ -1,0 +1,447 @@
+# WorkBuddy Expert Center — 全量目录(远程镜像)
+
+> 来源: `https://acc-1258344699.cos.accelerate.myqcloud.com/workbuddy/expert-marketplace` · 共 **421** 个专家 (agent 369 / team 52)
+
+## 分类统计
+
+| categoryId | 数量 |
+|---|---|
+| 01-ProductDesign | 19 |
+| 02-Engineering | 43 |
+| 03-GameSpatial | 25 |
+| 04-DataAI | 41 |
+| 05-MarketingGrowth | 36 |
+| 06-ContentCreative | 45 |
+| 07-SalesCommerce | 16 |
+| 08-FinanceInvestment | 38 |
+| 09-OperationsHR | 14 |
+| 10-ProjectQuality | 23 |
+| 11-SecurityCompliance | 27 |
+| 12-IndustryConsultant | 33 |
+| 13-TencentZone | 29 |
+| 14-GlobalDevelopment | 21 |
+| 15-BackToSchool | 11 |
+
+## 全量列表
+
+- **AIShifuExpert** [agent] · AI师傅 — 06-ContentCreative
+- **APMPerformanceExpert** [agent] · 安迪 — 13-TencentZone
+- **AShareAnalysis** [team] · A股研究团队 — 08-FinanceInvestment
+- **AcademicJournalSelector** [team] · 万方数据 — 04-DataAI
+- **AccessibilityAuditor** [agent] · 无碍碍 — 10-ProjectQuality
+- **AccountsPayableAgent** [agent] · 付清清 — 08-FinanceInvestment
+- **AdCreativeStrategist** [agent] · 点睛睛 — 05-MarketingGrowth
+- **AdTrackingExpert** [agent] · 追踪踪 — 05-MarketingGrowth
+- **AdortDesignExpert** [agent] · 林觉初 — 01-ProductDesign
+- **AgentIdentityTrustExpert** [agent] · 信链链 — 11-SecurityCompliance
+- **AgentOrchestrator** [agent] · 调度达 — 10-ProjectQuality
+- **AiContentCreatorTeam** [team] · 内容创作专家团 — 06-ContentCreative
+- **AiDataCopilot** [team] · 智数分析专家团 — 04-DataAI
+- **AiEngineer** [agent] · 深网网 — 04-DataAI
+- **AiHot** [agent] · 数字生命卡兹克 — 04-DataAI
+- **AiHumanizer** [agent] · 鹏城信息AI专家 — 06-ContentCreative
+- **AiImagePromptEngineer** [agent] · 画令令 — 01-ProductDesign
+- **AiMeetingNotes** [agent] · 鹏城信息AI专家 — 10-ProjectQuality
+- **AiShifu** [agent] · AI师傅 — 06-ContentCreative
+- **AiVideoScript** [agent] · 鹏城信息AI专家 — 06-ContentCreative
+- **AndonQExpert** [agent] · AndonQ — 13-TencentZone
+- **AntiScamAgent** [agent] · 天御金融反诈 — 13-TencentZone
+- **ApiDev** [agent] · 鹏城信息AI专家 — 02-Engineering
+- **ApiTestingExpert** [agent] · 接口探 — 10-ProjectQuality
+- **AppStoreOptimizationExpert** [agent] · 榜上上 — 05-MarketingGrowth
+- **ArxivWatcher** [agent] · 鹏城信息AI专家 — 04-DataAI
+- **AskLiuxiaopai** [agent] · AI 刘小排 — 12-IndustryConsultant
+- **AutoConsultant** [agent] · 车赢赢 — 05-MarketingGrowth
+- **AutonomousOptimizationArchitect** [agent] · 自进化 — 04-DataAI
+- **BackendArchitect** [agent] · 磐石石 — 02-Engineering
+- **BaiduSeoExpert** [agent] · 度优优 — 05-MarketingGrowth
+- **BehavioralNudgeEngine** [agent] · 助推推 — 01-ProductDesign
+- **BelieveInLight** [team] · 相信光么 — 08-FinanceInvestment
+- **BiddingStrategist** [agent] · 投标策略师 — 07-SalesCommerce
+- **BilibiliContentStrategist** [agent] · 弹幕幕 — 06-ContentCreative
+- **BlockchainSecurityAuditor** [agent] · 链审审 — 11-SecurityCompliance
+- **BookCoCreator** [agent] · 著书书 — 06-ContentCreative
+- **BrandGuardian** [agent] · 盾卫卫 — 05-MarketingGrowth
+- **BrazilCompanyQuery** [agent] · 巴西商务拓展专家 — 14-GlobalDevelopment
+- **BrazilLegal** [agent] · Brazil Legal Expert — 14-GlobalDevelopment
+- **BrazilRfbExpert** [agent] · Brazil Finance & Tax Expert — 14-GlobalDevelopment
+- **CATNetworkQualityAnalyst** [agent] · 亚伦 — 02-Engineering
+- **CampusConversationCoach** [agent] · 社交搭子 — 15-BackToSchool
+- **CampusEventNavigator** [agent] · 活动操盘手 — 15-BackToSchool
+- **CampusJobSearchCoach** [agent] · 求职冲刺 — 15-BackToSchool
+- **CapacityExpert** [agent] · CloudQ — 13-TencentZone
+- **CareerBroker** [agent] · 鹅厂职业经纪人 — 09-OperationsHR
+- **CareerNavigator** [agent] · 生涯领航员 — 15-BackToSchool
+- **CarouselContentGrowthExpert** [agent] · 翻页页 — 05-MarketingGrowth
+- **ChaogeekKongming** [agent] · ChaoGeek 0x孔明 — 12-IndustryConsultant
+- **ChaosExpert** [agent] · CloudQ — 13-TencentZone
+- **CharityDocFinanceExpert** [agent] · 小益 — 13-TencentZone
+- **ChatLawTeam** [team] · 中文法律咨询团 — 11-SecurityCompliance
+- **ChatcutVideoEditor** [agent] · 一站式视频创作专家 — 06-ContentCreative
+- **ChinaEcommerceOperationsExpert** [agent] · 卖得好 — 05-MarketingGrowth
+- **Citongshuopro** [team] · 刺桐说Pro-投资社群嘉宾团 — 08-FinanceInvestment
+- **CloudOpsTeam** [team] · 腾讯云技术支持 — 13-TencentZone
+- **Code** [agent] · 鹏城信息AI专家 — 02-Engineering
+- **CodeReviewExpert** [agent] · 火眼眼 — 02-Engineering
+- **ComplianceAuditor** [agent] · 合规规 — 11-SecurityCompliance
+- **ComputerOperationsAdvisor** [agent] · 小修同学 — 15-BackToSchool
+- **ConsultingPartners** [agent] · 丁笃行 — 12-IndustryConsultant
+- **ContentCreationExpertProd** [team] · 汽车行业内容创作专家团 — 06-ContentCreative
+- **ContentCreator** [agent] · 文博凯 — 06-ContentCreative
+- **ContentDistributionTeam** [team] · 全域内容分发专家团 — 06-ContentCreative
+- **ContentMonetizationTeam** [team] · 内容变现商业化专家团 — 05-MarketingGrowth
+- **ContentWriter** [agent] · 鹏城信息AI专家 — 06-ContentCreative
+- **ContractExpert** [agent] · 何同守 — 11-SecurityCompliance
+- **ContractLegalExpert** [agent] · 腾讯电子签合同法务专家 — 13-TencentZone
+- **CordysCrm** [agent] · Cordys CRM 助手 — 07-SalesCommerce
+- **CorpCreditDueDiligence** [agent] · 天御对公信贷 — 08-FinanceInvestment
+- **CorporateTrainingDesigner** [agent] · 育才才 — 09-OperationsHR
+- **CrossBorderEcommerceExpert** [agent] · 海跨洋 — 05-MarketingGrowth
+- **CulturalIntelligenceStrategist** [agent] · 知文文 — 05-MarketingGrowth
+- **CustomerSupportExpert** [agent] · 暖心心 — 09-OperationsHR
+- **DataAnalysisExpert** [agent] · 析数数 — 04-DataAI
+- **DataAnalyticsReporter** [agent] · 舒明析 — 04-DataAI
+- **DataEngineer** [agent] · 管道通 — 04-DataAI
+- **DataExplorationExpert** [agent] · 探数数 — 04-DataAI
+- **DataIntegrationAgent** [agent] · 聚数数 — 04-DataAI
+- **DatabaseOperations** [agent] · 鹏城信息AI专家 — 02-Engineering
+- **DatabaseOptimizationExpert** [agent] · 索引灵 — 04-DataAI
+- **DatabrainAgentV2** [agent] · DataBrain — 13-TencentZone
+- **DatabrainOpinionExpert** [agent] · DataBrain舆情分析专家 — 04-DataAI
+- **DealStrategist** [agent] · 赢单单 — 07-SalesCommerce
+- **DeepResearchExpert** [agent] · 深研研 — 04-DataAI
+- **DelightfulExperienceDesigner** [agent] · 惊喜喜 — 01-ProductDesign
+- **DesignEngineTeam** [team] · 设计原型专家团 — 01-ProductDesign
+- **DesignMdArchitect** [agent] · 规范范 — 01-ProductDesign
+- **DesignPrototypeExpert** [agent] · 小花创意 — 01-ProductDesign
+- **DesignToCodeExpert** [agent] · 图变码 — 01-ProductDesign
+- **DevOpsAutomationEngineer** [agent] · 一键达 — 02-Engineering
+- **DevPipelineOrchestrator** [agent] · 鹏城信息AI专家 — 02-Engineering
+- **DeveloperEvangelist** [agent] · 布道道 — 05-MarketingGrowth
+- **DiscoveryCoach** [agent] · 掘需需 — 07-SalesCommerce
+- **DiversityVisualExpert** [agent] · 多元元 — 01-ProductDesign
+- **DockerfileGenExpert** [agent] · 容器器 — 02-Engineering
+- **DocumentGenerationExpert** [agent] · 文档达 — 10-ProjectQuality
+- **DocumentProcessingExpert** [agent] · 理文文 — 10-ProjectQuality
+- **DouyinStrategist** [agent] · 斗音音 — 06-ContentCreative
+- **EarningsReviewer** [agent] · 季明辨 — 08-FinanceInvestment
+- **EdgeoneMakersExperts** [team] · Makers 开发专家团 — 13-TencentZone
+- **EgyptMarketing** [agent] · 埃及市场营销专家 — 14-GlobalDevelopment
+- **EgyptPublicAffairs** [agent] · Egypt Public Affairs — 14-GlobalDevelopment
+- **EgyptStrategicAdvisory** [agent] · Egypt Strategic Advisory — 14-GlobalDevelopment
+- **EmbeddedFirmwareEngineer** [agent] · 固件通 — 02-Engineering
+- **EmpiricalResearchTeam** [team] · 科研专家团 — 04-DataAI
+- **EngineeringAssuranceTeam** [team] · 工程保障团队 — 02-Engineering
+- **EngineeringWorkflowSkills** [agent] · 工序达 — 02-Engineering
+- **EnglishWritingCoach** [agent] · Evan老师 — 15-BackToSchool
+- **Eno** [agent] · 鹏城信息AI专家 — 02-Engineering
+- **EnterpriseAccountStrategist** [agent] · 拓客客 — 07-SalesCommerce
+- **EnterpriseLegalTeam** [team] · 企业法务专家团 — 11-SecurityCompliance
+- **EntrepreneurshipCoach** [agent] · 林正刚 — 12-IndustryConsultant
+- **EquityResearchExpert** [agent] · 严估深 — 08-FinanceInvestment
+- **EvidenceCollector** [agent] · 截图图 — 10-ProjectQuality
+- **ExamPreparationPlanner** [agent] · 备考军师 — 15-BackToSchool
+- **ExecutiveSummaryGenerator** [agent] · 简明明 — 10-ProjectQuality
+- **ExperimentTrackingManager** [agent] · 实验通 — 10-ProjectQuality
+- **FamilyEducationMa** [agent] · 马滢老师 — 12-IndustryConsultant
+- **FbsirAigcComplianceRedTeam** [agent] · AIGC 合规红队 — 11-SecurityCompliance
+- **FbsirBoardSecretaryAssistant** [agent] · 福帮手 — 11-SecurityCompliance
+- **FbsirEightSeatBoard** [team] · 独董会 — 12-IndustryConsultant
+- **FbsirIndustrySceneResearcher** [agent] · 行业场景研究员 — 12-IndustryConsultant
+- **FbsirSuperIndependentBoard** [agent] · 福帮手 — 12-IndustryConsultant
+- **FbsirSuperPartner** [agent] · 超级合伙人|魔镜行动 — 12-IndustryConsultant
+- **FeedbackSynthesisAnalyst** [agent] · 听声声 — 01-ProductDesign
+- **FinResearchExpert** [agent] · 同舟股市投研专家 — 08-FinanceInvestment
+- **FinanceAccountingExpert** [agent] · 记账账 — 08-FinanceInvestment
+- **FinanceDataExpert** [agent] · 财数数 — 04-DataAI
+- **FinancialModelingExpert** [agent] · 建模模 — 08-FinanceInvestment
+- **FinancialTracker** [agent] · 账清清 — 08-FinanceInvestment
+- **FinopsExpert** [agent] · CloudQ — 13-TencentZone
+- **FortuneConsultant** [agent] · 运势分析师 — 12-IndustryConsultant
+- **FortuneMaster** [agent] · 生辰命理大师 — 12-IndustryConsultant
+- **Frontend** [agent] · 鹏城信息AI专家 — 02-Engineering
+- **FrontendDeveloper** [agent] · 像素匠 — 02-Engineering
+- **FrontendSlides** [agent] · 鹏城信息AI专家 — 06-ContentCreative
+- **FsiMarketResearcher** [agent] · 严研行 — 08-FinanceInvestment
+- **FundResearchAnalyst** [agent] · 基金投研分析师 — 08-FinanceInvestment
+- **FundusDiseaseAnalysis** [agent] · 腾讯健康-觅影-眼底彩照疾病分析专家 — 04-DataAI
+- **GPTResearcherTeam** [team] · 深度研究团队 — 04-DataAI
+- **GameAudioEngineer** [agent] · 音效效 — 03-GameSpatial
+- **GameDesigner** [agent] · 玩法师 — 03-GameSpatial
+- **GameDevelopmentStudio** [team] · 鹏城信息AI专家 — 03-GameSpatial
+- **GaokaoAdvisor** [agent] · 专业高考顾问 — 12-IndustryConsultant
+- **GeoDiagnosisExpert** [agent] · 苍何 — 05-MarketingGrowth
+- **GitWorkflowExpert** [agent] · 分支通 — 02-Engineering
+- **GlReconciler** [agent] · 钱对齐 — 08-FinanceInvestment
+- **GodotGameScriptEngineer** [agent] · 节点通 — 03-GameSpatial
+- **GodotMultiplayerEngineer** [agent] · 联网达 — 03-GameSpatial
+- **GodotShaderDeveloper** [agent] · 渲染达 — 03-GameSpatial
+- **GovernmentDigitalPresalesConsultant** [agent] · 政通通 — 07-SalesCommerce
+- **GrowthHacker** [agent] · 裂变变 — 05-MarketingGrowth
+- **HealthcareMarketingComplianceExpert** [agent] · 医合合 — 11-SecurityCompliance
+- **HrDigitalExpert** [agent] · HR数智专家 — 13-TencentZone
+- **HrOperationsTeam** [team] · HR 运营团队 — 09-OperationsHR
+- **HskDevopsExpert** [agent] · 贝锐花生壳 — 02-Engineering
+- **HuashuDataPro** [team] · 花叔数据分析专家团 — 04-DataAI
+- **HuashuDocReviewer** [agent] · 花叔文档审稿专家 — 11-SecurityCompliance
+- **HumanizePptTeam** [team] · PPT大纲、生成、视频、演示与交付专家团 — 06-ContentCreative
+- **IdentityGraphOperator** [agent] · 识图图 — 05-MarketingGrowth
+- **IhrAiInterviewer** [agent] · 利唐智语AI面试官 — 09-OperationsHR
+- **IhrConference** [agent] · 利唐智语AI面谈官 — 09-OperationsHR
+- **IncidentResponseCommander** [agent] · 救火队 — 02-Engineering
+- **IndieFounderCoach** [agent] · 创迪 — 12-IndustryConsultant
+- **IndonesiaBdExpert** [agent] · 印尼商务拓展专家 — 14-GlobalDevelopment
+- **IndonesiaDigitalLawExpert** [agent] · 印尼法务合规专家 — 14-GlobalDevelopment
+- **IndonesiaPaExpert** [agent] · Indo Pub Affair — 14-GlobalDevelopment
+- **IndustrialParkInvestmentAttractionExpert** [agent] · 福帮手 — 07-SalesCommerce
+- **IndustrySreTeam** [team] · 腾讯云行业 SRE — 13-TencentZone
+- **InfrastructureOperationsExpert** [agent] · 运维通 — 02-Engineering
+- **InnovationStartupMentor** [agent] · 青创领航员 — 12-IndustryConsultant
+- **InspectionExpert** [agent] · CloudQ — 13-TencentZone
+- **InstagramOperationsExpert** [agent] · 晒图图 — 06-ContentCreative
+- **InternalCommsExpert** [agent] · 传令令 — 10-ProjectQuality
+- **InterviewSimulator** [agent] · 鹏城信息AI专家 — 09-OperationsHR
+- **InvestmentBankingExpert** [agent] · 银拓远 — 08-FinanceInvestment
+- **InvestmentMastersTeam** [team] · 投资大师专家团 — 08-FinanceInvestment
+- **InvoiceVerifyExpert** [agent] · 票证核验专家 — 11-SecurityCompliance
+- **InvoiceVerifyWorkbuddy** [team] · 智能发票专家团 — 11-SecurityCompliance
+- **IpExpert** [agent] · 权知明 — 11-SecurityCompliance
+- **JiayiAdsAnalyticsExpert** [agent] · 爆量君 — 05-MarketingGrowth
+- **JinshujuExpert** [agent] · 金数据 — 04-DataAI
+- **JinshujuFormExpert** [agent] · 表单管理专家 — 04-DataAI
+- **JinshujuTableExpert** [agent] · AI表格专家 — 04-DataAI
+- **JiraWorkflowAdmin** [agent] · 看板达 — 10-ProjectQuality
+- **JobCompanionTeam** [team] · 求职陪跑团 — 12-IndustryConsultant
+- **KdocsDataTable** [agent] · 金山文档智能建表助手 — 04-DataAI
+- **KdocsDocButler** [agent] · 金山文档文档管家助手 — 06-ContentCreative
+- **KdocsKnowledgeCollector** [agent] · 金山文档知识收藏助手 — 06-ContentCreative
+- **KdocsPdfToolbox** [agent] · 金山文档PDF处理助手 — 06-ContentCreative
+- **KdocsPptCreator** [agent] · WPS AIPPT创作助手 — 06-ContentCreative
+- **KetPrepTeam** [team] · KET备考专家团 — 12-IndustryConsultant
+- **KiddContentExpert** [agent] · 吟游诗人基德创作专家 — 06-ContentCreative
+- **KuaishouStrategist** [agent] · 老铁铁 — 06-ContentCreative
+- **KycScreener** [agent] · 查本源 — 08-FinanceInvestment
+- **LawStudentCoach** [agent] · 法学生陪练 — 11-SecurityCompliance
+- **LazyTravelPlanner** [agent] · 懒人出游规划师 — 12-IndustryConsultant
+- **LegalBuilderHubExpert** [agent] · 法律技能运营官 — 11-SecurityCompliance
+- **LegalClinicSupervisor** [agent] · 法律诊所督导 — 11-SecurityCompliance
+- **LegalComplianceReviewer** [agent] · 律守正 — 11-SecurityCompliance
+- **LegalSearchPro** [agent] · 法检 Pro — 11-SecurityCompliance
+- **LevelDesigner** [agent] · 关卡卡 — 03-GameSpatial
+- **LinkedInContentCreator** [agent] · 领英达 — 05-MarketingGrowth
+- **LitigationLegalExpert** [agent] · 诉讼法务专家 — 11-SecurityCompliance
+- **LiuxueYanxueExpert** [agent] · 福帮手 — 12-IndustryConsultant
+- **LivestreamEcommerceCoach** [agent] · 播旺旺 — 05-MarketingGrowth
+- **LlmWiki** [agent] · 知库库 — 04-DataAI
+- **LongManuscriptExpert** [agent] · 福帮手 — 06-ContentCreative
+- **LspIndexEngineer** [agent] · 索引引 — 02-Engineering
+- **MacOsSpatialMetalEngineer** [agent] · 渲染师 — 03-GameSpatial
+- **MaiDealAdvisor** [agent] · MAI Lab并购Agent — 08-FinanceInvestment
+- **MalaysiaFinanceTax** [agent] · 马来西亚财税金融专家 — 14-GlobalDevelopment
+- **MalaysiaHrAdmin** [agent] · Malaysia HR & Administration — 14-GlobalDevelopment
+- **MalaysiaLegal** [agent] · Malaysia Legal & Compliance — 14-GlobalDevelopment
+- **MalaysiaMarketing** [agent] · 大马营销通 — 14-GlobalDevelopment
+- **MarketAnalysisCn** [agent] · 鹏城信息AI专家 — 05-MarketingGrowth
+- **MarketingCampaignExpert** [agent] · 策动动 — 05-MarketingGrowth
+- **MarketingCampaignTeam** [team] · 营销战役团队 — 05-MarketingGrowth
+- **MarketingGrowthTeam** [team] · 营销增长专家团 — 05-MarketingGrowth
+- **MarketingReviewer** [agent] · 营文稳 — 11-SecurityCompliance
+- **McpBuildExpert** [agent] · 协议通 — 02-Engineering
+- **MeetingPrepAgent** [agent] · 周备全 — 08-FinanceInvestment
+- **MeituanLivingAssistant** [agent] · 40-20 外卖券 — 07-SalesCommerce
+- **MentougouBusinessGuide** [agent] · 门头沟营商顾问 — 12-IndustryConsultant
+- **MermaidDiagramExpert** [agent] · 绘灵 — 01-ProductDesign
+- **MetamorphosisPractitioner** [agent] · 蜕变践行者 — 12-IndustryConsultant
+- **MigraqTeam** [team] · 腾讯云上云迁移专家团 — 13-TencentZone
+- **MobileApplicationDeveloper** [agent] · 掌中灵 — 02-Engineering
+- **ModelBuilder** [agent] · 莫百炼 — 08-FinanceInvestment
+- **ModelQualityAssuranceExpert** [agent] · 模检检 — 04-DataAI
+- **ModernWebappExpert** [agent] · 速构构 — 02-Engineering
+- **MonthEndCloser** [agent] · 关月结 — 08-FinanceInvestment
+- **MultiCloudExpert** [agent] · CloudQ — 13-TencentZone
+- **MultiCloudManagementExpert** [agent] · CloudQ — 13-TencentZone
+- **MvpDevExpertTeam** [team] · MVP开发专家团 — 02-Engineering
+- **NarrativeDesigner** [agent] · 剧本本 — 03-GameSpatial
+- **NcreExpert** [team] · 计算机等级考试专家团 — 02-Engineering
+- **NewShareExpert** [agent] · 新股专家 — 08-FinanceInvestment
+- **NewsBriefingExpert** [agent] · 新闻资讯专家 — 06-ContentCreative
+- **NewsBuddy** [agent] · 懂秘 — 06-ContentCreative
+- **NgesHealthcareMarketingTeam** [team] · 腾讯健康NGES医药营销专家团 — 13-TencentZone
+- **NgoChallengeAdvisor** [agent] · 卡仔 — 01-ProductDesign
+- **NoteClassRepresentative** [agent] · 小记同学 — 15-BackToSchool
+- **NovelCreator** [agent] · 小说故事创作专家 — 06-ContentCreative
+- **NovelGenerator** [agent] · 鹏城信息AI专家 — 06-ContentCreative
+- **Nuwa** [agent] · 女娲 — 04-DataAI
+- **OmicsBioinfoExpert** [agent] · 腾讯组学生信分析专家 — 04-DataAI
+- **OmicsCdgptExpert** [agent] · 腾讯CD-GPT生物序列建模专家 — 04-DataAI
+- **OmicsDiagnosisExpert** [agent] · 腾讯组学任务分析智能诊断专家 — 04-DataAI
+- **OmicsHpcExpert** [agent] · 腾讯组学HPC集群运维与作业管理专家 — 02-Engineering
+- **OmicsIggmExpert** [agent] · 腾讯IgGM抗体药物研发专家 — 04-DataAI
+- **OmicsOriExpert** [agent] · 腾讯ORI蛋白设计专家 — 04-DataAI
+- **OmicsScbertExpert** [agent] · 腾讯scBert单细胞预训练专家 — 04-DataAI
+- **OmicsScproteinExpert** [agent] · 腾讯scPROTEIN单细胞蛋白组建模专家 — 04-DataAI
+- **OmicsTfoldExpert** [agent] · 腾讯tFold抗体结构预测专家 — 04-DataAI
+- **OpcTeam** [team] · 一人公司专家团 — 12-IndustryConsultant
+- **OpenSpecDocTeam** [team] · 专业文档生成团队 — 10-ProjectQuality
+- **OutboundStrategist** [agent] · 拨必通 — 07-SalesCommerce
+- **PaidMediaAuditor** [agent] · 查账账 — 05-MarketingGrowth
+- **PanshiCustomerVisitAgent** [agent] · 磐石CRM跟进拜访助手 — 12-IndustryConsultant
+- **PaperTopicSelection** [team] · 选题顾问（WANFANG TOPIC） — 12-IndustryConsultant
+- **PatientEducationContentReviewWordAssistant** [agent] · 腾讯健康药箱-私域患教内容审核助手 — 13-TencentZone
+- **PerformanceTestingExpert** [agent] · 压测测 — 10-ProjectQuality
+- **PersonalFitnessCoach** [agent] · 私人健身教练 — 12-IndustryConsultant
+- **PersonalKnowledgeArchitect** [agent] · 个人知识库架构师 — 04-DataAI
+- **PitchAgent** [agent] · 白必得 — 08-FinanceInvestment
+- **PneumoniaAiAnalyst** [agent] · 腾讯健康-觅影-肺部CT影像的肺炎辅助评估专家 — 04-DataAI
+- **PodcastStrategist** [agent] · 声浪浪 — 06-ContentCreative
+- **PpcBiddingStrategist** [agent] · 竞高高 — 05-MarketingGrowth
+- **PptCreationExpert** [agent] · 幻灯灯 — 06-ContentCreative
+- **PresalesTechnicalConsultant** [agent] · 方案通 — 07-SalesCommerce
+- **PrivateDomainMarketingExpert** [agent] · 司玉琦 — 05-MarketingGrowth
+- **PrivateDomainOperationsExpert** [agent] · 留客客 — 05-MarketingGrowth
+- **PrivateEquityExpert** [agent] · 募资资 — 08-FinanceInvestment
+- **ProductManagementExpert** [agent] · 产品通 — 01-ProductDesign
+- **ProductStrategyTeam** [team] · 产品战略团队 — 01-ProductDesign
+- **ProgrammaticAdBuyer** [agent] · 算法投 — 05-MarketingGrowth
+- **ProjectShepherd** [agent] · 牧羊羊 — 10-ProjectQuality
+- **PromoCreatorTeam** [team] · 袋鼠帝宣传片创作团队 — 06-ContentCreative
+- **PromptEngineer** [agent] · 提示词工程师 — 02-Engineering
+- **PromptEngineeringExpert** [agent] · 鹏城信息AI专家 — 04-DataAI
+- **ProposalStrategist** [agent] · 策必中 — 07-SalesCommerce
+- **PythonFullstackEngineer** [agent] · Python 全栈工程师 — 02-Engineering
+- **QingflowHrExpert** [agent] · 小Q — 09-OperationsHR
+- **RapidPrototypingEngineer** [agent] · 闪造造 — 02-Engineering
+- **RealityChecker** [agent] · 验真真 — 10-ProjectQuality
+- **RecruitmentExpert** [agent] · 伯乐乐 — 09-OperationsHR
+- **RedditCommunityBuilder** [agent] · 红迪迪 — 05-MarketingGrowth
+- **RemotionVideoExpert** [agent] · 动画画 — 06-ContentCreative
+- **ResumeAssistant** [agent] · 鹏城信息AI专家 — 09-OperationsHR
+- **RoadshowResearchTeam** [team] · 资本市场路演研究团 — 08-FinanceInvestment
+- **RobloxAvatarCreator** [agent] · 捏脸达 — 03-GameSpatial
+- **RobloxExperienceDesigner** [agent] · 乐体验 — 03-GameSpatial
+- **RobloxSystemScriptEngineer** [agent] · 脚本通 — 03-GameSpatial
+- **RumFullstackTeam** [team] · 腾讯云 RUM 全链路专家团 — 02-Engineering
+- **SaLegalCompliance** [agent] · 南非法务合规专家 — 11-SecurityCompliance
+- **SalesBattleTeam** [team] · 销售作战团队 — 07-SalesCommerce
+- **SalesCoach** [agent] · 单必成 — 07-SalesCommerce
+- **SalesDataExtractionAgent** [agent] · 拉数数 — 04-DataAI
+- **SalesPipelineAnalyst** [agent] · 漏斗通 — 07-SalesCommerce
+- **SdkLogExpert** [agent] · CloudQ — 13-TencentZone
+- **SearchTermAnalyst** [agent] · 词探探 — 05-MarketingGrowth
+- **SecurityEngineer** [agent] · 盾甲甲 — 02-Engineering
+- **SeniorDeveloper** [agent] · 吴八哥 — 02-Engineering
+- **SeniorProjectManager** [agent] · 关德豪 — 10-ProjectQuality
+- **SeoContentTeam** [team] · SEO 内容营销团队 — 05-MarketingGrowth
+- **SeoExpert** [agent] · 搜霸霸 — 05-MarketingGrowth
+- **SgBizDev** [agent] · Sg Business — 14-GlobalDevelopment
+- **SgFinanceTax** [agent] · Sg Finance & Tax — 14-GlobalDevelopment
+- **SgHrAdminExpert** [agent] · Sg HR & Admin — 14-GlobalDevelopment
+- **ShortVideoEditingCoach** [agent] · 剪神神 — 06-ContentCreative
+- **SiteReliabilityEngineer** [agent] · 稳如山 — 02-Engineering
+- **SkillSmith** [agent] · 技能匠人 — 15-BackToSchool
+- **SkillhubCharityExpertTeam** [team] · 技术公益专家团 — 12-IndustryConsultant
+- **SmartStockAnalyst** [agent] · 星辰 — 08-FinanceInvestment
+- **SmbCompliance** [agent] · 严守约 — 11-SecurityCompliance
+- **SmbFinance** [agent] · 钱守通 — 08-FinanceInvestment
+- **SmbOperations** [agent] · 毕运营 — 09-OperationsHR
+- **SmbRevenue** [agent] · 甄客来 — 07-SalesCommerce
+- **SmbTeam** [team] · 小企业经营团队 — 12-IndustryConsultant
+- **SocialAdStrategist** [agent] · 精投投 — 05-MarketingGrowth
+- **SocialEngagementTeam** [team] · 社媒互动增长专家团 — 05-MarketingGrowth
+- **SocialMediaStrategist** [agent] · 传声声 — 05-MarketingGrowth
+- **Soe** [agent] · 腾讯云安全运营专家 — 11-SecurityCompliance
+- **SoftwareArchitect** [agent] · 架构通 — 02-Engineering
+- **SoftwareCompany** [team] · 软件开发团队 — 02-Engineering
+- **SoftwareWorkshop** [team] · 软件工坊 — 02-Engineering
+- **SoliditySmartContractEngineer** [agent] · 链合约 — 02-Engineering
+- **SouthAfricaHrAdmin** [agent] · South Africa HR — 09-OperationsHR
+- **SouthAfricaStrategyAdvisor** [agent] · South African Strategy — 12-IndustryConsultant
+- **SprintPriorityManager** [agent] · 排序序 — 01-ProductDesign
+- **SreExpert** [agent] · CloudQ — 13-TencentZone
+- **StatementAuditor** [agent] · 审细明 — 08-FinanceInvestment
+- **StockPartnerTeam** [team] · 腾讯自选股股票投研专家团 — 08-FinanceInvestment
+- **StrategyBacktestExpert** [agent] · 回测明算 — 08-FinanceInvestment
+- **StudioOperationsManager** [agent] · 统筹筹 — 10-ProjectQuality
+- **StudioProducer** [agent] · 制片达 — 10-ProjectQuality
+- **StudyAbroadConsultant** [agent] · 留洋洋 — 09-OperationsHR
+- **StudyFortuneCompass** [agent] · 学运趋势解读师 — 15-BackToSchool
+- **StudyPlanner** [agent] · 学习规划师 — 12-IndustryConsultant
+- **SuperpowersZh** [agent] · AI编程方法论专家 — 02-Engineering
+- **SupplyChainStrategist** [agent] · 链优优 — 09-OperationsHR
+- **TanyuanCulturalHeritageExpert** [agent] · 文博领域AI顾问 — 12-IndustryConsultant
+- **TaxComplianceTeam** [team] · 财税合规专家团 — 11-SecurityCompliance
+- **TcSec** [agent] · 腾讯云安全专家 — 11-SecurityCompliance
+- **TdxStockDiagnostician** [agent] · 通达信诊断师 — 08-FinanceInvestment
+- **TdxStockHunter** [agent] · 通达信选股猎手 — 08-FinanceInvestment
+- **TdxValueAssessor** [agent] · 通达信评估师 — 08-FinanceInvestment
+- **TechnicalArtist** [agent] · 技美美 — 03-GameSpatial
+- **TechnicalDocumentationEngineer** [agent] · 文通通 — 10-ProjectQuality
+- **TencentCharityExpert** [agent] · 小益 — 13-TencentZone
+- **TencentCloudQuoteAssistant** [agent] · 腾讯云报价助手 — 13-TencentZone
+- **TencentRtcExpert** [agent] · CloudQ — 13-TencentZone
+- **TencentSecurityExpert** [agent] · 云鼎安全专家 — 13-TencentZone
+- **TencentcloudApi** [agent] · 腾讯云API专家 — 02-Engineering
+- **TerminalIntegrationExpert** [agent] · 终端通 — 02-Engineering
+- **TerminalVeteran** [agent] · 终端老兵专家（陈丰伟） — 12-IndustryConsultant
+- **TestResultsAnalyst** [agent] · 析测测 — 10-ProjectQuality
+- **ThaiMarketingCreative** [agent] · 泰国市场营销专家 — 14-GlobalDevelopment
+- **ThailandHrAdmin** [agent] · Thai HR&Admin — 14-GlobalDevelopment
+- **ThesisWritingMentor** [agent] · 论小舟 — 15-BackToSchool
+- **ThreatDetectionEngineer** [agent] · 猎威威 — 02-Engineering
+- **TianyuAccountGuardian** [agent] · 天御账号保护 — 13-TencentZone
+- **TianyuMarketingGuardian** [agent] · 天御营销保护 — 13-TencentZone
+- **TideriderSentiment** [agent] · DataBrain X TideRider — 04-DataAI
+- **TikTokStrategist** [agent] · 拓刻刻 — 06-ContentCreative
+- **ToolEvaluationExpert** [agent] · 选品品 — 10-ProjectQuality
+- **TopicEvaluator** [agent] · 科技侠来了 — 06-ContentCreative
+- **TradingAgentTeam** [team] · 交易分析团队 — 08-FinanceInvestment
+- **TrendHunter** [agent] · 热点猎手 — 05-MarketingGrowth
+- **TrendResearcher** [agent] · 风向标 — 04-DataAI
+- **TripStarAgent** [agent] · 路小鲜 — 12-IndustryConsultant
+- **TwitterOperationsExpert** [agent] · 推文文 — 06-ContentCreative
+- **UaeMarketingAdvisor** [agent] · UAE Marketing Expert — 14-GlobalDevelopment
+- **UaePublicAffairs** [agent] · 阿联酋公共事务专家 — 14-GlobalDevelopment
+- **UaeStrategicAdvisor** [agent] · 阿联酋战略顾问专家 — 14-GlobalDevelopment
+- **UiDesigner** [agent] · 像素君 — 01-ProductDesign
+- **UnityArchitect** [agent] · 解耦达 — 03-GameSpatial
+- **UnityEditorToolDeveloper** [agent] · 插件达 — 03-GameSpatial
+- **UnityMultiplayerEngineer** [agent] · 同步达 — 03-GameSpatial
+- **UnityShaderGraphArtist** [agent] · 着色师 — 03-GameSpatial
+- **UnrealMultiplayerArchitect** [agent] · 联机达 — 03-GameSpatial
+- **UnrealSystemEngineer** [agent] · 虚幻通 — 03-GameSpatial
+- **UnrealTechnicalArtist** [agent] · 材质通 — 03-GameSpatial
+- **UnrealWorldBuilder** [agent] · 造世界 — 03-GameSpatial
+- **UserExperienceArchitect** [agent] · 体验达 — 01-ProductDesign
+- **UserExperienceResearcher** [agent] · 探真真 — 01-ProductDesign
+- **UuptDelivery** [agent] · UU跑腿 — 07-SalesCommerce
+- **ValuationReviewer** [agent] · 顾估衡 — 08-FinanceInvestment
+- **VibeknowDesignVideo** [agent] · 一份文档，排成一条成片 — 06-ContentCreative
+- **VibeknowHanddraw** [agent] · 把专业内容画给外行看懂 — 06-ContentCreative
+- **VibeknowPptExplain** [agent] · 逐页讲解，一键成片 — 06-ContentCreative
+- **VideoDissection** [team] · 苍何视频解剖 — 06-ContentCreative
+- **VideoGenTeam** [team] · 苍何视频生成团队 — 06-ContentCreative
+- **VietnamFinanceTaxExpert** [agent] · Vietnam Finance & Tax Expert — 08-FinanceInvestment
+- **VietnamPublicAffairs** [agent] · VN Pub Affair — 12-IndustryConsultant
+- **ViralTopicMaster** [agent] · 爆款炼金师 — 06-ContentCreative
+- **VisionOsSpatialEngineer** [agent] · 空间通 — 03-GameSpatial
+- **VisualStorytellingExpert** [agent] · 图说说 — 01-ProductDesign
+- **VocabCraftExpert** [agent] · 词力 — 04-DataAI
+- **WeChatMiniProgramDeveloper** [agent] · 小程达 — 02-Engineering
+- **WealthManagementExpert** [agent] · 理财财 — 08-FinanceInvestment
+- **WebappTestingExpert** [agent] · 端测测 — 10-ProjectQuality
+- **WechatChannelsStrategist** [agent] · 微信视频号运营策略师 — 05-MarketingGrowth
+- **WechatOfficialAccountExpert** [agent] · 郝文昌 — 06-ContentCreative
+- **WeiboStrategist** [agent] · 热搜搜 — 06-ContentCreative
+- **WellArchExpert** [agent] · CloudQ — 13-TencentZone
+- **WorkflowOptimizationExpert** [agent] · 流畅畅 — 10-ProjectQuality
+- **WorkspaceBuilder** [agent] · 小台 — 02-Engineering
+- **WorldcupBuddy** [agent] · 看球搭子 — 12-IndustryConsultant
+- **XiaofaLitigationAssistant** [agent] · 小法同学 — 11-SecurityCompliance
+- **XiaohongshuOperationsExpert** [agent] · 薛红笙 — 06-ContentCreative
+- **XrCockpitInteractionExpert** [agent] · 座舱师 — 03-GameSpatial
+- **XrImmersiveDeveloper** [agent] · 沉浸达 — 03-GameSpatial
+- **XrInterfaceArchitect** [agent] · 空间界 — 03-GameSpatial
+- **YahooFinanceCli** [agent] · 鹏城信息AI专家 — 08-FinanceInvestment
+- **YunzhiQaAssistant** [agent] · 腾讯云知（乐享） — 13-TencentZone
+- **ZeroKnowledgeProofAdmin** [agent] · 零知知 — 11-SecurityCompliance
+- **ZhihuStrategist** [agent] · 答有道 — 06-ContentCreative
