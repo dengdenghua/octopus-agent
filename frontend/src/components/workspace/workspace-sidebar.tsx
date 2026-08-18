@@ -123,11 +123,9 @@ import {
   type ThreadSummary,
 } from "@/core/threads/sidebar";
 import type { AgentThread } from "@/core/threads/types";
-import {
-  agentRunStatusLightClass,
-  agentRunStatusLightPulseClass,
-} from "@/components/workspace/agent-run-status";
 import { useTasks } from "@/core/tasks/hooks";
+
+import { ThreadRunStatusLight } from "@/components/workspace/thread-run-status-light";
 import { useTeamTasks } from "@/core/team-tasks";
 import { useActiveAgentId } from "@/core/agents/active";
 import { formatCompactRelativeTimestamp } from "@/core/utils/datetime";
@@ -876,11 +874,9 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     // 助理是固定对话，本身就是一个持久会话，不当作"当前任务"重复置顶。
     if (activeId === OCTOPUS_THREAD_ID) return null;
     return (
-      [
-        ...projectThreads,
-        ...conversationThreads,
-        ...allHistoryThreads,
-      ].find((thread) => thread.id === activeId) ?? {
+      [...projectThreads, ...conversationThreads, ...allHistoryThreads].find(
+        (thread) => thread.id === activeId,
+      ) ?? {
         id: activeId,
         title: t.sidebar.currentTaskSession,
         updatedAt: "",
@@ -1636,78 +1632,6 @@ function ThreadAvatar({
   );
 }
 
-function ThreadRunStatusLight({
-  active,
-  className,
-  idle = "hidden",
-  status,
-}: {
-  active?: boolean;
-  className?: string;
-  idle?: "hidden" | "queue";
-  status?: ThreadRunStatus;
-}) {
-  const { t } = useI18n();
-  if (!status) {
-    if (idle === "hidden") return null;
-    return (
-      <span
-        aria-hidden="true"
-        className={cn(
-          "relative inline-flex size-2 shrink-0 items-center justify-center rounded-full",
-          active
-            ? "border border-muted-foreground/40 bg-muted-foreground/60"
-            : "border border-muted-foreground/60 bg-muted-foreground/20",
-          className,
-        )}
-        data-thread-queue-indicator="idle"
-      />
-    );
-  }
-  const label =
-    status === "running"
-      ? t.sidebar.taskStatusRunning
-      : status === "error"
-        ? t.sidebar.taskStatusFailed
-        : status === "waiting"
-          ? t.agentWorkbench.waitingToContinue
-          : t.sidebar.taskStatusPending;
-  const colorClass = agentRunStatusLightClass(status);
-  const pulseClass = agentRunStatusLightPulseClass(status);
-
-  return (
-    <span
-      aria-label={label}
-      role="img"
-      title={label}
-      className={cn(
-        "relative inline-flex size-2 shrink-0 items-center justify-center rounded-full",
-        className,
-      )}
-    >
-      {pulseClass && (
-        <span
-          className={cn(
-            "absolute inline-flex size-3 rounded-full opacity-25",
-            colorClass,
-            pulseClass,
-          )}
-        />
-      )}
-      <span
-        className={cn(
-          "relative inline-flex size-2 rounded-full shadow-[var(--shadow-xs)]",
-          colorClass,
-        )}
-      />
-    </span>
-  );
-}
-
-/** One image cell · falls back to a colored initial circle if the
- *  backend has no avatar for the agent (404 on
- *  ``/api/agents/<id>/avatar``). The initial fallback uses a hash-based
- *  color so different agents don't all blend into the same grey. */
 function AvatarCell({
   agentId,
   className,
