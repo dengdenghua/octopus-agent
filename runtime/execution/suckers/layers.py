@@ -83,6 +83,30 @@ ATOMIC_SKILL_NAMES: frozenset[str] = frozenset(
 )
 
 
+# Ephemeral sub-agents must never be granted long-term memory / SOUL skills.
+# A sub-agent runs without a propagated Session (current_session() is None in
+# the dispatch thread), so calling them raises RuntimeError; and even if a
+# Session were bound, a sub-agent must not mutate the parent agent's durable
+# memory. Used both to strip these skills from an ephemeral role's advertised
+# tool list and as a hard gate in the sub-agent tool executor.
+EPHEMERAL_MEMORY_SKILLS: frozenset[str] = frozenset(
+    {
+        "remember",
+        "recall",
+        "note_user",
+        "diary_write",
+        "update_soul",
+        "list_soul_history",
+        "revert_soul",
+        "recall_scores",
+        "analyze_soul_impact",
+        "auto_regression_check",
+        "deep_reflect",
+        "deep_evolve",
+    }
+)
+
+
 def is_atomic(skill_name: str | SkillId) -> bool:
     return str(skill_name) in ATOMIC_SKILL_NAMES
 

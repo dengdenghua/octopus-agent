@@ -885,6 +885,11 @@ def run_ephemeral_definition(
 
     call_context: dict[str, Any] = dict(context or {})
     effective_tool_policy = _effective_tool_policy(role, call_context)
+    # advertised list keeps the inherit semantics (an empty tuple means "atomic
+    # inherit", which intentionally includes the memory/SOUL skills). Those skills
+    # are blocked at the *execution* gate in ``_ephemeral_tool_exec`` instead of
+    # here, so the legacy "full grant -> []" contract (which the tests assert)
+    # stays intact and a sub-agent still can't mutate the parent's durable memory.
     effective_tool_allowlist = (
         [] if effective_tool_policy.allow_all else list(effective_tool_policy.allowed)
     )

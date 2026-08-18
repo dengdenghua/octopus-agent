@@ -20,6 +20,7 @@ from runtime.execution.suckers.ephemeral_injection_gate import (
     ephemeral_injection_taint_block,
     scan_and_escalate_ephemeral_taint,
 )
+from runtime.execution.suckers.layers import EPHEMERAL_MEMORY_SKILLS
 
 __all__ = [
     "_ephemeral_write_confine_block",
@@ -148,6 +149,22 @@ def _execute_tool_in_subagent(
     _taint_block = ephemeral_injection_taint_block(call, call.name)
     if _taint_block is not None:
         return (_taint_block, True)
+
+    # Memory / SOUL skills require a bound Session; ephemeral sub-agents run
+    # without one (current_session() is not propagated into the dispatch thread),
+    # so calling them raises RuntimeError and surfaces as a failed tool call the
+    # model keeps retrying. Block with a clean error instead — a sub-agent must
+    # not mutate the parent agent's durable memory anyway. This is the ultimate
+    # fallback: advertised-list stripping (ephemeral_agents) is the polite layer.
+    if str(call.name) in EPHEMERAL_MEMORY_SKILLS:
+        return (
+            "(unavailable: long-term memory / SOUL skills (remember, recall, "
+            "note_user, diary_write, and the self-evolution tools) are disabled "
+            "inside sub-agents — a sub-agent runs without a bound Session and "
+            "must not mutate the parent agent's durable memory. Report any "
+            "memory-worthy fact as a finding for the parent session instead.)",
+            True,
+        )
 
     _confine_block = _ephemeral_write_confine_block(call, skill)
     if _confine_block is not None:
