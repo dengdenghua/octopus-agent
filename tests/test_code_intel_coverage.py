@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from runtime.execution.suckers import code_intelligence_skills as cis
-
 
 # ── _code_analyze ────────────────────────────────────────────
 

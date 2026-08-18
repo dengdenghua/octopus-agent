@@ -402,7 +402,7 @@ def test_dispatcher_queue_cap_refuses_when_full(tmp_path) -> None:
         def execute(self, run_id: str, cancellation_token=None):
             started.append(run_id)
             release.wait(10)
-            return None
+            return
 
     store = LoopRunStore(tmp_path / "loop_runs.json")
     d = LoopRunDispatcher(

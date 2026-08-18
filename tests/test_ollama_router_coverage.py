@@ -7,12 +7,12 @@ import json
 import pytest
 
 import runtime.sensing.model_router.ollama_router as or_mod
+from runtime.platform.models.llm import Message, ModelRequest, ToolSpec
 from runtime.sensing.model_router.ollama_router import (
     OllamaModelInfo,
     OllamaModelRouter,
     OllamaRouterError,
 )
-from runtime.platform.models.llm import Message, ModelRequest, ToolSpec
 
 
 class _Client:

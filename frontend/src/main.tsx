@@ -31,6 +31,7 @@ import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "@fontsource/inter/700.css";
+import "katex/dist/katex.min.css";
 import "./styles/globals.css";
 
 // Auth-failure handling for the FE↔BE link. Two distinct cases:
@@ -39,7 +40,11 @@ import "./styles/globals.css";
 //    reloads to the login screen, every polling hook unmounts.
 //  - 403 (forbidden): authenticated but not allowed → DO NOT log out; just don't
 //    retry (retrying a forbidden call never succeeds).
-const AUTH_TOKEN_KEYS = ["octopus_auth_token", "octopus_auth_ts", "octopus_user"];
+const AUTH_TOKEN_KEYS = [
+  "octopus_auth_token",
+  "octopus_auth_ts",
+  "octopus_user",
+];
 let authBounced = false;
 
 function errMessage(err: unknown): string {
@@ -136,7 +141,10 @@ async function bootstrap() {
     <HashRouter>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider defaultTheme="system" storageKey="octopus-theme">
-          <I18nProvider initialLocale={initialLocale} initialTranslations={initialTranslations}>
+          <I18nProvider
+            initialLocale={initialLocale}
+            initialTranslations={initialTranslations}
+          >
             <AuthProvider>
               <AppearanceBootstrap />
               <AppRouter />

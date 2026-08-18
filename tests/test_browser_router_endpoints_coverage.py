@@ -197,7 +197,6 @@ def test_actions_without_page(client) -> None:
 def _page_client(client):
     c = _c(client)
     _ensure(client)
-    from runtime.platform.runtime_policy.browser_sessions import BrowserSessionCenter
 
     center = c.app.state  # not used; sessions live in the backend instance
     # Reach into the router's session registry via the sessions endpoint.
@@ -213,7 +212,6 @@ def test_actions_with_page(client, monkeypatch) -> None:
     backend = br_mod._BrowserBackend  # patched class; instance lives in router closure.
     # The TestClient app holds no reference; instead, drive via a page-aware
     # backend by pre-seeding the session through launch + page injection.
-    from runtime.platform.runtime_policy.browser_sessions import BrowserSessionCenter
 
     # Simplest: monkeypatch _ensure_real_browser_session to attach a page.
     orig = _StubBackend._ensure_real_browser_session

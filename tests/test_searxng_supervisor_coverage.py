@@ -140,7 +140,6 @@ def test_ensure_settings_and_url_env(monkeypatch, tmp_path) -> None:
 
 
 def test_launch_branches(monkeypatch) -> None:
-    import os
     import subprocess
 
     monkeypatch.setattr(ss, "_docker", lambda: "/usr/bin/docker")

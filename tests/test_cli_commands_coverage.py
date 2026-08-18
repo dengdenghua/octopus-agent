@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import io
 import json
-import os
 import sys
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -178,7 +177,6 @@ def test_run_setup_delegates_to_wizard(monkeypatch, tmp_path: Path) -> None:
 
 
 def test_run_ui_import_error(tmp_path: Path, monkeypatch) -> None:
-    import sys
 
     monkeypatch.setitem(sys.modules, "uvicorn", None)  # import uvicorn -> ImportError
     rc, out = _run(cc.run_ui, host="127.0.0.1", port=8000, journal_path=tmp_path / "j.jsonl")
@@ -186,7 +184,6 @@ def test_run_ui_import_error(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_run_ui_starts_server(tmp_path: Path, monkeypatch) -> None:
-    import sys
 
     ran: dict = {}
     fake_uvicorn = type("Uv", (), {"run": staticmethod(lambda _app, **kw: ran.update(kw))})

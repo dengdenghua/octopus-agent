@@ -20,7 +20,7 @@ class _FakeResp:
     def raise_for_status(self):
         if self.status_code >= 400:
             raise RuntimeError(f"HTTP {self.status_code}")
-        return None
+        return
 
     def json(self):
         if callable(self._json):

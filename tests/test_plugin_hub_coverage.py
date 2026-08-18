@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from runtime.platform.plugins.plugin_base import ModulePlugin
 from runtime.platform.plugins.plugin_hub import PluginHub
 
 

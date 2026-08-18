@@ -596,6 +596,10 @@ describe("<ChatInputBox /> cowork materials", () => {
     fireEvent.click(screen.getByTitle("Send"));
 
     await waitFor(() => expect(onDeepResearch).toHaveBeenCalledTimes(1));
+    // Sending clears the optimistic draft asynchronously. Wait for that
+    // contract before unmounting so the following test cannot observe a late
+    // state write when the full suite is under load.
+    await waitFor(() => expect(textarea().value).toBe(""));
     const [, options] = onDeepResearch.mock.calls[0];
     expect(options.materials).toEqual([
       expect.objectContaining({

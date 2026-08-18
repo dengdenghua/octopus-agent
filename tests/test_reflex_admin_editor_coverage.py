@@ -174,8 +174,8 @@ def test_rules_yaml_put_reload_failure(tmp_path: Path, monkeypatch) -> None:
     rules.write_text(RULES_YAML, encoding="utf-8")
     app = FastAPI()
     admin = app.router
-    import runtime.core.nerves.reflex.rules_loader as rl
     import runtime.cli as cli
+    import runtime.core.nerves.reflex.rules_loader as rl
 
     monkeypatch.setattr(rl, "find_default_rules_file", lambda: rules)
     monkeypatch.setattr(cli, "_build_reflex_router", lambda: (_ for _ in ()).throw(RuntimeError("no reflex")))
