@@ -303,6 +303,22 @@ def _read_file_text(
     limit: int | None = None,
 ) -> dict[str, Any]:
     """Original UTF-8 text reader — preserved verbatim, just under a new name."""
+    # Normalize numeric arguments: subagents sometimes serialize ints as strings
+    # (e.g. limit="100"), which would otherwise crash the comparisons below
+    # with "TypeError: '<' not supported between str and int".
+    try:
+        max_bytes = int(max_bytes)
+    except (TypeError, ValueError):
+        return {"error": "max_bytes must be an integer"}
+    try:
+        offset = int(offset)
+    except (TypeError, ValueError):
+        return {"error": "offset must be an integer"}
+    if limit is not None:
+        try:
+            limit = int(limit)
+        except (TypeError, ValueError):
+            return {"error": "limit must be an integer"}
     if offset < 0:
         return {"error": "offset must be >= 0"}
     if limit is not None and limit < 0:

@@ -77,7 +77,7 @@ def _safe_resolve(
 
 
 def _glob_files(
-    pattern: str,
+    pattern: str | None = None,
     root: str = ".",
     *,
     sandbox_dir: str | None = None,
@@ -86,6 +86,8 @@ def _glob_files(
     include_dirs: bool = False,
     **_kw: Any,
 ) -> dict[str, Any]:
+    if not pattern or not str(pattern).strip():
+        return {"error": "missing required 'pattern' (e.g. '**/*.py')"}
     base, err = _safe_resolve(root, sandbox_dir=sandbox_dir, allow_sensitive=allow_sensitive)
     if err:
         return {"error": err, "root": root}
