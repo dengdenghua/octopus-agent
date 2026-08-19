@@ -151,3 +151,93 @@ class TestFindPackRoot:
         root = tmp_path / "unpack"
         root.mkdir()
         assert ces._find_pack_root(root) == root
+
+
+class TestWbPrefixAndInstalledDetection:
+    """前端商城安装:wire id 带 wb_ 前缀,须可反查 + 与磁盘 slug 目录匹配。"""
+
+    def test_get_with_wb_prefix(self, tmp_path, monkeypatch):
+        store = _make_store_json(3)
+        mirror = tmp_path / "expert-store.json"
+        mirror.write_text(json.dumps(store, ensure_ascii=False), encoding="utf-8")
+        monkeypatch.setattr(ces, "LOCAL_MIRROR", mirror)
+        s = ces.CloudExpertStore(use_remote=False, use_cache=False)
+        # 前端 list_experts 返回 id = wb_expert-1,安装时直接回传该 id
+        listed = s.list_experts(limit=20)["agents"][1]
+        assert listed["id"] == "wb_expert-1"
+        assert s.get(listed["id"])["plugin"] == "expert-1"
+
+    def test_is_installed_matches_slugged_agent_dir(self, tmp_path, monkeypatch):
+        store = _make_store_json(3)
+        mirror = tmp_path / "expert-store.json"
+        mirror.write_text(json.dumps(store, ensure_ascii=False), encoding="utf-8")
+        monkeypatch.setattr(ces, "LOCAL_MIRROR", mirror)
+        # 模拟已经安装过:agents/expert_1(agent_packs slugified 名)
+        agents_root = tmp_path / "agents"
+        (agents_root / "expert_1").mkdir(parents=True)
+        monkeypatch.setattr(ces, "default_agents_root", lambda: agents_root)
+        s = ces.CloudExpertStore(use_remote=False, use_cache=False)
+        by_id = {a["id"]: a for a in s.list_experts(limit=20)["agents"]}
+        assert by_id["wb_expert-1"]["is_installed"] is True
+        assert by_id["wb_expert-2"]["is_installed"] is False
+
+    def test_install_expert_skips_when_slug_dir_exists(self, tmp_path, monkeypatch):
+        store = _make_store_json(1)
+        mirror = tmp_path / "expert-store.json"
+        mirror.write_text(json.dumps(store, ensure_ascii=False), encoding="utf-8")
+        monkeypatch.setattr(ces, "LOCAL_MIRROR", mirror)
+        agents_root = tmp_path / "agents"
+        (agents_root / "expert_0").mkdir(parents=True)
+        s = ces.CloudExpertStore(use_remote=False, use_cache=False)
+        res = s.install_expert(
+            "wb_expert-0",
+            agents_root=agents_root,
+            skills_root=tmp_path / "skills",
+        )
+        assert res["installed"] is True
+        assert res["already_exists"] is True
+        assert res["agent_id"] == "wb_expert-0"
+
+
+class TestCloudStoreRouterInstall:
+    """前端商城安装走 HTTP 层:wb_ 前缀 id 必须能过(回归:此前 404)。"""
+
+    def test_install_with_wb_prefix_via_router(self, tmp_path, monkeypatch):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from runtime.sensing.gateway.agent_world_router import (
+            create_agent_world_router,
+        )
+
+        store = _make_store_json(1)
+        mirror = tmp_path / "expert-store.json"
+        mirror.write_text(json.dumps(store, ensure_ascii=False), encoding="utf-8")
+        monkeypatch.setattr(ces, "LOCAL_MIRROR", mirror)
+
+        install_calls: list[str] = []
+
+        class _FakeStore(ces.CloudExpertStore):
+            def __init__(self, *a, **kw):
+                super().__init__(use_remote=False, use_cache=False)
+
+            def install_expert(self, expert_id, **kw):
+                install_calls.append(expert_id)
+                return {
+                    "installed": True,
+                    "already_exists": False,
+                    "agent_id": f"wb_{expert_id}",
+                    "agent_name": "X",
+                    "agent_path": str(tmp_path / "agents" / "expert_0"),
+                }
+
+        monkeypatch.setattr(ces, "CloudExpertStore", _FakeStore)
+
+        app = FastAPI()
+        app.include_router(create_agent_world_router())
+        client = TestClient(app)
+
+        res = client.post("/api/agent-market/cloud/store/wb_expert-0/install")
+        assert res.status_code == 200, res.text
+        assert res.json()["installed"] is True
+        assert install_calls == ["wb_expert-0"]

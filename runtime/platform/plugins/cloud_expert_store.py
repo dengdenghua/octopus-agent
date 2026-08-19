@@ -20,6 +20,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import shutil
 import tarfile
 import tempfile
@@ -43,6 +44,15 @@ LOCAL_MIRROR = (
 # 缓存远程数据,避免每次请求都拉全量(796KB)
 CACHE_DIR = Path(os.path.expanduser("~/.octopus/cache"))
 CACHE_FILE = CACHE_DIR / "cloud-expert-store.json"
+
+
+def _installed_agent_dir(plugin: str) -> str:
+    """WorkBuddy 专家 bundle 导入到 agents/<slug> 的目录名。
+
+    与 runtime.execution.misc.agent_packs._slugify_agent_id 保持一致
+    (插件 agent md 的 name/frontmatter 与 plugin 同名时)。
+    """
+    return re.sub(r"[^a-zA-Z0-9]+", "_", plugin.strip().lower()).strip("_") or "imported_agent"
 
 
 def _load_remote(url: str) -> dict[str, Any] | None:
@@ -131,6 +141,12 @@ class CloudExpertStore:
         for e in self._load().get("experts", []):
             if e.get("id") == expert_id or e.get("plugin") == expert_id:
                 return e
+            # 前端 id 带 wb_ 前缀(wb_<plugin>,见 to_agent_dict),反查去掉前缀。
+            if expert_id.startswith("wb_") and expert_id[3:] in (
+                e.get("id"),
+                e.get("plugin"),
+            ):
+                return e
         return None
 
     # ── 转成 agent-market wire 形状(与 _list_local_agents 同构) ──
@@ -138,6 +154,7 @@ class CloudExpertStore:
         is_team = e.get("expertType") == "team"
         plugin = e.get("plugin") or e.get("id")
         agent_id = f"wb_{plugin}" if plugin else e.get("id")
+        installed_dir = _installed_agent_dir(plugin) if plugin else agent_id
 
         def zh(o: Any) -> str:
             return (o or {}).get("zh") or (o or {}).get("en") or ""
@@ -167,7 +184,7 @@ class CloudExpertStore:
             "rating_count": 0,
             "is_featured": False,
             "is_official": True,
-            "is_installed": agent_id in installed,
+            "is_installed": agent_id in installed or installed_dir in installed,
             "is_team": is_team,
             "created_at": str(e.get("updatedAt") or ""),
             "bundle_url": e.get("bundleUrl") or "",
@@ -255,14 +272,18 @@ class CloudExpertStore:
         agents_root = Path(agents_root or default_agents_root())
         skills_root = Path(skills_root or resources_root() / "skills" / "public")
 
-        # 先检查是否已装
+        # 先检查是否已装(wire id 带 wb_ 前缀;磁盘目录是 slugified 名)
         agent_id = f"wb_{e.get('plugin')}" if e.get("plugin") else expert_id
-        if (agents_root / agent_id).exists():
+        installed_dir = (
+            _installed_agent_dir(e.get("plugin")) if e.get("plugin") else agent_id
+        )
+        if (agents_root / agent_id).exists() or (agents_root / installed_dir).exists():
             return {
                 "installed": True,
                 "already_exists": True,
                 "agent_id": agent_id,
-                "message": f"agent already exists: {agent_id}",
+                "agent_path": str(agents_root / installed_dir),
+                "message": f"agent already exists: {installed_dir}",
             }
 
         tmpdir = tempfile.mkdtemp(prefix="wb-bundle-")
