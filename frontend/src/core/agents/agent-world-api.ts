@@ -55,6 +55,116 @@ export interface AgentInstallResult {
   tool_registry?: string;
 }
 
+// ---------------------------------------------------------------------------
+// WorkBuddy 专家商城 · 云端源(替换第三方 octoapk 角色商城)
+// 后端: runtime/platform/plugins/cloud_expert_store.py
+//   GET  /api/agent-market/cloud/store
+//   GET  /api/agent-market/cloud/store/categories
+//   POST /api/agent-market/cloud/store/{id}/install
+// ---------------------------------------------------------------------------
+
+export interface CloudExpertAgent {
+  id: string;
+  name: string;
+  display_name: string;
+  description: string;
+  author: string;
+  category: string;
+  category_id?: string;
+  tags: string[];
+  icon: string;
+  avatar_url?: string;
+  is_team?: boolean;
+  is_installed?: boolean;
+  bundle_url?: string;
+  quick_prompts?: string[];
+  profession?: string;
+  source?: string;
+  created_at?: string;
+}
+
+export interface CloudStoreResponse {
+  agents: CloudExpertAgent[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface CloudStoreCategory {
+  id: string;
+  name: { en: string; zh: string };
+  description?: { en?: string; zh?: string };
+}
+
+export interface CloudStoreCategoriesResponse {
+  categories: CloudStoreCategory[];
+  meta?: Record<string, unknown>;
+}
+
+export interface CloudStoreInstallResult {
+  installed: boolean;
+  already_exists?: boolean;
+  agent_id?: string;
+  agent_name?: string;
+  agent_path?: string;
+  copied_skills?: string[];
+  warnings?: string[];
+  message?: string;
+}
+
+/** 拉取云端 WorkBuddy 专家商城(421 位)。refresh=1 强制清缓存重拉。 */
+export async function listCloudStoreExperts(
+  params: {
+    category?: string;
+    search?: string;
+    sort?: string;
+    refresh?: boolean;
+    limit?: number;
+  } = {},
+): Promise<CloudStoreResponse> {
+  const qs = new URLSearchParams();
+  if (params.category) qs.set("category", params.category);
+  if (params.search) qs.set("search", params.search);
+  if (params.sort) qs.set("sort", params.sort);
+  if (params.refresh) qs.set("refresh", "1");
+  qs.set("limit", String(params.limit ?? 500));
+  const res = await fetch(
+    `${getBackendBaseURL()}${AGENT_MARKET_API}/cloud/store?${qs.toString()}`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok)
+    throw new Error(`WorkBuddy cloud store failed: HTTP ${res.status}`);
+  return res.json() as Promise<CloudStoreResponse>;
+}
+
+/** 拉取云端商城分类(15 大类)。 */
+export async function listCloudStoreCategories(): Promise<CloudStoreCategoriesResponse> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${AGENT_MARKET_API}/cloud/store/categories`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok)
+    throw new Error(`WorkBuddy cloud categories failed: HTTP ${res.status}`);
+  return res.json() as Promise<CloudStoreCategoriesResponse>;
+}
+
+/** 安装云端专家:后端下载 bundle → 解包 → 导入为本地 agent。 */
+export async function installCloudExpert(
+  expertId: string,
+): Promise<CloudStoreInstallResult> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${AGENT_MARKET_API}/cloud/store/${encodeURIComponent(
+      expertId,
+    )}/install`,
+    { method: "POST", headers: authHeaders() },
+  );
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`WorkBuddy install failed: HTTP ${res.status} ${txt}`.trim());
+  }
+  return res.json() as Promise<CloudStoreInstallResult>;
+}
+
 export async function previewAgentPack(
   path: string,
 ): Promise<AgentPackPreview> {

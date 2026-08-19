@@ -71,7 +71,7 @@ import { AgentWorldCard } from "./agent-world-card";
 import { LocalAgentConnectDialog } from "./local-agent-connect-dialog";
 import { LocalSkillDirectoryPanel } from "@/components/store/local-skill-directory-panel";
 import { RegistrySkillsPanel } from "@/components/store/registry-skills-panel";
-import { RegistryRolesPanel } from "@/components/store/registry-roles-panel";
+import { WorkBuddyCloudStorePanel } from "@/components/store/workbuddy-cloud-store-panel";
 import { RegistryPluginsPanel } from "@/components/store/registry-plugins-panel";
 
 // ---------------------------------------------------------------------------
@@ -143,6 +143,34 @@ function scoreAgentForDisplay(agent: AgentWorldAgent): number {
   score += Math.max(0, agent.rating_count ?? 0) * 10;
   score += Math.round(Math.max(0, agent.rating ?? 0) * 100);
   return score;
+}
+
+/**
+ * Resolve a `?agent=` HUD target to the row the HUD actually renders.
+ *
+ * The bottom-left switcher and the HUD dedupe by different rules, so an exact
+ * name match is not enough: the switcher's Noah row is `market_researcher`,
+ * while the HUD collapses every Noah into `echo_noah`. Matching on name alone
+ * missed and the HUD silently opened on an arbitrary role. So fall back to the
+ * shared identity key — look the requested name up in the full list, then find
+ * whichever agent survived dedupe under the same identity.
+ */
+export function resolveHudAgent(
+  all: AgentWorldAgent[],
+  deduped: AgentWorldAgent[],
+  requestedName: string,
+): AgentWorldAgent | null {
+  const wanted = requestedName.trim();
+  if (!wanted) return null;
+
+  const exact = deduped.find((a) => a.name === wanted || a.id === wanted);
+  if (exact) return exact;
+
+  const raw = all.find((a) => a.name === wanted || a.id === wanted);
+  if (!raw) return null;
+  const key = agentWorldIdentityKey(raw);
+  if (!key) return null;
+  return deduped.find((a) => agentWorldIdentityKey(a) === key) ?? null;
 }
 
 export function dedupeAgentWorldAgents(
@@ -1096,6 +1124,9 @@ const SHOW_LOCAL_AGENT_LIBRARY = true;
 const SHOW_ENTERPRISE_ASSETS = false;
 // Hub shows all available agents (installed + installable).
 const LOCAL_LIBRARY_INSTALLED_ONLY = false;
+// 商城 tab 展示 WorkBuddy 专家商城(421)取代第三方 octoapk 角色商城。
+// 置 false 则完全隐藏商城 tab,只剩本地角色。
+const SHOW_WORKBUDDY_CLOUD_STORE = true;
 // Only the system-level admin persona is hidden from the hub;
 // desktop_operator (Raven) is a first-class user-facing CUA persona
 // since #22 (CUA productization).
@@ -1124,6 +1155,8 @@ export function AgentWorldUnified() {
     null,
   );
   const hudOnly = new URLSearchParams(location.search).get("hud") === "1";
+  const requestedAgentName =
+    new URLSearchParams(location.search).get("agent")?.trim() || "";
 
   // Data
   const [agents, setAgents] = useState<AgentWorldAgent[]>([]);
@@ -1196,7 +1229,27 @@ export function AgentWorldUnified() {
   }, [agents]);
 
   useEffect(() => {
-    if (!hudOnly || selectedAgent || dedupedAgents.length === 0) return;
+    if (!hudOnly || dedupedAgents.length === 0) return;
+    // `?agent=` targets the HUD at one role (the per-row HUD buttons in the
+    // bottom-left switcher). It wins over the stored active agent, and it
+    // re-selects on change so clicking another row's HUD button switches the
+    // panel instead of sticking on the first selection.
+    if (requestedAgentName) {
+      const requested = resolveHudAgent(
+        agents,
+        dedupedAgents,
+        requestedAgentName,
+      );
+      if (requested) {
+        setSelectedAgent((prev) =>
+          prev?.name === requested.name ? prev : requested,
+        );
+      }
+      // An unresolvable target (e.g. a CLI partner, which the HUD roster
+      // excludes) opens nothing rather than an unrelated role.
+      return;
+    }
+    if (selectedAgent) return;
     let activeName = "";
     try {
       activeName = window.localStorage.getItem(ACTIVE_AGENT_KEY) ?? "";
@@ -1208,7 +1261,7 @@ export function AgentWorldUnified() {
       dedupedAgents[0] ??
       null;
     setSelectedAgent(nextAgent);
-  }, [dedupedAgents, hudOnly, selectedAgent]);
+  }, [agents, dedupedAgents, hudOnly, requestedAgentName, selectedAgent]);
 
   const filteredAgents = useMemo(() => {
     let nextAgents = dedupedAgents;
@@ -1379,7 +1432,13 @@ export function AgentWorldUnified() {
                 </TabsContent>
 
                 <TabsContent value="registry" className="mt-0">
-                  <RegistryRolesPanel />
+                  {SHOW_WORKBUDDY_CLOUD_STORE ? (
+                    <WorkBuddyCloudStorePanel />
+                  ) : (
+                    <div className="py-10 text-center text-sm text-muted-foreground">
+                      商城已停用,仅保留本地角色。
+                    </div>
+                  )}
                 </TabsContent>
               </Tabs>
             </TabsContent>
