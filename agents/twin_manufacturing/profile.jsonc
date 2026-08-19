@@ -1,0 +1,40 @@
+{
+  "id": "twin_manufacturing",
+  "templateId": "octopus:digital-twin:manufacturing",
+  "templateVersion": "1.0.0",
+  "source_kind": "digital-twin-human-role",
+  "source_plugin": "twin-manufacturing",
+  "expertType": "agent",
+  "name": "生产制造工程师分身",
+  "icon": "🏭",
+  "description": "代表生产制造工程师的数位分身:负责工艺流程/试产计划/良率分析等文档侧闭环,产线调机与现场改善由真人执行,AI 替代不了真实产线。",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "digital-twin:human-role",
+  "category": "engineering",
+  "tags": [
+    "数字分身",
+    "真人岗位",
+    "真身协同",
+    "制造",
+    "产线",
+    "工艺",
+    "试产"
+  ],
+  "profession": "生产制造工程师",
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true,
+    "includeUserMd": true,
+    "includeMemoryMd": true
+  },
+  "capabilities": {
+    "digital_twin": true,
+    "human_collab": true,
+    "authorization_boundary": true,
+    "handoff_pack": true
+  }
+}

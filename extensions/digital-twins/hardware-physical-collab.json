@@ -1,0 +1,473 @@
+{
+  "meta": {
+    "title": "硬件实体协同数位分身",
+    "subtitle": "从 100 个数字分身岗位模板中单独拉出的『真身协同』子集",
+    "source": "octopus-enterprise/backend/app/agent_assets/twins_data.json",
+    "source_design": "docs/design/human-agent-company-workbench.md §2.2 数字分身",
+    "core_count": 40,
+    "ext_count": 20,
+    "core_groups": [
+      "电子 / 电气 / PCB / 电源岗",
+      "机械 / 结构 / 工业设计 / 包装岗",
+      "制造 / 质量 / 供应链岗",
+      "热 / 声 / 可靠性 / 测试岗"
+    ],
+    "ext_groups": [
+      "光 / 光机 / 显示 / 传感岗",
+      "射频 / 通信 / 天线岗"
+    ]
+  },
+  "collab_principle": {
+    "why_not_full_agent": "打样、打板、开模、贴片、测量、老化/跌落/EMC 实测、签样、试产都是物理世界动作,AI 无法闭环执行。",
+    "twin_role": "数位分身负责『设计与文档侧』闭环(方案/BOM/DFM/图纸审核/发包规格/跟催表/验收清单),把每个实体节点包装成交接包发给真人执行者,并等待回传,绝不伪造实测结果。",
+    "authorization": {
+      "auto": [
+        "整理任务/上下文",
+        "生成日报/周报/会议行动项草稿",
+        "起草 RFQ/比价表/打样发包规格",
+        "生成 DFM/DFT/DRC 检查清单",
+        "维护岗位知识库",
+        "同步进度给项目 AI COO"
+      ],
+      "need_human_confirm": [
+        "确认供应商价格/交期/MOQ",
+        "对外发邮件/发板给板厂",
+        "确认 BOM 最终版本/器件替换",
+        "签样/放行",
+        "修改关键项目结论",
+        "对外承诺交期"
+      ],
+      "forbidden": [
+        "冒充真人",
+        "自动承诺商业条件",
+        "伪造实测/测试数据",
+        "自动签署合同/付款",
+        "把未回传验证当已通过"
+      ]
+    }
+  },
+  "core_roles": [
+    {
+      "id": "twin-role-hardware-engineer",
+      "name": "硬件工程师",
+      "focus": "BOM、原理图检查、器件资料",
+      "group": "电子 / 电气 / PCB / 电源岗",
+      "group_id": "electronics-electrical-power"
+    },
+    {
+      "id": "twin-role-electronics-engineer",
+      "name": "电子工程师",
+      "focus": "器件选型、参考设计、测试记录",
+      "group": "电子 / 电气 / PCB / 电源岗",
+      "group_id": "electronics-electrical-power"
+    },
+    {
+      "id": "twin-role-electrical-engineer",
+      "name": "电气工程师",
+      "focus": "电气方案、接口定义、测试资料",
+      "group": "电子 / 电气 / PCB / 电源岗",
+      "group_id": "electronics-electrical-power"
+    },
+    {
+      "id": "twin-role-pcb-engineer",
+      "name": "PCB 工程师",
+      "focus": "DFM/DRC checklist、布局规则",
+      "group": "电子 / 电气 / PCB / 电源岗",
+      "group_id": "electronics-electrical-power"
+    },
+    {
+      "id": "twin-role-pcb-layout-engineer",
+      "name": "PCB Layout 工程师",
+      "focus": "走线规则、阻抗规则、生产文件检查",
+      "group": "电子 / 电气 / PCB / 电源岗",
+      "group_id": "electronics-electrical-power"
+    },
+    {
+      "id": "twin-role-power-engineer",
+      "name": "电源工程师",
+      "focus": "电源树、功耗、充电方案、电源风险",
+      "group": "电子 / 电气 / PCB / 电源岗",
+      "group_id": "electronics-electrical-power"
+    },
+    {
+      "id": "twin-role-battery-engineer",
+      "name": "电池工程师",
+      "focus": "电池规格、保护方案、容量估算",
+      "group": "电子 / 电气 / PCB / 电源岗",
+      "group_id": "electronics-electrical-power"
+    },
+    {
+      "id": "twin-role-connector-engineer",
+      "name": "连接器工程师",
+      "focus": "接口选型、插拔寿命、供应商资料",
+      "group": "电子 / 电气 / PCB / 电源岗",
+      "group_id": "electronics-electrical-power"
+    },
+    {
+      "id": "twin-role-signal-integrity-engineer",
+      "name": "信号完整性工程师 / SI",
+      "focus": "高速信号、阻抗、仿真资料",
+      "group": "电子 / 电气 / PCB / 电源岗",
+      "group_id": "electronics-electrical-power"
+    },
+    {
+      "id": "twin-role-power-integrity-engineer",
+      "name": "电源完整性工程师 / PI",
+      "focus": "供电网络、噪声、仿真记录",
+      "group": "电子 / 电气 / PCB / 电源岗",
+      "group_id": "electronics-electrical-power"
+    },
+    {
+      "id": "twin-role-emc-emi-engineer",
+      "name": "EMC/EMI 工程师",
+      "focus": "EMC 风险、整改记录、测试报告",
+      "group": "电子 / 电气 / PCB / 电源岗",
+      "group_id": "electronics-electrical-power"
+    },
+    {
+      "id": "twin-role-hardware-system-engineer",
+      "name": "硬件系统工程师",
+      "focus": "模块架构、接口关系、系统风险",
+      "group": "电子 / 电气 / PCB / 电源岗",
+      "group_id": "electronics-electrical-power"
+    },
+    {
+      "id": "twin-role-hardware-test-engineer",
+      "name": "硬件测试工程师",
+      "focus": "样机测试、测试数据、问题复现",
+      "group": "电子 / 电气 / PCB / 电源岗",
+      "group_id": "electronics-electrical-power"
+    },
+    {
+      "id": "twin-role-hardware-technician",
+      "name": "硬件技术员",
+      "focus": "焊接、改板、样机维护、测试记录",
+      "group": "电子 / 电气 / PCB / 电源岗",
+      "group_id": "electronics-electrical-power"
+    },
+    {
+      "id": "twin-role-mechanical-engineer",
+      "name": "机械工程师",
+      "focus": "结构需求、装配问题、供应商修改点",
+      "group": "机械 / 结构 / 工业设计 / 包装岗",
+      "group_id": "mechanical-structure-industrial"
+    },
+    {
+      "id": "twin-role-structural-engineer",
+      "name": "结构工程师",
+      "focus": "3D 结构说明、开模问题、装配约束",
+      "group": "机械 / 结构 / 工业设计 / 包装岗",
+      "group_id": "mechanical-structure-industrial"
+    },
+    {
+      "id": "twin-role-product-design-engineer",
+      "name": "产品设计工程师",
+      "focus": "产品架构、结构方案、量产问题追踪",
+      "group": "机械 / 结构 / 工业设计 / 包装岗",
+      "group_id": "mechanical-structure-industrial"
+    },
+    {
+      "id": "twin-role-industrial-designer",
+      "name": "工业设计师",
+      "focus": "外观概念、CMF、竞品外观分析",
+      "group": "机械 / 结构 / 工业设计 / 包装岗",
+      "group_id": "mechanical-structure-industrial"
+    },
+    {
+      "id": "twin-role-cmf-designer",
+      "name": "CMF 设计师",
+      "focus": "颜色、材料、工艺方案整理",
+      "group": "机械 / 结构 / 工业设计 / 包装岗",
+      "group_id": "mechanical-structure-industrial"
+    },
+    {
+      "id": "twin-role-packaging-engineer",
+      "name": "包装工程师",
+      "focus": "包装结构、运输测试、包装 BOM",
+      "group": "机械 / 结构 / 工业设计 / 包装岗",
+      "group_id": "mechanical-structure-industrial"
+    },
+    {
+      "id": "twin-role-materials-engineer",
+      "name": "材料工程师",
+      "focus": "材料对比、供应商资料、失效记录",
+      "group": "机械 / 结构 / 工业设计 / 包装岗",
+      "group_id": "mechanical-structure-industrial"
+    },
+    {
+      "id": "twin-role-tooling-engineer",
+      "name": "模具工程师",
+      "focus": "开模问题、模具修改、试模记录",
+      "group": "机械 / 结构 / 工业设计 / 包装岗",
+      "group_id": "mechanical-structure-industrial"
+    },
+    {
+      "id": "twin-role-injection-molding-engineer",
+      "name": "注塑工程师",
+      "focus": "注塑参数、缺陷归类、工艺记录",
+      "group": "机械 / 结构 / 工业设计 / 包装岗",
+      "group_id": "mechanical-structure-industrial"
+    },
+    {
+      "id": "twin-role-sheet-metal-engineer",
+      "name": "钣金工程师",
+      "focus": "钣金结构、加工约束、供应商反馈",
+      "group": "机械 / 结构 / 工业设计 / 包装岗",
+      "group_id": "mechanical-structure-industrial"
+    },
+    {
+      "id": "twin-role-cae-engineer",
+      "name": "CAE 工程师",
+      "focus": "仿真流程、结果整理、测试对比",
+      "group": "机械 / 结构 / 工业设计 / 包装岗",
+      "group_id": "mechanical-structure-industrial"
+    },
+    {
+      "id": "twin-role-prototype-engineer",
+      "name": "样机工程师 / Prototype Engineer",
+      "focus": "样机制作、改版记录、问题追踪",
+      "group": "机械 / 结构 / 工业设计 / 包装岗",
+      "group_id": "mechanical-structure-industrial"
+    },
+    {
+      "id": "twin-role-manufacturing-engineer",
+      "name": "制造工程师",
+      "focus": "工艺流程、产线问题、良率改善",
+      "group": "制造 / 质量 / 供应链岗",
+      "group_id": "manufacturing-quality-supply-chain"
+    },
+    {
+      "id": "twin-role-quality-engineer",
+      "name": "质量工程师",
+      "focus": "缺陷归类、质量报告、8D 草稿",
+      "group": "制造 / 质量 / 供应链岗",
+      "group_id": "manufacturing-quality-supply-chain"
+    },
+    {
+      "id": "twin-role-supply-chain-manager",
+      "name": "供应链经理",
+      "focus": "供应商状态、交期、风险、替代料",
+      "group": "制造 / 质量 / 供应链岗",
+      "group_id": "manufacturing-quality-supply-chain"
+    },
+    {
+      "id": "twin-role-procurement-manager-buyer",
+      "name": "采购经理 / Buyer",
+      "focus": "RFQ、比价、催交、采购单草稿",
+      "group": "制造 / 质量 / 供应链岗",
+      "group_id": "manufacturing-quality-supply-chain"
+    },
+    {
+      "id": "twin-role-thermal-design-engineer",
+      "name": "热设计工程师",
+      "focus": "温升数据、散热方案、热仿真资料",
+      "group": "热 / 声 / 可靠性 / 测试岗",
+      "group_id": "thermal-acoustic-reliability-test"
+    },
+    {
+      "id": "twin-role-thermal-simulation-engineer",
+      "name": "热仿真工程师",
+      "focus": "CFD/热仿真流程、结果对比",
+      "group": "热 / 声 / 可靠性 / 测试岗",
+      "group_id": "thermal-acoustic-reliability-test"
+    },
+    {
+      "id": "twin-role-thermal-test-engineer",
+      "name": "热测试工程师",
+      "focus": "热测试计划、数据整理、报告",
+      "group": "热 / 声 / 可靠性 / 测试岗",
+      "group_id": "thermal-acoustic-reliability-test"
+    },
+    {
+      "id": "twin-role-acoustic-engineer",
+      "name": "声学工程师",
+      "focus": "麦克风/扬声器参数、声学测试报告",
+      "group": "热 / 声 / 可靠性 / 测试岗",
+      "group_id": "thermal-acoustic-reliability-test"
+    },
+    {
+      "id": "twin-role-audio-engineer",
+      "name": "音频工程师",
+      "focus": "音频链路、调音记录、测试问题",
+      "group": "热 / 声 / 可靠性 / 测试岗",
+      "group_id": "thermal-acoustic-reliability-test"
+    },
+    {
+      "id": "twin-role-vibration-engineer",
+      "name": "振动工程师",
+      "focus": "振动测试、结构噪声、异常记录",
+      "group": "热 / 声 / 可靠性 / 测试岗",
+      "group_id": "thermal-acoustic-reliability-test"
+    },
+    {
+      "id": "twin-role-reliability-engineer",
+      "name": "可靠性工程师",
+      "focus": "老化、跌落、温湿度测试计划",
+      "group": "热 / 声 / 可靠性 / 测试岗",
+      "group_id": "thermal-acoustic-reliability-test"
+    },
+    {
+      "id": "twin-role-test-engineer",
+      "name": "测试工程师",
+      "focus": "测试用例、测试数据、问题复现",
+      "group": "热 / 声 / 可靠性 / 测试岗",
+      "group_id": "thermal-acoustic-reliability-test"
+    },
+    {
+      "id": "twin-role-failure-analysis-engineer",
+      "name": "失效分析工程师 / FA",
+      "focus": "根因分析、批次关联、FA 报告",
+      "group": "热 / 声 / 可靠性 / 测试岗",
+      "group_id": "thermal-acoustic-reliability-test"
+    },
+    {
+      "id": "twin-role-product-integrity-engineer",
+      "name": "产品完整性工程师",
+      "focus": "可靠性、质量、制造放行材料",
+      "group": "热 / 声 / 可靠性 / 测试岗",
+      "group_id": "thermal-acoustic-reliability-test"
+    }
+  ],
+  "ext_roles": [
+    {
+      "id": "twin-role-optical-engineer",
+      "name": "光学工程师",
+      "focus": "镜头、传感器参数、光学测试资料",
+      "group": "光 / 光机 / 显示 / 传感岗",
+      "group_id": "optics-imaging-sensor"
+    },
+    {
+      "id": "twin-role-opto-mechanical-engineer",
+      "name": "光机工程师",
+      "focus": "光机结构、公差、装调 checklist",
+      "group": "光 / 光机 / 显示 / 传感岗",
+      "group_id": "optics-imaging-sensor"
+    },
+    {
+      "id": "twin-role-display-engineer",
+      "name": "显示工程师",
+      "focus": "屏幕模组、显示参数、测试数据",
+      "group": "光 / 光机 / 显示 / 传感岗",
+      "group_id": "optics-imaging-sensor"
+    },
+    {
+      "id": "twin-role-camera-engineer",
+      "name": "摄像头工程师",
+      "focus": "Camera module、ISP 问题、图像测试",
+      "group": "光 / 光机 / 显示 / 传感岗",
+      "group_id": "optics-imaging-sensor"
+    },
+    {
+      "id": "twin-role-vision-engineer",
+      "name": "视觉工程师",
+      "focus": "图像质量、视觉算法评估资料",
+      "group": "光 / 光机 / 显示 / 传感岗",
+      "group_id": "optics-imaging-sensor"
+    },
+    {
+      "id": "twin-role-image-quality-engineer",
+      "name": "图像质量工程师 / IQ Engineer",
+      "focus": "样张对比、画质问题分类",
+      "group": "光 / 光机 / 显示 / 传感岗",
+      "group_id": "optics-imaging-sensor"
+    },
+    {
+      "id": "twin-role-sensor-engineer",
+      "name": "传感器工程师",
+      "focus": "传感器选型、标定文档、精度对比",
+      "group": "光 / 光机 / 显示 / 传感岗",
+      "group_id": "optics-imaging-sensor"
+    },
+    {
+      "id": "twin-role-touch-engineer",
+      "name": "触控工程师",
+      "focus": "触控模组、灵敏度、测试问题",
+      "group": "光 / 光机 / 显示 / 传感岗",
+      "group_id": "optics-imaging-sensor"
+    },
+    {
+      "id": "twin-role-lidar-tof-engineer",
+      "name": "激光/雷达工程师",
+      "focus": "LiDAR/ToF 参数、测试数据",
+      "group": "光 / 光机 / 显示 / 传感岗",
+      "group_id": "optics-imaging-sensor"
+    },
+    {
+      "id": "twin-role-optoelectronic-engineer",
+      "name": "光电工程师",
+      "focus": "光电器件、信号链、测试报告",
+      "group": "光 / 光机 / 显示 / 传感岗",
+      "group_id": "optics-imaging-sensor"
+    },
+    {
+      "id": "twin-role-infrared-engineer",
+      "name": "红外工程师",
+      "focus": "红外传感、热成像、测试资料",
+      "group": "光 / 光机 / 显示 / 传感岗",
+      "group_id": "optics-imaging-sensor"
+    },
+    {
+      "id": "twin-role-display-test-engineer",
+      "name": "显示测试工程师",
+      "focus": "屏幕亮度、色彩、均匀性测试记录",
+      "group": "光 / 光机 / 显示 / 传感岗",
+      "group_id": "optics-imaging-sensor"
+    },
+    {
+      "id": "twin-role-rf-engineer",
+      "name": "射频工程师 / RF Engineer",
+      "focus": "RF 测试、天线资料、认证问题",
+      "group": "射频 / 通信 / 天线岗",
+      "group_id": "rf-communication-antenna"
+    },
+    {
+      "id": "twin-role-antenna-engineer",
+      "name": "天线工程师",
+      "focus": "天线方案、测试数据、调试记录",
+      "group": "射频 / 通信 / 天线岗",
+      "group_id": "rf-communication-antenna"
+    },
+    {
+      "id": "twin-role-wireless-communication-engineer",
+      "name": "无线通信工程师",
+      "focus": "蓝牙/Wi-Fi/蜂窝连接问题整理",
+      "group": "射频 / 通信 / 天线岗",
+      "group_id": "rf-communication-antenna"
+    },
+    {
+      "id": "twin-role-bluetooth-engineer",
+      "name": "蓝牙工程师",
+      "focus": "BLE 协议、连接日志、兼容性问题",
+      "group": "射频 / 通信 / 天线岗",
+      "group_id": "rf-communication-antenna"
+    },
+    {
+      "id": "twin-role-wifi-engineer",
+      "name": "Wi-Fi 工程师",
+      "focus": "网络测试、吞吐、掉线问题归类",
+      "group": "射频 / 通信 / 天线岗",
+      "group_id": "rf-communication-antenna"
+    },
+    {
+      "id": "twin-role-cellular-engineer",
+      "name": "蜂窝通信工程师",
+      "focus": "LTE/5G 模块、认证、网络兼容性",
+      "group": "射频 / 通信 / 天线岗",
+      "group_id": "rf-communication-antenna"
+    },
+    {
+      "id": "twin-role-gnss-gps-engineer",
+      "name": "GNSS/GPS 工程师",
+      "focus": "定位精度、天线、测试轨迹分析",
+      "group": "射频 / 通信 / 天线岗",
+      "group_id": "rf-communication-antenna"
+    },
+    {
+      "id": "twin-role-communication-protocol-engineer",
+      "name": "通信协议工程师",
+      "focus": "协议栈、接口文档、问题复盘",
+      "group": "射频 / 通信 / 天线岗",
+      "group_id": "rf-communication-antenna"
+    }
+  ]
+}
