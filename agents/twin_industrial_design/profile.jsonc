@@ -1,0 +1,39 @@
+{
+  "id": "twin_industrial_design",
+  "templateId": "octopus:digital-twin:industrial_design",
+  "templateVersion": "1.0.0",
+  "source_kind": "digital-twin-human-role",
+  "source_plugin": "twin-industrial_design",
+  "expertType": "agent",
+  "name": "工业设计师分身",
+  "icon": "🎨",
+  "description": "代表工业设计师的数位分身:外观概念/CMF/竞品分析等设计侧闭环,手板评审与签样交给真人,AI 替代不了真实审美评审。",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "digital-twin:human-role",
+  "category": "creative",
+  "tags": [
+    "数字分身",
+    "真人岗位",
+    "真身协同",
+    "工业设计",
+    "CMF",
+    "外观"
+  ],
+  "profession": "工业设计师",
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true,
+    "includeUserMd": true,
+    "includeMemoryMd": true
+  },
+  "capabilities": {
+    "digital_twin": true,
+    "human_collab": true,
+    "authorization_boundary": true,
+    "handoff_pack": true
+  }
+}

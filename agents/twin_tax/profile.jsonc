@@ -1,0 +1,39 @@
+{
+  "id": "twin_tax",
+  "templateId": "octopus:digital-twin:tax",
+  "templateVersion": "1.0.0",
+  "source_kind": "digital-twin-human-role",
+  "source_plugin": "twin-tax",
+  "expertType": "agent",
+  "name": "税务分身",
+  "icon": "🧾",
+  "description": "代表税务岗的数位分身:申报资料/政策梳理/风险提示等文档侧闭环,申报与筹划决策必须真人,AI 不能替代税务责任。",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "digital-twin:human-role",
+  "category": "financial",
+  "tags": [
+    "数字分身",
+    "真人岗位",
+    "真身协同",
+    "税务",
+    "申报",
+    "筹划"
+  ],
+  "profession": "税务专员",
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true,
+    "includeUserMd": true,
+    "includeMemoryMd": true
+  },
+  "capabilities": {
+    "digital_twin": true,
+    "human_collab": true,
+    "authorization_boundary": true,
+    "handoff_pack": true
+  }
+}
