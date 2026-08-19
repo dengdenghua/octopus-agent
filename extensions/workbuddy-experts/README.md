@@ -122,8 +122,9 @@ agents/stock_partner_lead          腾讯自选股投研团 [finance]  +3 skills
 - **团队编排**: 专家团主理人依赖 WorkBuddy 的 TeamCreate / Agent spawn / SendMessage
   运行时能力。octopus 用自己的 subagent 机制(ephemeral_agents),团队协作流程
   需按 octopus 方式适配,主理人 agent 本身已可用。
-- **westock 连接器**: stock-partner-team 依赖腾讯自选股 westock-mcp,OAuth 连接器
-  需单独配置后才会有真实行情数据。
+- **westock 连接器**: stock-partner-team 依赖腾讯自选股 westock-mcp,需在
+  Hub → 插件 → **连接器** tab 安装并连接认证后才会有真实行情数据(认证编排层会把
+  凭据注入 MCP 请求,见 `extensions/workbuddy-connectors/README.md`)。
 
 ---
 

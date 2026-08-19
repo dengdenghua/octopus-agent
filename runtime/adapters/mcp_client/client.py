@@ -89,6 +89,32 @@ class MCPClient(ABC):
         self.close()
 
 
+def _connector_injection_for_server(server_name: str) -> dict[str, dict[str, str]]:
+    """Resolve connector auth injection (认证编排层) for an MCP server name.
+
+    Only connectors that are installed + enabled + connected contribute
+    headers/env. The connectors platform layer is imported lazily so the
+    MCP adapters never hard-depend on it; any failure resolves to empty
+    injection rather than blocking MCP traffic.
+    """
+    try:
+        from runtime.platform.connectors.auth_orchestrator import (
+            mcp_injection_for_server,
+        )
+
+        return mcp_injection_for_server(server_name)
+    except Exception:  # noqa: BLE001 - orchestration layer must not block MCP
+        return {"headers": {}, "env": {}}
+
+
+def _connector_headers_for(server_name: str) -> dict[str, str]:
+    return _connector_injection_for_server(server_name).get("headers", {})
+
+
+def _connector_env_for(server_name: str) -> dict[str, str]:
+    return _connector_injection_for_server(server_name).get("env", {})
+
+
 # ═══════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════
 
@@ -215,6 +241,13 @@ class StdioMCPClient(MCPClient):
                 )
             return result.model_copy(update={"latency_ms": (time.monotonic() - t0) * 1000})
 
+    def _stdio_env(self) -> dict[str, str] | None:
+        """config env + connector env(认证编排层,仅已安装+启用+连接)。"""
+        env = dict(self.config.env) if self.config.env else {}
+        for key, value in _connector_env_for(self.config.name).items():
+            env.setdefault(key, value)
+        return env or None
+
     def close(self) -> None:
         self._closed = True
 
@@ -227,7 +260,7 @@ class StdioMCPClient(MCPClient):
         params = StdioServerParameters(
             command=self.config.command,
             args=list(self.config.args),
-            env=dict(self.config.env) if self.config.env else None,
+            env=self._stdio_env(),
         )
         async with (
             stdio_client(params) as (read, write),
@@ -252,7 +285,7 @@ class StdioMCPClient(MCPClient):
         params = StdioServerParameters(
             command=self.config.command,
             args=list(self.config.args),
-            env=dict(self.config.env) if self.config.env else None,
+            env=self._stdio_env(),
         )
         async with (
             stdio_client(params) as (read, write),
@@ -351,6 +384,12 @@ class HttpMCPClient(MCPClient):
         so both shapes work uniformly.
         """
         header_values = dict(self.config.headers) if self.config.headers else {}
+        # Connector 认证编排层(WorkBuddy / octopus): only connectors that
+        # are installed + enabled + connected contribute headers. A header
+        # the user pasted into the server config always wins (manual beats
+        # connector auth, which beats the generic OAuth fallback below).
+        for key, value in _connector_headers_for(self.config.name).items():
+            header_values.setdefault(key, value)
         # OAuth-authorized servers (see mcp_router.py's /api/mcp/oauth/*
         # endpoints) get their bearer token injected here rather than
         # baked into ``config.headers`` — tokens refresh/expire and are

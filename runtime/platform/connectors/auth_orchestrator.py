@@ -215,3 +215,40 @@ class AuthOrchestrator:
 
 
 __all__ = ["AuthOrchestrator"]
+
+
+def mcp_injection_for_server(
+    server_name: str,
+    *,
+    registry: Any = None,
+    orchestrator: AuthOrchestrator | None = None,
+) -> dict[str, dict[str, str]]:
+    """为 MCP server 名解析连接器认证注入(仅 已安装 + 已启用 + 已连接)。
+
+    连接器 id 与 MCP server 名不一致(如 ``canva-ai`` → ``canva-mcp``),
+    这里按 ``conn.mcp_servers`` 的 key 反查。找不到匹配 / 未安装 /
+    未启用 / 未连接时返回空注入,MCP 代理侧不附加任何凭据。
+
+    返回 ``{"headers": {...}, "env": {...}}``,分别供 HTTP / stdio 传输注入。
+    """
+    from runtime.platform.connectors.connector_registry import ConnectorRegistry
+
+    registry = registry or ConnectorRegistry()
+    orch = orchestrator or AuthOrchestrator()
+    state = registry._state()
+    for cid, st in state.items():
+        if not (st.get("installed") and st.get("enabled")):
+            continue
+        conn = registry.get(cid)
+        if conn is None or not conn.mcp_servers:
+            continue
+        if server_name not in conn.mcp_servers:
+            continue
+        return {
+            "headers": orch.resolve_headers(conn),
+            "env": orch.resolve_env(conn),
+        }
+    return {"headers": {}, "env": {}}
+
+
+__all__ = ["AuthOrchestrator", "mcp_injection_for_server"]

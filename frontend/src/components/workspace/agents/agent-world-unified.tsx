@@ -11,6 +11,7 @@ import {
   ImportIcon,
   Loader2Icon,
   PlusIcon,
+  PlugIcon,
   PuzzleIcon,
   SearchIcon,
   StoreIcon,
@@ -71,6 +72,7 @@ import { AgentWorldCard } from "./agent-world-card";
 import { LocalAgentConnectDialog } from "./local-agent-connect-dialog";
 import { LocalSkillDirectoryPanel } from "@/components/store/local-skill-directory-panel";
 import { RegistrySkillsPanel } from "@/components/store/registry-skills-panel";
+import { ConnectorMarketPanel } from "@/components/store/connector-market-panel";
 import { WorkBuddyCloudStorePanel } from "@/components/store/workbuddy-cloud-store-panel";
 import { RegistryPluginsPanel } from "@/components/store/registry-plugins-panel";
 
@@ -1003,10 +1005,18 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
             <StoreIcon className="h-3.5 w-3.5" />
             {t.agentWorldUnified.marketplaceTab}
           </TabsTrigger>
+          <TabsTrigger value="connectors" className="h-8 gap-1.5 px-3 text-xs">
+            <PlugIcon className="h-3.5 w-3.5" />
+            连接器
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="registry" className="mt-0">
           <RegistryPluginsPanel />
+        </TabsContent>
+
+        <TabsContent value="connectors" className="mt-0">
+          <ConnectorMarketPanel />
         </TabsContent>
 
         <TabsContent value="local" className="mt-0 flex flex-col gap-4">

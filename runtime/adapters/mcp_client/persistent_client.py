@@ -139,11 +139,18 @@ class PersistentStdioMCPClient(MCPClient):
             resolved_process_backend,
         )
 
+        from .client import _connector_env_for
+
+        # config env + connector env(认证编排层,仅已安装+启用+连接)。
+        merged_env = dict(self.config.env) if self.config.env else {}
+        for key, value in _connector_env_for(self.config.name).items():
+            merged_env.setdefault(key, value)
+
         if not process_sandbox_required():
             return parameter_type(
                 command=self.config.command,
                 args=list(self.config.args),
-                env=dict(self.config.env) if self.config.env else None,
+                env=merged_env or None,
             )
 
         if not self.config.sandbox_dir:
@@ -164,7 +171,7 @@ class PersistentStdioMCPClient(MCPClient):
             workspace=workspace,
             allow_network=False,
             timeout_s=self.config.timeout_ms / 1000,
-            extra_env=_sandbox_extra_env(self.config.env),
+            extra_env=_sandbox_extra_env(merged_env),
             # Model inference endpoints stay reachable in a network-denied
             # sandbox (Claude Desktop parity).
             inference_domains=inference_domains(),

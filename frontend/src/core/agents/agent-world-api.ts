@@ -470,6 +470,196 @@ export async function listAgentRelationships(
 }
 
 // ---------------------------------------------------------------------------
+// 连接器市场(WorkBuddy 108 连接器 fork + 认证编排层)
+// 后端: runtime/sensing/gateway/connector_router.py
+//   GET    /api/connectors                      列表(含安装/启用状态)
+//   POST   /api/connectors/{id}/install         安装(技能→skills,MCP 默认禁用)
+//   DELETE /api/connectors/{id}/install         卸载
+//   POST   /api/connectors/{id}/enable|disable  启用/禁用 MCP
+//   GET    /api/connectors/{id}/status          认证状态
+//   POST   /api/connectors/{id}/connect         认证编排(带 tokens / 返回 CLI 命令)
+//   POST   /api/connectors/{id}/disconnect      断开并清除凭据
+// ---------------------------------------------------------------------------
+
+export type ConnectorType = "mcp" | "cli" | "skill-only" | "other";
+
+export interface ConnectorInfo {
+  id: string;
+  name: string;
+  name_zh: string;
+  description: string;
+  description_zh: string;
+  type: ConnectorType;
+  auth_mode: string;
+  source: string;
+  provider_id?: string;
+  mcp_servers: string[];
+  skill_count: number;
+  examples_zh?: string[];
+  installed: boolean;
+  enabled: boolean;
+  version: string;
+}
+
+export interface ConnectorListResponse {
+  connectors: ConnectorInfo[];
+  total: number;
+}
+
+export interface ConnectorStatusResponse {
+  connector_id: string;
+  auth_mode: string;
+  connected: boolean;
+  has_token?: boolean;
+  stored_keys?: string[];
+  cli_status?: {
+    exit_code: number;
+    output: string;
+    connected: boolean;
+  };
+}
+
+export interface ConnectorConnectResult {
+  connected: boolean;
+  connector_id?: string;
+  message?: string;
+  command?: string;
+  exit_code?: number;
+  output?: string;
+  stored_keys?: string[];
+}
+
+export interface ConnectorInstallResult {
+  installed: boolean;
+  connector_id: string;
+  type: string;
+  auth_mode: string;
+  copied_skills?: string[];
+  mcp_servers?: string[];
+  enabled?: boolean;
+  message?: string;
+}
+
+const CONNECTOR_API = "/api/connectors";
+
+/** 连接器列表(WorkBuddy 108 fork + 本地)。 */
+export async function listConnectors(params: {
+  search?: string;
+  type?: string;
+  limit?: number;
+} = {}): Promise<ConnectorListResponse> {
+  const qs = new URLSearchParams();
+  if (params.search) qs.set("search", params.search);
+  if (params.type) qs.set("type", params.type);
+  qs.set("limit", String(params.limit ?? 500));
+  const res = await fetch(
+    `${getBackendBaseURL()}${CONNECTOR_API}?${qs.toString()}`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok)
+    throw new Error(`Connector list failed: HTTP ${res.status}`);
+  return res.json() as Promise<ConnectorListResponse>;
+}
+
+/** 安装连接器(技能→~/.octopus/skills,MCP 默认禁用)。 */
+export async function installConnector(
+  connectorId: string,
+): Promise<ConnectorInstallResult> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${CONNECTOR_API}/${encodeURIComponent(
+      connectorId,
+    )}/install`,
+    { method: "POST", headers: authHeaders() },
+  );
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`Connector install failed: HTTP ${res.status} ${txt}`.trim());
+  }
+  return res.json() as Promise<ConnectorInstallResult>;
+}
+
+/** 卸载连接器。 */
+export async function uninstallConnector(connectorId: string): Promise<void> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${CONNECTOR_API}/${encodeURIComponent(
+      connectorId,
+    )}/install`,
+    { method: "DELETE", headers: authHeaders() },
+  );
+  if (!res.ok)
+    throw new Error(`Connector uninstall failed: HTTP ${res.status}`);
+}
+
+/** 启用连接器 MCP(需已连接)。 */
+export async function enableConnector(connectorId: string): Promise<void> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${CONNECTOR_API}/${encodeURIComponent(
+      connectorId,
+    )}/enable`,
+    { method: "POST", headers: authHeaders() },
+  );
+  if (!res.ok)
+    throw new Error(`Connector enable failed: HTTP ${res.status}`);
+}
+
+/** 禁用连接器 MCP。 */
+export async function disableConnector(connectorId: string): Promise<void> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${CONNECTOR_API}/${encodeURIComponent(
+      connectorId,
+    )}/disable`,
+    { method: "POST", headers: authHeaders() },
+  );
+  if (!res.ok)
+    throw new Error(`Connector disable failed: HTTP ${res.status}`);
+}
+
+/** 连接器认证状态。 */
+export async function getConnectorStatus(
+  connectorId: string,
+): Promise<ConnectorStatusResponse> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${CONNECTOR_API}/${encodeURIComponent(
+      connectorId,
+    )}/status`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok)
+    throw new Error(`Connector status failed: HTTP ${res.status}`);
+  return res.json() as Promise<ConnectorStatusResponse>;
+}
+
+/** 认证编排:带 tokens 走 token/oauth,否则 CLI 型返回终端命令。 */
+export async function connectConnector(
+  connectorId: string,
+  body: { tokens?: Record<string, string>; run_cli?: boolean } = {},
+): Promise<ConnectorConnectResult> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${CONNECTOR_API}/${encodeURIComponent(
+      connectorId,
+    )}/connect`,
+    { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify(body) },
+  );
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`Connector connect failed: HTTP ${res.status} ${txt}`.trim());
+  }
+  return res.json() as Promise<ConnectorConnectResult>;
+}
+
+/** 断开连接器并清除凭据。 */
+export async function disconnectConnector(connectorId: string): Promise<void> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${CONNECTOR_API}/${encodeURIComponent(
+      connectorId,
+    )}/disconnect`,
+    { method: "POST", headers: authHeaders() },
+  );
+  if (!res.ok)
+    throw new Error(`Connector disconnect failed: HTTP ${res.status}`);
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 

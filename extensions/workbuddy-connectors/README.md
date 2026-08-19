@@ -39,6 +39,18 @@ workbuddy-connectors/
 | `connector_registry.py` | 连接器定义加载 + 安装(技能→skills, MCP 登记默认禁用)/卸载/启停 |
 | `auth_orchestrator.py` | 认证编排:connect(token 存库 / CLI 登录命令)、disconnect、status、**auth 头/环境变量注入** |
 
+### MCP 代理认证注入(已接入)
+MCP 客户端在建立 HTTP/streamable-http 连接时,自动为**已安装 + 已启用 + 已连接**的连接器注入
+解析出的 auth 头(`Authorization` / `X-Oneid-Access-Token` 等);stdio 型注入环境变量。注入优先级:
+**用户手填 header > 连接器 auth > 通用 OAuth 兜底**。
+
+```
+runtime/adapters/mcp_client/client.py            # HttpMCPClient._transport() + StdioMCPClient._stdio_env()
+runtime/adapters/mcp_client/persistent_client.py # PersistentStdioMCPClient._stdio_parameters()
+runtime/platform/connectors/auth_orchestrator.py # mcp_injection_for_server(server_name) 反查连接器
+```
+连接器 id ≠ MCP server 名(如 `canva-ai` → `canva-mcp`),按 `conn.mcp_servers` 的 key 反查。
+
 网关接口(已挂载): `runtime/sensing/gateway/connector_router.py`
 ```
 GET    /api/connectors                      # 列表(108,含安装/启用状态)
@@ -66,5 +78,8 @@ auth 注入 + 捆绑技能」。本仓库的认证编排层把 WorkBuddy 这套�
 
 ## 测试
 ```
-tests/test_connectors.py   # 9 例:加密库/注册表/认证编排/网关路由
+tests/test_connectors.py          # 加密库/注册表/认证编排/网关路由
+tests/test_mcp_auth_injection.py  # MCP 代理认证注入(headers/env)7 例
 ```
+前端 `frontend/src/components/store/connector-market-panel.tsx`(Hub → 插件 → 连接器 tab)
+调 `/api/connectors` 完成浏览 / 安装 / 连接认证 / 启停。
