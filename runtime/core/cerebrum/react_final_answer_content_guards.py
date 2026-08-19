@@ -37,9 +37,14 @@ def _incomplete_final_answer_guard(final_answer: str) -> str | None:
     # ``我来``/``我这就``/``我直接`` announce an action exactly as ``我将`` does.
     # Their absence let "我来查看黑板…" through as a terminal answer three turns
     # running (thread teD7hPf9dkGOExwO0dIiBE), each time with zero tool calls.
+    # ``我继续``/``继续`` are the same future intent in continuation form: after a
+    # first "我接下来会核对…" was rejected, the model rephrased to "我继续核对
+    # 广义健康板块…确认是否也跟随大涨" which lacked every listed prefix and was
+    # delivered as a completed turn with zero tool calls (thread
+    # tj1qarRWyf8H5zzT6dR_-u, trn_d1cd69902f864d67 / trn_23c29c3f25ef4e68).
     preparatory_start = re.match(
         r"^(?:我(?:会|将|先|来|要|想|需要|这就|马上|直接|接下来|这就开始|马上开始|"
-        r"现在(?:立刻|马上|直接)?|开始)|接下来|下一步|准备|"
+        r"现在(?:立刻|马上|直接)?|继续|接着|随后|开始)|接下来|下一步|准备|继续|接着|"
         r"let me|i(?:'ll| will| first| am going to)|next[,：:]?)",
         visible,
         re.IGNORECASE,
@@ -88,7 +93,7 @@ def _incomplete_final_answer_guard(final_answer: str) -> str | None:
         re.IGNORECASE,
     )
     future_action = re.search(
-        r"(?:^|[。.!！；;，,]\s*)(?:我)?(?:会|将|先|接下来|下一步|准备|现在(?:立刻|马上)?)|"
+        r"(?:^|[。.!！；;，,]\s*)(?:我)?(?:会|将|先|接下来|下一步|准备|继续|接着|随后|现在(?:立刻|马上)?)|"
         r"(?:我)?先[^。.!！；;\n]{0,32}(?:再读|读取|查看|核对|检查|探清|定位|查找|搜索)|"
         r"\b(?:i(?:'ll| will)|let me|next)\b",
         visible,

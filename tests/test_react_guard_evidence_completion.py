@@ -142,6 +142,45 @@ def test_incomplete_final_answer_rejects_future_action_not_result() -> None:
     assert "not a completed answer" in message
 
 
+def test_incomplete_final_answer_rejects_continuation_promise() -> None:
+    # Regression (thread tj1qarRWyf8H5zzT6dR_-u, trn_d1cd69902f864d67 /
+    # trn_23c29c3f25ef4e68): after "我接下来会核对…" was rejected, the model
+    # rephrased to "我继续核对…确认它们是否也跟随大涨" — 继/接 continuation
+    # prefixes were missing from preparatory_start/future_action, so the
+    # rephrased announce was delivered as a completed turn with zero tool calls.
+    message = _incomplete_final_answer_guard(
+        "我继续核对广义健康板块（健康保险、数字健康、远程医疗、健身）"
+        "在2026年8月20日的行情，确认它们是否也跟随医药大涨。"
+    )
+
+    assert message is not None
+    assert "not a completed answer" in message
+
+
+def test_incomplete_final_answer_rejects_bare_continuation_verb_start() -> None:
+    # A turn-final answer that opens with a bare 继续推进/接着核实 plan is a
+    # placeholder, not a delivery — same shape as the 我继续 regression above.
+    message = _incomplete_final_answer_guard(
+        "继续推进当前任务，先核对已完成内容，确保下一步操作有明确依据。"
+    )
+
+    assert message is not None
+    assert "not a completed answer" in message
+
+
+def test_incomplete_final_answer_accepts_delivered_answer_that_mentions_continuation() -> None:
+    # A concrete conclusion that merely mentions continuing later must pass:
+    # the guard targets plan-only candidates, not finished reports that
+    # honestly state what remains.
+    assert (
+        _incomplete_final_answer_guard(
+            "结论：A方案成本更低。综合三轮报价数据，A方案总价 12.4 万，B 方案 15.1 万，"
+            "差异 2.7 万主要来自许可费；后续扩容仍可继续评估。"
+        )
+        is None
+    )
+
+
 def test_incomplete_final_answer_rejects_negated_conclusion_signal() -> None:
     message = _incomplete_final_answer_guard(
         "我先 grep 确认具体定义，然后整理差异；现在还没有给出结论。"
