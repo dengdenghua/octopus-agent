@@ -659,6 +659,158 @@ export async function disconnectConnector(connectorId: string): Promise<void> {
     throw new Error(`Connector disconnect failed: HTTP ${res.status}`);
 }
 
+
+// ---------------------------------------------------------------------------
+// 统一「能力包」市场 —— 连接器 + Codex 插件一个市场
+// 后端: runtime/sensing/gateway/capability_router.py
+//   GET  /api/capabilities                    统一列表
+//   POST /api/capabilities/{id}/install       安装(技能→skills, 连接器+MCP)
+//   POST /api/capabilities/{id}/enable|disable
+//   POST /api/capabilities/{id}/connect       认证编排
+//   GET  /api/capabilities/{id}/status
+// ---------------------------------------------------------------------------
+
+const CAPABILITY_API = "/api/capabilities";
+
+export type CapabilitySource = "connector" | "codex_plugin";
+
+export interface CapabilityInfo {
+  id: string;
+  name: string;
+  name_zh: string;
+  description: string;
+  description_zh: string;
+  type: string;
+  auth_mode: string;
+  source: CapabilitySource;
+  provider_id?: string;
+  author?: string;
+  category?: string;
+  icon?: string;
+  mcp_servers: string[];
+  skill_count: number;
+  examples_zh?: string[];
+  installed: boolean;
+  enabled: boolean;
+  connected?: boolean;
+  version: string;
+}
+
+export interface CapabilityListResponse {
+  capabilities: CapabilityInfo[];
+  total: number;
+}
+
+export interface CapabilityConnectResult {
+  connected: boolean;
+  message?: string;
+  command?: string;
+  capability_id?: string;
+}
+
+/** 统一能力市场列表(连接器 + Codex 插件)。 */
+export async function listCapabilities(opts: {
+  search?: string;
+  source?: CapabilitySource | "";
+  limit?: number;
+} = {}): Promise<CapabilityListResponse> {
+  const qs = new URLSearchParams();
+  if (opts.search) qs.set("search", opts.search);
+  if (opts.source) qs.set("source", opts.source);
+  qs.set("limit", String(opts.limit ?? 500));
+  const res = await fetch(
+    `${getBackendBaseURL()}${CAPABILITY_API}?${qs.toString()}`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok) throw new Error(`Capability list failed: HTTP ${res.status}`);
+  return res.json() as Promise<CapabilityListResponse>;
+}
+
+/** 安装能力包(技能→~/.octopus/skills;连接器额外登记 MCP)。 */
+export async function installCapability(
+  capabilityId: string,
+): Promise<{ installed: boolean; copied_skills?: string[] }> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${CAPABILITY_API}/${encodeURIComponent(
+      capabilityId,
+    )}/install`,
+    { method: "POST", headers: authHeaders() },
+  );
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`Capability install failed: HTTP ${res.status} ${txt}`.trim());
+  }
+  return res.json();
+}
+
+/** 卸载能力包。 */
+export async function uninstallCapability(capabilityId: string): Promise<void> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${CAPABILITY_API}/${encodeURIComponent(
+      capabilityId,
+    )}/install`,
+    { method: "DELETE", headers: authHeaders() },
+  );
+  if (!res.ok) throw new Error(`Capability uninstall failed: HTTP ${res.status}`);
+}
+
+/** 启用/禁用能力。 */
+export async function setCapabilityEnabled(
+  capabilityId: string,
+  enabled: boolean,
+): Promise<void> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${CAPABILITY_API}/${encodeURIComponent(
+      capabilityId,
+    )}/${enabled ? "enable" : "disable"}`,
+    { method: "POST", headers: authHeaders() },
+  );
+  if (!res.ok) throw new Error(`Capability ${enabled ? "enable" : "disable"} failed: HTTP ${res.status}`);
+}
+
+/** 能力认证/连接状态。 */
+export async function getCapabilityStatus(
+  capabilityId: string,
+): Promise<{ connected: boolean; auth_mode?: string }> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${CAPABILITY_API}/${encodeURIComponent(
+      capabilityId,
+    )}/status`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok) throw new Error(`Capability status failed: HTTP ${res.status}`);
+  return res.json();
+}
+
+/** 认证编排:连接器带 tokens / 插件直接就绪。 */
+export async function connectCapability(
+  capabilityId: string,
+  body: { tokens?: Record<string, string>; run_cli?: boolean } = {},
+): Promise<CapabilityConnectResult> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${CAPABILITY_API}/${encodeURIComponent(
+      capabilityId,
+    )}/connect`,
+    { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify(body) },
+  );
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`Capability connect failed: HTTP ${res.status} ${txt}`.trim());
+  }
+  return res.json();
+}
+
+/** 断开能力(清除连接器凭据)。 */
+export async function disconnectCapability(capabilityId: string): Promise<void> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${CAPABILITY_API}/${encodeURIComponent(
+      capabilityId,
+    )}/disconnect`,
+    { method: "POST", headers: authHeaders() },
+  );
+  if (!res.ok) throw new Error(`Capability disconnect failed: HTTP ${res.status}`);
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

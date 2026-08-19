@@ -649,6 +649,28 @@ def mount_routers_a(
             "connector_router failed to mount: %s", _conn_exc
         )
 
+    # ─── 统一能力市场(连接器 + Codex 插件归一)──────────────
+    # 一个市场统一管理连接器(WorkBuddy 108)与 Codex 插件(我们正在运行的),
+    # 统一 install/enable/connect 生命周期,详见 capability_registry.py。
+    try:
+        from runtime.sensing.gateway.capability_router import (
+            create_capability_router,
+        )
+
+        app.include_router(
+            create_capability_router(
+                identity_store=ctx.identity_store,
+                require_auth=ctx.require_auth,
+                jwt_secret=ctx.jwt_secret,
+                jwt_issuer=ctx.jwt_issuer,
+                jwt_audience=ctx.jwt_audience,
+            )
+        )
+    except Exception as _cap_exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning(
+            "capability_router failed to mount: %s", _cap_exc
+        )
+
     # ─── 企业版角色资产消费(数字分身归并 C·只读)──────────────
     # 配 OCTOPUS_ENTERPRISE_URL 时,市场可列举企业版托管的角色资产;不配则
     # available=false。消费而非 fork(见 enterprise_assets_router)。
