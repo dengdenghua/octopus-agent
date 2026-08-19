@@ -1,7 +1,6 @@
-"""统一「能力包」市场路由 —— 连接器 + Codex 插件一个市场管理。
+"""统一「插件」市场路由 —— 所有外部能力(WorkBuddy MCP 服务 + Codex 插件)统一叫插件。
 
-对齐 WorkBuddy 连接器 / Codex connector_* / Codex 插件三套体系,给前端一套
-统一「能力市场」:
+给前端一套统一「插件市场」:
 
   GET    /api/capabilities                   统一列表(连接器 + 插件)
   GET    /api/capabilities/{id}              单个能力详情

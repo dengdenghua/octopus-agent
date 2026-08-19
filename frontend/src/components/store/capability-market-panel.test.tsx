@@ -76,12 +76,11 @@ describe("CapabilityMarketPanel", () => {
     await waitFor(() =>
       expect(screen.getByText("腾讯股票")).toBeInTheDocument(),
     );
-    // 连接器 + 插件都显示
+    // 连接器 + 插件统一展示,不再出现「连接器」字样
     expect(screen.getByText("Browser")).toBeInTheDocument();
-    expect(screen.getAllByText("连接器").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("插件").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/连接器/)).not.toBeInTheDocument();
     expect(screen.getByText("技能 ×3")).toBeInTheDocument();
-    // 已安装连接器 → 连接 / 已禁用 按钮
+    // 已安装插件(连接器) → 连接 / 已禁用 按钮
     expect(
       screen.getByRole("button", { name: "连接" }),
     ).toBeInTheDocument();

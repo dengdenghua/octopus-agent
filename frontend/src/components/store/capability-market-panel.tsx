@@ -43,7 +43,7 @@ import {
 } from "@/core/agents/agent-world-api";
 import { cn } from "@/lib/utils";
 
-// 统一「能力包」市场 —— 连接器(WorkBuddy 108)+ Codex 插件(我们正在运行的)
+// 统一「插件」市场 —— 所有外部能力(WorkBuddy MCP 服务、Codex 插件、注册表插件)统一叫插件。
 // 一个市场统一管理:安装→技能/MCP,连接→认证编排,插件直接就绪。
 // 数据来自后端 /api/capabilities(见 runtime/sensing/gateway/capability_router.py)。
 
@@ -67,17 +67,10 @@ const TYPE_META: Record<
   other: { badge: "bg-muted text-muted-foreground", label: "其他" },
 };
 
-const SOURCE_LABEL: Record<string, { label: string; cls: string }> = {
-  connector: { label: "连接器", cls: "bg-sky-500/10 text-sky-700 dark:text-sky-300" },
-  codex_plugin: { label: "插件", cls: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" },
-};
-
 const DEFAULT_TYPE_META = {
   badge: "bg-muted text-muted-foreground",
   label: "其他",
 };
-const DEFAULT_SOURCE = { label: "连接器", cls: "bg-sky-500/10 text-sky-700 dark:text-sky-300" };
-
 const AUTH_LABEL: Record<string, string> = {
   none: "无需认证",
   token: "Token",
@@ -185,7 +178,7 @@ function ConnectDialog({
 
         {isCli && (
           <p className="text-xs leading-5 text-muted-foreground">
-            CLI 型连接器将执行 cli.json 的登录命令(浏览器/交互式)。
+            CLI 型插件将执行 cli.json 的登录命令(浏览器/交互式)。
             可勾选在后台同步执行,或在本机终端手动执行。
           </p>
         )}
@@ -229,9 +222,6 @@ export function CapabilityMarketPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [sourceFilter, setSourceFilter] = useState<
-    "all" | "connector" | "codex_plugin"
-  >("all");
   const [typeFilter, setTypeFilter] = useState<
     "all" | "mcp" | "cli" | "skill-only" | "plugin"
   >("all");
@@ -284,7 +274,6 @@ export function CapabilityMarketPanel() {
 
   const q = query.trim().toLowerCase();
   const filtered = items.filter((c) => {
-    if (sourceFilter !== "all" && c.source !== sourceFilter) return false;
     if (typeFilter !== "all" && c.type !== typeFilter) return false;
     if (!q) return true;
     return [c.name, c.name_zh, c.id, c.description, c.description_zh, c.author]
@@ -296,7 +285,6 @@ export function CapabilityMarketPanel() {
   const counts = useMemo(() => {
     const out: Record<string, number> = { all: items.length };
     for (const c of items) {
-      out[c.source] = (out[c.source] ?? 0) + 1;
       out[c.type] = (out[c.type] ?? 0) + 1;
     }
     return out;
@@ -393,31 +381,12 @@ export function CapabilityMarketPanel() {
           <Button
             type="button"
             size="sm"
-            variant={sourceFilter === "all" ? "secondary" : "ghost"}
-            onClick={() => setSourceFilter("all")}
+            variant={typeFilter === "all" ? "secondary" : "ghost"}
+            onClick={() => setTypeFilter("all")}
             className="h-8 px-2.5 text-xs"
           >
             全部<span className="ml-1 text-xs text-muted-foreground">{counts.all}</span>
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={sourceFilter === "connector" ? "secondary" : "ghost"}
-            onClick={() => setSourceFilter("connector")}
-            className="h-8 px-2.5 text-xs"
-          >
-            连接器<span className="ml-1 text-xs text-muted-foreground">{counts.connector ?? 0}</span>
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={sourceFilter === "codex_plugin" ? "secondary" : "ghost"}
-            onClick={() => setSourceFilter("codex_plugin")}
-            className="h-8 px-2.5 text-xs"
-          >
-            插件<span className="ml-1 text-xs text-muted-foreground">{counts.codex_plugin ?? 0}</span>
-          </Button>
-          <span className="mx-1 h-4 w-px bg-border-default" />
           {(["all", "mcp", "cli", "skill-only", "plugin"] as const).map(
             (tp) => (
               <Button
@@ -454,8 +423,8 @@ export function CapabilityMarketPanel() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索连接器 / 插件"
-              aria-label="搜索连接器 / 插件"
+              placeholder="搜索插件"
+              aria-label="搜索插件"
               className="h-8 w-44 rounded-md border border-border-default bg-background pl-7 pr-2 text-sm outline-none focus:border-primary/50"
             />
           </div>
@@ -485,7 +454,6 @@ export function CapabilityMarketPanel() {
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {filtered.map((cap) => {
             const typeMeta = TYPE_META[cap.type] ?? DEFAULT_TYPE_META;
-            const sourceMeta = SOURCE_LABEL[cap.source] ?? DEFAULT_SOURCE;
             const busy = busyMap[cap.id];
             const connected = statusMap[cap.id];
             const isPlugin = cap.source === "codex_plugin";
@@ -517,9 +485,6 @@ export function CapabilityMarketPanel() {
                   </div>
                 </CardHeader>
                 <div className="flex flex-wrap items-center gap-1 px-3">
-                  <Badge className={cn("border-transparent text-[11px]", sourceMeta.cls)}>
-                    {sourceMeta.label}
-                  </Badge>
                   <Badge
                     className={cn(
                       "border-transparent text-[11px]",
@@ -641,7 +606,7 @@ export function CapabilityMarketPanel() {
           })}
           {filtered.length === 0 && !loading && (
             <div className="col-span-full py-8 text-center text-sm text-muted-foreground">
-              没有匹配的连接器或插件
+              没有匹配的插件
             </div>
           )}
         </div>

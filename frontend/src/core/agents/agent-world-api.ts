@@ -708,7 +708,7 @@ export interface CapabilityConnectResult {
   capability_id?: string;
 }
 
-/** 统一能力市场列表(连接器 + Codex 插件)。 */
+/** 统一插件市场列表(WorkBuddy MCP 服务 + Codex 插件)。 */
 export async function listCapabilities(opts: {
   search?: string;
   source?: CapabilitySource | "";
@@ -726,7 +726,7 @@ export async function listCapabilities(opts: {
   return res.json() as Promise<CapabilityListResponse>;
 }
 
-/** 安装能力包(技能→~/.octopus/skills;连接器额外登记 MCP)。 */
+/** 安装插件(技能→~/.octopus/skills;带 MCP 的插件额外登记 MCP)。 */
 export async function installCapability(
   capabilityId: string,
 ): Promise<{ installed: boolean; copied_skills?: string[] }> {
@@ -782,7 +782,7 @@ export async function getCapabilityStatus(
   return res.json();
 }
 
-/** 认证编排:连接器带 tokens / 插件直接就绪。 */
+/** 认证编排:带认证的插件走 tokens / 其余直接就绪。 */
 export async function connectCapability(
   capabilityId: string,
   body: { tokens?: Record<string, string>; run_cli?: boolean } = {},
@@ -800,7 +800,7 @@ export async function connectCapability(
   return res.json();
 }
 
-/** 断开能力(清除连接器凭据)。 */
+/** 断开插件(清除已存凭据)。 */
 export async function disconnectCapability(capabilityId: string): Promise<void> {
   const res = await fetch(
     `${getBackendBaseURL()}${CAPABILITY_API}/${encodeURIComponent(

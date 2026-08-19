@@ -1,15 +1,15 @@
-"""统一「能力包(Capability)」注册表 —— 连接器与插件归一。
+"""统一「插件(Capability)」注册表 —— 所有外部能力统一叫插件。
 
-连接器(WorkBuddy 108)与 Codex 插件(我们正在运行的 ~/.codex/plugins/cache)
-本质都是「能力包」:元数据 + skills + 工具(MCP/CLI) + 认证编排。
-本模块把两者归一成同一个 schema、同一套生命周期,让前端一个市场统一管理。
+WorkBuddy 连接器(108)、Codex 插件(~/.codex/plugins/cache)本质都是「插件」:
+元数据 + skills + 工具(MCP/CLI) + 认证编排。本模块把两者归一成同一个 schema、
+同一套生命周期,让前端一个市场统一管理。
 
 统一模型(CapabilityItem):
-  source: "connector" | "codex_plugin"
+  source: "connector" | "codex_plugin"   (内部来源标识,统一对外叫插件)
   auth_mode: token | oauth | server-side | oneid-token | none
   lifecycle: installed / enabled / connected
   install → 复制 skills 到 ~/.octopus/skills + 登记 MCP
-  connect → 认证编排(连接器 token/oauth;插件默认无需认证)
+  connect → 认证编排(带认证的插件走 token/oauth;其余默认无需认证)
 """
 from __future__ import annotations
 
