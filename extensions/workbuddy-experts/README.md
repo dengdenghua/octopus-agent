@@ -212,3 +212,28 @@ python3 scripts/publish-cloud.py --repo dengdenghua/workbuddy-expert-market --up
 ```
 tests/test_cloud_expert_store.py   # 9 例:本地镜像/搜索/分类/团队标记/解压安全/包根定位
 ```
+
+---
+
+## 🔌 插件 / 连接器商城(2026-08-19)
+
+商城新增**插件/连接器**页(纯静态):
+👉 https://dengdenghua.github.io/workbuddy-expert-market/plugins.html
+(或同域名 `/plugins.html`,数据 `storefront/data/plugin-store.json`)
+
+**123 项 = 我们的 Codex 插件 15 个 + WorkBuddy 连接器 108 个:**
+
+| 来源 | 数量 | 说明 |
+|---|---|---|
+| Codex 插件 | 15 | `~/.codex/plugins/cache` 里的 google-drive / figma / sites / browser / chrome / visualize … |
+| WB 连接器 | 108 | mcp 84 / cli 22 / skill-only 2,含 auth_mode + 捆绑技能数 |
+
+生成:
+```bash
+python3 extensions/workbuddy-experts/scripts/build-plugin-store.py
+```
+
+配套的 **octopus 认证编排层**(`runtime/platform/connectors/`)让连接器"连得上":
+`POST /api/connectors/{id}/connect`(token/CLI 登录)→ `GET /api/connectors/{id}/headers`
+(auth 头注入)→ `GET /api/connectors/{id}/status`。详见
+`extensions/workbuddy-connectors/README.md`。

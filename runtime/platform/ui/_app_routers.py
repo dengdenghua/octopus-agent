@@ -630,6 +630,25 @@ def mount_routers_a(
             "registry_consumer_router failed to mount: %s", _reg_exc
         )
 
+    # ─── 连接器市场(WorkBuddy 连接器 fork · 认证编排层)──────────────
+    # 浏览/安装 108 个连接器 + 认证编排(connect/status/headers 注入)。
+    try:
+        from runtime.sensing.gateway.connector_router import create_connector_router
+
+        app.include_router(
+            create_connector_router(
+                identity_store=ctx.identity_store,
+                require_auth=ctx.require_auth,
+                jwt_secret=ctx.jwt_secret,
+                jwt_issuer=ctx.jwt_issuer,
+                jwt_audience=ctx.jwt_audience,
+            )
+        )
+    except Exception as _conn_exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning(
+            "connector_router failed to mount: %s", _conn_exc
+        )
+
     # ─── 企业版角色资产消费(数字分身归并 C·只读)──────────────
     # 配 OCTOPUS_ENTERPRISE_URL 时,市场可列举企业版托管的角色资产;不配则
     # available=false。消费而非 fork(见 enterprise_assets_router)。

@@ -4,3 +4,4 @@
 data/*
 !data/expert-store.json
 !data/skill-registry.json
+!data/plugin-store.json

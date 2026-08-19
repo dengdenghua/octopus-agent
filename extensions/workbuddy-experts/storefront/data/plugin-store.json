@@ -1,0 +1,3349 @@
+{
+ "meta": {
+  "title": "Octopus 插件/连接器商城",
+  "count": 123,
+  "codex_plugins": 15,
+  "workbuddy_connectors": 108,
+  "sources": [
+   "codex(OpenAI/Codex 生态)",
+   "workbuddy(腾讯连接器)"
+  ],
+  "generated_at": "2026-08-19T12:22:03.583116"
+ },
+ "items": [
+  {
+   "id": "codex_figma",
+   "plugin": "figma",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Figma",
+   "name_zh": "Figma",
+   "description": "Figma workflows for implementing designs in code, creating Code Connect templates for published Figma components, and generating project-specific design system rules for repeatable Figma-to-code work.",
+   "category": "Creativity",
+   "author": "Figma",
+   "version": "2.0.12",
+   "skills": [
+    "figma-use-motion",
+    "figma-use-slides",
+    "figma-generate-design",
+    "figma-implement-motion",
+    "figma-generate-diagram",
+    "figma-create-new-file",
+    "figma-swiftui",
+    "figma-generate-library",
+    "figma-use",
+    "figma-use-figjam",
+    "figma-code-connect"
+   ],
+   "connectors": [
+    "connector_68df038e0ba48191908c8434991bbac2"
+   ],
+   "path": "/Users/dangbei/.codex/plugins/cache/openai-api-curated/figma/d6169bef",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.codex/plugins/cache/openai-api-curated/figma/d6169bef"
+   }
+  },
+  {
+   "id": "codex_remotion",
+   "plugin": "remotion",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Remotion",
+   "name_zh": "Remotion",
+   "description": "Build videos programmatically with Remotion and React. Covers animations, timing, audio, captions, 3D, transitions, charts, text effects, and more.",
+   "category": "Creativity",
+   "author": "Remotion",
+   "version": "1.0.3",
+   "skills": [
+    "remotion"
+   ],
+   "connectors": [],
+   "path": "/Users/dangbei/.codex/plugins/cache/openai-api-curated/remotion/d6169bef",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.codex/plugins/cache/openai-api-curated/remotion/d6169bef"
+   }
+  },
+  {
+   "id": "codex_browser",
+   "plugin": "browser",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Browser",
+   "name_zh": "Browser",
+   "description": "Browser lets ChatGPT open and control the in-app browser, mainly for local development pages and files. Use it to navigate, inspect, click, type, and take screenshots while testing pages inside ChatGPT.",
+   "category": "Engineering",
+   "author": "OpenAI",
+   "version": "26.810.52044",
+   "skills": [
+    "control-in-app-browser"
+   ],
+   "connectors": [],
+   "path": "/Users/dangbei/.codex/plugins/cache/openai-bundled/browser/26.810.52044",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.codex/plugins/cache/openai-bundled/browser/26.810.52044"
+   }
+  },
+  {
+   "id": "codex_chrome",
+   "plugin": "chrome",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Chrome",
+   "name_zh": "Chrome",
+   "description": "Chrome lets ChatGPT use your Chrome browser for tasks that need your existing browser state, including open tabs, page content, and websites you're already signed into. It can navigate, view, click, type, and take screenshots while working. You stay in control: ChatGPT asks before interacting with new sites, you can stop actions at any time, and you can manage or remove Chrome access in settings. Browser content may include sensitive information from logged-in sites. Browser data from using this plugin may be used for training, subject to your OpenAI account data controls.",
+   "category": "Productivity",
+   "author": "OpenAI",
+   "version": "26.810.52044",
+   "skills": [
+    "control-chrome"
+   ],
+   "connectors": [],
+   "path": "/Users/dangbei/.codex/plugins/cache/openai-bundled/chrome/26.810.52044",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.codex/plugins/cache/openai-bundled/chrome/26.810.52044"
+   }
+  },
+  {
+   "id": "codex_computer-use",
+   "plugin": "computer-use",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Computer Use",
+   "name_zh": "Computer Use",
+   "description": "Mac Computer Use lets ChatGPT use any app on your computer, including your web browsers and files you allow it to access. It may take screenshots or page content while working. You stay in control: you choose which apps to allow ChatGPT to access, you can stop actions at any time, and control whether we use screenshots for training.",
+   "category": "Productivity",
+   "author": "OpenAI",
+   "version": "1.0.1000717",
+   "skills": [
+    "computer-use"
+   ],
+   "connectors": [],
+   "path": "/Users/dangbei/.codex/plugins/cache/openai-bundled/computer-use/1.0.1000717",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.codex/plugins/cache/openai-bundled/computer-use/1.0.1000717"
+   }
+  },
+  {
+   "id": "codex_sites",
+   "plugin": "sites",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Sites",
+   "name_zh": "Sites",
+   "description": "Build, save, deploy, and inspect websites such as landing pages, portfolios, dashboards, portals, trackers, hubs, games, and internal tools with Sites. Use of Sites is subject to the ChatGPT Sites Terms (https://openai.com/policies/chatgpt-sites-terms/), and you are responsible for your website content.",
+   "category": "Productivity",
+   "author": "OpenAI",
+   "version": "0.1.37",
+   "skills": [
+    "sites-building",
+    "sites-hosting"
+   ],
+   "connectors": [
+    "connector_20205bf7d4e99a89d7154bb849718324"
+   ],
+   "path": "/Users/dangbei/.codex/plugins/cache/openai-bundled/sites/0.1.37",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.codex/plugins/cache/openai-bundled/sites/0.1.37"
+   }
+  },
+  {
+   "id": "codex_visualize",
+   "plugin": "visualize",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Visualize",
+   "name_zh": "Visualize",
+   "description": "Create interactive charts, maps, diagrams, simulations, 3D models, data explorers, and UI previews directly in your conversation. Filter data, select details, compare scenarios, and adjust inputs to see how the result changes.",
+   "category": "Productivity",
+   "author": "OpenAI",
+   "version": "1.0.21",
+   "skills": [
+    "visualize"
+   ],
+   "connectors": [],
+   "path": "/Users/dangbei/.codex/plugins/cache/openai-bundled/visualize/1.0.21",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.codex/plugins/cache/openai-bundled/visualize/1.0.21"
+   }
+  },
+  {
+   "id": "codex_google-drive",
+   "plugin": "google-drive",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Google Drive",
+   "name_zh": "Google Drive",
+   "description": "Use Google Drive as one unified Google file plugin for search, file organization, sharing, and Google Docs, Google Sheets, and Google Slides workflows.",
+   "category": "Productivity",
+   "author": "OpenAI",
+   "version": "0.1.11",
+   "skills": [
+    "google-docs",
+    "google-drive-comments",
+    "google-sheets",
+    "google-drive",
+    "google-slides"
+   ],
+   "connectors": [
+    "connector_5f3c8c41a1e54ad7a76272c89e2554fa"
+   ],
+   "path": "/Users/dangbei/.codex/plugins/cache/openai-curated-remote/google-drive/0.1.11",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.codex/plugins/cache/openai-curated-remote/google-drive/0.1.11"
+   }
+  },
+  {
+   "id": "codex_openai-templates",
+   "plugin": "openai-templates",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Default templates",
+   "name_zh": "Default templates",
+   "description": "Create documents, presentations, and spreadsheets from OpenAI-provided reference templates.",
+   "category": "Productivity",
+   "author": "OpenAI",
+   "version": "0.1.1",
+   "skills": [
+    "artifact-template-strategy-memorandum",
+    "artifact-template-investment-committee-memo",
+    "artifact-template-operating-review",
+    "artifact-template-financial-budget",
+    "artifact-template-operating-calendar",
+    "artifact-template-project-kickoff",
+    "artifact-template-simple-dark-mode",
+    "artifact-template-design-report",
+    "artifact-template-legal-memorandum",
+    "artifact-template-experiment-analysis",
+    "artifact-template-project-tracker",
+    "artifact-template-system-design",
+    "artifact-template-three-statement-forecast",
+    "artifact-template-simple-light-mode",
+    "artifact-template-team-alignment",
+    "artifact-template-business-review",
+    "artifact-template-market-trends-report",
+    "artifact-template-analytics-dashboard",
+    "artifact-template-sales-pipeline",
+    "artifact-template-minimal-letterhead"
+   ],
+   "connectors": [
+    "connector_openai_default_templates"
+   ],
+   "path": "/Users/dangbei/.codex/plugins/cache/openai-curated-remote/openai-templates/0.1.1",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.codex/plugins/cache/openai-curated-remote/openai-templates/0.1.1"
+   }
+  },
+  {
+   "id": "codex_plugin-management",
+   "plugin": "plugin-management",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Plugin Management",
+   "name_zh": "Plugin Management",
+   "description": "Find relevant integrations for external apps and services, suggest useful plugins, and manage plugin permissions, dependencies, and connections.",
+   "category": "Productivity",
+   "author": "OpenAI",
+   "version": "0.1.0",
+   "skills": [
+    "plugin-management"
+   ],
+   "connectors": [
+    "connector_openai_plugin_management"
+   ],
+   "path": "/Users/dangbei/.codex/plugins/cache/openai-curated-remote/plugin-management/0.1.0",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.codex/plugins/cache/openai-curated-remote/plugin-management/0.1.0"
+   }
+  },
+  {
+   "id": "codex_documents",
+   "plugin": "documents",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Documents",
+   "name_zh": "Documents",
+   "description": "Create, edit, inspect, render, verify, and export DOCX document artifacts locally. Use Documents when the durable output or target is a document, doc, docs, Word file, Google Doc, Google Docs document, memo, report, or writing artifact.",
+   "category": "Productivity",
+   "author": "OpenAI",
+   "version": "26.818.11542",
+   "skills": [
+    "documents"
+   ],
+   "connectors": [],
+   "path": "/Users/dangbei/.codex/plugins/cache/openai-primary-runtime/documents/26.818.11542",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.codex/plugins/cache/openai-primary-runtime/documents/26.818.11542"
+   }
+  },
+  {
+   "id": "codex_pdf",
+   "plugin": "pdf",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "PDF",
+   "name_zh": "PDF",
+   "description": "Read, create, inspect, render, verify, and extract content from PDF files locally. Use PDF when the durable output or target is a PDF file and visual layout fidelity matters.",
+   "category": "Productivity",
+   "author": "OpenAI",
+   "version": "26.818.11542",
+   "skills": [
+    "pdf"
+   ],
+   "connectors": [],
+   "path": "/Users/dangbei/.codex/plugins/cache/openai-primary-runtime/pdf/26.818.11542",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.codex/plugins/cache/openai-primary-runtime/pdf/26.818.11542"
+   }
+  },
+  {
+   "id": "codex_presentations",
+   "plugin": "presentations",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Presentations",
+   "name_zh": "Presentations",
+   "description": "Create, edit, inspect, render, verify, and export presentation slide decks locally, including PPTX authoring and native Google Slides handoff guidance. Use Presentations when the durable output or target is a deck, slidedeck, presentation deck, slide deck, slides, PowerPoint, Google Slides, presentation, speaker notes, or visual deck repair.",
+   "category": "Productivity",
+   "author": "OpenAI",
+   "version": "26.818.11542",
+   "skills": [
+    "presentations"
+   ],
+   "connectors": [],
+   "path": "/Users/dangbei/.codex/plugins/cache/openai-primary-runtime/presentations/26.818.11542",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.codex/plugins/cache/openai-primary-runtime/presentations/26.818.11542"
+   }
+  },
+  {
+   "id": "codex_spreadsheets",
+   "plugin": "spreadsheets",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Spreadsheets",
+   "name_zh": "Spreadsheets",
+   "description": "Create, edit, inspect, render, verify, and export XLSX, CSV, and TSV spreadsheets locally, including local XLSX authoring for native Google Sheets handoff. Use Spreadsheets when the durable output or target is a spreadsheet, workbook, sheet, Google Sheet, or CSV file. Use Excel Live Control for working on a spreadsheet open in Microsoft Excel app, through the ChatGPT add-in.",
+   "category": "Productivity",
+   "author": "OpenAI",
+   "version": "26.818.11542",
+   "skills": [
+    "spreadsheets",
+    "excel-live-control"
+   ],
+   "connectors": [
+    "connector_openai_codex_document_control"
+   ],
+   "path": "/Users/dangbei/.codex/plugins/cache/openai-primary-runtime/spreadsheets/26.818.11542",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.codex/plugins/cache/openai-primary-runtime/spreadsheets/26.818.11542"
+   }
+  },
+  {
+   "id": "codex_template-creator",
+   "plugin": "template-creator",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Template Creator",
+   "name_zh": "Template Creator",
+   "description": "Use Template Creator to create reusable templates from documents, spreadsheets, presentations, Google Docs, Slides, and Sheets links, ImageGen or Product Design images, emails, Slack messages, and Site projects. Template Creator preserves the structure, voice, layout, and style of your reference so you can quickly create new versions whenever you need them.",
+   "category": "Productivity",
+   "author": "OpenAI",
+   "version": "26.818.11542",
+   "skills": [
+    "template-creator"
+   ],
+   "connectors": [],
+   "path": "/Users/dangbei/.codex/plugins/cache/openai-primary-runtime/template-creator/26.818.11542",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.codex/plugins/cache/openai-primary-runtime/template-creator/26.818.11542"
+   }
+  },
+  {
+   "id": "wb_77ircloud",
+   "plugin": "77ircloud",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "铱云AI供应链",
+   "name_zh": "铱云AI供应链",
+   "description": "通过自然语言管理铱云供应链：支持订单全链路操作，以及客户、商品、仓库库存、员工组织、资金账户、数据导出、经营统计和预警明细的查询分析。",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 2,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "查询今天待发货的订单",
+    "创建一个新的销售订单，客户为上海星辰贸易有限公司",
+    "查看商品精品咖啡的库存"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "77ircloud"
+   }
+  },
+  {
+   "id": "wb_agentkey",
+   "plugin": "agentkey",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "AgentKey",
+   "name_zh": "AgentKey",
+   "description": "AgentKey 是 AI 助手获取可信工具和实时数据的能力市场。支持网页搜索、URL抓取、新闻、社交媒体、股票市场价格、电商产品数据、企业/公司数据、天气、地图和地理位置、旅行（航班/酒店）、实时信息或任何第三方API。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "agentkey"
+   ],
+   "examples_zh": [
+    "用 AgentKey 搜索并总结小红书近 7 天关于 AI 办公工具的热门内容，给出 5 个适合做公众号或短视频的选题方向。",
+    "用 AgentKey 搜索 Instagram 近 3 天关于瑜伽垫的热门帖子，分析 5 个高互动内容的选题、钩子和形式。",
+    "用 AgentKey 结合 Yahoo Finance 和 Google News 分析 NVIDIA 最近一次财报后的市场反应，解释股价变化原因。"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "agentkey"
+   }
+  },
+  {
+   "id": "wb_ai-hive",
+   "plugin": "ai-hive",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "AI-HIVE",
+   "name_zh": "AI-HIVE",
+   "description": "连接全球 100+ 顶尖 AI 模型（Seedance 2.5、H3 (MiniMax)、Happyhorse、GPT-image、Nano-Banana、Deepseek、Kimi 等），一键搞定文本、图像、视频创作。",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 10,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "ai-hive"
+   ],
+   "examples_zh": [
+    "先联网搜一组宋代美学参考（服饰纹样、青绿山水、木构建筑），据此生成一张汉服少女主视觉概念图；再把这张图做成 12 秒电影感运镜视频：0-4s 缓慢推进特写衣纹、4-8s 环绕微距工艺、8-12s 横移拉远见全景，带氛围光与影视级色调，画面流畅稳定、面部五官清晰不变形、无抖动无闪烁。",
+    "帮我设计一个日漫风战斗少女 IP：银白长发、异色瞳（左金右蓝）、机甲肩甲、战斗服。先搜同类热门人设找配色参考，再用固定角色锚点『银发异色瞳少女，机甲肩甲，战斗姿态，锐利眼神』原样复用，生成正面/侧面/背面的三视图，统一画风与配色，用于盲盒手办立项。",
+    "搜一下今年新茶饮夏季营销主视觉趋势，据此做一张门店开业促销海报：主标题大字『买一送一』、暖橙色调、左侧 40% 留白、电影感侧光、3:4 竖版，适合朋友圈与小红书投放；另出一张极简冷调备选。"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "ai-hive"
+   }
+  },
+  {
+   "id": "wb_archive-hospital-mcp",
+   "plugin": "archive-hospital-mcp",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "腾讯健康全周期管理平台",
+   "name_zh": "腾讯健康全周期管理平台",
+   "description": "全周期管理平台机构端 AI 智能体的 MCP 连接器。基于原有全周期管理平台，通过引入对话式 AI 智能体，实现理解管理者意图，调度平台原有能力模块完成患者数据查询管理等操作",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "archive-hospital-mcp"
+   ],
+   "examples_zh": [
+    "目前管理了多少患者",
+    "帮我查一下最近收藏的患者列表",
+    "帮我查看张三的数据情况，总结异常指标和需要关注的重点情况"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "archive-hospital-mcp"
+   }
+  },
+  {
+   "id": "wb_awesun",
+   "plugin": "awesun",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "向日葵远程控制",
+   "name_zh": "向日葵远程控制",
+   "description": "通过命令行管理远端设备，实时监测在线状态、秒级发起远程控制、快速传输文件及远程截屏。零部署、免更新，轻松实现智能批量运维。",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "使用向日葵帮我列出所有在线设备，按设备名称、在线状态和最后上线时间整理成表格",
+    "使用向日葵帮我把办公电脑设备上的 D:\\test.txt 下载到本地桌面",
+    "使用向日葵帮我建立办公电脑设备的CMD远程连接，运行 ipconfig 和 tasklist 检查网络和进程情况"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "awesun"
+   }
+  },
+  {
+   "id": "wb_baidu-netdisk",
+   "plugin": "baidu-netdisk",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "百度网盘",
+   "name_zh": "百度网盘",
+   "description": "连接百度网盘，支持文件与分类浏览、关键词及语义检索、文件和文件夹管理、创建分享链接、查询容量，以及保存文本内容或通过 URL 转存文件。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "server-side",
+   "mcp_servers": [
+    "baidu-netdisk"
+   ],
+   "examples_zh": [
+    "查看我百度网盘根目录下的文件，并告诉我还剩多少可用空间",
+    "从文件名、文档内容和图片文字中搜索与「项目合同」相关的文件",
+    "找出网盘里与海边日落相关的图片和视频"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "baidu-netdisk"
+   }
+  },
+  {
+   "id": "wb_bazhuayu",
+   "plugin": "bazhuayu",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "八爪鱼",
+   "name_zh": "八爪鱼",
+   "description": "用自然语言驱动八爪鱼云采集：搜索模板、启动任务、查询进度、导出结构化数据，并管理已有任务。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "bazhuayu"
+   ],
+   "examples_zh": [
+    "帮我采集亚马逊无线耳机搜索结果前 3 页",
+    "搜索适合抓取某电商商品详情的云采集模板",
+    "查看我最近创建的采集任务进度"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "bazhuayu"
+   }
+  },
+  {
+   "id": "wb_beisen-cli",
+   "plugin": "beisen-cli",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "北森AI · HR专家",
+   "name_zh": "北森AI · HR专家",
+   "description": "依托北森HR SaaS平台，把审批、招聘进展、员工档案、绩效履历、考勤假期、组织架构和企业制度等近百个人力场景装进Workbuddy，一句话查询人力数据、办理HR业务。",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 10,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "帮我查下我有哪些待办/已办？",
+    "我上个月有没有迟到，或者忘记打卡？",
+    "我团队上月的公出、出差情况"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "beisen-cli"
+   }
+  },
+  {
+   "id": "wb_bugly-token",
+   "plugin": "bugly-token",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "Bugly 质量概览",
+   "name_zh": "Bugly 质量概览",
+   "description": "查看产品的质量概览 包括崩溃率 anr率 foom（oom）率 启动耗时",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "bugly"
+   ],
+   "examples_zh": [
+    "查看应用的大盘质量概览",
+    "查看应用的版本质量概览",
+    "查看应用的今天质量概览"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "bugly-token"
+   }
+  },
+  {
+   "id": "wb_canva",
+   "plugin": "canva",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "Canva可画",
+   "name_zh": "Canva可画",
+   "description": "无缝调用Canva可画的设计能力。一句话生成海报、演示文稿、小红书封面等设计，通过文字描述调整尺寸、填充品牌模板及检索已有内容",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "Canva可画"
+   ],
+   "examples_zh": [
+    "帮我总结 Q2 产品策略文档",
+    "为我们的 AI 发布会生成一个风格大胆的 pitch deck",
+    "将我的小红书帖子调整为微信朋友圈尺寸并导出为 PNG"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "canva"
+   }
+  },
+  {
+   "id": "wb_canva-ai",
+   "plugin": "canva-ai",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "Canva可画",
+   "name_zh": "Canva可画",
+   "description": "无缝调用Canva可画的设计能力。一句话生成海报、演示文稿、小红书封面等设计，通过文字描述调整尺寸、填充品牌模板及检索已有内容",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "canva-mcp"
+   ],
+   "examples_zh": [
+    "帮我总结 Q2 产品策略文档",
+    "为我们的 AI 发布会生成一个风格大胆的 pitch deck",
+    "将我的小红书帖子调整为微信朋友圈尺寸并导出为 PNG"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "canva-ai"
+   }
+  },
+  {
+   "id": "wb_chuhaijiang",
+   "plugin": "chuhaijiang",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "出海匠",
+   "name_zh": "出海匠",
+   "description": "基于实时 TikTok Shop 数据完成选品、竞品分析、达人筛选与带货内容创作，并管理社媒账号、发布内容、运营评论和私信。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "chuhaijiang"
+   ],
+   "examples_zh": [
+    "评估美区 Leak Proof Design Mini Portable Juicer Blender（ID：1731889645432705669）的近 7 天增长、竞争度和切入机会",
+    "深度分析 580ML Portable Juicer with LED Display（ID：1732374678933836006）的销量、评论痛点、带货达人和相似竞品",
+    "围绕 USB Rechargeable Portable Smoothies Blender & Juicer（ID：1731172842143585192），筛选 10 个可建联的中腰部带货达人"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "chuhaijiang"
+   }
+  },
+  {
+   "id": "wb_cisp-mcp",
+   "plugin": "cisp-mcp",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "水滴征信",
+   "name_zh": "水滴征信",
+   "description": "通过水滴征信企业信息服务平台查询工商、知识产权、舆情、财务、土地、企业关联关系、关联方等企业多维信息，并支持企业二要素/三要素核验。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "cisp-mcp"
+   ],
+   "examples_zh": [
+    "查询证通股份有限公司的工商照面信息",
+    "查一下证通股份有限公司的商标注册情况",
+    "验证企业名称和统一社会信用代码是否一致"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "cisp-mcp"
+   }
+  },
+  {
+   "id": "wb_cloudbase",
+   "plugin": "cloudbase",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "腾讯云 CloudBase",
+   "name_zh": "腾讯云 CloudBase",
+   "description": "腾讯云开发 CloudBase 全栈开发、部署、调试与排障连接器。覆盖 Web 应用、微信小程序、uni-app、原生 App HTTP API、云函数、CloudRun、NoSQL/MySQL 数据库、云存储、静态托管、身份认证、AI 大模型调用、AI Agent、资源巡检与 Spec 工作流。",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 31,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "cloudbase"
+   ],
+   "examples_zh": [
+    "帮我用 CloudBase 创建一个 React Web 应用，并配置登录、数据库和静态托管部署",
+    "帮我开发一个微信小程序页面，接入 wx.cloud 云开发、云函数和数据库",
+    "创建一个 HTTP 云函数，并用 CloudBase CLI 部署和验证日志"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "cloudbase"
+   }
+  },
+  {
+   "id": "wb_cnb-api",
+   "plugin": "cnb-api",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "CNB",
+   "name_zh": "CNB",
+   "description": "通过自然语言管理 CNB 平台：仓库、Issue、PR、流水线、制品库等操作。",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "获取当前 Issue 的详情",
+    "在当前 PR 上发表评论：已完成代码评审",
+    "查看当前 PR 的 CI 构建状态"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "cnb-api"
+   }
+  },
+  {
+   "id": "wb_ctrip-wendao",
+   "plugin": "ctrip-wendao",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "携程问道",
+   "name_zh": "携程问道",
+   "description": "通过携程问道 API 获取旅行规划与攻略。支持酒店查询、机票搜索、景点推荐、行程规划、美食住宿攻略。",
+   "category": "skill-only",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "skill-only",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "帮我规划一个三天两夜的三亚旅行",
+    "查一下下周五从北京到上海的机票",
+    "推荐杭州西湖附近性价比高的酒店"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "ctrip-wendao"
+   }
+  },
+  {
+   "id": "wb_dcs-cloud",
+   "plugin": "dcs-cloud",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "DCS Cloud",
+   "name_zh": "DCS Cloud",
+   "description": "通过自然语言管理 DCS Cloud：项目、任务、数据文件。用户需在云平台个人中心创建个人访问令牌(PAT)并粘贴到连接器，连接器用它登录 dcs CLI。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "dcs-cloud"
+   ],
+   "examples_zh": [
+    "列出我所有的项目",
+    "查看当前项目和任务列表",
+    "查看任务 abc123 的详情和日志"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "dcs-cloud"
+   }
+  },
+  {
+   "id": "wb_dingtalk",
+   "plugin": "dingtalk",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "钉钉",
+   "name_zh": "钉钉",
+   "description": "通过命令行管理钉钉全产品能力：AI 表格、考勤、日历、群聊与机器人、通讯录、开放平台文档、DING 消息、钉钉文档、钉钉云盘、AI 听记、邮箱、OA 审批、日志、待办。",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "在钉钉群【产品周会】里用机器人发一条通知：今天 15:00 在 3 楼会议室开周会，记得带上周的进展材料",
+    "查一下我下周的钉钉日程，列出和【客户对接】相关的会议（时间、参会人、会议室），并帮我找出三人都空闲的时段约一次同步会",
+    "在钉钉 AI 表格【任务跟踪】里新增一行：标题=Q2 上线评审、负责人=张三、截止时间=2026-05-20、状态=进行中"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "dingtalk"
+   }
+  },
+  {
+   "id": "wb_dknowc-mcp",
+   "plugin": "dknowc-mcp",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "深知可信工作台",
+   "name_zh": "深知可信工作台",
+   "description": "深知可信工作台面向政策、法律、标准和公共服务场景，提供可信问答、权威检索、深度研究和材料整理能力。它可以帮助用户查询政策原文、办事条件、申报材料、补贴资质、法律法规和行业标准，梳理多地区、多时间范围的信息，并基于可追溯的权威来源形成清晰、可核验的结果。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "dknowc-mcp"
+   ],
+   "examples_zh": [
+    "请使用深知可信工作台查询：深圳公积金租房提取需要哪些材料？请给出权威依据、办理条件和溯源链接。",
+    "请使用深知可信工作台搜索重庆市智能化改造技改补贴政策，返回政策原文、申报条件和权威来源链接。",
+    "请使用深知可信工作台深度对比北京、上海、深圳三地人才引进政策的类型、适用人群和核心条件，附权威政策依据。"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "dknowc-mcp"
+   }
+  },
+  {
+   "id": "wb_edgeone-pages",
+   "plugin": "edgeone-pages",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "EdgeOne Makers",
+   "name_zh": "EdgeOne Makers",
+   "description": "将项目部署到 EdgeOne Makers 并返回线上访问地址，支持全栈、云函数、AI Agent 等开发场景。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "edgeone-pages"
+   ],
+   "examples_zh": [
+    "开发个番茄时钟并部署到 EdgeOne Makers"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "edgeone-pages"
+   }
+  },
+  {
+   "id": "wb_emr-query",
+   "plugin": "emr-query",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "弹性MapReduce",
+   "name_zh": "弹性MapReduce",
+   "description": "通过CLI实现弹性 MapReduce 集群、节点、服务、作业、监控、YARN 调度、自动扩缩容、用户与配置等查询。",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "查看我所有的 EMR 集群列表",
+    "查询集群 emr-e3orculh 的节点信息",
+    "获取最近一天的 Spark 查询任务"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "emr-query"
+   }
+  },
+  {
+   "id": "wb_ezjoin-meeting",
+   "plugin": "ezjoin-meeting",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "EzyJoin智慧会议",
+   "name_zh": "EzyJoin智慧会议",
+   "description": "用自然语言管理 EzyJoin 智慧会议：预约会议室、创建/取消会议、查询会议日程与 AI 纪要。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "ezjoin-meeting"
+   ],
+   "examples_zh": [
+    "帮我查一下明天上午有哪些空闲会议室",
+    "帮我预约明天下午 3 点到 4 点 A 栋 3 楼 301 会议室，主题是项目周会",
+    "查看我本周的会议安排"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "ezjoin-meeting"
+   }
+  },
+  {
+   "id": "wb_fanruan-growth-advisor",
+   "plugin": "fanruan-growth-advisor",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "帆软增长谋士",
+   "name_zh": "帆软增长谋士",
+   "description": "企业洞察与增长分析：查询企业经营风险、舆情、招投标、专利、资质、政策等公开商业数据，并调用已授权的 MOSS 增长谋士 Agent 生成分析与报告。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 0,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "fanruan-growth-advisor"
+   ],
+   "examples_zh": [
+    "帮我查询这家公司的经营风险和涉诉情况",
+    "分析某行业的最新舆情和招投标动态",
+    "查询这家企业是否获得过政策补贴"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "fanruan-growth-advisor"
+   }
+  },
+  {
+   "id": "wb_fazhi-law",
+   "plugin": "fazhi-law",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "同花顺法律AI助手",
+   "name_zh": "同花顺法律AI助手",
+   "description": "查询中国法律法规、司法案例、裁判文书及互联网法律实务资讯，支持法条检索、类案检索、深度法律研究、法律文书起草与诉讼可视化。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 6,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "fazhi-law"
+   ],
+   "examples_zh": [
+    "民法典关于合同解除有哪些规定",
+    "帮我检索近三年民间借贷利息纠纷的典型案例",
+    "深度研究一下人工智能生成内容的著作权归属问题"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "fazhi-law"
+   }
+  },
+  {
+   "id": "wb_fbs-connector",
+   "plugin": "fbs-connector",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "福帮手",
+   "name_zh": "福帮手",
+   "description": "福帮手人机协同连接器：面向 WorkBuddy 的身份识别、场景包查询、首值与继续使用记录、乐包状态确认和超级合伙人交接。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "fbs-connector"
+   ],
+   "examples_zh": [
+    "先确认我当前的福帮手身份和最稳妥的下一步，再继续推进。",
+    "根据 skill_whoami 返回的场景包读取内容，并产出一张首值执行卡。",
+    "在同一个 binding 上记录 first_value_completed 或 continued_use_completed。"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "fbs-connector"
+   }
+  },
+  {
+   "id": "wb_feishu",
+   "plugin": "feishu",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "飞书",
+   "name_zh": "飞书",
+   "description": "通过命令行管理飞书/Lark 全产品能力：即时通讯、邮箱、日历、云文档、电子表格、多维表格（Base）、幻灯片、画板、知识库、云空间、妙记、视频会议、任务、审批、考勤、通讯录、OKR 等。",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 27,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "在飞书群【产品周会】里用机器人发一条通知：今天 15:00 在 3 楼会议室开周会，请带上周的进展材料",
+    "查下周我和张三、李四的飞书日程，找出三人都空闲的 2 小时时段，并创建一个标题为【Q2 规划对齐】的日程，邀请他们俩，预定一间会议室",
+    "在飞书多维表格【任务跟踪】里新增一行：标题=Q2 上线评审、负责人=张三、截止=2026-05-20、状态=进行中；并按负责人聚合未完成任务数"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "feishu"
+   }
+  },
+  {
+   "id": "wb_finenter",
+   "plugin": "finenter",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "进门投研",
+   "name_zh": "进门投研",
+   "description": "进门MCP覆盖券商、上市公司及资管机构的公开路演内容，整合内外资研报、券商点评等机构级观点，并提供实时行情、财务及量化因子等数据。经Data Agent清洗与结构化处理，减少Token消耗，提升回答准确率。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "mcp-server-brm"
+   ],
+   "examples_zh": [
+    "查询整理最近两周A股算力行业行情和市场观点及分歧",
+    "生成一份存储行业的边际变化报告",
+    "对比内外资机构对美联储最新议息会议的解读与市场预期，分析其对科技股走势和估值的潜在影响"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "finenter"
+   }
+  },
+  {
+   "id": "wb_flova",
+   "plugin": "flova",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "Flova",
+   "name_zh": "Flova",
+   "description": "使用 AI 创建、修改、审阅和导出专业视频，覆盖从创意与分镜到成片交付的完整流程。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "oauth",
+   "mcp_servers": [
+    "flova"
+   ],
+   "examples_zh": [
+    "为这份产品介绍制作一条 30 秒的竖屏宣传视频",
+    "继续完善我的 Flova 项目，先生成分镜供我确认",
+    "根据审阅意见修改镜头并导出最终视频"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "flova"
+   }
+  },
+  {
+   "id": "wb_fyopen-lawsearch",
+   "plugin": "fyopen-lawsearch",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "法研·法律法规检索",
+   "name_zh": "法研·法律法规检索",
+   "description": "法研·法律法规检索，支持自然语言获取精准、现行有效的法规条文，将高质量、海量的法规知识库，无缝接入各类AI应用与工作流中。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "fy-law-search-service"
+   ],
+   "examples_zh": [
+    "不满两周岁子女抚养权",
+    "中华人民共和国民法典第一千零八十四条"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "fyopen-lawsearch"
+   }
+  },
+  {
+   "id": "wb_gangtise-mcp",
+   "plugin": "gangtise-mcp",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "Gangtise投研",
+   "name_zh": "Gangtise投研",
+   "description": "Gangtise MCP汇聚机构级观点，研报，日程等另类数据，提供投研AI Agent预生成数据及全球行情/财务/估值/宏观行业等结构化数据。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "gangtise-mcp"
+   ],
+   "examples_zh": [
+    "过去30天，国内外机构对英伟达有哪些共识与分歧？",
+    "为宁德时代生成一页式投资摘要，并补充投资逻辑、同业对比、估值与主要风险",
+    "近期人形机器人产业的路演、调研与会议纪要，提炼产业链变化及重点公司"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "gangtise-mcp"
+   }
+  },
+  {
+   "id": "wb_gildata",
+   "plugin": "gildata",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "恒生聚源 MCP",
+   "name_zh": "恒生聚源 MCP",
+   "description": "连接恒生聚源 MCP，查询金融结构化数据、研究报告、公司公告、新闻资讯、条件选股、宏观行业、工商企业数据。支持基金经理观点持仓一致性分析、行业速报生成、金融资讯热点解读。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 3,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "gildata-finance-data"
+   ],
+   "examples_zh": [
+    "帮我分析张坤在 2024 年底的观点与持仓一致性",
+    "生成半导体行业的 24 小时速报",
+    "今天有什么重要的金融新闻要闻？"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "gildata"
+   }
+  },
+  {
+   "id": "wb_github",
+   "plugin": "github",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "GitHub",
+   "name_zh": "GitHub",
+   "description": "在 GitHub 上克隆、推送代码，查看和管理仓库与 Pull Request，用自然语言完成代码协作。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 0,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "server-side",
+   "mcp_servers": [
+    "github"
+   ],
+   "examples_zh": [
+    "帮我克隆 https://github.com/torvalds/linux 到本地并简要介绍这个仓库的结构",
+    "查看仓库 owner/repo 里所有 open 状态的 Pull Request，按更新时间倒序，告诉我每个 PR 的标题、作者和变更规模",
+    "在当前分支提交所有改动并推送到 GitHub，提交消息按我做的变更自动生成"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "github"
+   }
+  },
+  {
+   "id": "wb_gongyi-open-mcp",
+   "plugin": "gongyi-open-mcp",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "腾讯公益机构服务平台",
+   "name_zh": "腾讯公益机构服务平台",
+   "description": "腾讯公益机构服务平台连接器：用自然语言查询当前登录机构的用户与机构信息、项目、进展、财务披露等机构侧业务数据。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "gongyi-open-mcp"
+   ],
+   "examples_zh": [
+    "获取当前登录用户和所属机构信息",
+    "查询我机构下的项目列表，重点看教育助学类项目",
+    "查一下本机构的统一社会信用代码和评估等级"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "gongyi-open-mcp"
+   }
+  },
+  {
+   "id": "wb_ima-mcp",
+   "plugin": "ima-mcp",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "ima知识库",
+   "name_zh": "ima知识库",
+   "description": "引用知识库资料及文件，浏览知识库详情。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 0,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "ima-mcp"
+   ],
+   "examples_zh": [
+    "在 ima 知识库中搜索『季度复盘』相关的资料",
+    "查看『产品手册』ima 知识库的详情和文件列表",
+    "引用 ima 知识库中关于 OpenAPI 的内容回答这个问题"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "ima-mcp"
+   }
+  },
+  {
+   "id": "wb_infimind-ecommerce-image",
+   "plugin": "infimind-ecommerce-image",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "极睿电商生图",
+   "name_zh": "极睿电商生图",
+   "description": "通过 MCP 生成 KOC 种草拼图、商品主图与电商商品详情页，并查询任务生成结果。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 3,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "infimind-ecommerce-image"
+   ],
+   "examples_zh": [
+    "用这些商品图生成一组 KOC 种草拼图",
+    "根据商品素材生成一套电商详情页",
+    "用这些商品素材生成 5 张电商商品主图"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "infimind-ecommerce-image"
+   }
+  },
+  {
+   "id": "wb_infimind-video",
+   "plugin": "infimind-video",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "极睿视频",
+   "name_zh": "极睿视频",
+   "description": "通过自然语言使用极睿视频的专业视频生成和视频分析能力，支持多素材参考、任务进度查询与结构化分析结果。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 2,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "infimind-video"
+   ],
+   "examples_zh": [
+    "用这张商品图生成一段 10 秒的竖屏展示视频",
+    "用首尾两张图片生成一段自然过渡的视频",
+    "分析这个商品视频的脚本、风格、卖点和爆款公式"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "infimind-video"
+   }
+  },
+  {
+   "id": "wb_ioa",
+   "plugin": "ioa",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "零信任安全 iOA",
+   "name_zh": "零信任安全 iOA",
+   "description": "提供零信任接入、终端管控、安全防护、数据防泄密等核心安全能力的管理操作",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 0,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "ioa-mcp"
+   ],
+   "examples_zh": [
+    "帮我查询 iOA 当前账号分组信息",
+    "帮我盘点 iOA 终端资产列表",
+    "查看公司全员安装 iOA 客户端的覆盖率"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "ioa"
+   }
+  },
+  {
+   "id": "wb_jinshuju",
+   "plugin": "jinshuju",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "金数据",
+   "name_zh": "金数据",
+   "description": "用自然语言在金数据（jinshuju.net）创建表单、表格、问卷、考试、报名、收款等各类场景应用：一句话生成表单与表格、批量处理数据、自动统计分析，零门槛快速搭建。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "server-side",
+   "mcp_servers": [
+    "jinshuju"
+   ],
+   "examples_zh": [
+    "列一下我金数据里的表单",
+    "帮我建一个“2026 春季发布会”报名表，要姓名、手机号、公司、职位",
+    "把 form_token 为 abCdEf 的表单里最近 7 天的报名数据导出来"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "jinshuju"
+   }
+  },
+  {
+   "id": "wb_jiushuyun",
+   "plugin": "jiushuyun",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "九数云BI",
+   "name_zh": "九数云BI",
+   "description": "上传 Excel 或 CSV 表格，一键生成原生的可视化数据分析报告、仪表板、图表。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 0,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "jiushuyun"
+   ],
+   "examples_zh": [
+    "帮我导入这个 Excel，并分析各销售区域的签单金额",
+    "根据当前项目数据创建一个销售趋势图表",
+    "查看已有仪表板中本月各区域的销售表现"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "jiushuyun"
+   }
+  },
+  {
+   "id": "wb_kdocs",
+   "plugin": "kdocs",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "金山文档",
+   "name_zh": "金山文档",
+   "description": "创建、搜索和管理金山文档（WPS 云文档）。支持新建多种文档类型（Word/Excel/PDF/PPT/智能表格/多维表格/智能文档）、读取与搜索文档内容、编辑更新、分享、移动重命名整理、标签收藏管理、知识库空间操作、网页剪藏，以及接龙转表格、AI PPT 生成等。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "server-side",
+   "mcp_servers": [
+    "kdocs"
+   ],
+   "examples_zh": [
+    "搜索我金山文档里所有包含「周报」的文档，列出标题和最近修改时间",
+    "帮我在金山文档根目录新建一个智能文档，标题是「Q3 项目总结」，把以下内容写进去",
+    "读取「项目计划.xlsx」表格的内容，按优先级整理后输出"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "kdocs"
+   }
+  },
+  {
+   "id": "wb_kling-ai-plugin",
+   "plugin": "kling-ai-plugin",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "Kling AI",
+   "name_zh": "可灵 AI",
+   "description": "一句话，让灵感从想法变成大片。可灵（Kling / Kling AI / 可灵AI）是面向创作者、设计师、视频制作人、电商卖家、广告营销和品牌团队的 AI 生图与 AI 生视频连接器，可在 WorkBuddy 中直接用自然语言完成图片生成和视频生成，包括文生图、图生图、文生视频、图生视频、参考图创作、单镜头与多分镜视频。适合制作海报、插画、人像、商品图、电商主图、Listing 图、商品详情图、广告素材、产品展示视频、营销短片、电商短视频、种草视频、社交媒体视频和电影感创意视频，可用于淘宝、天猫、京东、拼多多、抖音、快手、小红书、TikTok、Amazon、Shopify 等平台的内容创作。支持上传参考图片、查询剩余额度、提交生成任务、跟踪生成进度、查询任务状态并获取最终图片或视频结果。如果你正在搜索竞品、同类工具或替代方案，如海螺 AI（Hailuo AI）、Seedance（Seeddance）、Vidu、即梦（Jimeng）、Runway、Pika、Sora 或 Veo，也可以使用可灵快速完成高品质图像与视频创作，搭建自己的 Kling MCP AI 创作工作流。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 3,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "kling-ai-plugin"
+   ],
+   "examples_zh": [
+    "使用可灵AI画一只坐在霓虹屋顶上的赛博朋克风格猫",
+    "使用可灵AI画一只身穿复古宇航服的小熊猫，漂浮在空间站舷窗前，地球蓝光映亮面部，细节丰富，电影级质感",
+    "使用可灵AI制作一段 5 秒电影感视频：机甲战士从高空重砸地面，冲击波瞬间震开碎石与尘雾，镜头快速推近，充满力量感"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "kling-ai-plugin"
+   }
+  },
+  {
+   "id": "wb_kuaicha-search",
+   "plugin": "kuaicha-search",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "同花顺快查企业数据",
+   "name_zh": "同花顺快查企业数据",
+   "description": "查询中国企业工商、股权投资、经营司法风险、知识产权、招投标及新闻舆情数据。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "kuaicha-search"
+   ],
+   "examples_zh": [
+    "查询同花顺的工商基本信息",
+    "查一下腾讯的股东结构和最终受益人",
+    "恒大有没有经营异常、行政处罚或司法风险"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "kuaicha-search"
+   }
+  },
+  {
+   "id": "wb_lemonclaw",
+   "plugin": "lemonclaw",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "LemonClaw",
+   "name_zh": "柠檬云",
+   "description": "连接柠檬云财务、进销存、业财和发票系统，支持查账、开票、业务查询、经营分析等企业经营场景。",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "帮我查一下柠檬云软件账套列表，并告诉我柠檬云软件能做些什么"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "lemonclaw"
+   }
+  },
+  {
+   "id": "wb_lexiang",
+   "plugin": "lexiang",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "乐享知识库",
+   "name_zh": "乐享知识库",
+   "description": "搜索、创建和管理乐享知识库中的文档。支持导入 Markdown、按标签整理内容、追踪团队文档的更新动态。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 8,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "lexiang"
+   ],
+   "examples_zh": [
+    "在乐享知识库里搜索所有包含【API 接口】的文档，返回匹配的文档标题、最后编辑时间和简要内容摘要",
+    "找出【技术方案】知识库里所有超过 3 个月没有更新的文档，列出文档名称和最后编辑人，我需要推动大家更新",
+    "把一份 Markdown 格式的【2025 年技术规划】导入到乐享，自动转换成带层级结构的知识库文档，保留代码块和表格格式"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "lexiang"
+   }
+  },
+  {
+   "id": "wb_linear-mcp",
+   "plugin": "linear-mcp",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "Linear",
+   "name_zh": "Linear",
+   "description": "管理 Linear 中的 Issues、项目、文档和发布。支持创建和更新 Issue 并指派负责人与标签，评论与讨论串回复，创建项目和里程碑及进度报告，管理文档和附件，查看 Sprint 周期与团队状态，搜索和 Code Review PR 变更。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 0,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "server-side",
+   "mcp_servers": [
+    "linear-mcp"
+   ],
+   "examples_zh": [
+    "在我的团队创建一个高优 Bug：「用户登录后页面白屏」，指派给我，打上 Bug 标签，关联到本周的 Sprint 周期",
+    "帮我把 ENG-42 这个 Issue 标记为已完成，然后添加一条评论说明修复方案，再创建一个子任务指派给 @李伟 跟进后续优化",
+    "创建一个名为「Q3 移动端改版」的项目，加入我的团队，设置下周五为目标日期，添加三个里程碑：设计稿交付、前端开发、集成测试"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "linear-mcp"
+   }
+  },
+  {
+   "id": "wb_lingxing-mcp",
+   "plugin": "lingxing-mcp",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "领星ERP",
+   "name_zh": "领星ERP",
+   "description": "使用自然语言查询和管理领星ERP中的店铺、库存、Listing、销售、利润、广告和运营数据。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "lingxing-mcp"
+   ],
+   "examples_zh": [
+    "查看我有权限访问的店铺",
+    "查询最近 7 天各店铺的产品表现",
+    "汇总本月订单利润并按店铺排序"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "lingxing-mcp"
+   }
+  },
+  {
+   "id": "wb_linkfox-product-selection",
+   "plugin": "linkfox-product-selection",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "Linkfox 选品",
+   "name_zh": "Linkfox 选品",
+   "description": "跨境电商选品一站式 AI 工具集，整合 竞品查询/ABA/Keepa/Sorftime/Jungle Scout/卖家精灵/SIF/极目/商业洞察/合规检测等 多项子能力，覆盖选品、关键词、竞品、评论、利基与趋势、合规检测。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 66,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "linkfox-product-selection"
+   ],
+   "examples_zh": [
+    "用 Jungle Scout 筛选美国站月销量 500+ 的商品",
+    "查 Keepa 上某 ASIN 近 90 天价格和 BSR 趋势",
+    "用智慧芽检索商品图相似外观专利"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "linkfox-product-selection"
+   }
+  },
+  {
+   "id": "wb_lovrabet-cli",
+   "plugin": "lovrabet-cli",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "Lovrabet CLI",
+   "name_zh": "Lovrabet CLI",
+   "description": "连接企业系统、数据和流程，让AI完成工作，交付结果",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "找出今天需要优先处理的异常订单，并生成处理清单",
+    "把这批保单的最新跟进结果更新到业务系统，并返回更新摘要",
+    "汇总本月续保和理赔情况，生成经营简报"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "lovrabet-cli"
+   }
+  },
+  {
+   "id": "wb_mastergo-vibe-mcp",
+   "plugin": "mastergo-vibe-mcp",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "MasterGo 莫高设计",
+   "name_zh": "MasterGo 莫高设计",
+   "description": "连接 MasterGo 画布，让 AI 进行设计、修改、同步和获取 D2C 代码。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "mastergo"
+   ],
+   "examples_zh": [
+    "使用 MasterGo MCP，为我设计一个任务管理系统界面",
+    "用当前文件已订阅的团队组件库生成 CRM 客户管理页面",
+    "把当前选中按钮背景改成黑色，文字改成白色"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "mastergo-vibe-mcp"
+   }
+  },
+  {
+   "id": "wb_mglc",
+   "plugin": "mglc",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "芒果灵创 CLI",
+   "name_zh": "芒果灵创 CLI",
+   "description": "通过命令行调用芒果灵创 AI 视频创作能力：可使用 30+ 模型生成图片和视频，管理项目、剧本、美术设定与分镜故事板，跟踪任务状态和生成结果。",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 7,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "生成一段雨后街道的电影感视频",
+    "创建一个新的项目并上传剧本",
+    "根据剧本提取人物设定并生成角色形象图"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "mglc"
+   }
+  },
+  {
+   "id": "wb_miaoda",
+   "plugin": "miaoda",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "秒哒应用搭建",
+   "name_zh": "秒哒应用搭建",
+   "description": "通过自然语言对话，即可完成网页、微信小程序及移动 App 的创建、预览、修改与发布上线，实现智能化、自动化、规模化的应用开发。",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "帮我创建一个待办事项管理应用",
+    "搭建一个销售数据看板",
+    "做一个杂志风格的高级个人博客网站"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "miaoda"
+   }
+  },
+  {
+   "id": "wb_moka",
+   "plugin": "moka",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "Moka HR 智能体",
+   "name_zh": "Moka HR 智能体",
+   "description": "招聘和人事一体的 AI 同事，把查询与执行收进一个对话。人才推荐、招聘动态、考勤绩效、审批待办，一句话问清；候选人寻访、面试分析与面试官评估，一句话发起。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 24,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "moka"
+   ],
+   "examples_zh": [
+    "我还有多少年假？什么时候过期？",
+    "我这个月考勤有没有异常，迟到了几次？",
+    "出差报销的标准是什么？"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "moka"
+   }
+  },
+  {
+   "id": "wb_morningstar",
+   "plugin": "morningstar",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "晨星 Morningstar",
+   "name_zh": "晨星 Morningstar",
+   "description": "接入晨星全球与中国基金数据，通过自然语言实现基金查询、筛选、分析与深度研究，以及组合穿透分析",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "morningstar"
+   ],
+   "examples_zh": [
+    "筛选晨星评级5星，近三年最大回撤不超过20%的基金",
+    "帮我看看易方达蓝筹精选的业绩、风险和持仓",
+    "研究一下最新的主动ETF/ active ETF"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "morningstar"
+   }
+  },
+  {
+   "id": "wb_mx-ds-mcp",
+   "plugin": "mx-ds-mcp",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "东方财富妙想MCP",
+   "name_zh": "东方财富妙想MCP",
+   "description": "通过自然语言查询的金融投研 MCP 工具套件，依托东方财富数据源，提供A股、港股、美股、基金、债券、指数板块、宏观数据查询，具备多条件资产筛选、券商研报检索、全市场公告解析、金融资讯检索能力。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "mx-ds-mcp"
+   ],
+   "examples_zh": [
+    "格力电器近 5 日涨跌幅、换手率及上市时间",
+    "沪深 300 近 10 日收盘点位与涨跌幅",
+    "筛选创业板市盈率最低的 50 只个股"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "mx-ds-mcp"
+   }
+  },
+  {
+   "id": "wb_mzl-trademark",
+   "plugin": "mzl-trademark",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "摩知轮商标查询",
+   "name_zh": "摩知轮商标查询",
+   "description": "用自然语言检索商标：按名称、申请人、申请号、注册号、尼斯类别、法律状态、日期范围查询，覆盖中国及 110+ 海外国家/地区商标局；并支持以图搜图的图形近似检索。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "mzl-trademark"
+   ],
+   "examples_zh": [
+    "帮我查一下「茅台」这个商标在第 33 类的注册情况",
+    "查申请人「华为技术有限公司」在中国的全部商标",
+    "「星巴克」在美国、欧盟、日本的商标注册情况"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "mzl-trademark"
+   }
+  },
+  {
+   "id": "wb_neo-crm",
+   "plugin": "neo-crm",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "销售易CRM",
+   "name_zh": "销售易CRM",
+   "description": "用自然语言查客户、推商机、盘线索、领公海、写跟进，一句话打通销售工作闭环。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "neo-crm"
+   ],
+   "examples_zh": [
+    "我要去拜访XXX，帮我准备一下",
+    "把我名下超过 30 天没跟进的客户列出来",
+    "搜一下公海里制造业、上周新进的线索 Top 10"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "neo-crm"
+   }
+  },
+  {
+   "id": "wb_netease-mail",
+   "plugin": "netease-mail",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "网易邮箱",
+   "name_zh": "网易邮箱",
+   "description": "通过 IMAP/SMTP 连接邮箱，支持收发邮件、搜索、附件下载。支持 163、126、yeah.net 等网易邮箱及其他标准 IMAP/SMTP 邮箱。",
+   "category": "skill-only",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "skill-only",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "帮我发一封邮件给 colleague@company.com，主题是周报，正文写本周完成了3个任务",
+    "查看我最近2小时的收件箱有没有新邮件",
+    "搜索最近一周主题包含「发票」的邮件"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "netease-mail"
+   }
+  },
+  {
+   "id": "wb_notion",
+   "plugin": "notion",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "Notion",
+   "name_zh": "Notion",
+   "description": "创建、搜索和管理 Notion 工作区。用自然语言读取页面、查询数据库、更新内容、整理知识库。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 4,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "notion"
+   ],
+   "examples_zh": [
+    "搜索我 Notion 里所有包含「周报」的页面，按最近编辑时间排序，列出标题和摘要",
+    "帮我在「项目管理」数据库中新建一条记录：标题是 Q3 产品规划，状态设为进行中，负责人是我",
+    "查询「任务看板」数据库中所有状态为【待处理】且截止日期在本周内的任务，按优先级排序"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "notion"
+   }
+  },
+  {
+   "id": "wb_opendata",
+   "plugin": "opendata",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "及刻智能·时空数据MCP",
+   "name_zh": "及刻智能·时空数据MCP",
+   "description": "通过自然语言查询线下时空数据，提供区域热力、场景识别、客流分析、POI查询等能力，助力商业洞察、开店选址等应用场景。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "opendata"
+   ],
+   "examples_zh": [
+    "查找上海妇女用品商店并返回 GCJ-02 坐标",
+    "统计成都建设路邻里生活广场周边 1000 米内不同分类的 POI 数量",
+    "查询指定圆形区域内的餐饮 POI 列表"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "opendata"
+   }
+  },
+  {
+   "id": "wb_pandadata",
+   "plugin": "pandadata",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "PandaData 金融数据",
+   "name_zh": "PandaData 金融数据",
+   "description": "查询、整理和分析 A 股、期货、期权、港美股、基金、宏观经济及量化因子等金融数据，支持统计比较与趋势归纳。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "pandadata"
+   ],
+   "examples_zh": [
+    "查询贵州茅台过去一年的日线行情，并统计月度收益率",
+    "比较沪深 300 和中证 500 最近三年的表现与波动",
+    "查询螺纹钢期货主力合约及近期行情变化"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "pandadata"
+   }
+  },
+  {
+   "id": "wb_patsnap-search",
+   "plugin": "patsnap-search",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "智慧芽专利&文献融合检索",
+   "name_zh": "智慧芽专利&文献融合检索",
+   "description": "在智慧芽全球专利数据库和文献库中进行融合检索，支持自然语言、语义搜索、关键词检索和多维过滤，并获取专利或文献信息。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "patsnap-search"
+   ],
+   "examples_zh": [
+    "帮我检索固态电池电解质相关的专利和论文",
+    "查找近五年 CRISPR 递送系统相关的核心专利和文献",
+    "获取公开号 CN109123456A 的专利基本信息和权利要求"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "patsnap-search"
+   }
+  },
+  {
+   "id": "wb_picset-commerce-images",
+   "plugin": "picset-commerce-images",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "Picset AI 电商图片",
+   "name_zh": "Picset AI 电商图片",
+   "description": "Picset AI 面向电商卖家、设计师和品牌团队，提供设计并制作电商套图、商品主图和商品详情图等。适用于设计制作电商套图、商品套图、主图、详情图、电商图、Listing 图、上架图、卖点图、功能图、场景图、详情长图或长详情页等商品图片需求时使用。适配 Amazon、淘宝、天猫、1688、Temu、TikTok Shop、拼多多、抖音电商、OZON、独立站、Shopify、Shopee、阿里巴巴国际站、Alibaba.com、速卖通、AliExpress、SHEIN、京东等国内国际主流电商平台",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 2,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "picset-commerce-images"
+   ],
+   "examples_zh": [
+    "用我上传的商品图生成一套淘宝主图和详情图",
+    "生成 5 张 Amazon 主图",
+    "生成一套统一风格的商品详情图"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "picset-commerce-images"
+   }
+  },
+  {
+   "id": "wb_picset-video-generation",
+   "plugin": "picset-video-generation",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "Picset AI 视频生成",
+   "name_zh": "Picset AI 视频生成",
+   "description": "Picset AI 视频生成连接器支持在 WorkBuddy 中通过 Agent SK 调用 Picset AI 视频生成能力，完成商品参考图上传登记、视频积分预估、确认提交、异步生成和任务状态查询。MVP 支持 Seedance 2.0、Seedance 2.0 Fast、Seedance 2.0 Mini 三个模型，默认使用 Seedance 2.0，适合基于商品素材和文字需求快速生成电商短视频。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "picset-video-generation"
+   ],
+   "examples_zh": [
+    "我上传一张商品图，帮我用 Seedance 2.0 生成一个 6 秒的高级质感展示视频",
+    "基于这张商品参考图，预估用 Seedance 2.0 Fast 生成 4 秒电商短视频需要多少积分",
+    "用这张空气循环扇图片生成 9:16 的 4 秒卖点视频，突出静音柔风"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "picset-video-generation"
+   }
+  },
+  {
+   "id": "wb_pkulaw",
+   "plugin": "pkulaw",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "北大法宝·法律智能检索",
+   "name_zh": "北大法宝·法律智能检索",
+   "description": "检索 + 核验一体：语义（自然语言描述）与关键词双模式检索法规、法条与司法案例；并可把文本中的法条引用与案号回北大法宝库逐条比对、对齐标准名称，输出带 pkulaw.com 原文链接的可溯源结果，专治法律幻觉。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "pkulaw"
+   ],
+   "examples_zh": [
+    "微信聊天记录作为民事诉讼电子证据，法院的认定标准和审查重点是什么？",
+    "员工连续旷工三天，公司能否解除劳动合同？请检索相关法律依据。",
+    "房屋租赁合同到期后房东拒绝退还押金，有没有类似司法案例？"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "pkulaw"
+   }
+  },
+  {
+   "id": "wb_qcc-company",
+   "plugin": "qcc-company",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "企查查",
+   "name_zh": "企查查",
+   "description": "查询和核实企业工商登记信息。支持股东结构、实际控制人、受益所有人、高管团队、对外投资、财务数据、年报及上市信息查询，用自然语言快速完成企业身份核验与背景调查。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "qcc-company"
+   ],
+   "examples_zh": [
+    "查询 企查查 的对外投资布局",
+    "帮我查下\"企查查科技股份有限公司\"的股东结构",
+    "帮我查询\"企查查科技股份有限公司\"的变更记录，来了解企业沿革情况"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "qcc-company"
+   }
+  },
+  {
+   "id": "wb_qcc-legal",
+   "plugin": "qcc-legal",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "企查查·法律数据",
+   "name_zh": "企查查·法律数据",
+   "description": "检索与核验中国法律法规和司法案例。覆盖全量现行法律、行政法规、司法解释——法规级到法条级逐字正文，标注时效性与效力级别；海量裁判文书及 2.5 万+ 权威案例（最高法/最高检指导性案例、公报案例、典型案例）；并对文本中的法条与案号引用逐条回库核验、标注时效、生成可溯源超链。用自然语言完成法条依据查找、类案检索、原文调取与法律引用核验，从源头消除法条与案号幻觉。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "qcc-legal"
+   ],
+   "examples_zh": [
+    "员工拒绝调岗被解除劳动合同，有哪些法律依据？请给出法条原文并确认是否现行有效",
+    "找几个卖方违约的买卖合同纠纷判决作类案参考",
+    "有没有关于个人信息保护的最高法指导性案例？"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "qcc-legal"
+   }
+  },
+  {
+   "id": "wb_qingflow",
+   "plugin": "qingflow",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "轻流",
+   "name_zh": "轻流",
+   "description": "轻流无代码平台连接器。通过自然语言创建应用、管理表单数据、处理审批流程、查询和导出数据，一站式连接轻流全部能力。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "qingflow"
+   ],
+   "examples_zh": [
+    "帮我在轻流创建一个请假单应用，包含请假类型、开始时间、结束时间、请假天数等字段",
+    "查看我工作空间下所有的应用列表",
+    "帮我查询请假单中所有待审批的记录"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "qingflow"
+   }
+  },
+  {
+   "id": "wb_qixinhuiyan-mcp",
+   "plugin": "qixinhuiyan-mcp",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "启信慧眼",
+   "name_zh": "启信慧眼",
+   "description": "通过启信慧眼 MCP 接入企业全景数据能力，支持用户用自然语言完成企业搜索、工商画像、风险识别、经营动态、知识产权等商业情报分析。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 0,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "qixin"
+   ],
+   "examples_zh": [
+    "查询上海合合信息科技股份有限公司的注册信息",
+    "查询上海合合信息科技股份有限公司的股东信息",
+    "查询上海合合信息科技股份有限公司近30天的招投标信息"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "qixinhuiyan-mcp"
+   }
+  },
+  {
+   "id": "wb_qq-mail",
+   "plugin": "qq-mail",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "QQ邮箱",
+   "name_zh": "QQ邮箱",
+   "description": "收发、搜索和整理 QQ 邮件。用自然语言读取邮件内容、汇总邮件线程、管理文件夹。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "qq-mail"
+   ],
+   "examples_zh": [
+    "找出最近两周来自 hr@company.com 的所有邮件，按时间排序，告诉我总共有几封、主要说的是什么",
+    "帮我生成上周的邮件汇总：来自客户的有多少封、来自内部同事的有多少封、哪个主题（销售/技术/运营）的邮件最多",
+    "搜索所有主题包含【报销】或【发票】且来自财务部的邮件，列出发件人、日期和摘要，我需要核对一笔款项"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "qq-mail"
+   }
+  },
+  {
+   "id": "wb_salesnail-instructor",
+   "plugin": "salesnail-instructor",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "SalesNail 讲师",
+   "name_zh": "SalesNail 讲师",
+   "description": "通过自然语言自助开通讲师试用、维护商业 Profile、生成客户方案，完成游戏创作、课程配置、实时带教，以及团队、学员、班级和商机的证据化分析与复盘。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "salesnail-instructor"
+   ],
+   "examples_zh": [
+    "帮我自助开通讲师试用，完成 Profile，并准备自我体验和好友体验课程",
+    "根据我的讲师 Profile 和这个客户 Brief 生成一份可发送的复杂销售培训方案",
+    "为制造业大客户销售培训设计并生成一个中文游戏"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "salesnail-instructor"
+   }
+  },
+  {
+   "id": "wb_salestouch",
+   "plugin": "salestouch",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "SalesTouch 经营执行",
+   "name_zh": "SalesTouch 经营执行",
+   "description": "通过自然语言连接 SalesTouch，完成组织资料、部门、角色权限、员工邀请、下属管理范围与销售流程配置，并处理销售执行、非销售工作、绩效、内部调研和经营汇总。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "salestouch"
+   ],
+   "examples_zh": [
+    "为新公司完成组织资料、部门、销售与非销售角色权限和销售流程配置，再邀请员工激活帐号、分配组织关系并设置主管的下属范围",
+    "汇总本周销售、项目任务、表单、绩效和内部调研，列出风险、证据缺口和下周动作",
+    "查一下华东区重点客户和商机，先给我风险摘要，再创建已确认的跟进任务"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "salestouch"
+   }
+  },
+  {
+   "id": "wb_seeyon-office-marketing-suite",
+   "plugin": "seeyon-office-marketing-suite",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "致远互联协同办公服务",
+   "name_zh": "致远互联协同办公服务",
+   "description": "为企业提供协同办公、会议和业务协同能力，支持用户用自然语言完成会议创建与查询、协同发起与跟进、和业务数据分析。",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 2,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "查询我本周已经发起的会议",
+    "分析销售订单的发货和回款情况",
+    "把销售分析报告发协同给销售负责人"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "seeyon-office-marketing-suite"
+   }
+  },
+  {
+   "id": "wb_shanglv-mcp-gateway",
+   "plugin": "shanglv-mcp-gateway",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "用友智能服务（AI BaaS）",
+   "name_zh": "用友智能服务（AI BaaS）",
+   "description": "通过用友银企联、税企联、商旅云等财务服务产品，为企业提供财务税务与银行资金数据服务，并提供企业商旅运营服务和行程服务。用自然语言完成企业的资金、税务、商旅的全面运营管理。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "shanglv-mcp-gateway"
+   ],
+   "examples_zh": [
+    "查询 dept_a 租户下金额大于 5000 的发票清单",
+    "搜索客户 CUST2024001 并查看其所有银行账户的最新余额快照",
+    "查账户 6225****1234 最近一个月的交易明细，只看贷方（入账）且金额大于 10000 的记录"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "shanglv-mcp-gateway"
+   }
+  },
+  {
+   "id": "wb_sharecrm",
+   "plugin": "sharecrm",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "纷享销客CRM",
+   "name_zh": "纷享销客CRM",
+   "description": "用自然语言查询客户、推进商机、写跟进记录、处理审批、建图表等，轻松搞定销售全链路工作。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 7,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "ShareCRM"
+   ],
+   "examples_zh": [
+    "下个月待我跟进的商机情况",
+    "写一条销售记录",
+    "生成本周销售周报"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "sharecrm"
+   }
+  },
+  {
+   "id": "wb_sq-company-dynamic",
+   "plugin": "sq-company-dynamic",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "上奇产业通-企业动态追踪",
+   "name_zh": "上奇产业通-企业动态追踪",
+   "description": "实时追踪企业全生命周期动态，覆盖投资设立、股权变动、创新平台、中标、知识产权、排名、迁移、资质认定、工商变更、上市、标准制定、招聘、拿地等维度，并提供企业实体匹配。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "sq-company-dynamic"
+   ],
+   "examples_zh": [
+    "追踪比亚迪近一年的投资设立与股权变动动态",
+    "查询某企业在人工智能领域的知识产权与中标动态",
+    "对比两家公司近半年的招聘与拿地动态趋势"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "sq-company-dynamic"
+   }
+  },
+  {
+   "id": "wb_tapd",
+   "plugin": "tapd",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "TAPD",
+   "name_zh": "TAPD",
+   "description": "管理需求、缺陷、任务和迭代。查询项目进度、拆分需求、流转状态、填写工时，覆盖需求到发布的研发全生命周期。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "tapd"
+   ],
+   "examples_zh": [
+    "查看我的待办需求和缺陷",
+    "获取需求【客户反馈】的内容，拆分成子需求并分配处理人",
+    "将迭代【v1.0.0 迭代】内未完成的需求移动到下一个迭代"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "tapd"
+   }
+  },
+  {
+   "id": "wb_tc-chengxin",
+   "plugin": "tc-chengxin",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "同程程心",
+   "name_zh": "同程程心",
+   "description": "同程程心可通过自然语言查询机票、火车票、酒店、景点、度假产品等旅行资源，支持火空联程、智能交通推荐、特价机票搜索、景区门票预订，以及完整行程规划，显著提升出行效率。",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "北京到上海的机票，明天出发",
+    "上海到北京的特价机票",
+    "苏州到上海的高铁"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "tc-chengxin"
+   }
+  },
+  {
+   "id": "wb_tdx-connector",
+   "plugin": "tdx-connector",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "通达信",
+   "name_zh": "通达信",
+   "description": "通过通达信 MCP 查询全球股票行情数据、条件选股、研究报告、公告资讯和宏观信息。支持个股基本面分析、同行业对比和智能选股筛查。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "server-side",
+   "mcp_servers": [
+    "tdx-finance"
+   ],
+   "examples_zh": [
+    "帮我查询贵州茅台(600519)最近的研究报告",
+    "筛选市盈率低于20、ROE高于15%的全球股票",
+    "查询近期宏观经济政策动向"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "tdx-connector"
+   }
+  },
+  {
+   "id": "wb_teacher-assistant",
+   "plugin": "teacher-assistant",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "企鹅教师助手",
+   "name_zh": "企鹅教师助手",
+   "description": "企鹅教师助手负责处理基础性工作，基于课标和教学方法协助快速生成课程大纲、教案、课件及多模态教学资源，从而让教师腾出更多时间在课堂上进行创新",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 0,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "teacher-assistant"
+   ],
+   "examples_zh": [
+    "帮我准备一节小学四年级数学《分数的初步认识》的课程",
+    "分析一下本周班级学生的作业完成情况",
+    "推荐几个关于光合作用的教学视频"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "teacher-assistant"
+   }
+  },
+  {
+   "id": "wb_tec-do",
+   "plugin": "tec-do",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "Tec-Do 2.0 广告与增长情报",
+   "name_zh": "Tec-Do 2.0 广告与增长情报",
+   "description": "面向出海广告投放和增长团队的 AI 能力集合。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "tec-do"
+   ],
+   "examples_zh": [
+    "查询美国 TikTok 电商品类的 CPM、CTR 和 CPC 基准",
+    "搜索美国宠物用品品类近 30 天的 TikTok 热门广告素材",
+    "为 example.com 生成结构化竞品分析报告"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "tec-do"
+   }
+  },
+  {
+   "id": "wb_tencent-docs",
+   "plugin": "tencent-docs",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "腾讯文档",
+   "name_zh": "腾讯文档",
+   "description": "创建、编辑和协作腾讯文档。用自然语言管理在线表格、文档和幻灯片，轻松完成内容查询、数据整理和团队协同。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 0,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "tencent-docs"
+   ],
+   "examples_zh": [
+    "帮我在腾讯文档里新建一个在线表格，包含姓名、部门、入职日期三列，并填入示例数据",
+    "打开我最近编辑的腾讯文档，帮我总结文档的主要内容和关键要点",
+    "在腾讯文档的表格里查找所有【销售额】大于 10 万的记录，按金额从高到低排序"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "tencent-docs"
+   }
+  },
+  {
+   "id": "wb_tencent-docs-oa",
+   "plugin": "tencent-docs-oa",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "腾讯文档企业版",
+   "name_zh": "腾讯文档企业版",
+   "description": "创建、编辑和协作腾讯文档。用自然语言管理在线表格、文档和幻灯片，轻松完成内容查询、数据整理和团队协同。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 0,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "oneid-token",
+   "mcp_servers": [
+    "tencent-docs-oa"
+   ],
+   "examples_zh": [
+    "帮我在腾讯文档里新建一个在线表格，包含姓名、部门、入职日期三列，并填入示例数据",
+    "打开我最近编辑的腾讯文档，帮我总结文档的主要内容和关键要点",
+    "在腾讯文档的表格里查找所有【销售额】大于 10 万的记录，按金额从高到低排序"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "tencent-docs-oa"
+   }
+  },
+  {
+   "id": "wb_tencent-health-nges",
+   "plugin": "tencent-health-nges",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "腾讯健康NGES",
+   "name_zh": "腾讯健康NGES",
+   "description": "腾讯健康NGES MCP服务，支持智能问数和合规审核等功能",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "nges"
+   ],
+   "examples_zh": [
+    "帮我查看本月的拜访KPI达成情况",
+    "帮我对以下话术进行合规审核"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "tencent-health-nges"
+   }
+  },
+  {
+   "id": "wb_tencent-map",
+   "plugin": "tencent-map",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "腾讯地图",
+   "name_zh": "腾讯地图",
+   "description": "接入腾讯地图各类位置服务，包括地点搜索、路线规划（驾车/公交/步行/骑行）、地址正逆解析、沿途搜索和天气查询等。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 0,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "tencent-map"
+   ],
+   "examples_zh": [
+    "亚洲金融大厦附近有什么美食",
+    "从腾讯北京总部大楼去西二旗地铁沿途哪里有加油站？",
+    "从北京天安门去首都机场T3有多远，打车需要多长时间？"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "tencent-map"
+   }
+  },
+  {
+   "id": "wb_tencent-qidian-cs",
+   "plugin": "tencent-qidian-cs",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "腾讯企点客服",
+   "name_zh": "腾讯企点客服",
+   "description": "腾讯企点客服连接器：用自然语言处理工单（查询/创建/更新/状态变更）、查询坐席在线与实时接待、检索/拉取客户资料、拉取人工/大模型/文本机器人的会话记录和消息、查看客服实时监控、会话监控、客服满意度与响应度报表等数据。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "mcp",
+   "mcp_servers": [
+    "qidian-cs"
+   ],
+   "examples_zh": [
+    "帮我查一下我最近一周处理的工单",
+    "用 VIP 模板帮我建一张工单，处理人是我",
+    "现在客服谁在线？"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "tencent-qidian-cs"
+   }
+  },
+  {
+   "id": "wb_tencent-survey",
+   "plugin": "tencent-survey",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "腾讯问卷",
+   "name_zh": "腾讯问卷",
+   "description": "创建、管理和分析腾讯问卷。用自然语言快速生成问卷、查看回收数据、设置题目逻辑。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "tencent-survey"
+   ],
+   "examples_zh": [
+    "帮我创建一个员工满意度调查问卷",
+    "查看问卷的回收数据并生成汇总报告",
+    "给问卷添加一道单选题并设置跳转逻辑"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "tencent-survey"
+   }
+  },
+  {
+   "id": "wb_tencent-tchouse-c",
+   "plugin": "tencent-tchouse-c",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "腾讯云数据仓库 TCHouse-C",
+   "name_zh": "腾讯云数据仓库 TCHouse-C",
+   "description": "腾讯云数据仓库 TCHouse-C 智能运维与分析助手，用自然语言完成集群健康诊断、慢 SQL 分析、规格选型推荐、表结构设计与 NL2SQL 查询。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 5,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "tchouse-c"
+   ],
+   "examples_zh": [
+    "帮我诊断一下集群 cdwch-xxxx 最近一天的健康状况",
+    "分析 TCHouse-C 集群最近 24 小时耗时最长的 10 条慢 SQL 并给出优化建议",
+    "根据我每天 2TB 写入、100 并发查询的业务场景，推荐一个合适的 TCHouse-C 集群规格并估算价格"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "tencent-tchouse-c"
+   }
+  },
+  {
+   "id": "wb_tencent-weiyun",
+   "plugin": "tencent-weiyun",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "微云",
+   "name_zh": "微云",
+   "description": "查看、下载、删除微云文件，并且提供上传文件到微云、生成分享链接能力，帮你管理微云文件",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "weiyun"
+   ],
+   "examples_zh": [
+    "查看我的微云文件列表",
+    "帮我把这个文件上传到微云",
+    "将刚刚上传的文件生成一个分享链接发到微信群"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "tencent-weiyun"
+   }
+  },
+  {
+   "id": "wb_tencentads",
+   "plugin": "tencentads",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "腾讯营销投放",
+   "name_zh": "腾讯营销投放",
+   "description": "腾讯营销投放 Skill，为大模型赋予广告投放管理能力：支持广告账户授权、广告/智投项目的创建与更新、创意管理、广告数据查询与分析、推广内容资产管理，以及操作日志查询等完整的广告投放全链路操作。",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 7,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "帮我查一下账户 52480523 当前的日预算是多少，并修改为 1000 元",
+    "请帮我更新广告 100869559303（广告主 ID: 80429989），开启一键起量，预算设为 200 元",
+    "帮我查看账户 69159768 在 2026 年 4 月 29 日到 5 月 18 日的商品维度投放数据，按天和商品分组，重点看消耗、曝光、点击"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "tencentads"
+   }
+  },
+  {
+   "id": "wb_textin-xparse",
+   "plugin": "textin-xparse",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "TextIn xParse·智能文档解析",
+   "name_zh": "TextIn xParse·智能文档解析",
+   "description": "通过命令行将文件（PDF、图片、Word、Excel、PPT、扫描件等）解析为 Markdown 或结构化 JSON，可还原文档目录结构和复杂表格结构，适用于高精度高性能要求的文档处理任务，每日免费1000页。",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "解析并总结这份 PDF 的核心内容：https://web-api.textin.com/image/download?filename=4249da45f6e946d2afd8380d59.pdf"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "textin-xparse"
+   }
+  },
+  {
+   "id": "wb_tmeet",
+   "plugin": "tmeet",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "腾讯会议",
+   "name_zh": "腾讯会议",
+   "description": "通过命令行创建、查询和管理腾讯会议。支持快速发起会议、查看日程安排、管理参会人员。",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "帮我创建一个明天下午 3 点的会议，主题是周报评审，时长 1 小时",
+    "查看我今天的所有会议安排",
+    "取消明天的周报评审会议"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "tmeet"
+   }
+  },
+  {
+   "id": "wb_tongzhou-fin-research",
+   "plugin": "tongzhou-fin-research",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "同舟金融研究",
+   "name_zh": "同舟金融研究",
+   "description": "连接公开行情、研报检索、行业图谱与同舟投研材料，为股市研究提供可复核证据。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "tongzhou-fin-research"
+   ],
+   "examples_zh": [
+    "分析半导体设备行业近期景气和估值变化",
+    "梳理一则政策事件对产业链上下游的影响",
+    "对比一家公司的行情、公告和机构观点"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "tongzhou-fin-research"
+   }
+  },
+  {
+   "id": "wb_tyc-mcp",
+   "plugin": "tyc-mcp",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "天眼查",
+   "name_zh": "天眼查",
+   "description": "通过天眼查 MCP 查询多维度企业数据。支持工商登记、股东结构、司法风险、知识产权、董监高、经营数据等 160+ 项企业数据能力，用自然语言完成企业尽调与商业情报分析。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "tyc-mcp"
+   ],
+   "examples_zh": [
+    "查一下北京金堤科技有限公司的基本工商信息",
+    "帮我查下比亚迪股份有限公司的股东结构",
+    "查询腾讯科技（深圳）有限公司的知识产权信息"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "tyc-mcp"
+   }
+  },
+  {
+   "id": "wb_wecom",
+   "plugin": "wecom",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "企业微信",
+   "name_zh": "企业微信",
+   "description": "企业微信官方 CLI 套件，覆盖消息、邮件、文档、待办、日程、会议、微盘、通讯录等业务功能。支持机器人主动通知、新建与读取文档、文档搜索、新建管理日程、预约与获取会议信息、新建跟进待办、上传与获取微盘文件、邮件读取与发送等能力",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 14,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "帮我整理下最新一周AI资讯，通过企业微信消息发送给我自己",
+    "根据最近一周我与客户沟通的企业微信邮件和会议，生成给客户的演示文稿",
+    "根据产品文档内容，生成一份总结摘要的PDF，文档链接是https://doc.weixin.qq.com/XXXXXX"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "wecom"
+   }
+  },
+  {
+   "id": "wb_weisheng-scrm",
+   "plugin": "weisheng-scrm",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "微盛企微管家SCRM",
+   "name_zh": "微盛企微管家SCRM",
+   "description": "查询或管理企业微信中的客户信息、客户标签、客户群、营销素材、活码、群发、跟进记录、联系人、商机、汇报、抽奖、客户日程、聊天记录等业务能力。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "weisheng-scrm"
+   ],
+   "examples_zh": [
+    "帮我查询一下我上周新增了几个客户",
+    "创建我的员工活码，欢迎语设置为：您好👋，很高兴为您服务！有任何需求随时和我说～",
+    "我下午要去拜访张三这个客户，请整理他的客户画像信息，帮我准备一下"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "weisheng-scrm"
+   }
+  },
+  {
+   "id": "wb_westock-mcp",
+   "plugin": "westock-mcp",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "腾讯自选股",
+   "name_zh": "腾讯自选股",
+   "description": "直连腾讯自选股，实时掌握毫秒级行情与资金动态，用自然语言分析自选数据、设置股价提醒、管理模拟交易，轻松搞定盯盘与投资决策。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "westock-mcp"
+   ],
+   "examples_zh": [
+    "把宁德时代加到我的自选",
+    "帮我找半导体相关的股票",
+    "看看我有哪些自选股票"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "westock-mcp"
+   }
+  },
+  {
+   "id": "wb_wind-finance",
+   "plugin": "wind-finance",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "Wind 金融数据",
+   "name_zh": "Wind 金融数据",
+   "description": "通过自然语言查询股票、基金、指数、债券、公告、财经新闻和宏观经济数据。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "wind-finance"
+   ],
+   "examples_zh": [
+    "筛选沪深市场市值超过500亿且连续5日上涨的股票",
+    "查询贵州茅台2024年ROE、营业收入和净利润",
+    "查询沪深300最近20日的MACD和涨跌幅"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "wind-finance"
+   }
+  },
+  {
+   "id": "wb_wk-workbuddy",
+   "plugin": "wk-workbuddy",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "威科先行",
+   "name_zh": "威科先行",
+   "description": "威科先行依托全面、准确、及时更新的法规、案例等法律数据研发的MCP服务，支持语义检索、关键词检索等场景。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "wk-mcp"
+   ],
+   "examples_zh": [
+    "在北京，根据近三年的案例观点，股权激励纠纷是否属于劳动争议？",
+    "北上深关于\"未约定竞业限制经济补偿时用人单位支付标准\"的规定",
+    "合同里写『甲方可随时单方解除合同且不承担任何责任』，这条款有没有问题？"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "wk-workbuddy"
+   }
+  },
+  {
+   "id": "wb_woscli",
+   "plugin": "woscli",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "微盟 WOS CLI",
+   "name_zh": "微盟 WOS CLI",
+   "description": "通过自然语言调用 woscli 操作微盟 WOS 业务能力：查询与管理订单、商品、客户资料、营销活动、数据看板等。",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "查询我最近的订单列表",
+    "帮我创建一个商品并上架",
+    "查看客户 xxx 的基本资料与组织关系"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "woscli"
+   }
+  },
+  {
+   "id": "wb_wps-knowledgebase",
+   "plugin": "wps-knowledgebase",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "WPS知识库",
+   "name_zh": "WPS知识库",
+   "description": "通过自然语言操作 WPS/zhishi 云端知识库：列出知识库、浏览文件树、智能问答、分享链接，以及文件/文件夹增删改查。",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "列出我的知识库",
+    "打开个人知识库看文件树",
+    "在知识库里问：上周项目进度总结"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "wps-knowledgebase"
+   }
+  },
+  {
+   "id": "wb_xiaoe-cloud-cli",
+   "plugin": "xiaoe-cloud-cli",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "小鹅通",
+   "name_zh": "小鹅通",
+   "description": "用自然语言管理小鹅通店铺：查询课程与学员，创建和编辑课程，查看订单，并查找或上传图片、音频、电子书和文档素材。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "xiaoe-cloud-cli"
+   ],
+   "examples_zh": [
+    "列出最近更新的课程，帮我看看它们的上下架状态",
+    "先列出我的课程，我选一门后再查看课程详情和学员列表",
+    "查询最近 7 天的订单，并打开其中一笔查看详情"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "xiaoe-cloud-cli"
+   }
+  },
+  {
+   "id": "wb_xingtu-claw-risk",
+   "plugin": "xingtu-claw-risk",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "天创信用星图MCP",
+   "name_zh": "天创信用星图MCP",
+   "description": "企业风险 AI 分析助手，用自然语言识别企业所属行业、分析企业间关联方关系（股权/实控人/担保/共同投资）。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "xingtu-claw-risk"
+   ],
+   "examples_zh": [
+    "百度公司属于哪个行业",
+    "识别一下小米集团的主营业务",
+    "腾讯和阿里巴巴是什么关系"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "xingtu-claw-risk"
+   }
+  },
+  {
+   "id": "wb_yingmi-mcp",
+   "plugin": "yingmi-mcp",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "盈米MCP",
+   "name_zh": "盈米MCP",
+   "description": "查询基金与市场数据，完成基金研究、组合分析、财富规划及金融内容生成。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "yingmi-mcp"
+   ],
+   "examples_zh": [
+    "查询基金 005827 的基本信息和近期表现",
+    "分析这几只基金的底层资产分布和组合风险",
+    "根据家庭收支和目标制定一份财富规划方案"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "yingmi-mcp"
+   }
+  },
+  {
+   "id": "wb_youshu-bd-mate",
+   "plugin": "youshu-bd-mate",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "有数智客 · 对公(To B)营销助手",
+   "name_zh": "有数智客 · 对公(To B)营销助手",
+   "description": "对公营销助手是基于企业全维数据构建的对公营销智能助手，提供从客户洞察、访前准备、话术生成到产品匹配的完整展业闭环能力。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "youshu-bd-mate"
+   ],
+   "examples_zh": [
+    "帮我生成一份XXX公司的访前报告",
+    "我要去拜访XXX公司，帮我生成一套营销话术",
+    "查一下XX公司的基本情况"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "youshu-bd-mate"
+   }
+  },
+  {
+   "id": "wb_yuandian-mcp",
+   "plugin": "yuandian-mcp",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "华宇元典法律数据",
+   "name_zh": "华宇元典法律数据",
+   "description": "华宇元典法律数据为智能体提供法律法规、案例文书、企业信息 MCP 工具能力。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 0,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "yuandian_mcp"
+   ],
+   "examples_zh": [
+    "夫妻共同财产是怎么规定的？要现行有效的法条原文，附出处。",
+    "股东转让了认缴出资但未届期的股权后,对受让前的公司债务还要担责吗?有类似裁判吗?",
+    "合作方恒大地产集团,签合同前帮我扫一遍司法风险。"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "yuandian-mcp"
+   }
+  },
+  {
+   "id": "wb_yzf-invoice-mcp-server",
+   "plugin": "yzf-invoice-mcp-server",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "云帐房AI开票",
+   "name_zh": "云帐房AI开票",
+   "description": "通过自然语言使用云帐房 AI 开票能力，完成开票信息识别，并前往电子税局开票。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "yzf-invoice-mcp-server"
+   ],
+   "examples_zh": [
+    "帮我开专票给云帐房网络科技有限公司，开票项目是软件服务费，含税金额 12000 元",
+    "帮我开普票给云帐房网络科技有限公司，开票项目是信息技术服务费，含税金额 8600 元",
+    "帮我开专票给云帐房网络科技有限公司，开票项目是咨询服务费，含税金额 5300 元"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "yzf-invoice-mcp-server"
+   }
+  },
+  {
+   "id": "wb_zfs-fssc-ai",
+   "plugin": "zfs-fssc-ai",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "中兴新云AI智报",
+   "name_zh": "中兴新云AI智报",
+   "description": "财务云 AI 报销助手：用自然语言完成报销申请、发票查询识别、报销单查询与费用审批等操作。",
+   "category": "mcp",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "mcp",
+   "auth_mode": "token",
+   "mcp_servers": [
+    "zfs-fssc-ai"
+   ],
+   "examples_zh": [
+    "帮我查询本月已提交的报销单",
+    "创建一张去北京出差的差旅报销单",
+    "我有一笔餐费要报销，帮我走流程"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "zfs-fssc-ai"
+   }
+  },
+  {
+   "id": "wb_zsxq",
+   "plugin": "zsxq",
+   "source": "workbuddy",
+   "kind": "connector",
+   "name": "知识星球",
+   "name_zh": "知识星球",
+   "description": "用自然语言管理知识星球：浏览星球内容、发帖评论、搜索主题、回答问题、管理笔记、查看用户信息。",
+   "category": "cli",
+   "author": "WorkBuddy(腾讯)",
+   "version": "1.0.0",
+   "skills_count": 1,
+   "skills": [],
+   "type": "cli",
+   "auth_mode": "token",
+   "mcp_servers": [],
+   "examples_zh": [
+    "列出我加入的所有星球",
+    "帮我在「生财有术」搜索关于「跨境电商」的主题",
+    "帮我发一篇帖子，标题是「今天的学习心得」"
+   ],
+   "install": {
+    "kind": "connector",
+    "connector_id": "zsxq"
+   }
+  }
+ ]
+}

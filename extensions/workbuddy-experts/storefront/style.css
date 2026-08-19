@@ -224,3 +224,10 @@ body {
 
 /* 关键修复:hidden 属性需压过 .modal-backdrop 的 display:flex */
 .modal-backdrop[hidden] { display: none !important; }
+
+
+/* ===== 插件/连接器商城(单栏,无侧边栏)===== */
+.layout-plugins {
+  max-width: 1320px; margin: 0 auto; padding: 20px;
+  display: grid; grid-template-columns: 1fr; gap: 24px;
+}
