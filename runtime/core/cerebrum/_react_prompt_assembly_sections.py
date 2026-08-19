@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime as _dt
+from typing import Any
 
 from runtime.core.cerebrum._react_prompt_assembly_state import _AssemblyState
 from runtime.core.cerebrum.react_browser_iteration import (
@@ -67,6 +68,53 @@ _CONTENT_TRUST_CONTRACT = (
     "且仍需通过既有权限与审批门禁。\n"
     "</content-trust>"
 )
+
+
+# Default tool-use contract: by default the model MUST actually call tools to
+# gather evidence before answering. The final-answer guard (which rejects
+# announce-only "我将…/我继续…" placeholders) is a last-resort backstop, not the
+# primary enforcement — the prompt is the first line. Only explicit audit/chat-like
+# modes lift this mandate (they carry their own direct/inspect-and-report
+# contracts). Byte-stable per mode shape: chat/audit turns simply omit it.
+_TOOL_USE_CONTRACT = (
+    "\n<tool-use-contract>\n"
+    "默认必须使用工具：只要本轮不是纯聊天，凡是需要查询、检索、核实、计算、读取、"
+    "搜索、调研、生成或操作的任务，都必须先实际调用对应工具，拿到工具的 Observation "
+    "作为证据，再给出 Final Answer。\n"
+    "禁止用预告式措辞代替执行：「我将…」「我接下来会…」「我先核对…」「我继续…」"
+    "「接下来/下一步/准备…」这类话术不是答案，也不代表本轮完成；说它们之前必须真的"
+    "调用工具并完成对应动作。工具可用时，绝不能以「正在处理 / 继续核对 / 我先看看」"
+    "收尾本轮。\n"
+    "仅当用户显式进入「聊天（chat）/ flash / 灵感（inspiration）」或「审计（audit）」"
+    "等直答模式时才允许不调用工具直接回答；除此之外一律默认工具优先执行。\n"
+    "</tool-use-contract>"
+)
+
+
+# Modes that are explicitly "just talk": direct answer is allowed, no tool
+# mandate. Mirrors _no_startup_code_context_modes in _react_prompt_assembly_state
+# plus the chat/flash/inspiration set used by auto-delegation guidance.
+_TOOL_USE_EXEMPT_MODES = frozenset(
+    {"chat", "flash", "inspiration", "conversation", "brainstorm", "discuss"}
+)
+
+
+def _is_audit_mode_turn(user_context: dict, metadata: dict, work_mode: Any) -> bool:
+    """Mirror the audit-mode detection in _react_prompt_assembly_guidance."""
+    return bool(
+        user_context.get("audit_mode")
+        or metadata.get("audit_mode")
+        or str(work_mode.mode or "").strip().lower() == "audit"
+        or str(work_mode.agent_mode or "").strip().lower() == "audit"
+    )
+
+
+def _is_tool_use_exempt_mode(work_mode: Any) -> bool:
+    """chat/flash/inspiration/conversation/... -> no tool-use mandate."""
+    for value in (work_mode.mode, work_mode.capability_mode):
+        if str(value or "").strip().lower() in _TOOL_USE_EXEMPT_MODES:
+            return True
+    return False
 
 
 def _assemble_early_sections(state: _AssemblyState) -> None:
@@ -165,6 +213,20 @@ def _assemble_early_sections(state: _AssemblyState) -> None:
             "exact blocker instead of attempting a write-based workaround.\n"
             "</read-only-contract>"
         )
+
+    # Default tool-use mandate (see _TOOL_USE_CONTRACT above). Injected on every
+    # normal turn so the model must actually execute tools rather than deliver an
+    # announce-only placeholder that the final-answer guard would have to catch.
+    # Skipped for no-tool turns (they already got <direct-answer-contract>),
+    # audit turns (they carry their own inspect-and-report/authorized-fix
+    # contract), and explicit chat-like modes where a direct answer is wanted.
+    if (
+        state.tools_active
+        and not state.no_tool_turn
+        and not _is_audit_mode_turn(_uc, _metadata, _wm)
+        and not _is_tool_use_exempt_mode(_wm)
+    ):
+        state.system_parts.append(_TOOL_USE_CONTRACT)
 
     # Codebase grounding for code/project chats: the same wiki + source
     # retrieval the planner uses, so interactive chat is grounded the same way
