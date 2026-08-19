@@ -11,7 +11,6 @@ import {
   ImportIcon,
   Loader2Icon,
   PlusIcon,
-  PlugIcon,
   PuzzleIcon,
   SearchIcon,
   StoreIcon,
@@ -71,10 +70,7 @@ import { AgentRoleProfileDialog } from "./agent-role-profile-dialog";
 import { AgentWorldCard } from "./agent-world-card";
 import { LocalAgentConnectDialog } from "./local-agent-connect-dialog";
 import { LocalSkillDirectoryPanel } from "@/components/store/local-skill-directory-panel";
-import { RegistrySkillsPanel } from "@/components/store/registry-skills-panel";
-import { CapabilityMarketPanel } from "@/components/store/capability-market-panel";
-import { WorkBuddyCloudStorePanel } from "@/components/store/workbuddy-cloud-store-panel";
-import { RegistryPluginsPanel } from "@/components/store/registry-plugins-panel";
+import { UnifiedMarketplacePanel } from "@/components/store/unified-marketplace-panel";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1001,23 +997,7 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
           <TabsTrigger value="local" className="h-8 gap-1.5 px-3 text-xs">
             {t.agentWorldUnified.enabledTab}
           </TabsTrigger>
-          <TabsTrigger value="registry" className="h-8 gap-1.5 px-3 text-xs">
-            <StoreIcon className="h-3.5 w-3.5" />
-            {t.agentWorldUnified.marketplaceTab}
-          </TabsTrigger>
-          <TabsTrigger value="connectors" className="h-8 gap-1.5 px-3 text-xs">
-            <PlugIcon className="h-3.5 w-3.5" />
-            连接器/插件
-          </TabsTrigger>
         </TabsList>
-
-        <TabsContent value="registry" className="mt-0">
-          <RegistryPluginsPanel />
-        </TabsContent>
-
-        <TabsContent value="connectors" className="mt-0">
-          <CapabilityMarketPanel />
-        </TabsContent>
 
         <TabsContent value="local" className="mt-0 flex flex-col gap-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -1136,7 +1116,6 @@ const SHOW_ENTERPRISE_ASSETS = false;
 const LOCAL_LIBRARY_INSTALLED_ONLY = false;
 // 商城 tab 展示 WorkBuddy 专家商城(421)取代第三方 octoapk 角色商城。
 // 置 false 则完全隐藏商城 tab,只剩本地角色。
-const SHOW_WORKBUDDY_CLOUD_STORE = true;
 // Only the system-level admin persona is hidden from the hub;
 // desktop_operator (Raven) is a first-class user-facing CUA persona
 // since #22 (CUA productization).
@@ -1393,6 +1372,13 @@ export function AgentWorldUnified() {
                   <BoxesIcon className="h-3.5 w-3.5" />
                   {t.plugins.tabSkillMarket}
                 </TabsTrigger>
+                <TabsTrigger
+                  value="market"
+                  className="h-8 gap-1.5 px-3 text-xs"
+                >
+                  <StoreIcon className="h-3.5 w-3.5" />
+                  {t.agentWorldUnified.marketplaceTab}
+                </TabsTrigger>
                 {SHOW_ENTERPRISE_ASSETS && (
                   <TabsTrigger
                     value="enterprise"
@@ -1414,13 +1400,6 @@ export function AgentWorldUnified() {
                   >
                     {t.agentWorldUnified.localTab}
                   </TabsTrigger>
-                  <TabsTrigger
-                    value="registry"
-                    className="h-8 gap-1.5 px-3 text-xs"
-                  >
-                    <StoreIcon className="h-3.5 w-3.5" />
-                    {t.agentWorldUnified.marketplaceTab}
-                  </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="local" className="mt-0">
@@ -1441,15 +1420,6 @@ export function AgentWorldUnified() {
                   />
                 </TabsContent>
 
-                <TabsContent value="registry" className="mt-0">
-                  {SHOW_WORKBUDDY_CLOUD_STORE ? (
-                    <WorkBuddyCloudStorePanel />
-                  ) : (
-                    <div className="py-10 text-center text-sm text-muted-foreground">
-                      商城已停用,仅保留本地角色。
-                    </div>
-                  )}
-                </TabsContent>
               </Tabs>
             </TabsContent>
 
@@ -1466,23 +1436,16 @@ export function AgentWorldUnified() {
                   >
                     {t.agentWorldUnified.enabledTab}
                   </TabsTrigger>
-                  <TabsTrigger
-                    value="registry"
-                    className="h-8 gap-1.5 px-3 text-xs"
-                  >
-                    <StoreIcon className="h-3.5 w-3.5" />
-                    {t.agentWorldUnified.marketplaceTab}
-                  </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="local" className="mt-0">
                   <LocalSkillDirectoryPanel searchQuery={searchQuery} />
                 </TabsContent>
-
-                <TabsContent value="registry" className="mt-0">
-                  <RegistrySkillsPanel />
-                </TabsContent>
               </Tabs>
+            </TabsContent>
+
+            <TabsContent value="market" className="mt-0">
+              <UnifiedMarketplacePanel />
             </TabsContent>
 
             <TabsContent value="enterprise" className="mt-0">
