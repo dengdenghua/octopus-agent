@@ -1,0 +1,17 @@
+{
+  "arms": [
+    "web_read",
+    "fs_writer",
+    "shell"
+  ],
+  "extra_affinity": [
+    "数字分身",
+    "真人岗位",
+    "岗位模板",
+    "产品定义",
+    "功能取舍",
+    "成本/交期影响"
+  ],
+  "private_skills": [],
+  "digital_twin": true
+}

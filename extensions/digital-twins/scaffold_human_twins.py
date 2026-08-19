@@ -1112,19 +1112,227 @@ HUMAN_TWINS = [
 ]
 
 
+# ── 全量铺开:从 twins_data.json 岗位模板自动生成 ─────────────────
+# 已手工精写的分身(slug)与 100 岗位模板(id)的覆盖关系,避免重复生成。
+SOURCE_ROLE_COVERAGE = {
+    "founder-owner": "founder",
+    "finance-manager": "finance",
+    "legal-manager": "legal",
+    "hr-recruiting-manager": "hr",
+    "product-manager": "product",
+    "hardware-product-manager": "hw_product",
+    "project-manager": "project",
+    "hardware-engineer": "hw_engineer",
+    "electronics-engineer": "electronics",
+    "industrial-designer": "industrial_design",
+    "optical-engineer": "optical",
+    "rf-engineer": "rf",
+    "structural-engineer": "structural_engineer",
+    "cae-engineer": "cae",
+    "reliability-engineer": "reliability",
+    "embedded-software-engineer": "embedded",
+    "manufacturing-engineer": "manufacturing",
+    "quality-engineer": "quality",
+    "supply-chain-manager": "supply_chain",
+    "npi-ramp-expert": "npi",
+}
+
+# 分组领域规范:自动生成分身时注入该组特有的知识库 / 确认边界。
+GROUP_SPECS = {
+    "business-product-project": {
+        "category": "specialist",
+        "icon": "📊",
+        "knowledge": "经营/财务/法务/HR/项目管理方法论、公司 OKR 与现金流口径、会议纪要模板、竞品与用户研究资料库。",
+        "confirm_tpl": [
+            "预算/付款/签约/用印/录用/对外承诺等真实经营决策",
+            "涉及现金、合规、法务责任的最终拍板",
+        ],
+    },
+    "electronics-electrical-power": {
+        "category": "engineering",
+        "icon": "⚡",
+        "knowledge": "器件规格书与参考设计、PCB 工艺能力表、电源/电池方案资料、SI/PI/EMC 设计规则与整改案例、常见失效模式(虚焊/过孔/串扰/电源纹波)。",
+        "confirm_tpl": [
+            "正式发板/贴片/焊接/上电实测/示波器与频谱实测结果",
+            "EMC/EMI 实测整改与认证送测、签样与放行",
+        ],
+    },
+    "optics-imaging-sensor": {
+        "category": "engineering",
+        "icon": "🔍",
+        "knowledge": "镜头/传感器规格书、光机装调公差表、显示/摄像头模组规格、图像质量评估样张库、标定与测试方法。",
+        "confirm_tpl": [
+            "光学/光机装调实测、模组与整机图像/显示实测结果",
+            "送样确认、签样与版本定版",
+        ],
+    },
+    "rf-communication-antenna": {
+        "category": "engineering",
+        "icon": "📡",
+        "knowledge": "RF 测试规范、天线仿真与暗室实测数据、蓝牙/Wi-Fi/蜂窝协议资料、认证要求(CE/FCC/SRRC)与整改案例。",
+        "confirm_tpl": [
+            "暗室/OTA 实测、天线方向图与灵敏度测试结果",
+            "认证送测、整改定版与放行",
+        ],
+    },
+    "mechanical-structure-industrial": {
+        "category": "engineering",
+        "icon": "⚙️",
+        "knowledge": "材料(ABS/PC/铝合金/不锈钢)与工艺能力(注塑/钣金/压铸/模具)、拔模壁厚设计规则、包装运输测试、常见失效(缩水/飞边/翘曲/应力集中)。",
+        "confirm_tpl": [
+            "3D/工程图正式发出、开模/手板/试模/装配实测结果",
+            "签样、模具修改与量产放行",
+        ],
+    },
+    "thermal-acoustic-reliability-test": {
+        "category": "engineering",
+        "icon": "🌡️",
+        "knowledge": "热仿真(CFD)与温升测试方法、声学参数与音频链路资料、振动/老化/跌落/环境可靠性测试标准与验收水平。",
+        "confirm_tpl": [
+            "热/声/振动/老化/跌落/环境实测数据与报告判定",
+            "失效判定、测试计划变更与放行结论",
+        ],
+    },
+    "embedded-firmware-software-algorithm": {
+        "category": "engineering",
+        "icon": "💻",
+        "knowledge": "芯片 SDK/BSP/内核驱动文档、固件版本与烧录流程、算法评估指标、RAG/Agent 工程实践、日志与问题复盘模板。",
+        "confirm_tpl": [
+            "上板烧录/刷机/真机联调与功耗时序实测结果",
+            "发布/回滚、模型上线与对外接口变更",
+        ],
+    },
+    "manufacturing-quality-supply-chain": {
+        "category": "specialist",
+        "icon": "🏭",
+        "knowledge": "工艺流程与产线能力、良率/缺陷统计方法、8D 报告模板、供应商与来料检验(SQE)资料、RFQ/比价/交期台账。",
+        "confirm_tpl": [
+            "产线调机/试产放行/停线/良率判定等现场决策",
+            "议价成交、验货签样、付款与供应商关系",
+        ],
+    },
+    "compound-experts": {
+        "category": "expert",
+        "icon": "🧠",
+        "knowledge": "跨专业联合问题(光机/热结构/射频结构/电源热/机电/机器人等)的系统性资料、风险分解与联调复盘模板。",
+        "confirm_tpl": [
+            "跨专业联调实测、现场调试与系统级验证结果",
+            "系统架构/方案取舍与对外承诺",
+        ],
+    },
+}
+GROUP_SPECS["_default"] = {
+    "category": "specialist",
+    "icon": "🧑‍🔬",
+    "knowledge": "岗位相关的方法论、行业规范与历史项目资料库。",
+    "confirm_tpl": [
+        "任何需要真人拍板、物理操作或对外承诺的事项",
+    ],
+}
+
+
+def build_from_source(role: dict, group: dict) -> dict:
+    """从 twins_data.json 的轻量岗位声明(名称+职责一行)展开成完整数位分身。"""
+    rid = role["id"]
+    name = role["name"]
+    focus = role.get("focus", "")
+    gid = group["id"]
+    spec = GROUP_SPECS.get(gid, GROUP_SPECS["_default"])
+
+    focus_items = [x.strip() for x in focus.split("、") if x.strip()] or ["本岗位核心事项"]
+    ai_can = [
+        f"梳理与跟进:{focus},产出结构化台账与待办清单",
+        "整理/审查本岗位相关资料与记录,维护版本与风险台账",
+        "起草文档草稿(报告/方案/检查清单/交接包)供真人审改",
+        "跟催跨部门/供应商关键节点,登记待确认项并主动提醒",
+    ]
+    for fi in focus_items:
+        ai_can.append(f"围绕「{fi}」做资料收集、对比整理与风险标注")
+
+    need_confirm = list(spec["confirm_tpl"]) + [
+        "把任何需要真人执行、拍板或对外承诺的环节回传真人并等待回传",
+    ]
+
+    forbidden = [
+        f"冒充{name}本人对供应商/客户/内部承诺",
+        "把未实测/未验证的结果写成『已通过』",
+        "伪造测试数据、进度或验收结果",
+        "自动确认交期、价格、签约、付款等商务条件",
+    ]
+
+    return {
+        "slug": _slug(rid),
+        "name": f"{name}分身",
+        "role": name,
+        "profession": name,
+        "icon": spec["icon"],
+        "category": spec["category"],
+        "description": f"代表真人「{name}」的数位分身:负责 {focus} 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。",
+        "tags": ["岗位模板", *focus_items[:3]],
+        "mission": f"跟进:{focus};产出台账、报告与交接包,回传真人执行并跟踪闭环。",
+        "ai_can": ai_can,
+        "need_confirm": need_confirm,
+        "forbidden": forbidden,
+        "knowledge": spec["knowledge"],
+    }
+
+
+def load_source_twins(source: Path | None) -> list[dict]:
+    """读取 twins_data.json,展开未被手工精写覆盖的全部岗位。"""
+    if source is None or not source.exists():
+        return []
+    data = json.loads(source.read_text(encoding="utf-8"))
+    hand_slugs = {t["slug"] for t in HUMAN_TWINS}
+    result: list[dict] = []
+    for group in data.get("role_groups", []):
+        for role in group.get("roles", []):
+            covered = SOURCE_ROLE_COVERAGE.get(role["id"])
+            if covered and covered in hand_slugs:
+                continue
+            result.append(build_from_source(role, group))
+    return result
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", default="", help="逗号分隔的 slug,只生成指定分身")
+    ap.add_argument(
+        "--source",
+        default="",
+        help="twins_data.json 岗位模板路径(默认自动探测:本仓库/上游 octopus-enterprise)",
+    )
     args = ap.parse_args()
     only = {s.strip() for s in args.only.split(",") if s.strip()} if args.only else None
 
-    created = []
-    for twin in HUMAN_TWINS:
-        if only and twin["slug"] not in only:
+    # 组装全量:手工精写 HUMAN_TWINS + 外源模板未覆盖岗位(全量铺开 100 岗位)
+    source = None
+    if args.source:
+        source = Path(args.source)
+    else:
+        candidates = [
+            REPO / "extensions" / "digital-twins" / "twins_data.json",
+            Path.home() / "Public" / "octopus" / "octopus-enterprise" / "backend" / "app" / "agent_assets" / "twins_data.json",
+        ]
+        source = next((c for c in candidates if c.exists()), None)
+    source_twins = load_source_twins(source)
+    twins: list[dict] = []
+    seen: set[str] = set()
+    for twin in [*HUMAN_TWINS, *source_twins]:
+        if twin["slug"] in seen:
             continue
+        seen.add(twin["slug"])
+        twins.append(twin)
+
+    if only:
+        twins = [t for t in twins if t["slug"] in only]
+
+    created = []
+    for twin in twins:
         d = scaffold(twin)
         created.append(d)
-    print(f"生成 {len(created)} 个数位分身:")
+    hand = len(HUMAN_TWINS)
+    src_n = len(source_twins)
+    print(f"生成 {len(created)} 个数位分身(手工精写 {hand} + 模板自动 {src_n},共覆盖 {len(twins)} 个岗位):")
     for d in created:
         print("  -", d.relative_to(REPO))
 

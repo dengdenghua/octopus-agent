@@ -1,0 +1,16 @@
+{
+  "arms": [
+    "web_read",
+    "fs_writer",
+    "shell"
+  ],
+  "extra_affinity": [
+    "数字分身",
+    "真人岗位",
+    "岗位模板",
+    "CFD/热仿真流程",
+    "结果对比"
+  ],
+  "private_skills": [],
+  "digital_twin": true
+}

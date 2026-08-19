@@ -1,0 +1,40 @@
+{
+  "id": "twin_mechatronics_expert",
+  "templateId": "octopus:digital-twin:mechatronics_expert",
+  "templateVersion": "1.0.0",
+  "source_kind": "digital-twin-human-role",
+  "source_plugin": "twin-mechatronics_expert",
+  "expertType": "agent",
+  "name": "机电一体化专家分身",
+  "icon": "🧠",
+  "description": "代表真人「机电一体化专家」的数位分身:负责 联调问题、接口关系、运动机构风险 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "digital-twin:human-role",
+  "category": "expert",
+  "tags": [
+    "数字分身",
+    "真人岗位",
+    "真身协同",
+    "岗位模板",
+    "联调问题",
+    "接口关系",
+    "运动机构风险"
+  ],
+  "profession": "机电一体化专家",
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true,
+    "includeUserMd": true,
+    "includeMemoryMd": true
+  },
+  "capabilities": {
+    "digital_twin": true,
+    "human_collab": true,
+    "authorization_boundary": true,
+    "handoff_pack": true
+  }
+}
