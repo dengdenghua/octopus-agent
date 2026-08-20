@@ -5,18 +5,31 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/harness";
 import { queueComposerImageEntry } from "@/core/composer-image-inbox";
 
+import type * as UploadsApiModule from "@/core/uploads/api";
+
 import { ChatInputBox } from "./chat-input-box";
 
 const uploadFilesMock = vi.fn();
+const uploadWithProgressMock = vi.fn();
 
-vi.mock("@/core/uploads", () => ({
-  uploadFiles: (...args: unknown[]) => uploadFilesMock(...args),
-}));
+// Only the transport is stubbed — ``useAttachmentUploads`` runs for real so the
+// progress/gating tests exercise the actual state machine. The hook imports
+// from ``./api`` directly, so that module is what has to be mocked; the barrel
+// re-exports it.
+vi.mock("@/core/uploads/api", async (importOriginal) => {
+  const actual = await importOriginal<UploadsApiModule>();
+  return {
+    ...actual,
+    uploadFiles: (...args: unknown[]) => uploadFilesMock(...args),
+    uploadFilesWithProgress: (...args: unknown[]) =>
+      uploadWithProgressMock(...args),
+  };
+});
 
 vi.mock("@/core/models/hooks", () => ({
   useModels: () => ({
@@ -51,11 +64,6 @@ vi.mock("./preview-refresh-indicator", () => ({
   PreviewRefreshIndicator: () => null,
 }));
 
-// The 3D pet was removed during the Live2D migration; reserved for re-mount.
-vi.mock("@/components/desktop-pet", () => ({
-  DesktopPetMascot: () => null,
-}));
-
 function textarea(): HTMLTextAreaElement {
   const el = document.querySelector("textarea");
   if (!el) throw new Error("textarea not found");
@@ -75,6 +83,34 @@ async function openToolsMenu() {
   fireEvent.click(trigger);
   return screen.findByRole("menu");
 }
+
+function uploadedInfo(file: File) {
+  return {
+    filename: file.name,
+    size: file.size,
+    path: `/artifacts/${file.name}`,
+    virtual_path: `uploads/${file.name}`,
+    artifact_url: `https://example.test/${file.name}`,
+    content_type: file.type,
+  };
+}
+
+beforeEach(() => {
+  uploadFilesMock.mockReset();
+  uploadWithProgressMock.mockReset();
+  // Attaching now uploads immediately, so every test needs a transport.
+  // The default resolves at once; progress-specific tests override it.
+  uploadWithProgressMock.mockImplementation(
+    async (
+      _threadId: string,
+      files: File[],
+      options?: { onProgress?: (p: number) => void },
+    ) => {
+      options?.onProgress?.(100);
+      return { files: files.map(uploadedInfo) };
+    },
+  );
+});
 
 describe("<ChatInputBox /> cowork materials", () => {
   it("keeps prompt-only shortcuts out of the quick tools menu", async () => {
@@ -326,13 +362,15 @@ describe("<ChatInputBox /> cowork materials", () => {
       },
     });
 
-    expect(screen.getByTitle("Send")).toBeEnabled();
+    // Send stays blocked until the attachment finishes uploading.
+    await waitFor(() => expect(screen.getByTitle("Send")).toBeEnabled());
     fireEvent.click(screen.getByTitle("Send"));
 
     await waitFor(() =>
       expect(onSubmit).toHaveBeenCalledWith({
         text: "",
         images: [image],
+        uploaded: [uploadedInfo(image)],
       }),
     );
   });
@@ -387,12 +425,14 @@ describe("<ChatInputBox /> cowork materials", () => {
     });
 
     expect(await screen.findByText("brief.md")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTitle("Send")).toBeEnabled());
     fireEvent.click(screen.getByTitle("Send"));
 
     await waitFor(() =>
       expect(onSubmit).toHaveBeenCalledWith({
         text: expect.stringContaining("upload=brief.md"),
         files: [file],
+        uploaded: [uploadedInfo(file)],
       }),
     );
   });
@@ -885,5 +925,171 @@ describe("<ChatInputBox /> send-failure draft restore", () => {
       ).toBeInTheDocument(),
     );
     expect(screen.getByText("浏览器截图")).toBeInTheDocument();
+  });
+});
+
+// ── upload on attach · the chip is the upload, not a promise of one ─
+//
+// Attachments used to upload inside the send handler. Nothing was in flight
+// while the chip sat in the composer, so a progress bar was impossible and the
+// only completion signal was a toast that appeared, detached, after send.
+describe("<ChatInputBox /> upload on attach", () => {
+  /** aria-label is stable; the title explains *why* send is blocked. */
+  const sendButton = () => screen.getByLabelText("Send");
+
+  function pasteImage(name = "shot.png") {
+    const image = new File(["img"], name, { type: "image/png" });
+    fireEvent.paste(textarea(), {
+      clipboardData: {
+        items: [{ kind: "file", type: "image/png", getAsFile: () => image }],
+      },
+    });
+    return image;
+  }
+
+  /** A transport whose completion and progress the test drives by hand. */
+  function deferredTransport() {
+    let resolve!: (value: { files: ReturnType<typeof uploadedInfo>[] }) => void;
+    let reject!: (err: Error) => void;
+    let emit: ((percent: number) => void) | undefined;
+    uploadWithProgressMock.mockImplementation(
+      (
+        _threadId: string,
+        _files: File[],
+        options?: { onProgress?: (p: number) => void },
+      ) => {
+        emit = options?.onProgress;
+        return new Promise((res, rej) => {
+          resolve = res;
+          reject = rej;
+        });
+      },
+    );
+    return {
+      progress: (percent: number) => act(() => emit?.(percent)),
+      finish: (files: File[]) =>
+        act(async () => resolve({ files: files.map(uploadedInfo) })),
+      fail: async (message: string) => {
+        await act(async () => {
+          reject(new Error(message));
+        });
+      },
+    };
+  }
+
+  it("starts uploading as soon as an image is attached", async () => {
+    renderWithProviders(<ChatInputBox mode="react" threadId="thread-1" />);
+    const image = pasteImage();
+
+    await waitFor(() => expect(uploadWithProgressMock).toHaveBeenCalledTimes(1));
+    expect(uploadWithProgressMock.mock.calls[0][0]).toBe("thread-1");
+    expect(uploadWithProgressMock.mock.calls[0][1]).toEqual([image]);
+  });
+
+  it("shows byte progress on the chip while the upload runs", async () => {
+    const transport = deferredTransport();
+    renderWithProviders(<ChatInputBox mode="react" threadId="thread-1" />);
+    pasteImage();
+
+    await waitFor(() => expect(uploadWithProgressMock).toHaveBeenCalled());
+    transport.progress(42);
+
+    const bar = await screen.findByRole("progressbar");
+    expect(bar).toHaveAttribute("aria-valuenow", "42");
+    expect(bar).toHaveAttribute("data-upload-status", "uploading");
+    expect(screen.getByText("42%")).toBeInTheDocument();
+  });
+
+  it("blocks send until the progress bar completes", async () => {
+    const transport = deferredTransport();
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <ChatInputBox mode="react" threadId="thread-1" onSubmit={onSubmit} />,
+    );
+    const image = pasteImage();
+
+    await waitFor(() => expect(uploadWithProgressMock).toHaveBeenCalled());
+    transport.progress(70);
+    expect(sendButton()).toBeDisabled();
+    // A disabled button that says nothing looks broken.
+    expect(sendButton()).toHaveAttribute(
+      "title",
+      "Waiting for attachments to finish uploading",
+    );
+    fireEvent.click(sendButton());
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    await transport.finish([image]);
+    await waitFor(() => expect(sendButton()).toBeEnabled());
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+  });
+
+  it("carries the server-side upload info into the sent message", async () => {
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <ChatInputBox mode="react" threadId="thread-1" onSubmit={onSubmit} />,
+    );
+    const image = pasteImage("into-chat.png");
+
+    await waitFor(() => expect(sendButton()).toBeEnabled());
+    fireEvent.click(sendButton());
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          images: [image],
+          uploaded: [uploadedInfo(image)],
+        }),
+      ),
+    );
+  });
+
+  it("marks a failed attachment and keeps send blocked", async () => {
+    const transport = deferredTransport();
+    renderWithProviders(<ChatInputBox mode="react" threadId="thread-1" />);
+    const image = pasteImage("broken.png");
+
+    await waitFor(() => expect(uploadWithProgressMock).toHaveBeenCalled());
+    await transport.fail("disk full");
+
+    const bar = await screen.findByRole("progressbar");
+    expect(bar).toHaveAttribute("data-upload-status", "error");
+    expect(sendButton()).toBeDisabled();
+    expect(screen.getByLabelText("Retry upload")).toBeInTheDocument();
+    expect(bar).toHaveAttribute("aria-label", "Upload failed");
+    expect(image.name).toBe("broken.png");
+  });
+
+  it("retries a failed upload from the chip", async () => {
+    const transport = deferredTransport();
+    renderWithProviders(<ChatInputBox mode="react" threadId="thread-1" />);
+    const image = pasteImage("retry-me.png");
+
+    await waitFor(() => expect(uploadWithProgressMock).toHaveBeenCalled());
+    await transport.fail("network down");
+    const retry = await screen.findByLabelText("Retry upload");
+    expect(image.name).toBe("retry-me.png");
+
+    uploadWithProgressMock.mockResolvedValue({ files: [uploadedInfo(image)] });
+    fireEvent.click(retry);
+
+    await waitFor(() => expect(sendButton()).toBeEnabled());
+    expect(uploadWithProgressMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops tracking an attachment that is removed mid-upload", async () => {
+    deferredTransport();
+    // Own thread id: the composer persists drafts per thread, and a leaked
+    // draft from another test would keep Send enabled for the wrong reason.
+    renderWithProviders(<ChatInputBox mode="react" threadId="thread-remove" />);
+    pasteImage("discarded.png");
+
+    await waitFor(() => expect(uploadWithProgressMock).toHaveBeenCalled());
+    fireEvent.click(screen.getByTitle("Remove"));
+
+    // Removing the chip must also clear its upload, or an abandoned transfer
+    // would keep the send button disabled forever.
+    await waitFor(() => expect(sendButton()).toBeDisabled());
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
 });
