@@ -259,22 +259,28 @@ def run_external_hook(
     Audit S-04 hardening:
       * ``${CLAUDE_PLUGIN_ROOT}`` / ``${CLAUDE_PROJECT_DIR}`` are
         substituted with ``shlex.quote`` so a workspace/plugin path cannot
-        smuggle shell metacharacters into the ``shell=True`` invocation.
+        smuggle shell metacharacters into the invocation.
       * When ``allowed_commands`` is a non-empty glob list, commands that
         do not match are refused without executing.
+
+    Audit C-06 (bandit B602): the command runs with ``shell=False`` via
+    ``shlex.split`` — no shell metacharacter expansion, no injection
+    surface from paths or payloads. Hooks that genuinely need pipelines /
+    redirection should wrap them in a script file and call that script.
     """
     cmd = command
     if plugin_root:
         cmd = cmd.replace("${CLAUDE_PLUGIN_ROOT}", shlex.quote(plugin_root))
     if project_dir:
         cmd = cmd.replace("${CLAUDE_PROJECT_DIR}", shlex.quote(project_dir))
-    if allowed_commands:
-        if not any(fnmatch.fnmatch(cmd, pattern) for pattern in allowed_commands):
-            _logger.warning(
-                "external hook command not allowed by allowlist (refused): %s",
-                cmd[:120],
-            )
-            return ExternalHookOutput(reason="hook command not allowed by allowlist")
+    if allowed_commands and not any(
+        fnmatch.fnmatch(cmd, pattern) for pattern in allowed_commands
+    ):
+        _logger.warning(
+            "external hook command not allowed by allowlist (refused): %s",
+            cmd[:120],
+        )
+        return ExternalHookOutput(reason="hook command not allowed by allowlist")
     payload_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     if dialect == "claude-code":
         payload_json += "\n"
@@ -284,9 +290,13 @@ def run_external_hook(
     if env:
         run_env.update(env)
     try:
+        # shell=False: split argv ourselves so shell metacharacters in the
+        # command are inert. A malformed quote raises ValueError and is
+        # caught by the infra-fault handler below (non-blocking).
+        argv = shlex.split(cmd)
         proc = subprocess.run(
-            cmd,
-            shell=True,
+            argv,
+            shell=False,
             input=payload_json,
             text=True,
             capture_output=True,

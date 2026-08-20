@@ -248,12 +248,17 @@ def safe_httpx_request(
                 self_inner._pinned_ip = pinned_ip
 
             def handle_request(self_inner, request):  # type: ignore[override]  # noqa: N805
-                # Rewrite the URL's host to the literal IP, keep the
-                # Host header so TLS SNI + vhost still target the name.
                 target_host = request.url.host
                 if target_host == self_inner._pinned_host:
-                    new_url = request.url.copy_with(host=self_inner._pinned_ip)
-                    request.url = new_url
+                    # Fake-ip proxy pool (198.18/15, see _FAKE_IP_NETWORK):
+                    # the proxy restores the real host from the TLS SNI, so
+                    # rewriting the URL host to the fake IP would drop SNI and
+                    # fail the handshake. Keep the hostname URL in that case.
+                    if not _is_fake_ip(self_inner._pinned_ip):
+                        new_url = request.url.copy_with(
+                            host=self_inner._pinned_ip
+                        )
+                        request.url = new_url
                     request.headers.setdefault("Host", target_host)
                 return super().handle_request(request)
 
@@ -300,7 +305,29 @@ def _as_ip(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
         return None
 
 
+# 198.18.0.0/15 (RFC 2544 benchmarking) is reserved, but Clash/Surge-style
+# proxies run in "fake-ip" mode where every public hostname resolves into this
+# pool and the proxy forwards the real traffic onward. It never stands for an
+# actual LAN/private resource, so it must be treated as external — otherwise a
+# fake-ip proxy environment can never reach any external MCP/OAuth endpoint.
+_FAKE_IP_NETWORK = ipaddress.ip_network("198.18.0.0/15")
+
+
+def _is_fake_ip(value: str | None) -> bool:
+    """True when ``value`` falls in the fake-ip proxy pool (198.18/15)."""
+    if not value:
+        return False
+    try:
+        ip = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return isinstance(ip, ipaddress.IPv4Address) and ip in _FAKE_IP_NETWORK
+
+
 def _is_private_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    # Fake-ip proxy pool (see _FAKE_IP_NETWORK above) is not private.
+    if isinstance(ip, ipaddress.IPv4Address) and ip in _FAKE_IP_NETWORK:
+        return False
     # IPv4-mapped IPv6 (``::ffff:10.0.0.1``) and IPv4-compatible
     # (``::10.0.0.1``) both look like public IPv6 to Python's
     # ``is_private`` but route to the embedded IPv4 address.  Unwrap

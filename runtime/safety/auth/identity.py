@@ -5,6 +5,7 @@ import binascii
 import hashlib
 import hmac
 import json
+import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -48,10 +49,12 @@ class IdentityStore:
                 h = _normalize_hash(api_key_hash)
 
             if h is not None:
-                if h in self._by_hash:
+                if api_key_plaintext is not None and any(
+                    _verify_plaintext_against_hash(api_key_plaintext, existing)
+                    for existing in self._by_hash
+                ):
                     raise ValueError(
-                        f"api key hash collision with existing identity "
-                        f"{self._by_hash[h].actor_id!r}"
+                        "api key hash collision with an existing identity"
                     )
                 self._by_hash[h] = identity
 
@@ -68,9 +71,11 @@ class IdentityStore:
     def verify_api_key(self, plaintext: str) -> Identity | None:
         if not plaintext:
             return None
-        h = hash_api_key(plaintext)
         with self._lock:
-            return self._by_hash.get(h)
+            for stored, identity in self._by_hash.items():
+                if _verify_plaintext_against_hash(plaintext, stored):
+                    return identity
+            return None
 
     def verify_jwt(
         self,
@@ -166,20 +171,59 @@ class IdentityStore:
 # ═══════════════════════════════════════════════════════════
 
 
+# Audit H2: API keys are hashed with PBKDF2-HMAC-SHA256 and a per-key random
+# salt so a leaked database cannot be brute-forced with rainbow tables / GPU
+# batches. Format: ``pbkdf2_sha256$<iterations>$<salt_hex>$<digest_hex>``.
+# The legacy deterministic ``sha256:<hex>`` format is still accepted on verify
+# so pre-existing ``api_key_hash`` configs keep working.
+_PBKDF2_ITERATIONS = 200_000
+_PBKDF2_SALT_BYTES = 16
+
+
 def hash_api_key(plaintext: str) -> str:
     if not plaintext:
         raise ValueError("cannot hash empty key")
-    digest = hashlib.sha256(plaintext.encode("utf-8")).hexdigest()
-    return f"sha256:{digest}"
+    salt = os.urandom(_PBKDF2_SALT_BYTES)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        plaintext.encode("utf-8"),
+        salt,
+        _PBKDF2_ITERATIONS,
+    )
+    return f"pbkdf2_sha256${_PBKDF2_ITERATIONS}${salt.hex()}${digest.hex()}"
 
 
 def _normalize_hash(h: str) -> str:
     h = h.strip()
+    if h.startswith("pbkdf2_sha256$"):
+        return h
     if h.startswith("sha256:"):
         return h
     if len(h) == 64 and all(c in "0123456789abcdef" for c in h.lower()):
         return f"sha256:{h.lower()}"
-    raise ValueError(f"unsupported hash format: {h[:20]}... (expect sha256:<hex>)")
+    raise ValueError(
+        f"unsupported hash format: {h[:20]}... (expect pbkdf2_sha256$... or sha256:<hex>)"
+    )
+
+
+def _verify_plaintext_against_hash(plaintext: str, stored_hash: str) -> bool:
+    """Constant-time-ish verify of ``plaintext`` against a stored hash spec."""
+    if stored_hash.startswith("pbkdf2_sha256$"):
+        try:
+            _prefix, iters_s, salt_hex, digest_hex = stored_hash.split("$")
+            iterations = int(iters_s)
+            salt = bytes.fromhex(salt_hex)
+            expected = bytes.fromhex(digest_hex)
+            actual = hashlib.pbkdf2_hmac(
+                "sha256", plaintext.encode("utf-8"), salt, iterations
+            )
+            return hmac.compare_digest(actual, expected)
+        except (ValueError, TypeError):
+            return False
+    if stored_hash.startswith("sha256:"):
+        digest = hashlib.sha256(plaintext.encode("utf-8")).hexdigest()
+        return hmac.compare_digest(stored_hash[len("sha256:") :].lower(), digest)
+    return False
 
 
 # ═══════════════════════════════════════════════════════════
