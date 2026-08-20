@@ -91,6 +91,12 @@ const IntelligencePage = lazy(
 const KnowledgePage = lazy(() => import("./app/workspace/knowledge/page"));
 const StoragePage = lazy(() => import("./app/workspace/storage/page"));
 const EvolutionPage = lazy(() => import("./app/workspace/evolution/page"));
+const ProjectsPage = lazy(
+  () => import("./app/workspace/projects/page"),
+);
+const PaperTradingPage = lazy(
+  () => import("./app/workspace/paper-trading/page"),
+);
 // Reflex monitor + YAML editor. See app/workspace/reflex/page.tsx.
 const ReflexMonitorPage = lazy(() => import("./app/workspace/reflex/page"));
 const ReflexEditorPage = lazy(() => import("./app/workspace/reflex/edit/page"));
@@ -233,6 +239,8 @@ export function AppRouter() {
               <Route path="nas" element={<StorageRedirect />} />
               <Route path="database" element={<StorageRedirect />} />
               <Route path="evolution" element={<EvolutionPage />} />
+              <Route path="projects" element={<ProjectsPage />} />
+              <Route path="paper-trading" element={<PaperTradingPage />} />
               <Route
                 path="replay"
                 element={<Navigate to={LEGACY_REDIRECTS.replay} replace />}

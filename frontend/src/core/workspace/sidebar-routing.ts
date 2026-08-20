@@ -103,6 +103,25 @@ export function isCompanySurfaceActive(pathname: string, search = "") {
   );
 }
 
+/**
+ * Link to the agent HUD.
+ *
+ * `agentName` targets the HUD at one specific role — used by the per-row HUD
+ * buttons in the bottom-left agent switcher, so each row can open the panel on
+ * its own role rather than on whichever agent happens to be active.
+ */
+export function agentHudHref(options: {
+  surface: "chat" | "company";
+  tab?: string;
+  agentName?: string;
+}): string {
+  const params = new URLSearchParams({ hud: "1", surface: options.surface });
+  if (options.tab) params.set("tab", options.tab);
+  const agentName = options.agentName?.trim();
+  if (agentName) params.set("agent", agentName);
+  return `/workspace/agents?${params.toString()}`;
+}
+
 export function isAgentSurfaceActive(pathname: string, search = "") {
   const params = new URLSearchParams(search);
   return (

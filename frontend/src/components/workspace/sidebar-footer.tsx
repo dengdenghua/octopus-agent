@@ -37,10 +37,10 @@ import {
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
+import { agentHudHref } from "@/core/workspace/sidebar-routing";
 import { useOctLink } from "@/core/oct/hooks";
 import { useAuth } from "@/providers/AuthProvider";
 import { CreditsCenterDialog } from "@/components/workspace/credits-center";
-import { getCommunityCredits } from "@/core/credits/ledger";
 import { cn } from "@/lib/utils";
 import { useEvolutionOverview } from "@/core/evolution/hooks";
 import {
@@ -204,14 +204,8 @@ export function AgentFooter() {
   const surfaceParam = new URLSearchParams(search).get("surface");
   const urlAgentName = new URLSearchParams(search).get("agent")?.trim() || null;
   const agentLibrarySurface = surfaceParam === "company" ? "company" : "chat";
-  const agentLibraryHref = (tab?: string) => {
-    const params = new URLSearchParams({
-      hud: "1",
-      surface: agentLibrarySurface,
-    });
-    if (tab) params.set("tab", tab);
-    return `/workspace/agents?${params.toString()}`;
-  };
+  const agentLibraryHref = (tab?: string, agentName?: string) =>
+    agentHudHref({ surface: agentLibrarySurface, tab, agentName });
   // Prefer the live detector for local CLIs so stale on-disk profiles cannot
   // leak an old alias, avatar, model, or capability identity into the picker.
   // Non-CLI profiles still come from the regular agent registry.
@@ -312,6 +306,30 @@ export function AgentFooter() {
     _navigate(taskWorkspaceRoute({ agentId: name }));
   };
 
+  // Per-row HUD shortcut. Rendered inside a DropdownMenuItem, so it has to stop
+  // both the pointer event and Radix's own `select` from bubbling — otherwise
+  // clicking it would also fire the row's `onSelect` and switch agents.
+  const renderHudButton = (agentName: string) => (
+    <button
+      type="button"
+      title={t.sidebar.openAgentHud}
+      aria-label={t.sidebar.openAgentHudFor(agentName)}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        _navigate(agentLibraryHref(undefined, agentName));
+      }}
+      className={cn(
+        "flex size-6 shrink-0 items-center justify-center rounded-md",
+        "text-muted-foreground/50 transition-colors",
+        "hover:bg-muted hover:text-foreground",
+      )}
+    >
+      <UsersRoundIcon className="size-3.5" />
+    </button>
+  );
+
   const renderAgentItem = (a: Agent) => {
     const isActive = a.name === active?.name;
     return (
@@ -335,6 +353,7 @@ export function AgentFooter() {
               : a.description || t.sidebar.soloChat}
           </span>
         </span>
+        {renderHudButton(a.name)}
         {isActive && (
           <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
             <CheckIcon className="size-3" />
@@ -398,6 +417,9 @@ export function AgentFooter() {
         >
           {status.label}
         </span>
+        {/* No HUD button for CLI partners — the HUD roster filters out
+            `local_*` / `registry_local_*` agents by design, so they have no
+            character file and the button would open someone else's. */}
         {isActive && (
           <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
             <CheckIcon className="size-3" />

@@ -11,6 +11,8 @@ import {
   type StubResponseDetail,
 } from "@/core/api/client";
 import { useEvent } from "@/core/events";
+import { useModuleRouteGuard } from "@/core/modules/use-module-route-guard";
+import { PRIMARY_WORKSPACE_ROUTE } from "@/core/workspace/sidebar-routing";
 import { swallow } from "@/core/utils/log";
 import { uuid } from "@/core/utils/uuid";
 import { useWorkspaceShortcuts } from "@/core/shortcuts/use-global-shortcuts";
@@ -118,6 +120,9 @@ export default function WorkspaceLayout() {
   const navigate = useNavigate();
   useTitleBarThemeSync();
   useWorkspaceShortcuts();
+  // A hidden module's route must also be unreachable by URL, not just absent
+  // from the sidebar.
+  useModuleRouteGuard(PRIMARY_WORKSPACE_ROUTE);
   useEvent(
     "task:new",
     (taskIdentity) => {

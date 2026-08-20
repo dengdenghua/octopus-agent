@@ -21,7 +21,9 @@ import {
   PlusIcon,
   RssIcon,
   Trash2Icon,
+  CandlestickChartIcon,
   CompassIcon,
+  SquareKanbanIcon,
   StoreIcon,
   UserRoundPenIcon,
   type LucideIcon,
@@ -97,11 +99,6 @@ import {
   useRenameThread,
   useThreads,
 } from "@/core/threads/hooks";
-import { useEvolutionOverview } from "@/core/evolution/hooks";
-import {
-  calculateLevel,
-  calculateStars,
-} from "@/components/workspace/evolution-dashboard/game-data-transformer";
 import {
   buildConversationThreadSummaries,
   buildProjectThreadSummaries,
@@ -131,6 +128,12 @@ import {
   isStorageRouteActive,
   PRIMARY_WORKSPACE_ROUTE,
 } from "@/core/workspace/sidebar-routing";
+
+import { ModuleEditorDialog } from "@/components/workspace/module-editor-dialog";
+import { modulesInSection } from "@/core/modules/catalog";
+import { useEnabledModuleIds } from "@/core/modules/enabled-modules";
+import { filterRoutesByEnabled } from "@/core/modules/module-routing";
+import type { ModuleSection } from "@/core/modules/types";
 
 import { AvatarCell } from "@/components/workspace/avatar-cell";
 
@@ -164,70 +167,38 @@ const OCTOPUS_THREAD_ID = "octopus-assistant";
 const LIVE_RUN_STATUS_TTL_MS = 30 * 60 * 1000;
 const LIVE_RUN_STATUS_PRUNE_INTERVAL_MS = 60 * 1000;
 
-const CHAT_CAPABILITY_ROUTES: NavRoute[] = [
-  {
-    to: "/workspace/agents?surface=chat",
-    labelKey: "navHR",
-    icon: StoreIcon,
-  },
-  {
-    to: "/workspace/intelligence?surface=chat",
-    labelKey: "navIntelligence",
-    icon: RssIcon,
-  },
-  {
-    // 助手（octopus）是全局上层入口，放在「订阅」下方，避免与主任务入口混淆。
-    to: "/workspace/realtime/octopus-assistant?agent=octopus",
-    labelKey: "navAssistant",
-    icon: UserRoundPenIcon,
-  },
-  {
-    to: "/workspace/evolution?surface=chat",
-    labelKey: "navEvolution",
-    icon: DnaIcon,
-  },
-];
+// Icons live here rather than in the catalog so `core/modules` stays free of
+// component imports (it is pure data + logic, unit-tested without React).
+const MODULE_ICONS: Record<string, ComponentType<SVGProps<SVGSVGElement>>> = {
+  hr: StoreIcon,
+  assistant: UserRoundPenIcon,
+  intelligence: RssIcon,
+  "paper.trading": CandlestickChartIcon,
+  projects: SquareKanbanIcon,
+  evolution: DnaIcon,
+  community: CompassIcon,
+  knowledge: DatabaseIcon,
+  "library.apps": AppWindowIcon,
+  "library.docs": FileTextIcon,
+  "library.images": FileImageIcon,
+  "library.videos": FilmIcon,
+  "library.computer": HardDriveIcon,
+};
 
-const COMMUNITY_ROUTES: NavRoute[] = [
-  {
-    to: "/workspace/community",
-    labelKey: "navCommunity",
-    icon: CompassIcon,
-  },
-];
+/** Catalog descriptors → sidebar NavRoutes, in catalog order. */
+function moduleNavRoutes(section: ModuleSection): NavRoute[] {
+  return modulesInSection(section).map((m) => ({
+    to: m.to,
+    labelKey: m.labelKey,
+    icon: MODULE_ICONS[m.id] ?? StoreIcon,
+  }));
+}
 
-const STORAGE_LIBRARY_ROUTES: NavRoute[] = [
-  {
-    to: "/workspace/knowledge?surface=chat",
-    labelKey: "navKnowledgeGraph",
-    icon: DatabaseIcon,
-  },
-  {
-    to: "/workspace/storage?surface=company&library=apps",
-    labelKey: "libraryApps",
-    icon: AppWindowIcon,
-  },
-  {
-    to: "/workspace/storage?surface=company&library=docs",
-    labelKey: "libraryDocs",
-    icon: FileTextIcon,
-  },
-  {
-    to: "/workspace/storage?surface=company&library=images",
-    labelKey: "libraryImages",
-    icon: FileImageIcon,
-  },
-  {
-    to: "/workspace/storage?surface=company&library=videos",
-    labelKey: "libraryVideos",
-    icon: FilmIcon,
-  },
-  {
-    to: "/workspace/storage?surface=company&library=computer",
-    labelKey: "libraryComputer",
-    icon: HardDriveIcon,
-  },
-];
+const CHAT_CAPABILITY_ROUTES: NavRoute[] = moduleNavRoutes("chatCapability");
+
+const COMMUNITY_ROUTES: NavRoute[] = moduleNavRoutes("community");
+
+const STORAGE_LIBRARY_ROUTES: NavRoute[] = moduleNavRoutes("storageLibrary");
 
 type SidebarFileExplorerTarget = {
   project: string;
@@ -379,13 +350,14 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       (t.sidebar as unknown as Record<string, string>)[key] ?? key,
     [t],
   );
+  const enabledModuleIds = useEnabledModuleIds();
   const resolveRoutes = useCallback(
     (routes: NavRoute[]) =>
-      routes.map((r) => ({
+      filterRoutesByEnabled(routes, enabledModuleIds).map((r) => ({
         ...r,
         label: r.label ?? (r.labelKey ? resolveLabel(r.labelKey) : r.to),
       })),
-    [resolveLabel],
+    [enabledModuleIds, resolveLabel],
   );
   const chatCapabilityItems = useMemo(
     () => resolveRoutes(CHAT_CAPABILITY_ROUTES),
@@ -402,6 +374,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
 
   // Settings dialog state
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [moduleEditorOpen, setModuleEditorOpen] = useState(false);
   const [settingsDefaultSection, setSettingsDefaultSection] =
     useState<SettingsSection>("appearance");
   const pendingSettingsOpenRef = useRef<number | null>(null);
@@ -968,6 +941,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
             pathname={pathname}
             search={search}
           />
+          <EditModulesButton onOpen={() => setModuleEditorOpen(true)} />
           {fileExplorerTarget ? (
             <ProjectFileExplorerView
               target={fileExplorerTarget}
@@ -1014,6 +988,10 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
         onOpenChange={handleSettingsOpenChange}
         defaultSection={settingsDefaultSection}
       />
+      <ModuleEditorDialog
+        open={moduleEditorOpen}
+        onOpenChange={setModuleEditorOpen}
+      />
     </>
   );
 }
@@ -1040,6 +1018,36 @@ function NavSection({
         {items.map((item) => (
           <NavRow key={item.to} item={item} pathname={pathname} />
         ))}
+      </SidebarMenu>
+    </SidebarGroup>
+  );
+}
+
+/** 侧栏底部的「编辑侧栏」入口 —— 对标钉钉侧栏那个 `+`。 */
+function EditModulesButton({ onOpen }: { onOpen: () => void }) {
+  const { t } = useI18n();
+  return (
+    <SidebarGroup className="p-0 px-1 pb-0.5 group-data-[collapsible=icon]:px-0">
+      <SidebarMenu className="gap-0.5">
+        <SidebarMenuItem className="justify-center">
+          <SidebarMenuButton
+            tooltip={t.sidebar.editModules}
+            aria-label={t.sidebar.editModules}
+            onClick={onOpen}
+            className={cn(
+              "group/nav h-9 w-full text-sm opacity-55 transition-[opacity,background-color,border-color]",
+              "border border-transparent hover:border-border-subtle hover:bg-muted/32 hover:opacity-100",
+              "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0",
+            )}
+          >
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors group-hover/nav:text-foreground">
+              <PlusIcon className="size-[16px]" />
+            </span>
+            <span className="min-w-0 flex-1 truncate text-left group-data-[collapsible=icon]:hidden">
+              {t.sidebar.editModules}
+            </span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
       </SidebarMenu>
     </SidebarGroup>
   );
@@ -2161,7 +2169,6 @@ function ChatsSection({
   threads,
   pathname,
   label,
-  emptyLabel,
   newActionLabel,
   agentId,
   workspacePath,
@@ -2170,7 +2177,6 @@ function ChatsSection({
   threads: ThreadSummary[];
   pathname: string;
   label?: string;
-  emptyLabel?: string;
   newActionLabel?: string;
   agentId?: string | null;
   workspacePath?: string | null;
@@ -2445,10 +2451,3 @@ export function CollapseToggle({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function EmptyHint({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mt-1 rounded-lg border border-dashed border-border-default px-2.5 py-1.5 text-xs leading-tight text-muted-foreground/75">
-      {children}
-    </div>
-  );
-}
