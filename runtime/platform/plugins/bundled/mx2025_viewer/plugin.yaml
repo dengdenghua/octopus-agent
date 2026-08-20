@@ -1,0 +1,20 @@
+name: mx2025_viewer
+display_name: MX技术小筑
+version: 0.1.0
+description: MX技术小筑网站查看器 — 通过同源反向代理访问 https://mx2025.hhhuu.com
+author: Octopus
+tags:
+  - viewer
+  - web
+provides:
+  - mx2025_viewer.page
+config:
+  base_url: https://mx2025.hhhuu.com
+config_schema:
+  type: object
+  properties:
+    base_url:
+      type: string
+      title: 网站地址
+      description: MX技术小筑的完整 URL(默认 https://mx2025.hhhuu.com)
+      default: https://mx2025.hhhuu.com
