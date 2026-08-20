@@ -1,16 +1,104 @@
 {
  "meta": {
   "title": "Octopus 插件/连接器商城",
-  "count": 123,
-  "codex_plugins": 15,
+  "count": 124,
+  "codex_plugins": 16,
   "workbuddy_connectors": 108,
   "sources": [
    "codex(OpenAI/Codex 生态)",
    "workbuddy(腾讯连接器)"
   ],
-  "generated_at": "2026-08-19T12:22:03.583116"
+  "generated_at": "2026-08-19T21:48:06.825515"
  },
  "items": [
+  {
+   "id": "codex_browser",
+   "plugin": "browser",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Browser",
+   "name_zh": "Browser",
+   "description": "Browser lets ChatGPT open and control the in-app browser, mainly for local development pages and files. Use it to navigate, inspect, click, type, and take screenshots while testing pages inside ChatGPT.",
+   "category": "Engineering",
+   "author": "OpenAI",
+   "version": "26.810.52044",
+   "skills": [
+    "control-in-app-browser"
+   ],
+   "connectors": [],
+   "path": "/Users/dangbei/.octopus/plugins/codex/browser",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.octopus/plugins/codex/browser"
+   }
+  },
+  {
+   "id": "codex_chrome",
+   "plugin": "chrome",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Chrome",
+   "name_zh": "Chrome",
+   "description": "Chrome lets ChatGPT use your Chrome browser for tasks that need your existing browser state, including open tabs, page content, and websites you're already signed into. It can navigate, view, click, type, and take screenshots while working. You stay in control: ChatGPT asks before interacting with new sites, you can stop actions at any time, and you can manage or remove Chrome access in settings. Browser content may include sensitive information from logged-in sites. Browser data from using this plugin may be used for training, subject to your OpenAI account data controls.",
+   "category": "Productivity",
+   "author": "OpenAI",
+   "version": "26.810.52044",
+   "skills": [
+    "control-chrome"
+   ],
+   "connectors": [],
+   "path": "/Users/dangbei/.octopus/plugins/codex/chrome",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.octopus/plugins/codex/chrome"
+   }
+  },
+  {
+   "id": "codex_computer-use",
+   "plugin": "computer-use",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Computer Use",
+   "name_zh": "Computer Use",
+   "description": "Mac Computer Use lets ChatGPT use any app on your computer, including your web browsers and files you allow it to access. It may take screenshots or page content while working. You stay in control: you choose which apps to allow ChatGPT to access, you can stop actions at any time, and control whether we use screenshots for training.",
+   "category": "Productivity",
+   "author": "OpenAI",
+   "version": "1.0.1000717",
+   "skills": [
+    "computer-use"
+   ],
+   "connectors": [],
+   "path": "/Users/dangbei/.octopus/plugins/codex/computer-use",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.octopus/plugins/codex/computer-use"
+   }
+  },
+  {
+   "id": "codex_documents",
+   "plugin": "documents",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Documents",
+   "name_zh": "Documents",
+   "description": "Create, edit, inspect, render, verify, and export DOCX document artifacts locally. Use Documents when the durable output or target is a document, doc, docs, Word file, Google Doc, Google Docs document, memo, report, or writing artifact.",
+   "category": "Productivity",
+   "author": "OpenAI",
+   "version": "26.818.11542",
+   "skills": [
+    "documents"
+   ],
+   "connectors": [],
+   "path": "/Users/dangbei/.octopus/plugins/codex/documents",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.octopus/plugins/codex/documents"
+   }
+  },
   {
    "id": "codex_figma",
    "plugin": "figma",
@@ -38,139 +126,38 @@
    "connectors": [
     "connector_68df038e0ba48191908c8434991bbac2"
    ],
-   "path": "/Users/dangbei/.codex/plugins/cache/openai-api-curated/figma/d6169bef",
+   "path": "/Users/dangbei/.octopus/plugins/codex/figma",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "codex-plugin",
-    "path": "/Users/dangbei/.codex/plugins/cache/openai-api-curated/figma/d6169bef"
+    "path": "/Users/dangbei/.octopus/plugins/codex/figma"
    }
   },
   {
-   "id": "codex_remotion",
-   "plugin": "remotion",
+   "id": "codex_github",
+   "plugin": "github",
    "source": "codex",
    "kind": "plugin",
-   "name": "Remotion",
-   "name_zh": "Remotion",
-   "description": "Build videos programmatically with Remotion and React. Covers animations, timing, audio, captions, 3D, transitions, charts, text effects, and more.",
-   "category": "Creativity",
-   "author": "Remotion",
-   "version": "1.0.3",
-   "skills": [
-    "remotion"
-   ],
-   "connectors": [],
-   "path": "/Users/dangbei/.codex/plugins/cache/openai-api-curated/remotion/d6169bef",
-   "install": {
-    "kind": "codex-plugin",
-    "path": "/Users/dangbei/.codex/plugins/cache/openai-api-curated/remotion/d6169bef"
-   }
-  },
-  {
-   "id": "codex_browser",
-   "plugin": "browser",
-   "source": "codex",
-   "kind": "plugin",
-   "name": "Browser",
-   "name_zh": "Browser",
-   "description": "Browser lets ChatGPT open and control the in-app browser, mainly for local development pages and files. Use it to navigate, inspect, click, type, and take screenshots while testing pages inside ChatGPT.",
-   "category": "Engineering",
+   "name": "GitHub",
+   "name_zh": "GitHub",
+   "description": "Use GitHub to inspect repositories, review pull requests, address feedback, debug failing Actions checks, and prepare code changes for review through a connector-first workflow with targeted CLI fallbacks.",
+   "category": "Developer Tools",
    "author": "OpenAI",
-   "version": "26.810.52044",
+   "version": "0.1.8-2841cf9749ae",
    "skills": [
-    "control-in-app-browser"
-   ],
-   "connectors": [],
-   "path": "/Users/dangbei/.codex/plugins/cache/openai-bundled/browser/26.810.52044",
-   "install": {
-    "kind": "codex-plugin",
-    "path": "/Users/dangbei/.codex/plugins/cache/openai-bundled/browser/26.810.52044"
-   }
-  },
-  {
-   "id": "codex_chrome",
-   "plugin": "chrome",
-   "source": "codex",
-   "kind": "plugin",
-   "name": "Chrome",
-   "name_zh": "Chrome",
-   "description": "Chrome lets ChatGPT use your Chrome browser for tasks that need your existing browser state, including open tabs, page content, and websites you're already signed into. It can navigate, view, click, type, and take screenshots while working. You stay in control: ChatGPT asks before interacting with new sites, you can stop actions at any time, and you can manage or remove Chrome access in settings. Browser content may include sensitive information from logged-in sites. Browser data from using this plugin may be used for training, subject to your OpenAI account data controls.",
-   "category": "Productivity",
-   "author": "OpenAI",
-   "version": "26.810.52044",
-   "skills": [
-    "control-chrome"
-   ],
-   "connectors": [],
-   "path": "/Users/dangbei/.codex/plugins/cache/openai-bundled/chrome/26.810.52044",
-   "install": {
-    "kind": "codex-plugin",
-    "path": "/Users/dangbei/.codex/plugins/cache/openai-bundled/chrome/26.810.52044"
-   }
-  },
-  {
-   "id": "codex_computer-use",
-   "plugin": "computer-use",
-   "source": "codex",
-   "kind": "plugin",
-   "name": "Computer Use",
-   "name_zh": "Computer Use",
-   "description": "Mac Computer Use lets ChatGPT use any app on your computer, including your web browsers and files you allow it to access. It may take screenshots or page content while working. You stay in control: you choose which apps to allow ChatGPT to access, you can stop actions at any time, and control whether we use screenshots for training.",
-   "category": "Productivity",
-   "author": "OpenAI",
-   "version": "1.0.1000717",
-   "skills": [
-    "computer-use"
-   ],
-   "connectors": [],
-   "path": "/Users/dangbei/.codex/plugins/cache/openai-bundled/computer-use/1.0.1000717",
-   "install": {
-    "kind": "codex-plugin",
-    "path": "/Users/dangbei/.codex/plugins/cache/openai-bundled/computer-use/1.0.1000717"
-   }
-  },
-  {
-   "id": "codex_sites",
-   "plugin": "sites",
-   "source": "codex",
-   "kind": "plugin",
-   "name": "Sites",
-   "name_zh": "Sites",
-   "description": "Build, save, deploy, and inspect websites such as landing pages, portfolios, dashboards, portals, trackers, hubs, games, and internal tools with Sites. Use of Sites is subject to the ChatGPT Sites Terms (https://openai.com/policies/chatgpt-sites-terms/), and you are responsible for your website content.",
-   "category": "Productivity",
-   "author": "OpenAI",
-   "version": "0.1.37",
-   "skills": [
-    "sites-building",
-    "sites-hosting"
+    "github",
+    "gh-fix-ci",
+    "yeet",
+    "gh-address-comments"
    ],
    "connectors": [
-    "connector_20205bf7d4e99a89d7154bb849718324"
+    "connector_76869538009648d5b282a4bb21c3d157"
    ],
-   "path": "/Users/dangbei/.codex/plugins/cache/openai-bundled/sites/0.1.37",
+   "path": "/Users/dangbei/.octopus/plugins/codex/github",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "codex-plugin",
-    "path": "/Users/dangbei/.codex/plugins/cache/openai-bundled/sites/0.1.37"
-   }
-  },
-  {
-   "id": "codex_visualize",
-   "plugin": "visualize",
-   "source": "codex",
-   "kind": "plugin",
-   "name": "Visualize",
-   "name_zh": "Visualize",
-   "description": "Create interactive charts, maps, diagrams, simulations, 3D models, data explorers, and UI previews directly in your conversation. Filter data, select details, compare scenarios, and adjust inputs to see how the result changes.",
-   "category": "Productivity",
-   "author": "OpenAI",
-   "version": "1.0.21",
-   "skills": [
-    "visualize"
-   ],
-   "connectors": [],
-   "path": "/Users/dangbei/.codex/plugins/cache/openai-bundled/visualize/1.0.21",
-   "install": {
-    "kind": "codex-plugin",
-    "path": "/Users/dangbei/.codex/plugins/cache/openai-bundled/visualize/1.0.21"
+    "path": "/Users/dangbei/.octopus/plugins/codex/github"
    }
   },
   {
@@ -194,10 +181,11 @@
    "connectors": [
     "connector_5f3c8c41a1e54ad7a76272c89e2554fa"
    ],
-   "path": "/Users/dangbei/.codex/plugins/cache/openai-curated-remote/google-drive/0.1.11",
+   "path": "/Users/dangbei/.octopus/plugins/codex/google-drive",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "codex-plugin",
-    "path": "/Users/dangbei/.codex/plugins/cache/openai-curated-remote/google-drive/0.1.11"
+    "path": "/Users/dangbei/.octopus/plugins/codex/google-drive"
    }
   },
   {
@@ -236,10 +224,33 @@
    "connectors": [
     "connector_openai_default_templates"
    ],
-   "path": "/Users/dangbei/.codex/plugins/cache/openai-curated-remote/openai-templates/0.1.1",
+   "path": "/Users/dangbei/.octopus/plugins/codex/openai-templates",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "codex-plugin",
-    "path": "/Users/dangbei/.codex/plugins/cache/openai-curated-remote/openai-templates/0.1.1"
+    "path": "/Users/dangbei/.octopus/plugins/codex/openai-templates"
+   }
+  },
+  {
+   "id": "codex_pdf",
+   "plugin": "pdf",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "PDF",
+   "name_zh": "PDF",
+   "description": "Read, create, inspect, render, verify, and extract content from PDF files locally. Use PDF when the durable output or target is a PDF file and visual layout fidelity matters.",
+   "category": "Productivity",
+   "author": "OpenAI",
+   "version": "26.818.11542",
+   "skills": [
+    "pdf"
+   ],
+   "connectors": [],
+   "path": "/Users/dangbei/.octopus/plugins/codex/pdf",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.octopus/plugins/codex/pdf"
    }
   },
   {
@@ -259,52 +270,11 @@
    "connectors": [
     "connector_openai_plugin_management"
    ],
-   "path": "/Users/dangbei/.codex/plugins/cache/openai-curated-remote/plugin-management/0.1.0",
+   "path": "/Users/dangbei/.octopus/plugins/codex/plugin-management",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "codex-plugin",
-    "path": "/Users/dangbei/.codex/plugins/cache/openai-curated-remote/plugin-management/0.1.0"
-   }
-  },
-  {
-   "id": "codex_documents",
-   "plugin": "documents",
-   "source": "codex",
-   "kind": "plugin",
-   "name": "Documents",
-   "name_zh": "Documents",
-   "description": "Create, edit, inspect, render, verify, and export DOCX document artifacts locally. Use Documents when the durable output or target is a document, doc, docs, Word file, Google Doc, Google Docs document, memo, report, or writing artifact.",
-   "category": "Productivity",
-   "author": "OpenAI",
-   "version": "26.818.11542",
-   "skills": [
-    "documents"
-   ],
-   "connectors": [],
-   "path": "/Users/dangbei/.codex/plugins/cache/openai-primary-runtime/documents/26.818.11542",
-   "install": {
-    "kind": "codex-plugin",
-    "path": "/Users/dangbei/.codex/plugins/cache/openai-primary-runtime/documents/26.818.11542"
-   }
-  },
-  {
-   "id": "codex_pdf",
-   "plugin": "pdf",
-   "source": "codex",
-   "kind": "plugin",
-   "name": "PDF",
-   "name_zh": "PDF",
-   "description": "Read, create, inspect, render, verify, and extract content from PDF files locally. Use PDF when the durable output or target is a PDF file and visual layout fidelity matters.",
-   "category": "Productivity",
-   "author": "OpenAI",
-   "version": "26.818.11542",
-   "skills": [
-    "pdf"
-   ],
-   "connectors": [],
-   "path": "/Users/dangbei/.codex/plugins/cache/openai-primary-runtime/pdf/26.818.11542",
-   "install": {
-    "kind": "codex-plugin",
-    "path": "/Users/dangbei/.codex/plugins/cache/openai-primary-runtime/pdf/26.818.11542"
+    "path": "/Users/dangbei/.octopus/plugins/codex/plugin-management"
    }
   },
   {
@@ -322,10 +292,58 @@
     "presentations"
    ],
    "connectors": [],
-   "path": "/Users/dangbei/.codex/plugins/cache/openai-primary-runtime/presentations/26.818.11542",
+   "path": "/Users/dangbei/.octopus/plugins/codex/presentations",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "codex-plugin",
-    "path": "/Users/dangbei/.codex/plugins/cache/openai-primary-runtime/presentations/26.818.11542"
+    "path": "/Users/dangbei/.octopus/plugins/codex/presentations"
+   }
+  },
+  {
+   "id": "codex_remotion",
+   "plugin": "remotion",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Remotion",
+   "name_zh": "Remotion",
+   "description": "Build videos programmatically with Remotion and React. Covers animations, timing, audio, captions, 3D, transitions, charts, text effects, and more.",
+   "category": "Creativity",
+   "author": "Remotion",
+   "version": "1.0.3",
+   "skills": [
+    "remotion"
+   ],
+   "connectors": [],
+   "path": "/Users/dangbei/.octopus/plugins/codex/remotion",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.octopus/plugins/codex/remotion"
+   }
+  },
+  {
+   "id": "codex_sites",
+   "plugin": "sites",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Sites",
+   "name_zh": "Sites",
+   "description": "Build, save, deploy, and inspect websites such as landing pages, portfolios, dashboards, portals, trackers, hubs, games, and internal tools with Sites. Use of Sites is subject to the ChatGPT Sites Terms (https://openai.com/policies/chatgpt-sites-terms/), and you are responsible for your website content.",
+   "category": "Productivity",
+   "author": "OpenAI",
+   "version": "0.1.37",
+   "skills": [
+    "sites-building",
+    "sites-hosting"
+   ],
+   "connectors": [
+    "connector_20205bf7d4e99a89d7154bb849718324"
+   ],
+   "path": "/Users/dangbei/.octopus/plugins/codex/sites",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.octopus/plugins/codex/sites"
    }
   },
   {
@@ -346,10 +364,11 @@
    "connectors": [
     "connector_openai_codex_document_control"
    ],
-   "path": "/Users/dangbei/.codex/plugins/cache/openai-primary-runtime/spreadsheets/26.818.11542",
+   "path": "/Users/dangbei/.octopus/plugins/codex/spreadsheets",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "codex-plugin",
-    "path": "/Users/dangbei/.codex/plugins/cache/openai-primary-runtime/spreadsheets/26.818.11542"
+    "path": "/Users/dangbei/.octopus/plugins/codex/spreadsheets"
    }
   },
   {
@@ -367,10 +386,33 @@
     "template-creator"
    ],
    "connectors": [],
-   "path": "/Users/dangbei/.codex/plugins/cache/openai-primary-runtime/template-creator/26.818.11542",
+   "path": "/Users/dangbei/.octopus/plugins/codex/template-creator",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "codex-plugin",
-    "path": "/Users/dangbei/.codex/plugins/cache/openai-primary-runtime/template-creator/26.818.11542"
+    "path": "/Users/dangbei/.octopus/plugins/codex/template-creator"
+   }
+  },
+  {
+   "id": "codex_visualize",
+   "plugin": "visualize",
+   "source": "codex",
+   "kind": "plugin",
+   "name": "Visualize",
+   "name_zh": "Visualize",
+   "description": "Create interactive charts, maps, diagrams, simulations, 3D models, data explorers, and UI previews directly in your conversation. Filter data, select details, compare scenarios, and adjust inputs to see how the result changes.",
+   "category": "Productivity",
+   "author": "OpenAI",
+   "version": "1.0.21",
+   "skills": [
+    "visualize"
+   ],
+   "connectors": [],
+   "path": "/Users/dangbei/.octopus/plugins/codex/visualize",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
+   "install": {
+    "kind": "codex-plugin",
+    "path": "/Users/dangbei/.octopus/plugins/codex/visualize"
    }
   },
   {
@@ -394,6 +436,7 @@
     "创建一个新的销售订单，客户为上海星辰贸易有限公司",
     "查看商品精品咖啡的库存"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "77ircloud"
@@ -422,6 +465,7 @@
     "用 AgentKey 搜索 Instagram 近 3 天关于瑜伽垫的热门帖子，分析 5 个高互动内容的选题、钩子和形式。",
     "用 AgentKey 结合 Yahoo Finance 和 Google News 分析 NVIDIA 最近一次财报后的市场反应，解释股价变化原因。"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "agentkey"
@@ -450,6 +494,7 @@
     "帮我设计一个日漫风战斗少女 IP：银白长发、异色瞳（左金右蓝）、机甲肩甲、战斗服。先搜同类热门人设找配色参考，再用固定角色锚点『银发异色瞳少女，机甲肩甲，战斗姿态，锐利眼神』原样复用，生成正面/侧面/背面的三视图，统一画风与配色，用于盲盒手办立项。",
     "搜一下今年新茶饮夏季营销主视觉趋势，据此做一张门店开业促销海报：主标题大字『买一送一』、暖橙色调、左侧 40% 留白、电影感侧光、3:4 竖版，适合朋友圈与小红书投放；另出一张极简冷调备选。"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "ai-hive"
@@ -478,6 +523,7 @@
     "帮我查一下最近收藏的患者列表",
     "帮我查看张三的数据情况，总结异常指标和需要关注的重点情况"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "archive-hospital-mcp"
@@ -504,6 +550,7 @@
     "使用向日葵帮我把办公电脑设备上的 D:\\test.txt 下载到本地桌面",
     "使用向日葵帮我建立办公电脑设备的CMD远程连接，运行 ipconfig 和 tasklist 检查网络和进程情况"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "awesun"
@@ -532,6 +579,7 @@
     "从文件名、文档内容和图片文字中搜索与「项目合同」相关的文件",
     "找出网盘里与海边日落相关的图片和视频"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "baidu-netdisk"
@@ -560,6 +608,7 @@
     "搜索适合抓取某电商商品详情的云采集模板",
     "查看我最近创建的采集任务进度"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "bazhuayu"
@@ -586,6 +635,7 @@
     "我上个月有没有迟到，或者忘记打卡？",
     "我团队上月的公出、出差情况"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "beisen-cli"
@@ -614,6 +664,7 @@
     "查看应用的版本质量概览",
     "查看应用的今天质量概览"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "bugly-token"
@@ -642,6 +693,7 @@
     "为我们的 AI 发布会生成一个风格大胆的 pitch deck",
     "将我的小红书帖子调整为微信朋友圈尺寸并导出为 PNG"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "canva"
@@ -670,6 +722,7 @@
     "为我们的 AI 发布会生成一个风格大胆的 pitch deck",
     "将我的小红书帖子调整为微信朋友圈尺寸并导出为 PNG"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "canva-ai"
@@ -698,6 +751,7 @@
     "深度分析 580ML Portable Juicer with LED Display（ID：1732374678933836006）的销量、评论痛点、带货达人和相似竞品",
     "围绕 USB Rechargeable Portable Smoothies Blender & Juicer（ID：1731172842143585192），筛选 10 个可建联的中腰部带货达人"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "chuhaijiang"
@@ -726,6 +780,7 @@
     "查一下证通股份有限公司的商标注册情况",
     "验证企业名称和统一社会信用代码是否一致"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "cisp-mcp"
@@ -754,6 +809,7 @@
     "帮我开发一个微信小程序页面，接入 wx.cloud 云开发、云函数和数据库",
     "创建一个 HTTP 云函数，并用 CloudBase CLI 部署和验证日志"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "cloudbase"
@@ -780,6 +836,7 @@
     "在当前 PR 上发表评论：已完成代码评审",
     "查看当前 PR 的 CI 构建状态"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "cnb-api"
@@ -806,6 +863,7 @@
     "查一下下周五从北京到上海的机票",
     "推荐杭州西湖附近性价比高的酒店"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "ctrip-wendao"
@@ -834,6 +892,7 @@
     "查看当前项目和任务列表",
     "查看任务 abc123 的详情和日志"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "dcs-cloud"
@@ -860,6 +919,7 @@
     "查一下我下周的钉钉日程，列出和【客户对接】相关的会议（时间、参会人、会议室），并帮我找出三人都空闲的时段约一次同步会",
     "在钉钉 AI 表格【任务跟踪】里新增一行：标题=Q2 上线评审、负责人=张三、截止时间=2026-05-20、状态=进行中"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "dingtalk"
@@ -888,6 +948,7 @@
     "请使用深知可信工作台搜索重庆市智能化改造技改补贴政策，返回政策原文、申报条件和权威来源链接。",
     "请使用深知可信工作台深度对比北京、上海、深圳三地人才引进政策的类型、适用人群和核心条件，附权威政策依据。"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "dknowc-mcp"
@@ -914,6 +975,7 @@
    "examples_zh": [
     "开发个番茄时钟并部署到 EdgeOne Makers"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "edgeone-pages"
@@ -940,6 +1002,7 @@
     "查询集群 emr-e3orculh 的节点信息",
     "获取最近一天的 Spark 查询任务"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "emr-query"
@@ -968,6 +1031,7 @@
     "帮我预约明天下午 3 点到 4 点 A 栋 3 楼 301 会议室，主题是项目周会",
     "查看我本周的会议安排"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "ezjoin-meeting"
@@ -996,6 +1060,7 @@
     "分析某行业的最新舆情和招投标动态",
     "查询这家企业是否获得过政策补贴"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "fanruan-growth-advisor"
@@ -1024,6 +1089,7 @@
     "帮我检索近三年民间借贷利息纠纷的典型案例",
     "深度研究一下人工智能生成内容的著作权归属问题"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "fazhi-law"
@@ -1052,6 +1118,7 @@
     "根据 skill_whoami 返回的场景包读取内容，并产出一张首值执行卡。",
     "在同一个 binding 上记录 first_value_completed 或 continued_use_completed。"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "fbs-connector"
@@ -1078,6 +1145,7 @@
     "查下周我和张三、李四的飞书日程，找出三人都空闲的 2 小时时段，并创建一个标题为【Q2 规划对齐】的日程，邀请他们俩，预定一间会议室",
     "在飞书多维表格【任务跟踪】里新增一行：标题=Q2 上线评审、负责人=张三、截止=2026-05-20、状态=进行中；并按负责人聚合未完成任务数"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "feishu"
@@ -1106,6 +1174,7 @@
     "生成一份存储行业的边际变化报告",
     "对比内外资机构对美联储最新议息会议的解读与市场预期，分析其对科技股走势和估值的潜在影响"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "finenter"
@@ -1134,6 +1203,7 @@
     "继续完善我的 Flova 项目，先生成分镜供我确认",
     "根据审阅意见修改镜头并导出最终视频"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "flova"
@@ -1161,6 +1231,7 @@
     "不满两周岁子女抚养权",
     "中华人民共和国民法典第一千零八十四条"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "fyopen-lawsearch"
@@ -1189,6 +1260,7 @@
     "为宁德时代生成一页式投资摘要，并补充投资逻辑、同业对比、估值与主要风险",
     "近期人形机器人产业的路演、调研与会议纪要，提炼产业链变化及重点公司"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "gangtise-mcp"
@@ -1217,6 +1289,7 @@
     "生成半导体行业的 24 小时速报",
     "今天有什么重要的金融新闻要闻？"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "gildata"
@@ -1245,6 +1318,7 @@
     "查看仓库 owner/repo 里所有 open 状态的 Pull Request，按更新时间倒序，告诉我每个 PR 的标题、作者和变更规模",
     "在当前分支提交所有改动并推送到 GitHub，提交消息按我做的变更自动生成"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "github"
@@ -1273,6 +1347,7 @@
     "查询我机构下的项目列表，重点看教育助学类项目",
     "查一下本机构的统一社会信用代码和评估等级"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "gongyi-open-mcp"
@@ -1301,6 +1376,7 @@
     "查看『产品手册』ima 知识库的详情和文件列表",
     "引用 ima 知识库中关于 OpenAPI 的内容回答这个问题"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "ima-mcp"
@@ -1329,6 +1405,7 @@
     "根据商品素材生成一套电商详情页",
     "用这些商品素材生成 5 张电商商品主图"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "infimind-ecommerce-image"
@@ -1357,6 +1434,7 @@
     "用首尾两张图片生成一段自然过渡的视频",
     "分析这个商品视频的脚本、风格、卖点和爆款公式"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "infimind-video"
@@ -1385,6 +1463,7 @@
     "帮我盘点 iOA 终端资产列表",
     "查看公司全员安装 iOA 客户端的覆盖率"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "ioa"
@@ -1413,6 +1492,7 @@
     "帮我建一个“2026 春季发布会”报名表，要姓名、手机号、公司、职位",
     "把 form_token 为 abCdEf 的表单里最近 7 天的报名数据导出来"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "jinshuju"
@@ -1441,6 +1521,7 @@
     "根据当前项目数据创建一个销售趋势图表",
     "查看已有仪表板中本月各区域的销售表现"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "jiushuyun"
@@ -1469,6 +1550,7 @@
     "帮我在金山文档根目录新建一个智能文档，标题是「Q3 项目总结」，把以下内容写进去",
     "读取「项目计划.xlsx」表格的内容，按优先级整理后输出"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "kdocs"
@@ -1497,6 +1579,7 @@
     "使用可灵AI画一只身穿复古宇航服的小熊猫，漂浮在空间站舷窗前，地球蓝光映亮面部，细节丰富，电影级质感",
     "使用可灵AI制作一段 5 秒电影感视频：机甲战士从高空重砸地面，冲击波瞬间震开碎石与尘雾，镜头快速推近，充满力量感"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "kling-ai-plugin"
@@ -1525,6 +1608,7 @@
     "查一下腾讯的股东结构和最终受益人",
     "恒大有没有经营异常、行政处罚或司法风险"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "kuaicha-search"
@@ -1549,6 +1633,7 @@
    "examples_zh": [
     "帮我查一下柠檬云软件账套列表，并告诉我柠檬云软件能做些什么"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "lemonclaw"
@@ -1577,6 +1662,7 @@
     "找出【技术方案】知识库里所有超过 3 个月没有更新的文档，列出文档名称和最后编辑人，我需要推动大家更新",
     "把一份 Markdown 格式的【2025 年技术规划】导入到乐享，自动转换成带层级结构的知识库文档，保留代码块和表格格式"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "lexiang"
@@ -1605,6 +1691,7 @@
     "帮我把 ENG-42 这个 Issue 标记为已完成，然后添加一条评论说明修复方案，再创建一个子任务指派给 @李伟 跟进后续优化",
     "创建一个名为「Q3 移动端改版」的项目，加入我的团队，设置下周五为目标日期，添加三个里程碑：设计稿交付、前端开发、集成测试"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "linear-mcp"
@@ -1633,6 +1720,7 @@
     "查询最近 7 天各店铺的产品表现",
     "汇总本月订单利润并按店铺排序"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "lingxing-mcp"
@@ -1661,6 +1749,7 @@
     "查 Keepa 上某 ASIN 近 90 天价格和 BSR 趋势",
     "用智慧芽检索商品图相似外观专利"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "linkfox-product-selection"
@@ -1687,6 +1776,7 @@
     "把这批保单的最新跟进结果更新到业务系统，并返回更新摘要",
     "汇总本月续保和理赔情况，生成经营简报"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "lovrabet-cli"
@@ -1715,6 +1805,7 @@
     "用当前文件已订阅的团队组件库生成 CRM 客户管理页面",
     "把当前选中按钮背景改成黑色，文字改成白色"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "mastergo-vibe-mcp"
@@ -1741,6 +1832,7 @@
     "创建一个新的项目并上传剧本",
     "根据剧本提取人物设定并生成角色形象图"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "mglc"
@@ -1767,6 +1859,7 @@
     "搭建一个销售数据看板",
     "做一个杂志风格的高级个人博客网站"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "miaoda"
@@ -1795,6 +1888,7 @@
     "我这个月考勤有没有异常，迟到了几次？",
     "出差报销的标准是什么？"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "moka"
@@ -1823,6 +1917,7 @@
     "帮我看看易方达蓝筹精选的业绩、风险和持仓",
     "研究一下最新的主动ETF/ active ETF"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "morningstar"
@@ -1851,6 +1946,7 @@
     "沪深 300 近 10 日收盘点位与涨跌幅",
     "筛选创业板市盈率最低的 50 只个股"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "mx-ds-mcp"
@@ -1879,6 +1975,7 @@
     "查申请人「华为技术有限公司」在中国的全部商标",
     "「星巴克」在美国、欧盟、日本的商标注册情况"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "mzl-trademark"
@@ -1907,6 +2004,7 @@
     "把我名下超过 30 天没跟进的客户列出来",
     "搜一下公海里制造业、上周新进的线索 Top 10"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "neo-crm"
@@ -1933,6 +2031,7 @@
     "查看我最近2小时的收件箱有没有新邮件",
     "搜索最近一周主题包含「发票」的邮件"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "netease-mail"
@@ -1961,6 +2060,7 @@
     "帮我在「项目管理」数据库中新建一条记录：标题是 Q3 产品规划，状态设为进行中，负责人是我",
     "查询「任务看板」数据库中所有状态为【待处理】且截止日期在本周内的任务，按优先级排序"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "notion"
@@ -1989,6 +2089,7 @@
     "统计成都建设路邻里生活广场周边 1000 米内不同分类的 POI 数量",
     "查询指定圆形区域内的餐饮 POI 列表"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "opendata"
@@ -2017,6 +2118,7 @@
     "比较沪深 300 和中证 500 最近三年的表现与波动",
     "查询螺纹钢期货主力合约及近期行情变化"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "pandadata"
@@ -2045,6 +2147,7 @@
     "查找近五年 CRISPR 递送系统相关的核心专利和文献",
     "获取公开号 CN109123456A 的专利基本信息和权利要求"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "patsnap-search"
@@ -2073,6 +2176,7 @@
     "生成 5 张 Amazon 主图",
     "生成一套统一风格的商品详情图"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "picset-commerce-images"
@@ -2101,6 +2205,7 @@
     "基于这张商品参考图，预估用 Seedance 2.0 Fast 生成 4 秒电商短视频需要多少积分",
     "用这张空气循环扇图片生成 9:16 的 4 秒卖点视频，突出静音柔风"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "picset-video-generation"
@@ -2129,6 +2234,7 @@
     "员工连续旷工三天，公司能否解除劳动合同？请检索相关法律依据。",
     "房屋租赁合同到期后房东拒绝退还押金，有没有类似司法案例？"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "pkulaw"
@@ -2157,6 +2263,7 @@
     "帮我查下\"企查查科技股份有限公司\"的股东结构",
     "帮我查询\"企查查科技股份有限公司\"的变更记录，来了解企业沿革情况"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "qcc-company"
@@ -2185,6 +2292,7 @@
     "找几个卖方违约的买卖合同纠纷判决作类案参考",
     "有没有关于个人信息保护的最高法指导性案例？"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "qcc-legal"
@@ -2213,6 +2321,7 @@
     "查看我工作空间下所有的应用列表",
     "帮我查询请假单中所有待审批的记录"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "qingflow"
@@ -2241,6 +2350,7 @@
     "查询上海合合信息科技股份有限公司的股东信息",
     "查询上海合合信息科技股份有限公司近30天的招投标信息"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "qixinhuiyan-mcp"
@@ -2269,6 +2379,7 @@
     "帮我生成上周的邮件汇总：来自客户的有多少封、来自内部同事的有多少封、哪个主题（销售/技术/运营）的邮件最多",
     "搜索所有主题包含【报销】或【发票】且来自财务部的邮件，列出发件人、日期和摘要，我需要核对一笔款项"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "qq-mail"
@@ -2297,6 +2408,7 @@
     "根据我的讲师 Profile 和这个客户 Brief 生成一份可发送的复杂销售培训方案",
     "为制造业大客户销售培训设计并生成一个中文游戏"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "salesnail-instructor"
@@ -2325,6 +2437,7 @@
     "汇总本周销售、项目任务、表单、绩效和内部调研，列出风险、证据缺口和下周动作",
     "查一下华东区重点客户和商机，先给我风险摘要，再创建已确认的跟进任务"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "salestouch"
@@ -2351,6 +2464,7 @@
     "分析销售订单的发货和回款情况",
     "把销售分析报告发协同给销售负责人"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "seeyon-office-marketing-suite"
@@ -2379,6 +2493,7 @@
     "搜索客户 CUST2024001 并查看其所有银行账户的最新余额快照",
     "查账户 6225****1234 最近一个月的交易明细，只看贷方（入账）且金额大于 10000 的记录"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "shanglv-mcp-gateway"
@@ -2407,6 +2522,7 @@
     "写一条销售记录",
     "生成本周销售周报"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "sharecrm"
@@ -2435,6 +2551,7 @@
     "查询某企业在人工智能领域的知识产权与中标动态",
     "对比两家公司近半年的招聘与拿地动态趋势"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "sq-company-dynamic"
@@ -2463,6 +2580,7 @@
     "获取需求【客户反馈】的内容，拆分成子需求并分配处理人",
     "将迭代【v1.0.0 迭代】内未完成的需求移动到下一个迭代"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "tapd"
@@ -2489,6 +2607,7 @@
     "上海到北京的特价机票",
     "苏州到上海的高铁"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "tc-chengxin"
@@ -2517,6 +2636,7 @@
     "筛选市盈率低于20、ROE高于15%的全球股票",
     "查询近期宏观经济政策动向"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "tdx-connector"
@@ -2545,6 +2665,7 @@
     "分析一下本周班级学生的作业完成情况",
     "推荐几个关于光合作用的教学视频"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "teacher-assistant"
@@ -2573,6 +2694,7 @@
     "搜索美国宠物用品品类近 30 天的 TikTok 热门广告素材",
     "为 example.com 生成结构化竞品分析报告"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "tec-do"
@@ -2601,6 +2723,7 @@
     "打开我最近编辑的腾讯文档，帮我总结文档的主要内容和关键要点",
     "在腾讯文档的表格里查找所有【销售额】大于 10 万的记录，按金额从高到低排序"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "tencent-docs"
@@ -2629,6 +2752,7 @@
     "打开我最近编辑的腾讯文档，帮我总结文档的主要内容和关键要点",
     "在腾讯文档的表格里查找所有【销售额】大于 10 万的记录，按金额从高到低排序"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "tencent-docs-oa"
@@ -2656,6 +2780,7 @@
     "帮我查看本月的拜访KPI达成情况",
     "帮我对以下话术进行合规审核"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "tencent-health-nges"
@@ -2684,6 +2809,7 @@
     "从腾讯北京总部大楼去西二旗地铁沿途哪里有加油站？",
     "从北京天安门去首都机场T3有多远，打车需要多长时间？"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "tencent-map"
@@ -2712,6 +2838,7 @@
     "用 VIP 模板帮我建一张工单，处理人是我",
     "现在客服谁在线？"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "tencent-qidian-cs"
@@ -2740,6 +2867,7 @@
     "查看问卷的回收数据并生成汇总报告",
     "给问卷添加一道单选题并设置跳转逻辑"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "tencent-survey"
@@ -2768,6 +2896,7 @@
     "分析 TCHouse-C 集群最近 24 小时耗时最长的 10 条慢 SQL 并给出优化建议",
     "根据我每天 2TB 写入、100 并发查询的业务场景，推荐一个合适的 TCHouse-C 集群规格并估算价格"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "tencent-tchouse-c"
@@ -2796,6 +2925,7 @@
     "帮我把这个文件上传到微云",
     "将刚刚上传的文件生成一个分享链接发到微信群"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "tencent-weiyun"
@@ -2822,6 +2952,7 @@
     "请帮我更新广告 100869559303（广告主 ID: 80429989），开启一键起量，预算设为 200 元",
     "帮我查看账户 69159768 在 2026 年 4 月 29 日到 5 月 18 日的商品维度投放数据，按天和商品分组，重点看消耗、曝光、点击"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "tencentads"
@@ -2846,6 +2977,7 @@
    "examples_zh": [
     "解析并总结这份 PDF 的核心内容：https://web-api.textin.com/image/download?filename=4249da45f6e946d2afd8380d59.pdf"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "textin-xparse"
@@ -2872,6 +3004,7 @@
     "查看我今天的所有会议安排",
     "取消明天的周报评审会议"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "tmeet"
@@ -2900,6 +3033,7 @@
     "梳理一则政策事件对产业链上下游的影响",
     "对比一家公司的行情、公告和机构观点"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "tongzhou-fin-research"
@@ -2928,6 +3062,7 @@
     "帮我查下比亚迪股份有限公司的股东结构",
     "查询腾讯科技（深圳）有限公司的知识产权信息"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "tyc-mcp"
@@ -2954,6 +3089,7 @@
     "根据最近一周我与客户沟通的企业微信邮件和会议，生成给客户的演示文稿",
     "根据产品文档内容，生成一份总结摘要的PDF，文档链接是https://doc.weixin.qq.com/XXXXXX"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "wecom"
@@ -2982,6 +3118,7 @@
     "创建我的员工活码，欢迎语设置为：您好👋，很高兴为您服务！有任何需求随时和我说～",
     "我下午要去拜访张三这个客户，请整理他的客户画像信息，帮我准备一下"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "weisheng-scrm"
@@ -3010,6 +3147,7 @@
     "帮我找半导体相关的股票",
     "看看我有哪些自选股票"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "westock-mcp"
@@ -3038,6 +3176,7 @@
     "查询贵州茅台2024年ROE、营业收入和净利润",
     "查询沪深300最近20日的MACD和涨跌幅"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "wind-finance"
@@ -3066,6 +3205,7 @@
     "北上深关于\"未约定竞业限制经济补偿时用人单位支付标准\"的规定",
     "合同里写『甲方可随时单方解除合同且不承担任何责任』，这条款有没有问题？"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "wk-workbuddy"
@@ -3092,6 +3232,7 @@
     "帮我创建一个商品并上架",
     "查看客户 xxx 的基本资料与组织关系"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "woscli"
@@ -3118,6 +3259,7 @@
     "打开个人知识库看文件树",
     "在知识库里问：上周项目进度总结"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "wps-knowledgebase"
@@ -3146,6 +3288,7 @@
     "先列出我的课程，我选一门后再查看课程详情和学员列表",
     "查询最近 7 天的订单，并打开其中一笔查看详情"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "xiaoe-cloud-cli"
@@ -3174,6 +3317,7 @@
     "识别一下小米集团的主营业务",
     "腾讯和阿里巴巴是什么关系"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "xingtu-claw-risk"
@@ -3202,6 +3346,7 @@
     "分析这几只基金的底层资产分布和组合风险",
     "根据家庭收支和目标制定一份财富规划方案"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "yingmi-mcp"
@@ -3230,6 +3375,7 @@
     "我要去拜访XXX公司，帮我生成一套营销话术",
     "查一下XX公司的基本情况"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "youshu-bd-mate"
@@ -3258,6 +3404,7 @@
     "股东转让了认缴出资但未届期的股权后,对受让前的公司债务还要担责吗?有类似裁判吗?",
     "合作方恒大地产集团,签合同前帮我扫一遍司法风险。"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "yuandian-mcp"
@@ -3286,6 +3433,7 @@
     "帮我开普票给云帐房网络科技有限公司，开票项目是信息技术服务费，含税金额 8600 元",
     "帮我开专票给云帐房网络科技有限公司，开票项目是咨询服务费，含税金额 5300 元"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "yzf-invoice-mcp-server"
@@ -3314,6 +3462,7 @@
     "创建一张去北京出差的差旅报销单",
     "我有一笔餐费要报销，帮我走流程"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "zfs-fssc-ai"
@@ -3340,6 +3489,7 @@
     "帮我在「生财有术」搜索关于「跨境电商」的主题",
     "帮我发一篇帖子，标题是「今天的学习心得」"
    ],
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-plugins.tar.gz",
    "install": {
     "kind": "connector",
     "connector_id": "zsxq"

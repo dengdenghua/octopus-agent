@@ -173,9 +173,22 @@ def main():
                     help="保留数据里的 COS bundleUrl(默认行为,与 --upload-bundles 同时给时以 --keep-cos 优先)")
     ap.add_argument("--inplace", action="store_true",
                     help="重写后的 expert-store.json 直接覆盖 storefront/data(否则只用于发布,本地不变)")
+    ap.add_argument("--no-rebuild", action="store_true",
+                    help="跳过重新生成 plugin-store.json / skill-registry.json(默认每次发布前重建,把本地插件/技能一起带上云端)")
     args = ap.parse_args()
 
     check_gh()
+
+    # 发布前重建插件/技能数据 → 本地插件/技能随商城一起上云
+    if not args.no_rebuild:
+        print("\n=== 0/3 重建插件 + 技能数据(本地 → 云端) ===")
+        scripts = ROOT / "scripts"
+        for script in ("build-plugin-store.py", "build-skill-registry.py"):
+            sp = scripts / script
+            if sp.exists():
+                sh(["python3", str(sp)])
+            else:
+                print(f"(跳过: 缺 {script})")
 
     # 读数据
     data = json.loads(DATA.read_text("utf-8"))
