@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import json
 
 import pytest
@@ -29,12 +30,18 @@ class TestIdentityBasics:
         assert i.roles == ()
         assert i.metadata == {}
 
-    def test_hash_api_key_deterministic(self):
+    def test_hash_api_key_salted_pbkdf2(self):
+        # Salted: two hashes of the same key must differ (random salt).
         h1 = hash_api_key("sk-test-123")
         h2 = hash_api_key("sk-test-123")
-        assert h1 == h2
-        assert h1.startswith("sha256:")
-        assert len(h1) == len("sha256:") + 64  # 64 hex chars
+        assert h1 != h2
+        assert h1.startswith("pbkdf2_sha256$")
+        parts = h1.split("$")
+        assert len(parts) == 4
+        # iterations / salt / digest are all present and parseable
+        assert int(parts[1]) >= 100_000
+        assert len(bytes.fromhex(parts[2])) == 16
+        assert len(bytes.fromhex(parts[3])) == 32
 
     def test_hash_api_key_different_for_different_input(self):
         assert hash_api_key("a") != hash_api_key("b")
@@ -78,9 +85,9 @@ class TestStoreCRUD:
         assert s.verify_api_key("sk-pre").actor_id == "bob"
 
     def test_add_with_bare_hex_hash(self):
-        """Implementation note."""
+        """Legacy bare 64-hex (old sha256) hashes are still accepted."""
         s = IdentityStore()
-        raw_hex = hash_api_key("sk-raw")[len("sha256:") :]
+        raw_hex = hashlib.sha256(b"sk-raw").hexdigest()
         s.add(Identity(actor_id="carol"), api_key_hash=raw_hex)
         assert s.verify_api_key("sk-raw").actor_id == "carol"
 

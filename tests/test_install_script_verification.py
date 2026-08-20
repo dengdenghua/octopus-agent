@@ -16,14 +16,14 @@ _REPO = Path(__file__).resolve().parent.parent
 
 def _extract_helper() -> str:
     lines = (_REPO / "scripts" / "install.sh").read_text(encoding="utf-8").splitlines()
-    start = next(i for i, l in enumerate(lines) if l.startswith("download_verify_run() {"))
+    start = next(i for i, line in enumerate(lines) if line.startswith("download_verify_run() {"))
     # Capture until the closing "}" at column 0 that ends the function.
     depth = 0
     body: list[str] = []
-    for l in lines[start:]:
-        body.append(l)
-        depth += l.count("{") - l.count("}")
-        if depth == 0 and l.strip() == "}":
+    for line in lines[start:]:
+        body.append(line)
+        depth += line.count("{") - line.count("}")
+        if depth == 0 and line.strip() == "}":
             break
     return "\n".join(body)
 

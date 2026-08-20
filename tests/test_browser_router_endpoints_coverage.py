@@ -198,7 +198,7 @@ def _page_client(client):
     c = _c(client)
     _ensure(client)
 
-    center = c.app.state  # not used; sessions live in the backend instance
+    _ = c.app.state  # not used; sessions live in the backend instance
     # Reach into the router's session registry via the sessions endpoint.
     return c
 
@@ -209,13 +209,11 @@ def test_actions_with_page(client, monkeypatch) -> None:
     page = _FakePage()
 
     # Grab the backend session object so we can attach a fake page.
-    backend = br_mod._BrowserBackend  # patched class; instance lives in router closure.
+    _ = br_mod._BrowserBackend  # patched class; instance lives in router closure.
     # The TestClient app holds no reference; instead, drive via a page-aware
     # backend by pre-seeding the session through launch + page injection.
 
     # Simplest: monkeypatch _ensure_real_browser_session to attach a page.
-    orig = _StubBackend._ensure_real_browser_session
-
     def _attach(self, session):
         session["page"] = page
         return True

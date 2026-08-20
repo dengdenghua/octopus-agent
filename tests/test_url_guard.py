@@ -208,6 +208,30 @@ class TestDNSRebinding:
         v = check_url("http://legit.example/")
         assert v.allow
 
+    def test_fake_ip_proxy_pool_is_treated_as_public(self, monkeypatch):
+        """198.18.0.0/15 is the Clash/Surge fake-ip pool standing in for the
+        whole public internet — it must not be flagged as a private/SSRF
+        target or a fake-ip proxy environment can never reach any external
+        MCP/OAuth endpoint."""
+        import runtime.safety.auth.url_guard as guard
+
+        def fake_getaddrinfo(host, *a, **kw):
+            return [
+                (
+                    socket.AF_INET,
+                    socket.SOCK_STREAM,
+                    socket.IPPROTO_TCP,
+                    "",
+                    ("198.18.0.21", 0),
+                )
+            ]
+
+        monkeypatch.setattr(guard.socket, "getaddrinfo", fake_getaddrinfo)
+
+        v = check_url("https://mcp.linear.app/mcp")
+        assert v.allow
+        assert "private" not in v.reason
+
     def test_dns_failure_fails_closed(self, monkeypatch):
         """Implementation note."""
         import runtime.safety.auth.url_guard as guard

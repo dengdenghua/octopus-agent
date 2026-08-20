@@ -8,6 +8,7 @@ import pytest
 
 from runtime.adapters.channels.discord import (
     DiscordChannel,
+    DiscordError,
     DiscordSignatureError,
     _parse_discord_ts,
 )
@@ -129,7 +130,7 @@ def test_send_text_message() -> None:
     bad = _channel(http_client=_FakeHttp())
     # No discord_channel_id in metadata and no thread_id fallback → send must fail.
     orphan = OutboundMessage(channel_id="discord", thread_id=None, content="hi")
-    with pytest.raises(Exception):
+    with pytest.raises(DiscordError):
         bad.send(orphan)
 
 
@@ -142,5 +143,5 @@ def test_post_json_retry_and_error() -> None:
 
     err = _FakeHttp(status=400, data={})
     ch2 = _channel(http_client=err)
-    with pytest.raises(Exception):
+    with pytest.raises(DiscordError):
         ch2._post_json("http://x", body={}, authorization="Bot t")

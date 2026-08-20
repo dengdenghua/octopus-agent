@@ -65,8 +65,10 @@ def test_auto_tick_status_and_error_paths(monkeypatch) -> None:
     def _boom():
         raise ImportError("no module")
 
-    monkeypatch.setattr(addendum_module := __import__(
-        "runtime.safety.recovery.gepa_addendum_store", fromlist=["legacy_global_path"]
-    ), "legacy_global_path", _boom)
+    monkeypatch.setattr(
+        __import__("runtime.safety.recovery.gepa_addendum_store", fromlist=["legacy_global_path"]),
+        "legacy_global_path",
+        _boom,
+    )
     snapped = rf._forge_applied_snapshot()
     assert snapped["applied"] is False and "error" in snapped

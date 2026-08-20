@@ -187,9 +187,10 @@ def test_team_runner_sequential_chains_outputs() -> None:
     assert result.quality_score == 0.8
 
 
-def test_team_runner_sequential_bails_on_role_error() -> None:
+def test_team_runner_sequential_isolates_role_failure() -> None:
+    """① 失败隔离: 单个角色失败不再中断流水线, 部分产出继续交付."""
     topology = TeamTopology(
-        name="bail",
+        name="isolate",
         protocol=CoordinationProtocol.SEQUENTIAL,
         agents={
             Role.PLANNER: AgentSpec(agent_id="p"),
@@ -200,14 +201,17 @@ def test_team_runner_sequential_bails_on_role_error() -> None:
         role_caller=_stub_caller(
             {
                 "p": {"output": "", "success": False, "error": "boom"},
-                "g": {"output": "should not run", "success": True},
+                "g": {"output": "generator still delivers", "success": True},
             }
         )
     )
     result = runner.run(topology, "x")
-    assert result.success is False
-    assert len(result.role_outputs) == 1
-    assert result.error == "planner(p): boom"
+    # 失败隔离: 流水线继续跑完, generator 的交付被保留为最终产出。
+    assert result.success is True
+    assert len(result.role_outputs) == 2
+    assert result.final_output == "generator still delivers"
+    assert result.degraded_roles == ["planner"]
+    assert result.role_outputs[0].error == "boom"
 
 
 def test_team_runner_continues_after_advisory_critic_error() -> None:
@@ -1010,3 +1014,186 @@ def test_team_runner_records_run_to_perf_log(tmp_path: Path) -> None:
     assert rows[0]["topology"] == "e2e-team"
     assert rows[0]["task_bucket"] == "e2e"
     assert rows[0]["extra"]["smoke"] is True
+
+
+# ── ① 失败隔离 + 部分产出继续 ─────────────────────────────────
+
+
+def test_team_runner_sequential_keeps_partial_output_on_error() -> None:
+    """角色失败但有部分产出时, 该产出仍传给下游并被采用."""
+    topology = TeamTopology(
+        name="partial",
+        protocol=CoordinationProtocol.SEQUENTIAL,
+        agents={
+            Role.PLANNER: AgentSpec(agent_id="p"),
+            Role.GENERATOR: AgentSpec(agent_id="g"),
+        },
+    )
+    runner = TeamRunner(
+        role_caller=_stub_caller(
+            {
+                "p": {"output": "partial plan", "success": False, "error": "timeout"},
+                "g": {"output": "built on partial plan", "success": True},
+            }
+        )
+    )
+    result = runner.run(topology, "x")
+    assert result.success is True
+    assert result.final_output == "built on partial plan"
+    assert result.degraded_roles == ["planner"]
+    # 下游 generator 的 prompt 里应包含上一角色的部分产出 + 失败标注。
+    prompts: list[str] = []
+    for out in result.role_outputs:
+        prompts.append(out.output)
+    assert "partial plan" in prompts[0]
+
+
+def test_team_runner_all_failed_is_fatal() -> None:
+    """所有角色都失败且无产出 → 判整体失败."""
+    topology = TeamTopology(
+        name="allfail",
+        protocol=CoordinationProtocol.SEQUENTIAL,
+        agents={
+            Role.PLANNER: AgentSpec(agent_id="p"),
+            Role.GENERATOR: AgentSpec(agent_id="g"),
+        },
+    )
+    runner = TeamRunner(
+        role_caller=_stub_caller(
+            {
+                "p": {"output": "", "success": False, "error": "boom"},
+                "g": {"output": "", "success": False, "error": "quota"},
+            }
+        )
+    )
+    result = runner.run(topology, "x")
+    assert result.success is False
+    assert result.error is not None
+    assert set(result.degraded_roles) == {"planner", "generator"}
+
+
+# ── ③ critic 反驳 → generator 重写 ────────────────────────────
+
+
+def test_critic_rewrite_loop_runs_when_critic_flags_issues() -> None:
+    """critic 提出问题时, generator 会被要求重写并计入 revision_rounds."""
+    topology = TeamTopology(
+        name="revise",
+        protocol=CoordinationProtocol.SEQUENTIAL,
+        agents={
+            Role.PLANNER: AgentSpec(agent_id="p"),
+            Role.GENERATOR: AgentSpec(agent_id="g"),
+            Role.CRITIC: AgentSpec(agent_id="c"),
+            Role.SYNTHESIZER: AgentSpec(agent_id="s"),
+        },
+    )
+    calls: list[tuple[str, str]] = []
+
+    def caller(*, agent_id, prompt, **_kw):
+        calls.append((agent_id, prompt))
+        if agent_id == "p":
+            return {"output": "plan", "success": True}
+        if agent_id == "g":
+            n_gen = sum(1 for (aid, _) in calls if aid == "g")
+            if n_gen == 1:
+                return {"output": "draft v1", "success": True}
+            return {"output": "draft v2 revised", "success": True}
+        if agent_id == "c":
+            return {"output": "问题: 缺少风险分析, 需补充", "success": True}
+        # synthesizer
+        return {"output": "final report", "success": True}
+
+    events: list[dict[str, Any]] = []
+    runner = TeamRunner(role_caller=caller, event_emitter=events.append)
+    result = runner.run(topology, "x")
+    assert result.revision_rounds >= 1
+    assert result.final_output == "final report"
+    # ③ 修订轮次以 team_revision_start 事件显式发出, 供网关渲染"修订 #N"标记。
+    rev_events = [e for e in events if e["type"] == "team_revision_start"]
+    assert rev_events, "expected team_revision_start marker events"
+    assert rev_events[0]["round_no"] == 1
+    # generator 至少被调用 2 次 (初始 + 修订)。
+    gen_calls = sum(1 for (aid, _) in calls if aid == "g")
+    assert gen_calls >= 2
+    # 修订 prompt 应包含批评意见。
+    rev_prompts = [pr for (aid, pr) in calls if aid == "g" and "critic-revision" in pr]
+    assert rev_prompts, "expected a critic-revision prompt"
+    assert "问题" in rev_prompts[0]
+
+
+def test_critic_clean_verdict_skips_rewrite() -> None:
+    """critic 判定没有问题 → 不触发重写."""
+    topology = TeamTopology(
+        name="norevise",
+        protocol=CoordinationProtocol.SEQUENTIAL,
+        agents={
+            Role.PLANNER: AgentSpec(agent_id="p"),
+            Role.GENERATOR: AgentSpec(agent_id="g"),
+            Role.CRITIC: AgentSpec(agent_id="c"),
+            Role.SYNTHESIZER: AgentSpec(agent_id="s"),
+        },
+    )
+    calls: list[tuple[str, str]] = []
+
+    def caller(*, agent_id, prompt, **_kw):
+        calls.append((agent_id, prompt))
+        if agent_id == "p":
+            return {"output": "plan", "success": True}
+        if agent_id == "g":
+            return {"output": "draft", "success": True}
+        if agent_id == "c":
+            return {"output": "未发现问题, 一切正常", "success": True}
+        return {"output": "final", "success": True}
+
+    runner = TeamRunner(role_caller=caller)
+    result = runner.run(topology, "x")
+    assert result.revision_rounds == 0
+    assert result.final_output == "final"
+    gen_calls = sum(1 for (aid, _) in calls if aid == "g")
+    assert gen_calls == 1
+
+
+# ── ② 并行副本交叉验证 ────────────────────────────────────────
+
+
+def test_parallel_replicas_cross_validate_via_critic() -> None:
+    """多副本角色跑完后, critic 对全部副本产出做交叉核查."""
+    topology = TeamTopology(
+        name="xcheck",
+        protocol=CoordinationProtocol.PARALLEL,
+        agents={
+            Role.PLANNER: AgentSpec(agent_id="p"),
+            Role.RESEARCHER: AgentSpec(agent_id="r", parallel_replicas=2),
+            Role.CRITIC: AgentSpec(agent_id="c"),
+            Role.SYNTHESIZER: AgentSpec(agent_id="s"),
+        },
+    )
+    calls: list[tuple[str, str]] = []
+
+    def caller(*, agent_id, prompt, **_kw):
+        calls.append((agent_id, prompt))
+        if agent_id == "p":
+            return {"output": "plan: 3 subproblems", "success": True}
+        if agent_id == "r":
+            return {"output": f"researcher {prompt.count('replica_index')}", "success": True}
+        if agent_id == "c":
+            return {"output": "交叉核查: 副本1与副本2结论重叠", "success": True}
+        return {"output": "final report", "success": True}
+
+    events: list[dict[str, Any]] = []
+    runner = TeamRunner(role_caller=caller, event_emitter=events.append)
+    result = runner.run(topology, "x")
+    assert result.final_output == "final report"
+    # ② 并行阶段与交叉核查都以事件显式发出, 供网关渲染阶段标记。
+    types = [e["type"] for e in events]
+    assert "team_parallel_start" in types
+    assert "team_cross_check_start" in types
+    par = next(e for e in events if e["type"] == "team_parallel_start")
+    assert par["replicas"] == 2
+    # critic 被交叉核查 prompt 调用过。
+    xcheck_prompts = [pr for (aid, pr) in calls if aid == "c" and "cross-validation" in pr]
+    assert xcheck_prompts, "expected a cross-validation critic pass"
+    assert "replica 1" in xcheck_prompts[0]
+    # 交叉核查产出带 metadata 标记。
+    cross_outputs = [o for o in result.role_outputs if o.metadata.get("cross_validation")]
+    assert len(cross_outputs) == 1

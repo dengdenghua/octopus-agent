@@ -27,11 +27,11 @@ class _Client:
 
     def get(self, url, **kw):
         self.calls.append(("get", url, kw))
-        return self._invoke(self.handlers.get(("get", url), _Resp200({})))
+        return self._invoke(self.handlers.get(("get", url), _resp200({})))
 
     def post(self, url, **kw):
         self.calls.append(("post", url, kw))
-        return self._invoke(self.handlers.get(("post", url), _Resp200({})))
+        return self._invoke(self.handlers.get(("post", url), _resp200({})))
 
     def __enter__(self):
         return self
@@ -56,7 +56,7 @@ class _Resp:
             raise RuntimeError(f"HTTP {self.status_code}")
 
 
-def _Resp200(data):
+def _resp200(data):
     return _Resp(data=data)
 
 

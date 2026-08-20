@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from contextlib import suppress
 from pathlib import Path
 
 import pytest
@@ -268,10 +269,8 @@ def test_symlink_in_diff_is_flagged(tmp_path: Path):
 
     def worker(path: str, task: str) -> None:
         (Path(path) / "real.txt").write_text("target\n", encoding="utf-8")
-        try:
+        with suppress(OSError, NotImplementedError):
             (Path(path) / "link.txt").symlink_to("real.txt")
-        except (OSError, NotImplementedError):
-            pass
 
     r = run_worktree_loop(str(repo), ["t1"], worker)
     assert r["ok"] is True
