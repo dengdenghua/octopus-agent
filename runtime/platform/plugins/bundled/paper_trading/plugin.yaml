@@ -1,0 +1,63 @@
+name: paper_trading
+display_name: 模拟炒股
+version: 0.3.0
+description: 模拟炒股练习插件 — 本地模拟交易面板 + 「平台交易」页对接平台配资盘(申请资金/合约/持仓/真实买卖委托,全部二次确认),可选只读接入平台实时大盘。纯个人练习用。
+author: Octopus
+tags:
+  - trading
+  - paper-trading
+  - simulation
+  - practice
+provides:
+  - paper_trading.api
+  - paper_trading.page
+  - paper_trading.skills
+config:
+  initial_cash: 1000000.0
+  data_dir: ~/.octopus/data/paper_trading
+  live_mode: true
+  base_url: http://114.66.32.152:58868/api
+  live_ttl: 30
+  credentials_file: ~/.octopus/data/paper_trading/credentials.json
+  auto_trade: false
+  proxy_origin: true
+config_schema:
+  type: object
+  properties:
+    initial_cash:
+      type: number
+      title: 初始模拟资金
+      description: 首次启动时分配的模拟资金(元)
+      default: 1000000
+    data_dir:
+      type: string
+      title: 状态持久化目录
+      description: 账户/持仓/成交记录 JSON 的落盘目录(默认 ~/.octopus/data/paper_trading)
+    live_mode:
+      type: boolean
+      title: 平台实时行情
+      description: 开启后只读拉取平台后端真实大盘(指数/涨跌家数/市场状态),不进行任何交易
+      default: true
+    base_url:
+      type: string
+      title: 平台 API 地址
+      description: 只读行情来源的 API 根地址(默认 http://114.66.32.152:58868/api)
+    live_ttl:
+      type: number
+      title: 实时行情缓存秒数
+      description: 页面每 2s 刷新,按此秒数合并对平台的请求(默认 30)
+      default: 30
+    credentials_file:
+      type: string
+      title: 凭证文件
+      description: "{phone, password} JSON 文件路径(可选,也可用环境变量 PAPER_TRADING_PHONE/PAPER_TRADING_PASSWORD)"
+    auto_trade:
+      type: boolean
+      title: 自动交易(agent/程序化下单)
+      description: "默认 false:真实下单必须人工在页面二次确认;设为 true 后启用 paper_trading.trade skill,允许 agent 直接向平台自动下单(带 confirm 授权)。开启有风险,请谨慎。"
+      default: false
+    proxy_origin:
+      type: boolean
+      title: 平台原站同源反代(嵌入原版网页)
+      description: "默认 false。设为 true 后把平台原站(/trade 网页及其 /api)反代到 /api/plugins/paper-trading/origin/*,页面即可直接嵌入原版交易界面并复用后端已缓存的登录态。代价:同源代理会让原站脚本以本应用 origin 的权限运行,可读取同源 localStorage(含本应用登录令牌),且原站为明文 HTTP。仅在信任该站点时开启。"
+      default: false

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>模拟炒股 · 平台原版 · Octopus 插件</title>
+<style>
+  :root{
+    --bg:#10131f; --bar:#1a1d33; --line:#39415f; --gold:#f0b90b;
+    --text:#e6e9f0; --muted:#9aa4b8;
+  }
+  *{margin:0; padding:0; box-sizing:border-box;}
+  html,body{height:100%; background:var(--bg); color:var(--text); font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;}
+  .topbar{height:44px; display:flex; align-items:center; gap:12px; padding:0 16px;
+    background:var(--bar); border-bottom:1px solid var(--line);}
+  .topbar .title{font-size:14px; font-weight:600; display:flex; align-items:center; gap:8px;}
+  .topbar .tag{font-size:11px; color:var(--gold); border:1px solid var(--line); border-radius:99px; padding:1px 8px;}
+  .topbar .sp{flex:1;}
+  .topbar a{font-size:12px; color:var(--gold); text-decoration:none; border:1px solid var(--line);
+    border-radius:4px; padding:4px 10px; background:var(--bg);}
+  .topbar a:hover{background:#273043;}
+  .topbar .note{font-size:12px; color:var(--muted);}
+  .topbar .warn{font-size:11px; color:#ff9f43; border:1px solid #5a4520;
+    border-radius:99px; padding:1px 8px; background:#241d10;}
+  #frameWrap{position:absolute; top:44px; left:0; right:0; bottom:0;}
+  #frameWrap iframe{width:100%; height:100%; border:0;}
+  .loadmask{position:absolute; inset:44px 0 0; display:flex; align-items:center; justify-content:center;
+    color:var(--muted); font-size:13px; background:var(--bg); z-index:2;}
+  .loadmask.hide{display:none;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="title">📈 模拟炒股 · 平台原版
+    <span class="tag">同源代理</span>
+  </span>
+  <span class="note">行情与交易走平台原站,已自动带入后端缓存的登录态。</span>
+  <span class="warn" title="原站脚本以本应用 origin 权限运行,且原站为明文 HTTP 传输">同源代理运行中</span>
+  <span class="sp"></span>
+  <a id="openWatch" href="/api/plugins/paper-trading/watch" target="_blank" rel="noopener">📡 盯盘 ↗</a>
+  <a id="openExt" href="origin/trade/#/transaction" target="_blank" rel="noopener">新窗口打开 ↗</a>
+</div>
+
+<div id="frameWrap">
+  <div class="loadmask" id="loadMask">正在加载平台原版页面…</div>
+  <!-- 走同源反代:后端会中和原站的 electron 崩溃并注入已缓存的登录态。
+       路径相对本页(/api/plugins/paper-trading/page),故为 origin/... -->
+  <iframe id="frame" src="origin/trade/#/transaction"></iframe>
+</div>
+
+<script>
+(function(){
+  var fr=document.getElementById('frame');
+  var mask=document.getElementById('loadMask');
+  function hide(){ if(mask) mask.classList.add('hide'); }
+  fr.addEventListener('load', hide);
+  // 兜底:若 iframe 加载异常,8 秒后隐藏遮罩,避免遮挡登录框
+  setTimeout(hide, 8000);
+  var open=document.getElementById('openExt');
+  if(open) open.addEventListener('click', function(){});
+})();
+</script>
+</body>
+</html>
