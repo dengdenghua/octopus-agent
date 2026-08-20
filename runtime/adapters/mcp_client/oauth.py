@@ -73,16 +73,20 @@ def build_authorize_url(
     redirect_uri: str,
     scopes: list[str] | None,
     state: str,
-    code_challenge: str,
+    code_challenge: str | None = None,
+    code_challenge_method: str | None = "S256",
 ) -> str:
     params = {
         "response_type": "code",
         "client_id": client_id,
         "redirect_uri": redirect_uri,
         "state": state,
-        "code_challenge": code_challenge,
-        "code_challenge_method": "S256",
     }
+    # 部分服务商(GitHub 等 OAuth App)不支持 PKCE:不传 code_challenge 即走纯
+    # authorization_code + client_secret 流。
+    if code_challenge:
+        params["code_challenge"] = code_challenge
+        params["code_challenge_method"] = code_challenge_method or "S256"
     if scopes:
         params["scope"] = " ".join(scopes)
     sep = "&" if "?" in authorize_url else "?"
@@ -122,20 +126,22 @@ def exchange_code(
     *,
     token_url: str,
     code: str,
-    code_verifier: str,
+    code_verifier: str | None = None,
     client_id: str,
+    client_secret: str | None = None,
     redirect_uri: str,
 ) -> dict[str, Any]:
-    return _post_form(
-        token_url,
-        {
-            "grant_type": "authorization_code",
-            "code": code,
-            "code_verifier": code_verifier,
-            "client_id": client_id,
-            "redirect_uri": redirect_uri,
-        },
-    )
+    data: dict[str, str] = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+    }
+    if code_verifier:
+        data["code_verifier"] = code_verifier
+    if client_secret:
+        data["client_secret"] = client_secret
+    return _post_form(token_url, data)
 
 
 def refresh_access(*, token_url: str, refresh_token: str, client_id: str) -> dict[str, Any]:
@@ -160,6 +166,8 @@ class _Pending:
     token_url: str
     client_id: str
     created_ts: float
+    client_secret: str = ""
+    use_pkce: bool = True
 
 
 @dataclass
@@ -241,6 +249,7 @@ class MCPOAuthStore:
         self._pending: dict[str, _Pending] = {}
         self._tokens: dict[str, _Tokens] = {}
         self._clients: dict[str, str] = {}  # issuer → registered client_id (DCR)
+        self._app_clients: dict[str, dict[str, str]] = {}  # provider → {client_id, client_secret}
         self._load()
 
     def _load(self) -> None:
@@ -291,12 +300,20 @@ class MCPOAuthStore:
                     token_url=str(pend["token_url"]),
                     client_id=str(pend["client_id"]),
                     created_ts=float(pend.get("created_ts", 0.0)),
+                    client_secret=str(pend.get("client_secret", "")),
+                    use_pkce=bool(pend.get("use_pkce", True)),
                 )
             except (KeyError, TypeError, ValueError):
                 continue
         for issuer, cid in (raw.get("clients") or {}).items():
             if isinstance(cid, str):
                 self._clients[str(issuer)] = cid
+        for prov, app in (raw.get("app_clients") or {}).items():
+            if isinstance(app, dict) and app.get("client_id"):
+                self._app_clients[str(prov)] = {
+                    "client_id": str(app["client_id"]),
+                    "client_secret": str(app.get("client_secret", "")),
+                }
 
     def _save(self) -> None:
         now = time.time()
@@ -323,10 +340,13 @@ class MCPOAuthStore:
                     "token_url": p.token_url,
                     "client_id": p.client_id,
                     "created_ts": p.created_ts,
+                    "client_secret": p.client_secret,
+                    "use_pkce": p.use_pkce,
                 }
                 for s, p in self._pending.items()
             },
             "clients": dict(self._clients),
+            "app_clients": dict(self._app_clients),
         }
         # 0o600 from creation — the token file holds access/refresh tokens
         # and must never be even briefly group/world-readable, so we set
@@ -349,6 +369,8 @@ class MCPOAuthStore:
         redirect_uri: str,
         token_url: str,
         client_id: str,
+        client_secret: str = "",
+        use_pkce: bool = True,
     ) -> str:
         state = secrets.token_urlsafe(32)
         # The callback is intentionally unauthenticated.  Bind the opaque
@@ -367,6 +389,8 @@ class MCPOAuthStore:
                 token_url,
                 client_id,
                 time.time(),
+                client_secret=client_secret,
+                use_pkce=use_pkce,
             )
             self._save()
         return state
@@ -435,6 +459,33 @@ class MCPOAuthStore:
         with self._lock:
             self._clients[issuer] = client_id
             self._save()
+
+    # ── 服务商 OAuth App 凭据(BYO OAuth:用户自己注册的 client_id/secret)─
+    def save_app_client(
+        self,
+        provider: str,
+        client_id: str,
+        client_secret: str,
+    ) -> None:
+        with self._lock:
+            self._app_clients[provider] = {
+                "client_id": client_id,
+                "client_secret": client_secret,
+            }
+            self._save()
+
+    def get_app_client(self, provider: str) -> dict[str, str] | None:
+        with self._lock:
+            app = self._app_clients.get(provider)
+            return dict(app) if app else None
+
+    def forget_app_client(self, provider: str) -> bool:
+        with self._lock:
+            if provider not in self._app_clients:
+                return False
+            del self._app_clients[provider]
+            self._save()
+            return True
 
     def has_tokens(self, server: str) -> bool:
         with self._lock:

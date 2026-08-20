@@ -82,12 +82,23 @@ class ConnectorDefinition:
             "auth_mode": self.auth_mode,
             "source": self.source,
             "provider_id": self.provider_id,
-            "mcp_servers": list(self.mcp_servers.keys()),
+            "mcp_servers": [
+                {
+                    "name": name,
+                    "url": str(cfg.get("url", "")) if isinstance(cfg, dict) else "",
+                }
+                for name, cfg in self.mcp_servers.items()
+            ],
             "skill_count": self.skill_count(),
             "examples_zh": self.examples_zh[:3],
             "installed": installed,
             "enabled": enabled,
             "version": self.version,
+            # CLI 连接器是否带 auth 登录命令(设备流/网页授权码登录)。
+            # 有 auth 命令 → 可跳网页登录,无需手动填 token。
+            "has_cli_auth": bool(self.cli.get("auth")) or bool(
+                self.cli.get("authDeviceFlow")
+            ),
         }
 
     def skill_count(self) -> int:
@@ -221,7 +232,39 @@ class ConnectorRegistry:
         if conn is None:
             raise KeyError(f"connector not found: {connector_id}")
         copied = self._install_skills(conn)
+
+        # CLI 生命周期(对齐 WorkBuddy cli.json):runtime 检查 → init 装工具 →
+        # versionCheck 版本校验。任何失败只降级返回,不阻断安装。
+        cli_life: dict[str, Any] = {"has_cli": bool(conn.cli)}
+        if conn.cli:
+            from runtime.platform.connectors import cli_lifecycle
+
+            runtime_res = cli_lifecycle.check_runtime(conn)
+            init_res = cli_lifecycle.run_init(conn, env=None)
+            version_res = cli_lifecycle.check_version(conn)
+            cli_life = {
+                "has_cli": True,
+                "runtime": runtime_res,
+                "init": init_res,
+                "version": version_res,
+                "auth_device_flow": bool(conn.cli.get("authDeviceFlow")),
+                "min_version": str(conn.cli.get("versionCheck") or {}).strip() and (
+                    (conn.cli.get("versionCheck") or {}).get("minVersion") or ""
+                ),
+            }
         self._set_state(connector_id, installed=True, enabled=False, installed_at=None)
+        msg = (
+            "已安装技能与 MCP 定义。MCP 默认禁用,连接后(connect)按需启用。"
+            if conn.mcp_servers
+            else "已安装技能(纯技能连接器无需 MCP)。"
+        )
+        if cli_life.get("has_cli"):
+            if cli_life.get("init", {}).get("ok"):
+                msg = "CLI 工具已安装。" + msg
+            elif cli_life.get("init", {}).get("error"):
+                msg = f"CLI init 未完成({cli_life['init']['error']});请先安装工具。" + msg
+            if cli_life.get("version", {}).get("error"):
+                msg = msg + f" 版本提示:{cli_life['version']['error']}"
         return {
             "installed": True,
             "connector_id": connector_id,
@@ -229,12 +272,10 @@ class ConnectorRegistry:
             "auth_mode": conn.auth_mode,
             "copied_skills": copied,
             "mcp_servers": list(conn.mcp_servers.keys()),
+            "cli_lifecycle": cli_life,
+            "min_version": conn.min_version,
             "enabled": False,
-            "message": (
-                "已安装技能与 MCP 定义。MCP 默认禁用,连接后(connect)按需启用。"
-                if conn.mcp_servers
-                else "已安装技能(纯技能连接器无需 MCP)。"
-            ),
+            "message": msg,
         }
 
     def _install_skills(self, conn: ConnectorDefinition) -> list[str]:

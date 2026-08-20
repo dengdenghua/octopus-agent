@@ -14,10 +14,15 @@ from __future__ import annotations
 import json
 import os
 import platform
+import re
 import shlex
 import subprocess
+import threading
+import time
+from dataclasses import dataclass
 from typing import Any
 
+from runtime.platform.connectors import cli_lifecycle
 from runtime.platform.connectors.connector_registry import ConnectorDefinition
 from runtime.platform.connectors.credential_store import CredentialStore
 
@@ -39,6 +44,26 @@ def _platform_key() -> str:
     if sys == "windows":
         return "win32"
     return "linux"
+
+
+# ── 设备流会话(WorkBuddy ``authDeviceFlow``)──────────────
+# CLI 登录命令往往是阻塞的设备流:后台跑 auth 命令 → 解析 verification_uri /
+# user_code → 前端弹窗 + 轮询 status。登录成功或超时后终止后台进程。
+
+
+@dataclass
+class DeviceFlowSession:
+    connector_id: str
+    proc: Any  # subprocess.Popen | None
+    verification_uri: str
+    user_code: str
+    expires_in: int
+    started_at: float
+    opened: bool = False
+
+
+_device_flows: dict[str, DeviceFlowSession] = {}
+_device_lock = threading.Lock()
 
 
 def _pick_platform(cmd_map: Any) -> str | None:
@@ -78,6 +103,11 @@ class AuthOrchestrator:
                 "output": stdout[:500],
                 "connected": code == 0 and self._match_status(conn, stdout),
             }
+        # 设备流:status 确认已登录(或超时) → 终止并清理后台 auth 进程
+        cli_connected = bool(
+            (detail.get("cli_status") or {}).get("connected")
+        ) or bool(detail.get("has_token"))
+        self._finish_device_flow(conn, cli_connected)
         return detail
 
     def connect(
@@ -111,6 +141,10 @@ class AuthOrchestrator:
             if not cmd:
                 return {"connected": False, "message": "当前平台无 auth 命令。"}
             if run_cli:
+                # 设备流:后台启动登录,返回 verification_uri / user_code 供前端
+                # 弹窗 + 轮询 status,不再阻塞等 CLI 退出。
+                if conn.cli.get("authDeviceFlow"):
+                    return self.start_device_flow(conn)
                 code, stdout = self._run_cli(conn, conn.cli.get("auth"), timeout=600)
                 connected = code == 0 and self._match_status(conn, stdout or "")
                 return {
@@ -141,10 +175,154 @@ class AuthOrchestrator:
             "cli_output": cli_out,
         }
 
+    # ── 设备流(WorkBuddy ``authDeviceFlow``)──────────────────
+    def start_device_flow(self, conn: ConnectorDefinition) -> dict[str, Any]:
+        """后台启动 CLI 设备流登录,解析 authorization URI + user_code。
+
+        返回 ``{"connected": False, "device_flow": {...}}``,前端弹窗打开
+        ``verification_uri``(URI 通常已内嵌 user_code)并轮询 ``status``。
+        """
+        spec = (conn.cli or {}).get("authDeviceFlow") or {}
+        default_ttl = float(spec.get("defaultExpiresInSeconds", 240))
+        with _device_lock:
+            sess = _device_flows.get(conn.id)
+            if sess and time.time() - sess.started_at < min(sess.expires_in, default_ttl):
+                return self._device_flow_payload(conn, sess)
+        cmd = cli_lifecycle.resolve_cmd((conn.cli or {}).get("auth"))
+        if not cmd:
+            return {"connected": False, "message": "当前平台无 auth 命令。"}
+        env = self.resolve_env(conn)
+        try:
+            proc = subprocess.Popen(
+                shlex.split(cmd),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                env={**os.environ, **env},
+            )
+        except Exception as exc:  # noqa: BLE001
+            return {"connected": False, "message": f"设备流启动失败: {exc}"}
+        sess = DeviceFlowSession(
+            connector_id=conn.id,
+            proc=proc,
+            verification_uri="",
+            user_code="",
+            expires_in=int(default_ttl),
+            started_at=time.time(),
+        )
+        with _device_lock:
+            _device_flows[conn.id] = sess
+        threading.Thread(
+            target=self._drain_device_output,
+            args=(conn, sess),
+            daemon=True,
+        ).start()
+        # 等最多 6s 解析出授权 URI(命令行启动 + 首行输出)
+        deadline = time.time() + 6
+        while time.time() < deadline and not sess.verification_uri:
+            time.sleep(0.2)
+        return self._device_flow_payload(conn, sess)
+
+    def _drain_device_output(self, conn: ConnectorDefinition, sess: DeviceFlowSession) -> None:
+        spec = (conn.cli or {}).get("authDeviceFlow") or {}
+        uri_re = re.compile(str(spec.get("uriPattern") or ""))
+        code_re = re.compile(str(spec.get("codePattern") or ""))
+        try:
+            if not sess.proc or not sess.proc.stdout:
+                return
+            for line in sess.proc.stdout:
+                if sess.verification_uri and sess.user_code:
+                    break
+                if uri_re.pattern and not sess.verification_uri:
+                    m = uri_re.search(line)
+                    if m:
+                        uri = m.group(1) if m.groups() else m.group(0)
+                        if cli_lifecycle.validate_auth_uri(uri, conn):
+                            sess.verification_uri = uri
+                if code_re.pattern and not sess.user_code:
+                    m = code_re.search(line)
+                    if m:
+                        sess.user_code = m.group(1) if m.groups() else m.group(0)
+        finally:
+            if sess.proc and sess.proc.poll() is None and not sess.opened:
+                # CLI 已自行退出(可能出错),避免进程泄漏
+                try:
+                    sess.proc.terminate()
+                except Exception:  # noqa: BLE001
+                    pass
+
+    def _device_flow_payload(
+        self,
+        conn: ConnectorDefinition,
+        sess: DeviceFlowSession,
+    ) -> dict[str, Any]:
+        spec = (conn.cli or {}).get("authDeviceFlow") or {}
+        return {
+            "connected": False,
+            "auth_mode": conn.auth_mode,
+            "device_flow": {
+                "connector_id": conn.id,
+                "verification_uri": sess.verification_uri,
+                "user_code": sess.user_code,
+                "expires_in": sess.expires_in,
+                "code_embedded_in_uri": bool(spec.get("codeEmbeddedInUri")),
+                "message": (
+                    "已启动设备流登录,请在打开的页面完成授权。"
+                    if sess.verification_uri
+                    else "设备流已启动,正在等待授权地址…"
+                ),
+            },
+        }
+
+    def _finish_device_flow(self, conn: ConnectorDefinition, connected: bool) -> None:
+        """设备流登录完成(或过期)→ 终止并清理后台 auth 进程。"""
+        with _device_lock:
+            sess = _device_flows.get(conn.id)
+            if sess is None:
+                return
+            expired = time.time() - sess.started_at >= sess.expires_in
+            if not (connected or expired):
+                return
+            _device_flows.pop(conn.id, None)
+            proc = sess.proc
+        if proc and proc.poll() is None:
+            try:
+                proc.terminate()
+            except Exception:  # noqa: BLE001
+                pass
+
+    def device_flow_status(self, conn: ConnectorDefinition) -> dict[str, Any]:
+        """返回活跃设备流信息(未启动/已结束 → device_flow=None)。"""
+        with _device_lock:
+            sess = _device_flows.get(conn.id)
+            if sess is None:
+                return {"connector_id": conn.id, "active": False, "device_flow": None}
+            return {"connector_id": conn.id, "active": True, **self._device_flow_payload(conn, sess)}
+
+    def cancel_device_flow(self, conn: ConnectorDefinition) -> dict[str, Any]:
+        """取消进行中的设备流登录(终止后台进程)。"""
+        with _device_lock:
+            sess = _device_flows.pop(conn.id, None)
+        if sess and sess.proc and sess.proc.poll() is None:
+            try:
+                sess.proc.terminate()
+            except Exception:  # noqa: BLE001
+                pass
+        return {"cancelled": True, "connector_id": conn.id}
+
     # ── 注入 ──────────────────────────────────────────────────
     def resolve_headers(self, conn: ConnectorDefinition) -> dict[str, str]:
         """为 MCP/HTTP 请求生成要注入的 auth 头。"""
         headers: dict[str, str] = {}
+        # 0) oneid-token(腾讯统一身份):注入 X-ONEID-ACCESS-TOKEN
+        if conn.auth_mode == "oneid-token":
+            tok = (
+                self._credentials.get_secret(conn.id, "oneid_token")
+                or self._credentials.get_secret(conn.id, "access_token")
+            )
+            if tok:
+                headers["X-ONEID-ACCESS-TOKEN"] = tok
         # 1) connector 自带规则(connectors.json auth_injection_rules)
         for rule in self._rules:
             if conn.id not in rule.get("applies_to_connectors", []):
