@@ -58,7 +58,7 @@ import type {
 import type { ReasoningMode } from "@/components/workspace/reasoning-mode";
 import type { PersonalMode } from "@/components/workspace/personal-mode-selector";
 import { RecRecorderOverlay } from "@/components/workspace/rec-recorder-overlay";
-import type { PromptInputFilePart } from "@/core/uploads";
+import type { PromptInputFilePart, UploadedFileInfo } from "@/core/uploads";
 import { normalizeWorkspaceArtifactRef } from "@/core/artifacts/utils";
 import { ChatPageLayout } from "@/components/workspace/chat-page-layout";
 import { RunDurationBadge } from "@/components/workspace/run-duration-badge";
@@ -98,7 +98,6 @@ import {
 } from "@/core/agent-modes/presets";
 import { PlanPanel } from "@/components/workspace/plan-panel";
 import { AutomationSubscriptionPanel } from "@/components/workspace/automation/automation-subscription-panel";
-import { PetSettingsMenu } from "@/components/workspace/pet-settings-menu";
 import { AssistantSettingsMenu } from "@/components/workspace/assistant-settings-menu";
 import { StreamingDebugger } from "@/components/workspace/streaming-debugger";
 import { ContextCompressionIndicator } from "@/components/workspace/context-compression-indicator";
@@ -2103,7 +2102,9 @@ function RealtimePageContent({
   const sidebarThreadId =
     thread.threadId ?? localStartedThreadIdRef.current ?? threadId;
   // Forward the derived run state to the Godot desktop pet (no-op in browser).
-  const petMood = usePetAgentEvents({
+  // The in-page sprite pet was removed — the desktop sidecar is the only pet
+  // now, so the returned mood is unused and the call is kept for its effect.
+  usePetAgentEvents({
     runState: sidebarRunState,
     settled: agentRunSettled,
     failed: agentRunFailed,
@@ -2401,7 +2402,12 @@ function RealtimePageContent({
   }, []);
 
   const handleSubmit = useCallback(
-    (message: { text: string; images?: File[]; files?: File[] }) => {
+    (message: {
+      text: string;
+      images?: File[];
+      files?: File[];
+      uploaded?: UploadedFileInfo[];
+    }) => {
       // Intent-based mode auto-switch: only in project/code mode, and never
       // for the octopus assistant (fixed chat persona). Manual override wins —
       // when the user has hand-picked a mode we only suggest, never silently
@@ -2460,6 +2466,11 @@ function RealtimePageContent({
         void sendMessage(threadId, { text: message.text, files: [] });
         return;
       }
+      // Composer-side uploads already happened on attach; align them back onto
+      // the parts by filename so the send path can skip the network.
+      const uploadedByName = new Map(
+        (message.uploaded ?? []).map((info) => [info.filename, info]),
+      );
       // Read each image into a data URL so PromptInputFilePart has the
       // `url` field FileUIPart requires; the original File is also
       // attached so the upload path can re-use the bytes without
@@ -2469,6 +2480,7 @@ function RealtimePageContent({
           (file) =>
             new Promise<PromptInputFilePart>((resolve, reject) => {
               const mediaType = file.type || "application/octet-stream";
+              const uploaded = uploadedByName.get(file.name);
               if (!mediaType.toLowerCase().startsWith("image/")) {
                 resolve({
                   type: "file",
@@ -2476,6 +2488,7 @@ function RealtimePageContent({
                   filename: file.name,
                   url: "",
                   file,
+                  uploaded,
                 });
                 return;
               }
@@ -2489,6 +2502,7 @@ function RealtimePageContent({
                   filename: file.name,
                   url,
                   file,
+                  uploaded,
                 });
               };
               reader.onerror = () =>
@@ -2987,7 +3001,6 @@ function RealtimePageContent({
                       </Button>
                     )}
                     {isOctopusAssistant && <AssistantSettingsMenu />}
-                    {isOctopusAssistant && <PetSettingsMenu />}
                     <RightPanelMenu
                       activePage={activeRightPanel}
                       artifactCount={artifactCount}
@@ -3119,8 +3132,6 @@ function RealtimePageContent({
                           disabled={researchLoading}
                           workDir={effectiveWorkDir}
                           displayAgent={composerDisplayAgent}
-                          petMood={petMood}
-                          showPet={isNewThread}
                           showWorkDirSelector={!isOctopusAssistant}
                           onWorkDirChange={handleWorkDirChange}
                           lockWorkDirToThread={!isNewThread}

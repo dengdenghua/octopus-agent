@@ -2,13 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AppWindowIcon,
   ArchiveIcon,
-  BrainIcon,
   ChevronRightIcon,
   CopyIcon,
   DatabaseIcon,
   ExternalLinkIcon,
   EyeIcon,
-  FileArchiveIcon,
   FileImageIcon,
   FileSearchIcon,
   FileTextIcon,
@@ -17,11 +15,8 @@ import {
   FolderOpenIcon,
   FolderSearchIcon,
   FolderPlusIcon,
-  Grid3X3Icon,
   HardDriveIcon,
-  ImageIcon,
   LayoutListIcon,
-  ListFilterIcon,
   LockKeyholeIcon,
   MessageSquarePlusIcon,
   PlayIcon,
@@ -31,7 +26,6 @@ import {
   ShieldCheckIcon,
   SlidersHorizontalIcon,
   SparklesIcon,
-  TablePropertiesIcon,
   TagIcon,
   UserIcon,
   UsersIcon,
@@ -105,16 +99,6 @@ type LibraryKey =
   | "videos"
   | "computer"
   | "sources";
-
-interface TopicItem {
-  title: string;
-  subtitle: string;
-  count: string;
-  status: string;
-  icon: LucideIcon;
-  tone: string;
-  covers: string[];
-}
 
 interface AppItem {
   id: string;
@@ -240,210 +224,6 @@ const DEFAULT_POLICY: NASPolicy = {
 const delay = (ms: number) =>
   new Promise((resolve) => window.setTimeout(resolve, ms));
 
-function buildDocTopics(copy: StorageCopy): TopicItem[] {
-  return [
-    topic(
-      copy.topics.docsAllTitle,
-      copy.topics.docsAllSubtitle,
-      "1,284",
-      copy.topics.docsAllStatus,
-      FileTextIcon,
-      "blue",
-      ["PDF", "DOC", "MD"],
-    ),
-    topic(
-      copy.topics.docsSourcesTitle,
-      copy.topics.docsSourcesSubtitle,
-      "32",
-      copy.topics.docsSourcesStatus,
-      FolderOpenIcon,
-      "green",
-      [
-        copy.topics.coverWork,
-        copy.topics.coverProject,
-        copy.topics.coverDownloads,
-      ],
-    ),
-    topic(
-      copy.topics.docsTopicsTitle,
-      copy.topics.docsTopicsSubtitle,
-      "18",
-      copy.topics.docsTopicsStatus,
-      BrainIcon,
-      "violet",
-      [
-        copy.topics.coverContract,
-        copy.topics.coverTech,
-        copy.topics.coverResearch,
-      ],
-    ),
-    topic(
-      copy.topics.docsRecentTitle,
-      copy.topics.docsRecentSubtitle,
-      "96",
-      copy.topics.docsRecentStatus,
-      FileSearchIcon,
-      "zinc",
-      [copy.topics.coverToday, copy.topics.cover7Days, copy.topics.cover30Days],
-    ),
-  ];
-}
-
-function buildImageTopics(copy: StorageCopy): TopicItem[] {
-  return [
-    topic(
-      copy.topics.imagesAllTitle,
-      copy.topics.imagesAllSubtitle,
-      "8,426",
-      copy.topics.imagesAllStatus,
-      FileImageIcon,
-      "green",
-      ["JPG", "PNG", "WEBP"],
-    ),
-    topic(
-      copy.topics.imagesTopicsTitle,
-      copy.topics.imagesTopicsSubtitle,
-      "41",
-      copy.topics.imagesTopicsStatus,
-      SparklesIcon,
-      "violet",
-      [
-        copy.topics.coverPeople,
-        copy.topics.coverPlaces,
-        copy.topics.coverTheme,
-      ],
-    ),
-    topic(
-      copy.topics.imagesSourcesTitle,
-      copy.topics.imagesSourcesSubtitle,
-      "24",
-      copy.topics.imagesSourcesStatus,
-      FolderOpenIcon,
-      "blue",
-      [
-        copy.topics.coverDesktop,
-        copy.topics.coverDownloads,
-        copy.topics.coverWechat,
-      ],
-    ),
-    topic(
-      copy.topics.imagesOcrTitle,
-      copy.topics.imagesOcrSubtitle,
-      "1,230",
-      copy.topics.imagesOcrStatus,
-      ImageIcon,
-      "amber",
-      [
-        copy.topics.coverWhiteboard,
-        copy.topics.coverInterface,
-        copy.topics.coverSpreadsheet,
-      ],
-    ),
-  ];
-}
-
-function buildDocFiles(copy: StorageCopy): FileItem[] {
-  return [
-    file(
-      copy.demoFiles.doc1Name,
-      "~/Documents/Research/AI Glasses.md",
-      copy.demoFiles.doc1Kind,
-      copy.demoFiles.doc1Updated,
-      "128 KB",
-      FileTextIcon,
-      "blue",
-    ),
-    file(
-      copy.demoFiles.doc2Name,
-      "~/Documents/Product/Roadmap.pptx",
-      copy.demoFiles.doc2Kind,
-      copy.demoFiles.doc2Updated,
-      "18.4 MB",
-      TablePropertiesIcon,
-      "amber",
-    ),
-    file(
-      copy.demoFiles.doc3Name,
-      "~/Documents/Contracts/Vendor.pdf",
-      copy.demoFiles.doc3Kind,
-      copy.demoFiles.doc3Updated,
-      "3.2 MB",
-      FileArchiveIcon,
-      "rose",
-    ),
-    file(
-      copy.demoFiles.doc4Name,
-      "~/Public/octopus/local-models.md",
-      copy.demoFiles.doc4Kind,
-      copy.demoFiles.doc4Updated,
-      "42 KB",
-      BrainIcon,
-      "violet",
-    ),
-    file(
-      copy.demoFiles.doc5Name,
-      "~/Documents/NAS/Permissions.xlsx",
-      copy.demoFiles.doc5Kind,
-      copy.demoFiles.doc5Updated,
-      "812 KB",
-      FileSearchIcon,
-      "green",
-    ),
-  ];
-}
-
-function buildImageFiles(copy: StorageCopy): FileItem[] {
-  return [
-    file(
-      "aoi-front-transparent.png",
-      "~/Pictures/Agents/aoi-front.png",
-      copy.demoFiles.image1Kind,
-      copy.demoFiles.image1Updated,
-      "4.8 MB",
-      FileImageIcon,
-      "green",
-    ),
-    file(
-      copy.demoFiles.image2Name,
-      "~/Pictures/Whiteboard/meeting.jpg",
-      copy.demoFiles.image2Kind,
-      copy.demoFiles.image2Updated,
-      "2.1 MB",
-      ImageIcon,
-      "blue",
-    ),
-    file(
-      copy.demoFiles.image3Name,
-      "~/Pictures/Screenshots/workspace.webp",
-      copy.demoFiles.image3Kind,
-      copy.demoFiles.image3Updated,
-      "980 KB",
-      FileImageIcon,
-      "violet",
-    ),
-    file(
-      copy.demoFiles.image4Name,
-      "~/Pictures/Receipts/travel.png",
-      copy.demoFiles.image4Kind,
-      copy.demoFiles.image4Updated,
-      "1.4 MB",
-      FileSearchIcon,
-      "amber",
-    ),
-  ];
-}
-
-function topic(
-  title: string,
-  subtitle: string,
-  count: string,
-  status: string,
-  icon: LucideIcon,
-  tone: string,
-  covers: string[],
-): TopicItem {
-  return { title, subtitle, count, status, icon, tone, covers };
-}
 
 function mapNASApp(item: NASApp, copy: StorageCopy): AppItem {
   const category =
@@ -616,18 +396,6 @@ function disk(
   active = false,
 ): DiskItem {
   return { name, path, type, size, icon, active };
-}
-
-function file(
-  name: string,
-  path: string,
-  kind: string,
-  updated: string,
-  size: string,
-  icon: LucideIcon,
-  tone: string,
-): FileItem {
-  return { name, path, kind, updated, size, icon, tone };
 }
 
 export default function StoragePage() {
@@ -1576,8 +1344,8 @@ function VideoLibraryView({
   const [isIndexing, setIsIndexing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // 安全检查：确保 files 不是 undefined
-  const safeFiles = files || [];
+  // 安全检查：确保 files 引用稳定（files 始终为数组）
+  const safeFiles = useMemo(() => files, [files]);
   const [hasSearched, setHasSearched] = useState(false);
   const [isVideoSearching, setIsVideoSearching] = useState(false);
   const [searchHits, setSearchHits] = useState<NASVideoSearchHit[]>([]);
@@ -2232,47 +2000,6 @@ function VideoPlayerDialog({
         </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function TopicNavRow({
-  topic: item,
-  active,
-}: {
-  topic: TopicItem;
-  active: boolean;
-}) {
-  const { t } = useI18n();
-  const Icon = item.icon;
-  return (
-    <button
-      type="button"
-      className={cn(
-        "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors",
-        active
-          ? "bg-card shadow-[var(--shadow-xs)] ring-1 ring-border"
-          : "hover:bg-white/70",
-      )}
-    >
-      <span
-        className={cn(
-          "flex size-9 shrink-0 items-center justify-center rounded-lg",
-          toneClass(item.tone),
-        )}
-      >
-        <Icon className="size-4" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">{item.title}</span>
-        <span className="block truncate text-xs text-muted-foreground">
-          {fill(t.storage.overview.itemsWithStatus, {
-            count: item.count,
-            status: item.status,
-          })}
-        </span>
-      </span>
-      <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
-    </button>
   );
 }
 

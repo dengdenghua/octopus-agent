@@ -975,7 +975,6 @@ export default function NewAgentPage() {
                     disabled={thread.isLoading}
                     placeholder={t.agents.createPageSubtitle}
                     autoFocus
-                    showPet={false}
                   />
                 )}
               </div>

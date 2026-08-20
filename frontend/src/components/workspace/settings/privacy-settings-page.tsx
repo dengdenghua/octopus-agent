@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertTriangleIcon,
-  LoaderCircleIcon,
   PlusIcon,
   RefreshCwIcon,
   TrashIcon,

@@ -1,8 +1,6 @@
 import {
   ActivityIcon,
   BellIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   InfoIcon,
   BrainIcon,
   CpuIcon,
@@ -546,19 +544,6 @@ export function SettingsDialog(props: SettingsDialogProps) {
     );
   }, [normalizedSettingsQuery, sections]);
   const hasSettingsResults = visibleSections.length > 0;
-  const sectionScrollLabels = useMemo(() => {
-    const language = locale.toLowerCase();
-    if (language.startsWith("zh")) {
-      return { before: "查看前面的设置", after: "查看更多设置" };
-    }
-    if (language.startsWith("ja")) {
-      return { before: "前の設定を見る", after: "他の設定を見る" };
-    }
-    if (language.startsWith("ko")) {
-      return { before: "이전 설정 보기", after: "설정 더 보기" };
-    }
-    return { before: "View previous settings", after: "View more settings" };
-  }, [locale]);
 
   useEffect(() => {
     if (!dialogProps.open) return;

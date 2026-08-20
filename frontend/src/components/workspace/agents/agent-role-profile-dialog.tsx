@@ -15,6 +15,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
+import type { EvolutionStoryChange } from "@/core/evolution/api";
 import { useEvolutionOverview, useSkillPerformance, useEvolutionStory } from "@/core/evolution/hooks";
 import {
   calculateLevel,
@@ -1120,14 +1121,14 @@ export function AgentRoleProfileDialog({
     const timelineEvents: TimelineEvent[] = [];
 
     if (evolutionStory?.changes) {
-      evolutionStory.changes.slice(0, 10).forEach((change: any, idx: number) => {
+      evolutionStory.changes.slice(0, 10).forEach((change: EvolutionStoryChange, idx: number) => {
         timelineEvents.push({
           id: `event-${idx}`,
-          type: change.category === 'skill_added' ? 'skill' :
-                change.category === 'rule_added' ? 'rule' : 'achievement',
+          type: change.kind === 'skill' ? 'skill' :
+                change.kind === 'rule' ? 'rule' : 'achievement',
           timestamp: new Date(Date.now() - idx * 86400000).toISOString(),
-          title: change.description || '未知事件',
-          description: change.category,
+          title: change.title || '未知事件',
+          description: change.content || change.kind,
         });
       });
     }
@@ -1626,7 +1627,7 @@ export function AgentRoleProfileDialog({
                             ? "text-primary"
                             : "text-white/50 hover:text-white/80"
                         )}
-                        onClick={() => setActiveBottomTab(tab.id as any)}
+                        onClick={() => setActiveBottomTab(tab.id as "overview" | "growth" | "radar" | "skills")}
                       >
                         <span>{tab.icon}</span>
                         <span>{tab.label}</span>
