@@ -75,7 +75,8 @@ export type AgentWorkbenchTabId =
   | "plan"
   | "diff"
   | "terminal"
-  | "browser";
+  | "browser"
+  | "project";
 
 export type JsonRecord = Record<string, unknown>;
 

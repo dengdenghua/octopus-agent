@@ -2,6 +2,7 @@ import {
   ArrowLeftIcon,
   ChevronRightIcon,
   DownloadIcon,
+  FolderKanbanIcon,
   GlobeIcon,
   PackageIcon,
   SparklesIcon,
@@ -59,6 +60,10 @@ import {
 } from "./agent-workbench-panel/workbench-tab-header";
 import { BrowserTabPage } from "./agent-workbench-panel/browser-tab-page";
 import { AgentKanbanView } from "./agent-workbench-panel/agent-kanban-view";
+import {
+  ProjectOsTab,
+  useBoundProjectState,
+} from "./agent-workbench-panel/project-os-tab";
 import type { WorkbenchRosterSeat } from "./agent-workbench-panel/helpers";
 import { useWorkbenchSelection } from "./agent-workbench-panel/use-workbench-selection";
 import { WorkbenchSnapshotCache } from "@/core/cache/workbench-snapshot-cache";
@@ -418,6 +423,12 @@ function AgentWorkbenchPanelImpl({
     return () => window.removeEventListener("keydown", handleEscape);
   }, [onClose]);
 
+  // Project OS binding: fetch the project bound to this thread so the
+  // workbench can surface a "项目" tab with live milestones / PM console.
+  const projectOsQuery = useBoundProjectState(threadId);
+  const boundProject = projectOsQuery.data;
+  const hasBoundProject = !projectOsQuery.isLoading && !!boundProject;
+
   const emptyShell =
     blocks.length === 0 &&
     agentTiles.length === 0 &&
@@ -462,10 +473,13 @@ function AgentWorkbenchPanelImpl({
     | "diff"
     | "terminal"
     | "browser"
-    | "artifacts" =
+    | "artifacts"
+    | "project" =
     requestedActiveTab === "subagents" || requestedActiveTab === "plan"
       ? "agent"
-      : requestedActiveTab;
+      : requestedActiveTab === "project" && !hasBoundProject
+        ? "agent"
+        : requestedActiveTab;
   const workbenchTabs: WorkbenchTab[] = useMemo(
     () => [
       {
@@ -488,8 +502,17 @@ function AgentWorkbenchPanelImpl({
         label: t.conversation.artifactsTitle,
         Icon: PackageIcon,
       },
+      ...(hasBoundProject
+        ? [
+            {
+              id: "project" as const,
+              label: t.agentWorkbenchPages.projectTab,
+              Icon: FolderKanbanIcon,
+            },
+          ]
+        : []),
     ],
-    [t.agentWorkbenchPages, t.conversation],
+    [t.agentWorkbenchPages, t.conversation, hasBoundProject],
   );
 
   // Auto-open a tab if it becomes the effective active tab
@@ -582,7 +605,12 @@ function AgentWorkbenchPanelImpl({
     : "summary";
 
   // Workbench view: summary / computer view.
-  if (emptyShell && !selectedEffectKey && !focusedProcessEvent) {
+  if (
+    emptyShell &&
+    effectiveActiveTab !== "project" &&
+    !selectedEffectKey &&
+    !focusedProcessEvent
+  ) {
     return (
       <EmptyShellView
         mainButton={{
@@ -685,6 +713,13 @@ function AgentWorkbenchPanelImpl({
         runBlocked={runBlocked}
         runSettled={runSettled}
         isLoading={isLoading}
+      />
+    ) : effectiveActiveTab === "project" && boundProject ? (
+      <ProjectOsTab
+        state={boundProject}
+        onRefetch={() => {
+          void projectOsQuery.refetch();
+        }}
       />
     ) : (
       agentKanbanPage

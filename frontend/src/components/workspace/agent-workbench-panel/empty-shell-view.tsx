@@ -35,7 +35,7 @@ export function EmptyShellView({
   visibleTabs: WorkbenchTab[];
   workbenchTabs: WorkbenchTab[];
   closedTabs: Set<AgentWorkbenchTabId>;
-  effectiveActiveTab: "agent" | "diff" | "terminal" | "browser" | "artifacts";
+  effectiveActiveTab: "agent" | "diff" | "terminal" | "browser" | "artifacts" | "project";
   onTabClick: (tabId: AgentWorkbenchTabId) => void;
   onTabClose: (tabId: AgentWorkbenchTabId) => void;
   visibleDiffEntries: DiffEntry[];
