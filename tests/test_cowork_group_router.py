@@ -270,3 +270,41 @@ def test_health_endpoint_includes_runner_status_when_runtime_attached(tmp_path) 
     assert h["runner"]["status"]["total_ticks"] == 1
     assert h["runner"]["status"]["last_ran_count"] == 1
     assert h["runner"]["status"]["last_error"] is None
+
+
+def test_project_mode_auto_binds_project_for_workbench_tab(tmp_path) -> None:
+    """Regression: switching a thread to 'project' mode previously only flipped
+    the group mode — no Project OS project was ever created/bound, so the
+    workbench 项目 tab (GET /api/projects/by-thread) had nothing to render
+    (thread t0Wn5Zhvh3VUFwoAR2uP4M switched to project mode but by-thread 404'd).
+    Entering project mode must ensure a real project exists and is bound."""
+    from runtime.projectos.store import ProjectStore
+
+    (tmp_path / "projects").mkdir(parents=True, exist_ok=True)
+    project_store = ProjectStore(base_dir=str(tmp_path / "projects"))
+    app = FastAPI()
+    app.include_router(
+        create_cowork_group_router(
+            store=GroupStore(base_dir=tmp_path),
+            project_store=project_store,
+        )
+    )
+    c = TestClient(app)
+    t = "thread-proj-mode"
+    c.post(f"/api/cowork/{t}/members", json={"target_id": "alice", "kind": "agent"})
+    c.post(f"/api/cowork/{t}/members", json={"target_id": "bob", "kind": "agent"})
+
+    r = c.post(f"/api/cowork/{t}/mode", json={"mode": "project"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["state"]["mode"] == "project"
+    assert "bound_project_id" in body["state"]
+
+    # The project is now visible via the workbench tab's by-thread lookup.
+    state = project_store.project_for_thread(t)
+    assert state is not None
+    assert state.id == body["state"]["bound_project_id"]
+
+    # Switching again reuses the same project (no duplicate creation).
+    r2 = c.post(f"/api/cowork/{t}/mode", json={"mode": "project"})
+    assert r2.json()["state"]["bound_project_id"] == state.id

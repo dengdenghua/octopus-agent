@@ -30,6 +30,7 @@ class CoworkRuntime:
     runner: AsyncWorkRunner | None = None
     runner_enabled: bool = False
     runner_reason: str = "disabled"
+    thread_store: Any | None = None
 
     def start(self, *, poll_seconds: float = 5.0) -> None:
         if self.runner is not None:
@@ -78,6 +79,7 @@ def create_cowork_runtime(
         runner=runner,
         runner_enabled=runner is not None,
         runner_reason=runner_reason,
+        thread_store=thread_store,
     )
 
 

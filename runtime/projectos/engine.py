@@ -85,14 +85,31 @@ def stub_generate_milestones(goal: str) -> list[Milestone]:
 
 
 def stub_decompose_tasks(ms: Milestone) -> list[Task]:
-    """No-LLM fallback: a research → execution pair (a 2-node DAG)."""
+    """No-LLM fallback: a research → execution pair (a 2-node DAG).
+
+    The research node defaults to ``team_mode="swarm"`` so a roster-aware
+    engine (cowork_bridge injects ``run_task_team``) brainstorms it across the
+    group; the execution node stays ``single`` unless a caller opts it into
+    cluster."""
     return [
-        Task(id=f"{ms.id}-T1", milestone_id=ms.id, type="research", goal=f"{ms.goal} — assess"),
+        Task(
+            id=f"{ms.id}-T1",
+            milestone_id=ms.id,
+            type="research",
+            goal=f"{ms.goal} — assess",
+            team_mode="swarm",
+            priority="P1",
+            estimate=1.0,
+            due_at=ms.due_at or "",
+            acceptance_criteria=list(ms.success_criteria),
+        ),
         Task(
             id=f"{ms.id}-T2",
             milestone_id=ms.id,
             type="code",
             goal=f"{ms.goal} — do",
+            priority="P2",
+            estimate=2.0,
             depends_on=[f"{ms.id}-T1"],
         ),
     ]
@@ -119,6 +136,10 @@ def _default_assign(task: Task) -> str:
 
 
 AgentAssigner = Callable[[Task], str]  # (task) -> concrete agent/member id
+# (task, context) -> output — runs a task node as a *team* (swarm 蜂群 / cluster
+# 集群) instead of a single agent. Injected by the cowork bridge so a project
+# task can fan out to the group roster and reuse the cluster/swarm engines.
+TaskTeamRunner = Callable[[Task, dict[str, Any]], Any]
 
 
 class ProjectEngine:
@@ -132,6 +153,7 @@ class ProjectEngine:
         qa_task: QAEvaluator = _default_qa,
         gate_milestone: MilestoneGate = _default_gate,
         assign_agent: AgentAssigner = _default_assign,
+        run_task_team: TaskTeamRunner | None = None,
         owner_id: str = "",
         tenant_id: str = "",
         scope: TenantScope | None = None,
@@ -146,6 +168,7 @@ class ProjectEngine:
         self._qa = qa_task
         self._gate = gate_milestone
         self._assign = assign_agent
+        self._run_task_team = run_task_team
         self.owner_id = owner_id
         self.tenant_id = tenant_id
 
@@ -159,6 +182,8 @@ class ProjectEngine:
             milestones = stub_generate_milestones(goal)
         if not milestones:
             milestones = stub_generate_milestones(goal)
+        from datetime import UTC, datetime
+
         project = Project(
             id=pid,
             name=name,
@@ -167,6 +192,8 @@ class ProjectEngine:
             status="running",
             owner_id=self.owner_id,
             tenant_id=self.tenant_id,
+            owner=self.owner_id or "",
+            created_at=datetime.now(UTC).isoformat(timespec="seconds"),
         )
         self.store.save_project(project)
         for ms in milestones:
@@ -475,7 +502,12 @@ class ProjectEngine:
             self._block_project(project, blocked.id, events, reason="milestone_blocked")
             return None
         if mss and len(done) == len(mss):
+            from datetime import UTC, datetime
+
             project.status = "done"
+            project.finished_at = project.finished_at or datetime.now(UTC).isoformat(
+                timespec="seconds"
+            )
             saved = self.store.save_project(project)
             if saved.status == "done":
                 events.append("project_done")
@@ -490,6 +522,11 @@ class ProjectEngine:
             events.append("no_runnable_milestone")  # all blocked on unmet deps
             self._block_project(project, project.current_ms, events, reason="no_runnable_milestone")
             return None
+        if not project.started_at:
+            from datetime import UTC, datetime
+
+            project.started_at = datetime.now(UTC).isoformat(timespec="seconds")
+            self.store.save_project(project)
         nxt.status = "active"
         saved_ms = self.store.save_milestone(project.id, nxt)
         if saved_ms.status != "active":
@@ -575,7 +612,17 @@ class ProjectEngine:
                 continue
             context = self._context(project, ms, tasks)
             try:
-                task.output = self._execute(task, context)
+                # 项目模式 × 集群/蜂群：任务节点声明了 team_mode（swarm/cluster）
+                # 且注入了 run_task_team 时，把它交给团队执行器（蜂群 fan-out /
+                # 集群角色流水线），否则退回单 agent 执行。这样项目 DAG 里可以
+                # 混排「单点任务」和「团队任务」。
+                if (
+                    task.team_mode in ("swarm", "cluster")
+                    and self._run_task_team is not None
+                ):
+                    task.output = self._run_task_team(task, context)
+                else:
+                    task.output = self._execute(task, context)
             except Exception as exc:  # noqa: BLE001 — one task failing must not kill the loop
                 task.output = f"error: {type(exc).__name__}: {exc}"
                 if task.attempts >= MAX_TASK_ATTEMPTS:

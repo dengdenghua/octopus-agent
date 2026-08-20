@@ -379,6 +379,36 @@ def create_projects_router(
             )
         return {"project": project.name, "status": project.status, "milestones": out}
 
+    @router.get("/api/projects/{project_id}/pm")
+    def pm_console(request: Request, project_id: str) -> dict[str, Any]:
+        """PM 驾驶舱：里程碑健康度、燃尽、风险/阻塞、下一步、指派。"""
+        project = _project_or_404(request, project_id)
+        try:
+            scoped_store = _scoped_store(request)
+        except ValueError as exc:
+            raise _bad_request(exc) from exc
+        from runtime.projectos.pm import build_pm_report
+
+        report = build_pm_report(scoped_store, project_id)
+        return {
+            "project_id": project_id,
+            "project": project.name,
+            "status": project.status,
+            "pm": report or {},
+        }
+
+    @router.get("/api/projects/{project_id}/retro")
+    def retro(request: Request, project_id: str) -> dict[str, Any]:
+        """复盘：完工项目的交付、成本与建议。"""
+        project = _project_or_404(request, project_id)
+        try:
+            scoped_store = _scoped_store(request)
+        except ValueError as exc:
+            raise _bad_request(exc) from exc
+        from runtime.projectos.pm import build_retro
+
+        return {"project_id": project_id, "project": project.name, "retro": build_retro(scoped_store, project_id) or {}}
+
     @router.get("/api/projects/{project_id}/events")
     def events(request: Request, project_id: str, limit: int = 100) -> dict[str, Any]:
         """Project audit trail: recoveries, interventions, and future operator actions."""

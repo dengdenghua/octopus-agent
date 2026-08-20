@@ -120,6 +120,7 @@ def create_cowork_group_router(
     team_rooms_router: Any = None,
     team_tasks_router: Any = None,
     runtime: Any = None,
+    project_store: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
     jwt_secret: str | None = None,
@@ -128,6 +129,40 @@ def create_cowork_group_router(
 ) -> APIRouter:
     """Create the ``/api/cowork/*`` thread-group router."""
     group_store = store or GroupStore()
+
+    def _ensure_project_for_thread(thread_id: str, request: Request) -> str | None:
+        """Bind a Project OS project to the thread if none exists yet.
+
+        Fails soft: a project-mode switch must never fail the whole request
+        just because planning is unavailable."""
+        try:
+            from runtime.projectos.cowork_bridge import ensure_project_for_thread
+            from runtime.projectos.store import ProjectStore
+
+            name = ""
+            thread_store = getattr(runtime, "thread_store", None)
+            get_state = getattr(thread_store, "get_state", None)
+            if callable(get_state):
+                try:
+                    st = get_state(thread_id)
+                    values = st.get("values") if isinstance(st, dict) else None
+                    title = values.get("title") if isinstance(values, dict) else None
+                    if isinstance(title, str) and title.strip():
+                        name = title.strip()
+                except Exception:  # noqa: BLE001
+                    name = ""
+            store = project_store if project_store is not None else ProjectStore()
+            return ensure_project_for_thread(
+                store,
+                group_store,
+                thread_id,
+                name=name,
+                goal=name,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _logger = __import__("logging").getLogger("octopus.cowork")
+            _logger.warning("project-mode auto-bind failed for %s: %s", thread_id, exc)
+            return None
 
     def _require_thread_path(thread_id: str) -> None:
         try:
@@ -752,14 +787,23 @@ def create_cowork_group_router(
     def set_mode(thread_id: str, body: ModeBody, request: Request) -> dict[str, Any]:
         """Switch the collaboration mode (chat/cluster/swarm/project) —
         non-destructive. 'project' runs the milestone-driven Project OS over the
-        group; there is no separate project entity."""
+        group. Entering project mode also ensures a real Project OS project is
+        bound to the thread (created deterministically if missing) so the
+        workbench 项目 tab has something to render; execution itself stays
+        user-triggered via Run/Tick."""
         if body.mode not in ("chat", "cluster", "swarm", "project"):
             raise HTTPException(400, "mode must be chat | cluster | swarm | project")
         group_store.append(
             thread_id,
             MemberEvent(action="mode", actor=_actor(request), mode=body.mode),  # type: ignore[arg-type]
         )
-        return {"ok": True, "state": group_store.state(thread_id).to_dict()}
+        bound_project_id: str | None = None
+        if body.mode == "project":
+            bound_project_id = _ensure_project_for_thread(thread_id, request)
+        state = group_store.state(thread_id).to_dict()
+        if bound_project_id is not None:
+            state["bound_project_id"] = bound_project_id
+        return {"ok": True, "state": state}
 
     @router.post("/api/cowork/{thread_id}/blackboard", dependencies=[Depends(_auth_dep)])
     def write_board(thread_id: str, body: BoardBody, request: Request) -> dict[str, Any]:

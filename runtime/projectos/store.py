@@ -156,6 +156,10 @@ def _normalize_project(project: Project) -> Project:
         status=project.status if project.status in _PROJECT_STATUSES else "planning",
         owner_id=_text(project.owner_id, label="owner_id", max_length=256),
         tenant_id=_text(project.tenant_id, label="tenant_id", max_length=256),
+        owner=_text(project.owner, label="project owner", max_length=256),
+        created_at=_text(project.created_at, label="created_at", max_length=64),
+        started_at=_text(project.started_at, label="started_at", max_length=64),
+        finished_at=_text(project.finished_at, label="finished_at", max_length=64),
     )
 
 
@@ -167,6 +171,9 @@ def _normalize_milestone(ms: Milestone) -> Milestone:
         goal=_text(ms.goal, label="milestone goal"),
         spec=_json_dict(ms.spec, label="milestone spec"),
         success_criteria=_text_list(ms.success_criteria, label="success criterion"),
+        priority=ms.priority if ms.priority in ("P0", "P1", "P2", "P3") else "P2",
+        planned_start=_text(ms.planned_start, label="planned_start", max_length=64),
+        due_at=_text(ms.due_at, label="due_at", max_length=64),
         status=ms.status if ms.status in _MILESTONE_STATUSES else "pending",
         dependencies=_id_list(ms.dependencies, label="milestone dependency"),
         task_ids=_id_list(ms.task_ids, label="task_id"),
@@ -183,6 +190,11 @@ def _normalize_task(task: Task) -> Task:
         goal=_text(task.goal, label="task goal"),
         assigned_role=_optional_id(task.assigned_role, label="assigned_role") or "engineer",
         assigned_agent=_optional_id(task.assigned_agent, label="assigned_agent") or "",
+        team_mode=task.team_mode if task.team_mode in ("single", "swarm", "cluster") else "single",
+        priority=task.priority if task.priority in ("P0", "P1", "P2", "P3") else "P2",
+        estimate=max(0.0, float(task.estimate or 0)),
+        due_at=_text(task.due_at, label="due_at", max_length=64),
+        acceptance_criteria=_text_list(task.acceptance_criteria, label="acceptance criterion"),
         status=task.status if task.status in _TASK_STATUSES else "pending",
         depends_on=_id_list(task.depends_on, label="task dependency"),
         input=_json_dict(task.input, label="task input"),

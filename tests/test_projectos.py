@@ -4,13 +4,50 @@ from __future__ import annotations
 
 import pytest
 
-from runtime.projectos.engine import HARD_MAX_RUN_TICKS, ProjectEngine, normalize_run_ticks
+from runtime.projectos.engine import (
+    HARD_MAX_RUN_TICKS,
+    ProjectEngine,
+    normalize_run_ticks,
+    stub_generate_milestones,
+)
 from runtime.projectos.model import Milestone, Project, Task, ready_tasks
 from runtime.projectos.store import ProjectStore
 from runtime.projectos.timeline import project_process_timeline
 
 
 # ── model ────────────────────────────────────────────────────────────────────
+def test_stub_decompose_research_node_is_swarm() -> None:
+    """The fallback decomposer flags the research node as a swarm task so a
+    roster-aware engine brainstorms it across the group."""
+    from runtime.projectos.engine import stub_decompose_tasks
+
+    tasks = stub_decompose_tasks(Milestone(id="MS", name="m", goal="g"))
+    research = next(t for t in tasks if t.type == "research")
+    assert research.team_mode == "swarm"
+
+
+def test_engine_dispatches_team_mode_tasks_to_run_task_team(tmp_path) -> None:
+    """swarm/cluster tasks go to the injected run_task_team; single stays on
+    execute_task — the project × cluster/swarm seam."""
+    from runtime.projectos.engine import stub_decompose_tasks
+
+    store = ProjectStore(base_dir=tmp_path)
+    eng = ProjectEngine(
+        store,
+        generate_milestones=stub_generate_milestones,
+        decompose_tasks=stub_decompose_tasks,
+        execute_task=lambda task, ctx: "single-exec",
+        run_task_team=lambda task, ctx: f"team-{task.team_mode}",
+    )
+    p = eng.plan("t", "g")
+    eng.run(p.id, max_ticks=50)
+    tasks = store.tasks_for_milestone(p.milestone_ids[0])
+    by_type = {t.type: t for t in tasks}
+    # research node is swarm → team hook; code node is single → execute.
+    assert by_type["research"].output == "team-swarm"
+    assert by_type["code"].output == "single-exec"
+
+
 def test_ready_tasks_respects_dag() -> None:
     t1 = Task(id="T1", milestone_id="M", type="design", goal="a")
     t2 = Task(id="T2", milestone_id="M", type="code", goal="b", depends_on=["T1"])
@@ -34,6 +71,13 @@ def test_roundtrips() -> None:
     assert Milestone.from_dict(m.to_dict()).spec == {"power": "<5W"}
     t = Task(id="T1", milestone_id="M1", type="research", goal="g", depends_on=["T0"])
     assert Task.from_dict(t.to_dict()).depends_on == ["T0"]
+    # team_mode (single/swarm/cluster) round-trips and is sanitized.
+    tw = Task(id="T2", milestone_id="M1", type="research", goal="g", team_mode="swarm")
+    assert Task.from_dict(tw.to_dict()).team_mode == "swarm"
+    tc = Task(id="T3", milestone_id="M1", type="code", goal="g", team_mode="cluster")
+    assert Task.from_dict(tc.to_dict()).team_mode == "cluster"
+    assert Task.from_dict({"id": "T4", "milestone_id": "M1", "type": "code",
+                           "goal": "g", "team_mode": "banana"}).team_mode == "single"
 
 
 # ── store ────────────────────────────────────────────────────────────────────

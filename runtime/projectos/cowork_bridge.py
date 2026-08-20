@@ -9,6 +9,7 @@ role. So "assemble a group, then turn on project mode" just works — any roster
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from runtime.memory.cowork.group_store import GroupStore
@@ -57,6 +58,155 @@ def nominate_assigner(
     return _assign
 
 
+def _compose_swarm_output(result: dict[str, Any], prompt: str) -> str:
+    """Turn a group_fanout result into a project-task deliverable: the primary
+    reply + supporting angles, labeled so the QA gate sees who said what."""
+    synthesis = result.get("synthesis") if isinstance(result.get("synthesis"), dict) else {}
+    primary = str(synthesis.get("primary_reply") or "").strip()
+    support = [
+        r for r in (result.get("replies") or [])
+        if isinstance(r, dict) and r.get("ok") and str(r.get("reply") or "").strip()
+    ]
+    if not primary and not support:
+        return "[swarm] 无人回应"
+    lines = [f"# 蜂群交付 · {prompt[:80]}", ""]
+    if primary:
+        lines.append(f"**主要观点（{synthesis.get('primary_agent_id') or '?'}）**\n{primary}")
+        lines.append("")
+    if len(support) > 1:
+        lines.append("**支撑角度**")
+        for r in support:
+            who = str(r.get("display_name") or r.get("agent_id") or "?")
+            body = str(r.get("reply") or "").strip()
+            if body and r.get("agent_id") != synthesis.get("primary_agent_id"):
+                lines.append(f"- {who}: {body[:800]}")
+    return "\n".join(lines)
+
+
+def _compose_cluster_output(result: Any, prompt: str) -> str:
+    final = str(getattr(result, "final_output", "") or "").strip()
+    if final:
+        return f"# 集群交付\n{final}"
+    return "[cluster] 团队流水线未产出可交付内容"
+
+
+def team_execute_for_group(
+    roster: list[tuple[str, str]],
+    *,
+    agent_caller: Callable[[str, str, int], dict[str, Any]] | None = None,
+    debate_rounds: int = 2,
+) -> Callable[[Task, dict[str, Any]], Any]:
+    """ProjectEngine.run_task_team hook: execute a project task node as a team.
+
+    - ``swarm`` (蜂群) → ``run_group_fanout`` over the roster, optional debate
+      rounds, arbitration synthesis as the deliverable.
+    - ``cluster`` (集群) → ``TeamRunner`` parallel pipeline: the roster becomes
+      the researcher pool, the assigned agent becomes the synthesizer.
+
+    This is the seam that lets 项目模式 reuse the cluster/swarm engines we
+    optimized instead of running every project task single-agent.
+    """
+    members = [{"name": mid, "display_name": mid} for mid, _ in roster]
+    ids = [mid for mid, _ in roster]
+
+    def _call_agent(agent_id: str, prompt: str, timeout_s: int = 300) -> dict[str, Any]:
+        if agent_caller is not None:
+            return agent_caller(agent_id, prompt, timeout_s)
+        from runtime.execution.subagents import call_subagent
+
+        try:
+            result = call_subagent(
+                agent_id,
+                prompt,
+                context={"source": "projectos_team_task"},
+                timeout_s=timeout_s,
+                timeout_seconds=float(timeout_s),
+            )
+            return {
+                "success": bool(result.get("success")),
+                "output": str(result.get("output") or result.get("parsed") or ""),
+                "error": result.get("error"),
+            }
+        except Exception as exc:  # noqa: BLE001 — isolate one member's failure
+            return {
+                "success": False,
+                "output": "",
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+
+    def _run(task: Task, context: dict[str, Any]) -> Any:
+        prompt = task.goal
+        milestone_goal = context.get("milestone_goal")
+        if milestone_goal:
+            prompt = f"Milestone: {milestone_goal}\nTask: {task.goal}"
+        if task.team_mode == "swarm":
+            return _run_swarm(prompt)
+        return _run_cluster(task, prompt)
+
+    def _run_swarm(prompt: str) -> str:
+        from runtime.execution.agents.group_fanout import run_group_fanout
+
+        n = max(1, len(members))
+        result = run_group_fanout(
+            prompt,
+            members,
+            agent_caller=_call_agent,
+            max_members=n,
+            max_concurrency=min(32, n),
+            scale_mode="safe",
+            debate_rounds=debate_rounds,
+        )
+        return _compose_swarm_output(result, prompt)
+
+    def _run_cluster(task: Task, prompt: str) -> str:
+        if not ids:
+            raise RuntimeError("project cluster task needs at least one roster member")
+        from runtime.safety.organization import (
+            AgentSpec,
+            CoordinationProtocol,
+            Role,
+            TeamTopology,
+        )
+        from runtime.safety.organization.team_runner import TeamRunner
+
+        pool_id = ids[0]
+        synth_id = task.assigned_agent or pool_id
+        topology = TeamTopology(
+            name="project-cluster",
+            protocol=CoordinationProtocol.PARALLEL,
+            agents={
+                # The assigned (best-fit) member leads: plans the task, then
+                # merges the pool into the deliverable. Same agent runs both
+                # roles (plan → pool → synthesize), which is the "cluster" feel.
+                Role.PLANNER: AgentSpec(agent_id=synth_id),
+                # The whole roster is the researcher pool (one replica per member).
+                Role.RESEARCHER: AgentSpec(agent_id=pool_id, parallel_replicas=len(ids)),
+                Role.SYNTHESIZER: AgentSpec(agent_id=synth_id),
+            },
+        )
+
+        def _role_caller(
+            *,
+            agent_id: str,
+            prompt: str,
+            context: dict[str, Any] | None = None,
+            timeout_seconds: int | None = None,
+            use_cheap_model: bool = False,
+            event_emitter: Callable[[dict[str, Any]], None] | None = None,
+        ) -> dict[str, Any]:
+            role = (context or {}).get("team_role")
+            idx = (context or {}).get("team_replica_index")
+            actual = agent_id
+            if role == "researcher" and isinstance(idx, int) and 1 <= idx <= len(ids):
+                actual = ids[idx - 1]
+            return _call_agent(actual, prompt, timeout_s=timeout_seconds or 300)
+
+        runner = TeamRunner(role_caller=_role_caller, timeout_seconds=900)
+        return _compose_cluster_output(runner.run(topology, prompt), prompt)
+
+    return _run
+
+
 def engine_for_group(
     project_store: ProjectStore,
     group_store: GroupStore,
@@ -77,6 +227,10 @@ def engine_for_group(
     kwargs.setdefault("generate_milestones", stub_generate_milestones)
     kwargs.setdefault("decompose_tasks", stub_decompose_tasks)
     kwargs["assign_agent"] = nominate_assigner(roster, competence)
+    # 项目模式 × 集群/蜂群：有可执行成员时注入任务级团队执行器，让声明了
+    # team_mode 的任务节点跑成蜂群/集群，而不是一律单 agent。
+    if roster:
+        kwargs["run_task_team"] = team_execute_for_group(roster)
     return ProjectEngine(
         project_store,
         **kwargs,
@@ -85,8 +239,50 @@ def engine_for_group(
     )
 
 
+def ensure_project_for_thread(
+    project_store: ProjectStore,
+    group_store: GroupStore,
+    thread_id: str,
+    *,
+    name: str,
+    goal: str,
+    owner_id: str = "",
+    tenant_id: str = "",
+) -> str | None:
+    """Create (if missing) a Project OS project bound to a cowork thread.
+
+    Returns the project_id (existing or freshly planned), or ``None`` when the
+    group has no participant agents to staff it. Used by the cowork mode switch
+    so entering "project" mode always has a real project for the workbench 项目
+    tab to render. Planning uses stub/deterministic hooks (no LLM call); actual
+    execution stays user-triggered via Run/Tick so a mere mode switch never
+    auto-runs a project.
+    """
+    roster = [a for a, _ in roster_from_group(group_store, thread_id)]
+    if not roster:
+        return None
+    existing = project_store.project_for_thread(thread_id)
+    if existing is not None:
+        return existing.id
+    engine = engine_for_group(
+        project_store,
+        group_store,
+        thread_id,
+        owner_id=owner_id,
+        tenant_id=tenant_id,
+    )
+    project = engine.plan(name or "当前项目", goal or name or "当前目标")
+    project_store.bind_thread(thread_id, project.id)
+    return project.id
+
+
 def full_project_state(project_store: ProjectStore, project_id: str) -> dict[str, Any] | None:
-    """Return the complete Project OS read-model for API and realtime callers."""
+    """Return the complete Project OS read-model for API and realtime callers.
+
+    Includes the derived PM console (``pm``) — milestone health, burndown,
+    risks/blockers, next actions, assignments — plus a ``retro`` once the
+    project reaches a terminal state.
+    """
     project = project_store.get_project(project_id)
     if project is None:
         return None
@@ -98,10 +294,20 @@ def full_project_state(project_store: ProjectStore, project_id: str) -> dict[str
         ]
         for milestone in milestones
     }
+    from runtime.projectos.pm import build_pm_report, build_retro
+
+    pm = build_pm_report(project_store, project_id)
+    retro = (
+        build_retro(project_store, project_id)
+        if project.status in ("done", "failed")
+        else None
+    )
     return {
         "project": project.to_dict(),
         "milestones": [milestone.to_dict() for milestone in milestones],
         "tasks": tasks_by_ms,
+        "pm": pm,
+        "retro": retro,
         "available_actions": _project_available_actions(project.status),
         "action_specs": _project_action_specs(project.id, project.status),
     }

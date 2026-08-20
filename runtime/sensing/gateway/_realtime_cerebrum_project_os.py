@@ -27,6 +27,20 @@ if TYPE_CHECKING:
     from runtime.sensing.gateway.realtime_gateway import EventEmitter
 
 
+_PROJECT_OS_HELP = """Project OS 控制命令（项目模式对话内可用）：
+
+- /project report（或 /project pm）—— PM 驾驶舱：里程碑健康度 / 风险 / 下一步动作 / 指派
+- /project retro —— 项目复盘：交付、失败、重试、耗时、建议
+- /project recover [tasks=T1,T2] [run] —— 恢复被阻塞的项目（可指定重跑任务）
+- /project task <task_id> <reassign|reset|complete|skip> [agent=agent-id] [reason=...] [run]
+    - reassign agent=xxx —— 换人重派
+    - reset —— 重置重跑
+    - complete output="<结果>" —— 人工验收通过
+    - skip reason="<原因>" —— 跳过该节点
+
+项目模式下直接发一句话目标，就会进入里程碑驱动的 Project OS 执行。"""
+
+
 def _format_project_os_result(state: dict[str, Any]) -> str:
     """Human-readable Project OS result for the realtime chat surface."""
     raw_project = state.get("project")
@@ -87,12 +101,53 @@ def _format_project_os_result(state: dict[str, Any]) -> str:
             lines.append(f"  派发：{', '.join(assignments)}")
     if len(milestones) > 6:
         lines.append(f"- 其余 {len(milestones) - 6} 个里程碑已省略，可在 Project OS 视图继续查看。")
+    # 现实 PM 摘要：健康度、风险、下一步、复盘。
+    pm = state.get("pm") if isinstance(state.get("pm"), dict) else None
+    if pm:
+        lines.append("")
+        lines.append("PM 驾驶舱：")
+        health_label = {"on_track": "正常", "at_risk": "有风险", "overdue": "已逾期", "blocked": "阻塞", "completed": "完成"}
+        for m in (pm.get("milestones") or [])[:8]:
+            if not isinstance(m, dict):
+                continue
+            h = health_label.get(str(m.get("health")), str(m.get("health") or ""))
+            tag = f" · {h}"
+            if m.get("overdue_tasks"):
+                tag += f" · 逾期{len(m['overdue_tasks'])}"
+            lines.append(f"- {m.get('name')}：{m.get('done')}/{m.get('total')} · {int((m.get('progress') or 0) * 100)}%{tag}")
+        risks = pm.get("risks") or []
+        if risks:
+            lines.append(f"风险/阻塞（{len(risks)}）：")
+            for r in risks[:5]:
+                if isinstance(r, dict):
+                    lines.append(f"  - [{r.get('health')}] {r.get('milestone') or r.get('task')}：{r.get('detail')}")
+        actions = pm.get("next_actions") or []
+        if actions:
+            lines.append("下一步：")
+            for a in actions[:5]:
+                if isinstance(a, dict):
+                    lines.append(f"  - {a.get('priority')} {a.get('task')} · {a.get('milestone')}")
+        retro = state.get("retro") if isinstance(state.get("retro"), dict) else None
+        if retro:
+            lines.append("复盘：")
+            lines.append(
+                f"  - {retro.get('done_tasks')}/{retro.get('task_count')} 任务完成"
+                + (f" · 失败 {retro.get('failed_tasks')}" if retro.get("failed_tasks") else "")
+                + (f" · 重试 {retro.get('attempts_total')} 次" if (retro.get("attempts_total") or 0) > (retro.get("task_count") or 0) else "")
+                + (f" · 耗时 {retro.get('duration_days')} 天" if retro.get("duration_days") else "")
+            )
+            for rec in (retro.get("recommendations") or [])[:3]:
+                lines.append(f"  - 💡 {rec}")
     if status == "blocked":
         lines.append("")
         lines.append("项目已阻塞；请处理失败任务、验收条件或依赖后再继续推进。")
     elif status not in {"done", "failed"}:
         lines.append("")
         lines.append("项目还未结束；后续回合会继续从当前 Project OS 状态推进。")
+    # 对话框交互引导：告诉用户接下来可以用什么命令继续推进 / 查看管理视图。
+    lines.append("")
+    lines.append("下一步可输入：/project report（PM 驾驶舱）· /project retro（复盘）"
+                 + (" · /project recover（恢复项目）" if status == "blocked" else " · /project help（全部命令）"))
     return "\n".join(lines)
 
 
@@ -191,6 +246,10 @@ def _parse_project_os_control(text: str) -> dict[str, Any] | None:
             "run": "run" in tail or opts.get("run", "").lower() in {"1", "true", "yes"},
             "cascade": opts.get("cascade", "true").lower() not in {"0", "false", "no"},
         }
+    if command in {"report", "pm"}:
+        return {"type": "report"}
+    if command in {"retro", "retrospective"}:
+        return {"type": "retro"}
     return {"type": "help"}
 
 
@@ -270,6 +329,16 @@ async def _drive_project_os(
                     "result": result,
                     **state,
                 }
+            if control.get("type") in {"report", "retro"}:
+                state = full_project_state(runtime._project_store, project.id) or {}
+                return {
+                    "ok": True,
+                    "roster": [],
+                    "reused": True,
+                    "control": control,
+                    "result": {"final_status": project.status},
+                    **state,
+                }
             if control.get("type") == "task" and engine is not None:
                 intervention = engine.intervene_task(
                     project.id,
@@ -320,11 +389,7 @@ async def _drive_project_os(
             return {
                 "ok": False,
                 "error": "unknown_project_command",
-                "message": (
-                    "可用命令：/project recover [tasks=T1,T2] [run]；"
-                    "/project task <task_id> <reassign|reset|complete|skip> "
-                    "[agent=agent-id] [reason=...] [run]"
-                ),
+                "message": _PROJECT_OS_HELP,
             }
         return run_project_from_group(
             runtime._project_store,

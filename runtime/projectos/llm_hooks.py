@@ -96,6 +96,20 @@ def parse_tasks(text: str, milestone_id: str) -> list[Task]:
         goal = str(item.get("goal") or item.get("title") or tid)
         label_to_id[goal] = tid
         label_to_id[str(i)] = tid
+        team_mode = (
+            item.get("team_mode")
+            if item.get("team_mode") in ("single", "swarm", "cluster")
+            else "single"
+        )
+        priority = (
+            str(item.get("priority")).upper()
+            if str(item.get("priority") or "").upper() in ("P0", "P1", "P2", "P3")
+            else "P2"
+        )
+        try:
+            estimate = float(item.get("estimate") or 0)
+        except (TypeError, ValueError):
+            estimate = 0.0
         out.append(
             Task(
                 id=tid,
@@ -103,6 +117,11 @@ def parse_tasks(text: str, milestone_id: str) -> list[Task]:
                 type=ttype,
                 goal=goal,
                 assigned_role=ROLE_FOR_TASK.get(ttype, "engineer"),
+                team_mode=team_mode,
+                priority=priority,
+                estimate=max(0.0, estimate),
+                due_at=str(item.get("due_at") or ""),
+                acceptance_criteria=[str(c) for c in (item.get("acceptance_criteria") or [])],
                 depends_on=[str(d) for d in (item.get("depends_on") or [])],
             )
         )
@@ -151,7 +170,13 @@ def llm_decompose_tasks(router: Any, *, model: str = DEFAULT_MODEL):
         prompt = (
             "Decompose this milestone into 2–5 tasks forming a small DAG. Reply "
             'ONLY a JSON array; each item: {"type":"design|code|research|analysis|'
-            'review","goal","depends_on":[earlier goals]}.'
+            'review","goal","team_mode":"single|swarm|cluster",'
+            '"priority":"P0|P1|P2|P3","estimate":1.5,"due_at":"YYYY-MM-DD",'
+            '"acceptance_criteria":["..."],"depends_on":[earlier goals]}. '
+            'team_mode=swarm for research that benefits from diverse angles; '
+            'team_mode=cluster for big build tasks that need orchestration; '
+            'single otherwise. Keep estimates in person-days and due dates within '
+            'the milestone window.'
             f"\n\nMilestone: {ms.goal}\nSpec: {json.dumps(ms.spec, ensure_ascii=False)}"
             f"\nSuccess criteria: {ms.success_criteria}"
         )

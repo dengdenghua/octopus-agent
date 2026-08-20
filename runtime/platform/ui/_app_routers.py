@@ -107,6 +107,18 @@ def mount_routers_a(
         )
     )
 
+    # ─── Project OS store · shared by the project-mode auto-bind below and the
+    # projects_router, so a project created by switching a thread to project
+    # mode is the same store the workbench 项目 tab reads from.
+    from runtime.projectos.store import ProjectStore
+    from runtime.sensing.gateway.projects_router import create_projects_router
+
+    project_store = ProjectStore()
+    app.state.project_store = project_store
+    project_model_router = (
+        getattr(getattr(stack, "planner", None), "router", None) if stack is not None else None
+    )
+
     # ─── Cowork thread-group · WeChat-style membership + mode + blackboard ──
     # GET /api/cowork/{thread} (public) + POST/DELETE members/mode/blackboard
     # (auth-gated). A thread IS the group; 1:1 is the N=2 case.
@@ -132,6 +144,7 @@ def mount_routers_a(
             team_rooms_router=ctx.team_rooms_router,
             team_tasks_router=ctx.team_tasks_router,
             runtime=ctx.cowork_runtime,
+            project_store=project_store,
             identity_store=ctx.identity_store,
             require_auth=ctx.require_auth,
             jwt_secret=ctx.jwt_secret,
@@ -144,14 +157,6 @@ def mount_routers_a(
     # GET /api/projects/* is authenticated and owner/tenant scoped in shared
     # mode; POST plan/tick/run and other mutations use the same Principal.
     # LLM hooks when a model router is available, else deterministic stubs.
-    from runtime.projectos.store import ProjectStore
-    from runtime.sensing.gateway.projects_router import create_projects_router
-
-    project_store = ProjectStore()
-    app.state.project_store = project_store
-    project_model_router = (
-        getattr(getattr(stack, "planner", None), "router", None) if stack is not None else None
-    )
     app.include_router(
         create_projects_router(
             store=project_store,

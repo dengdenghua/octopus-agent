@@ -11,8 +11,9 @@ from runtime.projectos.cowork_bridge import (
     nominate_assigner,
     roster_from_group,
     run_project_from_group,
+    team_execute_for_group,
 )
-from runtime.projectos.engine import stub_generate_milestones
+from runtime.projectos.engine import stub_decompose_tasks, stub_generate_milestones
 from runtime.projectos.model import Milestone, Task
 from runtime.projectos.store import ProjectStore
 from runtime.projectos.timeline import project_process_timeline
@@ -190,3 +191,81 @@ def test_from_group_endpoint_turns_a_group_into_a_project_team(tmp_path) -> None
         ).status_code
         == 400
     )
+
+# ── 项目模式 × 蜂群/集群（任务级 team_mode）──────────────────────
+
+
+def test_team_swarm_runs_task_as_fanout() -> None:
+    """swarm 任务节点：蜂群 fan-out 覆盖整个 roster，交付物 = 仲裁合成。"""
+    roster = [("researcher-a", "researcher-a"), ("researcher-b", "researcher-b")]
+    calls: list[str] = []
+
+    def caller(agent_id: str, prompt: str, timeout_s: int = 300) -> dict:
+        calls.append(agent_id)
+        return {"success": True, "output": f"视角 from {agent_id}"}
+
+    run_team = team_execute_for_group(roster, agent_caller=caller, debate_rounds=1)
+    out = run_team(
+        Task(id="T", milestone_id="M", type="research", goal="怎么给这个功能定价", team_mode="swarm"),
+        {},
+    )
+    assert out.startswith("# 蜂群交付")
+    assert "researcher-a" in calls and "researcher-b" in calls
+    assert "视角 from" in out
+
+
+def test_team_cluster_runs_task_as_role_pipeline() -> None:
+    """cluster 任务节点：roster 当研究员池，指派 agent 当队长/合成器。"""
+    roster = [("researcher-a", "researcher-a"), ("researcher-b", "researcher-b")]
+    calls: list[str] = []
+
+    def caller(agent_id: str, prompt: str, timeout_s: int = 300) -> dict:
+        calls.append(agent_id)
+        return {"success": True, "output": f"out by {agent_id}"}
+
+    run_team = team_execute_for_group(roster, agent_caller=caller, debate_rounds=1)
+    out = run_team(
+        Task(
+            id="T",
+            milestone_id="M",
+            type="code",
+            goal="build the thing",
+            team_mode="cluster",
+            assigned_agent="lead-agent",
+        ),
+        {},
+    )
+    assert out.startswith("# 集群交付")
+    # 每个 roster 成员作为研究员副本各跑一次，队长也跑了计划+合成。
+    assert set(calls) >= {"researcher-a", "researcher-b", "lead-agent"}
+
+
+def test_engine_for_group_wires_team_executor_and_runs_swarm_node(tmp_path) -> None:
+    """engine_for_group 注入 run_task_team；stub 分解的 research 节点走蜂群，
+    而不是单 agent execute —— 项目×蜂群端到端。"""
+    gs = GroupStore(base_dir=tmp_path)
+    for a in ("researcher-a", "researcher-b"):
+        service.invite_member(gs, "thread-1", actor="u", target_id=a, kind="agent")
+
+    called: list[str] = []
+
+    def caller(agent_id: str, prompt: str, timeout_s: int = 300) -> dict:
+        called.append(agent_id)
+        return {"success": True, "output": f"out by {agent_id}"}
+
+    eng = engine_for_group(
+        ProjectStore(base_dir=tmp_path),
+        gs,
+        "thread-1",
+        hooks={
+            "generate_milestones": stub_generate_milestones,
+            "decompose_tasks": stub_decompose_tasks,
+        },
+    )
+    # 手动注入一个走 fan-out 的 team executor（避免真实 call_subagent）。
+    eng._run_task_team = team_execute_for_group(  # noqa: SLF001
+        roster_from_group(gs, "thread-1"), agent_caller=caller, debate_rounds=1
+    )
+    p = eng.plan("custom", "设计一套定价策略")
+    eng.run(p.id, max_ticks=50)
+    assert "researcher-a" in called and "researcher-b" in called
