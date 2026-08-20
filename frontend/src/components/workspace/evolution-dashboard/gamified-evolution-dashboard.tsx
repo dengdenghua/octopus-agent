@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
-import { useI18n } from "@/core/i18n/hooks";
 import {
   useEvolutionOverview,
   useSkillPerformance,
@@ -31,7 +30,6 @@ const MOCK_AGENTS = [
 ];
 
 export default function GameifiedEvolutionDashboard() {
-  const { t } = useI18n();
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [collectivePanelExpanded, setCollectivePanelExpanded] = useState(true);
 

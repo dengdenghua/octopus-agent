@@ -1,4 +1,8 @@
 import { cn } from "@/lib/utils";
+import type {
+  EvolutionOverview,
+  SkillPerformance,
+} from "@/core/evolution/api";
 
 export interface RadarDataPoint {
   dimension: string;
@@ -47,7 +51,7 @@ export function AbilityRadarChart({
   };
 
   // 生成多边形路径
-  const generatePolygonPath = (valueMultiplier: number = 1) => {
+  const generatePolygonPath = (valueMultiplier = 1) => {
     return data
       .map((item, index) => {
         const point = calculatePoint(index, item.value * valueMultiplier);
@@ -208,8 +212,8 @@ export const ABILITY_DIMENSIONS = {
  * 从进化数据计算能力维度得分
  */
 export function calculateAbilityScores(
-  data: any, // EvolutionOverview
-  skillPerformances: any[], // SkillPerformance[]
+  data: EvolutionOverview,
+  skillPerformances: SkillPerformance[],
   dimensionType: keyof typeof ABILITY_DIMENSIONS = "general"
 ): RadarDataPoint[] {
   const dimensions = ABILITY_DIMENSIONS[dimensionType];
@@ -292,7 +296,7 @@ export function calculateAbilityScores(
  * 根据技能名称关键词获取技能得分
  */
 function getSkillScore(
-  skillPerformances: any[],
+  skillPerformances: SkillPerformance[],
   keywords: string[]
 ): number {
   const matchedSkills = skillPerformances.filter((skill) =>

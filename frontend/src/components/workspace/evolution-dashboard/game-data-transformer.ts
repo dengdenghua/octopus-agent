@@ -1,7 +1,6 @@
 import type {
   EvolutionOverview,
   SkillPerformance,
-  LearningCurvePoint,
   EvolutionStory,
 } from "@/core/evolution/api";
 import type { CharacterStats } from "./character-card";

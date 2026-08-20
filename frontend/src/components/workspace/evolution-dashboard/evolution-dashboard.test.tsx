@@ -68,7 +68,6 @@ describe("EvolutionDashboard states", () => {
   });
 
   it("labels populated trend and skill charts", async () => {
-    const user = userEvent.setup();
     queries.overview.data = {
       skills: { total: 1, auto_extracted: 1 },
       memory: { total_facts: 2, categories: { rules: 1 } },
