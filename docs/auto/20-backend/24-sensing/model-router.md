@@ -285,10 +285,10 @@ tier: "standard"
 | --- | --- | --- |
 | func | `def request_has_images(request)` | True when the request carries images on either channel. |
 | func | `def model_known_non_vision(model)` | Operator declared ``supports_vision: false`` for this model id. |
-| func | `def apply_vision_guard(request)` | Pre-guard: transcribe/strip images for models declared non-vision. |
+| func | `def apply_vision_guard(request)` | Pre-guard: transcribe/strip images for models that can't see them. |
 | func | `def build_without_images(request)` | Crash-recovery variant: always transcribe/strip images. |
 | func | `def classify_image_rejection(exc)` | True when the upstream likely rejected the image payload. |
-| func | `def transcribe_or_strip_images(request)` | Replace every image with a transcription (best effort) or a note. |
+| func | `def transcribe_or_strip_images(request, include_b64)` | Replace every image with a transcription (best effort) or a note. |
 
 
 ## Who imports this

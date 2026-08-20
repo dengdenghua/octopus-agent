@@ -32,8 +32,8 @@ tier: "standard"
 
 ## `session_start` · 2 处
 
-- `runtime/sensing/gateway/realtime_turn_lifecycle.py:443`
-- `runtime/sensing/gateway/realtime_turn_lifecycle.py:451`
+- `runtime/sensing/gateway/realtime_turn_lifecycle.py:439`
+- `runtime/sensing/gateway/realtime_turn_lifecycle.py:447`
 
 ## `stop` · 2 处
 
@@ -42,6 +42,6 @@ tier: "standard"
 
 ## `user_prompt` · 2 处
 
-- `runtime/sensing/gateway/realtime_turn_lifecycle.py:444`
-- `runtime/sensing/gateway/realtime_turn_lifecycle.py:453`
+- `runtime/sensing/gateway/realtime_turn_lifecycle.py:440`
+- `runtime/sensing/gateway/realtime_turn_lifecycle.py:449`
 
