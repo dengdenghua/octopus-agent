@@ -1,0 +1,29 @@
+{
+  "mcp_servers": [
+    {
+      "name": "computer-use",
+      "needs": [
+        "review"
+      ],
+      "origin": "/Users/dangbei/.codex/config.toml",
+      "enabled": false
+    },
+    {
+      "name": "node_repl",
+      "needs": [
+        "credentials",
+        "node"
+      ],
+      "origin": "/Users/dangbei/.codex/config.toml",
+      "enabled": false
+    },
+    {
+      "name": "openaiDeveloperDocs",
+      "needs": [
+        "auth"
+      ],
+      "origin": "/Users/dangbei/.codex/config.toml",
+      "enabled": false
+    }
+  ]
+}
