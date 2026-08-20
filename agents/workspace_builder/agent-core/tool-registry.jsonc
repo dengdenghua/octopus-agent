@@ -1,0 +1,16 @@
+{
+  "arms": [
+    "web_read",
+    "fs_writer",
+    "shell"
+  ],
+  "extra_affinity": [
+    "工作台搭建",
+    "响应式网页",
+    "个人效率工具",
+    "engineering"
+  ],
+  "private_skills": [],
+  "workbuddy_team": false,
+  "workbuddy_lead_agent": null
+}

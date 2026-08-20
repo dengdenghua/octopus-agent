@@ -1,0 +1,28 @@
+{
+  "id": "contrarian-investor",
+  "templateId": "workbuddy:stock-partner-team",
+  "templateVersion": "1.0.8",
+  "source_kind": "workbuddy-expert-fork",
+  "source_plugin": "stock-partner-team",
+  "expertType": "member",
+  "name": "坤候底 · 逆向投资人",
+  "icon": "🏔️",
+  "description": "17年穿越牛熊：只买大市值跌出来的机会，支撑位分批建仓，大道至简长期持有，从不追高。",
+  "avatar": "avatar.png",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "workbuddy-fork:stock-partner-team",
+  "category": "finance",
+  "tags": [
+    "投研",
+    "股票",
+    "圆桌成员"
+  ],
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "arms": [
+    "web_read",
+    "shell"
+  ],
+  "extra_affinity": [
+    "SEO内容",
+    "关键词研究",
+    "转化率优化",
+    "marketing"
+  ],
+  "private_skills": [
+    "seo-analysis",
+    "content-writing",
+    "cro-optimization"
+  ],
+  "workbuddy_team": true,
+  "workbuddy_lead_agent": "seo-content-team-lead"
+}

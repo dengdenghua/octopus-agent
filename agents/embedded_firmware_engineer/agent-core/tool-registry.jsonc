@@ -1,0 +1,16 @@
+{
+  "arms": [
+    "web_read",
+    "fs_writer",
+    "shell"
+  ],
+  "extra_affinity": [
+    "嵌入式固件",
+    "RTOS开发",
+    "物联网硬件",
+    "engineering"
+  ],
+  "private_skills": [],
+  "workbuddy_team": false,
+  "workbuddy_lead_agent": null
+}

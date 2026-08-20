@@ -1,0 +1,21 @@
+{
+  "arms": [
+    "browser_interact",
+    "fs_writer",
+    "shell"
+  ],
+  "extra_affinity": [
+    "高级开发",
+    "架构设计",
+    "代码质量",
+    "engineering"
+  ],
+  "private_skills": [
+    "browser-use",
+    "capability-evolver",
+    "frontend-dev",
+    "fullstack-dev"
+  ],
+  "workbuddy_team": false,
+  "workbuddy_lead_agent": null
+}

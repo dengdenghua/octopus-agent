@@ -1,0 +1,28 @@
+{
+  "id": "signal-chief",
+  "templateId": "workbuddy:stock-partner-team",
+  "templateVersion": "1.0.8",
+  "source_kind": "workbuddy-expert-fork",
+  "source_plugin": "stock-partner-team",
+  "expertType": "member",
+  "name": "洲四方 · 信号派首席",
+  "icon": "📡",
+  "description": "20年实战信号猎手：政策/产业/新闻/资金四层信号体系交叉验证，资金确认是硬信号，纪律是反人性的。",
+  "avatar": "avatar.png",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "workbuddy-fork:stock-partner-team",
+  "category": "finance",
+  "tags": [
+    "投研",
+    "股票",
+    "圆桌成员"
+  ],
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true
+  }
+}

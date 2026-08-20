@@ -1,0 +1,31 @@
+{
+  "id": "stock_partner_lead",
+  "templateId": "workbuddy:stock-partner-team",
+  "templateVersion": "1.0.8",
+  "source_kind": "workbuddy-expert-fork",
+  "source_plugin": "stock-partner-team",
+  "expertType": "team",
+  "name": "腾讯自选股股票投研专家团",
+  "icon": "🤖",
+  "description": "六位投研专家团，兼擅产业策略、信号捕捉、估值定价、逆向布局、基本面与短线，基于实时行情多视角研判。",
+  "avatar": "avatar.png",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "workbuddy-fork:stock-partner-team",
+  "category": "finance",
+  "tags": [
+    "估值定价",
+    "资金风向",
+    "短线节奏"
+  ],
+  "profession": "腾讯自选股股票投研专家团",
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true,
+    "includeUserMd": true,
+    "includeMemoryMd": true
+  }
+}

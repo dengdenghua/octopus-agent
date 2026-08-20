@@ -1,0 +1,16 @@
+{
+  "arms": [
+    "web_read",
+    "fs_writer"
+  ],
+  "extra_affinity": [
+    "finance",
+    "投研",
+    "股票"
+  ],
+  "private_skills": [
+    "westock-data",
+    "westock-tool",
+    "md-to-html"
+  ]
+}
