@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   CloudDownload,
@@ -6,6 +6,7 @@ import {
   RefreshCw,
   Users,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   installCloudExpert,
   listCloudStoreCategories,
@@ -38,9 +49,242 @@ function avatarUrl(value?: string): string | null {
 }
 
 const TYPE_STYLE = {
-  agent: { badge: "bg-primary/10 text-primary", label: "专家" },
-  team: { badge: "bg-chart-3/10 text-chart-3 dark:text-chart-3", label: "专家团" },
+  agent: { badge: "bg-primary/10 text-primary", label: "expert" },
+  team: { badge: "bg-chart-3/10 text-chart-3 dark:text-chart-3", label: "team" },
 } as const;
+
+/** 首屏渲染上限 + 「加载更多」步长(避免 421 张带图卡片一次性全量渲染)。 */
+const PAGE_SIZE = 60;
+
+/** 安装分步:后端接口为单次 POST,无分步回调,前端按阶段展示文案。 */
+type InstallPhase = "confirm" | "download" | "unpack" | "import" | "done";
+
+function ExpertDetailDialog({
+  expert,
+  open,
+  onOpenChange,
+  onInstall,
+  installing,
+}: {
+  expert: CloudExpertAgent;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onInstall: (expert: CloudExpertAgent) => void;
+  installing: boolean;
+}) {
+  const { t } = useI18n();
+  const isTeam = !!expert.is_team;
+  const typeStyle = isTeam ? TYPE_STYLE.team : TYPE_STYLE.agent;
+  const av = avatarUrl(expert.avatar_url);
+  const prompts = expert.quick_prompts?.filter(Boolean) ?? [];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <div className="flex items-start gap-3 pr-6">
+            {av ? (
+              <img
+                src={av}
+                alt=""
+                className="size-12 shrink-0 rounded-lg border border-border-default object-cover"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).style.display = "none";
+                }}
+              />
+            ) : (
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-lg border border-border-default bg-muted text-xl">
+                {isTeam ? "👥" : "🧑‍💼"}
+              </div>
+            )}
+            <div className="min-w-0">
+              <DialogTitle className="text-base">
+                {t.store.detailTitle(expert.display_name)}
+              </DialogTitle>
+              <DialogDescription className="mt-0.5 line-clamp-2 text-xs">
+                {expert.profession || expert.description}
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <ScrollArea className="max-h-[50vh] pr-3">
+          <div className="flex flex-col gap-3">
+            {expert.profession ? (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">
+                  {t.store.detailProfession}
+                </p>
+                <p className="text-sm">{expert.profession}</p>
+              </div>
+            ) : null}
+
+            {expert.description ? (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">
+                  {t.store.detailDescription}
+                </p>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                  {expert.description}
+                </p>
+              </div>
+            ) : null}
+
+            {expert.tags.length > 0 ? (
+              <div>
+                <p className="mb-1 text-xs font-medium text-muted-foreground">
+                  {t.store.detailTags}
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {expert.tags.map((tag) => (
+                    <Badge
+                      key={tag}
+                      variant="outline"
+                      className="text-[11px] font-normal text-muted-foreground"
+                    >
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {prompts.length > 0 ? (
+              <div>
+                <p className="mb-1 text-xs font-medium text-muted-foreground">
+                  {t.store.detailQuickPrompts}
+                </p>
+                <div className="flex flex-col gap-1.5">
+                  {prompts.map((p, i) => (
+                    <div
+                      key={i}
+                      className="rounded-md border border-border-default bg-muted/40 px-2.5 py-1.5 text-xs text-foreground/90"
+                    >
+                      {p}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </ScrollArea>
+
+        <DialogFooter className="flex items-center justify-between gap-2">
+          <Badge
+            className={cn(
+              "border-transparent text-[11px]",
+              typeStyle.badge,
+            )}
+          >
+            {isTeam && <Users className="mr-1 inline size-3 align-[-2px]" />}
+            {isTeam ? t.store.expertTypeTeam : t.store.expertTypeAgent}
+          </Badge>
+          <Button
+            size="sm"
+            variant={expert.is_installed ? "outline" : "default"}
+            className="h-8 rounded-sm px-3 text-xs"
+            disabled={installing || expert.is_installed}
+            onClick={() => onInstall(expert)}
+          >
+            {installing ? (
+              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            ) : expert.is_installed ? (
+              <Check className="mr-1 h-3 w-3" />
+            ) : (
+              <CloudDownload className="mr-1 h-3 w-3" />
+            )}
+            {installing
+              ? t.store.installing
+              : expert.is_installed
+                ? t.store.detailInstalled
+                : t.store.detailInstall}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function InstallProgressDialog({
+  expert,
+  phase,
+  onOpenChange,
+}: {
+  expert: CloudExpertAgent;
+  phase: InstallPhase;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { t } = useI18n();
+  const steps: { key: InstallPhase; label: string }[] = [
+    { key: "download", label: t.store.phaseDownload },
+    { key: "unpack", label: t.store.phaseUnpack },
+    { key: "import", label: t.store.phaseImport },
+  ];
+  const activeIndex = Math.max(
+    0,
+    steps.findIndex((s) => s.key === phase),
+  );
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm" showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle className="text-sm">
+            {t.store.installExpertTitle}
+          </DialogTitle>
+          <DialogDescription className="line-clamp-1 text-xs">
+            {expert.display_name}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-2">
+          {steps.map((s, i) => {
+            const state =
+              i < activeIndex ? "done" : i === activeIndex ? "active" : "todo";
+            return (
+              <div key={s.key} className="flex items-center gap-2 text-sm">
+                {state === "done" ? (
+                  <Check className="size-4 shrink-0 text-primary" />
+                ) : state === "active" ? (
+                  <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
+                ) : (
+                  <span className="size-4 shrink-0 rounded-full border border-border-default" />
+                )}
+                <span
+                  className={cn(
+                    state === "todo" && "text-muted-foreground",
+                  )}
+                >
+                  {s.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ExpertCardSkeleton() {
+  return (
+    <Card className="gap-2.5 py-3">
+      <CardHeader className="flex-row items-center gap-2.5 px-3 pt-0">
+        <Skeleton className="size-10 shrink-0 rounded-lg" />
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <Skeleton className="h-3.5 w-2/3" />
+          <Skeleton className="h-3 w-full" />
+        </div>
+      </CardHeader>
+      <div className="flex gap-1 px-3">
+        <Skeleton className="h-4 w-10 rounded-full" />
+        <Skeleton className="h-4 w-14 rounded-full" />
+      </div>
+      <CardFooter className="px-3 pb-0">
+        <Skeleton className="h-7 w-20 rounded-sm" />
+      </CardFooter>
+    </Card>
+  );
+}
 
 export function WorkBuddyCloudStorePanel() {
   const { t } = useI18n();
@@ -54,6 +298,23 @@ export function WorkBuddyCloudStorePanel() {
   const [typeFilter, setTypeFilter] = useState<"all" | "agent" | "team">("all");
   const [installing, setInstalling] = useState<Record<string, boolean>>({});
   const [installed, setInstalled] = useState<Record<string, boolean>>({});
+  // 详情弹窗 + 安装分步弹窗
+  const [detailTarget, setDetailTarget] = useState<CloudExpertAgent | null>(
+    null,
+  );
+  const [installTarget, setInstallTarget] = useState<CloudExpertAgent | null>(
+    null,
+  );
+  const [installPhase, setInstallPhase] = useState<InstallPhase>("download");
+  // 增量渲染:首屏 PAGE_SIZE,「加载更多」逐步追加
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const timersRef = useRef<number[]>([]);
+
+  useEffect(() => {
+    return () => {
+      for (const id of timersRef.current) window.clearTimeout(id);
+    };
+  }, []);
 
   const load = useCallback(
     async (refresh = false) => {
@@ -73,6 +334,7 @@ export function WorkBuddyCloudStorePanel() {
         const done: Record<string, boolean> = {};
         for (const e of storeRes.agents) if (e.is_installed) done[e.id] = true;
         setInstalled((prev) => ({ ...prev, ...done }));
+        setVisibleCount(PAGE_SIZE);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {
@@ -99,42 +361,78 @@ export function WorkBuddyCloudStorePanel() {
     n?.zh || n?.en || "";
 
   const q = query.trim().toLowerCase();
-  const filtered = experts.filter((e) => {
-    if (
-      activeCategory !== "all" &&
-      (e.category_id || "") !== activeCategory
-    )
-      return false;
-    if (typeFilter !== "all" && (e.is_team ? "team" : "agent") !== typeFilter)
-      return false;
-    if (!q) return true;
-    const hay = [
-      e.display_name,
-      e.profession || "",
-      e.description,
-      e.id,
-      ...e.tags,
-    ]
-      .join(" ")
-      .toLowerCase();
-    return hay.includes(q);
-  });
+  const filtered = useMemo(() => {
+    return experts.filter((e) => {
+      if (
+        activeCategory !== "all" &&
+        (e.category_id || "") !== activeCategory
+      )
+        return false;
+      if (typeFilter !== "all" && (e.is_team ? "team" : "agent") !== typeFilter)
+        return false;
+      if (!q) return true;
+      const hay = [
+        e.display_name,
+        e.profession || "",
+        e.description,
+        e.id,
+        ...e.tags,
+      ]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [activeCategory, experts, q, typeFilter]);
 
-  const onInstall = async (expert: CloudExpertAgent) => {
+  const visible = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
+
+  const runInstallFlow = async (expert: CloudExpertAgent) => {
     setInstalling((m) => ({ ...m, [expert.id]: true }));
+    setInstallTarget(expert);
+    setInstallPhase("download");
+    // 后端单次 POST 无分步回调:按时间推进阶段文案,给用户可感知的进度。
+    const timers: number[] = [];
+    timers.push(
+      window.setTimeout(() => setInstallPhase("unpack"), 600),
+      window.setTimeout(() => setInstallPhase("import"), 1400),
+    );
+    timersRef.current.push(...timers);
     setError(null);
     try {
       await installCloudExpert(expert.id);
       setInstalled((m) => ({ ...m, [expert.id]: true }));
+      setInstallPhase("done");
+      toast.success(t.store.installSuccess(expert.display_name));
+      window.setTimeout(() => setInstallTarget(null), 500);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const reason = err instanceof Error ? err.message : String(err);
+      setError(reason);
+      toast.error(t.store.installFailed(expert.display_name, reason));
+      setInstallTarget(null);
     } finally {
       setInstalling((m) => ({ ...m, [expert.id]: false }));
     }
   };
 
+  /** 卡片/详情里的安装入口:已安装直接忽略,否则进入确认流。 */
+  const onInstall = (expert: CloudExpertAgent) => {
+    if (installed[expert.id] || expert.is_installed) return;
+    // 详情弹窗关闭,打开安装确认
+    setDetailTarget(null);
+    void runInstallFlow(expert);
+  };
+
+  const typeLabel = (e: CloudExpertAgent): string =>
+    e.is_team ? t.store.expertTypeTeam : t.store.expertTypeAgent;
+
   return (
     <div className="space-y-3">
+      {/* 面板标题 */}
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">{t.store.expertsPanelTitle}</span>
+      </div>
+
       {/* 分类 + 类型 + 搜索 */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div
@@ -148,7 +446,7 @@ export function WorkBuddyCloudStorePanel() {
             onClick={() => setActiveCategory("all")}
             className="h-8 shrink-0 px-2.5 text-xs"
           >
-            {t.agentWorld.categories.all}
+            {t.store.typeAll}
             <span className="ml-1 text-xs text-muted-foreground">
               {categoryCounts.get("all") ?? 0}
             </span>
@@ -189,10 +487,10 @@ export function WorkBuddyCloudStorePanel() {
                 className="h-8 px-2.5 text-xs"
               >
                 {tp === "all"
-                  ? t.agentWorld.categories.all
+                  ? t.store.typeAll
                   : tp === "team"
-                    ? "专家团"
-                    : "专家"}
+                    ? t.store.expertTypeTeam
+                    : t.store.expertTypeAgent}
               </Button>
             ))}
           </div>
@@ -202,8 +500,8 @@ export function WorkBuddyCloudStorePanel() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索专家 / 领域 / 标签"
-            aria-label="搜索专家"
+            placeholder={t.store.searchExpertsPlaceholder}
+            aria-label={t.store.searchExpertsPlaceholder}
             className="h-8 w-40 rounded-md border border-border-default bg-background px-2 text-sm outline-none focus:border-primary/50"
           />
           <Button
@@ -211,7 +509,7 @@ export function WorkBuddyCloudStorePanel() {
             variant="ghost"
             disabled={loading}
             onClick={() => void load(true)}
-            title="刷新(重新拉取云端数据)"
+            title={t.store.refreshTooltip}
           >
             <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
           </Button>
@@ -219,109 +517,178 @@ export function WorkBuddyCloudStorePanel() {
       </div>
 
       {error ? (
-        <div className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          {error}
+        <div className="flex items-center justify-between gap-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          <span className="line-clamp-2">{error}</span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 shrink-0 px-2 text-xs"
+            disabled={loading}
+            onClick={() => void load()}
+          >
+            <RefreshCw className="mr-1 size-3" />
+            {t.store.retry}
+          </Button>
         </div>
       ) : null}
 
       {loading ? (
-        <div className="flex min-h-[200px] items-center justify-center text-muted-foreground">
-          <Loader2 className="size-5 animate-spin" />
+        <div
+          className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+          aria-label={t.store.expertLoadingAria}
+        >
+          {Array.from({ length: 10 }).map((_, i) => (
+            <ExpertCardSkeleton key={i} />
+          ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-          {filtered.map((expert) => {
-            const isTeam = !!expert.is_team;
-            const typeStyle = isTeam ? TYPE_STYLE.team : TYPE_STYLE.agent;
-            const done = installed[expert.id];
-            const busy = installing[expert.id];
-            const av = avatarUrl(expert.avatar_url);
-            return (
-              <Card
-                key={expert.id}
-                className="gap-2.5 py-3 transition-colors hover:border-primary/40"
-              >
-                <CardHeader className="flex-row items-center gap-2.5 px-3 pt-0">
-                  {av ? (
-                    <img
-                      src={av}
-                      alt=""
-                      loading="lazy"
-                      className="size-10 shrink-0 rounded-lg border border-border-default object-cover"
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).style.display =
-                          "none";
-                      }}
-                    />
-                  ) : (
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border-default bg-muted text-base">
-                      {isTeam ? "👥" : "🧑‍💼"}
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <CardTitle className="truncate text-sm">
-                      {expert.display_name}
-                    </CardTitle>
-                    <CardDescription className="truncate text-xs">
-                      {expert.profession || expert.description}
-                    </CardDescription>
-                  </div>
-                </CardHeader>
-                <div className="flex flex-wrap gap-1 px-3">
-                  <Badge
-                    className={cn(
-                      "border-transparent text-[11px]",
-                      typeStyle.badge,
-                    )}
-                  >
-                    {isTeam && (
-                      <Users className="mr-1 inline size-3 align-[-2px]" />
-                    )}
-                    {typeStyle.label}
-                  </Badge>
-                  {expert.tags.slice(0, 2).map((tag) => (
-                    <Badge
-                      key={tag}
-                      variant="outline"
-                      className="text-[11px] font-normal text-muted-foreground"
-                    >
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-                <CardFooter className="px-3 pb-0">
-                  <Button
-                    size="sm"
-                    variant={done ? "outline" : "default"}
-                    className="h-7 rounded-sm px-3 text-xs"
-                    disabled={busy || done}
-                    onClick={() => void onInstall(expert)}
-                  >
-                    {busy ? (
-                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                    ) : done ? (
-                      <Check className="mr-1 h-3 w-3" />
+        <>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+            {visible.map((expert) => {
+              const isTeam = !!expert.is_team;
+              const typeStyle = isTeam ? TYPE_STYLE.team : TYPE_STYLE.agent;
+              const done = installed[expert.id] || expert.is_installed;
+              const busy = installing[expert.id];
+              const av = avatarUrl(expert.avatar_url);
+              return (
+                <Card
+                  key={expert.id}
+                  className="gap-2.5 cursor-pointer py-3 transition-colors hover:border-primary/40"
+                  onClick={() => setDetailTarget(expert)}
+                >
+                  <CardHeader className="flex-row items-center gap-2.5 px-3 pt-0">
+                    {av ? (
+                      <img
+                        src={av}
+                        alt=""
+                        loading="lazy"
+                        className="size-10 shrink-0 rounded-lg border border-border-default object-cover"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).style.display =
+                            "none";
+                        }}
+                      />
                     ) : (
-                      <CloudDownload className="mr-1 h-3 w-3" />
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border-default bg-muted text-base">
+                        {isTeam ? "👥" : "🧑‍💼"}
+                      </div>
                     )}
-                    {busy
-                      ? "安装中…"
-                      : done
-                        ? "已安装"
-                        : "安装"}
-                  </Button>
-                </CardFooter>
-              </Card>
-            );
-          })}
-        </div>
+                    <div className="min-w-0">
+                      <CardTitle className="truncate text-sm">
+                        {expert.display_name}
+                      </CardTitle>
+                      <CardDescription className="truncate text-xs">
+                        {expert.profession || expert.description}
+                      </CardDescription>
+                    </div>
+                  </CardHeader>
+                  <div className="flex flex-wrap gap-1 px-3">
+                    <Badge
+                      className={cn(
+                        "border-transparent text-[11px]",
+                        typeStyle.badge,
+                      )}
+                    >
+                      {isTeam && (
+                        <Users className="mr-1 inline size-3 align-[-2px]" />
+                      )}
+                      {typeLabel(expert)}
+                    </Badge>
+                    {expert.tags.slice(0, 2).map((tag) => (
+                      <Badge
+                        key={tag}
+                        variant="outline"
+                        className="text-[11px] font-normal text-muted-foreground"
+                      >
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                  <CardFooter className="px-3 pb-0">
+                    <Button
+                      size="sm"
+                      variant={done ? "outline" : "default"}
+                      className="h-7 rounded-sm px-3 text-xs"
+                      disabled={busy || done}
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        onInstall(expert);
+                      }}
+                    >
+                      {busy ? (
+                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                      ) : done ? (
+                        <Check className="mr-1 h-3 w-3" />
+                      ) : (
+                        <CloudDownload className="mr-1 h-3 w-3" />
+                      )}
+                      {busy
+                        ? t.store.installing
+                        : done
+                          ? t.store.installed
+                          : t.store.install}
+                    </Button>
+                  </CardFooter>
+                </Card>
+              );
+            })}
+          </div>
+
+          {visible.length > 0 && (
+            <div className="flex justify-center">
+              {hasMore ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-4 text-xs"
+                  onClick={() =>
+                    setVisibleCount((c) => Math.min(c + PAGE_SIZE, filtered.length))
+                  }
+                >
+                  {t.store.loadMore}
+                  <span className="ml-1 text-muted-foreground">
+                    ({visibleCount}/{filtered.length})
+                  </span>
+                </Button>
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  {t.store.noMoreItems}
+                </span>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {!loading && !error && filtered.length === 0 ? (
         <div className="py-10 text-center text-sm text-muted-foreground">
-          {metaCount ? `共 ${metaCount} 位专家 · 无匹配结果` : "无匹配结果"}
+          {t.store.noMatchExperts(metaCount ?? 0)}
         </div>
       ) : null}
+
+      {/* 详情弹窗 */}
+      {detailTarget && (
+        <ExpertDetailDialog
+          expert={detailTarget}
+          open
+          onOpenChange={(open) => {
+            if (!open) setDetailTarget(null);
+          }}
+          onInstall={onInstall}
+          installing={!!(detailTarget && installing[detailTarget.id])}
+        />
+      )}
+
+      {/* 安装进度弹窗(确认后直接进入分步流程) */}
+      {installTarget && installPhase !== "done" && (
+        <InstallProgressDialog
+          expert={installTarget}
+          phase={installPhase}
+          onOpenChange={() => {
+            // 安装进行中不允许关闭,避免用户误以为已取消
+          }}
+        />
+      )}
     </div>
   );
 }
