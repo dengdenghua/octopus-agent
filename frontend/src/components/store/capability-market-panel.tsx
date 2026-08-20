@@ -32,6 +32,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
+  deleteOAuthApp,
+  getOAuthApp,
+  oauthAuthorize,
+  oauthStatus,
+  saveOAuthApp,
+} from "@/core/mcp/api";
+import {
   connectCapability,
   disconnectCapability,
   getCapabilityStatus,
@@ -39,6 +46,7 @@ import {
   listCapabilities,
   setCapabilityEnabled,
   uninstallCapability,
+  type CapabilityConnectResult,
   type CapabilityInfo,
 } from "@/core/agents/agent-world-api";
 import { cn } from "@/lib/utils";
@@ -79,6 +87,30 @@ const AUTH_LABEL: Record<string, string> = {
   "oneid-token": "OneID",
 };
 
+/** 轮询 MCP OAuth 授权结果,直到已授权或超时(默认 90s)。 */
+function pollOAuth(server: string, timeoutMs = 90_000): Promise<boolean> {
+  return new Promise((resolve) => {
+    const startedAt = Date.now();
+    const tick = async () => {
+      try {
+        const st = await oauthStatus(server);
+        if (st.authorized) {
+          resolve(true);
+          return;
+        }
+      } catch {
+        // 网络抖动忽略,继续轮询
+      }
+      if (Date.now() - startedAt >= timeoutMs) {
+        resolve(false);
+        return;
+      }
+      window.setTimeout(tick, 1500);
+    };
+    void tick();
+  });
+}
+
 function ConnectDialog({
   capability,
   open,
@@ -92,28 +124,62 @@ function ConnectDialog({
 }) {
   const [accessToken, setAccessToken] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [oneIdToken, setOneIdToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [deviceFlow, setDeviceFlow] = useState<
+    CapabilityConnectResult["device_flow"] | null
+  >(null);
 
   useEffect(() => {
     if (open) {
       setAccessToken("");
       setApiKey("");
+      setOneIdToken("");
       setMessage(null);
       setBusy(false);
+      setDeviceFlow(null);
     }
   }, [open]);
 
   const isCli = capability.type === "cli";
   const isPlugin = capability.source === "codex_plugin";
+  const isOneId = capability.auth_mode === "oneid-token";
+
+  /** 轮询连接状态直到成功或超时(设备流登录完成后 CLI status 返回 connected)。 */
+  const pollConnected = (timeoutMs: number): Promise<boolean> =>
+    new Promise((resolve) => {
+      const startedAt = Date.now();
+      const tick = async () => {
+        try {
+          const st = await getCapabilityStatus(capability.id);
+          if (st.connected) {
+            resolve(true);
+            return;
+          }
+        } catch {
+          // 网络抖动忽略,继续轮询
+        }
+        if (Date.now() - startedAt >= timeoutMs) {
+          resolve(false);
+          return;
+        }
+        window.setTimeout(tick, 2000);
+      };
+      void tick();
+    });
 
   const onSubmit = async () => {
     setBusy(true);
     setMessage(null);
     try {
       const tokens: Record<string, string> = {};
-      if (accessToken.trim()) tokens.access_token = accessToken.trim();
-      if (apiKey.trim()) tokens.api_key = apiKey.trim();
+      if (isOneId) {
+        if (oneIdToken.trim()) tokens.oneid_token = oneIdToken.trim();
+      } else {
+        if (accessToken.trim()) tokens.access_token = accessToken.trim();
+        if (apiKey.trim()) tokens.api_key = apiKey.trim();
+      }
       const res = await connectCapability(capability.id, {
         tokens: Object.keys(tokens).length ? tokens : undefined,
         run_cli: isCli && Object.keys(tokens).length === 0,
@@ -121,6 +187,28 @@ function ConnectDialog({
       if (res.connected) {
         setMessage(isPlugin ? "插件无需认证,已就绪 ✓" : "已连接 ✓");
         onConnected();
+      } else if (res.device_flow) {
+        // CLI 设备流:展示授权地址 + 自动打开 + 轮询状态
+        setDeviceFlow(res.device_flow);
+        const uri = res.device_flow.verification_uri;
+        if (uri) {
+          const popup = window.open(
+            uri,
+            "octopus-device-flow",
+            "popup=yes,width=560,height=720",
+          );
+          if (!popup) setMessage("已复制授权地址,请手动打开(浏览器拦截了弹窗)。");
+        }
+        const ok = await pollConnected(
+          (res.device_flow.expires_in || 240) * 1000,
+        );
+        if (ok) {
+          setMessage("设备流登录完成 ✓");
+          setDeviceFlow(null);
+          onConnected();
+        } else {
+          setMessage("设备流授权未在有效期内完成,可重试或手动执行 CLI 登录。");
+        }
       } else if (res.command) {
         setMessage(`请在终端执行:\n${res.command}`);
       } else {
@@ -151,11 +239,25 @@ function ConnectDialog({
 
         {isPlugin && (
           <p className="text-xs leading-5 text-muted-foreground">
-            插件(Codex 插件)无需认证,安装后技能即可用。点「保存凭据」直接确认就绪。
+            插件(Octopus 插件)无需认证,安装后技能即可用。点「保存凭据」直接确认就绪。
           </p>
         )}
 
-        {!isCli && !isPlugin && (
+        {!isCli && !isPlugin && isOneId && (
+          <div className="flex flex-col gap-2">
+            <label className="text-xs text-muted-foreground">
+              OneID Token(腾讯统一身份)
+            </label>
+            <Input
+              value={oneIdToken}
+              onChange={(e) => setOneIdToken(e.target.value)}
+              placeholder="粘贴 OneID access token"
+              className="h-8 text-sm"
+            />
+          </div>
+        )}
+
+        {!isCli && !isPlugin && !isOneId && (
           <div className="flex flex-col gap-2">
             <label className="text-xs text-muted-foreground">
               access_token
@@ -176,12 +278,45 @@ function ConnectDialog({
           </div>
         )}
 
-        {isCli && (
+        {isCli && !deviceFlow && (
           <p className="text-xs leading-5 text-muted-foreground">
-            CLI 型插件将执行 cli.json 的登录命令(浏览器/交互式)。
-            可勾选在后台同步执行,或在本机终端手动执行。
+            CLI 型插件将执行 cli.json 的登录命令(浏览器/设备流)。点「执行 CLI
+            登录」自动开始。
           </p>
         )}
+
+        {deviceFlow ? (
+          <div className="space-y-1.5 rounded-md bg-muted/60 px-2.5 py-2 text-xs">
+            <p className="text-foreground">
+              {deviceFlow.message || "请在浏览器完成授权"}
+            </p>
+            {deviceFlow.user_code && !deviceFlow.code_embedded_in_uri ? (
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">验证码</span>
+                <code className="rounded bg-background px-1.5 py-0.5 font-mono text-[12px]">
+                  {deviceFlow.user_code}
+                </code>
+              </div>
+            ) : null}
+            <div className="flex items-center gap-2 pt-0.5">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="h-7 px-2 text-xs"
+                onClick={() =>
+                  deviceFlow.verification_uri &&
+                  window.open(deviceFlow.verification_uri, "_blank")
+                }
+              >
+                打开授权页
+              </Button>
+              <span className="text-muted-foreground">
+                等待授权完成…({deviceFlow.expires_in || 240}s)
+              </span>
+            </div>
+          </div>
+        ) : null}
 
         {message ? (
           <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-muted/60 px-2 py-1.5 text-xs text-foreground">
@@ -196,7 +331,7 @@ function ConnectDialog({
             size="sm"
             onClick={() => onOpenChange(false)}
           >
-            取消
+            {deviceFlow ? "关闭" : "取消"}
           </Button>
           <Button
             type="button"
@@ -209,7 +344,189 @@ function ConnectDialog({
             ) : (
               <KeyRound className="mr-1 h-3 w-3" />
             )}
-            {isCli ? "执行 CLI 登录" : "保存凭据"}
+            {isCli ? (deviceFlow ? "重新登录" : "执行 CLI 登录") : "保存凭据"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** 服务商 OAuth App 凭据配置弹窗(BYO OAuth)。
+ *
+ * GitHub / GitLab 等连接器不暴露 .well-known 元数据,网页登录靠用户在自己账号下
+ * 注册一个 OAuth App(免费、几分钟)。这里收集 client_id + client_secret,加密存
+ * 到后端(绝不返回明文 secret),保存后自动继续网页授权。
+ */
+function OAuthAppDialog({
+  open,
+  provider,
+  providerName,
+  docsUrl,
+  redirectUri,
+  onOpenChange,
+  onSaved,
+}: {
+  open: boolean;
+  provider: string;
+  providerName: string;
+  docsUrl: string;
+  redirectUri: string;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => void;
+}) {
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [hasExisting, setHasExisting] = useState(false);
+  const [existingMask, setExistingMask] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    setClientId("");
+    setClientSecret("");
+    setMessage(null);
+    setBusy(false);
+    void getOAuthApp(provider)
+      .then((info) => {
+        setHasExisting(info.configured);
+        setExistingMask(info.client_id_masked);
+      })
+      .catch(() => setHasExisting(false));
+  }, [open, provider]);
+
+  const onSubmit = async () => {
+    if (!clientId.trim()) {
+      setMessage("请填写 client_id。");
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      await saveOAuthApp(provider, clientId.trim(), clientSecret.trim());
+      setMessage("凭据已保存,正在打开授权页…");
+      onSaved();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : String(err));
+      setBusy(false);
+    }
+  };
+
+  const onRemove = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await deleteOAuthApp(provider);
+      setHasExisting(false);
+      setExistingMask("");
+      setMessage("已移除本地保存的 OAuth App 凭据。");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[520px]">
+        <DialogHeader className="gap-1 text-left">
+          <DialogTitle className="text-[15px]">
+            🔗 配置 {providerName} OAuth App
+          </DialogTitle>
+          <DialogDescription className="text-caption leading-5">
+            该服务商不支持自动发现(MCP .well-known),网页登录需要你注册一个
+            OAuth App 获取凭据,和 WorkBuddy 用自己平台注册的 App 一个原理。
+            凭据仅保存在本机(加密),不会上传。
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-2 text-xs">
+          {docsUrl ? (
+            <a
+              href={docsUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-primary underline underline-offset-2"
+            >
+              如何创建 {providerName} OAuth App(官方文档)
+            </a>
+          ) : null}
+          <div className="rounded-md bg-muted/60 px-2.5 py-2 leading-5">
+            <div className="font-medium text-foreground">回调地址(注册 App 时填写)</div>
+            <code className="mt-0.5 block break-all text-[11px] text-muted-foreground">
+              {redirectUri}
+            </code>
+          </div>
+        </div>
+
+        {hasExisting ? (
+          <div className="flex items-center justify-between gap-2 rounded-md border border-border-default px-2.5 py-2 text-xs">
+            <span className="text-muted-foreground">
+              已保存 OAuth App:{' '}
+              <code className="text-foreground">{existingMask || "已配置"}</code>
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => void onRemove()}
+            >
+              移除
+            </Button>
+          </div>
+        ) : null}
+
+        <div className="space-y-2">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">
+              client_id
+            </label>
+            <Input
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              placeholder="Iv23xxxxxxxxxxxxxxxx"
+              autoComplete="off"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">
+              client_secret
+            </label>
+            <Input
+              value={clientSecret}
+              onChange={(e) => setClientSecret(e.target.value)}
+              placeholder="gho_xxxxxxxxxxxxxxxx"
+              autoComplete="off"
+              type="password"
+            />
+          </div>
+        </div>
+
+        {message ? (
+          <pre className="max-h-24 overflow-auto whitespace-pre-wrap rounded-md bg-muted/60 px-2 py-1.5 text-xs text-foreground">
+            {message}
+          </pre>
+        ) : null}
+
+        <DialogFooter className="gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onOpenChange(false)}
+          >
+            取消
+          </Button>
+          <Button type="button" size="sm" disabled={busy} onClick={() => void onSubmit()}>
+            {busy ? (
+              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            ) : (
+              <KeyRound className="mr-1 h-3 w-3" />
+            )}
+            保存并继续授权
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -221,28 +538,40 @@ export function CapabilityMarketPanel() {
   const [items, setItems] = useState<CapabilityInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<
     "all" | "mcp" | "cli" | "skill-only" | "plugin"
   >("all");
   const [busyMap, setBusyMap] = useState<Record<string, boolean>>({});
   const [statusMap, setStatusMap] = useState<Record<string, boolean>>({});
+  /** 显示只能手动填 token 的插件(默认隐藏,对齐「都能跳网页授权」)。 */
+  const [showManual, setShowManual] = useState(false);
   const [connectTarget, setConnectTarget] = useState<CapabilityInfo | null>(
     null,
   );
+  const [oauthAppDialog, setOAuthAppDialog] = useState<{
+    provider: string;
+    providerName: string;
+    docsUrl: string;
+    redirectUri: string;
+    server: string;
+    url: string;
+    cap: CapabilityInfo;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await listCapabilities({ limit: 500 });
+      const res = await listCapabilities({ limit: 500, includeManual: showManual });
       setItems(res.capabilities);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showManual]);
 
   useEffect(() => {
     void load();
@@ -293,13 +622,26 @@ export function CapabilityMarketPanel() {
   const onInstall = async (cap: CapabilityInfo) => {
     setBusy(cap.id, true);
     setError(null);
+    setNotice(null);
     try {
-      await installCapability(cap.id);
+      const res = await installCapability(cap.id);
       setItems((prev) =>
         prev.map((c) =>
           c.id === cap.id ? { ...c, installed: true, enabled: false } : c,
         ),
       );
+      // CLI 连接器生命周期提示(init/版本)不阻断安装
+      const cli = res.cli_lifecycle;
+      if (cli?.has_cli) {
+        const msgs: string[] = [];
+        if (cli.init && !cli.init.ok && cli.init.error) {
+          msgs.push(`CLI 工具未装好:${cli.init.error}`);
+        }
+        if (cli.version && !cli.version.ok && cli.version.error) {
+          msgs.push(`版本提示:${cli.version.error}`);
+        }
+        if (msgs.length) setNotice(msgs.join(" "));
+      }
       void refreshStatus([{ ...cap, installed: true, enabled: false }]);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -356,8 +698,42 @@ export function CapabilityMarketPanel() {
     }
   };
 
-  const openConnect = (cap: CapabilityInfo) => {
-    // 插件无需认证,直接确认就绪
+  // 跑一遍「网页授权」:authorize → 弹窗 → 轮询回调结果。
+  const runWebOAuth = async (cap: CapabilityInfo, server: string, url: string) => {
+    const { authorize_url, needs_app_credentials, provider, provider_name, docs_url, redirect_uri } =
+      await oauthAuthorize(server, url, cap.oauth_provider ?? undefined);
+    // 服务商直连 OAuth(GitHub 等)还没配置 OAuth App 凭据 → 引导用户填写
+    if (needs_app_credentials && provider) {
+      setOAuthAppDialog({
+        provider,
+        providerName: provider_name ?? provider,
+        docsUrl: docs_url ?? "",
+        redirectUri: redirect_uri ?? "",
+        server,
+        url,
+        cap,
+      });
+      return;
+    }
+    const popup = window.open(
+      authorize_url,
+      "octopus-mcp-oauth",
+      "popup=yes,width=560,height=720",
+    );
+    if (!popup) {
+      setError("授权窗口被浏览器拦截,请允许弹窗后重试");
+      return;
+    }
+    const ok = await pollOAuth(server);
+    if (ok) {
+      setStatusMap((m) => ({ ...m, [cap.id]: true }));
+    } else {
+      setError("未完成网页授权(超时或取消),可重试或改用手动填写凭据");
+    }
+  };
+
+  const openConnect = async (cap: CapabilityInfo) => {
+    // 插件(Codex)无需认证,直接确认就绪
     if (cap.source === "codex_plugin") {
       setBusy(cap.id, true);
       void connectCapability(cap.id)
@@ -370,6 +746,31 @@ export function CapabilityMarketPanel() {
         .finally(() => setBusy(cap.id, false));
       return;
     }
+
+    // OneID(腾讯统一身份)特例:走 oneid-token 专用流程,不尝试网页 OAuth。
+    if (cap.auth_mode === "oneid-token") {
+      setConnectTarget(cap);
+      return;
+    }
+
+    // MCP 型插件:优先走「网页登录授权」——打开服务商授权页,登录授权后回调。
+    // 服务商不支持网页授权时才回退到手动填 token。
+    const mcp = (cap.mcp_servers ?? []).find((s) => s && s.url);
+    if (mcp) {
+      setBusy(cap.id, true);
+      setError(null);
+      try {
+        await runWebOAuth(cap, mcp.name, mcp.url);
+      } catch {
+        // 无 .well-known 发现 + 非服务商直连 OAuth → 回退到手动填写凭据
+        setConnectTarget(cap);
+      } finally {
+        setBusy(cap.id, false);
+      }
+      return;
+    }
+
+    // 其余类型:打开手动填写凭据对话框
     setConnectTarget(cap);
   };
 
@@ -430,6 +831,15 @@ export function CapabilityMarketPanel() {
           </div>
           <Button
             size="sm"
+            variant={showManual ? "secondary" : "ghost"}
+            disabled={loading}
+            onClick={() => setShowManual((v) => !v)}
+            title="显示只能手动填 token、不能跳网页授权的插件"
+          >
+            {showManual ? "隐藏手动填" : "显示手动填"}
+          </Button>
+          <Button
+            size="sm"
             variant="ghost"
             disabled={loading}
             onClick={() => void load()}
@@ -443,6 +853,12 @@ export function CapabilityMarketPanel() {
       {error ? (
         <div className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
           {error}
+        </div>
+      ) : null}
+
+      {notice ? (
+        <div className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+          {notice}
         </div>
       ) : null}
 
@@ -493,6 +909,14 @@ export function CapabilityMarketPanel() {
                   >
                     {typeMeta.label}
                   </Badge>
+                  {(cap.oauth_supported || cap.has_cli_auth) && (
+                    <Badge
+                      className="border-transparent bg-sky-500/15 text-[11px] text-sky-600 dark:text-sky-400"
+                      title="支持跳转网页登录授权,无需手动填 token"
+                    >
+                      🔗 网页登录
+                    </Badge>
+                  )}
                   <Badge
                     variant="outline"
                     className="text-[11px] font-normal text-muted-foreground"
@@ -575,7 +999,7 @@ export function CapabilityMarketPanel() {
                         onClick={() =>
                           connected
                             ? void onDisconnect(cap)
-                            : openConnect(cap)
+                            : void openConnect(cap)
                         }
                         title={connected ? "断开并清除凭据" : "连接/认证"}
                       >
@@ -624,6 +1048,33 @@ export function CapabilityMarketPanel() {
               ...m,
               [connectTarget.id]: true,
             }));
+          }}
+        />
+      ) : null}
+
+      {oauthAppDialog ? (
+        <OAuthAppDialog
+          open
+          provider={oauthAppDialog.provider}
+          providerName={oauthAppDialog.providerName}
+          docsUrl={oauthAppDialog.docsUrl}
+          redirectUri={oauthAppDialog.redirectUri}
+          onOpenChange={(open) => {
+            if (!open) setOAuthAppDialog(null);
+          }}
+          onSaved={async () => {
+            const dlg = oauthAppDialog;
+            setOAuthAppDialog(null);
+            if (!dlg) return;
+            setBusy(dlg.cap.id, true);
+            setError(null);
+            try {
+              await runWebOAuth(dlg.cap, dlg.server, dlg.url);
+            } catch {
+              setConnectTarget(dlg.cap);
+            } finally {
+              setBusy(dlg.cap.id, false);
+            }
           }}
         />
       ) : null}
