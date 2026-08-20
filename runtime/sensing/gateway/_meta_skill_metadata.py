@@ -268,12 +268,19 @@ def _dynamic_plugin_skill_names() -> set[str]:
         project = _default_skill_library_dir().parents[2]
     except Exception:
         project = Path.cwd()
+    # 统一读 octopus 名下插件(~/.octopus/plugins/codex);旧 ~/.codex 缓存先同步一次
+    try:
+        from runtime.platform.plugins.codex_discovery import (
+            sync_codex_cache_to_octopus,
+        )
+
+        sync_codex_cache_to_octopus()
+    except Exception:  # noqa: BLE001
+        pass
     roots.extend(
         [
             project / ".octopus" / "plugins" / "codex",
             Path.home() / ".octopus" / "plugins" / "codex",
-            project / ".codex" / "plugins" / "cache",
-            Path.home() / ".codex" / "plugins" / "cache",
         ]
     )
     names: set[str] = set()

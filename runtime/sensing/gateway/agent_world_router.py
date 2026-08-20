@@ -637,6 +637,80 @@ def create_agent_world_router(
         except FileExistsError as exc:
             raise HTTPException(409, str(exc)) from exc
 
+    # ── 云商城插件 / 技能目录(发布到 Pages 的 plugin-store.json / skill-registry.json) ──
+    def _cloud_catalog(kind: str) -> Any:
+        from runtime.platform.plugins.cloud_catalog import CloudCatalog
+
+        return CloudCatalog(kind)
+
+    @router.get("/api/agent-market/cloud/plugins")
+    def api_agent_market_cloud_plugins(
+        search: str | None = None,
+        kind: str | None = None,
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=200, ge=1, le=500),
+        refresh: int = Query(default=0, ge=0, le=1),
+    ) -> dict[str, Any]:
+        cat = _cloud_catalog("plugins")
+        if refresh:
+            cat.refresh()
+        out = cat.list(search=search, kind=kind, offset=offset, limit=limit)
+        out["meta"] = cat.meta()
+        return out
+
+    @router.get("/api/agent-market/cloud/skills")
+    def api_agent_market_cloud_skills(
+        search: str | None = None,
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=300, ge=1, le=500),
+        refresh: int = Query(default=0, ge=0, le=1),
+    ) -> dict[str, Any]:
+        cat = _cloud_catalog("skills")
+        if refresh:
+            cat.refresh()
+        out = cat.list(search=search, offset=offset, limit=limit)
+        out["meta"] = cat.meta()
+        return out
+
+    # ── 云商城已安装状态(本地已落地哪些技能/插件) ─────────────
+    @router.get("/api/agent-market/cloud/installed")
+    def api_agent_market_cloud_installed() -> dict[str, Any]:
+        cat = _cloud_catalog("skills")
+        plugins = _cloud_catalog("plugins")
+        return {
+            "skills": cat.installed_skills(),
+            "plugins": plugins.installed_plugins(),
+        }
+
+    # ── 云商城安装(下载内容包 → 解包落地) ─────────────────────
+    @router.post("/api/agent-market/cloud/skills/{name}/install")
+    def api_agent_market_cloud_skill_install(name: str) -> dict[str, Any]:
+        cat = _cloud_catalog("skills")
+        try:
+            return cat.install_skill(name)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @router.post("/api/agent-market/cloud/plugins/{plugin_id}/install")
+    def api_agent_market_cloud_plugin_install(plugin_id: str) -> dict[str, Any]:
+        cat = _cloud_catalog("plugins")
+        item = next((i for i in cat.items() if i.get("id") == plugin_id), None)
+        if item is None:
+            raise HTTPException(404, f"cloud plugin not found: {plugin_id}")
+        # 内容包目录:codex 插件 plugins/codex/<name>,连接器 plugins/connector/<id>;
+        # 条目 id 带前缀(codex_/wb_),成员名取 item["plugin"]。
+        item_kind = str(item.get("kind") or "connector")
+        archive_kind = "codex" if item_kind == "plugin" else "connector"
+        member = str(item.get("plugin") or plugin_id)
+        try:
+            return cat.install_plugin(member, plugin_kind=archive_kind)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
     return router
 
 

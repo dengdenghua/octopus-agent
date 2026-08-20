@@ -19,6 +19,7 @@ import re
 import shutil
 import tarfile
 import tempfile
+import time as _time
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -44,6 +45,29 @@ from runtime.sensing._fastapi_guard import require_fastapi
 # 插件目录和显式权限审核。
 _ROLE_ASSET_TYPES = ("role", "twin-role")
 _MAX_PLUGIN_UNCOMPRESSED_BYTES = 200 * 1024 * 1024
+
+
+# registry 全量列表查询是 5 秒级慢请求(公网),列表端点加进程内 TTL 缓存:
+# 同一批资产在 TTL 内命中内存,search/category/分页都在缓存之上做;``refresh=1`` 强制穿透拉新。
+# 只缓存成功结果(loader 抛异常时不写入,下次仍会重试),零第三方依赖。
+_REGISTRY_CACHE_TTL_SECONDS = 60.0
+_REGISTRY_CACHE: dict[str, tuple[float, list[Any]]] = {}
+
+
+def _registry_list_cached(
+    key: str,
+    loader: Any,
+    *,
+    refresh: bool = False,
+) -> list[Any]:
+    now = _time.monotonic()
+    if not refresh:
+        hit = _REGISTRY_CACHE.get(key)
+        if hit is not None and (now - hit[0]) < _REGISTRY_CACHE_TTL_SECONDS:
+            return hit[1]
+    assets = loader()
+    _REGISTRY_CACHE[key] = (now, assets)
+    return assets
 
 
 def _ensure_safe_dir(path: Path) -> None:
@@ -387,11 +411,19 @@ def create_registry_consumer_router(
         Path(publisher_trust_store_path) if publisher_trust_store_path is not None else None
     )
 
+    _branding_cache: dict[str, tuple[float, dict[str, dict[str, Any]]]] = {}
+    _branding_key = f"{plugin_root}|{publisher_trust_store_path}"
+
     def _current_plugin_branding() -> dict[str, dict[str, Any]]:
-        # Re-scan on registry reads so a newly installed bundle gets its logo
-        # without requiring a runtime restart.  Discovery is local-only and
-        # cheap compared with the registry request itself.
-        return _plugin_branding_index(plugin_root, publisher_trust_store_path)
+        # 本地发现开销 ~0.4s/次(扫插件目录),加 5s TTL:安装新 bundle 后最迟 5s
+        # 就能刷出新 logo,又避免每次读 registry 都重复扫盘。
+        now = _time.monotonic()
+        hit = _branding_cache.get(_branding_key)
+        if hit is not None and (now - hit[0]) < 5.0:
+            return hit[1]
+        idx = _plugin_branding_index(plugin_root, publisher_trust_store_path)
+        _branding_cache[_branding_key] = (now, idx)
+        return idx
 
     def _auth_dep(request: Request) -> None:
         from runtime.adapters.web_auth import _resolve_actor
@@ -413,11 +445,16 @@ def create_registry_consumer_router(
         category: str | None = None,
         offset: int = Query(default=0, ge=0),
         limit: int = Query(default=50, ge=1, le=500),
+        refresh: bool = Query(default=False),
     ) -> dict[str, Any]:
         from octopus_runtime import RegistryClient
 
         try:
-            assets = RegistryClient(base).list_skills()
+            assets = _registry_list_cached(
+                f"skills|{base}",
+                lambda: RegistryClient(base).list_skills(),
+                refresh=refresh,
+            )
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(502, f"registry unreachable: {exc}") from exc
         if category:
@@ -479,13 +516,21 @@ def create_registry_consumer_router(
         role_type: str | None = Query(default=None, alias="type"),
         offset: int = Query(default=0, ge=0),
         limit: int = Query(default=50, ge=1, le=500),
+        refresh: bool = Query(default=False),
     ) -> dict[str, Any]:
         from octopus_runtime import RegistryClient
 
         types = (role_type,) if role_type in _ROLE_ASSET_TYPES else _ROLE_ASSET_TYPES
         try:
-            client = RegistryClient(base)
-            assets = [a for t in types for a in client.list_assets(type_=t)]
+            assets = _registry_list_cached(
+                f"roles|{base}|{','.join(types)}",
+                lambda: [
+                    a
+                    for t in types
+                    for a in RegistryClient(base).list_assets(type_=t)
+                ],
+                refresh=refresh,
+            )
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(502, f"registry unreachable: {exc}") from exc
         if category:
@@ -556,11 +601,16 @@ def create_registry_consumer_router(
         category: str | None = None,
         offset: int = Query(default=0, ge=0),
         limit: int = Query(default=50, ge=1, le=500),
+        refresh: bool = Query(default=False),
     ) -> dict[str, Any]:
         from octopus_runtime import RegistryClient
 
         try:
-            assets = RegistryClient(base).list_assets(type_="plugin")
+            assets = _registry_list_cached(
+                f"plugins|{base}",
+                lambda: RegistryClient(base).list_assets(type_="plugin"),
+                refresh=refresh,
+            )
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(502, f"registry unreachable: {exc}") from exc
         if category:

@@ -31,6 +31,7 @@ except ImportError:  # pragma: no cover
     Query = None  # type: ignore[assignment, misc]
     Request = None  # type: ignore[assignment, misc]
 
+from runtime.platform.connectors import oauth_support
 from runtime.sensing._fastapi_guard import require_fastapi
 
 
@@ -72,12 +73,29 @@ def create_capability_router(
             raise HTTPException(404, f"capability not found: {cid}")
         return registry._public(item)
 
+    # 需要手动填 token 的判定:既不能跳网页 OAuth,也没有 CLI 设备流。
+    def _is_manual_token_only(item: dict[str, Any]) -> bool:
+        if item.get("auth_mode") not in ("token", "oneid-token", "mcp", "oauth"):
+            return False
+        if item.get("oauth_supported") is True:
+            return False
+        if item.get("oauth_provider"):
+            return False
+        if item.get("has_cli_auth"):
+            return False
+        return True
+
     @router.get("/api/capabilities")
     def list_capabilities(
         search: str | None = None,
         source: str | None = Query(default=None, alias="source"),
         ctype: str | None = Query(default=None, alias="type"),
         limit: int = Query(default=500, ge=1, le=1000),
+        include_manual: bool = Query(
+            default=False,
+            alias="include_manual",
+            description="默认隐藏只能手动填 token 的插件;传 true 全部返回。",
+        ),
     ) -> dict[str, Any]:
         items = registry.list()
         if source:
@@ -95,7 +113,26 @@ def create_capability_router(
                 or q in str(i.get("description_zh", "")).lower()
                 or q in str(i.get("id", "")).lower()
             ]
+        # 网页 OAuth 授权支持探测:后台并发 + 磁盘缓存(不阻塞列表返回)
+        urls: list[str] = []
+        for i in items:
+            urls.extend(
+                str(s.get("url", ""))
+                for s in i.get("mcp_servers", [])
+                if isinstance(s, dict) and s.get("url")
+            )
+        oauth_support.prewarm(urls)
         items = [registry._public(i) for i in items]
+        items = [oauth_support.annotate(i) for i in items]
+        for i in items:
+            i["manual_token_only"] = _is_manual_token_only(i)
+        if not include_manual:
+            # 移除「只能手动填 token」且未安装的插件(已安装的保留以便管理/卸载)
+            items = [
+                i
+                for i in items
+                if not i["manual_token_only"] or i.get("installed")
+            ]
         return {"capabilities": items[:limit], "total": len(items)}
 
     @router.get("/api/capabilities/{cid}")

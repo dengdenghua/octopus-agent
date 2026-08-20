@@ -13,6 +13,7 @@ FastAPI will match those real routes first.
 
 from __future__ import annotations
 
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -337,10 +338,8 @@ def create_evolution_ops_router(
         )
         for name in auto_skills:
             description = ""
-            try:
+            with suppress(AttributeError, KeyError, TypeError):
                 description = str(getattr(registry.get(name), "description", "") or "")
-            except (AttributeError, KeyError, TypeError):
-                pass
             changes.append(
                 {
                     "kind": "skill",
@@ -406,15 +405,22 @@ def create_evolution_ops_router(
         }
         if len(observations) < limit and thread_store is not None:
             try:
-                recent_threads = thread_store.search(limit=limit * 3, sort_by="updated_at")
+                recent_threads = list(thread_store.search(limit=limit * 3, sort_by="updated_at") or [])
             except (AttributeError, TypeError, OSError):
+                recent_threads = []
+            # guard the search() contract (may return None) so iteration is
+            # always over a list (audit H5 / mypy union-attr).
+            if recent_threads is None:
                 recent_threads = []
             for thread in recent_threads:
                 thread_id = str(thread.get("thread_id") or "")
                 if not thread_id or thread_id in observed_thread_ids:
                     continue
-                values = thread.get("values") if isinstance(thread.get("values"), dict) else {}
-                messages = values.get("messages") if isinstance(values.get("messages"), list) else []
+                values: dict[str, Any] = (
+                    thread.get("values") if isinstance(thread.get("values"), dict) else {}
+                )
+                raw_messages = values.get("messages")
+                messages: list[Any] = raw_messages if isinstance(raw_messages, list) else []
                 human_text = ""
                 latest_answer = ""
                 tool_count = 0
