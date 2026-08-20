@@ -588,6 +588,9 @@ function turnToMessages(turn: Turn): Message[] {
         if (am.agentIcon) {
           kwargs.agent_icon = am.agentIcon;
         }
+        if (am.replyTo) {
+          kwargs.reply_to = am.replyTo;
+        }
         if (am.phaseId) {
           kwargs.phase_id = am.phaseId;
         }

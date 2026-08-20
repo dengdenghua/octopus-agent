@@ -376,6 +376,67 @@ describe("MessageList process trace lifecycle", () => {
     expect(stats).toHaveTextContent("3 文件修改");
   });
 
+  test("expands a completed agent card to reveal the full report", () => {
+    const fullReport = `这是一份很长的研究报告，${"深入分析了浙江自然(605080)的行业格局、估值与风险。".repeat(3)}`;
+    renderWithProviders(
+      <InlineSubagentCards
+        settled
+        agents={[
+          {
+            id: "analyst",
+            name: "行业分析师",
+            role: "analyst",
+            status: "done",
+            task: "分析浙江自然",
+            summary: fullReport,
+            filesTouchedCount: 0,
+            index: 0,
+          },
+        ]}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(screen.queryByTestId("agent-report-0")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /查看报告/ }));
+
+    const panel = screen.getByTestId("agent-report-0");
+    expect(panel).toHaveTextContent(fullReport);
+    expect(screen.getByRole("button", { name: /收起报告/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /收起报告/ }));
+    expect(screen.queryByTestId("agent-report-0")).not.toBeInTheDocument();
+  });
+
+  test("expands a failed agent card to reveal the failure reason", () => {
+    renderWithProviders(
+      <InlineSubagentCards
+        settled
+        agents={[
+          {
+            id: "contrarian",
+            name: "逆向投资者",
+            role: "contrarian",
+            status: "error",
+            task: "给出反方观点",
+            error: "时间窗口不足，未能完成多空验证",
+            filesTouchedCount: 0,
+            index: 0,
+          },
+        ]}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(screen.queryByTestId("agent-report-0")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /查看失败原因/ }));
+
+    const panel = screen.getByTestId("agent-report-0");
+    expect(panel).toHaveTextContent("时间窗口不足，未能完成多空验证");
+  });
+
   test("folds persisted spec, spawn and finish rows into two compact cards", () => {
     const history: AIMessage = {
       id: "ai-real-history",

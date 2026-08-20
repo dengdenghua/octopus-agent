@@ -1329,18 +1329,10 @@ export function useThreadStreamRealtime(
             effectiveThreadId && effectiveThreadId !== "new"
               ? await uploadPromptInputFiles(effectiveThreadId, files)
               : await fallbackFileAttachmentsAsync(files);
-          if (
-            hasFileUploads &&
-            attachments.length > 0 &&
-            !attachments.every((a) => !a.path && !a.artifact_url)
-          ) {
-            // Only toast when at least one attachment got a real server-side
-            // path/artifact_url — i.e. the file was actually uploaded, not
-            // just name-only fallback. Keeps the signal meaningful.
-            toast.success(
-              t.agentWorkbenchPages.inputsUploadedFiles(attachments.length),
-            );
-          }
+          // No upload toast here: the composer chip owns that signal now. A
+          // floating "uploaded 1 file" popup fired at send time told the user
+          // about work they had already watched finish, and it appeared
+          // detached from the attachment it described.
           const rawContext =
             context && typeof context === "object"
               ? (context as Record<string, unknown>)
@@ -1443,7 +1435,6 @@ export function useThreadStreamRealtime(
       permissionRuntime.sandbox_mode,
       permissionRuntime.execution_environment,
       threadId,
-      t.agentWorkbenchPages,
       t.chatInputBox.uploadFailed,
     ],
   );
@@ -1458,7 +1449,8 @@ export function useThreadStreamRealtime(
   ] as const;
 }
 
-async function uploadPromptInputFiles(
+/** Exported for tests: the attach-time-upload reuse path is worth pinning. */
+export async function uploadPromptInputFiles(
   threadId: string,
   fileParts: PromptInputMessage["files"],
 ): Promise<Record<string, unknown>[]> {
@@ -1467,7 +1459,16 @@ async function uploadPromptInputFiles(
     await Promise.all(fileParts.map((part) => promptInputFilePartToFile(part)))
   ).filter((file): file is File => file instanceof File);
   if (files.length === 0) return fallbackFileAttachments(fileParts);
-  const result = await uploadFiles(threadId, files);
+  // The composer now uploads on attach, so by send time the bytes are usually
+  // already on the server. Re-posting them would double the wait and mint a
+  // second artifact for the same picture.
+  const preUploaded = fileParts
+    .map((part) => part.uploaded)
+    .filter((info): info is UploadedFileInfo => !!info);
+  const result =
+    preUploaded.length === files.length
+      ? { files: preUploaded }
+      : await uploadFiles(threadId, files);
 
   // Hosted upload gives us a server-side path/URL. For image-typed
   // attachments we ALSO embed a base64 data URL so the backend can

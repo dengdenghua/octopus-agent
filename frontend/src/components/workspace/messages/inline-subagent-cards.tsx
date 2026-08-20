@@ -968,6 +968,8 @@ function KimiStyleSubagentCard({
   const { t } = useI18n();
   const detailId = `${useId()}-agent-preview`;
   const [previewSuppressed, setPreviewSuppressed] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const hasReport = Boolean(agent.summary || agent.error);
   const isRunning = agent.status === "running" || agent.status === "waiting";
   const isDone = agent.status === "done";
   const statusLabel =
@@ -1100,6 +1102,50 @@ function KimiStyleSubagentCard({
           )}
         </div>
       </button>
+
+      {hasReport && (
+        <div className="pl-8 pr-1">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setPreviewSuppressed(true);
+              event.currentTarget.blur();
+              setReportOpen((value) => !value);
+            }}
+            aria-expanded={reportOpen}
+            className={cn(
+              "mt-0.5 inline-flex items-center gap-1 rounded px-1 py-0.5 text-micro font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50",
+              reportOpen
+                ? "text-foreground/75 hover:bg-background/60"
+                : "text-muted-foreground/70 hover:bg-background/60 hover:text-foreground",
+            )}
+          >
+            {reportOpen ? (
+              <ChevronUpIcon className="size-3" />
+            ) : (
+              <ChevronDownIcon className="size-3" />
+            )}
+            {reportOpen
+              ? t.message.collapseReport
+              : agent.error
+                ? t.message.viewReportError
+                : t.message.viewReport}
+          </button>
+          {reportOpen && (
+            <div
+              data-testid={`agent-report-${agent.index ?? 0}`}
+              className="mt-1 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-md border border-border/50 bg-background/40 px-2.5 py-2 text-xs leading-relaxed text-muted-foreground"
+            >
+              {agent.error ? (
+                <span className="text-destructive/80">{agent.error}</span>
+              ) : (
+                agent.summary
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {previewEnabled && !previewSuppressed && (
         <div

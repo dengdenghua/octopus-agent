@@ -56,6 +56,8 @@ export interface AgentMessageItem extends ItemBase {
   agentDisplayName?: string;
   agentAvatarUrl?: string;
   agentIcon?: string;
+  /** ③ @因果链：本气泡回应/反驳的成员 display name。 */
+  replyTo?: string;
 }
 
 export interface ReasoningItem extends ItemBase {

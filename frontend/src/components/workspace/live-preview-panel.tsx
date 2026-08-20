@@ -474,7 +474,7 @@ ${jsContent || "// No JavaScript"}
                     srcDoc={iframeSrcDoc}
                     onLoad={handleIframeLoad}
                     className="h-full min-h-0 w-full flex-1"
-                    sandbox="allow-scripts allow-same-origin"
+                    sandbox="allow-scripts"
                     title={t.livePreview.title}
                   />
                 ) : previewUrl ? (
@@ -484,7 +484,7 @@ ${jsContent || "// No JavaScript"}
                     src={previewUrl}
                     onLoad={handleIframeLoad}
                     className="h-full min-h-0 w-full flex-1"
-                    sandbox="allow-scripts allow-same-origin"
+                    sandbox="allow-scripts"
                     title={t.livePreview.title}
                   />
                 ) : htmlContent ? (

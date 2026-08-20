@@ -1504,6 +1504,7 @@ export function MessageList({
     agentAvatar,
     agentIcon,
     agentRole,
+    replyTo,
     children,
   }: {
     key: string;
@@ -1511,6 +1512,8 @@ export function MessageList({
     agentAvatar?: string;
     agentIcon?: string | null;
     agentRole?: string;
+    /** ③ @因果链：本气泡回应/反驳的成员名，显示"回应 @谁"。 */
+    replyTo?: string;
     children: ReactNode;
   }) => {
     const displayName = agentName || t.message.assistant;
@@ -1537,6 +1540,14 @@ export function MessageList({
               {agentRole === "tl" && (
                 <span className="rounded-md border border-success/50 bg-success/10 px-1.5 py-0 text-xs leading-4 font-medium text-success">
                   队长
+                </span>
+              )}
+              {replyTo && (
+                <span
+                  className="rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0 text-xs leading-4 font-medium text-primary"
+                  title={replyTo}
+                >
+                  ↪ 回应 @{replyTo}
                 </span>
               )}
             </div>
@@ -1613,6 +1624,10 @@ export function MessageList({
       agentAvatar: avatar,
       agentIcon: icon,
       agentRole: role,
+      replyTo:
+        typeof msg.additional_kwargs?.reply_to === "string"
+          ? (msg.additional_kwargs.reply_to as string)
+          : undefined,
       children: content,
     });
   };
@@ -1664,6 +1679,10 @@ export function MessageList({
       agentAvatar,
       agentIcon,
       agentRole,
+      replyTo:
+        typeof aiMessage?.additional_kwargs?.reply_to === "string"
+          ? (aiMessage.additional_kwargs.reply_to as string)
+          : undefined,
       children: content,
     });
   };

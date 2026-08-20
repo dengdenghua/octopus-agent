@@ -167,8 +167,28 @@ describe("<MarkdownContent /> streaming state", () => {
     );
 
     const markdown = view.container.querySelector(".chat-markdown");
-    expect(markdown).toHaveClass("whitespace-pre-wrap");
+    // Soft breaks are preserved by pre-wrap on the prose blocks, not on the
+    // container: the container must stay `normal` so Streamdown's inter-block
+    // separator newlines don't render as blank lines.
+    expect(markdown).toHaveClass("whitespace-normal");
+    expect(markdown?.className).toContain("[&_p]:whitespace-pre-wrap");
     expect(markdown?.textContent).toContain("v1\nfinal=");
+  });
+
+  it("does not let inter-block newlines render as blank lines", () => {
+    // A heading followed by a table is the shape that broke: Streamdown emits
+    // the table as a sibling block and leaves the row separator newlines as a
+    // bare text node on the container. Under pre-wrap those became ~89 blank
+    // lines of dead space above the table.
+    const view = renderMarkdown(
+      ["## 二、中危发现", "", "| # | 位置 |", "|---|---|", "| M1 | a.yaml |"].join(
+        "\n",
+      ),
+    );
+
+    const markdown = view.container.querySelector(".chat-markdown");
+    expect(markdown).not.toHaveClass("whitespace-pre-wrap");
+    expect(markdown).toHaveClass("whitespace-normal");
   });
 
   it("hides leaked read-only control tags but preserves the answer", () => {

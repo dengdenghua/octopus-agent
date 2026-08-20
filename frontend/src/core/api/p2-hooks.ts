@@ -190,7 +190,7 @@ export function useMessageFeedback(
       messageIndex: number,
       feedbackType: FeedbackType,
       tags: string[] = [],
-      comment: string = ""
+      comment = ""
     ) => {
       if (!thread_id) return;
 

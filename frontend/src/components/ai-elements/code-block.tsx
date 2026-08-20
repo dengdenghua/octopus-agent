@@ -1,3 +1,4 @@
+import DOMPurify from "dompurify";
 import { Button } from "@/components/ui/button";
 import { swallow } from "@/core/utils/log";
 import { copyTextToClipboard } from "@/core/clipboard";
@@ -233,8 +234,8 @@ export const CodeBlock = ({
                 PRE_CLASS_OVERRIDES,
                 wrap ? WRAP_PRE_CLASS : SCROLL_PRE_CLASS,
               )}
-              // biome-ignore lint/security/noDangerouslySetInnerHtml: "shiki output is sanitized html"
-              dangerouslySetInnerHTML={{ __html: html }}
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized via DOMPurify (audit C3/M4).
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html) }}
             />
           ) : (
             <div className="size-full overflow-auto">

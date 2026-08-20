@@ -269,7 +269,21 @@ export const MarkdownContent = memo(
       <MessageResponse
         key={isLoading ? "streaming" : "settled"}
         className={cn(
-          "chat-markdown whitespace-pre-wrap",
+          // `whitespace-pre-wrap` preserves intentional soft line breaks inside
+          // prose, but it must NOT apply to the container's own text nodes.
+          // Streamdown splits markdown into sibling blocks and leaves the
+          // separator newlines between them as bare text nodes on the root — a
+          // `## heading` followed by a 12-row table leaves ~89 raw newlines
+          // there. Under pre-wrap each one rendered as a real blank line, so a
+          // table could be preceded by 1000px+ of void. Applying pre-wrap to
+          // the text blocks instead collapses that inter-block whitespace while
+          // keeping soft breaks. Lists are excluded on purpose: Streamdown
+          // already sets `whitespace-normal` on ul/ol for the same reason.
+          "chat-markdown whitespace-normal",
+          "[&_p]:whitespace-pre-wrap [&_blockquote]:whitespace-pre-wrap",
+          "[&_h1]:whitespace-pre-wrap [&_h2]:whitespace-pre-wrap",
+          "[&_h3]:whitespace-pre-wrap [&_h4]:whitespace-pre-wrap",
+          "[&_h5]:whitespace-pre-wrap [&_h6]:whitespace-pre-wrap",
           proseSizeClass,
           className,
         )}

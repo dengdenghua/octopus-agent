@@ -5,7 +5,6 @@ import { getBackendBaseURL } from "@/core/config";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import { useI18n } from "@/core/i18n/hooks";
 import type { Agent } from "@/core/agents/types";
-import type { PetMood } from "@/components/desktop-pet";
 import {
   normalizePermissionMode,
   type PermissionMode,
@@ -16,6 +15,7 @@ import type {
   ResearchSourceKind,
 } from "@/core/research/api";
 import type { ReasoningEffort } from "@/core/threads";
+import type { UploadedFileInfo } from "@/core/uploads";
 import { cn } from "@/lib/utils";
 
 import type { ReasoningMode } from "./reasoning-mode";
@@ -52,10 +52,6 @@ export interface ChatInputBoxProps {
     Agent,
     "name" | "display_name" | "avatar_url" | "icon"
   > | null;
-  petMood?: PetMood;
-  /** Render the in-page pet beside the composer. Existing conversations can
-   * hide it while preserving the user's global pet preference. */
-  showPet?: boolean;
   /** Show the workdir selector pill in the footer. Default false (chat
    * doesn't need a folder); pass true for code-flavored conversations
    * that read/edit local files. */
@@ -118,6 +114,8 @@ export interface ChatInputBoxProps {
     text: string;
     images?: File[];
     files?: File[];
+    /** Server-side info for attachments already uploaded on attach. */
+    uploaded?: UploadedFileInfo[];
   }) => void;
   onStop?: () => void;
   /** True while attachments are being uploaded to the backend. Surfaces

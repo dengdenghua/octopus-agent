@@ -4,13 +4,14 @@ import {
   FileCodeIcon,
   FileJsonIcon,
   FileArchiveIcon,
-  Loader2Icon,
+  RotateCcwIcon,
   XIcon,
 } from "lucide-react";
 
 import type { Translations } from "@/core/i18n/locales";
+import type { AttachmentUpload } from "@/core/uploads";
 import type { PendingContextFile } from "./helpers";
-import { imageFileKey } from "./helpers";
+import { imageFileKey, uploadFileKey } from "./helpers";
 
 interface FileAttachmentProps {
   pendingFiles: PendingContextFile[];
@@ -20,7 +21,69 @@ interface FileAttachmentProps {
   onRemoveFile: (id: string) => void;
   onRemoveImage: (index: number) => void;
   isUploading?: boolean;
+  /** Per-attachment upload state, keyed by ``uploadFileKey(file)``. */
+  uploads?: Map<string, AttachmentUpload>;
+  onRetryUpload?: (key: string) => void;
   t: Translations;
+}
+
+/** Progress bar pinned to the bottom edge of a chip. */
+function UploadProgressBar({
+  upload,
+  t,
+}: {
+  upload: AttachmentUpload | undefined;
+  t: Translations;
+}) {
+  if (!upload || upload.status === "done") return null;
+  const failed = upload.status === "error";
+  return (
+    <div
+      className="absolute bottom-0 left-0 right-0 h-1 bg-muted"
+      role="progressbar"
+      aria-valuenow={failed ? 0 : upload.progress}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label={
+        failed ? t.uploads.uploadFailed : t.uploads.uploadProgress(upload.progress)
+      }
+      data-upload-status={upload.status}
+    >
+      <div
+        className={`h-full transition-[width] duration-200 ${
+          failed ? "bg-danger" : "bg-primary"
+        }`}
+        style={{ width: failed ? "100%" : `${upload.progress}%` }}
+      />
+    </div>
+  );
+}
+
+/** Retry affordance shown on a failed chip. */
+function UploadRetryButton({
+  upload,
+  onRetry,
+  t,
+  className,
+}: {
+  upload: AttachmentUpload | undefined;
+  onRetry?: (key: string) => void;
+  t: Translations;
+  className?: string;
+}) {
+  if (!upload || upload.status !== "error" || !onRetry) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => onRetry(upload.key)}
+      data-testid={`upload-retry-${upload.key}`}
+      className={`flex size-5 shrink-0 items-center justify-center rounded bg-background/80 text-danger backdrop-blur-sm hover:bg-danger/10 ${className ?? ""}`}
+      title={`${t.uploads.retryUpload}${upload.error ? `: ${upload.error}` : ""}`}
+      aria-label={t.uploads.retryUpload}
+    >
+      <RotateCcwIcon className="size-3.5" />
+    </button>
+  );
 }
 
 function fileExt(name: string): string {
@@ -229,6 +292,8 @@ export function FileAttachment({
   onRemoveFile,
   onRemoveImage,
   isUploading = false,
+  uploads,
+  onRetryUpload,
   t,
 }: FileAttachmentProps) {
   if (pendingFiles.length === 0 && pendingImages.length === 0 && !isUploading) {
@@ -240,10 +305,16 @@ export function FileAttachment({
         const ext = fileExt(file.name);
         const displayName = cleanFileName(file.name);
         const meta = buildFileMeta(file);
+        // Context files carry their own id, which is already ``uploadFileKey``
+        // for browser uploads (see ``addPendingUploadFiles``).
+        const upload = uploads?.get(file.id);
+        const failed = upload?.status === "error";
         return (
           <div
             key={file.id}
-            className="group flex h-[52px] min-w-[180px] max-w-[260px] items-center gap-2.5 rounded-md border border-border-default bg-background px-2.5 py-1.5 shadow-sm"
+            className={`group relative flex h-[52px] min-w-[180px] max-w-[260px] items-center gap-2.5 overflow-hidden rounded-md border bg-background px-2.5 py-1.5 shadow-sm ${
+              failed ? "border-danger" : "border-border-default"
+            }`}
             title={file.workDir ? `${file.path}\n${file.workDir}` : file.path}
           >
             <FileTypeBadge ext={ext} />
@@ -251,10 +322,23 @@ export function FileAttachment({
               <span className="block truncate text-[13px] font-medium leading-tight text-foreground">
                 {displayName}
               </span>
-              <span className="block truncate text-mini leading-tight text-muted-foreground">
-                {meta}
+              <span
+                className={`block truncate text-mini leading-tight ${
+                  failed ? "text-danger" : "text-muted-foreground"
+                }`}
+              >
+                {failed
+                  ? t.uploads.uploadFailed
+                  : upload?.status === "uploading"
+                    ? t.uploads.uploadProgress(upload.progress)
+                    : meta}
               </span>
             </span>
+            <UploadRetryButton
+              upload={upload}
+              onRetry={onRetryUpload}
+              t={t}
+            />
             <button
               type="button"
               onClick={() => onRemoveFile(file.id)}
@@ -264,6 +348,7 @@ export function FileAttachment({
             >
               <XIcon className="size-3.5" />
             </button>
+            <UploadProgressBar upload={upload} t={t} />
           </div>
         );
       })}
@@ -271,10 +356,17 @@ export function FileAttachment({
         const key = imageFileKey(file);
         const url = pendingImagePreviews[key];
         const sourceLabel = pendingImageSources[key];
+        // Images are keyed by ``imageFileKey`` in the composer but tracked by
+        // ``uploadFileKey`` in the upload hook. They agree for real File
+        // objects; the fallback keeps a pasted blob without a name working.
+        const upload = uploads?.get(uploadFileKey(file)) ?? uploads?.get(key);
+        const failed = upload?.status === "error";
         return (
           <div
             key={key}
-            className="group relative h-16 w-16 shrink-0 overflow-hidden rounded border border-border-default"
+            className={`group relative h-16 w-16 shrink-0 overflow-hidden rounded border ${
+              failed ? "border-danger" : "border-border-default"
+            }`}
           >
             {url && (
               <img
@@ -288,6 +380,23 @@ export function FileAttachment({
                 {sourceLabel}
               </div>
             ) : null}
+            {/* Percent rides the top-left corner so it never covers the
+                source label, which says where the image came from. */}
+            {upload && upload.status !== "done" ? (
+              <div
+                className={`absolute left-0.5 top-0.5 rounded px-1 text-mini font-medium text-white backdrop-blur-sm ${
+                  failed ? "bg-danger/85" : "bg-black/60"
+                }`}
+              >
+                {failed ? "!" : `${upload.progress}%`}
+              </div>
+            ) : null}
+            <UploadRetryButton
+              upload={upload}
+              onRetry={onRetryUpload}
+              t={t}
+              className="absolute bottom-0.5 left-0.5"
+            />
             <button
               type="button"
               onClick={() => onRemoveImage(index)}
@@ -296,15 +405,10 @@ export function FileAttachment({
             >
               ×
             </button>
+            <UploadProgressBar upload={upload} t={t} />
           </div>
         );
       })}
-      {isUploading && (
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Loader2Icon className="size-3 animate-spin" />
-          {t.uploads.uploadingFiles}
-        </div>
-      )}
     </div>
   );
 }

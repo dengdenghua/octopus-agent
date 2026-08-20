@@ -152,7 +152,7 @@ export function BrowserPanel() {
               src={url}
               title={t.browser.startBrowsingHint}
               className="h-full w-full border-0"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+              sandbox="allow-scripts allow-forms allow-popups"
             />
           )
         ) : (

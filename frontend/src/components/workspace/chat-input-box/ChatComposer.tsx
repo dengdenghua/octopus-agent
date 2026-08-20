@@ -46,11 +46,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { DesktopPetMascot } from "@/components/desktop-pet";
-import { usePetSettings } from "@/core/pet/pet-settings";
 import { cn } from "@/lib/utils";
 import { normalizePermissionMode } from "@/core/permissions";
-import { uploadFiles } from "@/core/uploads";
+import { uploadFiles, useAttachmentUploads } from "@/core/uploads";
 import type { ResearchMaterial, ResearchSourceKind } from "@/core/research/api";
 import {
   codexComposerModeMarker,
@@ -87,8 +85,6 @@ export function ChatComposer({
   status,
   disabled,
   modelName,
-  petMood = "idle",
-  showPet = true,
   mode = "react",
   threadId,
   workDir,
@@ -118,19 +114,6 @@ export function ChatComposer({
 }: ChatInputBoxProps) {
   const { t } = useI18n();
   const { models } = useModels();
-  const petVisible = usePetSettings().visible;
-  // 同步 Electron 桌面宠物（Godot sidecar）与网页内宠物：开关关闭时一并
-  // 隐藏桌面窗口。浏览器环境无 window.octopus.pet，天然 no-op。
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.octopus?.isElectron) return;
-    const pet = window.octopus.pet;
-    if (!pet) return;
-    if (petVisible) {
-      void pet.start().catch(() => {});
-    } else {
-      void pet.stop().catch(() => {});
-    }
-  }, [petVisible]);
   const [draft, setDraft] = useState(
     () =>
       // A per-thread draft survives thread switches and reloads. defaultValue
@@ -181,6 +164,12 @@ export function ChatComposer({
   >({});
   const [pendingFiles, setPendingFiles] = useState<PendingContextFile[]>([]);
   const contextFileInputRef = useRef<HTMLInputElement | null>(null);
+  // Attachments upload the moment they land in the composer, not at send.
+  // The ref lets the removal handlers reach the API without taking it as a
+  // dependency — they run inside `setState` updaters.
+  const attachmentUploads = useAttachmentUploads(threadId);
+  const attachmentUploadsRef = useRef(attachmentUploads);
+  attachmentUploadsRef.current = attachmentUploads;
 
   // Slash-command typeahead · shared hook (see use-slash-typeahead).
   // Returns the picker JSX + a keydown handler that we call FIRST in
@@ -231,7 +220,15 @@ export function ChatComposer({
   const canUseDeepResearch =
     allowAgentModes && mode === "deep" && !!onDeepResearch;
   const isDeepResearchMode = canUseDeepResearch && researchConfigOpen;
-  const isBusy = disabled || uploadingMaterials || isUploading;
+  // Attachments have to land before the message can go: sending mid-transfer
+  // is what produced a picture the model never received. A failed attachment
+  // blocks too — silently dropping it is worse than making the user decide.
+  const isBusy =
+    disabled ||
+    uploadingMaterials ||
+    isUploading ||
+    attachmentUploads.isUploading ||
+    attachmentUploads.hasFailed;
   const sendLabel = t.chatInputBox.send;
   const stopLabel = t.chatInputBox.stop;
   const parsedResearchUrls = useMemo(
@@ -461,16 +458,21 @@ export function ChatComposer({
     const browserUploadFiles = pendingFiles
       .map((file) => file.file)
       .filter((file): file is File => file instanceof File);
+    const completedUploads = attachmentUploads.completed();
     try {
       onSubmit?.({
         text: appendReferencedFiles(text, pendingFiles),
         images: pendingImages.length > 0 ? pendingImages : undefined,
         files: browserUploadFiles.length > 0 ? browserUploadFiles : undefined,
+        // Already on the server — the send path matches these by filename and
+        // skips re-uploading the same bytes.
+        uploaded: completedUploads.length > 0 ? completedUploads : undefined,
       });
     } finally {
       releaseSubmitLock();
     }
     setDraft("");
+    attachmentUploads.reset();
     if (pendingFiles.length > 0) {
       setPendingFiles([]);
       if (contextFileInputRef.current) contextFileInputRef.current.value = "";
@@ -498,6 +500,7 @@ export function ChatComposer({
     onCompressContext,
     pendingImages,
     pendingFiles,
+    attachmentUploads,
     t,
     threadId,
   ]);
@@ -639,6 +642,11 @@ export function ChatComposer({
       );
       if (arr.length === 0) return;
       const sourceLabel = options?.sourceLabel?.trim() || "图片";
+      // Being in the composer *is* being uploaded: start the transfer now so
+      // the chip can show real progress and send can wait on it.
+      attachmentUploads.start(
+        arr.map((file) => ({ key: uploadFileKey(file), file })),
+      );
       setPendingImages((current) => {
         const known = new Set(current.map((file) => imageFileKey(file)));
         const next = [...current];
@@ -668,13 +676,14 @@ export function ChatComposer({
         return next;
       });
     },
-    [],
+    [attachmentUploads],
   );
   const removePendingImage = useCallback((index: number) => {
     setPendingImages((current) => {
       const removed = current[index];
       if (!removed) return current;
       const key = imageFileKey(removed);
+      attachmentUploadsRef.current?.remove(uploadFileKey(removed));
       setPendingImagePreviews((prev) => {
         const url = prev[key];
         if (url) URL.revokeObjectURL(url);
@@ -694,6 +703,9 @@ export function ChatComposer({
       if (!files) return;
       const arr = Array.from(files);
       if (arr.length === 0) return;
+      attachmentUploads.start(
+        arr.map((file) => ({ key: uploadFileKey(file), file })),
+      );
       setPendingFiles((current) => {
         const known = new Set(current.map((file) => file.id));
         const next = [...current];
@@ -713,10 +725,13 @@ export function ChatComposer({
       });
       window.setTimeout(() => textareaRef.current?.focus(), 0);
     },
-    [],
+    [attachmentUploads],
   );
 
   const removePendingFile = useCallback((id: string) => {
+    // Context files picked from the workspace have no upload entry; the hook
+    // ignores unknown keys, so this is safe for both kinds of chip.
+    attachmentUploadsRef.current?.remove(id);
     setPendingFiles((current) => current.filter((file) => file.id !== id));
   }, []);
 
@@ -883,14 +898,6 @@ export function ChatComposer({
         className,
       )}
     >
-      {showPet && petVisible && (
-        <DesktopPetMascot
-          mood={petMood}
-          size="sm"
-          className="hidden opacity-90 transition-opacity duration-base group-focus-within:opacity-60 md:block"
-          anchor={{ corner: "top-right", gap: { x: -10, y: 72 } }}
-        />
-      )}
       <div className="relative">
         {slashPicker}
         <MentionPicker
@@ -910,6 +917,8 @@ export function ChatComposer({
         onRemoveFile={removePendingFile}
         onRemoveImage={removePendingImage}
         isUploading={isUploading}
+        uploads={attachmentUploads.uploads}
+        onRetryUpload={attachmentUploads.retry}
         t={t}
       />
       <textarea
@@ -1217,7 +1226,14 @@ export function ChatComposer({
                   : "bg-foreground text-background hover:bg-foreground/90 active:scale-95",
                 "disabled:bg-transparent disabled:text-muted-foreground/50 disabled:cursor-not-allowed disabled:hover:bg-muted/60 disabled:hover:text-muted-foreground",
               )}
-              title={sendLabel}
+              // A disabled send button should say why it is disabled.
+              title={
+                attachmentUploads.isUploading
+                  ? t.uploads.waitingForUpload
+                  : attachmentUploads.hasFailed
+                    ? t.uploads.uploadFailed
+                    : sendLabel
+              }
               aria-label={sendLabel}
             >
               {isBusy ? (
