@@ -1,8 +1,15 @@
 import type { FileUIPart } from "ai";
 
+import type { UploadedFileInfo } from "./api";
+
 export type PromptInputFilePart = FileUIPart & {
   // Transient submit-time handle to the original browser File; not serializable.
   file?: File;
+  /**
+   * Set when the composer already uploaded this file on attach. The send path
+   * reuses it instead of pushing the same bytes a second time.
+   */
+  uploaded?: UploadedFileInfo;
 };
 
 /** A composed message from the input box: plain text plus uploaded files. */
