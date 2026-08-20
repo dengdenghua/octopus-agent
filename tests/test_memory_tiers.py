@@ -275,6 +275,48 @@ class TestThreeTierStacking:
         assert "Long-term Memory" not in soul
 
 
+    def test_oversized_memory_tier_is_bounded(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """A grown project memory index (e.g. a 20k+ character
+        ``.octopus/MEMORY.md``) must not be injected wholesale — that
+        blows the planner/react context budget and the compression
+        engine drops the *entire* system segment, losing the agent's
+        identity/soul. Each tier is capped at
+        ``_MAX_MEMORY_TIER_CHARS`` with a truncation marker."""
+        from runtime.execution.agents.loader import _MAX_MEMORY_TIER_CHARS
+
+        monkeypatch.setenv("OCTOPUS_HOME", str(tmp_path / "home"))
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        monkeypatch.chdir(repo)
+
+        big_memory = ("- [claude] topic-%03d: summary line \n" * 1500)
+        project_mem = repo / ".octopus" / "MEMORY.md"
+        project_mem.parent.mkdir()
+        project_mem.write_text(big_memory, encoding="utf-8")
+        assert len(big_memory) > _MAX_MEMORY_TIER_CHARS * 5
+
+        agent_dir, _core = _setup_agent_dir(tmp_path)
+        shared = _setup_shared_dir(tmp_path)
+
+        soul = _compose_soul(agent_dir, shared)
+
+        # Tier still surfaces (capped) · marker present · no full dump
+        assert "Long-term Memory (project)" in soul
+        assert "已截断" in soul
+        assert "topic-1499" not in soul
+        # Project tier contributes no more than the cap + heading
+        start = soul.index("Long-term Memory (project)")
+        remaining = soul[start:]
+        next_heading = remaining.find("\n## ")
+        end = start + (next_heading if next_heading != -1 else len(remaining))
+        tier_text = soul[start:end]
+        assert len(tier_text) <= _MAX_MEMORY_TIER_CHARS + 120
+
+
 # ═══════════════════════════════════════════════════════════
 # Back-compat
 # ═══════════════════════════════════════════════════════════
