@@ -635,6 +635,27 @@ def mount_routers_a(
             "registry_consumer_router failed to mount: %s", _reg_exc
         )
 
+    # ─── 统一资产仓库(插件/技能/角色 · WorkBuddy+Codex+本地 归一)────────
+    # 浏览 ~/.octopus/assets/ 统一 index + 显式重建(sync)。
+    try:
+        from runtime.sensing.gateway.asset_registry_router import (
+            create_asset_registry_router,
+        )
+
+        app.include_router(
+            create_asset_registry_router(
+                identity_store=ctx.identity_store,
+                require_auth=ctx.require_auth,
+                jwt_secret=ctx.jwt_secret,
+                jwt_issuer=ctx.jwt_issuer,
+                jwt_audience=ctx.jwt_audience,
+            )
+        )
+    except Exception as _asset_exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning(
+            "asset_registry_router failed to mount: %s", _asset_exc
+        )
+
     # ─── 连接器市场(WorkBuddy 连接器 fork · 认证编排层)──────────────
     # 浏览/安装 108 个连接器 + 认证编排(connect/status/headers 注入)。
     try:

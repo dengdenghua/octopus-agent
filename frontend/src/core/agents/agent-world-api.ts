@@ -165,6 +165,141 @@ export async function installCloudExpert(
   return res.json() as Promise<CloudStoreInstallResult>;
 }
 
+
+/** 云商城插件目录(我们发布到 GitHub Pages 的 plugin-store.json)。 */
+export interface CloudPluginItem {
+  id: string;
+  plugin: string;
+  source: string;
+  kind: string;
+  name: string;
+  name_zh: string;
+  description: string;
+  category?: string;
+  author?: string;
+  version?: string;
+  skills?: string[];
+  connectors?: string[];
+  skills_count?: number;
+  type?: string;
+  auth_mode?: string;
+  mcp_servers?: { name?: string; url?: string }[];
+  examples_zh?: string[];
+}
+
+export interface CloudPluginsResponse {
+  items: CloudPluginItem[];
+  total: number;
+  meta?: { count?: number; codex_plugins?: number; workbuddy_connectors?: number };
+}
+
+export async function fetchCloudPlugins(opts: {
+  search?: string;
+  kind?: string;
+  limit?: number;
+} = {}): Promise<CloudPluginsResponse> {
+  const qs = new URLSearchParams();
+  if (opts.search) qs.set("search", opts.search);
+  if (opts.kind) qs.set("kind", opts.kind);
+  qs.set("limit", String(opts.limit ?? 500));
+  const res = await fetch(
+    `${getBackendBaseURL()}${AGENT_MARKET_API}/cloud/plugins?${qs.toString()}`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok) throw new Error(`Cloud plugins failed: HTTP ${res.status}`);
+  return res.json() as Promise<CloudPluginsResponse>;
+}
+
+/** 云商城技能目录(我们发布到 GitHub Pages 的 skill-registry.json)。 */
+export interface CloudSkillItem {
+  name: string;
+  version?: string;
+  author?: string;
+  description: string;
+  tags?: string[];
+  source?: string;
+  download_url?: string;
+}
+
+export interface CloudSkillsResponse {
+  items: CloudSkillItem[];
+  total: number;
+  meta?: { count?: number; workbuddy_skills?: number; octopus_skills?: number };
+}
+
+export async function fetchCloudSkills(opts: {
+  search?: string;
+  limit?: number;
+} = {}): Promise<CloudSkillsResponse> {
+  const qs = new URLSearchParams();
+  if (opts.search) qs.set("search", opts.search);
+  qs.set("limit", String(opts.limit ?? 500));
+  const res = await fetch(
+    `${getBackendBaseURL()}${AGENT_MARKET_API}/cloud/skills?${qs.toString()}`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok) throw new Error(`Cloud skills failed: HTTP ${res.status}`);
+  return res.json() as Promise<CloudSkillsResponse>;
+}
+
+/** 云端已安装状态(本地已落地的技能/插件)。 */
+export interface CloudInstalledStatus {
+  skills: string[];
+  plugins: string[];
+}
+
+export async function fetchCloudInstalled(): Promise<CloudInstalledStatus> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${AGENT_MARKET_API}/cloud/installed`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok) throw new Error(`Cloud installed status failed: HTTP ${res.status}`);
+  return res.json() as Promise<CloudInstalledStatus>;
+}
+
+export interface CloudSkillInstallResult {
+  installed: boolean;
+  already_exists?: boolean;
+  name: string;
+  path: string;
+  source?: string;
+}
+
+export interface CloudPluginInstallResult {
+  installed: boolean;
+  plugin_id: string;
+  kind?: string;
+  path: string;
+  copied_skills?: string[];
+  source?: string;
+}
+
+/** 从云端安装技能(下载内容包 → 解包 → 落到 ~/.octopus/skills)。 */
+export async function installCloudSkill(name: string): Promise<CloudSkillInstallResult> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${AGENT_MARKET_API}/cloud/skills/${encodeURIComponent(name)}/install`,
+    { method: "POST", headers: authHeaders() },
+  );
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`云技能安装失败: HTTP ${res.status} ${txt}`.trim());
+  }
+  return res.json() as Promise<CloudSkillInstallResult>;
+}
+
+/** 从云端安装插件/连接器(下载内容包 → 解包 → 落地 + 复制捆绑技能)。 */
+export async function installCloudPlugin(pluginId: string): Promise<CloudPluginInstallResult> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${AGENT_MARKET_API}/cloud/plugins/${encodeURIComponent(pluginId)}/install`,
+    { method: "POST", headers: authHeaders() },
+  );
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`云插件安装失败: HTTP ${res.status} ${txt}`.trim());
+  }
+  return res.json() as Promise<CloudPluginInstallResult>;
+}
+
 export async function previewAgentPack(
   path: string,
 ): Promise<AgentPackPreview> {
@@ -469,196 +604,6 @@ export async function listAgentRelationships(
   return data.relationships;
 }
 
-// ---------------------------------------------------------------------------
-// 连接器市场(WorkBuddy 108 连接器 fork + 认证编排层)
-// 后端: runtime/sensing/gateway/connector_router.py
-//   GET    /api/connectors                      列表(含安装/启用状态)
-//   POST   /api/connectors/{id}/install         安装(技能→skills,MCP 默认禁用)
-//   DELETE /api/connectors/{id}/install         卸载
-//   POST   /api/connectors/{id}/enable|disable  启用/禁用 MCP
-//   GET    /api/connectors/{id}/status          认证状态
-//   POST   /api/connectors/{id}/connect         认证编排(带 tokens / 返回 CLI 命令)
-//   POST   /api/connectors/{id}/disconnect      断开并清除凭据
-// ---------------------------------------------------------------------------
-
-export type ConnectorType = "mcp" | "cli" | "skill-only" | "other";
-
-export interface ConnectorInfo {
-  id: string;
-  name: string;
-  name_zh: string;
-  description: string;
-  description_zh: string;
-  type: ConnectorType;
-  auth_mode: string;
-  source: string;
-  provider_id?: string;
-  mcp_servers: string[];
-  skill_count: number;
-  examples_zh?: string[];
-  installed: boolean;
-  enabled: boolean;
-  version: string;
-}
-
-export interface ConnectorListResponse {
-  connectors: ConnectorInfo[];
-  total: number;
-}
-
-export interface ConnectorStatusResponse {
-  connector_id: string;
-  auth_mode: string;
-  connected: boolean;
-  has_token?: boolean;
-  stored_keys?: string[];
-  cli_status?: {
-    exit_code: number;
-    output: string;
-    connected: boolean;
-  };
-}
-
-export interface ConnectorConnectResult {
-  connected: boolean;
-  connector_id?: string;
-  message?: string;
-  command?: string;
-  exit_code?: number;
-  output?: string;
-  stored_keys?: string[];
-}
-
-export interface ConnectorInstallResult {
-  installed: boolean;
-  connector_id: string;
-  type: string;
-  auth_mode: string;
-  copied_skills?: string[];
-  mcp_servers?: string[];
-  enabled?: boolean;
-  message?: string;
-}
-
-const CONNECTOR_API = "/api/connectors";
-
-/** 连接器列表(WorkBuddy 108 fork + 本地)。 */
-export async function listConnectors(params: {
-  search?: string;
-  type?: string;
-  limit?: number;
-} = {}): Promise<ConnectorListResponse> {
-  const qs = new URLSearchParams();
-  if (params.search) qs.set("search", params.search);
-  if (params.type) qs.set("type", params.type);
-  qs.set("limit", String(params.limit ?? 500));
-  const res = await fetch(
-    `${getBackendBaseURL()}${CONNECTOR_API}?${qs.toString()}`,
-    { headers: authHeaders() },
-  );
-  if (!res.ok)
-    throw new Error(`Connector list failed: HTTP ${res.status}`);
-  return res.json() as Promise<ConnectorListResponse>;
-}
-
-/** 安装连接器(技能→~/.octopus/skills,MCP 默认禁用)。 */
-export async function installConnector(
-  connectorId: string,
-): Promise<ConnectorInstallResult> {
-  const res = await fetch(
-    `${getBackendBaseURL()}${CONNECTOR_API}/${encodeURIComponent(
-      connectorId,
-    )}/install`,
-    { method: "POST", headers: authHeaders() },
-  );
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`Connector install failed: HTTP ${res.status} ${txt}`.trim());
-  }
-  return res.json() as Promise<ConnectorInstallResult>;
-}
-
-/** 卸载连接器。 */
-export async function uninstallConnector(connectorId: string): Promise<void> {
-  const res = await fetch(
-    `${getBackendBaseURL()}${CONNECTOR_API}/${encodeURIComponent(
-      connectorId,
-    )}/install`,
-    { method: "DELETE", headers: authHeaders() },
-  );
-  if (!res.ok)
-    throw new Error(`Connector uninstall failed: HTTP ${res.status}`);
-}
-
-/** 启用连接器 MCP(需已连接)。 */
-export async function enableConnector(connectorId: string): Promise<void> {
-  const res = await fetch(
-    `${getBackendBaseURL()}${CONNECTOR_API}/${encodeURIComponent(
-      connectorId,
-    )}/enable`,
-    { method: "POST", headers: authHeaders() },
-  );
-  if (!res.ok)
-    throw new Error(`Connector enable failed: HTTP ${res.status}`);
-}
-
-/** 禁用连接器 MCP。 */
-export async function disableConnector(connectorId: string): Promise<void> {
-  const res = await fetch(
-    `${getBackendBaseURL()}${CONNECTOR_API}/${encodeURIComponent(
-      connectorId,
-    )}/disable`,
-    { method: "POST", headers: authHeaders() },
-  );
-  if (!res.ok)
-    throw new Error(`Connector disable failed: HTTP ${res.status}`);
-}
-
-/** 连接器认证状态。 */
-export async function getConnectorStatus(
-  connectorId: string,
-): Promise<ConnectorStatusResponse> {
-  const res = await fetch(
-    `${getBackendBaseURL()}${CONNECTOR_API}/${encodeURIComponent(
-      connectorId,
-    )}/status`,
-    { headers: authHeaders() },
-  );
-  if (!res.ok)
-    throw new Error(`Connector status failed: HTTP ${res.status}`);
-  return res.json() as Promise<ConnectorStatusResponse>;
-}
-
-/** 认证编排:带 tokens 走 token/oauth,否则 CLI 型返回终端命令。 */
-export async function connectConnector(
-  connectorId: string,
-  body: { tokens?: Record<string, string>; run_cli?: boolean } = {},
-): Promise<ConnectorConnectResult> {
-  const res = await fetch(
-    `${getBackendBaseURL()}${CONNECTOR_API}/${encodeURIComponent(
-      connectorId,
-    )}/connect`,
-    { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify(body) },
-  );
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`Connector connect failed: HTTP ${res.status} ${txt}`.trim());
-  }
-  return res.json() as Promise<ConnectorConnectResult>;
-}
-
-/** 断开连接器并清除凭据。 */
-export async function disconnectConnector(connectorId: string): Promise<void> {
-  const res = await fetch(
-    `${getBackendBaseURL()}${CONNECTOR_API}/${encodeURIComponent(
-      connectorId,
-    )}/disconnect`,
-    { method: "POST", headers: authHeaders() },
-  );
-  if (!res.ok)
-    throw new Error(`Connector disconnect failed: HTTP ${res.status}`);
-}
-
 
 // ---------------------------------------------------------------------------
 // 统一「能力包」市场 —— 连接器 + Codex 插件一个市场
@@ -674,6 +619,12 @@ const CAPABILITY_API = "/api/capabilities";
 
 export type CapabilitySource = "connector" | "codex_plugin";
 
+/** 连接器/MCP server 端点(含 url,供网页 OAuth 授权使用)。 */
+export interface MCPEndpoint {
+  name: string;
+  url: string;
+}
+
 export interface CapabilityInfo {
   id: string;
   name: string;
@@ -687,7 +638,16 @@ export interface CapabilityInfo {
   author?: string;
   category?: string;
   icon?: string;
-  mcp_servers: string[];
+  mcp_servers: MCPEndpoint[];
+  /** 是否支持网页 OAuth 登录授权(后端探测缓存;null=未知/未探测)。 */
+  oauth_supported?: boolean | null;
+  /** 服务商直连 OAuth(如 github)的 provider id,存在则走 BYO OAuth App 网页登录。 */
+  oauth_provider?: string | null;
+  oauth_provider_name?: string | null;
+  /** CLI 连接器带 auth 登录命令 → 支持设备流网页授权码登录。 */
+  has_cli_auth?: boolean;
+  /** 只能手动填 token、不能跳网页登录(后端默认从市场隐藏)。 */
+  manual_token_only?: boolean;
   skill_count: number;
   examples_zh?: string[];
   installed: boolean;
@@ -706,6 +666,15 @@ export interface CapabilityConnectResult {
   message?: string;
   command?: string;
   capability_id?: string;
+  /** CLI 设备流(WorkBuddy authDeviceFlow):verification_uri + user_code。 */
+  device_flow?: {
+    connector_id: string;
+    verification_uri: string;
+    user_code: string;
+    expires_in: number;
+    code_embedded_in_uri: boolean;
+    message?: string;
+  };
 }
 
 /** 统一插件市场列表(WorkBuddy MCP 服务 + Codex 插件)。 */
@@ -713,11 +682,14 @@ export async function listCapabilities(opts: {
   search?: string;
   source?: CapabilitySource | "";
   limit?: number;
+  /** 是否包含只能手动填 token 的插件(默认 false,后端已隐藏)。 */
+  includeManual?: boolean;
 } = {}): Promise<CapabilityListResponse> {
   const qs = new URLSearchParams();
   if (opts.search) qs.set("search", opts.search);
   if (opts.source) qs.set("source", opts.source);
   qs.set("limit", String(opts.limit ?? 500));
+  qs.set("include_manual", opts.includeManual ? "true" : "false");
   const res = await fetch(
     `${getBackendBaseURL()}${CAPABILITY_API}?${qs.toString()}`,
     { headers: authHeaders() },
@@ -729,7 +701,18 @@ export async function listCapabilities(opts: {
 /** 安装插件(技能→~/.octopus/skills;带 MCP 的插件额外登记 MCP)。 */
 export async function installCapability(
   capabilityId: string,
-): Promise<{ installed: boolean; copied_skills?: string[] }> {
+): Promise<{
+  installed: boolean;
+  copied_skills?: string[];
+  cli_lifecycle?: {
+    has_cli?: boolean;
+    init?: { ok: boolean; error?: string; output?: string };
+    version?: { ok: boolean; error?: string; version?: string; min_version?: string };
+    runtime?: { ok: boolean; error?: string };
+    auth_device_flow?: boolean;
+    min_version?: string;
+  };
+}> {
   const res = await fetch(
     `${getBackendBaseURL()}${CAPABILITY_API}/${encodeURIComponent(
       capabilityId,
@@ -809,6 +792,90 @@ export async function disconnectCapability(capabilityId: string): Promise<void> 
     { method: "POST", headers: authHeaders() },
   );
   if (!res.ok) throw new Error(`Capability disconnect failed: HTTP ${res.status}`);
+}
+
+// ---------------------------------------------------------------------------
+// 统一资产仓库(插件 / 技能 / 角色,WorkBuddy + Codex + 本地 + 内置 归一)
+// 后端: runtime/platform/assets/asset_registry.py
+//   GET  /api/assets                统一资产列表(kind/source/search 过滤)+ 汇总
+//   GET  /api/assets/{kind}/{id}    单个资产详情
+//   POST /api/assets/sync           重建统一仓库(幂等)
+// ---------------------------------------------------------------------------
+
+export type UnifiedAssetKind = "plugin" | "skill" | "agent" | "team";
+
+export type UnifiedAssetSource = "codex" | "workbuddy" | "local" | "builtin" | "imported";
+
+export interface UnifiedAsset {
+  id: string;
+  kind: UnifiedAssetKind;
+  source: UnifiedAssetSource;
+  type?: string;
+  name: string;
+  name_zh?: string;
+  description?: string;
+  version?: string;
+  author?: string;
+  category?: string;
+  skills?: string[];
+  skills_count?: number;
+  auth_mode?: string;
+  mcp_servers?: string[];
+  origin?: string;
+  /** 平铺目录名(冲突时带 -source 后缀)。 */
+  dir?: string;
+}
+
+export interface UnifiedAssetsSummary {
+  root: string;
+  title: string;
+  sources: UnifiedAssetSource[];
+  updated_at: string;
+  counts: Partial<Record<UnifiedAssetKind, number>>;
+}
+
+export interface UnifiedAssetsResponse {
+  summary: UnifiedAssetsSummary;
+  total: number;
+  items: UnifiedAsset[];
+  kind_filter?: string | null;
+  source_filter?: string | null;
+}
+
+const ASSETS_API = "/api/assets";
+
+export async function fetchUnifiedAssets(params: {
+  kind?: UnifiedAssetKind;
+  source?: UnifiedAssetSource;
+  search?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<UnifiedAssetsResponse> {
+  const qs = new URLSearchParams();
+  if (params.kind) qs.set("kind", params.kind);
+  if (params.source) qs.set("source", params.source);
+  if (params.search) qs.set("search", params.search);
+  qs.set("limit", String(params.limit ?? 500));
+  if (params.offset) qs.set("offset", String(params.offset));
+  const res = await fetch(`${getBackendBaseURL()}${ASSETS_API}?${qs.toString()}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Unified assets failed: HTTP ${res.status}`);
+  return res.json() as Promise<UnifiedAssetsResponse>;
+}
+
+export async function syncUnifiedAssets(): Promise<{
+  root: string;
+  counts: Partial<Record<UnifiedAssetKind, number>>;
+  files_copied: number;
+  updated_at: string;
+}> {
+  const res = await fetch(`${getBackendBaseURL()}${ASSETS_API}/sync`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Unified assets sync failed: HTTP ${res.status}`);
+  return res.json();
 }
 
 // ---------------------------------------------------------------------------
