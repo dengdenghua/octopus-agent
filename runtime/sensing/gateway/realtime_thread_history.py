@@ -8,6 +8,7 @@ thread store, and into OpenAI-style chat history for
 
 from __future__ import annotations
 
+import difflib
 from typing import Any
 
 from runtime.protocol import Turn, TurnStatus
@@ -51,6 +52,36 @@ def _limit_text(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
     return f"{text[:limit]}\n…（后文已省略）"
+
+
+def _collapse_near_identical_ai(messages: list[dict[str, Any]], incoming: dict[str, Any]) -> bool:
+    """Collapse a re-sent, near-identical assistant message (latest wins).
+
+    A guard-rejected draft and its retry can be byte-for-byte the same long
+    report except for a single number (observed: an AI4S report re-emitted at
+    0.9988 similarity right after a fabricated-fact guard rejection — both
+    messages landed in the same turn). Persisting both inflates the sidebar
+    transcript and re-sends ~2x the tokens to the model. We only collapse
+    pure-text AI messages whose bodies are long and very similar, keeping the
+    newest copy in place. If the earlier copy carried tool calls (e.g. a
+    ``todo_write`` before the report draft), the caller preserves them on the
+    merged message so no real action is dropped from the transcript.
+    """
+    content = incoming.get("content")
+    if not isinstance(content, str) or len(content) < 120:
+        return False
+    # An incoming message that itself carries tool calls is a distinct
+    # action carrier, never a re-sent report — don't collapse it.
+    if incoming.get("tool_calls"):
+        return False
+    prev = messages[-1] if messages else None
+    if not isinstance(prev, dict) or prev.get("type") != "ai":
+        return False
+    prev_content = prev.get("content")
+    if not isinstance(prev_content, str) or len(prev_content) < 120:
+        return False
+    ratio = difflib.SequenceMatcher(None, prev_content, content).ratio()
+    return ratio >= 0.9
 
 
 def _flatten_turns_to_messages(
@@ -359,10 +390,22 @@ def _flatten_turns_to_messages(
                 }
                 if pending_tool_calls:
                     ai["tool_calls"] = list(pending_tool_calls)
-                messages.append(ai)
                 pending_reasoning = []
                 pending_plan = None
                 pending_tool_calls = []
+                if _collapse_near_identical_ai(messages, ai):
+                    # A guard-rejected draft + its near-identical retry would
+                    # otherwise both persist; keep only the newest copy. Real
+                    # tool calls attached to the earlier copy (todo_update etc.)
+                    # are preserved so no action is lost from the transcript.
+                    merged = ai
+                    prev_tool_calls = messages[-1].get("tool_calls")
+                    if prev_tool_calls:
+                        merged = dict(ai)
+                        merged["tool_calls"] = prev_tool_calls
+                    messages[-1] = merged
+                else:
+                    messages.append(ai)
             elif t == "fileChange":
                 changes = getattr(item, "changes", None) or []
                 for ch in changes:

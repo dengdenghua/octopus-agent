@@ -192,6 +192,147 @@ def test_flatten_merges_post_final_trace_items_into_delivered_answer() -> None:
     assert [tool["name"] for tool in ai["tool_calls"]] == ["todo_write"]
 
 
+def test_flatten_collapses_near_identical_resent_report() -> None:
+    """Regression: a guard-rejected report draft and its near-identical retry
+    (thread t0Wn5Zhvh3VUFwoAR2uP4M: two AI4S reports, 3665 vs 3670 chars, only
+    a '诺华'→'据公开披露约' fact fixed, 0.9988 similarity) were both persisted
+    into the sidebar and both re-sent to the model. The flatten adapter must
+    collapse them to a single message, keeping the newest copy while
+    preserving real tool calls attached to the earlier draft."""
+    from runtime.protocol import Turn
+    from runtime.sensing.gateway.realtime_cerebrum import _flatten_turns_to_messages
+
+    sentences = [
+        "AI for Science 正在从单点工具应用走向科研范式级别的重构，全球主要经济体都把 AI4S 写进了各自的国家科技战略。",
+        "蛋白质结构预测领域，AlphaFold 系列模型把过去需要数年冷冻电镜实验才能解析的结构，压缩到数小时之内完成端到端预测。",
+        "材料设计方向出现了一批生成式模型，能够在给定目标力学性能的前提下逆向搜索候选晶体结构，大幅压缩实验试错周期。",
+        "气象与气候建模方面，高分辨率风场与降水模型已经开始辅助极端天气预警，相关论文连续出现在 Nature 与 Science 的正刊上。",
+        "药物发现管线里，分子对接、亲和力预测与毒性筛选正在被统一到同一套预训练框架里，临床前研究的人力成本显著下降。",
+        "产业端的热钱正在涌入这一赛道，一级市场多笔亿元级融资集中在通用科学模型与垂直行业基座模型两类标的。",
+        "风险层面，跨学科评估仍然缺乏统一基准，部分模型在训练分布外场景的泛化能力仍不达预期，存在被过度宣传的问题。",
+    ]
+    body = "".join(sentences) * 4
+    base = "# AI4S（AI for Science）领域调研报告\n\n## 一、执行摘要\n\n" + body
+    mid = len(base) // 2
+    draft = base
+    retry = base[:mid] + "据公开披露约" + base[mid + 6:]  # same-length fact fix
+
+    turn = Turn.model_validate(
+        {
+            "id": "turn-dup-report",
+            "threadId": "thread-dup",
+            "status": "completed",
+            "startedAt": "2026-06-01T18:53:24Z",
+            "completedAt": "2026-06-01T19:03:00Z",
+            "items": [
+                {
+                    "id": "u1",
+                    "type": "userMessage",
+                    "status": "completed",
+                    "createdAt": "2026-06-01T18:53:24Z",
+                    "text": "调研一下 AI4S",
+                    "attachments": [],
+                },
+                {
+                    "id": "tc1",
+                    "type": "commandExecution",
+                    "status": "completed",
+                    "createdAt": "2026-06-01T19:02:47Z",
+                    "command": "todo_write",
+                    "inputPreview": {},
+                    "cwd": None,
+                    "aggregatedOutput": "ok",
+                    "exitCode": 0,
+                    "processId": None,
+                    "networkAccess": False,
+                },
+                {
+                    "id": "a1",
+                    "type": "agentMessage",
+                    "status": "completed",
+                    "createdAt": "2026-06-01T19:03:00Z",
+                    "text": draft,
+                },
+                {
+                    "id": "r2",
+                    "type": "reasoning",
+                    "status": "completed",
+                    "createdAt": "2026-06-01T19:03:01Z",
+                    "summary": ["guard rejected the draft, fixing the number"],
+                    "content": "",
+                },
+                {
+                    "id": "a2",
+                    "type": "agentMessage",
+                    "status": "completed",
+                    "createdAt": "2026-06-01T19:03:02Z",
+                    "text": retry,
+                },
+            ],
+            "error": None,
+        }
+    )
+
+    messages, _, _ = _flatten_turns_to_messages([turn])
+
+    ai = [m for m in messages if m.get("type") == "ai"]
+    reports = [m for m in ai if (m.get("content") or "").startswith("# AI4S")]
+    assert len(reports) == 1, "near-identical re-sent report must be collapsed"
+    kept = reports[0]
+    assert kept["content"] == retry, "newest (guard-passed) copy must win"
+    # The todo_write action attached to the earlier draft must survive.
+    assert [tool["name"] for tool in (kept.get("tool_calls") or [])] == ["todo_write"]
+
+
+def test_flatten_keeps_genuinely_different_answers_apart() -> None:
+    """The near-duplicate collapse must NOT merge two genuinely different
+    consecutive assistant answers (e.g. a real follow-up after a report)."""
+    from runtime.protocol import Turn
+    from runtime.sensing.gateway.realtime_cerebrum import _flatten_turns_to_messages
+
+    first = "# AI4S 领域调研报告\n\n" + "AI for Science 正在走向科研范式重构。" * 40
+    second = "# 智能睡眠行业调研报告\n\n" + "智能睡眠是睡眠经济与 AI 结合的最新赛道，覆盖监测硬件、助眠内容与数字疗法。" * 30
+
+    turn = Turn.model_validate(
+        {
+            "id": "turn-distinct",
+            "threadId": "thread-distinct",
+            "status": "completed",
+            "startedAt": "2026-06-01T18:53:24Z",
+            "completedAt": "2026-06-01T19:03:00Z",
+            "items": [
+                {
+                    "id": "u1",
+                    "type": "userMessage",
+                    "status": "completed",
+                    "createdAt": "2026-06-01T18:53:24Z",
+                    "text": "调研一下",
+                    "attachments": [],
+                },
+                {
+                    "id": "a1",
+                    "type": "agentMessage",
+                    "status": "completed",
+                    "createdAt": "2026-06-01T19:03:00Z",
+                    "text": first,
+                },
+                {
+                    "id": "a2",
+                    "type": "agentMessage",
+                    "status": "completed",
+                    "createdAt": "2026-06-01T19:03:02Z",
+                    "text": second,
+                },
+            ],
+            "error": None,
+        }
+    )
+
+    messages, _, _ = _flatten_turns_to_messages([turn])
+    ai = [m for m in messages if m.get("type") == "ai"]
+    assert len(ai) == 2, "genuinely different answers must not be collapsed"
+
+
 def test_flatten_keeps_reasoning_private_and_commentary_explicit() -> None:
     from runtime.protocol import Turn
     from runtime.sensing.gateway.realtime_cerebrum import _flatten_turns_to_messages
@@ -2105,6 +2246,10 @@ def test_project_os_blocked_result_does_not_claim_auto_continue() -> None:
     assert "状态：blocked" in text
     assert "项目已阻塞" in text
     assert "后续回合会继续" not in text
+    # 对话框交互引导：阻塞项目提示可用命令（恢复/PM 驾驶舱/复盘）。
+    assert "下一步可输入" in text
+    assert "/project recover（恢复项目）" in text
+    assert "/project report（PM 驾驶舱）" in text
 
 
 def test_project_os_control_parser() -> None:
