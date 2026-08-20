@@ -6492,6 +6492,44 @@
         "title": "WorkspaceOutputsResponse",
         "type": "object"
       },
+      "_CredentialsIn": {
+        "properties": {
+          "password": {
+            "default": "",
+            "title": "Password",
+            "type": "string"
+          },
+          "phone": {
+            "default": "",
+            "title": "Phone",
+            "type": "string"
+          }
+        },
+        "title": "_CredentialsIn",
+        "type": "object"
+      },
+      "_FavIn": {
+        "properties": {
+          "code": {
+            "default": "",
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "title": "_FavIn",
+        "type": "object"
+      },
+      "_GroupIn": {
+        "properties": {
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "title": "_GroupIn",
+        "type": "object"
+      },
       "_MoveIn": {
         "properties": {
           "to": {
@@ -6504,6 +6542,164 @@
           "to"
         ],
         "title": "_MoveIn",
+        "type": "object"
+      },
+      "_OrderIn": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "order_type": {
+            "default": "market",
+            "title": "Order Type",
+            "type": "string"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "qty": {
+            "default": 100,
+            "title": "Qty",
+            "type": "integer"
+          },
+          "side": {
+            "default": "buy",
+            "title": "Side",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "_OrderIn",
+        "type": "object"
+      },
+      "_PlatformApplyIn": {
+        "description": "申请/扩大配资合约(真实操作,需 confirm)。",
+        "properties": {
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "contract_type": {
+            "default": 1,
+            "title": "Contract Type",
+            "type": "integer"
+          },
+          "multiple": {
+            "default": 10,
+            "title": "Multiple",
+            "type": "integer"
+          },
+          "principal": {
+            "default": 1000.0,
+            "title": "Principal",
+            "type": "number"
+          }
+        },
+        "title": "_PlatformApplyIn",
+        "type": "object"
+      },
+      "_PlatformCancelIn": {
+        "description": "撤单(需 confirm)。",
+        "properties": {
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "contract_id": {
+            "default": "",
+            "title": "Contract Id",
+            "type": "string"
+          },
+          "order_id": {
+            "default": "",
+            "title": "Order Id",
+            "type": "string"
+          }
+        },
+        "title": "_PlatformCancelIn",
+        "type": "object"
+      },
+      "_PlatformMoneyIn": {
+        "description": "追加资金 / 提盈(需 confirm)。",
+        "properties": {
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "contract_id": {
+            "default": "",
+            "title": "Contract Id",
+            "type": "string"
+          },
+          "money": {
+            "default": 0.0,
+            "title": "Money",
+            "type": "number"
+          }
+        },
+        "title": "_PlatformMoneyIn",
+        "type": "object"
+      },
+      "_PlatformOrderIn": {
+        "description": "平台真实买卖委托(需 confirm)。entrust_type: 0限价 1市价。",
+        "properties": {
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "contract_id": {
+            "default": "",
+            "title": "Contract Id",
+            "type": "string"
+          },
+          "entrust_type": {
+            "default": 0,
+            "title": "Entrust Type",
+            "type": "integer"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "qty": {
+            "default": 100,
+            "title": "Qty",
+            "type": "integer"
+          },
+          "stock_code": {
+            "default": "",
+            "title": "Stock Code",
+            "type": "string"
+          },
+          "stock_name": {
+            "default": "",
+            "title": "Stock Name",
+            "type": "string"
+          }
+        },
+        "title": "_PlatformOrderIn",
         "type": "object"
       },
       "_PolicyOut": {
@@ -6585,6 +6781,17 @@
           "tool"
         ],
         "title": "_RuleOut",
+        "type": "object"
+      },
+      "_StockIn": {
+        "properties": {
+          "code": {
+            "default": "",
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "title": "_StockIn",
         "type": "object"
       }
     }
@@ -7222,6 +7429,526 @@
         "summary": " Usage Summary",
         "tags": [
           "stub"
+        ]
+      }
+    },
+    "/api/agent-market/cloud/installed": {
+      "get": {
+        "operationId": "api_agent_market_cloud_installed_api_agent_market_cloud_installed_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Market Cloud Installed Api Agent Market Cloud Installed Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Agent Market Cloud Installed",
+        "tags": [
+          "agent-market"
+        ]
+      }
+    },
+    "/api/agent-market/cloud/plugins": {
+      "get": {
+        "operationId": "api_agent_market_cloud_plugins_api_agent_market_cloud_plugins_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Refresh",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Market Cloud Plugins Api Agent Market Cloud Plugins Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Market Cloud Plugins",
+        "tags": [
+          "agent-market"
+        ]
+      }
+    },
+    "/api/agent-market/cloud/plugins/{plugin_id}/install": {
+      "post": {
+        "operationId": "api_agent_market_cloud_plugin_install_api_agent_market_cloud_plugins__plugin_id__install_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "title": "Plugin Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Market Cloud Plugin Install Api Agent Market Cloud Plugins  Plugin Id  Install Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Market Cloud Plugin Install",
+        "tags": [
+          "agent-market"
+        ]
+      }
+    },
+    "/api/agent-market/cloud/skills": {
+      "get": {
+        "operationId": "api_agent_market_cloud_skills_api_agent_market_cloud_skills_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 300,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Refresh",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Market Cloud Skills Api Agent Market Cloud Skills Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Market Cloud Skills",
+        "tags": [
+          "agent-market"
+        ]
+      }
+    },
+    "/api/agent-market/cloud/skills/{name}/install": {
+      "post": {
+        "operationId": "api_agent_market_cloud_skill_install_api_agent_market_cloud_skills__name__install_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Market Cloud Skill Install Api Agent Market Cloud Skills  Name  Install Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Market Cloud Skill Install",
+        "tags": [
+          "agent-market"
+        ]
+      }
+    },
+    "/api/agent-market/cloud/store": {
+      "get": {
+        "operationId": "api_agent_market_cloud_store_api_agent_market_cloud_store_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "updated",
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Refresh",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Market Cloud Store Api Agent Market Cloud Store Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Market Cloud Store",
+        "tags": [
+          "agent-market"
+        ]
+      }
+    },
+    "/api/agent-market/cloud/store/categories": {
+      "get": {
+        "operationId": "api_agent_market_cloud_categories_api_agent_market_cloud_store_categories_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Market Cloud Categories Api Agent Market Cloud Store Categories Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Agent Market Cloud Categories",
+        "tags": [
+          "agent-market"
+        ]
+      }
+    },
+    "/api/agent-market/cloud/store/{expert_id}": {
+      "get": {
+        "operationId": "api_agent_market_cloud_detail_api_agent_market_cloud_store__expert_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "expert_id",
+            "required": true,
+            "schema": {
+              "title": "Expert Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Market Cloud Detail Api Agent Market Cloud Store  Expert Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Market Cloud Detail",
+        "tags": [
+          "agent-market"
+        ]
+      }
+    },
+    "/api/agent-market/cloud/store/{expert_id}/install": {
+      "post": {
+        "operationId": "api_agent_market_cloud_install_api_agent_market_cloud_store__expert_id__install_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "expert_id",
+            "required": true,
+            "schema": {
+              "title": "Expert Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Market Cloud Install Api Agent Market Cloud Store  Expert Id  Install Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Market Cloud Install",
+        "tags": [
+          "agent-market"
         ]
       }
     },
@@ -12817,6 +13544,188 @@
         ]
       }
     },
+    "/api/assets": {
+      "get": {
+        "operationId": "list_unified_assets_api_assets_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 2000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Unified Assets Api Assets Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Unified Assets",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/api/assets/sync": {
+      "post": {
+        "operationId": "sync_unified_assets_api_assets_sync_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Sync Unified Assets Api Assets Sync Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Sync Unified Assets",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/api/assets/{kind}/{asset_id}": {
+      "get": {
+        "operationId": "get_unified_asset_api_assets__kind___asset_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Unified Asset Api Assets  Kind   Asset Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Unified Asset",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
     "/api/auth/logout": {
       "post": {
         "operationId": "_auth_logout_api_auth_logout_post",
@@ -14255,6 +15164,113 @@
         ]
       }
     },
+    "/api/capabilities": {
+      "get": {
+        "operationId": "list_capabilities_api_capabilities_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "默认隐藏只能手动填 token 的插件;传 true 全部返回。",
+            "in": "query",
+            "name": "include_manual",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "默认隐藏只能手动填 token 的插件;传 true 全部返回。",
+              "title": "Include Manual",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Capabilities Api Capabilities Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Capabilities",
+        "tags": [
+          "capabilities"
+        ]
+      }
+    },
     "/api/capabilities/enable": {
       "post": {
         "description": "Hot-load a skill group that was excluded at startup.\n\nBody: ``{\"group\": \"web\"}`` — registers the named group into the\nlive ``SkillRegistry`` so subsequent tool calls succeed without a\nbackend restart. Triggered by the UI's one-click \"enable\" prompt\nwhen the model tries to call a config-disabled tool (e.g.\n``web_search`` under ``enable_web_skills=False``).",
@@ -14298,6 +15314,400 @@
         "summary": "Api Capabilities Enable",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/api/capabilities/{cid}": {
+      "get": {
+        "operationId": "capability_detail_api_capabilities__cid__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cid",
+            "required": true,
+            "schema": {
+              "title": "Cid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Capability Detail Api Capabilities  Cid  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capability Detail",
+        "tags": [
+          "capabilities"
+        ]
+      }
+    },
+    "/api/capabilities/{cid}/connect": {
+      "post": {
+        "operationId": "capability_connect_api_capabilities__cid__connect_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cid",
+            "required": true,
+            "schema": {
+              "title": "Cid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Capability Connect Api Capabilities  Cid  Connect Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capability Connect",
+        "tags": [
+          "capabilities"
+        ]
+      }
+    },
+    "/api/capabilities/{cid}/disable": {
+      "post": {
+        "operationId": "capability_disable_api_capabilities__cid__disable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cid",
+            "required": true,
+            "schema": {
+              "title": "Cid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Capability Disable Api Capabilities  Cid  Disable Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capability Disable",
+        "tags": [
+          "capabilities"
+        ]
+      }
+    },
+    "/api/capabilities/{cid}/disconnect": {
+      "post": {
+        "operationId": "capability_disconnect_api_capabilities__cid__disconnect_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cid",
+            "required": true,
+            "schema": {
+              "title": "Cid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Capability Disconnect Api Capabilities  Cid  Disconnect Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capability Disconnect",
+        "tags": [
+          "capabilities"
+        ]
+      }
+    },
+    "/api/capabilities/{cid}/enable": {
+      "post": {
+        "operationId": "capability_enable_api_capabilities__cid__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cid",
+            "required": true,
+            "schema": {
+              "title": "Cid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Capability Enable Api Capabilities  Cid  Enable Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capability Enable",
+        "tags": [
+          "capabilities"
+        ]
+      }
+    },
+    "/api/capabilities/{cid}/headers": {
+      "get": {
+        "operationId": "capability_headers_api_capabilities__cid__headers_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cid",
+            "required": true,
+            "schema": {
+              "title": "Cid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Capability Headers Api Capabilities  Cid  Headers Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capability Headers",
+        "tags": [
+          "capabilities"
+        ]
+      }
+    },
+    "/api/capabilities/{cid}/install": {
+      "delete": {
+        "operationId": "capability_uninstall_api_capabilities__cid__install_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cid",
+            "required": true,
+            "schema": {
+              "title": "Cid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Capability Uninstall Api Capabilities  Cid  Install Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capability Uninstall",
+        "tags": [
+          "capabilities"
+        ]
+      },
+      "post": {
+        "operationId": "capability_install_api_capabilities__cid__install_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cid",
+            "required": true,
+            "schema": {
+              "title": "Cid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Capability Install Api Capabilities  Cid  Install Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capability Install",
+        "tags": [
+          "capabilities"
+        ]
+      }
+    },
+    "/api/capabilities/{cid}/status": {
+      "get": {
+        "operationId": "capability_status_api_capabilities__cid__status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cid",
+            "required": true,
+            "schema": {
+              "title": "Cid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Capability Status Api Capabilities  Cid  Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capability Status",
+        "tags": [
+          "capabilities"
         ]
       }
     },
@@ -16838,6 +18248,479 @@
         ]
       }
     },
+    "/api/connectors": {
+      "get": {
+        "operationId": "list_connectors_api_connectors_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Connectors Api Connectors Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Connectors",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/connectors/{connector_id}": {
+      "get": {
+        "operationId": "connector_detail_api_connectors__connector_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "title": "Connector Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Connector Detail Api Connectors  Connector Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connector Detail",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/connectors/{connector_id}/connect": {
+      "post": {
+        "operationId": "connector_connect_api_connectors__connector_id__connect_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "title": "Connector Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Connector Connect Api Connectors  Connector Id  Connect Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connector Connect",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/connectors/{connector_id}/disable": {
+      "post": {
+        "operationId": "connector_disable_api_connectors__connector_id__disable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "title": "Connector Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Connector Disable Api Connectors  Connector Id  Disable Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connector Disable",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/connectors/{connector_id}/disconnect": {
+      "post": {
+        "operationId": "connector_disconnect_api_connectors__connector_id__disconnect_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "title": "Connector Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Connector Disconnect Api Connectors  Connector Id  Disconnect Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connector Disconnect",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/connectors/{connector_id}/enable": {
+      "post": {
+        "operationId": "connector_enable_api_connectors__connector_id__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "title": "Connector Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Connector Enable Api Connectors  Connector Id  Enable Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connector Enable",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/connectors/{connector_id}/headers": {
+      "get": {
+        "operationId": "connector_headers_api_connectors__connector_id__headers_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "title": "Connector Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Connector Headers Api Connectors  Connector Id  Headers Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connector Headers",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/connectors/{connector_id}/install": {
+      "delete": {
+        "operationId": "connector_uninstall_api_connectors__connector_id__install_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "title": "Connector Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Connector Uninstall Api Connectors  Connector Id  Install Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connector Uninstall",
+        "tags": [
+          "connectors"
+        ]
+      },
+      "post": {
+        "operationId": "connector_install_api_connectors__connector_id__install_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "title": "Connector Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Connector Install Api Connectors  Connector Id  Install Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connector Install",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/connectors/{connector_id}/status": {
+      "get": {
+        "operationId": "connector_status_api_connectors__connector_id__status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "title": "Connector Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Connector Status Api Connectors  Connector Id  Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connector Status",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
     "/api/control-sessions": {
       "get": {
         "operationId": "list_sessions_api_control_sessions_get",
@@ -18324,7 +20207,7 @@
     },
     "/api/cowork/{thread_id}/mode": {
       "post": {
-        "description": "Switch the collaboration mode (chat/cluster/swarm/project) —\nnon-destructive. 'project' runs the milestone-driven Project OS over the\ngroup; there is no separate project entity.",
+        "description": "Switch the collaboration mode (chat/cluster/swarm/project) —\nnon-destructive. 'project' runs the milestone-driven Project OS over the\ngroup. Entering project mode also ensures a real Project OS project is\nbound to the thread (created deterministically if missing) so the\nworkbench 项目 tab has something to render; execution itself stays\nuser-triggered via Run/Tick.",
         "operationId": "set_mode_api_cowork__thread_id__mode_post",
         "parameters": [
           {
@@ -26973,6 +28856,146 @@
         ]
       }
     },
+    "/api/mcp/oauth/app/{provider}": {
+      "delete": {
+        "operationId": "api_mcp_oauth_app_delete_api_mcp_oauth_app__provider__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Mcp Oauth App Delete Api Mcp Oauth App  Provider  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Mcp Oauth App Delete",
+        "tags": [
+          "mcp"
+        ]
+      },
+      "get": {
+        "operationId": "api_mcp_oauth_app_get_api_mcp_oauth_app__provider__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Mcp Oauth App Get Api Mcp Oauth App  Provider  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Mcp Oauth App Get",
+        "tags": [
+          "mcp"
+        ]
+      },
+      "post": {
+        "operationId": "api_mcp_oauth_app_save_api_mcp_oauth_app__provider__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Mcp Oauth App Save Api Mcp Oauth App  Provider  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Mcp Oauth App Save",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
     "/api/mcp/oauth/authorize": {
       "post": {
         "operationId": "api_mcp_oauth_authorize_api_mcp_oauth_authorize_post",
@@ -29957,6 +31980,1951 @@
         ]
       }
     },
+    "/api/plugins/mx2025_viewer/origin/{upstream_path}": {
+      "delete": {
+        "operationId": "mx2025_viewer_proxy_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upstream_path",
+            "required": true,
+            "schema": {
+              "title": "Upstream Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Proxy Http"
+      },
+      "get": {
+        "operationId": "mx2025_viewer_proxy_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upstream_path",
+            "required": true,
+            "schema": {
+              "title": "Upstream Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Proxy Http"
+      },
+      "head": {
+        "operationId": "mx2025_viewer_proxy_head",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upstream_path",
+            "required": true,
+            "schema": {
+              "title": "Upstream Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Proxy Http"
+      },
+      "patch": {
+        "operationId": "mx2025_viewer_proxy_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upstream_path",
+            "required": true,
+            "schema": {
+              "title": "Upstream Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Proxy Http"
+      },
+      "post": {
+        "operationId": "mx2025_viewer_proxy_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upstream_path",
+            "required": true,
+            "schema": {
+              "title": "Upstream Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Proxy Http"
+      },
+      "put": {
+        "operationId": "mx2025_viewer_proxy_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upstream_path",
+            "required": true,
+            "schema": {
+              "title": "Upstream Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Proxy Http"
+      }
+    },
+    "/api/plugins/mx2025_viewer/page": {
+      "get": {
+        "operationId": "mx2025_viewer_page",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Page"
+      }
+    },
+    "/api/plugins/paper-trading-replica/health": {
+      "get": {
+        "operationId": "health_api_plugins_paper_trading_replica_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Health Api Plugins Paper Trading Replica Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "paper_trading_replica"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading-replica/page": {
+      "get": {
+        "operationId": "serve_page_api_plugins_paper_trading_replica_page_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Serve Page",
+        "tags": [
+          "paper_trading_replica"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/account": {
+      "get": {
+        "operationId": "account_api_plugins_paper_trading_account_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Account Api Plugins Paper Trading Account Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Account",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/kline/{code}": {
+      "get": {
+        "operationId": "kline_api_plugins_paper_trading_kline__code__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "title": "Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 60,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Kline Api Plugins Paper Trading Kline  Code  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Kline",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/live/credentials": {
+      "post": {
+        "operationId": "set_credentials_api_plugins_paper_trading_live_credentials_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_CredentialsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Credentials Api Plugins Paper Trading Live Credentials Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Credentials",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/live/credentials/clear": {
+      "post": {
+        "operationId": "clear_credentials_api_plugins_paper_trading_live_credentials_clear_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Clear Credentials Api Plugins Paper Trading Live Credentials Clear Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Clear Credentials",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/live/overview": {
+      "get": {
+        "operationId": "live_overview_api_plugins_paper_trading_live_overview_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Live Overview Api Plugins Paper Trading Live Overview Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Live Overview",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/live/push/latest": {
+      "get": {
+        "description": "查询某个推送事件的当前最新快照(已解码)。\n\n- ``event``: kLineRealTime / todayStock / stockPosition 等;\n- ``light=true``: kLineRealTime 返回紧凑字段(默认,省流量)。\n供量化策略/页面按需取当前状态,无需订阅。",
+        "operationId": "live_push_latest_api_plugins_paper_trading_live_push_latest_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "event",
+            "required": false,
+            "schema": {
+              "default": "kLineRealTime",
+              "title": "Event",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "light",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Light",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Live Push Latest Api Plugins Paper Trading Live Push Latest Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Live Push Latest",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/live/push/status": {
+      "get": {
+        "description": "实时推送连接状态(WS 是否在连、各事件订阅与最近推送时间)。",
+        "operationId": "live_push_status_api_plugins_paper_trading_live_push_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Live Push Status Api Plugins Paper Trading Live Push Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Live Push Status",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/live/push/stream": {
+      "get": {
+        "description": "SSE 实时推送流:把平台 WS 推送逐条转发给浏览器(替代轮询)。\n\n事件格式(每行一个):\n    event: <event_name>\n    data: <JSON>\n心跳每 15s 发一次 comment 保活。",
+        "operationId": "live_push_stream_api_plugins_paper_trading_live_push_stream_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "light",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Light",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Live Push Stream Api Plugins Paper Trading Live Push Stream Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Live Push Stream",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/live/push/subscribe": {
+      "get": {
+        "description": "订阅某个推送事件并返回其最新(已解码)快照。\n\n- ``event``: kLineRealTime(个股实时+十档盘口+分时) / todayStock(大盘) /\n  stockPosition(持仓) / itemByStepDetailsV3(分时详情) 等;\n- ``codes``: 逗号分隔的代码列表,如 \"605080.sh,003032.sz\"(仅个股类事件需要)。\n订阅后该事件会持续推送到本地;可通过 /live/push/stream 或 Python 回调消费。",
+        "operationId": "live_push_subscribe_api_plugins_paper_trading_live_push_subscribe_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "event",
+            "required": false,
+            "schema": {
+              "default": "kLineRealTime",
+              "title": "Event",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "codes",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Codes",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Live Push Subscribe Api Plugins Paper Trading Live Push Subscribe Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Live Push Subscribe",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/live/refresh": {
+      "post": {
+        "operationId": "refresh_live_api_plugins_paper_trading_live_refresh_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Refresh Live Api Plugins Paper Trading Live Refresh Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Refresh Live",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/live/status": {
+      "get": {
+        "operationId": "live_status_api_plugins_paper_trading_live_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Live Status Api Plugins Paper Trading Live Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Live Status",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/live/watch": {
+      "get": {
+        "operationId": "live_watch_api_plugins_paper_trading_live_watch_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "force",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Force",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Live Watch Api Plugins Paper Trading Live Watch Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Live Watch",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/orderbook/{code}": {
+      "get": {
+        "operationId": "orderbook_api_plugins_paper_trading_orderbook__code__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "title": "Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "levels",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "title": "Levels",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Orderbook Api Plugins Paper Trading Orderbook  Code  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Orderbook",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/orders": {
+      "get": {
+        "operationId": "orders_api_plugins_paper_trading_orders_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Orders Api Plugins Paper Trading Orders Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Orders",
+        "tags": [
+          "paper_trading"
+        ]
+      },
+      "post": {
+        "operationId": "create_order_api_plugins_paper_trading_orders_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_OrderIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Order Api Plugins Paper Trading Orders Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Order",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/page": {
+      "get": {
+        "operationId": "serve_page_api_plugins_paper_trading_page_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Serve Page",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/platform/add-capital": {
+      "post": {
+        "operationId": "platform_add_capital_api_plugins_paper_trading_platform_add_capital_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_PlatformMoneyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Platform Add Capital Api Plugins Paper Trading Platform Add Capital Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Platform Add Capital",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/platform/apply-contract": {
+      "post": {
+        "operationId": "platform_apply_contract_api_plugins_paper_trading_platform_apply_contract_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_PlatformApplyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Platform Apply Contract Api Plugins Paper Trading Platform Apply Contract Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Platform Apply Contract",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/platform/apply-options": {
+      "get": {
+        "operationId": "platform_apply_options_api_plugins_paper_trading_platform_apply_options_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Platform Apply Options Api Plugins Paper Trading Platform Apply Options Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Platform Apply Options",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/platform/buy": {
+      "post": {
+        "operationId": "platform_buy_api_plugins_paper_trading_platform_buy_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_PlatformOrderIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Platform Buy Api Plugins Paper Trading Platform Buy Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Platform Buy",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/platform/cancel-order": {
+      "post": {
+        "operationId": "platform_cancel_order_api_plugins_paper_trading_platform_cancel_order_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_PlatformCancelIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Platform Cancel Order Api Plugins Paper Trading Platform Cancel Order Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Platform Cancel Order",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/platform/contract-details": {
+      "get": {
+        "operationId": "platform_contract_details_api_plugins_paper_trading_platform_contract_details_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Platform Contract Details Api Plugins Paper Trading Platform Contract Details Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Platform Contract Details",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/platform/contracts": {
+      "get": {
+        "operationId": "platform_contracts_api_plugins_paper_trading_platform_contracts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Platform Contracts Api Plugins Paper Trading Platform Contracts Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Platform Contracts",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/platform/money-records": {
+      "get": {
+        "operationId": "platform_money_records_api_plugins_paper_trading_platform_money_records_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "contract_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Contract Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type_",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "default": "",
+              "title": "Type "
+            }
+          },
+          {
+            "in": "query",
+            "name": "date",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "current",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "title": "Current",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Platform Money Records Api Plugins Paper Trading Platform Money Records Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Platform Money Records",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/platform/orders": {
+      "get": {
+        "operationId": "platform_orders_api_plugins_paper_trading_platform_orders_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "type_",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "title": "Type ",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "current",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "title": "Current",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Platform Orders Api Plugins Paper Trading Platform Orders Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Platform Orders",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/platform/overview": {
+      "get": {
+        "operationId": "platform_overview_api_plugins_paper_trading_platform_overview_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Platform Overview Api Plugins Paper Trading Platform Overview Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Platform Overview",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/platform/positions": {
+      "get": {
+        "operationId": "platform_positions_api_plugins_paper_trading_platform_positions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Platform Positions Api Plugins Paper Trading Platform Positions Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Platform Positions",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/platform/rate-table": {
+      "get": {
+        "operationId": "platform_rate_table_api_plugins_paper_trading_platform_rate_table_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Platform Rate Table Api Plugins Paper Trading Platform Rate Table Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Platform Rate Table",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/platform/sell": {
+      "post": {
+        "operationId": "platform_sell_api_plugins_paper_trading_platform_sell_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_PlatformOrderIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Platform Sell Api Plugins Paper Trading Platform Sell Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Platform Sell",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/platform/sell-panel": {
+      "get": {
+        "operationId": "platform_sell_panel_api_plugins_paper_trading_platform_sell_panel_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "contract_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Contract Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stock_code",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Stock Code",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Platform Sell Panel Api Plugins Paper Trading Platform Sell Panel Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Platform Sell Panel",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/platform/status": {
+      "get": {
+        "operationId": "platform_status_api_plugins_paper_trading_platform_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Platform Status Api Plugins Paper Trading Platform Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Platform Status",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/platform/withdraw-profit": {
+      "post": {
+        "operationId": "platform_withdraw_profit_api_plugins_paper_trading_platform_withdraw_profit_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_PlatformMoneyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Platform Withdraw Profit Api Plugins Paper Trading Platform Withdraw Profit Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Platform Withdraw Profit",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/quote/{code}": {
+      "get": {
+        "operationId": "quote_api_plugins_paper_trading_quote__code__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "title": "Code",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Quote Api Plugins Paper Trading Quote  Code  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Quote",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/quotes": {
+      "get": {
+        "operationId": "quotes_api_plugins_paper_trading_quotes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Quotes Api Plugins Paper Trading Quotes Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Quotes",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/reset": {
+      "post": {
+        "operationId": "reset_api_plugins_paper_trading_reset_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Reset Api Plugins Paper Trading Reset Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Reset",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/symbols": {
+      "get": {
+        "operationId": "symbols_api_plugins_paper_trading_symbols_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Symbols Api Plugins Paper Trading Symbols Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Symbols",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/watch": {
+      "get": {
+        "operationId": "serve_watch_page_api_plugins_paper_trading_watch_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Serve Watch Page",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/watchlists": {
+      "get": {
+        "operationId": "watchlists_api_plugins_paper_trading_watchlists_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Watchlists Api Plugins Paper Trading Watchlists Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Watchlists",
+        "tags": [
+          "paper_trading"
+        ]
+      },
+      "post": {
+        "operationId": "create_group_api_plugins_paper_trading_watchlists_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_GroupIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Group Api Plugins Paper Trading Watchlists Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Group",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/watchlists/fav": {
+      "post": {
+        "operationId": "toggle_fav_api_plugins_paper_trading_watchlists_fav_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_FavIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Toggle Fav Api Plugins Paper Trading Watchlists Fav Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Toggle Fav",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/watchlists/{group_id}": {
+      "delete": {
+        "operationId": "delete_group_api_plugins_paper_trading_watchlists__group_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Group Api Plugins Paper Trading Watchlists  Group Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Group",
+        "tags": [
+          "paper_trading"
+        ]
+      },
+      "patch": {
+        "operationId": "rename_group_api_plugins_paper_trading_watchlists__group_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_GroupIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rename Group Api Plugins Paper Trading Watchlists  Group Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Group",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/watchlists/{group_id}/stocks": {
+      "post": {
+        "operationId": "add_stock_api_plugins_paper_trading_watchlists__group_id__stocks_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_StockIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Add Stock Api Plugins Paper Trading Watchlists  Group Id  Stocks Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Stock",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
+    "/api/plugins/paper-trading/watchlists/{group_id}/stocks/{code}": {
+      "delete": {
+        "operationId": "remove_stock_api_plugins_paper_trading_watchlists__group_id__stocks__code__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "title": "Code",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Remove Stock Api Plugins Paper Trading Watchlists  Group Id  Stocks  Code  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Stock",
+        "tags": [
+          "paper_trading"
+        ]
+      }
+    },
     "/api/plugins/permission-rule-drafts": {
       "get": {
         "operationId": "_plugin_permission_rule_drafts_api_plugins_permission_rule_drafts_get",
@@ -30902,6 +34870,51 @@
         ]
       }
     },
+    "/api/projects/{project_id}/pm": {
+      "get": {
+        "description": "PM 驾驶舱：里程碑健康度、燃尽、风险/阻塞、下一步、指派。",
+        "operationId": "pm_console_api_projects__project_id__pm_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Pm Console Api Projects  Project Id  Pm Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pm Console",
+        "tags": [
+          "projectos"
+        ]
+      }
+    },
     "/api/projects/{project_id}/process-timeline": {
       "get": {
         "description": "Project process timeline: persisted plan/run/control evidence.",
@@ -31052,6 +35065,51 @@
           }
         },
         "summary": "Report",
+        "tags": [
+          "projectos"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/retro": {
+      "get": {
+        "description": "复盘：完工项目的交付、成本与建议。",
+        "operationId": "retro_api_projects__project_id__retro_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Retro Api Projects  Project Id  Retro Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retro",
         "tags": [
           "projectos"
         ]
@@ -31525,6 +35583,16 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Refresh",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -31719,6 +35787,16 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Refresh",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -31896,6 +35974,16 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Refresh",
+              "type": "boolean"
             }
           }
         ],
