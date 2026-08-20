@@ -35,11 +35,10 @@ def test_build_authorize_url_omits_pkce_when_no_challenge() -> None:
 
 
 def test_exchange_code_uses_client_secret(monkeypatch: pytest.MonkeyPatch) -> None:
-    body_sent: dict[str, str] = {}
     calls: list[str] = []
 
     class _Resp:
-        def __enter__(self) -> "_Resp":
+        def __enter__(self) -> _Resp:
             return self
 
         def __exit__(self, *_a: object) -> bool:

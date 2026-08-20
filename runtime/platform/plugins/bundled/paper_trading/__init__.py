@@ -18,12 +18,8 @@ import contextlib
 import json
 import logging
 import queue
-import threading
-import time
 from pathlib import Path
 from typing import Any
-
-_logger = logging.getLogger(__name__)
 
 from runtime.execution.suckers.registry import Skill
 from runtime.platform.plugins.plugin_base import ModulePlugin
@@ -46,6 +42,8 @@ except ImportError:  # pragma: no cover
     HTMLResponse = None  # type: ignore[assignment,misc]
     StreamingResponse = None  # type: ignore[assignment,misc]
     BaseModel = None  # type: ignore[assignment,misc]
+
+_logger = logging.getLogger(__name__)
 
 
 class _OrderIn(BaseModel):  # type: ignore[misc]  # noqa: PGH003
@@ -611,7 +609,7 @@ class PaperTradingPlugin(ModulePlugin):
             if push is None or StreamingResponse is None:
                 return {"ok": False, "error": "推送未启用(缺凭证/依赖)"}
 
-            send_q: "queue.Queue[tuple[str, dict[str, Any]]]" = queue.Queue()
+            send_q: queue.Queue[tuple[str, dict[str, Any]]] = queue.Queue()
 
             def _on_event(event: str, data: dict[str, Any]) -> None:
                 send_q.put((event, _normalize_push(event, data) if light else data))

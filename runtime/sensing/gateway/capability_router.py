@@ -81,9 +81,7 @@ def create_capability_router(
             return False
         if item.get("oauth_provider"):
             return False
-        if item.get("has_cli_auth"):
-            return False
-        return True
+        return not item.get("has_cli_auth")
 
     @router.get("/api/capabilities")
     def list_capabilities(

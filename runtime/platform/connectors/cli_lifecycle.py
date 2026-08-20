@@ -12,7 +12,6 @@ WorkBuddy 的 CLI 连接器不只是「跑一条 auth 命令」,完整协议还�
 """
 from __future__ import annotations
 
-import json
 import os
 import platform
 import re

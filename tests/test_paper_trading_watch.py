@@ -134,8 +134,7 @@ def test_client_fetch_real_quotes_payload_and_decode() -> None:
 
 
 def _watch_live(client: MagicMock, ttl: float = 10.0) -> LiveDataSource:
-    live = LiveDataSource(client, ttl=ttl)
-    return live
+    return LiveDataSource(client, ttl=ttl)
 
 
 def test_watch_aggregates_overview_positions_watchlist() -> None:

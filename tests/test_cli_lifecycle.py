@@ -6,9 +6,6 @@ Hermetic —— 不执行真实 CLI;subprocess 与 Popen 全部 monkeypatch。
 from __future__ import annotations
 
 import io
-import json
-
-import pytest
 
 from runtime.platform.connectors import cli_lifecycle
 from runtime.platform.connectors.auth_orchestrator import AuthOrchestrator
@@ -31,7 +28,6 @@ def test_version_ge():
 # ── versionCheck / runtime / init ─────────────────────
 def test_check_version_passes(monkeypatch):
     def fake_run(cmd, *a, **k):  # noqa: ARG001
-        import subprocess
 
         class R:
             returncode = 0

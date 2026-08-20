@@ -350,7 +350,6 @@ def test_debate_build_prompt_has_rebuttal_instruction() -> None:
 
 def test_debate_reply_to_extraction() -> None:
     """③ @因果链: 回复正文里的 @成员名 应被解析为 reply_to 标注."""
-    from runtime.sensing.gateway._team_stream_group_fanout import _extract_mention_target  # type: ignore
 
     # 实际闭包内定义，改为直接测 group_fanout 的 build prompt 即可；
     # 这里验证协议字段存在且能承载 reply_to。
@@ -364,9 +363,7 @@ def test_debate_reply_to_extraction() -> None:
 
 def test_fanout_emits_failure_rows() -> None:
     """② 失败可视化: 蜂群成员失败应 emit 一条 '未能回应 · 原因' 行."""
-    import asyncio
 
-    from runtime.sensing.gateway import _team_stream_group_fanout as mod
 
     emitted: list[dict] = []
 

@@ -16,10 +16,6 @@ from __future__ import annotations
 import base64
 import gzip
 import json
-import time
-from pathlib import Path
-
-import pytest
 
 from runtime.platform.plugins.bundled.paper_trading import PaperTradingPlugin
 from runtime.platform.plugins.bundled.paper_trading.live import (
@@ -112,7 +108,11 @@ class TestPushClient:
         c = self._client()
         push = LivePushClient(c, host="h", auto_start=False)
         got = []
-        cb = lambda ev, d: got.append(ev)
+
+        def _cb(ev: object, d: object) -> None:
+            got.append(ev)
+
+        cb = _cb
         push.subscribe("kLineRealTime", [], cb)
         push.unsubscribe("kLineRealTime", cb)
         push._on_frame('42["kLineRealTime",' + json.dumps({"data": _gzip_b64([])}) + "]")
@@ -137,11 +137,6 @@ class TestPushClient:
 class TestPluginPush:
     def test_push_client_none_without_credentials(self, tmp_path):
         plugin = PaperTradingPlugin()
-        ctx = type(
-            "Ctx",
-            (),
-            {"config": {"live_mode": True, "data_dir": str(tmp_path)}, "plugin_dir": str(tmp_path)},
-        )()
         # 不触发 on_load 的完整插件,直接造一个未配凭证的 live
         plugin.live = LiveDataSource.from_config(
             {"base_url": DEFAULT_BASE_URL, "live_ttl": 30},
@@ -171,7 +166,11 @@ class TestGlobalCallback:
         c._token = "tok"
         push = LivePushClient(c, host="h", auto_start=False)
         got = []
-        cb = lambda ev, d: got.append(ev)
+
+        def _cb2(ev: object, d: object) -> None:
+            got.append(ev)
+
+        cb = _cb2
         push.add_global_callback(cb)
         push.remove_global_callback(cb)
         push.subscribe("todayStock", [])

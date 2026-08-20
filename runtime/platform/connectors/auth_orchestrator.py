@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import platform
@@ -247,10 +248,8 @@ class AuthOrchestrator:
         finally:
             if sess.proc and sess.proc.poll() is None and not sess.opened:
                 # CLI 已自行退出(可能出错),避免进程泄漏
-                try:
+                with contextlib.suppress(Exception):
                     sess.proc.terminate()
-                except Exception:  # noqa: BLE001
-                    pass
 
     def _device_flow_payload(
         self,
@@ -287,10 +286,8 @@ class AuthOrchestrator:
             _device_flows.pop(conn.id, None)
             proc = sess.proc
         if proc and proc.poll() is None:
-            try:
+            with contextlib.suppress(Exception):
                 proc.terminate()
-            except Exception:  # noqa: BLE001
-                pass
 
     def device_flow_status(self, conn: ConnectorDefinition) -> dict[str, Any]:
         """返回活跃设备流信息(未启动/已结束 → device_flow=None)。"""
@@ -305,10 +302,8 @@ class AuthOrchestrator:
         with _device_lock:
             sess = _device_flows.pop(conn.id, None)
         if sess and sess.proc and sess.proc.poll() is None:
-            try:
+            with contextlib.suppress(Exception):
                 sess.proc.terminate()
-            except Exception:  # noqa: BLE001
-                pass
         return {"cancelled": True, "connector_id": conn.id}
 
     # ── 注入 ──────────────────────────────────────────────────

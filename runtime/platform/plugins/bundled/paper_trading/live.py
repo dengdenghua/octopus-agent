@@ -1241,7 +1241,7 @@ class LivePushClient:
                 self._connected = True
                 self._connected_at = time.time()
                 # engine.io open 包
-                open_pkt = await asyncio.wait_for(ws.recv(), timeout=self._subscribe_timeout)
+                await asyncio.wait_for(ws.recv(), timeout=self._subscribe_timeout)
                 # socket.io v2 默认命名空间 CONNECT
                 await ws.send("40")
                 await asyncio.wait_for(ws.recv(), timeout=self._subscribe_timeout)
@@ -1255,7 +1255,7 @@ class LivePushClient:
                 while not self._stop.is_set():
                     try:
                         frame = await asyncio.wait_for(ws.recv(), timeout=self._socket_timeout)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         await ws.send("3")  # 超时兜底发 pong
                         continue
                     if frame == "2":  # engine.io ping -> pong
