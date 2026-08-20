@@ -338,6 +338,31 @@ async def _drive_team_topology(
             },
         )
 
+    async def _emit_marker(
+        turn: Turn,
+        log: EventLog,
+        text: str,
+        *,
+        icon: str = "💬",
+        agent_display_name: str = "主持人",
+    ) -> None:
+        """Emit a one-shot phase-marker bubble (parallel start, cross-check,
+        critic revision, blocked role, ...) so the four cluster optimizations
+        are visible in the stream instead of silently happening inside the
+        runner."""
+        await state.flush(turn, log, emitter)
+        item = AgentMessageItem(
+            text=text,
+            status=ItemStatus.COMPLETED,
+            agent_display_name=agent_display_name,
+            agent_icon=icon,
+        )
+        turn.items.append(item)
+        log.item_started(turn.thread_id, turn.id, item)
+        log.item_completed(turn.thread_id, turn.id, item)
+        await _safe_emit_started(turn, log, item)
+        await _safe_emit_completed(turn, log, item)
+
     def _coerce_str_list(value: Any) -> list[str]:
         if not isinstance(value, list):
             return []
@@ -444,6 +469,44 @@ async def _drive_team_topology(
                 # whether the role's text already streamed in vs.
                 # needs a one-shot dump.
                 streamed_chars["count"] = 0
+            elif ekind == "team_parallel_start":
+                # ② 并行副本阶段标记：研究员池以 N 个副本并行跑。
+                replicas = int(evt.get("replicas") or 1)
+                role_label = str(evt.get("role") or "role")
+                await _emit_marker(
+                    turn,
+                    log,
+                    f"🔀 并行 {role_label} 池 · {replicas} 个副本同时开工 · agent={evt.get('agent_id') or ''}",
+                    icon="🔀",
+                )
+            elif ekind == "team_cross_check_start":
+                # ② 并行副本交叉验证：critic 对 N 个副本产出做去重/冲突/缺口核查。
+                replicas = int(evt.get("replicas") or 1)
+                await _emit_marker(
+                    turn,
+                    log,
+                    f"🔍 critic 交叉核查 · 对 {replicas} 个副本去重/冲突/缺口 · agent={evt.get('agent_id') or ''}",
+                    icon="🔍",
+                )
+            elif ekind == "team_revision_start":
+                # ③ critic 反驳 → generator 重写：标出本轮修订。
+                round_no = int(evt.get("round_no") or 1)
+                await _emit_marker(
+                    turn,
+                    log,
+                    f"✍️ critic 反驳 → generator 修订 第 {round_no} 轮 · agent={evt.get('agent_id') or ''}",
+                    icon="✍️",
+                )
+            elif ekind == "team_role_blocked":
+                # ① 失败隔离/路由阻断：被策略拦下的角色明确亮出来。
+                role_label = str(evt.get("role") or "role")
+                reason = str(evt.get("error") or "subagent blocked by routing policy")
+                await _emit_marker(
+                    turn,
+                    log,
+                    f"⛔ {role_label} 被路由策略阻断 · {reason}",
+                    icon="⛔",
+                )
             elif ekind == "sub_text_delta":
                 # Live role text. Each chunk lands on the currently-
                 # open AgentMessageItem (opened by team_role_start).
@@ -613,6 +676,31 @@ async def _drive_team_topology(
         turn.status = TurnStatus.COMPLETED
     else:
         turn.status = TurnStatus.FAILED
+
+    # ② 集群失败可视化：失败隔离后角色失败不再整体失败，但要在最终交付上
+    # 标注"降级"——学 workbuddy 的 "X failed" 可见性。
+    degraded = list(getattr(run_result, "degraded_roles", None) or [])
+    if degraded:
+        _names = "、".join(degraded)
+        _rev = getattr(run_result, "revision_rounds", 0) or 0
+        _note = f"⚠️ 降级交付：{_names} 未能完成，已保留部分产出继续；"
+        if _rev:
+            _note += f"critic 反驳后修订 {_rev} 轮。"
+        else:
+            _note += "其余角色已接力完成。"
+        with contextlib.suppress(Exception):
+            _item = AgentMessageItem(
+                text=_note,
+                status=ItemStatus.COMPLETED,
+                agent_display_name="主持人",
+                agent_avatar_url="/api/agents/swarm-moderator/avatar",
+                agent_icon="⚠️",
+            )
+            turn.items.append(_item)
+            log.item_started(turn.thread_id, turn.id, _item)
+            log.item_completed(turn.thread_id, turn.id, _item)
+            await _safe_emit_started(turn, log, _item)
+            await _safe_emit_completed(turn, log, _item)
 
     with contextlib.suppress(Exception):
         await state.finalize_workbench(

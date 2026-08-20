@@ -36,6 +36,64 @@ from runtime.sensing.gateway.realtime_gateway import EventEmitter
 _logger = logging.getLogger(__name__)
 
 
+def _extract_mention_target(body: str, roster_members: list[dict[str, Any]]) -> str | None:
+    """③ 从回复正文里解析 @ 到的成员名，用于气泡"回应 @谁"标注。"""
+    if not body or not roster_members:
+        return None
+    for m in roster_members:
+        display = str(m.get("display_name") or m.get("name") or "")
+        parts = display.split()
+        cands = {
+            display,
+            parts[0] if parts else display,
+            display.replace(" ", ""),
+        }
+        if any(c and ("@" + c) in body for c in cands):
+            return display
+    return None
+
+
+# ── 成员失败的错误净化 ──────────────────────────────────────────────
+# 蜂群把成员异常(ConnectError/超时/429/权限)原样打进聊天气泡会让用户看到
+# 一堆 SSL/traceback 噪音(thread t0Wn5Zhvh3VUFwoAR2uP4M: "⚠️ 钊审财 · 财报
+# 研究员 未能回应 · ConnectError: [SSL: UNEXPECTED_EOF_WHILE_READING] …")。
+# 用户需要知道"谁没答上、要不要紧",不需要底层异常串。这里把常见异常归类成
+# 一句友好话术;原始细节只进日志/审计,不进聊天。
+_SANITIZED_ERROR_HINTS: tuple[tuple[str, str], ...] = (
+    ("ssl", "网络连接中断"),
+    ("unexpected_eof", "网络连接中断"),
+    ("timeout", "响应超时"),
+    ("timed out", "响应超时"),
+    ("connection refused", "服务未启动或拒绝连接"),
+    ("connection reset", "连接被重置"),
+    ("rate limit", "触发限流(稍后自动重试)"),
+    ("429", "触发限流(稍后自动重试)"),
+    ("quota", "额度不足"),
+    ("auth", "鉴权失败"),
+    ("permission", "权限不足"),
+    ("model not found", "模型不可用"),
+    ("model not found or", "模型不可用"),
+    ("no model", "模型未配置"),
+    ("context length", "上下文超长"),
+    ("exceeds", "上下文超长"),
+)
+
+
+def _friendly_member_error(error: Any) -> str:
+    raw = str(error or "").strip()
+    if not raw:
+        return "未能产生回复"
+    lower = raw.lower()
+    for hint, label in _SANITIZED_ERROR_HINTS:
+        if hint in lower:
+            return label
+    # 兜底:绝不在气泡里展示原始异常堆栈/长串,只给类型名的简短形式。
+    name = raw.splitlines()[0].strip()
+    if len(name) <= 60:
+        return f"异常({name})"
+    return "未知异常(详见审计日志)"
+
+
 async def _drive_group_fanout(
     runtime: Any,
     turn: Turn,
@@ -67,6 +125,7 @@ async def _drive_group_fanout(
         display_name: str | None = None,
         agent_id: str | None = None,
         icon: str | None = None,
+        reply_to: str | None = None,
     ) -> None:
         # Tag the bubble with its real author so the UI shows that member's
         # avatar + name instead of the turn leader's. Use the shared resolver so
@@ -87,6 +146,7 @@ async def _drive_group_fanout(
             agent_display_name=display_name,
             agent_avatar_url=avatar_url,
             agent_icon=icon,
+            reply_to=reply_to,
         )
         turn.items.append(item)
         with contextlib.suppress(Exception):
@@ -319,9 +379,15 @@ async def _drive_group_fanout(
             empty = []
         if len(answered) < 2 and not failed and not empty:
             return None
+        # Multi-round debate double-counts the same member across rounds —
+        # the summary should report distinct members, not bubble count.
+        distinct_answered = list(dict.fromkeys(answered))
         parts = [
-            f"协作汇总: {len(answered)} 位成员已回应",
+            f"协作汇总: {len(distinct_answered)} 位成员已回应",
         ]
+        rounds = int(result.get("debate", {}).get("rounds") or arbitration.get("rounds") or 1)
+        if rounds > 1:
+            parts.append(f"共 {rounds} 轮成员互见辩论")
         if primary:
             parts.append(f"优先采纳 {primary} 的视角继续")
         if recommended and recommended != "use_primary_response":
@@ -408,6 +474,55 @@ async def _drive_group_fanout(
             low = t.lower()
             return len(t.strip()) >= 6 and any(cue in low for cue in task_cues)
 
+        # 辩论意图检测：消息含辩论 cue（辩论/反驳/挑战/谁不同意/互怼/打擂台等）
+        # 或上下文显式传 swarm_debate_rounds/debate_rounds（>=2 强制多轮）。
+        # 用户 @ 了谁 → 这些成员在第二轮被点名优先回应（成员互见 + @反驳）。
+        debate_cues = (
+            "辩论",
+            "反驳",
+            "挑战",
+            "谁不同意",
+            "谁反对",
+            "互怼",
+            "打擂台",
+            "互驳",
+            "观点交锋",
+            "battle",
+            "debate",
+            "rebut",
+        )
+
+        def _wants_debate() -> int:
+            # Explicit context flag wins.
+            for key in ("swarm_debate_rounds", "debate_rounds"):
+                raw = ctx.get(key)
+                if raw is not None:
+                    try:
+                        val = int(raw)
+                    except (TypeError, ValueError):
+                        val = 0
+                    if val >= 2:
+                        return min(val, 3)
+            low = text.lower()
+            if any(cue.lower() in low for cue in debate_cues):
+                return 2
+            return 0
+
+        def _mentioned_names() -> list[str]:
+            """Display names the boss @-mentioned in the message (dedup)."""
+            found: list[str] = []
+            for m in members:
+                display = str(m.get("display_name") or m.get("name") or "")
+                parts = display.split()
+                cands = {
+                    display,
+                    parts[0] if parts else display,
+                    display.replace(" ", ""),
+                }
+                if any(c and ("@" + c) in text for c in cands):
+                    found.append(display)
+            return found
+
         # Split: local partners @-mentioned WITH a task → real worktree run;
         # everyone else (persona agents + partners just chatting) → group bubble.
         work_members = [
@@ -468,6 +583,8 @@ async def _drive_group_fanout(
                 max_concurrency=fanout_concurrency,
                 scale_mode=scale_mode,
             )
+            debate_rounds = _wants_debate()
+            mentioned = _mentioned_names()
             result = await asyncio.to_thread(
                 run_group_fanout,
                 text,
@@ -479,6 +596,8 @@ async def _drive_group_fanout(
                 max_concurrency=fanout_concurrency,
                 scale_mode=scale_mode,
                 turn_id=turn.id,
+                debate_rounds=debate_rounds,
+                mentioned=mentioned,
             )
             await _complete_group_trace(result)
             arbitration = result.get("arbitration")
@@ -499,15 +618,41 @@ async def _drive_group_fanout(
                     turn.items.append(audit_item)
                     log.item_started(turn.thread_id, turn.id, audit_item)
                     log.item_completed(turn.thread_id, turn.id, audit_item)
+            last_round_emitted = 0
             for reply in result.get("replies", []):
                 body = str(reply.get("reply") or "").strip()
+                round_no = int(reply.get("round") or 1)
+                if round_no > 1 and round_no != last_round_emitted:
+                    last_round_emitted = round_no
+                    await _emit(
+                        "⚔️ 第 " + str(round_no) + " 轮 · 成员互见辩论 —— 大家看到彼此观点后点名回应：",
+                        display_name="主持人",
+                        agent_id="swarm-moderator",
+                        icon="⚔️",
+                    )
                 if reply.get("ok") and body:
+                    # ③ @因果链：把回复里 @ 到的成员解析出来，作为气泡的
+                    # reply_to 附加信息，前端在气泡标题旁显示"回应 @谁"。
+                    reply_to = _extract_mention_target(body, chat_members)
                     await _emit(
                         body,
                         display_name=str(reply.get("display_name") or ""),
                         agent_id=str(reply.get("agent_id") or ""),
+                        reply_to=reply_to,
                     )
                     spoke += 1
+                elif not reply.get("ok"):
+                    # ② 蜂群失败可视化：workbuddy 在 inbox 里明确显示
+                    # "X failed · 原因"，我们之前是静默跳过——现在打一行。
+                    err = str(reply.get("error") or "no reply")
+                    await _emit(
+                        "⚠️ "
+                        + str(reply.get("display_name") or reply.get("agent_id") or "成员")
+                        + " 未能回应 · "
+                        + _friendly_member_error(err),
+                        display_name=str(reply.get("display_name") or ""),
+                        agent_id=str(reply.get("agent_id") or ""),
+                    )
             summary = _group_summary(result)
             if summary:
                 await _emit(summary)
@@ -547,7 +692,7 @@ async def _drive_group_fanout(
                 else:
                     err = str(mem.get("error") or "没有产生改动")
                     await _emit(
-                        f"⚠️ 这次没能完成：{err[:400]}",
+                        f"⚠️ 这次没能完成：{_friendly_member_error(err)}",
                         display_name=disp,
                         agent_id=wm["name"],
                     )

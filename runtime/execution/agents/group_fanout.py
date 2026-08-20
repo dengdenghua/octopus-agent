@@ -14,6 +14,11 @@ Honest scope: this is still *conversation*, not a full task graph.  It does,
 however, now returns a deterministic arbitration summary so downstream team
 surfaces can pick a primary response, classify failures, and decide the next
 action without re-parsing bubbles.
+
+Debate (蜂群多轮辩论): pass ``debate_rounds >= 2`` to run a second (or Nth)
+round where every member sees the previous round's transcript and is invited to
+@-rebut or support specific members — grafting the "成员互见 + @反驳" capability
+that persistent team rooms have onto our one-shot fan-out.
 """
 
 from __future__ import annotations
@@ -37,6 +42,9 @@ _KIMI_SCALE_MEMBERS = 300
 _LARGE_TIER_MEMBERS = 64
 _TEAM_TIER_MEMBERS = 16
 _ROOM_TIER_MEMBERS = 2
+
+# Hard bound on debate rounds so a hostile cue can't spin up unbounded LLM cost.
+_MAX_DEBATE_ROUNDS = 3
 
 
 def _response_id(turn_id: str | None, index: int, agent_id: str) -> str:
@@ -106,6 +114,7 @@ def arbitrate_group_fanout(
             "ok": bool(reply.get("ok")),
             "score": score,
             "reply_chars": len(str(reply.get("reply") or "").strip()),
+            "round": int(reply.get("round") or 1),
             "error": reply.get("error"),
         }
         if status == "failed":
@@ -152,6 +161,7 @@ def arbitrate_group_fanout(
         "answered_agent_ids": answered,
         "failed_agent_ids": failed,
         "empty_agent_ids": empty,
+        "rounds": max([int(r.get("round") or 1) for r in rows], default=1),
         "ranking": ranked,
         "outcomes": rows,
     }
@@ -199,14 +209,62 @@ def synthesize_group_fanout(
 
 
 def build_fanout_prompt(message: str, speaker: str, roster: list[str]) -> str:
-    """The per-member instruction: react in persona, short, group-chat style."""
+    """The per-member instruction: answer the actual question in persona."""
     names = "、".join(roster) if roster else "(只有你)"
     return (
         f"你在一个团队群聊里,群成员有:{names}。\n"
-        f"刚才群里有人说:「{message}」\n\n"
-        f"请用你自己的人设、第一人称,像在微信群里冒泡那样自然地接一句话"
-        f"(1-3 句即可):说说这事你能帮上什么、或你的角度。不要复述别人的话,"
-        f"不要长篇大论,不要列大纲——就是随口接一句。"
+        f"群里有人（{speaker or '老板'}）说:「{message}」\n\n"
+        f"请用你自己的人设、第一人称,像在微信群里冒泡那样自然地接一句切题的话"
+        f"(1-3 句即可):围绕这句话本身给出你的观点、信息或能直接帮上的具体动作。\n"
+        f"硬性要求:\n"
+        f"1) 必须切题——直接回应『{message}』这件事,不要跑题到你自己的日常话题或"
+        f"泛泛地说'我能帮你'。\n"
+        f"2) 不要反问、不要只表态不干活、不要复述别人的话。\n"
+        f"3) 不要长篇大论,不要列大纲。"
+    )
+
+
+def build_debate_prompt(
+    message: str,
+    speaker: str,
+    roster: list[str],
+    transcript: list[dict[str, Any]],
+    *,
+    round_no: int = 2,
+    mentioned: list[str] | None = None,
+) -> str:
+    """Round-2+ instruction: everyone sees the prior round and @-rebuts.
+
+    ``transcript`` is ``[{agent_id, display_name, reply}]`` from the previous
+    round. ``mentioned`` are display names the boss explicitly @-mentioned in
+    the original message — those members are the debate's first targets.
+    """
+    names = "、".join(roster) if roster else "(只有你)"
+    lines = []
+    for t in transcript or []:
+        who = str(t.get("display_name") or t.get("agent_id") or "?")
+        reply = str(t.get("reply") or "").strip()
+        if reply:
+            lines.append(f"· {who}: {reply}")
+    transcript_text = "\n".join(lines) if lines else "(上一轮没有有效发言)"
+    mention_note = ""
+    if mentioned:
+        mention_note = (
+            "老板在消息里专门 @ 了这些成员，请优先针对他们的观点展开："
+            + "、".join(mentioned)
+            + "。\n"
+        )
+    return (
+        f"你在一个团队群聊里,群成员有:{names}。\n"
+        f"老板刚才问:「{message}」\n\n"
+        f"—— 第 {round_no} 轮 · 成员互见辩论 ——\n"
+        f"这是大家上一轮的全部发言（现在所有人都看得到）：\n{transcript_text}\n\n"
+        f"{mention_note}"
+        f"请用你自己的人设、第一人称回应（1-3 句，必须围绕上面这条消息本身，"
+        f"不要跑题到你的日常话题）：\n"
+        f"1) 如果你不同意某位成员的看法，用「@对方名字」点名反驳，只驳观点、不人身攻击；\n"
+        f"2) 如果你认同某人，可以点名支持并补一句你的角度；\n"
+        f"3) 不要复述别人已经说过的话，不要长篇大论。"
     )
 
 
@@ -219,6 +277,8 @@ def run_group_fanout(
     max_concurrency: int | None = None,
     scale_mode: str = "safe",
     turn_id: str | None = None,
+    debate_rounds: int = 1,
+    mentioned: list[str] | None = None,
 ) -> dict[str, Any]:
     """Fan ``message`` out to each member in parallel; collect persona replies.
 
@@ -226,9 +286,15 @@ def run_group_fanout(
     one-shot subagent invoker — ``agent_caller(agent_id=..., prompt=...)`` →
     ``{output, success, error}`` (in production: ``delegation_skills._call_agent``).
 
-    Returns ``{ok, replies:[{agent_id, display_name, reply, ok, error}], count,
-    spoke, arbitration}``. Order follows the roster. Never raises — one
-    member's failure is isolated.
+    When ``debate_rounds >= 2`` the fan-out becomes a multi-round debate: each
+    subsequent round feeds every member the previous round's full transcript and
+    invites them to @-rebut or support specific members. Replies carry a
+    ``round`` field (1-based) so the UI can group/annotate rounds.
+
+    Returns ``{ok, replies:[{agent_id, display_name, reply, ok, error, round}],
+    count, spoke, debate:{rounds, transcript, mentioned}, arbitration}``. Order
+    follows the roster within each round. Never raises — one member's failure is
+    isolated.
     """
     msg = (message or "").strip()
     if not msg:
@@ -263,52 +329,98 @@ def run_group_fanout(
         "capacity_tier": _capacity_tier(len(clean), requested_members),
     }
 
-    def _one(member: dict[str, Any]) -> dict[str, Any]:
-        agent_id = str(member.get("name") or member.get("agent_id"))
-        display = str(member.get("display_name") or agent_id)
-        rec: dict[str, Any] = {
-            "agent_id": agent_id,
-            "display_name": display,
-            "reply": "",
-            "ok": False,
-            "error": None,
-        }
-        try:
-            res = agent_caller(
-                agent_id=agent_id,
-                prompt=build_fanout_prompt(msg, display, roster),
-                timeout_s=90,
+    # Debate rounds are clamped so a hostile cue can't spin up unbounded cost.
+    rounds = max(1, min(int(debate_rounds or 1), _MAX_DEBATE_ROUNDS))
+
+    def _run_round(round_no: int, transcript: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        def _one(member: dict[str, Any]) -> dict[str, Any]:
+            agent_id = str(member.get("name") or member.get("agent_id"))
+            display = str(member.get("display_name") or agent_id)
+            if round_no == 1:
+                prompt = build_fanout_prompt(msg, display, roster)
+            else:
+                prompt = build_debate_prompt(
+                    msg,
+                    display,
+                    roster,
+                    transcript,
+                    round_no=round_no,
+                    mentioned=mentioned,
+                )
+            rec: dict[str, Any] = {
+                "agent_id": agent_id,
+                "display_name": display,
+                "reply": "",
+                "ok": False,
+                "error": None,
+                "round": round_no,
+            }
+            try:
+                res = agent_caller(
+                    agent_id=agent_id,
+                    prompt=prompt,
+                    timeout_s=90,
+                )
+                rec["ok"] = bool(res.get("success"))
+                rec["reply"] = str(res.get("output") or "")
+                rec["error"] = res.get("error")
+            except Exception as exc:  # noqa: BLE001 — one member's failure is isolated
+                rec["error"] = f"{type(exc).__name__}: {exc}"
+            return rec
+
+        results: list[dict[str, Any]] = []
+        with _cf.ThreadPoolExecutor(
+            max_workers=workers, thread_name_prefix="group-fanout"
+        ) as pool:
+            futures = [pool.submit(_one, m) for m in clean]
+            for fut in _cf.as_completed(futures):
+                results.append(fut.result())
+
+        order = {str(m.get("name") or m.get("agent_id")): i for i, m in enumerate(clean)}
+        results.sort(key=lambda r: order.get(r["agent_id"], len(order)))
+        return results
+
+    all_replies: list[dict[str, Any]] = []
+    transcript: list[dict[str, Any]] = []
+    for round_no in range(1, rounds + 1):
+        round_replies = _run_round(round_no, transcript)
+        # Stable global response ids across rounds.
+        for reply in round_replies:
+            reply["response_id"] = _response_id(
+                turn_id,
+                len(all_replies),
+                str(reply.get("agent_id") or ""),
             )
-            rec["ok"] = bool(res.get("success"))
-            rec["reply"] = str(res.get("output") or "")
-            rec["error"] = res.get("error")
-        except Exception as exc:  # noqa: BLE001 — one member's failure is isolated
-            rec["error"] = f"{type(exc).__name__}: {exc}"
-        return rec
+        all_replies.extend(round_replies)
+        # Feed the next round only the successful, non-empty replies.
+        transcript = [
+            {
+                "agent_id": r["agent_id"],
+                "display_name": r["display_name"],
+                "reply": r["reply"],
+            }
+            for r in round_replies
+            if r["ok"] and str(r.get("reply") or "").strip()
+        ]
+        if not transcript:
+            break  # nobody spoke this round — no point debating into a void
 
-    results: list[dict[str, Any]] = []
-    with _cf.ThreadPoolExecutor(max_workers=workers, thread_name_prefix="group-fanout") as pool:
-        futures = [pool.submit(_one, m) for m in clean]
-        for fut in _cf.as_completed(futures):
-            results.append(fut.result())
-
-    order = {str(m.get("name") or m.get("agent_id")): i for i, m in enumerate(clean)}
-    results.sort(key=lambda r: order.get(r["agent_id"], len(order)))
-    for index, reply in enumerate(results):
-        reply.setdefault(
-            "response_id",
-            _response_id(turn_id, index, str(reply.get("agent_id") or "")),
-        )
-    spoke = sum(1 for r in results if r["ok"] and r["reply"].strip())
-    arbitration = arbitrate_group_fanout(results, turn_id=turn_id)
-    synthesis = synthesize_group_fanout(results, arbitration)
+    spoke = sum(1 for r in all_replies if r["ok"] and r["reply"].strip())
+    arbitration = arbitrate_group_fanout(all_replies, turn_id=turn_id)
+    synthesis = synthesize_group_fanout(all_replies, arbitration)
+    debate = {
+        "rounds": max([int(r.get("round") or 1) for r in all_replies], default=1),
+        "transcript": transcript,
+        "mentioned": mentioned or [],
+    } if rounds > 1 else None
     return {
         "ok": spoke > 0,
-        "replies": results,
-        "count": len(results),
+        "replies": all_replies,
+        "count": len(all_replies),
         "spoke": spoke,
         "dropped": capacity["dropped_members"],
         "capacity": capacity,
         "arbitration": arbitration,
         "synthesis": synthesis,
+        "debate": debate,
     }

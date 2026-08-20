@@ -210,3 +210,22 @@ def test_serve_mesh_1_forces_mesh_even_for_small(monkeypatch) -> None:
         ),
     )
     assert any("parallel" in it.text for it in turn.items)  # mesh actually ran
+
+
+def test_budget_scales_with_graph_size() -> None:
+    """④ 预算随节点数动态伸缩, 单节点用基线, 大图放大并封顶."""
+    single = _graph(["a"], [])
+    t1, u1 = mod._budget_for_graph(single)
+    assert t1 == 140_000  # 100k + 40k*1
+    assert u1 == 1.5
+
+    big = _graph(["a", "b", "c", "d", "e"], [])
+    t5, u5 = mod._budget_for_graph(big)
+    assert t5 == 300_000  # 100k + 40k*5
+    assert u5 == 3.5
+
+    # 封顶: 100+ 节点也不超过 800k / 8.0
+    huge = _graph([f"n{i}" for i in range(200)], [])
+    th, uh = mod._budget_for_graph(huge)
+    assert th == 800_000
+    assert uh == 8.0

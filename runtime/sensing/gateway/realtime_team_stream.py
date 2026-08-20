@@ -14,6 +14,7 @@ re-exports them so the public API surface is unchanged.
 from __future__ import annotations
 
 from runtime.sensing.gateway._realtime_team_stream_mesh import (
+    _budget_for_graph,
     _drive_swarm_mesh,
     _graph_favors_mesh,
 )
@@ -27,4 +28,5 @@ __all__ = [
     "_drive_swarm_mesh",
     "_drive_team_topology",
     "_graph_favors_mesh",
+    "_budget_for_graph",
 ]
