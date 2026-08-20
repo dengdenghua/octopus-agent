@@ -522,3 +522,51 @@ def test_incomplete_final_answer_accepts_past_tense_bare_intention_verbs() -> No
     )
     assert _incomplete_final_answer_guard("我找到了答案：两者的定义完全一致。") is None
     assert _incomplete_final_answer_guard("我分析了数据，得出三点结论。") is None
+
+
+def test_incomplete_final_answer_rejects_promised_synthesis() -> None:
+    """Regression (thread t0Wn5Zhvh3VUFwoAR2uP4M): "四个方向都收齐了，马上
+    综合。" and "抱歉刚才掉线了，马上把4位成员的成果综合出来。" were each
+    delivered as a *completed* turn — a promise to synthesize with zero actual
+    output. A short, body-less promise-to-produce must be rejected like the
+    read/search announce prefixes."""
+    assert (
+        _incomplete_final_answer_guard("四个方向都收齐了，马上综合。")
+        is not None
+    )
+    assert (
+        _incomplete_final_answer_guard("抱歉刚才掉线了，马上把4位成员的成果综合出来。")
+        is not None
+    )
+    assert (
+        _incomplete_final_answer_guard(
+            "证据已足够成稿：市场、政策、成果、玩家、融资、风险六个维度都有可引用来源。"
+            "更新任务状态后输出完整报告。"
+        )
+        is not None
+    )
+    assert _incomplete_final_answer_guard("马上综合给出：") is not None
+
+
+def test_incomplete_final_answer_accepts_delivered_synthesis_tail() -> None:
+    """A promise that actually carries a delivered body/numbers must keep
+    passing — the guard targets body-less promises, not finished outputs."""
+    assert (
+        _incomplete_final_answer_guard(
+            "马上把结论给你：A 方案 12.4 万，B 方案 15.1 万，差异 2.7 万。"
+        )
+        is None
+    )
+    assert (
+        _incomplete_final_answer_guard(
+            "综合如下：市场 1578 亿美元，政策中美加码，产业英伟达-礼来已布局。"
+        )
+        is None
+    )
+    assert (
+        _incomplete_final_answer_guard(
+            "结论：A方案成本更低。综合三轮报价数据，A方案总价 12.4 万，B 方案 15.1 万，"
+            "差异 2.7 万主要来自许可费；后续扩容仍可继续评估。"
+        )
+        is None
+    )

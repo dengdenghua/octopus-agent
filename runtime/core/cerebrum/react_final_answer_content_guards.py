@@ -34,6 +34,18 @@ def _incomplete_final_answer_guard(final_answer: str) -> str | None:
             "The proposed Final Answer is empty or only contains an internal "
             "control marker. Produce the actual user-facing result now."
         )
+    # Strip leading hedges/apologies so an answer that *starts* with "抱歉刚才
+    # 掉线了，马上把…" or "哈哈报告还在肝" is still classified as the announce it
+    # is, instead of escaping every intent prefix because it opens with filler
+    # (thread t0Wn5Zhvh3VUFwoAR2uP4M: "抱歉刚才掉线了，马上把4位成员的成果综合出来。"
+    # was delivered as a completed turn with zero synthesis output).
+    visible_core = re.sub(
+        r"^(?:抱歉|不好意思|抱歉抱歉|稍等|稍等片刻|等一下|哈哈|好的|好嘞|好呀|"
+        r"ok(?:ay)?|收到|明白|让我(?:先|来)?)[，。,!！；;\s]*",
+        "",
+        visible,
+        flags=re.IGNORECASE,
+    )
     # ``我来``/``我这就``/``我直接`` announce an action exactly as ``我将`` does.
     # Their absence let "我来查看黑板…" through as a terminal answer three turns
     # running (thread teD7hPf9dkGOExwO0dIiBE), each time with zero tool calls.
@@ -46,7 +58,7 @@ def _incomplete_final_answer_guard(final_answer: str) -> str | None:
         r"^(?:我(?:会|将|先|来|要|想|需要|这就|马上|直接|接下来|这就开始|马上开始|"
         r"现在(?:立刻|马上|直接)?|继续|接着|随后|开始)|接下来|下一步|准备|继续|接着|"
         r"let me|i(?:'ll| will| first| am going to)|next[,：:]?)",
-        visible,
+        visible_core,
         re.IGNORECASE,
     )
     evidence_action = re.search(
@@ -93,7 +105,7 @@ def _incomplete_final_answer_guard(final_answer: str) -> str | None:
         re.IGNORECASE,
     )
     future_action = re.search(
-        r"(?:^|[。.!！；;，,]\s*)(?:我)?(?:会|将|先|接下来|下一步|准备|继续|接着|随后|现在(?:立刻|马上)?)|"
+        r"(?:^|[。.!！；;，,]\s*)(?:我)?(?:会|将|先|接下来|下一步|准备|继续|接着|随后|现在(?:立刻|马上)?|马上|立刻|立即)|"
         r"(?:我)?先[^。.!！；;\n]{0,32}(?:再读|读取|查看|核对|检查|探清|定位|查找|搜索)|"
         r"\b(?:i(?:'ll| will)|let me|next)\b",
         visible,
@@ -116,6 +128,26 @@ def _incomplete_final_answer_guard(final_answer: str) -> str | None:
         visible,
         re.IGNORECASE,
     )
+    # A turn can end with a *promised* synthesis ("马上综合。"/"马上把…综合出
+    # 来。"/"更新任务状态后输出完整报告。") while delivering nothing. That is
+    # the same announce-only failure as the read/search prefixes above, just in
+    # output form — the model claims the work is about to be emitted instead of
+    # emitting it (thread t0Wn5Zhvh3VUFwoAR2uP4M: msgs "四个方向都收齐了，马上
+    # 综合。" and "抱歉刚才掉线了，马上把4位成员的成果综合出来。" were each the
+    # whole final answer). Only short, body-less promises trip this; any answer
+    # with a real markdown body (delivered_report) or a colon+findings tail is
+    # left alone.
+    promised_delivery = re.search(
+        r"(?:马上|立刻|立即|这就|现在)(?:把|将)?[^。.!！；;\n]{0,28}"
+        r"(?:综合|汇总|输出|整理|成稿|生成|给出|交付|发你|给到你)"
+        r"[^。.!！；;\n]{0,8}(?:出来|一下|给你|给到|好|完|了|给你看|奉上)?[。.!！;\s]*$"
+        r"|(?:稍后|之后|之后|再|后|然后|接着)[^。.!！；;\n]{0,16}"
+        r"(?:输出|给出|生成|成稿|交付|汇总|综合)[^。.!！；;\n]{0,12}"
+        r"(?:完整|最终|正式)?(?:报告|方案|答案|结果|内容|成果)",
+        visible,
+        re.IGNORECASE,
+    )
+
     # Long-form reports often start with a short roadmap ("我将检查…") before
     # presenting the actual findings.  Do not classify that opening sentence as
     # the whole answer: headings, enumerated findings, and a substantial body
@@ -133,6 +165,14 @@ def _incomplete_final_answer_guard(final_answer: str) -> str | None:
     )
     if delivered_report:
         return None
+    if promised_delivery and not delivered_report:
+        return (
+            "The proposed Final Answer only promises to produce or synthesize "
+            "the result (e.g. 「马上综合」/「马上输出完整报告」) without actually "
+            "delivering it. It is not a completed answer. Emit the actual "
+            "synthesized report/content now — do not end the turn with a promise "
+            "to produce it."
+        )
     if (
         evidence_action
         and (preparatory_start or future_action)
@@ -350,7 +390,11 @@ def _ungrounded_external_fact_guard(
         "Presenting a number as a sourced fact it wasn't sourced from is fabrication. Either "
         "cite the observation the figure actually came from, or soften to "
         'an approximation / your own understanding (e.g. "约 ¥…" / '
-        '"据我了解…" / "approximately …").'
+        '"据我了解…" / "approximately …"). '
+        "Fix the specific claims in place and continue with your existing "
+        "synthesis — do NOT re-submit essentially the same full report with "
+        "only one figure tweaked, and do not emit a second copy of the whole "
+        "report; a near-identical re-submission will be rejected again."
     )
 
 
