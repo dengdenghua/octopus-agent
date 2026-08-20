@@ -35,20 +35,20 @@ def test_action_spec_from_entry() -> None:
 
 def test_run_webhook(monkeypatch) -> None:
     monkeypatch.setattr("urllib.request.urlopen", lambda req, timeout=1.0: _ctx(_RespLike(204)))
-    res = _run_webhook("r1", {"url": "https://x/hook", "method": "GET"})
+    res = _run_webhook("r1", {"url": "https://8.8.8.8/hook", "method": "GET"})
     assert res.success is True
     assert "HTTP 204" in res.detail
 
     monkeypatch.setattr("urllib.request.urlopen", lambda req, timeout=1.0: _ctx(_RespLike(500)))
-    res = _run_webhook("r1", {"url": "https://x/hook", "body": {"a": 1}})
+    res = _run_webhook("r1", {"url": "https://8.8.8.8/hook", "body": {"a": 1}})
     assert res.success is False
     assert "HTTP 500" in res.detail
 
     def _http_error(*a, **kw):
-        raise urllib.error.HTTPError("https://x", 429, "Too Many", None, None)
+        raise urllib.error.HTTPError("https://8.8.8.8", 429, "Too Many", None, None)
 
     monkeypatch.setattr("urllib.request.urlopen", _http_error)
-    res = _run_webhook("r1", {"url": "https://x/hook"})
+    res = _run_webhook("r1", {"url": "https://8.8.8.8/hook"})
     assert res.success is False
     assert "HTTPError" in res.error
 
@@ -56,7 +56,7 @@ def test_run_webhook(monkeypatch) -> None:
         raise OSError("dns failed")
 
     monkeypatch.setattr("urllib.request.urlopen", _generic)
-    res = _run_webhook("r1", {"url": "https://x/hook"})
+    res = _run_webhook("r1", {"url": "https://8.8.8.8/hook"})
     assert res.success is False
     assert "OSError" in res.error
 
@@ -199,3 +199,17 @@ def test_execute_action_order(monkeypatch) -> None:
     monkeypatch.setattr("runtime.core.nerves.reflex.actions._run_webhook", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
     out = execute_action(ActionSpec(webhook={"url": "x"}), "r1")
     assert out == []
+
+
+def test_run_webhook_ssrf_guard_blocks_private() -> None:
+    """SSRF 防护 (audit C4): 指向内网/私网的 webhook 被 url_guard 拒绝."""
+    res = _run_webhook("r1", {"url": "http://127.0.0.1:8080/hook", "method": "GET"})
+    assert res.success is False
+    assert "url_guard rejected" in res.error
+
+    # allow_private 显式开启时不再被 url_guard 拦截（配置所有者负责该端点）；
+    # 此处未 mock urlopen，连接本地端口会得到 OSError，但绝不是 url_guard。
+    res2 = _run_webhook(
+        "r1", {"url": "http://127.0.0.1:8080/hook", "method": "GET", "allow_private": True}
+    )
+    assert "url_guard" not in res2.error

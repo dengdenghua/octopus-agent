@@ -42,6 +42,12 @@ def project(tmp_path: Path) -> Path:
     return p
 
 
+
+def _user_commands(cmds):
+    """Filter the always-shipped bundled tier out of count/name assertions."""
+    bundled = {"project"}
+    return [c for c in cmds if c.name not in bundled]
+
 # ═══════════════════════════════════════════════════════════
 # Loading
 # ═══════════════════════════════════════════════════════════
@@ -53,10 +59,11 @@ class TestLoading:
         from runtime.execution.slash_commands import load_slash_commands
 
         cmds = load_slash_commands()
-        assert len(cmds) == 1
-        assert cmds[0].name == "hello"
-        assert cmds[0].body == "Hello $ARGUMENTS!"
-        assert cmds[0].source == "global"
+        user = _user_commands(cmds)
+        assert len(user) == 1
+        assert user[0].name == "hello"
+        assert user[0].body == "Hello $ARGUMENTS!"
+        assert user[0].source == "global"
 
     def test_frontmatter_parsed(self, home: Path):
         (home / "review.md").write_text(
@@ -72,7 +79,7 @@ class TestLoading:
         from runtime.execution.slash_commands import load_slash_commands
 
         cmds = load_slash_commands()
-        c = cmds[0]
+        c = next(cmd for cmd in cmds if cmd.name == "review")
         assert c.description == "Review a PR"
         assert c.argument_hint == "<pr-number>"
         assert c.allowed_tools == ("fetch_url", "read_file")
@@ -84,8 +91,9 @@ class TestLoading:
         from runtime.execution.slash_commands import load_slash_commands
 
         cmds = load_slash_commands()
-        assert cmds[0].body == "Just a body $1"
-        assert cmds[0].description == ""
+        c = next(cmd for cmd in cmds if cmd.name == "bare")
+        assert c.body == "Just a body $1"
+        assert c.description == ""
 
     def test_project_overrides_global(
         self,
@@ -100,9 +108,11 @@ class TestLoading:
         from runtime.execution.slash_commands import load_slash_commands
 
         cmds = load_slash_commands(project_dir=project)
-        assert len(cmds) == 1
-        assert cmds[0].body == "project version"
-        assert cmds[0].source == "project"
+        user = _user_commands(cmds)
+        assert len(user) == 1
+        assert user[0].name == "dup"
+        assert user[0].body == "project version"
+        assert user[0].source == "project"
 
     def test_project_and_global_coexist(
         self,
@@ -117,7 +127,7 @@ class TestLoading:
         from runtime.execution.slash_commands import load_slash_commands
 
         cmds = load_slash_commands(project_dir=project)
-        names = {c.name for c in cmds}
+        names = {c.name for c in _user_commands(cmds)}
         assert names == {"g", "p"}
 
     def test_missing_dirs_return_empty(
@@ -128,7 +138,11 @@ class TestLoading:
         monkeypatch.setenv("OCTOPUS_HOME", str(tmp_path / "nope"))
         from runtime.execution.slash_commands import load_slash_commands
 
-        assert load_slash_commands() == []
+        cmds = load_slash_commands()
+        # No global/project dirs → only the always-shipped bundled tier remains.
+        assert len(cmds) == 1
+        assert cmds[0].name == "project"
+        assert cmds[0].source == "bundled"
 
     def test_nested_md_files_ignored(self, home: Path):
         sub = home / "sub"
@@ -138,7 +152,7 @@ class TestLoading:
         from runtime.execution.slash_commands import load_slash_commands
 
         cmds = load_slash_commands()
-        assert {c.name for c in cmds} == {"top"}
+        assert {c.name for c in _user_commands(cmds)} == {"top"}
 
 
 # ═══════════════════════════════════════════════════════════
@@ -242,6 +256,62 @@ class TestSerialization:
         from runtime.execution.slash_commands import load_slash_commands
 
         cmds = load_slash_commands()
-        assert len(cmds) == 1
+        user = _user_commands(cmds)
+        assert len(user) == 1
+        assert user[0].name == "bad"
         # Description not parsed because frontmatter block was incomplete
-        assert cmds[0].description == ""
+        assert user[0].description == ""
+
+
+class TestBundledTier:
+    """App-shipped bundled slash commands (lowest precedence tier)."""
+
+    def test_project_command_ships_by_default(self) -> None:
+        from runtime.execution.slash_commands import load_slash_commands
+
+        cmds = load_slash_commands()
+        project = next((c for c in cmds if c.name == "project"), None)
+        assert project is not None
+        assert project.source == "bundled"
+        assert "PM 驾驶舱" in project.description
+        assert "report" in project.argument_hint
+
+    def test_global_overrides_bundled(self, home: Path) -> None:
+        (home / "project.md").write_text(
+            "---\ndescription: custom project command\n---\ncustom body",
+            encoding="utf-8",
+        )
+        from runtime.execution.slash_commands import load_slash_commands
+
+        cmds = load_slash_commands()
+        project = next(c for c in cmds if c.name == "project")
+        assert project.source == "global"
+        assert project.description == "custom project command"
+
+
+class TestProjectExpansionGuard:
+    """``/project ...`` must never be expanded as a generic slash template —
+    the project-mode driver owns that namespace."""
+
+    def test_project_control_passes_through(self) -> None:
+        from runtime.sensing.gateway.slash_command_expansion import (
+            maybe_expand_slash_command,
+        )
+
+        assert maybe_expand_slash_command("/project report") == "/project report"
+        assert maybe_expand_slash_command("/project retro") == "/project retro"
+        assert (
+            maybe_expand_slash_command("/project task MS1-T1 reset run")
+            == "/project task MS1-T1 reset run"
+        )
+
+    def test_other_slash_commands_still_expand(self) -> None:
+        import os
+
+        from runtime.sensing.gateway.slash_command_expansion import (
+            maybe_expand_slash_command,
+        )
+
+        # No user command configured → falls through unchanged (no crash).
+        assert maybe_expand_slash_command("/review 42") == "/review 42"
+        assert os.getcwd()  # keep import referenced

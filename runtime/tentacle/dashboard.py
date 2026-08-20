@@ -28,7 +28,7 @@ import time
 from contextlib import suppress
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi import Request as FastAPIRequest
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
@@ -46,7 +46,7 @@ def create_tentacle_router(
     coordinator: TentacleCoordinator,
     *,
     identity_store: Any = None,
-    require_auth: bool = False,
+    require_auth: bool = True,
     jwt_secret: str | None = None,
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
@@ -58,12 +58,44 @@ def create_tentacle_router(
     """
     router = APIRouter(prefix="/api/tentacle", tags=["tentacle"])
 
+    # Security default: auth is enforced whenever an identity store is
+    # available (``_enforce_auth``). With ``require_auth=True`` but no
+    # identity store the router degrades to anonymous with a warning — the
+    # coordinator normally supplies a store built from the WebSocket auth
+    # token, so a real deployment always enforces.
+    _enforce_auth = require_auth and identity_store is not None
+
+    def _require_http_auth(request: FastAPIRequest) -> None:
+        """FastAPI dependency: enforce auth on HTTP endpoints when enabled."""
+        if not _enforce_auth:
+            return
+        token: str | None = None
+        auth_header = request.headers.get("authorization") or ""
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header[7:].strip()
+        if not token:
+            raise HTTPException(401, "missing tentacle auth token")
+        if jwt_secret and token.count(".") == 2:
+            identity = identity_store.verify_jwt(
+                token,
+                secret=jwt_secret,
+                required_issuer=jwt_issuer,
+                required_audience=jwt_audience,
+            )
+            if identity is not None:
+                return
+        if identity_store.verify_api_key(token) is not None:
+            return
+        raise HTTPException(401, "invalid tentacle auth token")
+
+
+
     # 任务历史记录（内存，重启清空）
     _task_history: list[dict[str, Any]] = []
 
     def _resolve_ws_actor(ws: WebSocket) -> str | None:
         if identity_store is None:
-            if require_auth:
+            if _enforce_auth:
                 raise PermissionError("identity store required for tentacle auth")
             return None
         token: str | None = None
@@ -88,7 +120,7 @@ def create_tentacle_router(
             except Exception:  # noqa: BLE001
                 token = None
         if not token:
-            if require_auth:
+            if _enforce_auth:
                 raise PermissionError("missing tentacle auth token")
             return None
         if jwt_secret and token.count(".") == 2:
@@ -100,12 +132,12 @@ def create_tentacle_router(
             )
             if identity is not None:
                 return identity.actor_id
-            if require_auth:
+            if _enforce_auth:
                 raise PermissionError("invalid jwt")
         identity = identity_store.verify_api_key(token)
         if identity is not None:
             return identity.actor_id
-        if require_auth:
+        if _enforce_auth:
             raise PermissionError("invalid token")
         return None
 
@@ -117,7 +149,7 @@ def create_tentacle_router(
 
     # ── 设备列表 ────────────────────────────────────────
 
-    @router.get("/devices")
+    @router.get("/devices", dependencies=[Depends(_require_http_auth)])
     async def list_devices() -> list[dict[str, Any]]:
         coordinator.pool.all_online()
         all_devices = list(coordinator.pool._tentacles.values())
@@ -145,7 +177,7 @@ def create_tentacle_router(
 
     # ── 设备详情 ────────────────────────────────────────
 
-    @router.get("/devices/{tentacle_id}")
+    @router.get("/devices/{tentacle_id}", dependencies=[Depends(_require_http_auth)])
     async def device_detail(tentacle_id: str) -> dict[str, Any]:
         device = coordinator.pool.get(tentacle_id)
         if device is None:
@@ -162,7 +194,7 @@ def create_tentacle_router(
 
     # ── 提交任务 ────────────────────────────────────────
 
-    @router.post("/task")
+    @router.post("/task", dependencies=[Depends(_require_http_auth)])
     async def submit_task(body: dict[str, Any]) -> dict[str, Any]:
         task = body.get("task", "").strip()
         tentacle_id = body.get("tentacle_id", "")
@@ -243,7 +275,7 @@ def create_tentacle_router(
 
     # ── 群发（一对多群控） ──────────────────────────────
 
-    @router.post("/broadcast")
+    @router.post("/broadcast", dependencies=[Depends(_require_http_auth)])
     async def broadcast_task(body: dict[str, Any]) -> dict[str, Any]:
         """把同一任务并发下发到多台设备并聚合结果。
 
@@ -285,19 +317,19 @@ def create_tentacle_router(
 
     # ── 任务历史 ────────────────────────────────────────
 
-    @router.get("/tasks")
+    @router.get("/tasks", dependencies=[Depends(_require_http_auth)])
     async def list_tasks() -> list[dict[str, Any]]:
         return list(reversed(_task_history))
 
     # ── 协调器统计 ──────────────────────────────────────
 
-    @router.get("/stats")
+    @router.get("/stats", dependencies=[Depends(_require_http_auth)])
     async def stats() -> dict[str, Any]:
         return coordinator.stats()
 
     # ── VLM 视觉分析 ────────────────────────────────────
 
-    @router.post("/devices/{tentacle_id}/analyze")
+    @router.post("/devices/{tentacle_id}/analyze", dependencies=[Depends(_require_http_auth)])
     async def vlm_analyze(tentacle_id: str, body: dict[str, Any]) -> dict[str, Any]:
         """手动触发 VLM 分析设备屏幕.
 
@@ -399,7 +431,7 @@ def create_tentacle_router(
 
     # ── 屏幕流：获取设备最新截图 ────────────────────────
 
-    @router.get("/devices/{tentacle_id}/screenshot")
+    @router.get("/devices/{tentacle_id}/screenshot", dependencies=[Depends(_require_http_auth)])
     async def device_screenshot(tentacle_id: str) -> Response:
         """获取设备最新截图（JPEG）.
 
@@ -421,7 +453,7 @@ def create_tentacle_router(
 
     # ── 屏幕流：获取 WebSocket URL ──────────────────────
 
-    @router.post("/screen/subscribe")
+    @router.post("/screen/subscribe", dependencies=[Depends(_require_http_auth)])
     async def screen_subscribe(body: dict[str, Any] | None = None) -> dict[str, Any]:
         """返回屏幕流 WebSocket URL 供前端连接.
 
@@ -595,7 +627,7 @@ def create_tentacle_router(
         finally:
             await screen_relay.unsubscribe(PC_HOST_ID, ws)
 
-    @router.post("/pc-screen/start")
+    @router.post("/pc-screen/start", dependencies=[Depends(_require_http_auth)])
     async def pc_screen_start(body: dict[str, Any] | None = None) -> dict[str, Any]:
         """启动 PC 屏幕捕获."""
         from runtime.tentacle.mobile.pc_screen_capture import PcScreenCapture, PcScreenConfig
@@ -620,7 +652,7 @@ def create_tentacle_router(
         except Exception as e:
             raise HTTPException(500, f"Failed to start PC screen capture: {e}") from e
 
-    @router.post("/pc-screen/stop")
+    @router.post("/pc-screen/stop", dependencies=[Depends(_require_http_auth)])
     async def pc_screen_stop() -> dict[str, Any]:
         """停止 PC 屏幕捕获."""
         if coordinator.pc_screen_capture is None:
@@ -631,7 +663,7 @@ def create_tentacle_router(
         coordinator.pc_screen_capture = None
         return {"status": "stopped", "last_stats": stats}
 
-    @router.get("/pc-screen/stats")
+    @router.get("/pc-screen/stats", dependencies=[Depends(_require_http_auth)])
     async def pc_screen_stats() -> dict[str, Any]:
         """获取 PC 屏幕捕获统计."""
         if coordinator.pc_screen_capture is None:
@@ -640,7 +672,7 @@ def create_tentacle_router(
 
     # ── 远程输入（手机→PC控制）──────────────────────────────
 
-    @router.post("/remote-input")
+    @router.post("/remote-input", dependencies=[Depends(_require_http_auth)])
     async def remote_input(body: dict[str, Any]) -> dict[str, Any]:
         """远程输入事件端点.
 

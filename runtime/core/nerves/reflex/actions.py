@@ -71,6 +71,16 @@ def _run_webhook(rule_id: str, cfg: dict[str, Any]) -> ActionResult:
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
         req_headers.setdefault("Content-Type", "application/json")
 
+    # SSRF guard (audit C4): block private/internal targets unless the rule
+    # explicitly opts in via ``allow_private: true``.
+    from runtime.safety.auth.url_guard import check_url
+
+    verdict = check_url(url, allow_private=bool(cfg.get("allow_private", False)))
+    if not verdict.allow:
+        return ActionResult(
+            rule_id, "webhook", False, 0.0, error=f"url_guard rejected: {verdict.reason}"
+        )
+
     try:
         req = urllib.request.Request(
             url,
