@@ -354,9 +354,9 @@ def register_cron_executor_task(runner: Any, channel_manager_holder: list | None
     # (audit T-02) plus the flock already prevent double-firing, so the
     # scheduler thread only ever does a fast submit.
     import threading as _threading
-    from concurrent.futures import ThreadPoolExecutor as _TPE
+    from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
 
-    _cron_pool = _TPE(max_workers=2, thread_name_prefix="cron-exec")
+    _cron_pool = _ThreadPoolExecutor(max_workers=2, thread_name_prefix="cron-exec")
     _tick_in_flight = _threading.Event()
 
     def _tick() -> None:

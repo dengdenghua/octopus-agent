@@ -171,7 +171,7 @@ def _call_handler_with_transient_retry(
         return fut.result(timeout=float(timeout_s))
     except _cf.TimeoutError:
         pool.shutdown(wait=False, cancel_futures=True)
-        raise TimeoutError(f"tool handler exceeded its timeout ({timeout_s:g}s)")
+        raise TimeoutError(f"tool handler exceeded its timeout ({timeout_s:g}s)") from None
     except BaseException:
         pool.shutdown(wait=False, cancel_futures=True)
         raise

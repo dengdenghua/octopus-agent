@@ -111,7 +111,7 @@ def _digest_one_path(p: Any) -> str:
                         entries.append(_digest_one_path(child))
                 except OSError:
                     entries.append(f"{child}:unreadable")
-            return f"{p}:dir:{"|".join(entries)}"
+            return f"{p}:dir:{'|'.join(entries)}"
     except OSError:
         return f"{p}:unreadable"
     return f"{p}:missing"

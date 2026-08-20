@@ -179,6 +179,16 @@ def _input_schema_from_handler(handler: Any) -> tuple[dict[str, Any], ...]:
         "bool_": "boolean",
     }
 
+    # A VAR_KEYWORD (``**kwargs``) handler legitimately accepts arbitrary
+    # parameters, so its schema must stay permissive; without one we close
+    # ``additionalProperties`` so the model cannot smuggle internal privilege
+    # overrides (``allow_sensitive`` / ``allow_private``) past the published
+    # tool schema (audit C2). The executor still strips them at dispatch as a
+    # second, independent boundary.
+    has_var_keyword = any(
+        p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+    )
+
     for pname, param in sig.parameters.items():
         if pname in _INTERNAL_PARAMS or pname.startswith("_"):
             continue
@@ -227,7 +237,7 @@ def _input_schema_from_handler(handler: Any) -> tuple[dict[str, Any], ...]:
     schema: dict[str, Any] = {
         "type": "object",
         "properties": properties,
-        "additionalProperties": True,
+        "additionalProperties": has_var_keyword,
     }
     if required:
         schema["required"] = required

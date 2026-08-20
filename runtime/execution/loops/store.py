@@ -162,8 +162,8 @@ class LoopRunStore:
         """
         from datetime import UTC, datetime
 
-        cap = DEFAULT_MAX_RUNS if max_runs is None else max(0, int(max_runs))
-        ttl = DEFAULT_TTL_SECONDS if ttl_seconds is None else max(0, int(ttl_seconds))
+        cap = self.DEFAULT_MAX_RUNS if max_runs is None else max(0, int(max_runs))
+        ttl = self.DEFAULT_TTL_SECONDS if ttl_seconds is None else max(0, int(ttl_seconds))
         now = datetime.now(UTC)
         with self._write_lock():
             payload = self._read_payload()
