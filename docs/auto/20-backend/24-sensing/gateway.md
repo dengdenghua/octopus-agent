@@ -126,6 +126,8 @@ tier: "standard"
 | `anthropic_compat/router.py` | Anthropic Managed Agents REST + SSE router. |
 | `anthropic_compat/session_manager.py` | Session lifecycle manager for the Anthropic compat layer. |
 | `apps_router.py` | — |
+| `asset_registry_router.py` | 统一资产仓库路由 —— 插件 / 技能 / 角色(WorkBuddy + Codex + 本地 + 内置)归一视图。 |
+| `capability_router.py` | 统一「插件」市场路由 —— 所有外部能力(WorkBuddy MCP 服务 + Codex 插件)统一叫插件。 |
 | `channels_router.py` | — |
 | `cli_team_router.py` | CLI-team router · ``/api/cli-team/*``. |
 | `completion_router.py` | Inline code completion endpoint — Tab-complete skeleton. |
@@ -139,6 +141,7 @@ tier: "standard"
 | `computer_runtime_readiness.py` | Runtime-readiness aggregation for the computer-automation router. |
 | `computer_vision.py` | Vision-model config resolution + OpenAI-compatible vision call for the computer-automation router. |
 | `config_router.py` | Config router · identity-lock + providers + custom-models. |
+| `connector_router.py` | 连接器网关路由 — 浏览/安装/认证编排/启停。 |
 | `control_sessions_router.py` | Unified control-session API. |
 | `cowork_group_router.py` | Thread-group API: WeChat-style membership + mode + shared blackboard. |
 | `cron_router.py` | Cron settings compatibility router. |
@@ -573,6 +576,18 @@ tier: "standard"
 | func | `def discover_apps(roots)` |  |
 | func | `def create_apps_router(app_roots, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
 
+### `asset_registry_router.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def create_asset_registry_router(identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
+
+### `capability_router.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def create_capability_router(registry, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
+
 ### `channels_router.py`
 
 | Kind | Symbol | Doc |
@@ -612,6 +627,12 @@ tier: "standard"
 | class | `class ConfigRouter` | Bundle returned by ``create_config_router``. |
 | func | `def create_config_router(stack, custom_models_path, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` | Build the FastAPI router + state bundle. |
 
+### `connector_router.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def create_connector_router(registry, orchestrator, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, auth_injection_rules)` |  |
+
 ### `control_sessions_router.py`
 
 | Kind | Symbol | Doc |
@@ -641,7 +662,7 @@ tier: "standard"
 | class | `class RoomMessageBody(BaseModel)` |  |
 | class | `class EnsureRoomBody(BaseModel)` |  |
 | class | `class CollabTaskBody(BaseModel)` |  |
-| func | `def create_cowork_group_router(store, async_store, collaboration_store, room_message_store, team_rooms_state_path, team_tasks_state_path, team_rooms_router, team_tasks_router, runtime, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` | Create the ``/api/cowork/*`` thread-group router. |
+| func | `def create_cowork_group_router(store, async_store, collaboration_store, room_message_store, team_rooms_state_path, team_tasks_state_path, team_rooms_router, team_tasks_router, runtime, project_store, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` | Create the ``/api/cowork/*`` thread-group router. |
 
 ### `cron_router.py`
 
@@ -1178,17 +1199,17 @@ tier: "standard"
 
 ## Who imports this
 
-**14** file(s) reference this package:
+**15** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
 - **`runtime/cli_serve.py/`** · 1 file(s)
   - `runtime/cli_serve.py`
-- **`runtime/platform/`** · 12 file(s)
+- **`runtime/platform/`** · 13 file(s)
+  - `runtime/platform/plugins/cloud_expert_store.py`
   - `runtime/platform/ui/_app_agents.py`
   - `runtime/platform/ui/_app_collab.py`
   - `runtime/platform/ui/_app_health.py`
   - `runtime/platform/ui/_app_meta.py`
-  - `runtime/platform/ui/_app_parallel.py`
-  - _… and 7 more_
+  - _… and 8 more_
 

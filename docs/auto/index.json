@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "generated_at": "2026-08-18T18:39:35+00:00",
-  "files_analyzed": 48,
+  "generated_at": "2026-08-20T19:31:19+00:00",
+  "files_analyzed": 170,
   "tree": [
     {
       "type": "doc",
@@ -153,6 +153,11 @@
             },
             {
               "type": "doc",
+              "title": "🏔️ 坤候底 · 逆向投资人",
+              "path": "20-backend/26-agents/contrarian-investor.md"
+            },
+            {
+              "type": "doc",
               "title": "🖥️ Raven",
               "path": "20-backend/26-agents/desktop_operator.md"
             },
@@ -208,8 +213,23 @@
             },
             {
               "type": "doc",
+              "title": "🤖 固件通",
+              "path": "20-backend/26-agents/embedded_firmware_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🔬 钊审财 · 财报研究员",
+              "path": "20-backend/26-agents/fundamental-researcher.md"
+            },
+            {
+              "type": "doc",
               "title": "🐙 Eve",
               "path": "20-backend/26-agents/general.md"
+            },
+            {
+              "type": "doc",
+              "title": "🌊 星望远 · 产业策略师",
+              "path": "20-backend/26-agents/industry-strategist.md"
             },
             {
               "type": "doc",
@@ -253,8 +273,598 @@
             },
             {
               "type": "doc",
+              "title": "🤖 吴八哥",
+              "path": "20-backend/26-agents/senior_developer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🤖 SEO 内容营销团队",
+              "path": "20-backend/26-agents/seo_content_team_lead.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚡ 磊追浪 · 短线冲浪手",
+              "path": "20-backend/26-agents/shortterm-surfer.md"
+            },
+            {
+              "type": "doc",
+              "title": "📡 洲四方 · 信号派首席",
+              "path": "20-backend/26-agents/signal-chief.md"
+            },
+            {
+              "type": "doc",
+              "title": "🤖 腾讯自选股股票投研专家团",
+              "path": "20-backend/26-agents/stock_partner_lead.md"
+            },
+            {
+              "type": "doc",
+              "title": "🌡️ 声学工程师分身",
+              "path": "20-backend/26-agents/twin_acoustic_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧠 声学-结构专家分身",
+              "path": "20-backend/26-agents/twin_acoustic_structure_expert.md"
+            },
+            {
+              "type": "doc",
+              "title": "💻 AI 工程师分身",
+              "path": "20-backend/26-agents/twin_ai_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧠 AI 硬件系统专家分身",
+              "path": "20-backend/26-agents/twin_ai_hardware_system_expert.md"
+            },
+            {
+              "type": "doc",
+              "title": "📊 AI 产品经理分身",
+              "path": "20-backend/26-agents/twin_ai_product_manager.md"
+            },
+            {
+              "type": "doc",
+              "title": "💻 算法工程师分身",
+              "path": "20-backend/26-agents/twin_algorithm_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "💻 Android 系统工程师分身",
+              "path": "20-backend/26-agents/twin_android_system_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "📡 天线工程师分身",
+              "path": "20-backend/26-agents/twin_antenna_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🌡️ 音频工程师分身",
+              "path": "20-backend/26-agents/twin_audio_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🔎 审计分身",
+              "path": "20-backend/26-agents/twin_audit.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚡ 电池工程师分身",
+              "path": "20-backend/26-agents/twin_battery_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "📡 蓝牙工程师分身",
+              "path": "20-backend/26-agents/twin_bluetooth_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "💻 BSP 工程师分身",
+              "path": "20-backend/26-agents/twin_bsp_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "📊 经营助理 / 总经理助理分身",
+              "path": "20-backend/26-agents/twin_business_assistant.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧮 CAE 仿真工程师分身",
+              "path": "20-backend/26-agents/twin_cae.md"
+            },
+            {
+              "type": "doc",
+              "title": "🔍 摄像头工程师分身",
+              "path": "20-backend/26-agents/twin_camera_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "📡 蜂窝通信工程师分身",
+              "path": "20-backend/26-agents/twin_cellular_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚙️ CMF 设计师分身",
+              "path": "20-backend/26-agents/twin_cmf_designer.md"
+            },
+            {
+              "type": "doc",
+              "title": "📡 通信协议工程师分身",
+              "path": "20-backend/26-agents/twin_communication_protocol_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚡ 连接器工程师分身",
+              "path": "20-backend/26-agents/twin_connector_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧠 DFM/DFx 专家分身",
+              "path": "20-backend/26-agents/twin_dfm_dfx_expert.md"
+            },
+            {
+              "type": "doc",
+              "title": "🔍 显示工程师分身",
+              "path": "20-backend/26-agents/twin_display_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🔍 显示测试工程师分身",
+              "path": "20-backend/26-agents/twin_display_test_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚡ 电气工程师分身",
+              "path": "20-backend/26-agents/twin_electrical_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚡ 电子工程师分身",
+              "path": "20-backend/26-agents/twin_electronics.md"
+            },
+            {
+              "type": "doc",
+              "title": "🛰️ 嵌入式工程师分身",
+              "path": "20-backend/26-agents/twin_embedded.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧠 嵌入式-硬件联调专家分身",
+              "path": "20-backend/26-agents/twin_embedded_hardware_debug_expert.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚡ EMC/EMI 工程师分身",
+              "path": "20-backend/26-agents/twin_emc_emi_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧠 工厂交付专家分身",
+              "path": "20-backend/26-agents/twin_factory_delivery_expert.md"
+            },
+            {
+              "type": "doc",
+              "title": "🛠️ FAE 应用工程师分身",
+              "path": "20-backend/26-agents/twin_fae.md"
+            },
+            {
+              "type": "doc",
+              "title": "🌡️ 失效分析工程师 / FA分身",
+              "path": "20-backend/26-agents/twin_failure_analysis_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "💹 财务分身",
+              "path": "20-backend/26-agents/twin_finance.md"
+            },
+            {
+              "type": "doc",
+              "title": "💻 固件工程师分身",
+              "path": "20-backend/26-agents/twin_firmware_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "👑 创始人/CEO 分身",
+              "path": "20-backend/26-agents/twin_founder.md"
+            },
+            {
+              "type": "doc",
+              "title": "📡 GNSS/GPS 工程师分身",
+              "path": "20-backend/26-agents/twin_gnss_gps_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧠 硬件质量闭环专家分身",
+              "path": "20-backend/26-agents/twin_hardware_quality_closed_loop_expert.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧠 硬件系统架构专家分身",
+              "path": "20-backend/26-agents/twin_hardware_system_architect.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚡ 硬件系统工程师分身",
+              "path": "20-backend/26-agents/twin_hardware_system_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚡ 硬件技术员分身",
+              "path": "20-backend/26-agents/twin_hardware_technician.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚡ 硬件测试工程师分身",
+              "path": "20-backend/26-agents/twin_hardware_test_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🩺 医疗健康协作分身",
+              "path": "20-backend/26-agents/twin_health.md"
+            },
+            {
+              "type": "doc",
+              "title": "👥 人力资源分身",
+              "path": "20-backend/26-agents/twin_hr.md"
+            },
+            {
+              "type": "doc",
+              "title": "🔧 硬件工程师分身",
+              "path": "20-backend/26-agents/twin_hw_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "📱 硬件产品经理分身",
+              "path": "20-backend/26-agents/twin_hw_product.md"
+            },
+            {
+              "type": "doc",
+              "title": "🔍 图像质量工程师 / IQ Engineer分身",
+              "path": "20-backend/26-agents/twin_image_quality_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🎨 工业设计师分身",
+              "path": "20-backend/26-agents/twin_industrial_design.md"
+            },
+            {
+              "type": "doc",
+              "title": "🔍 红外工程师分身",
+              "path": "20-backend/26-agents/twin_infrared_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚙️ 注塑工程师分身",
+              "path": "20-backend/26-agents/twin_injection_molding_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "📈 投融资分析师分身",
+              "path": "20-backend/26-agents/twin_investment.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚖️ 律师分身",
+              "path": "20-backend/26-agents/twin_lawyer.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚖️ 法务合规分身",
+              "path": "20-backend/26-agents/twin_legal.md"
+            },
+            {
+              "type": "doc",
+              "title": "🔍 激光/雷达工程师分身",
+              "path": "20-backend/26-agents/twin_lidar_tof_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "💻 Linux 驱动工程师分身",
+              "path": "20-backend/26-agents/twin_linux_driver_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "💻 机器视觉算法工程师分身",
+              "path": "20-backend/26-agents/twin_machine_vision_algorithm_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🏭 生产制造工程师分身",
+              "path": "20-backend/26-agents/twin_manufacturing.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚙️ 材料工程师分身",
+              "path": "20-backend/26-agents/twin_materials_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚙️ 机械工程师分身",
+              "path": "20-backend/26-agents/twin_mechanical_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧠 机电一体化专家分身",
+              "path": "20-backend/26-agents/twin_mechatronics_expert.md"
+            },
+            {
+              "type": "doc",
+              "title": "🏭 NPI 量产导入分身",
+              "path": "20-backend/26-agents/twin_npi.md"
+            },
+            {
+              "type": "doc",
+              "title": "🩹 护理协作分身",
+              "path": "20-backend/26-agents/twin_nurse.md"
+            },
+            {
+              "type": "doc",
+              "title": "📊 运营管理分身",
+              "path": "20-backend/26-agents/twin_operations.md"
+            },
+            {
+              "type": "doc",
+              "title": "🔭 光学工程师分身",
+              "path": "20-backend/26-agents/twin_optical.md"
+            },
+            {
+              "type": "doc",
+              "title": "🔍 光机工程师分身",
+              "path": "20-backend/26-agents/twin_opto_mechanical_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧠 光机系统专家分身",
+              "path": "20-backend/26-agents/twin_opto_mechanical_system_expert.md"
+            },
+            {
+              "type": "doc",
+              "title": "🔍 光电工程师分身",
+              "path": "20-backend/26-agents/twin_optoelectronic_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚙️ 包装工程师分身",
+              "path": "20-backend/26-agents/twin_packaging_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚡ PCB 工程师分身",
+              "path": "20-backend/26-agents/twin_pcb_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚡ PCB Layout 工程师分身",
+              "path": "20-backend/26-agents/twin_pcb_layout_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "📊 PMO 经理分身",
+              "path": "20-backend/26-agents/twin_pmo_manager.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚡ 电源工程师分身",
+              "path": "20-backend/26-agents/twin_power_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚡ 电源完整性工程师 / PI分身",
+              "path": "20-backend/26-agents/twin_power_integrity_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧠 电源-热专家分身",
+              "path": "20-backend/26-agents/twin_power_thermal_expert.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧠 售前解决方案专家分身",
+              "path": "20-backend/26-agents/twin_presales_solution_expert.md"
+            },
+            {
+              "type": "doc",
+              "title": "🔩 工艺工程师分身",
+              "path": "20-backend/26-agents/twin_process.md"
+            },
+            {
+              "type": "doc",
+              "title": "🏭 采购经理 / Buyer分身",
+              "path": "20-backend/26-agents/twin_procurement_manager_buyer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🗂️ 产品经理分身",
+              "path": "20-backend/26-agents/twin_product.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧠 产品合规认证专家分身",
+              "path": "20-backend/26-agents/twin_product_compliance_certification_expert.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚙️ 产品设计工程师分身",
+              "path": "20-backend/26-agents/twin_product_design_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🌡️ 产品完整性工程师分身",
+              "path": "20-backend/26-agents/twin_product_integrity_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🗓️ 项目经理分身",
+              "path": "20-backend/26-agents/twin_project.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚙️ 样机工程师 / Prototype Engineer分身",
+              "path": "20-backend/26-agents/twin_prototype_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧠 心理咨询师分身",
+              "path": "20-backend/26-agents/twin_psychology.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧪 质量工程师分身",
+              "path": "20-backend/26-agents/twin_quality.md"
+            },
+            {
+              "type": "doc",
+              "title": "🕐 可靠性工程师分身",
+              "path": "20-backend/26-agents/twin_reliability.md"
+            },
+            {
+              "type": "doc",
+              "title": "📡 射频工程师分身",
+              "path": "20-backend/26-agents/twin_rf.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧠 射频-结构专家分身",
+              "path": "20-backend/26-agents/twin_rf_structure_expert.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧠 机器人系统专家分身",
+              "path": "20-backend/26-agents/twin_robotics_system_expert.md"
+            },
+            {
+              "type": "doc",
+              "title": "🤝 销售与商务分身",
+              "path": "20-backend/26-agents/twin_sales.md"
+            },
+            {
+              "type": "doc",
+              "title": "🔍 传感器工程师分身",
+              "path": "20-backend/26-agents/twin_sensor_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚙️ 钣金工程师分身",
+              "path": "20-backend/26-agents/twin_sheet_metal_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚡ 信号完整性工程师 / SI分身",
+              "path": "20-backend/26-agents/twin_signal_integrity_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧠 智能硬件产品架构专家分身",
+              "path": "20-backend/26-agents/twin_smart_hardware_product_architect.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧠 智能制造自动化专家分身",
+              "path": "20-backend/26-agents/twin_smart_manufacturing_automation_expert.md"
+            },
+            {
+              "type": "doc",
+              "title": "📐 结构工程师分身",
+              "path": "20-backend/26-agents/twin_structural_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧠 供应商质量专家分身",
+              "path": "20-backend/26-agents/twin_supplier_quality_expert.md"
+            },
+            {
+              "type": "doc",
+              "title": "🚚 供应链与采购分身",
+              "path": "20-backend/26-agents/twin_supply_chain.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧠 供应链工程专家分身",
+              "path": "20-backend/26-agents/twin_supply_chain_engineering_expert.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧾 税务分身",
+              "path": "20-backend/26-agents/twin_tax.md"
+            },
+            {
+              "type": "doc",
+              "title": "📊 技术项目经理 / TPM分身",
+              "path": "20-backend/26-agents/twin_technical_program_manager.md"
+            },
+            {
+              "type": "doc",
+              "title": "🌡️ 测试工程师分身",
+              "path": "20-backend/26-agents/twin_test_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🌡️ 热设计工程师分身",
+              "path": "20-backend/26-agents/twin_thermal_design_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🌡️ 热仿真工程师分身",
+              "path": "20-backend/26-agents/twin_thermal_simulation_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧠 热-结构联合专家分身",
+              "path": "20-backend/26-agents/twin_thermal_structure_expert.md"
+            },
+            {
+              "type": "doc",
+              "title": "🌡️ 热测试工程师分身",
+              "path": "20-backend/26-agents/twin_thermal_test_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "⚙️ 模具工程师分身",
+              "path": "20-backend/26-agents/twin_tooling_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🔍 触控工程师分身",
+              "path": "20-backend/26-agents/twin_touch_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "📊 用户研究员分身",
+              "path": "20-backend/26-agents/twin_user_researcher.md"
+            },
+            {
+              "type": "doc",
+              "title": "🌡️ 振动工程师分身",
+              "path": "20-backend/26-agents/twin_vibration_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🔍 视觉工程师分身",
+              "path": "20-backend/26-agents/twin_vision_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "📡 Wi-Fi 工程师分身",
+              "path": "20-backend/26-agents/twin_wifi_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "📡 无线通信工程师分身",
+              "path": "20-backend/26-agents/twin_wireless_communication_engineer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧮 文衡价 · 估值分析师",
+              "path": "20-backend/26-agents/valuation-analyst.md"
+            },
+            {
+              "type": "doc",
               "title": "✨ Luna",
               "path": "20-backend/26-agents/vibe_selling.md"
+            },
+            {
+              "type": "doc",
+              "title": "🤖 小台",
+              "path": "20-backend/26-agents/workspace_builder.md"
             }
           ]
         }

@@ -39,6 +39,7 @@ tier: "standard"
 | `client.py` | — |
 | `oauth.py` | MCP OAuth 2.0 (PKCE) client — authorize-on-enable for remote MCP servers. |
 | `oauth_discovery.py` | OAuth metadata discovery + dynamic client registration for MCP (step 2). |
+| `oauth_providers.py` | 服务商直连 OAuth App 配置 —— 为不暴露 ``.well-known`` 元数据、但支持 OAuth App 的服务商提供网页登录(WorkBuddy 的 ``server-side`` 连接器就是靠 它平台自己注册的 OAuth App 做到的)。 |
 | `persistent_client.py` | — |
 | `trust.py` | — |
 | `types.py` | — |
@@ -70,8 +71,8 @@ tier: "standard"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def new_pkce()` | Return ``(code_verifier, code_challenge)`` for PKCE S256. |
-| func | `def build_authorize_url(authorize_url, client_id, redirect_uri, scopes, state, code_challenge)` |  |
-| func | `def exchange_code(token_url, code, code_verifier, client_id, redirect_uri)` |  |
+| func | `def build_authorize_url(authorize_url, client_id, redirect_uri, scopes, state, code_challenge, code_challenge_method)` |  |
+| func | `def exchange_code(token_url, code, code_verifier, client_id, client_secret, redirect_uri)` |  |
 | func | `def refresh_access(token_url, refresh_token, client_id)` |  |
 | class | `class MCPOAuthStore` | Thread-safe, JSON-backed per-server OAuth token + pending-flow store. |
 | func | `def get_oauth_store(tenant_id)` | Return the OAuth store for one tenant; no arg is the legacy store. |
@@ -86,6 +87,14 @@ tier: "standard"
 | class | `class OAuthEndpoints` |  |
 | func | `def discover(server_url, timeout)` |  |
 | func | `def register_client(registration_url, redirect_uri, client_name, timeout)` | Dynamic client registration (RFC 7591) for a public PKCE client. |
+
+### `oauth_providers.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class ProviderOAuth` |  |
+| func | `def get_provider(provider_id)` |  |
+| func | `def get_provider_for_capability(item)` | 从 capability item 解析服务商 id(provider_id 优先,其次 id / source)。 |
 
 ### `persistent_client.py`
 
@@ -112,14 +121,16 @@ tier: "standard"
 
 ## Who imports this
 
-**5** file(s) reference this package:
+**7** file(s) reference this package:
 
 - **`runtime/cli_mcp.py/`** · 1 file(s)
   - `runtime/cli_mcp.py`
 - **`runtime/cli_serve.py/`** · 1 file(s)
   - `runtime/cli_serve.py`
-- **`runtime/platform/`** · 2 file(s)
+- **`runtime/platform/`** · 4 file(s)
+  - `runtime/platform/capabilities/capability_registry.py`
   - `runtime/platform/config/builder.py`
+  - `runtime/platform/connectors/oauth_support.py`
   - `runtime/platform/ui/health_router.py`
 - **`runtime/sensing/`** · 1 file(s)
   - `runtime/sensing/gateway/mcp_router.py`
