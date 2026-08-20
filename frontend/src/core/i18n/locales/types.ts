@@ -188,6 +188,9 @@ export interface Translations {
     processRecords: (n: number) => string;
     showMoreAgents: (n: number) => string;
     collapseAgents: string;
+    viewReport: string;
+    viewReportError: string;
+    collapseReport: string;
     latestTool: string;
     execution: string;
     verification: string;
@@ -1098,6 +1101,7 @@ export interface Translations {
     diffTab: string;
     terminalTab: string;
     browserTab: string;
+    projectTab: string;
   };
 
   // Agent workbench panel (kanban / screen timeline)
@@ -1430,6 +1434,20 @@ export interface Translations {
     registryUpToDate: string;
     registryInstalledMessage: (id: string, version: string) => string;
     surfaceFallback: string;
+    discoveredTitle: string;
+    discoveredHint: string;
+    noDiscovered: string;
+    refreshDiscovered: string;
+    actionLoad: string;
+    actionStart: string;
+    actionStop: string;
+    actionUnload: string;
+    actionPending: string;
+    stateLoaded: string;
+    stateStarted: string;
+    stateStopped: string;
+    lifecycleActionError: (name: string, action: string) => string;
+    lifecycleRefreshError: string;
   };
 
   // Live Preview
@@ -1512,9 +1530,12 @@ export interface Translations {
     navReflex: string;
     navIntelligence: string;
     navAssistant: string;
+    navPaperTrading: string;
+    navPaperTradingDesc: string;
     navCommunity: string;
     navMcp: string;
     navEvolution: string;
+    navProjects: string;
     navPlugins: string;
     navHR: string;
     navComputer: string;
@@ -1540,6 +1561,7 @@ export interface Translations {
     switchAgentLabel: string;
     switchAgentMenuTitle: string;
     openAgentHud: string;
+    openAgentHudFor: (name: string) => string;
     currentAgent: string;
     soloChat: string;
     localCliPartners: string;
@@ -1579,6 +1601,15 @@ export interface Translations {
     openThreadFilesTooltip: string;
     // Surface switch + task statuses
     navBrowserSurface: string;
+    // Pluggable module editor (DingTalk-style "edit sidebar" panel)
+    editModules: string;
+    editModulesDone: string;
+    editModulesHint: string;
+    modulePinned: string;
+    moduleGroupWorkspace: string;
+    moduleGroupKnowledge: string;
+    moduleGroupCommunity: string;
+    moduleGroupGrowth: string;
     sectionTaskHistory: string;
     noTaskHistory: string;
     unnamedTask: string;
@@ -2468,6 +2499,10 @@ export interface Translations {
   uploads: {
     uploading: string;
     uploadingFiles: string;
+    uploadProgress: (percent: number) => string;
+    uploadFailed: string;
+    retryUpload: string;
+    waitingForUpload: string;
   };
 
   // Streaming status
@@ -6802,6 +6837,33 @@ export interface Translations {
     typeLabelPromptCapability: string;
     typeLabelTwinRole: string;
     categoryDigitalTwin: string;
+    expertsPanelTitle: string;
+    searchExpertsPlaceholder: string;
+    expertTypeAgent: string;
+    expertTypeTeam: string;
+    typeAll: string;
+    refreshTooltip: string;
+    installExpertTitle: string;
+    installExpertDesc: (name: string) => string;
+    confirmInstall: string;
+    cancelInstall: string;
+    phaseDownload: string;
+    phaseUnpack: string;
+    phaseImport: string;
+    installSuccess: (name: string) => string;
+    installFailed: (name: string, reason: string) => string;
+    detailTitle: (name: string) => string;
+    detailProfession: string;
+    detailQuickPrompts: string;
+    detailTags: string;
+    detailDescription: string;
+    detailInstall: string;
+    detailInstalled: string;
+    loadMore: string;
+    noMoreItems: string;
+    retry: string;
+    noMatchExperts: (total: number) => string;
+    expertLoadingAria: string;
   };
 
   // Skill Categories
