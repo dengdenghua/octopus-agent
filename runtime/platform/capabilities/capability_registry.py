@@ -1,6 +1,6 @@
 """统一「插件(Capability)」注册表 —— 所有外部能力统一叫插件。
 
-WorkBuddy 连接器(108)、Codex 插件(~/.codex/plugins/cache)本质都是「插件」:
+WorkBuddy 连接器(108)、Codex 格式插件(~/.octopus/plugins/codex)本质都是「插件」:
 元数据 + skills + 工具(MCP/CLI) + 认证编排。本模块把两者归一成同一个 schema、
 同一套生命周期,让前端一个市场统一管理。
 
@@ -21,7 +21,9 @@ from pathlib import Path
 from typing import Any
 
 # ── 默认路径 ────────────────────────────────────────────────
-CODEX_PLUGIN_CACHE = Path(os.path.expanduser("~/.codex/plugins/cache"))
+# Codex 格式插件统一放在我们 octopus 名下(~/.octopus/plugins/codex),
+# 不再直接读 Codex 的 ~/.codex/plugins/cache;旧缓存由 codex_discovery 一次性同步。
+CODEX_PLUGIN_CACHE = Path.home() / ".octopus" / "plugins" / "codex"
 CONNECTOR_ROOT = Path(os.path.expanduser("~/.octopus/connectors"))
 CONNECTOR_STATE_FILE = CONNECTOR_ROOT / "state.json"
 CAPABILITY_STATE_FILE = Path(os.path.expanduser("~/.octopus/capabilities/state.json"))
@@ -143,12 +145,23 @@ class CapabilityRegistry:
 
     # ── Codex 插件扫描 ──────────────────────────────────────
     def _scan_codex_plugins(self) -> list[tuple[dict[str, Any], Path]]:
-        """遍历 ~/.codex/plugins/cache/<family>/<plugin>/<version>/.codex-plugin/plugin.json"""
+        """遍历 ~/.octopus/plugins/codex/<plugin>/.codex-plugin/plugin.json。
+
+        首次调用会把旧 Codex 缓存(~/.codex/plugins/cache)同步进来,
+        保证迁移后本地已有的插件仍能识别。
+        """
         if not self._codex_cache.is_dir():
-            return []
+            if not self._codex_cache.exists():
+                from runtime.platform.plugins.codex_discovery import (
+                    sync_codex_cache_to_octopus,
+                )
+
+                sync_codex_cache_to_octopus(dest=self._codex_cache)
+            if not self._codex_cache.is_dir():
+                return []
         out = []
         for manifest_path in sorted(
-            self._codex_cache.glob("*/*/*/.codex-plugin/plugin.json")
+            self._codex_cache.glob("*/.codex-plugin/plugin.json")
         ):
             try:
                 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -274,7 +287,26 @@ class CapabilityRegistry:
             conn = self._connectors.get(cid)
             if conn is None:
                 raise KeyError(f"connector not found: {cid}")
-            return self._auth.status(conn)
+            st = self._auth.status(conn)
+            # CLI 设备流:status 命令确认登录成功 → connected
+            cli_conn = (st.get("cli_status") or {}).get("connected")
+            if cli_conn:
+                st["connected"] = True
+            # MCP 型插件:任一 MCP server 已完成网页 OAuth 授权即视为已连接
+            try:
+                from runtime.adapters.mcp_client import oauth
+
+                oauth_servers = [
+                    name
+                    for name in conn.mcp_servers
+                    if oauth.get_oauth_store().has_tokens(name)
+                ]
+                if oauth_servers:
+                    st["connected"] = True
+                    st["oauth_servers"] = oauth_servers
+            except Exception:  # noqa: BLE001 - OAuth 检查失败不阻断状态查询
+                pass
+            return st
         return {
             "capability_id": cid,
             "auth_mode": "none",

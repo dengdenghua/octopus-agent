@@ -136,6 +136,9 @@ class AgentMessageItem(_ItemBase):
     agent_display_name: str | None = Field(default=None, alias="agentDisplayName")
     agent_avatar_url: str | None = Field(default=None, alias="agentAvatarUrl")
     agent_icon: str | None = Field(default=None, alias="agentIcon")
+    # ③ @因果链：本气泡回应/反驳的成员 display name，前端在气泡标题旁显示
+    # "回应 @谁"。
+    reply_to: str | None = Field(default=None, alias="replyTo")
 
 
 class ReasoningItem(_ItemBase):

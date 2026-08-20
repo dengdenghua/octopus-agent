@@ -59,9 +59,7 @@ def _is_streaming_scope(scope: Scope) -> bool:
     path = scope.get("path") or ""
     if "/stream" in path:
         return True
-    if path.startswith("/v1/"):
-        return True
-    return False
+    return path.startswith("/v1/")
 
 
 class RequestTimeoutMiddleware:

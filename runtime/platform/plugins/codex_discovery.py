@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -34,6 +35,65 @@ def _default_plugin_roots() -> list[Path]:
         root / ".octopus" / "plugins" / "codex",
         Path.home() / ".octopus" / "plugins" / "codex",
     ]
+
+
+# 我们自己的 Codex 格式插件目录(octopus 名下,不再直接读 ~/.codex)。
+OCTOPUS_CODEX_PLUGIN_ROOT = Path.home() / ".octopus" / "plugins" / "codex"
+# Codex 应用的原始插件缓存(只作为一次性的迁移来源)。
+LEGACY_CODEX_PLUGIN_CACHE = Path.home() / ".codex" / "plugins" / "cache"
+
+
+def octopus_codex_plugin_root() -> Path:
+    """返回 octopus 自有的 Codex 格式插件目录(不存在则创建)。"""
+    OCTOPUS_CODEX_PLUGIN_ROOT.mkdir(parents=True, exist_ok=True)
+    return OCTOPUS_CODEX_PLUGIN_ROOT
+
+
+def _version_tuple(version: str) -> tuple[int, ...]:
+    parts = []
+    for seg in version.replace("-", ".").split("."):
+        parts.append(int(seg) if seg.isdigit() else 0)
+    return tuple(parts)
+
+
+def sync_codex_cache_to_octopus(
+    *,
+    source: str | Path | None = None,
+    dest: str | Path | None = None,
+) -> int:
+    """把旧 Codex 缓存(~/.codex/plugins/cache)一次性同步到我们 octopus 插件目录。
+
+    幂等:octopus 目录里已有同名插件(.codex-plugin/plugin.json)就跳过,不覆盖
+    本地已装的。返回本次复制成功的插件数。
+    """
+    src = Path(source or LEGACY_CODEX_PLUGIN_CACHE)
+    target_root = Path(dest or octopus_codex_plugin_root())
+    if not src.is_dir():
+        return 0
+    target_root.mkdir(parents=True, exist_ok=True)
+    # src/<family>/<plugin>/<version>/.codex-plugin/plugin.json → 每个插件保留最新版本
+    by_plugin: dict[str, tuple[tuple[int, ...], Path]] = {}
+    for manifest_path in sorted(src.rglob(".codex-plugin/plugin.json")):
+        try:
+            meta = json.loads(manifest_path.read_text("utf-8"))
+            pid = str(meta.get("name") or "")
+        except (OSError, json.JSONDecodeError):  # noqa: BLE001
+            continue
+        if not pid:
+            continue
+        version = _version_tuple(str(meta.get("version") or "0.0.0"))
+        plugin_root = manifest_path.parent.parent
+        cur = by_plugin.get(pid)
+        if cur is None or version >= cur[0]:
+            by_plugin[pid] = (version, plugin_root)
+    copied = 0
+    for pid, (_, plugin_root) in by_plugin.items():
+        target = target_root / pid
+        if (target / ".codex-plugin" / "plugin.json").exists():
+            continue
+        shutil.copytree(plugin_root, target)
+        copied += 1
+    return copied
 
 
 def _read_manifest(path: Path) -> dict[str, Any] | None:

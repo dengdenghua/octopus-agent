@@ -115,6 +115,17 @@ def setup_app(
         if local_auth_config
         else None
     )
+    # Audit H1: never silently run auth with a well-known dev/test secret —
+    # anyone who knows it can forge tokens. Warn loudly so local configs that
+    # shipped with the placeholder value are caught before exposure.
+    _known_test_jwt_secrets = ("test-secret-key-for-local-development-only-1234567890",)
+    if cocoloop_jwt_secret and cocoloop_jwt_secret in _known_test_jwt_secrets:
+        logging.getLogger(__name__).warning(
+            "jwt_secret is the well-known development/test secret; anyone who "
+            "knows it can forge auth tokens. Set a strong random value before "
+            "exposing this instance to a network."
+        )
+
     local_auth_runtime_config = local_auth_config
     if (
         local_auth_config is not None
