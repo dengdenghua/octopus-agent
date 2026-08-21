@@ -1,11 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Check,
-  CloudDownload,
-  Loader2,
-  RefreshCw,
-  Users,
-} from "lucide-react";
+import { Check, CloudDownload, Loader2, RefreshCw, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -50,11 +44,28 @@ function avatarUrl(value?: string): string | null {
 
 const TYPE_STYLE = {
   agent: { badge: "bg-primary/10 text-primary", label: "expert" },
-  team: { badge: "bg-chart-3/10 text-chart-3 dark:text-chart-3", label: "team" },
+  team: {
+    badge: "bg-chart-3/10 text-chart-3 dark:text-chart-3",
+    label: "team",
+  },
 } as const;
 
 /** 首屏渲染上限 + 「加载更多」步长(避免 421 张带图卡片一次性全量渲染)。 */
 const PAGE_SIZE = 60;
+const EMBEDDED_PAGE_SIZE = 24;
+
+export type WorkBuddyCloudStoreKind = "agent" | "team";
+
+export interface WorkBuddyCloudStorePanelProps {
+  /** 外层人才市场的全局搜索词。 */
+  searchQuery?: string;
+  /** 固定只看专家或专家团；不传时保留原来的面板内切换。 */
+  kind?: WorkBuddyCloudStoreKind;
+  /** 嵌入人才市场时隐藏重复标题/搜索，并采用更舒展的卡片密度。 */
+  embedded?: boolean;
+  /** 安装成功后通知外层刷新“角色库”。 */
+  onInstalled?: (expert: CloudExpertAgent) => void;
+}
 
 /** 安装分步:后端接口为单次 POST,无分步回调,前端按阶段展示文案。 */
 type InstallPhase = "confirm" | "download" | "unpack" | "import" | "done";
@@ -171,10 +182,7 @@ function ExpertDetailDialog({
 
         <DialogFooter className="flex items-center justify-between gap-2">
           <Badge
-            className={cn(
-              "border-transparent text-[11px]",
-              typeStyle.badge,
-            )}
+            className={cn("border-transparent text-[11px]", typeStyle.badge)}
           >
             {isTeam && <Users className="mr-1 inline size-3 align-[-2px]" />}
             {isTeam ? t.store.expertTypeTeam : t.store.expertTypeAgent}
@@ -250,9 +258,7 @@ function InstallProgressDialog({
                   <span className="size-4 shrink-0 rounded-full border border-border-default" />
                 )}
                 <span
-                  className={cn(
-                    state === "todo" && "text-muted-foreground",
-                  )}
+                  className={cn(state === "todo" && "text-muted-foreground")}
                 >
                   {s.label}
                 </span>
@@ -286,7 +292,12 @@ function ExpertCardSkeleton() {
   );
 }
 
-export function WorkBuddyCloudStorePanel() {
+export function WorkBuddyCloudStorePanel({
+  searchQuery = "",
+  kind,
+  embedded = false,
+  onInstalled,
+}: WorkBuddyCloudStorePanelProps = {}) {
   const { t } = useI18n();
   const [experts, setExperts] = useState<CloudExpertAgent[]>([]);
   const [categories, setCategories] = useState<CloudStoreCategory[]>([]);
@@ -307,7 +318,8 @@ export function WorkBuddyCloudStorePanel() {
   );
   const [installPhase, setInstallPhase] = useState<InstallPhase>("download");
   // 增量渲染:首屏 PAGE_SIZE,「加载更多」逐步追加
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const pageSize = embedded ? EMBEDDED_PAGE_SIZE : PAGE_SIZE;
+  const [visibleCount, setVisibleCount] = useState(pageSize);
   const timersRef = useRef<number[]>([]);
 
   useEffect(() => {
@@ -335,43 +347,51 @@ export function WorkBuddyCloudStorePanel() {
         const done: Record<string, boolean> = {};
         for (const e of storeRes.agents) if (e.is_installed) done[e.id] = true;
         setInstalled((prev) => ({ ...prev, ...done }));
-        setVisibleCount(PAGE_SIZE);
+        setVisibleCount(pageSize);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {
         setLoading(false);
       }
     },
-    [],
+    [pageSize],
   );
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  const effectiveTypeFilter = kind ?? typeFilter;
   const categoryCounts = useMemo(() => {
-    const counts = new Map<string, number>([["all", experts.length]]);
-    for (const e of experts) {
+    const typeScopedExperts =
+      effectiveTypeFilter === "all"
+        ? experts
+        : experts.filter(
+            (expert) =>
+              (expert.is_team ? "team" : "agent") === effectiveTypeFilter,
+          );
+    const counts = new Map<string, number>([["all", typeScopedExperts.length]]);
+    for (const e of typeScopedExperts) {
       const key = e.category_id || "all";
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     return counts;
-  }, [experts]);
+  }, [effectiveTypeFilter, experts]);
 
   const zhName = (n?: { en?: string; zh?: string }): string =>
     n?.zh || n?.en || "";
 
-  const q = query.trim().toLowerCase();
+  const externalQuery = searchQuery.trim().toLowerCase();
+  const localQuery = query.trim().toLowerCase();
   const filtered = useMemo(() => {
     return experts.filter((e) => {
+      if (activeCategory !== "all" && (e.category_id || "") !== activeCategory)
+        return false;
       if (
-        activeCategory !== "all" &&
-        (e.category_id || "") !== activeCategory
+        effectiveTypeFilter !== "all" &&
+        (e.is_team ? "team" : "agent") !== effectiveTypeFilter
       )
         return false;
-      if (typeFilter !== "all" && (e.is_team ? "team" : "agent") !== typeFilter)
-        return false;
-      if (!q) return true;
       const hay = [
         e.display_name,
         e.profession || "",
@@ -381,9 +401,21 @@ export function WorkBuddyCloudStorePanel() {
       ]
         .join(" ")
         .toLowerCase();
-      return hay.includes(q);
+      if (externalQuery && !hay.includes(externalQuery)) return false;
+      if (localQuery && !hay.includes(localQuery)) return false;
+      return true;
     });
-  }, [activeCategory, experts, q, typeFilter]);
+  }, [activeCategory, effectiveTypeFilter, experts, externalQuery, localQuery]);
+
+  useEffect(() => {
+    setVisibleCount(pageSize);
+  }, [
+    activeCategory,
+    effectiveTypeFilter,
+    externalQuery,
+    localQuery,
+    pageSize,
+  ]);
 
   const visible = filtered.slice(0, visibleCount);
   const hasMore = visibleCount < filtered.length;
@@ -403,6 +435,7 @@ export function WorkBuddyCloudStorePanel() {
     try {
       await installCloudExpert(expert.id);
       setInstalled((m) => ({ ...m, [expert.id]: true }));
+      onInstalled?.(expert);
       setInstallPhase("done");
       toast.success(t.store.installSuccess(expert.display_name));
       window.setTimeout(() => setInstallTarget(null), 500);
@@ -430,9 +463,13 @@ export function WorkBuddyCloudStorePanel() {
   return (
     <div className="space-y-3">
       {/* 面板标题 */}
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">{t.store.expertsPanelTitle}</span>
-      </div>
+      {!embedded ? (
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium">
+            {t.store.expertsPanelTitle}
+          </span>
+        </div>
+      ) : null}
 
       {/* 分类 + 类型 + 搜索 */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -452,68 +489,80 @@ export function WorkBuddyCloudStorePanel() {
               {categoryCounts.get("all") ?? 0}
             </span>
           </Button>
-          {categories.map((c) => {
-            const count = categoryCounts.get(c.id) ?? 0;
-            return (
-              <Button
-                key={c.id}
-                type="button"
-                size="sm"
-                variant={activeCategory === c.id ? "secondary" : "outline"}
-                onClick={() => setActiveCategory(c.id)}
-                className={cn(
-                  "h-8 shrink-0 px-2.5 text-xs",
-                  activeCategory === c.id &&
-                    "border-primary/35 bg-primary/10 text-foreground",
-                )}
-              >
-                {zhName(c.name)}
-                <span className="ml-1 text-xs text-muted-foreground">
-                  {count}
-                </span>
-              </Button>
-            );
-          })}
+          {categories
+            .filter((c) => !kind || (categoryCounts.get(c.id) ?? 0) > 0)
+            .map((c) => {
+              const count = categoryCounts.get(c.id) ?? 0;
+              return (
+                <Button
+                  key={c.id}
+                  type="button"
+                  size="sm"
+                  variant={activeCategory === c.id ? "secondary" : "outline"}
+                  onClick={() => setActiveCategory(c.id)}
+                  className={cn(
+                    "h-8 shrink-0 px-2.5 text-xs",
+                    activeCategory === c.id &&
+                      "border-primary/35 bg-primary/10 text-foreground",
+                  )}
+                >
+                  {zhName(c.name)}
+                  <span className="ml-1 text-xs text-muted-foreground">
+                    {count}
+                  </span>
+                </Button>
+              );
+            })}
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          <div className="flex items-center gap-1">
-            {(["all", "agent", "team"] as const).map((tp) => (
-              <Button
-                key={tp}
-                type="button"
-                size="sm"
-                variant={typeFilter === tp ? "secondary" : "ghost"}
-                onClick={() => setTypeFilter(tp)}
-                className="h-8 px-2.5 text-xs"
-              >
-                {tp === "all"
-                  ? t.store.typeAll
-                  : tp === "team"
-                    ? t.store.expertTypeTeam
-                    : t.store.expertTypeAgent}
-              </Button>
-            ))}
-          </div>
-          <span className="text-xs text-muted-foreground">
-            {filtered.length}/{experts.length}
-          </span>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t.store.searchExpertsPlaceholder}
-            aria-label={t.store.searchExpertsPlaceholder}
-            className="h-8 w-40 rounded-md border border-border-default bg-background px-2 text-sm outline-none focus:border-primary/50"
-          />
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={loading}
-            onClick={() => void load(true)}
-            title={t.store.refreshTooltip}
-          >
-            <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
-          </Button>
+          {!kind ? (
+            <div className="flex items-center gap-1">
+              {(["all", "agent", "team"] as const).map((tp) => (
+                <Button
+                  key={tp}
+                  type="button"
+                  size="sm"
+                  variant={typeFilter === tp ? "secondary" : "ghost"}
+                  onClick={() => setTypeFilter(tp)}
+                  className="h-8 px-2.5 text-xs"
+                >
+                  {tp === "all"
+                    ? t.store.typeAll
+                    : tp === "team"
+                      ? t.store.expertTypeTeam
+                      : t.store.expertTypeAgent}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+          {!embedded ? (
+            <span className="text-xs text-muted-foreground">
+              {filtered.length}/{experts.length}
+            </span>
+          ) : null}
+          {!embedded ? (
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t.store.searchExpertsPlaceholder}
+              aria-label={t.store.searchExpertsPlaceholder}
+              className="h-8 w-40 rounded-md border border-border-default bg-background px-2 text-sm outline-none focus:border-primary/50"
+            />
+          ) : null}
+          {!embedded ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={loading}
+              onClick={() => void load(true)}
+              title={t.store.refreshTooltip}
+            >
+              <RefreshCw
+                className={cn("size-3.5", loading && "animate-spin")}
+              />
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -535,16 +584,28 @@ export function WorkBuddyCloudStorePanel() {
 
       {loading ? (
         <div
-          className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+          className={cn(
+            "grid grid-cols-1 gap-3 sm:grid-cols-2",
+            embedded
+              ? "xl:grid-cols-3 min-[1800px]:grid-cols-4"
+              : "lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5",
+          )}
           aria-label={t.store.expertLoadingAria}
         >
-          {Array.from({ length: 10 }).map((_, i) => (
+          {Array.from({ length: embedded ? 6 : 10 }).map((_, i) => (
             <ExpertCardSkeleton key={i} />
           ))}
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+          <div
+            className={cn(
+              "grid grid-cols-1 gap-3 sm:grid-cols-2",
+              embedded
+                ? "xl:grid-cols-3 min-[1800px]:grid-cols-4"
+                : "lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5",
+            )}
+          >
             {visible.map((expert) => {
               const isTeam = !!expert.is_team;
               const typeStyle = isTeam ? TYPE_STYLE.team : TYPE_STYLE.agent;
@@ -643,7 +704,9 @@ export function WorkBuddyCloudStorePanel() {
                   variant="outline"
                   className="h-8 px-4 text-xs"
                   onClick={() =>
-                    setVisibleCount((c) => Math.min(c + PAGE_SIZE, filtered.length))
+                    setVisibleCount((c) =>
+                      Math.min(c + pageSize, filtered.length),
+                    )
                   }
                 >
                   {t.store.loadMore}

@@ -184,6 +184,125 @@ class TestFindPackRoot:
         assert ces._find_pack_root(root) == root
 
 
+class TestFindAgentName:
+    def test_team_manifest_agent_name_beats_alphabetical_member(self, tmp_path):
+        root = tmp_path / "stock-partner-team"
+        agents = root / "agents"
+        manifest = root / ".codebuddy-plugin" / "plugin.json"
+        agents.mkdir(parents=True)
+        manifest.parent.mkdir(parents=True)
+        (agents / "contrarian-investor.md").write_text("# member", "utf-8")
+        (agents / "stock-partner-lead.md").write_text("# lead", "utf-8")
+        manifest.write_text(
+            json.dumps(
+                {
+                    "agentName": "stock-partner-lead",
+                    "teamInfo": {"leadAgent": "stock-partner-lead"},
+                }
+            ),
+            "utf-8",
+        )
+
+        selected = ces._find_agent_name(
+            root,
+            {
+                "plugin": "stock-partner-team",
+                "promptFile": "/plugins/stock-partner-team/agents/stock-partner-lead.md",
+            },
+        )
+
+        assert selected == "stock-partner-lead"
+
+    def test_stock_partner_install_imports_lead_not_sorted_first_member(
+        self, tmp_path, monkeypatch
+    ):
+        root = tmp_path / "stock-partner-team"
+        agents = root / "agents"
+        manifest = root / ".codebuddy-plugin" / "plugin.json"
+        agents.mkdir(parents=True)
+        manifest.parent.mkdir(parents=True)
+        (agents / "contrarian-investor.md").write_text("# member", "utf-8")
+        (agents / "stock-partner-lead.md").write_text("# lead", "utf-8")
+        manifest.write_text(
+            json.dumps(
+                {
+                    "agentName": "stock-partner-lead",
+                    "teamInfo": {"leadAgent": "stock-partner-lead"},
+                }
+            ),
+            "utf-8",
+        )
+
+        selected: list[str] = []
+
+        class _Result:
+            already_exists = False
+            agent_id = "stock_partner_lead"
+            agent_name = "Stock Partner Lead"
+            agent_path = str(tmp_path / "installed" / agent_id)
+            copied_skills: list[str] = []
+            warnings: list[str] = []
+
+        import runtime.execution.misc.agent_packs as agent_packs
+
+        def fake_import(pack_root, agent_name, **_kwargs):
+            assert pack_root == root
+            selected.append(agent_name)
+            return _Result()
+
+        monkeypatch.setattr(agent_packs, "import_agent_from_pack", fake_import)
+        store = ces.CloudExpertStore(use_remote=False, use_cache=False)
+        monkeypatch.setattr(
+            store,
+            "get",
+            lambda _expert_id: {
+                "plugin": "stock-partner-team",
+                "bundleUrl": "https://example.com/stock-partner-team.tar.gz",
+                "promptFile": "/plugins/stock-partner-team/agents/stock-partner-lead.md",
+            },
+        )
+        monkeypatch.setattr(store, "_download", lambda *_args: tmp_path / "bundle.tar.gz")
+        monkeypatch.setattr(store, "_unpack", lambda *_args: root)
+
+        result = store.install_expert(
+            "wb_stock-partner-team",
+            agents_root=tmp_path / "installed",
+            skills_root=tmp_path / "skills",
+        )
+
+        assert selected == ["stock-partner-lead"]
+        assert result["agent_id"] == "stock_partner_lead"
+
+    def test_team_info_lead_is_used_when_agent_name_is_missing(self, tmp_path):
+        root = tmp_path / "team"
+        agents = root / "agents"
+        manifest = root / ".codebuddy-plugin" / "plugin.json"
+        agents.mkdir(parents=True)
+        manifest.parent.mkdir(parents=True)
+        (agents / "a-member.md").write_text("# member", "utf-8")
+        (agents / "team-lead.md").write_text("# lead", "utf-8")
+        manifest.write_text(
+            json.dumps({"teamInfo": {"leadAgent": "team-lead"}}),
+            "utf-8",
+        )
+
+        assert ces._find_agent_name(root, {"plugin": "team"}) == "team-lead"
+
+    def test_catalog_prompt_file_precedes_alphabetical_fallback(self, tmp_path):
+        root = tmp_path / "team"
+        agents = root / "agents"
+        agents.mkdir(parents=True)
+        (agents / "a-member.md").write_text("# member", "utf-8")
+        (agents / "team-lead.md").write_text("# lead", "utf-8")
+
+        selected = ces._find_agent_name(
+            root,
+            {"promptFile": "/plugins/team/agents/team-lead.md"},
+        )
+
+        assert selected == "team-lead"
+
+
 class TestWbPrefixAndInstalledDetection:
     """前端商城安装:wire id 带 wb_ 前缀,须可反查 + 与磁盘 slug 目录匹配。"""
 

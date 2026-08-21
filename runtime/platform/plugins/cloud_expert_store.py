@@ -395,12 +395,57 @@ def _find_pack_root(unpack_root: Path) -> Path:
 
 
 def _find_agent_name(pack_root: Path, e: dict[str, Any]) -> str:
-    """优先用插件里的 lead agent 名;退化用 manifest 里的 agentName。"""
+    """Resolve the pack entry agent, preferring explicit lead metadata.
+
+    Team bundles contain several ``agents/*.md`` files.  Picking the first
+    alphabetically can import an arbitrary member instead of the team lead, so
+    consult the plugin manifest and catalog ``promptFile`` before falling back
+    to the legacy first-file behaviour.
+    """
     agents_dir = pack_root / "agents"
-    if agents_dir.is_dir():
-        files = sorted(agents_dir.glob("*.md"))
-        if files:
-            return files[0].stem
+    if not agents_dir.is_dir():
+        return e.get("plugin") or e.get("id")
+
+    def existing_agent_name(value: Any) -> str | None:
+        if not isinstance(value, str) or not value.strip():
+            return None
+        # ``promptFile`` is commonly an absolute-looking marketplace path;
+        # only its basename may select a file inside this already validated
+        # pack directory.
+        filename = value.strip().replace("\\", "/").rsplit("/", 1)[-1]
+        name = filename[:-3] if filename.endswith(".md") else filename
+        if not name or name in {".", ".."}:
+            return None
+        candidate = agents_dir / f"{name}.md"
+        return name if candidate.is_file() else None
+
+    manifest: dict[str, Any] = {}
+    for marker in (".codebuddy-plugin", ".claude-plugin", ".codex-plugin"):
+        manifest_path = pack_root / marker / "plugin.json"
+        try:
+            loaded = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+            continue
+        if isinstance(loaded, dict):
+            manifest = loaded
+            break
+
+    team_info = manifest.get("teamInfo")
+    lead_agent = team_info.get("leadAgent") if isinstance(team_info, dict) else None
+    for value in (
+        manifest.get("agentName"),
+        lead_agent,
+        manifest.get("promptFile"),
+        e.get("promptFile"),
+        e.get("prompt_file"),
+    ):
+        resolved = existing_agent_name(value)
+        if resolved:
+            return resolved
+
+    files = sorted(agents_dir.glob("*.md"))
+    if files:
+        return files[0].stem
     return e.get("plugin") or e.get("id")
 
 

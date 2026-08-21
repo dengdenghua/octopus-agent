@@ -44,16 +44,16 @@ const experts = Array.from({ length: 70 }, (_, i) => ({
 
 /** 卡片标题元素 = [data-slot="card-title"] 文本恰为「专家 N」。 */
 function cardTitles(): HTMLElement[] {
-  return Array.from(document.querySelectorAll('[data-slot="card-title"]')).filter(
-    (el) => /^专家 \d+$/.test((el.textContent || "").trim()),
+  return Array.from(
+    document.querySelectorAll('[data-slot="card-title"]'),
+  ).filter((el) =>
+    /^专家 \d+$/.test((el.textContent || "").trim()),
   ) as HTMLElement[];
 }
 
 /** 找某位专家的卡片(标题精确匹配)。 */
 function cardOf(name: string): HTMLElement {
-  const title = cardTitles().find(
-    (el) => el.textContent?.trim() === name,
-  );
+  const title = cardTitles().find((el) => el.textContent?.trim() === name);
   if (!title) throw new Error(`card not found: ${name}`);
   return title.closest('[data-slot="card"]') as HTMLElement;
 }
@@ -93,6 +93,49 @@ describe("WorkBuddyCloudStorePanel", () => {
     expect(screen.getByText(/已全部加载/)).toBeInTheDocument();
   });
 
+  it("嵌入人才市场时只展示指定类型并使用对应分类数量", async () => {
+    renderWithProviders(<WorkBuddyCloudStorePanel embedded kind="team" />, {
+      locale: "zh-CN",
+    });
+
+    await screen.findByText("专家 0");
+    await waitFor(() => expect(cardTitles()).toHaveLength(7));
+    expect(cardTitles().map((title) => title.textContent?.trim())).toEqual([
+      "专家 0",
+      "专家 10",
+      "专家 20",
+      "专家 30",
+      "专家 40",
+      "专家 50",
+      "专家 60",
+    ]);
+    expect(screen.queryByText("专家 1")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "全部7" })).toBeVisible();
+    expect(screen.queryByText(/7\/70/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: /搜索专家/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /刷新/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("专家页复用人才市场外层搜索且不会混入专家团", async () => {
+    renderWithProviders(
+      <WorkBuddyCloudStorePanel embedded kind="agent" searchQuery="专家 11" />,
+      { locale: "zh-CN" },
+    );
+
+    await screen.findByText("专家 11");
+    expect(cardTitles().map((title) => title.textContent?.trim())).toEqual([
+      "专家 11",
+    ]);
+    expect(screen.queryByText("专家 10")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: /搜索专家/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("点击卡片打开详情弹窗,展示 quick_prompts 与安装入口", async () => {
     const user = userEvent.setup();
     renderWithProviders(<WorkBuddyCloudStorePanel />, { locale: "zh-CN" });
@@ -100,9 +143,7 @@ describe("WorkBuddyCloudStorePanel", () => {
     await screen.findByText("专家 5");
 
     await user.click(cardOf("专家 5"));
-    expect(
-      await screen.findByText(/专家详情 · 专家 5/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/专家详情 · 专家 5/)).toBeInTheDocument();
     expect(screen.getByText("开场提问 5")).toBeInTheDocument();
     expect(screen.getByText(/第 5 位专家的简介/)).toBeInTheDocument();
     expect(
@@ -124,6 +165,7 @@ describe("WorkBuddyCloudStorePanel", () => {
 
   it("安装走确认流:显示分步进度,成功后 toast 成功提示", async () => {
     const user = userEvent.setup();
+    const onInstalled = vi.fn();
     // 用可控 promise 模拟真实下载耗时,让进度弹窗可被断言
     let resolveInstall!: (v: unknown) => void;
     mocks.installCloudExpert.mockReturnValue(
@@ -131,7 +173,12 @@ describe("WorkBuddyCloudStorePanel", () => {
         resolveInstall = res;
       }),
     );
-    renderWithProviders(<WorkBuddyCloudStorePanel />, { locale: "zh-CN" });
+    renderWithProviders(
+      <WorkBuddyCloudStorePanel onInstalled={onInstalled} />,
+      {
+        locale: "zh-CN",
+      },
+    );
 
     await screen.findByText("专家 3");
 
@@ -156,5 +203,6 @@ describe("WorkBuddyCloudStorePanel", () => {
         "专家「专家 3」安装成功",
       );
     });
+    expect(onInstalled).toHaveBeenCalledWith(experts[3]);
   });
 });

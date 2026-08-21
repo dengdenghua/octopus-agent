@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useNavigate } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,10 +15,30 @@ vi.mock("@/core/agents/agent-world-api", () => ({
   previewAgentPack: vi.fn(),
 }));
 
+vi.mock("@/components/store/workbuddy-cloud-store-panel", () => ({
+  WorkBuddyCloudStorePanel: ({
+    embedded,
+    kind,
+    searchQuery,
+  }: {
+    embedded?: boolean;
+    kind?: string;
+    searchQuery?: string;
+  }) => (
+    <div
+      data-testid="workbuddy-talent-market"
+      data-embedded={String(embedded)}
+      data-kind={kind}
+      data-search={searchQuery}
+    />
+  ),
+}));
+
 import {
   AgentWorldUnified,
   AgentsTab,
   resolveHubMarketRoute,
+  resolveHubTalentView,
 } from "./agent-world-unified";
 
 const emptyCounts = new Map([
@@ -117,6 +137,11 @@ describe("HUB market shell", () => {
     expect(screen.getByRole("button", { name: "我的库" })).toBeVisible();
     expect(screen.getByRole("button", { name: /发布/ })).toBeVisible();
     expect(screen.queryByText(/统一资产/)).toBeNull();
+    expect(
+      within(screen.getByTestId("hub-market-navigation"))
+        .getAllByRole("tab")
+        .map((tab) => tab.textContent?.trim()),
+    ).toEqual(["精选", "人才市场", "应用市场"]);
   });
 
   it("keeps legacy HUB tabs mapped into the new market hierarchy", () => {
@@ -136,6 +161,74 @@ describe("HUB market shell", () => {
       section: "applications",
       applicationView: "library",
     });
+    expect(resolveHubTalentView("?tab=agents")).toBe("roles");
+    expect(resolveHubTalentView("?tab=agents&talent=experts")).toBe("experts");
+    expect(resolveHubTalentView("?tab=agents&talent=teams")).toBe("teams");
+  });
+
+  it("restores WorkBuddy experts and expert teams as focused talent views", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <SidebarProvider>
+        <AgentWorldUnified />
+      </SidebarProvider>,
+      {
+        initialRoute: "/workspace/agents?tab=agents",
+        locale: "zh-CN",
+      },
+    );
+
+    expect(screen.getByRole("tab", { name: "人才市场" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tab", { name: "角色" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tab", { name: "专家" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "专家团" })).toBeVisible();
+
+    await user.click(screen.getByRole("tab", { name: "专家" }));
+    expect(screen.getByTestId("workbuddy-talent-market")).toHaveAttribute(
+      "data-kind",
+      "agent",
+    );
+    expect(screen.getByTestId("workbuddy-talent-market")).toHaveAttribute(
+      "data-embedded",
+      "true",
+    );
+
+    await user.click(screen.getByRole("tab", { name: "专家团" }));
+    expect(screen.getByTestId("workbuddy-talent-market")).toHaveAttribute(
+      "data-kind",
+      "team",
+    );
+  });
+
+  it("opens the expert-team talent deep link directly", () => {
+    renderWithProviders(
+      <SidebarProvider>
+        <AgentWorldUnified />
+      </SidebarProvider>,
+      {
+        initialRoute: "/workspace/agents?tab=agents&talent=teams",
+        locale: "zh-CN",
+      },
+    );
+
+    expect(screen.getByRole("tab", { name: "人才市场" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tab", { name: "专家团" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByTestId("workbuddy-talent-market")).toHaveAttribute(
+      "data-kind",
+      "team",
+    );
   });
 
   it("returns to the featured landing page when the HUB link clears a legacy tab", async () => {
