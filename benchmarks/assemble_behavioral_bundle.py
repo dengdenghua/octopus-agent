@@ -17,6 +17,7 @@ from runtime.safety.evolution.behavioral_surpass_evidence import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SUITE_ID = "same-task-head-to-head-v1"
+SYSTEM_RUN_SCHEMA = "octopus.behavioral_system_run.v2"
 INFRASTRUCTURE_STATUS_PATH = REPO_ROOT / "benchmarks/results/behavioral-infrastructure-latest.json"
 
 
@@ -58,9 +59,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def _load_system_run(path: Path, expected_system: str) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict) or payload.get("schema") != (
-        "octopus.behavioral_system_run.v1"
-    ):
+    if not isinstance(payload, dict) or payload.get("schema") != SYSTEM_RUN_SCHEMA:
         raise ValueError(f"invalid system run schema: {path}")
     if payload.get("suite_id") != SUITE_ID or payload.get("system_id") != expected_system:
         raise ValueError(f"system run identity mismatch: {path}")

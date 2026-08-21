@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -94,6 +95,49 @@ def test_e2e_release_proof_merges_readiness_and_full_stack(tmp_path: Path) -> No
     )
 
 
+def test_e2e_release_proof_accepts_relocated_relative_ci_bundle(tmp_path: Path) -> None:
+    producer = tmp_path / "producer"
+    full_stack_data = _full_stack(report_root=producer)
+    for row in full_stack_data["suites"]:
+        row["state_root"] = str(Path(str(row["state_root"])).relative_to(producer))
+        row["playwright_report"] = str(Path(str(row["playwright_report"])).relative_to(producer))
+    (producer / "full_stack_smoke_proof.json").write_text(
+        json.dumps(full_stack_data),
+        encoding="utf-8",
+    )
+
+    consumer = tmp_path / "downloaded-artifact"
+    shutil.copytree(producer, consumer)
+    shutil.rmtree(producer)
+    readiness = tmp_path / "readiness.json"
+    readiness.write_text(json.dumps(_readiness()), encoding="utf-8")
+    output = tmp_path / "release.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/e2e_release_proof.py",
+            "--readiness",
+            str(readiness),
+            "--full-stack",
+            str(consumer / "full_stack_smoke_proof.json"),
+            "--output",
+            str(output),
+            "--required-suite",
+            "full-stack-desktop",
+            "--required-suite",
+            "full-stack-mobile",
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(output.read_text(encoding="utf-8"))["ready"] is True
+
+
 def test_e2e_release_proof_requires_all_named_full_stack_suites(
     tmp_path: Path,
 ) -> None:
@@ -179,6 +223,41 @@ def test_e2e_release_proof_rejects_weak_readiness_artifact(
         "production_readiness_scores_clear_target",
         "production_readiness_coverage_has_no_gaps",
     } <= set(data["failed_checks"])
+
+
+def test_e2e_release_proof_rejects_static_only_readiness_report(
+    tmp_path: Path,
+) -> None:
+    readiness = tmp_path / "readiness.json"
+    full_stack = tmp_path / "full_stack.json"
+    output = tmp_path / "release.json"
+    readiness.write_text(
+        json.dumps(_readiness(release_proof=False, mode="static_only")),
+        encoding="utf-8",
+    )
+    full_stack.write_text(json.dumps(_full_stack(report_root=tmp_path)), encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/e2e_release_proof.py",
+            "--readiness",
+            str(readiness),
+            "--full-stack",
+            str(full_stack),
+            "--output",
+            str(output),
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert result.returncode == 1
+    assert data["ready"] is False
+    assert "production_readiness_release_proof" in data["failed_checks"]
 
 
 def test_e2e_release_proof_rejects_inconsistent_full_stack_counts(
@@ -722,10 +801,15 @@ def _readiness(
     scorecard_score: int = 97,
     automation_score: int = 95,
     coverage_gap_domains: int = 0,
+    release_proof: bool = True,
+    mode: str = "full",
 ) -> dict[str, object]:
     return {
         "schema": schema,
         "ready": True,
+        "mode": mode,
+        "release_proof": release_proof,
+        "expected_revision": "test-revision",
         "scorecard_score": scorecard_score,
         "automation_score": automation_score,
         "e2e": {

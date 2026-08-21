@@ -10,12 +10,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections.abc import Mapping, Sequence
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
 from runtime.safety.evolution.agent_competitor_scorecard import (
+    SCORECARD_CALIBRATION_AS_OF,
+    SCORECARD_CALIBRATION_MAX_AGE_DAYS,
+    SCORECARD_CALIBRATION_SOURCE_REVISION,
     compute_agent_competitor_scorecard,
 )
 from runtime.safety.evolution.agent_loop_quality import compute_agent_loop_quality
@@ -72,6 +77,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--static-only",
+        action="store_true",
+        help=(
+            "Run only deterministic scorecard, coverage, and quality checks. "
+            "This mode is explicitly not release proof."
+        ),
+    )
+    parser.add_argument(
         "--json",
         action="store_true",
         help="Emit a machine-readable readiness report instead of text.",
@@ -88,6 +101,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         min_score=args.min_score,
         review_queue_path=args.review_queue_path,
         behavioral_bundle_path=args.behavioral_bundle_path,
+        static_only=args.static_only,
     )
     report = result.to_dict()
     if args.json_output is not None:
@@ -106,11 +120,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"  - {failure}", file=sys.stderr)
         return 1
 
+    if result.static_only:
+        prefix = "static-only readiness checks passed (NON-RELEASE PROOF)"
+    elif result.release_proof:
+        prefix = "commit-bound production readiness gate passed"
+    else:
+        prefix = (
+            "production readiness gate passed (NOT COMMIT-BOUND RELEASE PROOF; "
+            "set OCTOPUS_BEHAVIORAL_EXPECTED_REVISION)"
+        )
     print(
-        "production readiness gate passed: "
-        f"scorecard={result.scorecard_score}, automation={result.automation_score}, "
-        f"e2e={result.e2e_verdict}, {result.e2e_summary_text}, "
-        f"quality={result.quality_summary}",
+        f"{prefix}: scorecard={result.scorecard_score}, "
+        f"automation={result.automation_score}, e2e={result.e2e_verdict}, "
+        f"{result.e2e_summary_text}, quality={result.quality_summary}",
     )
     return 0
 
@@ -122,6 +144,7 @@ class GateResult:
         failures: list[str],
         scorecard_score: int,
         scorecard_evidence_adjusted_score: int,
+        scorecard_calibration: dict[str, Any],
         automation_score: int,
         e2e_ready: bool,
         e2e_verdict: str,
@@ -130,10 +153,13 @@ class GateResult:
         e2e_behavioral: dict[str, Any],
         e2e_failed_checks: list[str],
         quality_summary: str,
+        static_only: bool,
+        expected_revision: str,
     ) -> None:
         self.failures = failures
         self.scorecard_score = scorecard_score
         self.scorecard_evidence_adjusted_score = scorecard_evidence_adjusted_score
+        self.scorecard_calibration = scorecard_calibration
         self.automation_score = automation_score
         self.e2e_ready = e2e_ready
         self.e2e_verdict = e2e_verdict
@@ -142,6 +168,22 @@ class GateResult:
         self.e2e_behavioral = e2e_behavioral
         self.e2e_failed_checks = e2e_failed_checks
         self.quality_summary = quality_summary
+        self.static_only = static_only
+        self.expected_revision = expected_revision
+
+    @property
+    def gate_passed(self) -> bool:
+        return not self.failures
+
+    @property
+    def release_proof(self) -> bool:
+        return bool(
+            self.gate_passed
+            and not self.static_only
+            and self.expected_revision
+            and self.e2e_ready
+            and self.e2e_behavioral.get("ready") is True
+        )
 
     @property
     def e2e_summary_text(self) -> str:
@@ -157,12 +199,35 @@ class GateResult:
         )
 
     def to_dict(self) -> dict[str, Any]:
+        mode = "static_only" if self.static_only else "full"
+        if self.static_only:
+            proof_scope = "static_only_non_release"
+            notice = (
+                "NON-RELEASE PROOF: behavioral head-to-head evidence is reported "
+                "but does not block this static-only gate."
+            )
+        elif self.release_proof:
+            proof_scope = "commit_bound_release"
+            notice = "Commit-bound release proof for the expected source revision."
+        else:
+            proof_scope = "full_gate_not_commit_bound_or_failed"
+            notice = (
+                "Not commit-bound release proof unless the full gate passes with "
+                "OCTOPUS_BEHAVIORAL_EXPECTED_REVISION set."
+            )
         return {
             "schema": "octopus.production_readiness_gate.v1",
-            "ready": not self.failures,
+            "mode": mode,
+            "gate_passed": self.gate_passed,
+            "ready": self.gate_passed and not self.static_only,
+            "release_proof": self.release_proof,
+            "proof_scope": proof_scope,
+            "notice": notice,
+            "expected_revision": self.expected_revision,
             "failures": list(self.failures),
             "scorecard_score": self.scorecard_score,
             "scorecard_evidence_adjusted_score": (self.scorecard_evidence_adjusted_score),
+            "scorecard_calibration": dict(self.scorecard_calibration),
             "automation_score": self.automation_score,
             "e2e": {
                 "ready": self.e2e_ready,
@@ -181,8 +246,10 @@ def run_gate(
     min_score: int = MIN_SCORE,
     review_queue_path: str | Path | None = None,
     behavioral_bundle_path: str | Path | None = None,
+    static_only: bool = False,
 ) -> GateResult:
     failures: list[str] = []
+    expected_revision = os.environ.get("OCTOPUS_BEHAVIORAL_EXPECTED_REVISION", "").strip()
 
     scorecard = compute_agent_competitor_scorecard(target_score=min_score)
     automation = compute_automation_radar(
@@ -221,6 +288,10 @@ def run_gate(
     if not isinstance(scorecard_surpass_summary, Mapping):
         scorecard_surpass_summary = {}
 
+    scorecard_calibration = _require_current_scorecard_calibration(
+        failures,
+        scorecard.get("baseline_context"),
+    )
     _require_ready(
         failures,
         "agent competitor scorecard parity certification",
@@ -266,68 +337,78 @@ def run_gate(
         "automation radar evidence gaps",
         automation.get("octopus_gaps"),
     )
-    _require_ready(
-        failures,
-        "e2e surpass certification",
-        e2e_certification,
-    )
-    _require_ready(
-        failures,
-        "behavioral surpass evidence",
-        e2e_behavioral,
-    )
+    if not static_only:
+        _require_ready(
+            failures,
+            "e2e surpass certification",
+            e2e_certification,
+        )
+        _require_ready(
+            failures,
+            "behavioral surpass evidence",
+            e2e_behavioral,
+        )
     _require_no_failed_checks(
         failures,
         "e2e surpass certification checks",
-        e2e_certification.get("checks"),
+        _gate_checks(
+            e2e_certification.get("checks"),
+            static_only=static_only,
+        ),
     )
+    expected_summary: dict[str, Any] = {
+        "scorecard_octopus": scorecard_score,
+        "scorecard_best_external": _best_external_score(scorecard),
+        "scorecard_evidence_adjusted_octopus": scorecard_evidence_adjusted_score,
+        "automation_octopus": automation_score,
+        "automation_codex": _nested_int(automation, "overall", "codex"),
+        "coverage_ready": _nested_int(
+            e2e_coverage,
+            "summary",
+            "ready_domains",
+        ),
+        "coverage_total": _nested_int(
+            e2e_coverage,
+            "summary",
+            "total_domains",
+        ),
+        "coverage_gap_domains": _nested_int(
+            e2e_coverage,
+            "summary",
+            "gap_domains",
+        ),
+        "quality_ready": quality_ready,
+        "quality_total": quality_total,
+        "all_dimensions_surpassed": bool(
+            scorecard_surpass_summary.get("all_dimensions_surpassed"),
+        ),
+        "scorecard_gap_dimensions": int(
+            scorecard_surpass_summary.get("gap_dimensions") or 0,
+        ),
+        "automation_gap_dimensions": len(automation.get("octopus_gaps") or []),
+    }
+    if not static_only:
+        expected_summary.update(
+            {
+                "behavioral_ready": bool(e2e_behavioral.get("ready")),
+                "behavioral_octopus_pass_pow_k": _nested_float(
+                    e2e_behavioral,
+                    "systems",
+                    "octopus",
+                    "aggregate_pass_pow_k",
+                ),
+                "behavioral_codex_pass_pow_k": _nested_float(
+                    e2e_behavioral,
+                    "systems",
+                    "codex",
+                    "aggregate_pass_pow_k",
+                ),
+            }
+        )
     _require_e2e_summary_consistency(
         failures,
         e2e_summary,
-        {
-            "scorecard_octopus": scorecard_score,
-            "scorecard_best_external": _best_external_score(scorecard),
-            "scorecard_evidence_adjusted_octopus": scorecard_evidence_adjusted_score,
-            "automation_octopus": automation_score,
-            "automation_codex": _nested_int(automation, "overall", "codex"),
-            "coverage_ready": _nested_int(
-                e2e_coverage,
-                "summary",
-                "ready_domains",
-            ),
-            "coverage_total": _nested_int(
-                e2e_coverage,
-                "summary",
-                "total_domains",
-            ),
-            "coverage_gap_domains": _nested_int(
-                e2e_coverage,
-                "summary",
-                "gap_domains",
-            ),
-            "quality_ready": quality_ready,
-            "quality_total": quality_total,
-            "all_dimensions_surpassed": bool(
-                scorecard_surpass_summary.get("all_dimensions_surpassed"),
-            ),
-            "scorecard_gap_dimensions": int(
-                scorecard_surpass_summary.get("gap_dimensions") or 0,
-            ),
-            "automation_gap_dimensions": len(automation.get("octopus_gaps") or []),
-            "behavioral_ready": bool(e2e_behavioral.get("ready")),
-            "behavioral_octopus_pass_pow_k": _nested_float(
-                e2e_behavioral,
-                "systems",
-                "octopus",
-                "aggregate_pass_pow_k",
-            ),
-            "behavioral_codex_pass_pow_k": _nested_float(
-                e2e_behavioral,
-                "systems",
-                "codex",
-                "aggregate_pass_pow_k",
-            ),
-        },
+        expected_summary,
     )
 
     for report in quality_reports:
@@ -348,6 +429,7 @@ def run_gate(
         failures=failures,
         scorecard_score=scorecard_score,
         scorecard_evidence_adjusted_score=scorecard_evidence_adjusted_score,
+        scorecard_calibration=scorecard_calibration,
         automation_score=automation_score,
         e2e_ready=bool(e2e_certification.get("ready")),
         e2e_verdict=str(e2e_certification.get("verdict") or "unknown"),
@@ -356,6 +438,8 @@ def run_gate(
         e2e_behavioral=e2e_behavioral,
         e2e_failed_checks=e2e_failed_checks,
         quality_summary=quality_summary,
+        static_only=static_only,
+        expected_revision=expected_revision,
     )
 
 
@@ -371,6 +455,69 @@ def _require_ready(
         next_actions = [str(item) for item in report.get("next_actions") or []]
     suffix = f" next_actions={next_actions}" if next_actions else ""
     failures.append(f"{label} is not ready{suffix}")
+
+
+def _utc_today() -> date:
+    return datetime.now(UTC).date()
+
+
+def _require_current_scorecard_calibration(
+    failures: list[str],
+    context: Any,
+) -> dict[str, Any]:
+    evaluated_on = _utc_today()
+    status: dict[str, Any] = {
+        "schema": "octopus.scorecard_calibration_status.v1",
+        "ready": False,
+        "evaluated_on": evaluated_on.isoformat(),
+        "age_days": None,
+        "context": dict(context) if isinstance(context, Mapping) else {},
+    }
+    if not isinstance(context, Mapping):
+        failures.append("agent scorecard calibration metadata is unavailable")
+        return status
+
+    expected = {
+        "as_of": SCORECARD_CALIBRATION_AS_OF,
+        "source": "git_commit",
+        "source_revision": SCORECARD_CALIBRATION_SOURCE_REVISION,
+        "max_age_days": SCORECARD_CALIBRATION_MAX_AGE_DAYS,
+    }
+    mismatches = [
+        f"{field}={context.get(field)!r} expected {expected_value!r}"
+        for field, expected_value in expected.items()
+        if context.get(field) != expected_value
+    ]
+    if mismatches:
+        failures.append(
+            "agent scorecard calibration metadata does not match the version-controlled "
+            f"policy: {', '.join(mismatches)}",
+        )
+        return status
+
+    try:
+        calibrated_on = date.fromisoformat(SCORECARD_CALIBRATION_AS_OF)
+    except ValueError:
+        failures.append("agent scorecard calibration date is invalid")
+        return status
+    age_days = (evaluated_on - calibrated_on).days
+    status["age_days"] = age_days
+    if age_days < 0:
+        failures.append(
+            "agent scorecard calibration date is in the future: "
+            f"as_of={SCORECARD_CALIBRATION_AS_OF}",
+        )
+        return status
+    if age_days > SCORECARD_CALIBRATION_MAX_AGE_DAYS:
+        failures.append(
+            "agent scorecard calibration is stale: "
+            f"as_of={SCORECARD_CALIBRATION_AS_OF}, age_days={age_days}, "
+            f"max_age_days={SCORECARD_CALIBRATION_MAX_AGE_DAYS}; "
+            "recalibrate the external architecture baseline before release",
+        )
+        return status
+    status["ready"] = True
+    return status
 
 
 def _require_min_score(
@@ -431,6 +578,16 @@ def _require_no_failed_checks(
     failed = [row for row in rows if isinstance(row, Mapping) and row.get("passed") is not True]
     if failed:
         failures.append(f"{label}: {_row_ids(failed)}")
+
+
+def _gate_checks(rows: Any, *, static_only: bool) -> Any:
+    if not static_only or not isinstance(rows, Sequence) or isinstance(rows, str):
+        return rows
+    return [
+        row
+        for row in rows
+        if not (isinstance(row, Mapping) and str(row.get("id") or "").startswith("behavioral:"))
+    ]
 
 
 def _require_e2e_summary_consistency(

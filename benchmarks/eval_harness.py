@@ -34,6 +34,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+from runtime.safety.evolution.behavioral_surpass_evidence import (
+    BUNDLE_SCHEMA,
+    behavioral_system_provenance_digest,
+    validate_behavioral_system_provenance,
+)
+
+TRAJECTORY_SCHEMA = "octopus.behavioral_trajectory.v2"
+
 # ── Trajectory ───────────────────────────────────────────────
 
 
@@ -393,6 +401,7 @@ def write_behavioral_system_evidence(
     root: Path | str,
     system_id: str,
     version: str,
+    provenance: dict[str, Any] | None = None,
     artifact_dir: Path | str = "benchmarks/results/behavioral-artifacts",
 ) -> dict[str, Any]:
     """Write digest-addressed trajectories for one side of a head-to-head run.
@@ -404,6 +413,14 @@ def write_behavioral_system_evidence(
     """
 
     base = Path(root).resolve()
+    normalized_provenance = (
+        validate_behavioral_system_provenance(provenance, system_id=system_id)
+        if provenance is not None
+        else {}
+    )
+    provenance_digest = (
+        behavioral_system_provenance_digest(normalized_provenance) if normalized_provenance else ""
+    )
     if report.infrastructure_failures:
         failed = ", ".join(case.case_id for case in report.infrastructure_failures)
         raise ValueError("behavioral evidence cannot score infrastructure failures: " + failed)
@@ -438,9 +455,10 @@ def write_behavioral_system_evidence(
             zip(result.trajectories, result.verdicts, strict=True)
         ):
             artifact = {
-                "schema": "octopus.behavioral_trajectory.v1",
+                "schema": TRAJECTORY_SCHEMA,
                 "system_id": system_id,
                 "system_version": version,
+                "system_provenance_sha256": provenance_digest,
                 "case_id": case.id,
                 "trial_index": trial_index,
                 "prompt_sha256": prompt_digest,
@@ -488,6 +506,8 @@ def write_behavioral_system_evidence(
         )
     return {
         "version": version,
+        "provenance": normalized_provenance,
+        "provenance_sha256": provenance_digest,
         "cases": result_rows,
     }
 
@@ -510,7 +530,7 @@ def write_behavioral_bundle(
     if not isinstance(manifest, dict) or manifest.get("suite_id") != suite_id:
         raise ValueError("suite manifest ID does not match bundle suite_id")
     payload = {
-        "schema": "octopus.behavioral_surpass_bundle.v1",
+        "schema": BUNDLE_SCHEMA,
         "suite_id": suite_id,
         "runner_version": runner_version,
         "source_revision": source_revision,

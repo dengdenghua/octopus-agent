@@ -8,7 +8,9 @@ from pathlib import Path
 from runtime.safety.evolution.behavioral_surpass_evidence import (
     ALLOWED_EXECUTION_MODES,
     BUNDLE_SCHEMA,
+    CODEX_DESKTOP_EXECUTABLE,
     REQUIRED_DOMAINS,
+    behavioral_system_provenance_digest,
     compute_behavioral_surpass_evidence,
 )
 
@@ -50,6 +52,34 @@ def _write_valid_bundle(root: Path, now: datetime) -> Path:
     manifest_digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     systems: dict[str, object] = {}
     for system_id in ("octopus", "codex"):
+        if system_id == "octopus":
+            provenance = {
+                "schema": "octopus.behavioral_system_provenance.v1",
+                "system_id": "octopus",
+                "model": {"expected": "octopus-model", "requested": "octopus-model"},
+                "config": {
+                    "expected_sha256": "a" * 64,
+                    "observed_sha256": "a" * 64,
+                },
+            }
+        else:
+            provenance = {
+                "schema": "octopus.behavioral_system_provenance.v1",
+                "system_id": "codex",
+                "model": {"expected": "codex-model", "requested": "codex-model"},
+                "executable": {
+                    "path": CODEX_DESKTOP_EXECUTABLE,
+                    "expected_sha256": "b" * 64,
+                    "observed_sha256": "b" * 64,
+                    "codesign": {
+                        "expected_team_identifier": "OPENAI-TEAM",
+                        "observed_team_identifier": "OPENAI-TEAM",
+                        "expected_identifier": "com.openai.codex",
+                        "observed_identifier": "com.openai.codex",
+                    },
+                },
+            }
+        provenance_digest = behavioral_system_provenance_digest(provenance)
         cases = []
         for domain in REQUIRED_DOMAINS:
             for case_index in range(2):
@@ -65,9 +95,10 @@ def _write_valid_bundle(root: Path, now: datetime) -> Path:
                     )
                     content = json.dumps(
                         {
-                            "schema": "octopus.behavioral_trajectory.v1",
+                            "schema": "octopus.behavioral_trajectory.v2",
                             "system_id": system_id,
                             "system_version": f"{system_id}-test",
+                            "system_provenance_sha256": provenance_digest,
                             "case_id": case_id,
                             "trial_index": trial_index,
                             "prompt_sha256": prompt_digest,
@@ -101,7 +132,12 @@ def _write_valid_bundle(root: Path, now: datetime) -> Path:
                         "artifacts": artifacts,
                     }
                 )
-        systems[system_id] = {"version": f"{system_id}-test", "cases": cases}
+        systems[system_id] = {
+            "version": f"{system_id}-test",
+            "provenance": provenance,
+            "provenance_sha256": provenance_digest,
+            "cases": cases,
+        }
     bundle = {
         "schema": BUNDLE_SCHEMA,
         "suite_id": "same-task-head-to-head-v1",
@@ -282,6 +318,37 @@ def test_tampered_trajectory_artifact_fails_digest_gate(tmp_path: Path) -> None:
         is False
     )
     assert any("digest mismatch" in error for error in report["errors"])
+
+
+def test_missing_system_provenance_fails_release_gate(tmp_path: Path) -> None:
+    now = datetime(2026, 7, 17, tzinfo=UTC)
+    path = _write_valid_bundle(tmp_path, now)
+    bundle = _load(path)
+    del bundle["systems"]["octopus"]["provenance"]
+    _write(path, bundle)
+
+    report = compute_behavioral_surpass_evidence(root=tmp_path, now=now)
+
+    assert report["ready"] is False
+    assert (
+        next(row for row in report["checks"] if row["id"] == "system_provenance")["passed"] is False
+    )
+
+
+def test_substituted_codex_identity_fails_release_gate(tmp_path: Path) -> None:
+    now = datetime(2026, 7, 17, tzinfo=UTC)
+    path = _write_valid_bundle(tmp_path, now)
+    bundle = _load(path)
+    codex = bundle["systems"]["codex"]
+    codex["provenance"]["executable"]["observed_sha256"] = "c" * 64
+    _write(path, bundle)
+
+    report = compute_behavioral_surpass_evidence(root=tmp_path, now=now)
+
+    assert report["ready"] is False
+    assert (
+        next(row for row in report["checks"] if row["id"] == "system_provenance")["passed"] is False
+    )
 
 
 def test_reused_trajectory_does_not_count_as_repeated_trials(tmp_path: Path) -> None:

@@ -1,0 +1,41 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: octopus-agent-ingress
+  namespace: octopus-agent
+spec:
+  podSelector:
+    matchLabels:
+      app: octopus-agent
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        # Fail closed until the operator explicitly labels the namespace that
+        # owns the chosen ingress controller; see deploy/k8s/README.md.
+        - namespaceSelector:
+            matchLabels:
+              octopus-agent.io/ingress-access: "true"
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-ingress
+  namespace: octopus-agent
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: octopus-agent
+      ports:
+        - protocol: TCP
+          port: 6379

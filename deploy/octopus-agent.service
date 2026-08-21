@@ -7,14 +7,16 @@
 #
 # Implementation note.
 #   sudo -u octopus python -m venv /opt/octopus-agent/.venv
-#   sudo -u octopus /opt/octopus-agent/.venv/bin/pip install "octopus-agent[serve]"
+#   sudo -u octopus /opt/octopus-agent/.venv/bin/pip install \
+#       "octopus-agent-runtime[serve,local-auth,anthropic]"
 # Implementation note.
 #   # sudo -u octopus git clone <repo> /opt/octopus-agent/src
 #   # sudo -u octopus /opt/octopus-agent/.venv/bin/pip install -e /opt/octopus-agent/src".[serve]"
 #
 # Implementation note.
-#   sudo cp config.example.yaml /etc/octopus/config.yaml
+#   sudo cp deploy/systemd-config.yaml /etc/octopus/config.yaml
 # Implementation note.
+#   sudo cp deploy/systemd.env.example /etc/octopus/octopus.env
 #   sudo chmod 600 /etc/octopus/octopus.env
 #   sudo chown octopus:octopus /etc/octopus/octopus.env
 #
@@ -42,6 +44,7 @@ WorkingDirectory=/var/lib/octopus
 
 # Implementation note.
 EnvironmentFile=/etc/octopus/octopus.env
+Environment=OCTOPUS_DATA_DIR=/var/lib/octopus
 
 # Implementation note.
 ExecStart=/opt/octopus-agent/.venv/bin/octopus-agent serve \

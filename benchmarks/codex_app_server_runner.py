@@ -58,7 +58,7 @@ class CodexAppServerTrialRunner:
             stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
-            env={**os.environ, "NO_COLOR": "1"},
+            env=_codex_child_environment(),
         )
         assert process.stdin is not None
         assert process.stdout is not None
@@ -250,6 +250,38 @@ def codex_desktop_version(executable: str | Path) -> str:
     if completed.returncode != 0:
         raise RuntimeError(f"Codex version command failed: {completed.stderr[-1000:]}")
     return f"Codex Desktop App Server ({completed.stdout.strip()})"
+
+
+def _codex_child_environment() -> dict[str, str]:
+    """Return the Codex baseline environment without Octopus-owned state.
+
+    The behavioral workflow necessarily holds an Octopus API token, an
+    optional local-auth password, and the path to the real-provider config.
+    Passing ``os.environ`` through verbatim made those values visible to the
+    comparison process and any plugin it launched.  Keep the signed-in Codex
+    profile and normal non-secret runner environment, but remove every Octopus
+    namespace variable and every common credential-shaped name so the baseline
+    cannot inspect or reuse the system-under-test's provider keys, credentials,
+    or configuration.
+    """
+
+    sensitive_markers = (
+        "TOKEN",
+        "SECRET",
+        "PASSWORD",
+        "API_KEY",
+        "ACCESS_KEY",
+        "PRIVATE_KEY",
+        "CREDENTIAL",
+    )
+    child: dict[str, str] = {}
+    for key, value in os.environ.items():
+        upper = key.upper()
+        if upper.startswith("OCTOPUS_") or any(marker in upper for marker in sensitive_markers):
+            continue
+        child[key] = value
+    child["NO_COLOR"] = "1"
+    return child
 
 
 def _read_json_lines(

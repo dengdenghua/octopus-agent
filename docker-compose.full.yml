@@ -1,11 +1,13 @@
-# octopus-agent · 全栈部署（生产 / 压测 / 多 worker）
+# octopus-agent · 单机全栈部署（生产基线 / 压测）
 # 包含: agent + Redis + Jaeger + Prometheus + Grafana
 #
-# Redis 为跨进程事件总线（Nerves）和分布式记忆（Hemolymph）提供共享后端。
+# 此清单只有一个 Agent 和一个 Redis，不构成 HA。Redis 为跨进程事件总线
+# （Nerves）和分布式记忆（Hemolymph）提供共享后端；跨机生产请改接托管
+# Redis / Sentinel / Cluster，并为文件状态配置共享存储或外部后端。
 # Jaeger / Prometheus / Grafana 提供完整的可观测性栈。
 #
 # 初次使用:
-#   1. cp config.example.yaml config.yaml  # 复制并编辑配置
+#   1. cp config.example.yaml config.yaml  # 复制并启用 oct 或 local_auth；否则非回环 bind 会 fail closed
 #   2. 在 .env 中设置 REDIS_PASSWORD 和 GRAFANA_PASSWORD
 #   3. mkdir -p data/ data/redis data/grafana
 #
@@ -25,6 +27,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    # Local build tag only; it is never a published release identity.
     image: octopus-agent:latest
     container_name: octopus-agent
     restart: unless-stopped
@@ -33,6 +36,8 @@ services:
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      OCTOPUS_LOCAL_AUTH_JWT_SECRET: ${OCTOPUS_LOCAL_AUTH_JWT_SECRET:-}
+      OCTOPUS_ADMIN_PASSWORD_HASH: ${OCTOPUS_ADMIN_PASSWORD_HASH:-}
       OCTOPUS_HEARTS_REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379/0
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
@@ -40,6 +45,9 @@ services:
       OCTOPUS_LOG_LEVEL: ${OCTOPUS_LOG_LEVEL:-INFO}
     volumes:
       - ./data:/data
+      # Named volume is seeded from the image on first use, then preserves
+      # registry-installed skills/agents across container replacement.
+      - octopus-resources:/app/resources
       - ./config.yaml:/etc/octopus/config.yaml:ro
     depends_on:
       redis:
@@ -57,7 +65,7 @@ services:
       - --learn-interval
       - "${LEARN_INTERVAL_S:-0}"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/readyz', timeout=3)"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -77,9 +85,13 @@ services:
 
   # ─── Redis · 事件总线 + 分布式记忆后端 ──────────
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.11-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
     container_name: octopus-redis
     restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
+      # redis-cli consumes this without putting the password in the probe argv.
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
     command: [
       "redis-server",
       "--appendonly", "yes",
@@ -89,9 +101,7 @@ services:
     volumes:
       - ./data/redis:/data
     healthcheck:
-      test: ["CMD", "sh", "-c", "redis-cli -a \"$REDIS_PASSWORD\" ping"]
-      environment:
-        REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -173,3 +183,7 @@ services:
       options:
         max-size: "20m"
         max-file: "3"
+
+volumes:
+  octopus-resources:
+    name: octopus-resources

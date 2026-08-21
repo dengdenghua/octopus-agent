@@ -389,6 +389,12 @@ def test_writes_digest_verified_behavioral_system_evidence(tmp_path) -> None:
         },
     )
     report = run_suite([case], runner=_mock_runner_echo, k=3)
+    provenance = {
+        "schema": "octopus.behavioral_system_provenance.v1",
+        "system_id": "octopus",
+        "model": {"expected": "approved-model", "requested": "approved-model"},
+        "config": {"expected_sha256": "a" * 64, "observed_sha256": "a" * 64},
+    }
 
     system = write_behavioral_system_evidence(
         report,
@@ -396,9 +402,12 @@ def test_writes_digest_verified_behavioral_system_evidence(tmp_path) -> None:
         root=tmp_path,
         system_id="octopus",
         version="test-version",
+        provenance=provenance,
     )
 
     assert system["version"] == "test-version"
+    assert system["provenance"] == provenance
+    assert len(system["provenance_sha256"]) == 64
     assert system["cases"][0]["passes"] == 3
     assert system["cases"][0]["trajectory_count"] == 3
     assert system["cases"][0]["prompt_digest"] == hashlib.sha256(b"hello").hexdigest()
@@ -407,6 +416,7 @@ def test_writes_digest_verified_behavioral_system_evidence(tmp_path) -> None:
     for artifact in artifacts:
         content = (tmp_path / artifact["path"]).read_bytes()
         assert hashlib.sha256(content).hexdigest() == artifact["sha256"]
+        assert json.loads(content)["system_provenance_sha256"] == system["provenance_sha256"]
 
     bundle_path = tmp_path / "benchmarks" / "results" / "bundle.json"
     manifest_path = tmp_path / "benchmarks" / "behavioral-surpass-suite.json"
@@ -424,7 +434,7 @@ def test_writes_digest_verified_behavioral_system_evidence(tmp_path) -> None:
         systems={"octopus": system, "codex": system},
     )
     bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
-    assert bundle["schema"] == "octopus.behavioral_surpass_bundle.v1"
+    assert bundle["schema"] == "octopus.behavioral_surpass_bundle.v2"
     assert bundle["suite_manifest_sha256"] == hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     assert bundle["systems"]["octopus"]["cases"][0]["rubric_digest"] == rubric_digest
 

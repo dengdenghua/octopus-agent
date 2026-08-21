@@ -36,6 +36,7 @@ class TestDockerfile:
         assert "USER octopus" in text
         # Implementation note.
         assert "useradd" in text
+        assert "--uid 10001" in text
 
     def test_exposes_port(self):
         text = (REPO / "Dockerfile").read_text(encoding="utf-8")
@@ -46,16 +47,78 @@ class TestDockerfile:
         assert 'ENTRYPOINT ["octopus-agent"]' in text
         assert "serve" in text  # Implementation note.
 
+    def test_release_inputs_are_locked_and_multiarch_safe(self):
+        text = (REPO / "Dockerfile").read_text(encoding="utf-8")
+        from_lines = [line for line in text.splitlines() if line.startswith("FROM ")]
+
+        assert from_lines
+        assert all("@sha256:" in line for line in from_lines)
+        assert (
+            "node:22.23.2-alpine@sha256:"
+            "c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32"
+        ) in text
+        assert (
+            "python:3.12.11-slim-bookworm@sha256:"
+            "519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7"
+        ) in text
+        assert (
+            "ghcr.io/astral-sh/uv:0.11.25@sha256:"
+            "1e3808aa9023d0980e7c15b1fa7c1ac16ff35925780cf5c459858b2d693f01a9"
+        ) in text
+        assert "COPY pyproject.toml uv.lock" in text
+        assert "uv sync --locked --no-dev --no-editable --no-sources" in text
+        assert "pip install" not in text
+        assert "OCTOPUS_DEPLOYMENT_MODE=production" in text
+        assert "PYTHONPATH=" not in text
+
+    def test_bubblewrap_package_is_arch_specific_and_hash_verified(self):
+        text = (REPO / "Dockerfile").read_text(encoding="utf-8")
+
+        assert "ARG TARGETARCH" in text
+        assert "bubblewrap_0.8.0-2+deb12u1_${TARGETARCH}.deb" in text
+        assert "3cc9134a3286ad01a323dcd924ba123eb634cefaeec82d774257e06308aeaadb" in text
+        assert "d044ba1d7961d835669035fcd1e11121f1dc960a1a2e1c6489a93ea44e083557" in text
+        assert "sha256sum --check --strict" in text
+        assert "unsupported TARGETARCH" in text
+        assert "dpkg --install /tmp/bubblewrap.deb" in text
+        assert '"0.8.0-2+deb12u1"' in text
+        assert "apt-get install" not in text
+
     def test_dockerignore_excludes_data_and_env(self):
         text = (REPO / ".dockerignore").read_text(encoding="utf-8")
         # Implementation note.
         for pattern in ["data/", "*.jsonl", "*.sqlite", ".env"]:
             assert pattern in text, f"missing .dockerignore entry: {pattern}"
+        assert "agents/*/sessions/" in text
+        assert "agents/*/workspace/" in text
+        for local_state in (
+            ".octopus/",
+            ".octopus-*/",
+            ".codex-audits/",
+            ".agents/",
+            "deliverables/",
+            "config.local*.yaml",
+        ):
+            assert local_state in text
 
     def test_dockerignore_keeps_readme(self):
         """Implementation note."""
         text = (REPO / ".dockerignore").read_text(encoding="utf-8")
         assert "!README.md" in text
+
+    def test_ci_smokes_installed_image_and_bundled_skills(self):
+        yaml = pytest.importorskip("yaml")
+        workflow = yaml.safe_load((REPO / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+        steps = workflow["jobs"]["docker-build"]["steps"]
+        named = {step.get("name"): step for step in steps if step.get("name")}
+        smoke = named["Smoke installed image and bundled skill catalog"]["run"]
+        assert "/etc/octopus/config.example.yaml" in smoke
+        assert "/readyz" in smoke
+        assert "/api/health" in smoke
+        assert "payload['skills'] >= 3" in smoke
+        assert "resolve_process_backend('strict')" in smoke
+        assert "assert choice.hard" in smoke
+        assert "docker rm --force" in smoke
 
 
 # ═══════════════════════════════════════════════════════════
@@ -80,6 +143,20 @@ class TestDockerCompose:
         vols = svc.get("volumes", [])
         assert any("./data:/data" in v for v in vols), "需要把 ./data:/data 挂上做 journal 持久化"
 
+    def test_compose_persists_mutable_resource_catalog(self):
+        yaml = pytest.importorskip("yaml")
+        for filename in ("docker-compose.yml", "docker-compose.full.yml"):
+            doc = yaml.safe_load((REPO / filename).read_text(encoding="utf-8"))
+            volumes = doc["services"]["octopus-agent"]["volumes"]
+            assert "octopus-resources:/app/resources" in volumes
+            assert doc["volumes"]["octopus-resources"]["name"] == "octopus-resources"
+
+    def test_make_compose_bootstrap_does_not_start_unauthenticated_template(self):
+        makefile = (REPO / "Makefile").read_text(encoding="utf-8")
+        assert "enable oct or local_auth with a strong secret" in makefile
+        assert "created config.yaml/.env" in makefile
+        assert "test -f config.yaml || cp config.example.yaml config.yaml" not in makefile
+
     def test_compose_mounts_config_readonly(self):
         yaml = pytest.importorskip("yaml")
         doc = yaml.safe_load((REPO / "docker-compose.yml").read_text(encoding="utf-8"))
@@ -98,14 +175,46 @@ class TestDockerCompose:
 
     def test_compose_has_healthcheck(self):
         yaml = pytest.importorskip("yaml")
-        doc = yaml.safe_load((REPO / "docker-compose.yml").read_text(encoding="utf-8"))
-        svc = doc["services"]["octopus-agent"]
-        hc = svc.get("healthcheck")
-        assert hc is not None
-        assert "test" in hc
-        # Implementation note.
-        test_cmd = " ".join(hc["test"]) if isinstance(hc["test"], list) else hc["test"]
-        assert "/api/health" in test_cmd or "/api/status" in test_cmd
+        for filename in ("docker-compose.yml", "docker-compose.full.yml"):
+            doc = yaml.safe_load((REPO / filename).read_text(encoding="utf-8"))
+            svc = doc["services"]["octopus-agent"]
+            hc = svc.get("healthcheck")
+            assert hc is not None
+            assert "test" in hc
+            test_cmd = " ".join(hc["test"]) if isinstance(hc["test"], list) else hc["test"]
+            assert "/readyz" in test_cmd
+            assert "/api/health" not in test_cmd
+
+    def test_full_compose_redis_healthcheck_receives_required_secret(self):
+        yaml = pytest.importorskip("yaml")
+        doc = yaml.safe_load((REPO / "docker-compose.full.yml").read_text(encoding="utf-8"))
+        redis = doc["services"]["redis"]
+
+        assert redis["environment"]["REDIS_PASSWORD"].startswith("${REDIS_PASSWORD:?")
+        assert redis["environment"]["REDISCLI_AUTH"].startswith("${REDIS_PASSWORD:?")
+        assert "environment" not in redis["healthcheck"]
+        assert redis["healthcheck"]["test"] == ["CMD", "redis-cli", "ping"]
+
+    def test_full_compose_redis_image_is_version_and_digest_pinned(self):
+        yaml = pytest.importorskip("yaml")
+        doc = yaml.safe_load((REPO / "docker-compose.full.yml").read_text(encoding="utf-8"))
+
+        assert doc["services"]["redis"]["image"] == (
+            "redis:7.4.11-alpine@sha256:"
+            "ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf"
+        )
+
+    def test_compose_forwards_config_auth_secrets(self):
+        yaml = pytest.importorskip("yaml")
+        for filename in ("docker-compose.yml", "docker-compose.full.yml"):
+            doc = yaml.safe_load((REPO / filename).read_text(encoding="utf-8"))
+            environment = doc["services"]["octopus-agent"]["environment"]
+            assert environment["OCTOPUS_LOCAL_AUTH_JWT_SECRET"] == (
+                "${OCTOPUS_LOCAL_AUTH_JWT_SECRET:-}"
+            )
+            assert environment["OCTOPUS_ADMIN_PASSWORD_HASH"] == (
+                "${OCTOPUS_ADMIN_PASSWORD_HASH:-}"
+            )
 
     def test_compose_restart_policy(self):
         yaml = pytest.importorskip("yaml")
@@ -159,6 +268,11 @@ class TestDocumentation:
         for line in text.splitlines():
             if line.startswith("ANTHROPIC_API_KEY="):
                 assert line.endswith("=") or "sk-" not in line
+        assert "REDIS_PASSWORD=\n" in text
+        assert "GRAFANA_PASSWORD=\n" in text
+        assert "change-me-redis" not in text
+        assert "change-me-grafana" not in text
+        assert "openssl rand -hex 32" in text
 
     def test_deploy_md_exists(self):
         # Implementation note.
@@ -166,7 +280,7 @@ class TestDocumentation:
         path = REPO / "docs" / "deployment.md"
         assert path.exists()
         text = path.read_text(encoding="utf-8")
-        for section in ["Docker", "docker compose", "/api/health"]:
+        for section in ["Docker", "docker compose", "/livez", "/readyz", "/api/health"]:
             assert section in text
 
     def test_license_present_and_apache2(self):

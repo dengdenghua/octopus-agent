@@ -82,6 +82,7 @@ config.local*.yaml
 
 # JavaScript dependencies
 /node_modules/
+/extras/desktop/node_modules/
 
 # temp
 *.tmp
@@ -155,6 +156,8 @@ frontend/dist-regression/
 frontend/build/
 frontend/*.tsbuildinfo
 frontend/tmp-*.mjs
+# One-off local screenshot drivers used during visual QA.
+frontend/_shot*.mjs
 frontend/lint-output*.txt
 frontend/src/styles/tailwind-prebuilt.css
 frontend/node_modules/

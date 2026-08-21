@@ -5,20 +5,43 @@ metadata:
   namespace: octopus-agent
 data:
   config.yaml: |
-    # Implementation note.
-    # Implementation note.
     name: octopus-agent
     version_compat: "0.2"
 
     planner:
       type: llm
-      model: mock/prod
-      mock_response: |
-        {"reasoning": "mock response · replace me in prod", "nodes": []}
+      model: claude-haiku-4-5-20251001
+      mock_response: null
 
     budget:
       max_tokens: 50000
       max_usd: 0.50
+
+    # The pod binds 0.0.0.0, so control-plane authentication is mandatory.
+    # Both values come from octopus-agent-secrets; placeholder/missing JWT
+    # material fails schema validation instead of starting an open service.
+    local_auth:
+      enabled: true
+      allow_any_username: false
+      users:
+        admin: ${OCTOPUS_ADMIN_PASSWORD_HASH}
+      login_max_failures: 5
+      login_ip_max_failures: 20
+      login_failure_window_seconds: 300
+      login_lockout_seconds: 60
+      login_rate_limit_max_entries: 10000
+      jwt_secret: ${OCTOPUS_LOCAL_AUTH_JWT_SECRET}
+      jwt_expire_seconds: 28800
+      jwt_audience: octopus-agent-web
+      # This baseline has exactly one login account. All local-auth users share
+      # default_roles, so do not add non-admin users without per-user RBAC.
+      default_roles: [user, local, admin, operator]
+
+    # A networked production deployment must resolve a verified hard process
+    # sandbox at startup. Unsupported kernels therefore fail closed.
+    execution:
+      deployment_mode: production
+      process_sandbox: strict
 
     journal_file: /data/events.jsonl
 

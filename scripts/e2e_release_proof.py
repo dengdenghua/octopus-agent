@@ -209,6 +209,14 @@ def build_release_proof(
             "next_action": "Run production readiness gate and fix reported failures.",
         },
         {
+            "id": "production_readiness_release_proof",
+            "passed": readiness.get("release_proof") is True,
+            "next_action": (
+                "Run the full readiness gate with commit-bound behavioral evidence; "
+                "static-only reports are not release proof."
+            ),
+        },
+        {
             "id": "production_readiness_scores_clear_target",
             "passed": scorecard_score >= MIN_SCORE and automation_score >= MIN_SCORE,
             "next_action": "Restore scorecard and automation scores to the E2E target.",
@@ -491,6 +499,9 @@ def build_release_proof(
         "readiness": {
             "schema": readiness.get("schema"),
             "ready": readiness.get("ready"),
+            "mode": readiness.get("mode"),
+            "release_proof": readiness.get("release_proof"),
+            "expected_revision": readiness.get("expected_revision"),
             "scorecard_score": readiness.get("scorecard_score"),
             "automation_score": readiness.get("automation_score"),
             "e2e": readiness.get("e2e"),

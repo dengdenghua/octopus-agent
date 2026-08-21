@@ -16,13 +16,13 @@ concurrency:
 jobs:
   secret-scan:
     name: Secret scan (gitleaks)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
       - name: Gitleaks secret scan
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -36,33 +36,46 @@ jobs:
   # independently reported; any failure still fails the job.
   lint-and-test:
     name: Lint + Test (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.11.9", "3.12.11"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
 
-      - name: Setup uv for dependency-lock validation
-        if: matrix.python-version == '3.11'
-        uses: astral-sh/setup-uv@v5
+      - name: Set up pinned uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
         with:
           version: "0.11.25"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
 
       - name: Dependency lock is reproducible
-        if: matrix.python-version == '3.11'
+        if: matrix.python-version == '3.11.9'
         run: uv lock --check
 
-      - name: Install package
-        run: pip install -e ".[dev,web,serve,discord]"
+      - name: Install locked package
+        env:
+          UV_PYTHON_DOWNLOADS: never
+        run: >-
+          uv sync --locked --python ${{ matrix.python-version }}
+          --extra dev --extra web --extra serve --extra discord
+
+      - name: Activate locked environment
+        shell: bash
+        run: |
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            echo "${GITHUB_WORKSPACE}/.venv/Scripts" >> "${GITHUB_PATH}"
+          else
+            echo "${GITHUB_WORKSPACE}/.venv/bin" >> "${GITHUB_PATH}"
+          fi
 
       - name: Invariant lint (active rules)
         # Style/ratchet gate: must not mask pytest below (see note at job top).
@@ -189,27 +202,27 @@ jobs:
           --output test-results/replay-latency-budget.json
 
       - name: Upload replay latency proof
-        if: always() && matrix.python-version == '3.11'
-        uses: actions/upload-artifact@v4
+        if: always() && matrix.python-version == '3.11.9'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: replay-latency-proof
           path: test-results/replay-latency-budget.json
           if-no-files-found: error
 
-      - name: Production readiness gate
+      - name: Static-only readiness checks (not release proof)
         if: always()
         env:
           OCTOPUS_READINESS_HOME: ${{ runner.temp }}/octopus-readiness
           OCTOPUS_READINESS_DATA_DIR: ${{ runner.temp }}/octopus-readiness/data
-          OCTOPUS_READINESS_REPORT: ${{ runner.temp }}/octopus-readiness/readiness_gate.json
-        run: make production-readiness
+          OCTOPUS_READINESS_REPORT: ${{ runner.temp }}/octopus-readiness/readiness_static.json
+        run: make production-readiness-static
 
-      - name: Upload production readiness proof
-        if: always() && matrix.python-version == '3.11'
-        uses: actions/upload-artifact@v4
+      - name: Upload static readiness report (not release proof)
+        if: always() && matrix.python-version == '3.11.9'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: production-readiness-proof
-          path: ${{ runner.temp }}/octopus-readiness/readiness_gate.json
+          name: production-readiness-static-report
+          path: ${{ runner.temp }}/octopus-readiness/readiness_static.json
           if-no-files-found: error
 
       - name: Golden-path gate (plan→execute→replan→verify, incl. parallel/recovery)
@@ -249,8 +262,8 @@ jobs:
         run: pytest tests/test_agents_router_local_partner_security.py -v --tb=short
 
       - name: Upload coverage
-        if: matrix.python-version == '3.11'
-        uses: actions/upload-artifact@v4
+        if: matrix.python-version == '3.11.9'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: coverage-report
           path: .coverage
@@ -266,56 +279,84 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
-        python-version: ["3.11"]
+        os: [windows-2025, macos-15]
+        python-version: ["3.11.9"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
-      - name: Install package
-        run: pip install -e ".[dev,web,serve]"
+      - name: Set up pinned uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          version: "0.11.25"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install locked package
+        env:
+          UV_PYTHON_DOWNLOADS: never
+        run: >-
+          uv sync --locked --python ${{ matrix.python-version }}
+          --extra dev --extra web --extra serve
+      - name: Activate locked environment
+        shell: bash
+        run: |
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            echo "${GITHUB_WORKSPACE}/.venv/Scripts" >> "${GITHUB_PATH}"
+          else
+            echo "${GITHUB_WORKSPACE}/.venv/bin" >> "${GITHUB_PATH}"
+          fi
       - name: pytest (fast subset)
         run: pytest -m "not slow and not integration" --tb=short -q
 
   security-scan:
     name: Security scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: "3.12"
-          cache: pip
-      - run: pip install bandit pip-audit
+          python-version: "3.12.11"
+      - name: Set up pinned uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          version: "0.11.25"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install locked security environment
+        env:
+          UV_PYTHON_DOWNLOADS: never
+        run: uv sync --locked --python 3.12.11 --extra dev --extra web --extra serve
+      - name: Activate locked environment
+        run: echo "${GITHUB_WORKSPACE}/.venv/bin" >> "${GITHUB_PATH}"
       - name: Bandit SAST (zero MEDIUM+ severity findings)
         # MEDIUM and HIGH severity are enforced at zero. All findings
         # were either fixed at the source or given justified inline
         # nosec markers with a reason comment.
         run: bandit -r runtime/ -ll -ii
       - name: pip-audit
-        # Paramiko 4.0.0 has no fixed release for PYSEC-2026-2858; both
-        # Paramiko connection paths disable ssh-rsa/SHA-1 explicitly. The
-        # exception is documented and time-bounded in docs/security/.
-        run: pip install -e ".[dev,web,serve]" && pip-audit --ignore-vuln PYSEC-2026-2858
+        # The locked graph must be vulnerability-clean without suppressions.
+        run: pip-audit
 
   frontend:
     name: Frontend lint + build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10.26.2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "20"
+          node-version: "22.23.2"
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - name: Install dependencies
         working-directory: frontend
         run: pnpm install --frozen-lockfile
+      - name: Frontend production dependency audit
+        working-directory: frontend
+        run: pnpm audit --prod
       - name: ESLint
         working-directory: frontend
         # No `|| true`: the gate must fail on real errors. The tree is
@@ -339,14 +380,14 @@ jobs:
     # too many files / lines. Aligns with the "收紧提交粒度" (commit
     # granularity) goal in .trae/specs/scale-focus-control/spec.md Delta 2.
     name: PR scale guard (files / lines)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
       - name: Check PR size against base
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const { execSync } = require('child_process');
@@ -387,23 +428,32 @@ jobs:
 
   full-stack-smoke:
     name: Full-stack browser smoke
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: "3.11"
-          cache: pip
-      - uses: pnpm/action-setup@v4
+          python-version: "3.11.9"
+      - name: Set up pinned uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          version: "0.11.25"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10.26.2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "20"
+          node-version: "22.23.2"
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - name: Install backend dependencies
-        run: pip install -e ".[dev,serve,web]"
+        env:
+          UV_PYTHON_DOWNLOADS: never
+        run: uv sync --locked --python 3.11.9 --extra dev --extra serve --extra web
+      - name: Activate locked backend environment
+        run: echo "${GITHUB_WORKSPACE}/.venv/bin" >> "${GITHUB_PATH}"
       - name: Install frontend dependencies
         working-directory: frontend
         run: pnpm install --frozen-lockfile
@@ -411,61 +461,95 @@ jobs:
         working-directory: frontend
         run: pnpm exec playwright install --with-deps chromium
       - name: FastAPI + Vite smoke
+        env:
+          OCTOPUS_VERIFY_SKIP_PRODUCTION_GATE: "1"
         run: bash scripts/verify_local.sh --full-stack-only
 
       - name: Upload full-stack smoke proof
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: full-stack-smoke-proof
-          path: test-results/local-verify-state/full_stack_smoke_proof.json
-          if-no-files-found: error
-
-      - name: Upload E2E release proof
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-release-proof
-          path: test-results/local-verify-state/e2e_release_proof.json
+          name: full-stack-smoke-proof-${{ github.sha }}
+          path: test-results/local-verify-state
           if-no-files-found: error
 
   docker-build:
     name: Docker build test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Build Docker image
         run: docker build -t octopus-agent-ci .
+      - name: Smoke installed image and bundled skill catalog
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint python octopus-agent-ci -c \
+            "from runtime.safety.sandboxing.sandbox import resolve_process_backend; choice = resolve_process_backend('strict'); assert choice.hard, choice"
+          container="octopus-agent-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup() {
+            docker logs "${container}" 2>/dev/null || true
+            docker rm --force "${container}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker run --detach --name "${container}" octopus-agent-ci \
+            serve --config /etc/octopus/config.example.yaml \
+            --host 127.0.0.1 --port 8000
+          ready=0
+          for _ in $(seq 1 60); do
+            if docker exec "${container}" python -c \
+              "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "${ready}" = "1"
+          docker exec "${container}" python -c \
+            "import json, urllib.request; payload=json.load(urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)); assert payload['skills'] >= 3, payload"
 
   tracing-smoke:
     name: Tracing smoke test (with OTel installed)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: {python-version: "3.11", cache: pip}
-      - run: pip install -e ".[dev,tracing]"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: {python-version: "3.11.9"}
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with: {version: "0.11.25", enable-cache: true, cache-dependency-glob: uv.lock}
+      - run: uv sync --locked --python 3.11.9 --extra dev --extra tracing
+        env: {UV_PYTHON_DOWNLOADS: never}
+      - run: echo "${GITHUB_WORKSPACE}/.venv/bin" >> "${GITHUB_PATH}"
       - run: pytest tests/test_tracing.py -v
 
   cli-smoke:
     name: CLI argparse wiring smoke
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: {python-version: "3.11", cache: pip}
-      - run: pip install -e ".[dev,serve,web,discord]"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: {python-version: "3.11.9"}
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with: {version: "0.11.25", enable-cache: true, cache-dependency-glob: uv.lock}
+      - run: >-
+          uv sync --locked --python 3.11.9
+          --extra dev --extra serve --extra web --extra discord
+        env: {UV_PYTHON_DOWNLOADS: never}
+      - run: echo "${GITHUB_WORKSPACE}/.venv/bin" >> "${GITHUB_PATH}"
       - name: CLI --help for every subcommand
         run: pytest tests/test_cli_smoke.py -v
 
   demos:
     name: End-to-end demos (bugfix/reflection/evolution)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: {python-version: "3.11", cache: pip}
-      - run: pip install -e ".[dev,web,serve]"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: {python-version: "3.11.9"}
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with: {version: "0.11.25", enable-cache: true, cache-dependency-glob: uv.lock}
+      - run: uv sync --locked --python 3.11.9 --extra dev --extra web --extra serve
+        env: {UV_PYTHON_DOWNLOADS: never}
+      - run: echo "${GITHUB_WORKSPACE}/.venv/bin" >> "${GITHUB_PATH}"
       - name: Git identity for commit demos
         run: |
           git config --global user.email "ci@octopus-agent.test"
@@ -475,20 +559,24 @@ jobs:
 
   openapi-contract:
     name: OpenAPI schema + TS types contract gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: {python-version: "3.11", cache: pip}
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: {python-version: "3.11.9"}
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with: {version: "0.11.25", enable-cache: true, cache-dependency-glob: uv.lock}
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10.26.2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "20"
+          node-version: "22.23.2"
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
-      - run: pip install -e ".[dev,serve]"
+      - run: uv sync --locked --python 3.11.9 --extra dev --extra serve
+        env: {UV_PYTHON_DOWNLOADS: never}
+      - run: echo "${GITHUB_WORKSPACE}/.venv/bin" >> "${GITHUB_PATH}"
 
       - name: Regenerate OpenAPI snapshot
         run: OCTOPUS_OPENAPI_WRITE=1 pytest tests/test_openapi_snapshot.py -q

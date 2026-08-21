@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
 import os
 import sys
@@ -34,9 +35,14 @@ from benchmarks.realtime_runner import (
     probe_realtime_endpoint,
 )
 from benchmarks.system_run_seed import load_system_run_seed, merge_seed_reports
+from runtime.safety.evolution.behavioral_surpass_evidence import (
+    CODEX_DESKTOP_EXECUTABLE,
+    validate_behavioral_system_provenance,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INFRASTRUCTURE_STATUS_PATH = REPO_ROOT / "benchmarks/results/behavioral-infrastructure-latest.json"
+SYSTEM_RUN_SCHEMA = "octopus.behavioral_system_run.v2"
 
 
 def _approval_behavior(case_id: str) -> tuple[str, str]:
@@ -156,6 +162,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--artifact-dir", default="benchmarks/results/behavioral-artifacts")
     parser.add_argument("--system-version", default=None)
     parser.add_argument("--model", default=None)
+    parser.add_argument(
+        "--provenance-file",
+        type=Path,
+        default=None,
+        help="Verified config/model/executable identity for release-gated evidence.",
+    )
+    parser.add_argument(
+        "--octopus-config-path",
+        type=Path,
+        default=None,
+        help="Config whose digest must match Octopus release-evidence provenance.",
+    )
     parser.add_argument("--octopus-url", default="ws://127.0.0.1:8000/api/realtime")
     parser.add_argument("--octopus-token-env", default="OCTOPUS_API_TOKEN")
     parser.add_argument(
@@ -205,6 +223,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.k < 1:
         parser.error("--k must be at least 1")
+    try:
+        provenance = _load_and_bind_provenance(args)
+    except ValueError as exc:
+        parser.error(str(exc))
     selected = set(args.case_ids) if args.case_ids else None
     octopus_token = os.environ.get(args.octopus_token_env) or None
     if args.system == "octopus":
@@ -377,6 +399,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 expected_suite_id="same-task-head-to-head-v1",
                 expected_k=args.k,
                 cases=prepared.cases,
+                expected_provenance=provenance,
             )
             for path in args.seed_run
         ]
@@ -443,10 +466,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         root=REPO_ROOT,
         system_id=args.system,
         version=version,
+        provenance=provenance,
         artifact_dir=args.artifact_dir,
     )
     payload = {
-        "schema": "octopus.behavioral_system_run.v1",
+        "schema": SYSTEM_RUN_SCHEMA,
         "suite_id": "same-task-head-to-head-v1",
         "slice": "full" if selected is None else "selected",
         "system_id": args.system,
@@ -457,6 +481,49 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(report.summary())
     print(f"system evidence: {args.output}")
     return 0 if report.aggregate_pass_pow_k == 1.0 else 1
+
+
+def _load_and_bind_provenance(args: argparse.Namespace) -> dict[str, object] | None:
+    """Load release provenance and bind it to the exact inputs used by this run."""
+
+    if args.provenance_file is None:
+        return None
+    try:
+        raw = json.loads(args.provenance_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"behavioral provenance is unreadable: {args.provenance_file}") from exc
+    provenance = validate_behavioral_system_provenance(raw, system_id=args.system)
+    requested_model = str(provenance["model"]["requested"])
+    if not args.model or args.model != requested_model:
+        raise ValueError(
+            f"--model must exactly match approved {args.system} provenance: {requested_model!r}"
+        )
+
+    if args.system == "octopus":
+        if args.octopus_config_path is None or not args.octopus_config_path.is_file():
+            raise ValueError(
+                "--octopus-config-path must name the config bound to release provenance"
+            )
+        observed = hashlib.sha256(args.octopus_config_path.read_bytes()).hexdigest()
+        expected = str(provenance["config"]["observed_sha256"])
+        if observed != expected:
+            raise ValueError("Octopus config changed after behavioral identity verification")
+    else:
+        if args.codex_surface != "desktop":
+            raise ValueError("release provenance requires the Codex Desktop App Server surface")
+        if str(args.codex_executable) != CODEX_DESKTOP_EXECUTABLE:
+            raise ValueError(
+                f"Codex executable must be the fixed Desktop path: {CODEX_DESKTOP_EXECUTABLE}"
+            )
+        executable = Path(args.codex_executable)
+        if not executable.is_file():
+            raise ValueError(f"Codex Desktop executable is missing: {executable}")
+        with executable.open("rb") as handle:
+            observed = hashlib.file_digest(handle, "sha256").hexdigest()
+        expected = str(provenance["executable"]["observed_sha256"])
+        if observed != expected:
+            raise ValueError("Codex Desktop executable changed after signature verification")
+    return provenance
 
 
 def _write_checkpoint(

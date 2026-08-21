@@ -148,6 +148,45 @@ def test_e2e_smoke_proof_reports_failed_suite(tmp_path: Path) -> None:
     assert data["failed_suites"] == ["full-stack-desktop"]
 
 
+def test_e2e_smoke_proof_records_bundle_internal_paths_as_relative(tmp_path: Path) -> None:
+    bundle = tmp_path / "artifact"
+    state_root = bundle / "full-stack"
+    report = bundle / "playwright.json"
+    output = bundle / "full_stack_smoke_proof.json"
+    state_root.mkdir(parents=True)
+    _write_playwright_report(
+        report,
+        stats={"expected": 1, "skipped": 0, "unexpected": 0, "flaky": 0},
+        skipped_tests=[],
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/e2e_smoke_proof.py",
+            "--output",
+            str(output),
+            "--suite",
+            "full-stack-mobile",
+            "--status",
+            "passed",
+            "--state-root",
+            str(state_root),
+            "--playwright-report",
+            str(report),
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    row = json.loads(output.read_text(encoding="utf-8"))["suites"][0]
+    assert row["state_root"] == "full-stack"
+    assert row["playwright_report"] == "playwright.json"
+
+
 def _write_playwright_report(
     path: Path,
     *,

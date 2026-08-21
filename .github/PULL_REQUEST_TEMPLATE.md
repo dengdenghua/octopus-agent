@@ -24,7 +24,7 @@
 python -m pytest tests/ -q
 python -m tools.lint.invariant_check runtime/ tests/
 cd frontend && pnpm test && pnpm typecheck
-make production-readiness
+make production-readiness-static  # 静态检查；明确不是发布证明
 ```
 
 ---
@@ -36,7 +36,7 @@ make production-readiness
 - [ ] `python -m pytest tests/` 绿(不跳过 · 3800+ 基线)
 - [ ] `python -m tools.lint.invariant_check runtime/ tests/` 0 issue
 - [ ] `cd frontend && pnpm test && pnpm typecheck` 绿
-- [ ] `make production-readiness` 绿
+- [ ] `make production-readiness-static` 绿（非发布证明；tag 发布另跑同 SHA 完整门禁）
 - [ ] 新逻辑有新测试(unit 或 integration)· 否则给说法
 - [ ] 不加新强依赖(新 soft-dep 走 `[project.optional-dependencies]` · 在 PR 说明动机)
 - [ ] 违反不变量的改动同步更新 [invariants.md](../docs/invariants.md)

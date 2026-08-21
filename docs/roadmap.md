@@ -4,9 +4,9 @@
 
 ---
 
-## 📍 当前现状（2026-06 快照）
+## 📍 当前现状（2026-08 快照）
 
-**12400+ tests 绿 · 0 lint-blocker · 0 新硬依赖**。
+**13100+ tests 绿 · 0 lint-blocker · 0 新硬依赖**。
 （活计数：`python tools/lint/count_tests.py`；CI 通过 `--check` 防止漂移。）
 
 ### ✅ 已闭合（原路线图 0-3 阶段 + 额外补齐）
@@ -55,11 +55,11 @@
 | 7 | mkdocs + tour + 速查卡 | `mkdocs.yml` + `runtime/tour.py` + `invariants-cheatsheet.md` | `tests/test_tour.py` (4) |
 
 **接入点没破坏 · 老代码零 breakage。所有新能力走 opt-in soft-dep**：
-- `pip install 'octopus-agent[mantle-ssh]'` → paramiko
-- `pip install 'octopus-agent[mantle-k8s]'` → kubernetes CLI 已够 · 想用 Python client 加 `[mantle-k8s]`
-- `pip install 'octopus-agent[hearts-redis]'` / `[hearts-etcd]`
-- `pip install 'octopus-agent[skin]'` → watchdog（没装降级 polling · 仍能用）
-- `pip install 'octopus-agent[docs]'` → mkdocs material
+- `pip install 'octopus-agent-runtime[mantle-ssh]'` → paramiko
+- `pip install 'octopus-agent-runtime[mantle-k8s]'` → kubernetes CLI 已够 · 想用 Python client 加 `[mantle-k8s]`
+- `pip install 'octopus-agent-runtime[hearts-redis]'` / `[hearts-etcd]`
+- `pip install 'octopus-agent-runtime[skin]'` → watchdog（没装降级 polling · 仍能用）
+- `pip install 'octopus-agent-runtime[docs]'` → mkdocs material
 
 ### 🤝 仍然留给社区的题目（下一波贡献点）
 

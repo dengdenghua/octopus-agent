@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from benchmarks.codex_app_server_runner import _app_server_message_to_eval
+from benchmarks.codex_app_server_runner import (
+    _app_server_message_to_eval,
+    _codex_child_environment,
+)
 from benchmarks.run_behavioral_suite import _codex_approval_responder
 
 
@@ -100,3 +103,23 @@ def test_codex_denial_responder_is_selective() -> None:
     ) == {"decision": "accept"}
     assert responder("item/fileChange/requestApproval", {}) == {"decision": "accept"}
     assert _codex_approval_responder("coding.path-boundary") is None
+
+
+def test_codex_child_environment_removes_all_octopus_state(monkeypatch) -> None:
+    monkeypatch.setenv("OCTOPUS_API_TOKEN", "system-under-test-token")
+    monkeypatch.setenv("OCTOPUS_EVAL_LOCAL_PASSWORD", "system-under-test-password")
+    monkeypatch.setenv("OCTOPUS_EVAL_CONFIG", "/private/octopus/config.yaml")
+    monkeypatch.setenv("octopus_future_secret", "future-secret")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "provider-key-used-by-octopus")
+    monkeypatch.setenv("GH_TOKEN", "runner-token")
+    monkeypatch.setenv("CODEX_HOME", "/signed-in/codex-profile")
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+
+    child = _codex_child_environment()
+
+    assert all(not key.upper().startswith("OCTOPUS_") for key in child)
+    assert "ANTHROPIC_API_KEY" not in child
+    assert "GH_TOKEN" not in child
+    assert child["CODEX_HOME"] == "/signed-in/codex-profile"
+    assert child["PATH"] == "/usr/bin:/bin"
+    assert child["NO_COLOR"] == "1"

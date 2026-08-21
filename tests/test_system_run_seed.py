@@ -8,6 +8,9 @@ import pytest
 
 from benchmarks.eval_harness import EvalCase
 from benchmarks.system_run_seed import load_system_run_seed, merge_seed_reports
+from runtime.safety.evolution.behavioral_surpass_evidence import (
+    behavioral_system_provenance_digest,
+)
 
 
 def _case() -> EvalCase:
@@ -88,6 +91,35 @@ def _write_seed(root: Path, *, k: int = 3) -> Path:
     return run
 
 
+def _release_provenance(model: str = "approved-model") -> dict[str, object]:
+    return {
+        "schema": "octopus.behavioral_system_provenance.v1",
+        "system_id": "octopus",
+        "model": {"expected": model, "requested": model},
+        "config": {"expected_sha256": "c" * 64, "observed_sha256": "c" * 64},
+    }
+
+
+def _write_release_seed(root: Path) -> Path:
+    run = _write_seed(root)
+    payload = json.loads(run.read_text(encoding="utf-8"))
+    provenance = _release_provenance()
+    provenance_digest = behavioral_system_provenance_digest(provenance)
+    payload["schema"] = "octopus.behavioral_system_run.v2"
+    payload["system"]["provenance"] = provenance
+    payload["system"]["provenance_sha256"] = provenance_digest
+    for artifact_ref in payload["system"]["cases"][0]["artifacts"]:
+        artifact_path = root / artifact_ref["path"]
+        artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+        artifact["schema"] = "octopus.behavioral_trajectory.v2"
+        artifact["system_provenance_sha256"] = provenance_digest
+        content = json.dumps(artifact, sort_keys=True).encode()
+        artifact_path.write_bytes(content)
+        artifact_ref["sha256"] = hashlib.sha256(content).hexdigest()
+    run.write_text(json.dumps(payload), encoding="utf-8")
+    return run
+
+
 def test_load_system_run_seed_reconstructs_verified_report(tmp_path: Path) -> None:
     report = load_system_run_seed(
         _write_seed(tmp_path),
@@ -138,6 +170,22 @@ def test_load_system_run_seed_rejects_metadata_drift(tmp_path: Path) -> None:
             expected_suite_id="same-task-head-to-head-v1",
             expected_k=3,
             cases=[case],
+        )
+
+
+def test_release_seed_rejects_model_or_config_provenance_drift(tmp_path: Path) -> None:
+    seed = _write_release_seed(tmp_path)
+
+    with pytest.raises(ValueError, match="provenance does not match"):
+        load_system_run_seed(
+            seed,
+            root=tmp_path,
+            expected_system="octopus",
+            expected_version="octopus-local",
+            expected_suite_id="same-task-head-to-head-v1",
+            expected_k=3,
+            cases=[_case()],
+            expected_provenance=_release_provenance("different-model"),
         )
 
 
