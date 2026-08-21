@@ -404,6 +404,7 @@ interface ModelConfig {
    *  slot for Auto mode's performance verdict. Backend stores this
    *  as ``models`` on the custom-model entry. */
   models: string[];
+  selection_ids?: string[];
   display_name?: string | null;
   description?: string | null;
   provider?: string | null;
@@ -421,7 +422,7 @@ interface ModelConfig {
 function customModelReferences(model: ModelConfig): string[] {
   return Array.from(
     new Set(
-      [model.name, model.id, ...model.models]
+      [model.name, model.id, ...model.models, ...(model.selection_ids ?? [])]
         .map((value) => value?.trim())
         .filter((value): value is string => Boolean(value)),
     ),
@@ -456,6 +457,7 @@ export function customModelMatchesSelection(
 
 export function customModelPreferredSelection(model: ModelConfig): string {
   return (
+    model.selection_ids?.find((value) => value.trim())?.trim() ||
     model.models.find((value) => value.trim())?.trim() ||
     customModelEntryId(model)
   );

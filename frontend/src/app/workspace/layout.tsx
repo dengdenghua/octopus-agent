@@ -1,11 +1,11 @@
 import { Fragment, lazy, Suspense, useEffect, useState } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Toaster } from "sonner";
 
 import { Banner } from "@/components/ui/banner";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { WorkspaceSidebar } from "@/components/workspace/workspace-sidebar";
+import { WorkspaceRouteOutlet } from "@/components/workspace/workspace-route-outlet";
 import {
   STUB_RESPONSE_EVENT,
   type StubResponseDetail,
@@ -159,9 +159,7 @@ export default function WorkspaceLayout() {
         <SidebarInset className="relative z-[1] flex min-w-0 flex-col overflow-hidden">
           <StubResponseBannerHost />
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-            <ErrorBoundary>
-              <Outlet />
-            </ErrorBoundary>
+            <WorkspaceRouteOutlet />
           </div>
         </SidebarInset>
       </SidebarProvider>

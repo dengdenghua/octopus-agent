@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: win-build-${{ github.ref }}
@@ -15,95 +15,307 @@ concurrency:
 jobs:
   build-win:
     name: Build Windows EXE
-    runs-on: windows-latest
+    runs-on: windows-2025
+    # Production signing credentials live only in this protected environment.
+    # Configure required reviewers in GitHub; a missing secret fails before build work.
+    environment: windows-code-signing
     env:
       NODE_OPTIONS: --max-old-space-size=8192
       OCTOPUS_SOURCEMAP: "0"
+      OCTOPUS_WINDOWS_TIMESTAMP_URL: http://timestamp.digicert.com
+      UV_PYTHON_DOWNLOADS: never
       CI: "true"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: pnpm/action-setup@v4
+      - name: Validate protected Windows signing identity
+        shell: pwsh
+        env:
+          CSC_LINK: ${{ secrets.WINDOWS_CODE_SIGNING_CERTIFICATE_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CSC_LINK)) {
+            throw "Protected secret WINDOWS_CODE_SIGNING_CERTIFICATE_BASE64 is required"
+          }
+          if ([string]::IsNullOrWhiteSpace($env:CSC_KEY_PASSWORD)) {
+            throw "Protected secret WINDOWS_CODE_SIGNING_CERTIFICATE_PASSWORD is required"
+          }
+
+          try {
+            $certificateBytes = [Convert]::FromBase64String(($env:CSC_LINK -replace '\s', ''))
+            $flags = [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet
+            $certificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new(
+              $certificateBytes,
+              $env:CSC_KEY_PASSWORD,
+              $flags
+            )
+          } catch {
+            throw "Windows signing certificate is not a password-protected base64 PKCS#12 bundle: $($_.Exception.Message)"
+          }
+
+          try {
+            if (-not $certificate.HasPrivateKey) {
+              throw "Windows signing certificate does not contain a private key"
+            }
+            $codeSigningOid = "1.3.6.1.5.5.7.3.3"
+            $hasCodeSigningEku = $false
+            foreach ($extension in $certificate.Extensions) {
+              if ($extension -is [Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension]) {
+                foreach ($usage in $extension.EnhancedKeyUsages) {
+                  if ($usage.Value -eq $codeSigningOid) {
+                    $hasCodeSigningEku = $true
+                  }
+                }
+              }
+            }
+            if (-not $hasCodeSigningEku) {
+              throw "Windows signing certificate is missing the Code Signing EKU"
+            }
+            $now = (Get-Date).ToUniversalTime()
+            if ($certificate.NotBefore.ToUniversalTime() -gt $now -or $certificate.NotAfter.ToUniversalTime() -le $now) {
+              throw "Windows signing certificate is not currently valid"
+            }
+          } finally {
+            if ($null -ne $certificate) { $certificate.Dispose() }
+          }
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10.26.2
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "20"
+          node-version: "22.23.2"
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: "3.11"
-          cache: pip
+          python-version: "3.11.9"
 
-      - name: Upgrade Python build tooling
-        run: python -m pip install --upgrade pip setuptools wheel
+      - name: Setup pinned uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          version: "0.11.25"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
 
-      - name: Install Python dependencies
-        run: python -m pip install -e ".[dev,web,serve]" pyinstaller
-
-      - name: Install NSIS
-        run: |
-          choco install nsis -y
+      - name: Sync locked desktop build dependencies
+        run: >-
+          uv sync --locked --python 3.11.9
+          --extra desktop-core
+          --extra desktop-build
 
       - name: Install frontend dependencies
         working-directory: frontend
-        run: pnpm install --frozen-lockfile
-
-      - name: Install desktop dependencies
-        working-directory: extras/desktop
         run: pnpm install --frozen-lockfile
 
       - name: Typecheck frontend
         working-directory: frontend
         run: pnpm typecheck
 
-      - name: Generate desktop icons
-        working-directory: extras/desktop
-        run: pnpm icons:generate
-
-      - name: Prepare desktop agents
-        working-directory: extras/desktop
-        run: pnpm desktop:agents
-
       - name: Build backend (PyInstaller)
         working-directory: extras/desktop
+        env:
+          PYTHON_EXE: ${{ github.workspace }}\.venv\Scripts\python.exe
         run: pnpm backend:build:win
+
+      - name: Verify PyInstaller backend before packaging
+        shell: pwsh
+        run: |
+          $backend = Join-Path $PWD "extras/desktop/build/backend/octopus-backend.exe"
+          if (-not (Test-Path -LiteralPath $backend -PathType Leaf)) {
+            throw "PyInstaller backend is missing: $backend"
+          }
+          & $backend --help
+          if ($LASTEXITCODE -ne 0) {
+            throw "PyInstaller backend failed its pre-packaging startup check"
+          }
+
+      - name: Sync locked desktop test dependencies
+        run: >-
+          uv sync --locked --python 3.11.9
+          --extra dev
+          --extra desktop-core
+          --extra desktop-build
+
+      - name: Verify desktop first-launch and packaging contracts
+        run: >-
+          ./.venv/Scripts/python.exe -m pytest
+          tests/test_desktop_config_packaging.py
+          tests/test_desktop_core_sync.py
+          -q
 
       - name: Build frontend
         working-directory: frontend
         run: pnpm build
 
-      - name: Build Electron EXE
-        working-directory: extras/desktop
+      - name: Build canonical Electron EXE
+        working-directory: frontend
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm exec electron-builder --win --publish never
+          # electron-builder consumes these only for this signing step. They are
+          # deliberately not job-wide, so setup and dependency actions cannot read them.
+          CSC_LINK: ${{ secrets.WINDOWS_CODE_SIGNING_CERTIFICATE_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGNING_CERTIFICATE_PASSWORD }}
+        run: pnpm electron:build:win
+
+      - name: Verify packaged backend is present and reaches readiness
+        shell: pwsh
+        run: |
+          $backend = Join-Path $PWD "frontend/release/win-unpacked/resources/backend/octopus-backend.exe"
+          if (-not (Test-Path -LiteralPath $backend -PathType Leaf)) {
+            throw "Packaged backend is missing: $backend"
+          }
+
+          $smokeRoot = Join-Path $env:RUNNER_TEMP "octopus-packaged-backend-smoke"
+          $config = Join-Path $smokeRoot "config.yaml"
+          $mutableResources = Join-Path $smokeRoot "resources"
+          $packagedResources = Join-Path $PWD "frontend/release/win-unpacked/resources"
+          New-Item -ItemType Directory -Force -Path $smokeRoot | Out-Null
+          node -e 'const m=require(process.argv[1]);m.ensureDesktopConfigFile({bundledPath:process.argv[2],targetPath:process.argv[3]});m.ensureDesktopResources({bundledRoot:process.argv[4],targetRoot:process.argv[5]});' `
+            (Join-Path $PWD "frontend/electron/desktop-config.cjs") `
+            (Join-Path $packagedResources "config.desktop.yaml") `
+            $config $packagedResources $mutableResources
+          if ($LASTEXITCODE -ne 0) {
+            throw "Desktop first-launch materialization failed"
+          }
+
+          $env:OCTOPUS_DESKTOP = "1"
+          $env:OCTOPUS_DATA_DIR = Join-Path $smokeRoot "data"
+          $env:OCTOPUS_RESOURCES_DIR = $mutableResources
+          $stdout = Join-Path $smokeRoot "backend.stdout.log"
+          $stderr = Join-Path $smokeRoot "backend.stderr.log"
+          $port = 18765
+          $backendProcess = Start-Process -FilePath $backend `
+            -ArgumentList @("serve", "--config", $config, "--host", "127.0.0.1", "--port", "$port") `
+            -RedirectStandardOutput $stdout -RedirectStandardError $stderr `
+            -NoNewWindow -PassThru
+          $ready = $false
+          try {
+            $deadline = (Get-Date).AddSeconds(90)
+            while ((Get-Date) -lt $deadline -and -not $backendProcess.HasExited) {
+              try {
+                $response = Invoke-WebRequest "http://127.0.0.1:$port/readyz" `
+                  -UseBasicParsing -TimeoutSec 2
+                if ($response.StatusCode -eq 200) {
+                  $ready = $true
+                  break
+                }
+              } catch {
+                # The fixed backend is still starting; retry until the deadline.
+              }
+              Start-Sleep -Milliseconds 500
+            }
+            if (-not $ready) {
+              if (Test-Path $stdout) { Get-Content $stdout -Tail 200 }
+              if (Test-Path $stderr) { Get-Content $stderr -Tail 200 }
+              throw "Packaged backend did not reach /readyz"
+            }
+          } finally {
+            if (-not $backendProcess.HasExited) {
+              Stop-Process -Id $backendProcess.Id -Force
+              Wait-Process -Id $backendProcess.Id -ErrorAction SilentlyContinue
+            }
+          }
+
+      - name: Verify Authenticode signatures and create commit-bound checksums
+        shell: pwsh
+        run: |
+          $releaseRoot = (Resolve-Path "frontend/release").Path
+          $installerCandidates = @(
+            Get-ChildItem -LiteralPath $releaseRoot -File -Filter "Octopus-Setup-*.exe"
+          )
+          if ($installerCandidates.Count -ne 1) {
+            throw "Expected exactly one Octopus installer, found $($installerCandidates.Count)"
+          }
+          $installer = $installerCandidates[0]
+          if (-not $installer.Name.Contains($env:GITHUB_SHA)) {
+            throw "Installer filename is not bound to GITHUB_SHA: $($installer.Name)"
+          }
+
+          $signedFiles = [ordered]@{}
+          $signedFiles[$installer.Name] = $installer.FullName
+          $signedFiles["win-unpacked/Octopus.exe"] = Join-Path $releaseRoot "win-unpacked/Octopus.exe"
+          $signedFiles["win-unpacked/resources/backend/octopus-backend.exe"] = `
+            Join-Path $releaseRoot "win-unpacked/resources/backend/octopus-backend.exe"
+
+          $installerChecksumLine = $null
+          $expectedSignerThumbprint = $null
+          $proofFiles = @()
+          foreach ($entry in $signedFiles.GetEnumerator()) {
+            $path = [string]$entry.Value
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Signed release file is missing: $path"
+            }
+            $signature = Get-AuthenticodeSignature -LiteralPath $path
+            if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+              throw "Authenticode signature is not Valid for $($entry.Key): $($signature.Status)"
+            }
+            if ($null -eq $signature.SignerCertificate) {
+              throw "Authenticode signer certificate is missing for $($entry.Key)"
+            }
+            if ($null -eq $signature.TimeStamperCertificate) {
+              throw "Trusted RFC3161 timestamp is missing for $($entry.Key)"
+            }
+            if ($null -eq $expectedSignerThumbprint) {
+              $expectedSignerThumbprint = $signature.SignerCertificate.Thumbprint
+            } elseif ($expectedSignerThumbprint -ne $signature.SignerCertificate.Thumbprint) {
+              throw "Release executables were not signed by one consistent identity"
+            }
+
+            $sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($entry.Key -eq $installer.Name) {
+              $installerChecksumLine = "$sha256 *$($entry.Key)"
+            }
+            $proofFiles += [ordered]@{
+              path = [string]$entry.Key
+              sha256 = $sha256
+              authenticodeStatus = [string]$signature.Status
+              signerThumbprint = $signature.SignerCertificate.Thumbprint
+              timestampThumbprint = $signature.TimeStamperCertificate.Thumbprint
+            }
+          }
+
+          if ([string]::IsNullOrWhiteSpace($installerChecksumLine)) {
+            throw "Installer checksum was not generated"
+          }
+          $installerChecksumLine | Set-Content `
+            -LiteralPath (Join-Path $releaseRoot "SHA256SUMS") `
+            -Encoding ascii
+          [ordered]@{
+            schema = "octopus.windows_signing_proof.v1"
+            sourceRevision = $env:GITHUB_SHA
+            timestampServer = $env:OCTOPUS_WINDOWS_TIMESTAMP_URL
+            generatedAt = (Get-Date).ToUniversalTime().ToString("o")
+            files = $proofFiles
+          } | ConvertTo-Json -Depth 6 | Set-Content `
+            -LiteralPath (Join-Path $releaseRoot "windows-signing-proof.json") `
+            -Encoding utf8
 
       - name: List release artifacts
-        working-directory: extras/desktop/release
+        working-directory: frontend/release
         run: |
           Get-ChildItem -Recurse | Select-Object FullName, Length
           Get-ChildItem -File | ForEach-Object { "{0:N1} MB`t{1}" -f ($_.Length / 1MB), $_.Name }
 
       - name: Upload EXE installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: Octopus-Setup-Windows
+          name: Octopus-Setup-Windows-${{ github.sha }}
           path: |
-            extras/desktop/release/*.exe
-            extras/desktop/release/*.blockmap
-            extras/desktop/release/*.yml
+            frontend/release/Octopus-Setup-*.exe
+            frontend/release/SHA256SUMS
+            frontend/release/windows-signing-proof.json
+            frontend/release/*.blockmap
+            frontend/release/*.yml
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
 
       - name: Upload portable (unpacked)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: Octopus-Portable-Windows
-          path: extras/desktop/release/win-unpacked/**
+          name: Octopus-Portable-Windows-${{ github.sha }}
+          path: frontend/release/win-unpacked/**
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30

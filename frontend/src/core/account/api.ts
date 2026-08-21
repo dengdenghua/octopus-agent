@@ -6,6 +6,7 @@
 
 import { getBackendBaseURL } from "@/core/config";
 import { apiClient } from "@/core/api";
+import { authHeaders } from "@/core/auth/api";
 
 import type {
   AccountOverview,
@@ -34,9 +35,11 @@ export const accountApi = {
     formData.append("file", file);
     const resp = await fetch(`${getBackendBaseURL()}/api/account/avatar`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-      },
+      // Auth owns the token storage contract. In particular, current sessions
+      // live in sessionStorage under `octopus_auth_token`; never manufacture an
+      // empty Authorization header because that also prevents the global fetch
+      // interceptor from attaching a valid session token.
+      headers: authHeaders(),
       body: formData,
     });
     if (!resp.ok) throw new Error(`Upload avatar failed: ${resp.status}`);

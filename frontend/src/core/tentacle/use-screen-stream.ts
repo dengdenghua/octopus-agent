@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getToken } from "@/core/auth/api";
+import { getBackendWebSocketBaseURL } from "@/core/config";
 
 // ── Types ──────────────────────────────────────────────
 
@@ -40,8 +41,7 @@ const FLAG_KEYFRAME = 0x01;
 // ── Helpers ────────────────────────────────────────────
 
 function buildWsUrl(): string {
-  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const base = `${proto}//${window.location.host}/api/tentacle/screen/stream`;
+  const base = `${getBackendWebSocketBaseURL()}/api/tentacle/screen/stream`;
   const token = getToken();
   if (!token) return base;
   return `${base}?token=${encodeURIComponent(token)}`;

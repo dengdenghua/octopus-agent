@@ -9,6 +9,7 @@ import {
   WorkspaceContainer,
 } from "@/components/workspace/workspace-container";
 import { useI18n } from "@/core/i18n/hooks";
+import { getBackendBaseURL } from "@/core/config";
 
 type Tab = "platform" | "watch";
 
@@ -23,11 +24,12 @@ type Tab = "platform" | "watch";
 export default function PaperTradingPage() {
   const { t } = useI18n();
   const [tab, setTab] = useState<Tab>("platform");
-  const src =
+  const pluginPath =
     tab === "watch"
       ? "/api/plugins/paper-trading/watch"
       : "/api/plugins/paper-trading/page";
-  const openUrl = tab === "watch" ? "/api/plugins/paper-trading/watch" : "/api/plugins/paper-trading/page";
+  const src = `${getBackendBaseURL()}${pluginPath}`;
+  const openUrl = src;
 
   return (
     <WorkspaceContainer className="!p-0 md:!px-0">
@@ -35,7 +37,7 @@ export default function PaperTradingPage() {
         <div className="flex h-full w-full min-h-0 flex-col items-stretch">
           <div className="flex h-11 shrink-0 items-center justify-between gap-3 border-b px-4">
             <div className="flex items-center gap-2 text-sm font-semibold">
-              <span>🐟 模拟炒股</span>
+              <h1>🐟 模拟炒股</h1>
               <div className="ml-2 flex items-center rounded-lg border bg-muted/40 p-0.5">
                 <button
                   type="button"

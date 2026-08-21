@@ -11,7 +11,20 @@ pnpm electron        # 仅拉起 Electron(假定 dev server 已在运行)
 ```
 
 后端默认 `http://127.0.0.1:8000`,可用 `OCTOPUS_BACKEND_URL` 覆盖;
+桌面壳只接受无凭据、无额外路径的 loopback HTTP(S) origin(`127.0.0.1`、
+`localhost`、`::1`),远端或伪装 host 会在创建窗口前 fail-closed。
 前端地址可用 `ELECTRON_START_URL` 覆盖(默认 `http://127.0.0.1:3000`)。
+
+## 打包渲染源
+
+- 正式包和 Electron 冒烟使用固定安全源 `octopus-app://app/index.html`,不使用
+  `file://` / `loadFile`,也不关闭 Chromium `webSecurity`。
+- 自定义协议仅从随包 `dist` 读取静态文件(含 realpath 边界校验),并只把
+  `/api`、`/v1`、`/media`、`/.well-known`、`/.a2a` 转发到上述固定 loopback
+  后端。因此 `/community/*`、原生 `/api/*` 与 `/api/plugins/*` 都具有正常同源语义,
+  不需要通配 CORS。
+- WebSocket 无法通过自定义 HTTP 协议升级;renderer 仅为 realtime/terminal/
+  tentacle/team-room WebSocket 使用 preload 注入的 loopback transport URL。
 
 ## 实现状态(对照 electron.d.ts)
 
@@ -37,16 +50,30 @@ pnpm electron        # 仅拉起 Electron(假定 dev server 已在运行)
 
 ## 打包(electron-builder)
 
-- 配置:`packaging/desktop/build.yml`(需先 `pnpm add -D electron-builder`)。
-- 脚本:`pnpm electron:build:mac|win|linux`(`frontend/package.json`)。
-- 打包模式行为:main 进程 spawn `python -m runtime serve` 托管后端
-  (`extraResources` 携带 `config.desktop.yaml` 与 `runtime/` 到 resources),
-  退出时清理子进程。
+- 唯一发布壳是 `frontend/electron/`，配置为 `packaging/desktop/build.yml`；
+  `extras/desktop/electron/` 已退役，不得直接产出安装包。
+- 当前生产打包仅支持 Windows。CI 先用 PyInstaller 生成
+  `extras/desktop/build/backend/octopus-backend.exe`，再从 `frontend/` 执行
+  `pnpm electron:build:win`。macOS/Linux 在拥有对应的随包后端前明确拒绝发布。
+- 正式构建只从受保护的 `windows-code-signing` Environment 注入 base64 PKCS#12 与密码；
+  缺任一 secret、证书无私钥/Code Signing EKU、签名或可信 RFC3161 时间戳无效都会停止。
+  安装器文件名和两个 GitHub artifact 名均携带完整 `github.sha`，并生成
+  `SHA256SUMS` 与逐文件签名证明。
+- 打包模式只启动 `resources/backend/octopus-backend.exe`。缺失时首启
+  fail-closed，不回退到系统 Python/uv，不在运行时下载依赖。
+- 随包能力在 PyInstaller 构建时固定；不在用户设备上在线安装可选依赖。
+- 首启会把 agents/prompts/protocols/skills.lock 种入 `userData/resources`。后续版本只补
+  不存在的路径，不覆盖同名的用户安装/修改内容；需要采用新版内置资源时，先备份
+  userData，再显式删除或迁移目标路径后重启应用。
+- 升级继续使用旧壳的 `userData/config.yaml`。首启物化器会为新安装
+  生成独立高熵 JWT secret，也会原子轮换旧安装的弱 secret。
 
 ## 已知边界
 
-- `electron-builder` / `electron-updater` 未安装;打包前需在 `frontend/` 安装
-  (`pnpm add -D electron-builder electron-updater`)。打包时
-  `config.desktop.yaml` 与 `runtime/` 已由 build.yml 的 `extraResources` 放入 resources。
+- `electron-builder` / `electron-updater` 已由 `frontend/package.json` 锁定。打包时
+  `config.desktop.yaml`、只读资源与 Windows 后端 exe 由 build.yml 的
+  `extraResources` 放入应用。
 - `webview` 标签已启用(workspace 内嵌浏览器依赖它)。
-- 安全基线:contextIsolation 开、nodeIntegration 关、`window.open` 一律转系统浏览器。
+- 安全基线:contextIsolation 开、nodeIntegration 关、主窗口只允许固定应用入口导航。
+  HTTP(S)/mailto 外链交给系统浏览器;应用源内的新窗口使用无 preload、sandbox 开启的
+  隔离 BrowserWindow。

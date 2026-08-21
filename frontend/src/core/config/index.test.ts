@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { getBackendBaseURL, getOctopusBaseURL } from ".";
+import {
+  getBackendBaseURL,
+  getBackendTransportBaseURL,
+  getBackendWebSocketBaseURL,
+  getOctopusBaseURL,
+  getPublicAssetURL,
+} from ".";
 
 const ORIGINAL_LOCATION = window.location;
 
@@ -27,6 +33,7 @@ describe("backend base URL resolution", () => {
 
     expect(getBackendBaseURL()).toBe("");
     expect(getOctopusBaseURL()).toBe("/api");
+    expect(getBackendWebSocketBaseURL()).toBe("ws://localhost:3000");
   });
 
   test("lets runtime backend query param override dev proxy defaults", () => {
@@ -70,7 +77,30 @@ describe("backend base URL resolution", () => {
     };
 
     expect(getBackendBaseURL()).toBe("http://127.0.0.1:8765");
+    expect(getBackendTransportBaseURL()).toBe("http://127.0.0.1:8765");
+    expect(getBackendWebSocketBaseURL()).toBe("ws://127.0.0.1:8765");
     expect(getOctopusBaseURL()).toBe("http://127.0.0.1:8765/api");
+  });
+
+  test("keeps packaged Electron HTTP on its app origin and WebSockets on loopback", () => {
+    setLocation(
+      "octopus-app://app/index.html?octopusBackend=http%3A%2F%2Fevil.example#/workspace/realtime/new",
+    );
+    window.octopus = {
+      backendBaseURL: "http://127.0.0.1:8765/",
+      isElectron: true,
+    };
+
+    expect(getBackendBaseURL()).toBe("");
+    expect(getOctopusBaseURL()).toBe("/api");
+    expect(getBackendTransportBaseURL()).toBe("http://127.0.0.1:8765");
+    expect(getBackendWebSocketBaseURL()).toBe("ws://127.0.0.1:8765");
+  });
+
+  test("resolves bundled community assets through Vite's public base", () => {
+    expect(getPublicAssetURL("/community/memory-video(1).jpg")).toBe(
+      "/community/memory-video(1).jpg",
+    );
   });
 
   test("rejects unsafe runtime backend protocols", () => {

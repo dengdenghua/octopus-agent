@@ -11,13 +11,30 @@ const backendOut = path.join(buildRoot, "backend");
 const workPath = path.join(buildRoot, "pyinstaller-work");
 const specPath = path.join(repoRoot, "packaging", "windows", "octopus-backend.spec");
 const expectedExe = path.join(backendOut, "octopus-backend.exe");
-const python = process.env.PYTHON_EXE || process.env.PYTHON || "python";
+const expectedLockedPython = path.join(repoRoot, ".venv", "Scripts", "python.exe");
+const configuredPython = process.env.PYTHON_EXE;
 
 function assertInside(parent, child) {
   const rel = path.relative(parent, child);
   if (rel.startsWith("..") || path.isAbsolute(rel)) {
     throw new Error(`refusing to operate outside ${parent}: ${child}`);
   }
+}
+
+if (!configuredPython) {
+  throw new Error("PYTHON_EXE must point to the uv-locked Windows build environment");
+}
+
+const lockedPython = path.resolve(configuredPython);
+if (lockedPython.toLowerCase() !== expectedLockedPython.toLowerCase()) {
+  throw new Error(`PYTHON_EXE must resolve to ${expectedLockedPython}`);
+}
+if (!fs.existsSync(lockedPython) || !fs.statSync(lockedPython).isFile()) {
+  throw new Error(
+    `locked Windows build interpreter is missing: ${lockedPython}; ` +
+      "run uv sync --locked --python 3.11.9 " +
+      "--extra desktop-core --extra desktop-build",
+  );
 }
 
 for (const target of [backendOut, workPath]) {
@@ -28,7 +45,7 @@ fs.mkdirSync(backendOut, { recursive: true });
 fs.mkdirSync(workPath, { recursive: true });
 
 const result = spawnSync(
-  python,
+  lockedPython,
   [
     "-m",
     "PyInstaller",

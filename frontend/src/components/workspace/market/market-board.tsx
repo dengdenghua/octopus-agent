@@ -1,8 +1,16 @@
-import { ArrowRightIcon, ClockIcon, LayoutGridIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
+import {
+  ArrowRightIcon,
+  ClockIcon,
+  LayoutGridIcon,
+  PlusIcon,
+  SearchIcon,
+  XIcon,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MarketGrid } from "@/components/workspace/market/market-feed";
 import { MarketDetail } from "@/components/workspace/market/market-detail";
+import { communityAssetURL } from "@/components/workspace/community/community-assets";
 import {
   MARKET_CATEGORIES,
   getMarketItems,
@@ -14,18 +22,18 @@ import { cn } from "@/lib/utils";
 
 /** 可选封面（复用社区已生成封面图）。 */
 const COVER_OPTIONS = [
-  "/community/price-watch(1).jpg",
-  "/community/weekly-report(1).jpg",
-  "/community/resume(1).jpg",
-  "/community/language-coach.jpg",
-  "/community/study-paper(1).jpg",
-  "/community/smart-home.jpg",
-  "/community/travel-plan(1).jpg",
-  "/community/game-auto-daily.jpg",
-  "/community/gacha.jpg",
-  "/community/meeting-notes.jpg",
-  "/community/plan-tomorrow.jpg",
-  "/community/coupon.jpg",
+  communityAssetURL("price-watch(1).jpg"),
+  communityAssetURL("weekly-report(1).jpg"),
+  communityAssetURL("resume(1).jpg"),
+  communityAssetURL("language-coach.jpg"),
+  communityAssetURL("study-paper(1).jpg"),
+  communityAssetURL("smart-home.jpg"),
+  communityAssetURL("travel-plan(1).jpg"),
+  communityAssetURL("game-auto-daily.jpg"),
+  communityAssetURL("gacha.jpg"),
+  communityAssetURL("meeting-notes.jpg"),
+  communityAssetURL("plan-tomorrow.jpg"),
+  communityAssetURL("coupon.jpg"),
 ] as const;
 
 /** 集市面板：嵌入社区页的二级视图，自带搜索/分类/余额/上架/购买。 */
@@ -79,7 +87,8 @@ export function MarketBoard() {
                 这里是社区好物(积分交易),不是资产商店
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                插件 / 技能 / 角色(Codex + WorkBuddy + 本地)已统一到「统一资产」入口。
+                插件 / 技能 / 角色(Codex + WorkBuddy +
+                本地)已统一到「统一资产」入口。
               </p>
             </div>
           </div>

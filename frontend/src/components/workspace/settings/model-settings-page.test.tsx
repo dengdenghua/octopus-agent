@@ -118,6 +118,10 @@ describe("custom model selection identity", () => {
     id: "provider-entry",
     name: "provider-alias",
     models: ["provider-model-fast", "provider-model-strong"],
+    selection_ids: [
+      "selection-provider-fast-default",
+      "selection-provider-fast-1m",
+    ],
   };
 
   it("recognizes entry ids, aliases, and concrete upstream model ids", () => {
@@ -126,11 +130,23 @@ describe("custom model selection identity", () => {
     expect(customModelMatchesSelection(model, "provider-model-fast")).toBe(
       true,
     );
+    expect(
+      customModelMatchesSelection(model, "selection-provider-fast-1m"),
+    ).toBe(true);
     expect(customModelMatchesSelection(model, "unrelated-model")).toBe(false);
   });
 
-  it("uses the first concrete model as the default selection", () => {
-    expect(customModelPreferredSelection(model)).toBe("provider-model-fast");
+  it("prefers the exact default row selection and falls back for old catalogs", () => {
+    expect(customModelPreferredSelection(model)).toBe(
+      "selection-provider-fast-default",
+    );
+    expect(
+      customModelPreferredSelection({
+        id: "legacy-entry",
+        name: "legacy-alias",
+        models: ["legacy-model"],
+      }),
+    ).toBe("legacy-model");
     expect(
       customModelPreferredSelection({
         id: "empty-entry",

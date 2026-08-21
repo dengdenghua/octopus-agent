@@ -56,7 +56,9 @@ molili:
 local_auth:
   enabled: true
   allow_any_username: true
-  jwt_secret: octopus-desktop-local-jwt-secret-change-me
+  # Replaced atomically with a unique high-entropy value by
+  # frontend/electron/desktop-config.cjs before the backend starts.
+  jwt_secret: __OCTOPUS_DESKTOP_LOCAL_AUTH_JWT_SECRET__
   jwt_expire_seconds: 604800
   jwt_issuer: octopus-agent
   actor_prefix: "local:"

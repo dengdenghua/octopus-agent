@@ -41,28 +41,42 @@ Stop it with:
 docker compose down
 ```
 
-## Desktop Build (Optional)
+## Windows Desktop Build (Optional)
 
-The desktop shell is **opt-in** — it lives in `extras/desktop/` and wraps the
-web frontend in Electron for users who want a single-file installer.
+The desktop shell is **opt-in**. `frontend/electron/` is the canonical shell;
+`extras/desktop/` only retains the PyInstaller backend build helper.
 
 ```bash
-cd extras/desktop
 corepack enable
-pnpm install --frozen-lockfile
-pnpm electron:build:win    # or :mac / :linux
+pnpm --dir frontend install --frozen-lockfile
+uv sync --locked --python 3.11.9 --extra desktop-core --extra desktop-build
+pnpm --dir extras/desktop backend:build:win
+pnpm --dir frontend build
 ```
 
-For development (Backend + Vite + Electron with hot reload):
+正式 Windows 安装器必须由 `windows-code-signing` 受保护环境中的代码签名证书构建；
+缺少证书/密码、SHA-256 RFC3161 时间戳或任一 Authenticode 复验都会停止。开发者本地
+复现时还需临时设置 `GITHUB_SHA`、`CSC_LINK`（base64 PKCS#12）和
+`CSC_KEY_PASSWORD` 后运行 `pnpm --dir frontend electron:build:win`，不得把这些值写入
+仓库或 shell profile。推荐直接使用 `build-win.yml`，它会额外生成 SHA-bound artifact 与
+`SHA256SUMS`。
+
+The resulting Windows installer contains a fixed PyInstaller backend. First
+launch never downloads Python dependencies and never falls back to system
+Python or uv; a missing backend aborts startup. macOS/Linux desktop releases
+are disabled until equivalent bundled backends and smoke tests exist.
+
+For development (run the backend separately, then Vite + Electron with hot
+reload):
 
 ```bash
-cd extras/desktop
-pnpm electron:dev
+pnpm --dir frontend electron:dev
 ```
 
 > Self-hosted or developer use — skip this; the web frontend (`frontend/`) is
 > the canonical UI and is ~30 MB vs ~200 MB for the desktop bundle.
-> See [`extras/desktop/README.md`](../extras/desktop/README.md).
+> See [`frontend/electron/README.md`](../frontend/electron/README.md) and the
+> legacy helper notes in [`extras/desktop/README.md`](../extras/desktop/README.md).
 
 ## Health Checks
 

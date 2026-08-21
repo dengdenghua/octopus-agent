@@ -1,25 +1,23 @@
 "use strict";
-// uv-managed packaged backend runtime.
+// Desktop backend runtime.
 //
-// The shipped desktop app does NOT bundle a Python interpreter or a ~1.1GB
-// site-packages. On first launch it uses `uv` (bundled per-platform binary,
-// or a system `uv` as fallback) to create a venv under the user-data dir and
-// install a lean core (serve + http + pydantic). Heavy optional capabilities
-// (browser, vision, code-intel, …) are installed on demand via
-// ensureOptionalDeps().
+// Production installers are self-contained: electron-builder copies the
+// PyInstaller backend into resources/backend and packaged Electron processes
+// may start only that executable.  They never create a venv, consult a system
+// `uv`, or download Python dependencies at first launch.
 //
-// This is the "B" hybrid: the app stays ~350MB, core functions work offline,
-// and heavy deps are pulled only when actually used.
+// The uv-managed path below is deliberately development-only.  It keeps the
+// unpackaged `--smoke-test-backend` workflow useful without becoming a hidden
+// network or host-tool fallback in a released installer.
 
-const { spawn, spawnSync } = require("child_process");
+const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const { app } = require("electron");
 
-// Packaged layout roots the uv-managed venv under userData/backend. A test
-// (or an embedder) can override it to reuse an existing venv — e.g. the
-// Playwright smoke reuses the checkout's own .venv so the spawn path is
-// exercised without a first-launch bootstrap download.
+// Development layout roots the uv-managed venv under userData/backend. A test
+// can override it to reuse an existing venv — e.g. the Playwright smoke reuses
+// the checkout's own .venv so the spawn path is exercised without a download.
 const backendRoot = () =>
   process.env.OCTOPUS_DESKTOP_BACKEND_ROOT ||
   path.join(app.getPath("userData"), "backend");
@@ -38,20 +36,38 @@ function pythonExe() {
     : path.join(backendRoot(), ".venv", "bin", "python");
 }
 
-function bundledUv() {
-  const exe = process.platform === "win32" ? "uv.exe" : "uv";
-  const p = path.join(resourcesPath(), "uv", exe);
-  return fs.existsSync(p) ? p : null;
+function packagedBackendExecutable() {
+  const exe =
+    process.platform === "win32" ? "octopus-backend.exe" : "octopus-backend";
+  return path.join(resourcesPath(), "backend", exe);
 }
 
-function uvCmd() {
-  return bundledUv() || "uv";
+function requirePackagedBackendExecutable() {
+  const executable = packagedBackendExecutable();
+  let info;
+  try {
+    info = fs.statSync(executable);
+  } catch {
+    throw new Error(
+      `packaged backend executable is missing: ${executable}; refusing system/runtime fallback`,
+    );
+  }
+  if (!info.isFile()) {
+    throw new Error(`packaged backend path is not a file: ${executable}`);
+  }
+  return executable;
 }
 
-// Lean core deps for the packaged serve backend. Deliberately small — heavy
-// optional groups are declared in pyproject `[project.optional-dependencies]`
-// and installed on demand via ensureOptionalDeps(). Keep in sync with the
-// `desktop-core` extra in pyproject.toml.
+function developmentUvCmd() {
+  if (app.isPackaged) {
+    throw new Error("packaged desktop builds must not invoke uv");
+  }
+  return process.env.OCTOPUS_DESKTOP_DEV_UV || "uv";
+}
+
+// Lean core deps for the development-only uv smoke runtime. Keep in sync with
+// the `desktop-core` extra in pyproject.toml; released installers use the
+// PyInstaller dependency graph instead.
 const CORE_DEPS = [
   "fastapi>=0.115,<1.0",
   "starlette>=1.3.1",
@@ -117,14 +133,22 @@ function runProcess(cmd, args, opts = {}) {
 // Create the venv + install the core deps if missing. Runs once on first
 // launch and downloads the Python interpreter + a lean dep set.
 async function bootstrapCore(onProgress) {
+  if (app.isPackaged) {
+    throw new Error(
+      "packaged desktop builds use the bundled backend and cannot bootstrap dependencies",
+    );
+  }
   if (venvReady()) return;
   onProgress?.({ stage: "venv", message: "首次启动：创建后端虚拟环境…" });
-  await runProcess(uvCmd(), ["venv", path.join(backendRoot(), ".venv")]);
+  await runProcess(developmentUvCmd(), [
+    "venv",
+    path.join(backendRoot(), ".venv"),
+  ]);
   onProgress?.({
     stage: "deps",
     message: "安装核心依赖（仅首次，约几百 MB）…",
   });
-  await runProcess(uvCmd(), [
+  await runProcess(developmentUvCmd(), [
     "pip",
     "install",
     "--python",
@@ -135,10 +159,15 @@ async function bootstrapCore(onProgress) {
 
 // Lazily install a heavy optional capability group on first use.
 async function ensureOptionalDeps(group, onProgress) {
+  if (app.isPackaged) {
+    throw new Error(
+      "released desktop capabilities are fixed at build time; rebuild the signed installer with the required optional dependency",
+    );
+  }
   const pkgs = OPTIONAL_GROUPS[group];
   if (!pkgs) throw new Error(`unknown optional group: ${group}`);
   onProgress?.({ stage: "optional", message: `安装 ${group} 能力…` });
-  await runProcess(uvCmd(), [
+  await runProcess(developmentUvCmd(), [
     "pip",
     "install",
     "--python",
@@ -149,30 +178,50 @@ async function ensureOptionalDeps(group, onProgress) {
 
 let backendChild = null;
 
-// Start the packaged backend using the uv-managed venv python. Bootstraps the
-// runtime on first launch (non-blocking) so the renderer can show progress.
+// Start a fixed bundled executable in packaged mode.  The unpackaged smoke
+// path may use the development venv, but there is intentionally no packaged
+// fallback to Python, uv, PATH, or the network.
 async function spawnBackend(configPath, onProgress) {
   if (backendChild) return backendChild;
-  await bootstrapCore(onProgress);
+  const packaged = Boolean(app.isPackaged);
+  if (!packaged) await bootstrapCore(onProgress);
   const env = {
     ...process.env,
-    PYTHONPATH: resourcesPath(),
+    OCTOPUS_DESKTOP: "1",
+    OCTOPUS_DATA_DIR: path.join(app.getPath("userData"), "data"),
+    OCTOPUS_RESOURCES_DIR: path.join(app.getPath("userData"), "resources"),
   };
-  const child = spawn(
-    pythonExe(),
-    [
-      "-m",
-      "runtime",
-      "serve",
-      "--config",
-      configPath,
-      "--host",
-      "127.0.0.1",
-      "--port",
-      backendPort(),
-    ],
-    { stdio: "inherit", env },
-  );
+  if (!packaged) env.PYTHONPATH = resourcesPath();
+  fs.mkdirSync(env.OCTOPUS_DATA_DIR, { recursive: true, mode: 0o700 });
+  const executable = packaged
+    ? requirePackagedBackendExecutable()
+    : pythonExe();
+  const args = packaged
+    ? [
+        "serve",
+        "--config",
+        configPath,
+        "--host",
+        "127.0.0.1",
+        "--port",
+        backendPort(),
+      ]
+    : [
+        "-m",
+        "runtime",
+        "serve",
+        "--config",
+        configPath,
+        "--host",
+        "127.0.0.1",
+        "--port",
+        backendPort(),
+      ];
+  const child = spawn(executable, args, {
+    stdio: "inherit",
+    env,
+    windowsHide: true,
+  });
   backendChild = child;
   child.on("exit", (code, signal) => {
     console.warn(
@@ -205,4 +254,6 @@ module.exports = {
   bootstrapCore,
   venvReady,
   pythonExe,
+  packagedBackendExecutable,
+  requirePackagedBackendExecutable,
 };

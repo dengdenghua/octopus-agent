@@ -61,7 +61,9 @@ const DesktopPage = lazy(() => import("./app/desktop/page"));
 const TopBrowserPage = lazy(() => import("./app/browser/page"));
 
 const WorkspaceLayout = lazy(() => import("./app/workspace/layout"));
-const ChatPage = lazy(() => import("./app/workspace/realtime/[thread_id]/page"));
+const ChatPage = lazy(
+  () => import("./app/workspace/realtime/[thread_id]/page"),
+);
 const TeamJoinPage = lazy(() => import("./app/workspace/team/join/page"));
 const ComputerPage = lazy(() => import("./app/workspace/computer/page"));
 const DesktopOrganizerPage = lazy(
@@ -91,9 +93,7 @@ const IntelligencePage = lazy(
 const KnowledgePage = lazy(() => import("./app/workspace/knowledge/page"));
 const StoragePage = lazy(() => import("./app/workspace/storage/page"));
 const EvolutionPage = lazy(() => import("./app/workspace/evolution/page"));
-const ProjectsPage = lazy(
-  () => import("./app/workspace/projects/page"),
-);
+const ProjectsPage = lazy(() => import("./app/workspace/projects/page"));
 const PaperTradingPage = lazy(
   () => import("./app/workspace/paper-trading/page"),
 );
@@ -103,7 +103,12 @@ const ReflexEditorPage = lazy(() => import("./app/workspace/reflex/edit/page"));
 function PageLoading() {
   const { t } = useI18n();
   return (
-    <div className="flex h-screen items-center justify-center">
+    <div
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      className="flex h-screen items-center justify-center"
+    >
       <div className="text-muted-foreground text-sm">{t.common.loading}</div>
     </div>
   );
@@ -205,10 +210,7 @@ export function AppRouter() {
                 path="mobile"
                 element={<Navigate to={LEGACY_REDIRECTS.mobile} replace />}
               />
-              <Route
-                path="settings"
-                element={<SettingsRoute />}
-              />
+              <Route path="settings" element={<SettingsRoute />} />
               <Route
                 path="mcp"
                 element={
@@ -247,12 +249,7 @@ export function AppRouter() {
               />
               <Route
                 path="workflows"
-                element={
-                  <Navigate
-                    to={LEGACY_REDIRECTS.workflows}
-                    replace
-                  />
-                }
+                element={<Navigate to={LEGACY_REDIRECTS.workflows} replace />}
               />
               <Route path="reflex" element={<ReflexMonitorPage />} />
               <Route path="reflex/edit" element={<ReflexEditorPage />} />

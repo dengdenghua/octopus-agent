@@ -1301,6 +1301,8 @@ export const __testing = {
   projectThreadsForPreview,
   syncedSidebarPathname,
   activeTeamTaskRoomId,
+  ProjectGroupTrigger,
+  SidebarTimestamp,
 };
 
 type WorkspaceSurfaceMode = "agent" | "browser";
@@ -1542,6 +1544,68 @@ function ProjectGroupIcon({ project: _project }: { project: string }) {
   return <FolderIcon className="size-[18px] shrink-0 opacity-70" />;
 }
 
+function ProjectGroupTrigger({
+  project,
+  threadCount,
+  deletable,
+}: {
+  project: string;
+  threadCount: number;
+  deletable: boolean;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <CollapsibleTrigger
+          className={cn(
+            "flex h-9 w-full items-center gap-2 rounded-lg px-1 text-sm",
+            deletable ? "pr-8" : "pr-1",
+            "text-foreground/85 hover:text-foreground hover:bg-muted/40 transition-colors",
+            "outline-none focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:ring-inset",
+          )}
+        >
+          <ProjectGroupIcon project={project} />
+          <span className="min-w-0 truncate">{project}</span>
+          <span
+            className={cn(
+              "ml-auto shrink-0 text-xs text-muted-foreground/60 transition-opacity",
+              deletable && "group-hover/project:opacity-0",
+            )}
+          >
+            {threadCount}
+          </span>
+        </CollapsibleTrigger>
+      </TooltipTrigger>
+      <TooltipContent
+        side="right"
+        align="center"
+        className="max-w-72 break-words"
+      >
+        {project}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function SidebarTimestamp({
+  updatedAt,
+  className,
+}: {
+  updatedAt: string;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "shrink-0 overflow-hidden whitespace-nowrap text-right text-mini font-medium text-sidebar-foreground/70 transition-[width,opacity,color] duration-fast group-hover/thread:text-sidebar-foreground/90",
+        className,
+      )}
+    >
+      {formatCompactRelativeTimestamp(updatedAt)}
+    </span>
+  );
+}
+
 function ProjectGroup({
   project,
   threads,
@@ -1623,25 +1687,11 @@ function ProjectGroup({
     <Collapsible open={open} onOpenChange={setOpen}>
       <SidebarGroup className="p-0 px-2 py-1">
         <div className="group/project relative">
-          <CollapsibleTrigger
-            className={cn(
-              "flex h-9 w-full items-center gap-2 rounded-lg px-1 text-sm",
-              deletable ? "pr-8" : "pr-1",
-              "text-foreground/85 hover:text-foreground hover:bg-muted/40 transition-colors",
-              "outline-none focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:ring-inset",
-            )}
-          >
-            <ProjectGroupIcon project={project} />
-            <span className="truncate">{project}</span>
-            <span
-              className={cn(
-                "ml-auto text-xs text-muted-foreground/60 shrink-0 transition-opacity",
-                deletable && "group-hover/project:opacity-0",
-              )}
-            >
-              {threads.length}
-            </span>
-          </CollapsibleTrigger>
+          <ProjectGroupTrigger
+            project={project}
+            threadCount={threads.length}
+            deletable={deletable}
+          />
           {deletable && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1753,16 +1803,14 @@ function ProjectGroup({
                     <span className="line-clamp-2 min-w-0 flex-1 break-words leading-tight">
                       {thread.title}
                     </span>
-                    <span
-                      className={cn(
-                        "overflow-hidden whitespace-nowrap text-mini text-muted-foreground transition-[width,opacity,color] duration-fast group-hover/thread:text-muted-foreground/90",
+                    <SidebarTimestamp
+                      updatedAt={thread.updatedAt}
+                      className={
                         active
                           ? "w-0 opacity-0"
-                          : "w-10 opacity-100 group-hover/thread:w-0 group-hover/thread:opacity-0 group-focus-within/thread:w-0 group-focus-within/thread:opacity-0",
-                      )}
-                    >
-                      {formatCompactRelativeTimestamp(thread.updatedAt)}
-                    </span>
+                          : "w-10 opacity-100 group-hover/thread:w-0 group-hover/thread:opacity-0 group-focus-within/thread:w-0 group-focus-within/thread:opacity-0"
+                      }
+                    />
                   </Link>
                   <button
                     type="button"
@@ -2316,9 +2364,10 @@ function ChatsSection({
                       <span className="min-w-0 flex-1 truncate leading-tight">
                         {t.title}
                       </span>
-                      <span className="w-10 shrink-0 overflow-hidden whitespace-nowrap text-right text-mini text-muted-foreground transition-[width,opacity,color] group-hover/thread:w-0 group-hover/thread:text-muted-foreground/90 group-hover/thread:opacity-0 group-focus-within/thread:w-0 group-focus-within/thread:opacity-0">
-                        {formatCompactRelativeTimestamp(t.updatedAt)}
-                      </span>
+                      <SidebarTimestamp
+                        updatedAt={t.updatedAt}
+                        className="w-10 group-hover/thread:w-0 group-hover/thread:opacity-0 group-focus-within/thread:w-0 group-focus-within/thread:opacity-0"
+                      />
                     </Link>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -2450,4 +2499,3 @@ export function CollapseToggle({ compact = false }: { compact?: boolean }) {
     </Tooltip>
   );
 }
-

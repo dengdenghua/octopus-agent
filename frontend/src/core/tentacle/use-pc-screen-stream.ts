@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { authHeaders, getToken } from "@/core/auth/api";
+import { getBackendBaseURL, getBackendWebSocketBaseURL } from "@/core/config";
 
 // ── Types ──────────────────────────────────────────────
 
@@ -53,8 +54,7 @@ const FRAME_TYPE_WEBP = 0x03;
 // ── Helpers ────────────────────────────────────────────
 
 function buildPcWsUrl(): string {
-  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const base = `${proto}//${window.location.host}/api/tentacle/pc-screen/stream`;
+  const base = `${getBackendWebSocketBaseURL()}/api/tentacle/pc-screen/stream`;
   const token = getToken();
   if (!token) return base;
   return `${base}?token=${encodeURIComponent(token)}`;
@@ -166,7 +166,10 @@ export function usePcScreenStream(
       // "waiting for signal" overlay on `frameCount === 0`, and
       // throttling that transition would leave the overlay covering
       // an already-rendered frame for up to a second.
-      if (isFirstFrame || now - lastStatsFlushRef.current >= STATS_FLUSH_INTERVAL_MS) {
+      if (
+        isFirstFrame ||
+        now - lastStatsFlushRef.current >= STATS_FLUSH_INTERVAL_MS
+      ) {
         lastStatsFlushRef.current = now;
         setFrameCount(rawFrameCountRef.current);
         setFps(fpsFramesRef.current.length);
@@ -179,11 +182,14 @@ export function usePcScreenStream(
 
   const sendInput = useCallback(async (event: RemoteInputEvent) => {
     try {
-      const res = await fetch("/api/tentacle/remote-input", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify(event),
-      });
+      const res = await fetch(
+        `${getBackendBaseURL()}/api/tentacle/remote-input`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify(event),
+        },
+      );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         console.error("Remote input failed:", body.detail || res.statusText);

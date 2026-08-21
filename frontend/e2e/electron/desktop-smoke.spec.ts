@@ -12,6 +12,8 @@
  * backend-health assertion belongs to the browser full-stack smoke lane.
  */
 import { test, expect, _electron as electron } from "@playwright/test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -20,8 +22,15 @@ const ELECTRON_DIR = path.resolve(THIS_DIR, "..", "..", "electron");
 const REPO_ROOT = path.resolve(THIS_DIR, "..", "..", "..");
 
 test("desktop shell boots: window, preload bridge, workbench root", async () => {
+  const userDataDir = await mkdtemp(
+    path.join(tmpdir(), "octopus-electron-shell-"),
+  );
   const app = await electron.launch({
-    args: [path.join(ELECTRON_DIR, "main.cjs"), "--smoke-test"],
+    args: [
+      path.join(ELECTRON_DIR, "main.cjs"),
+      "--smoke-test",
+      `--user-data-dir=${userDataDir}`,
+    ],
     cwd: REPO_ROOT,
     env: { ...process.env, OCTOPUS_PET_DISABLED: "1" },
   });
@@ -29,6 +38,19 @@ test("desktop shell boots: window, preload bridge, workbench root", async () => 
   try {
     const win = await app.firstWindow();
     await win.waitForLoadState("domcontentloaded");
+
+    const rendererOrigin = await win.evaluate(() => ({
+      protocol: window.location.protocol,
+      host: window.location.host,
+      origin: window.location.origin,
+      secureContext: window.isSecureContext,
+    }));
+    expect(rendererOrigin).toEqual({
+      protocol: "octopus-app:",
+      host: "app",
+      origin: "octopus-app://app",
+      secureContext: true,
+    });
 
     // The preload bridge must be present and resolved to the main process.
     const bridge = await win.evaluate(() => ({
@@ -46,6 +68,24 @@ test("desktop shell boots: window, preload bridge, workbench root", async () => 
       () => !!document.querySelector("#root")?.firstElementChild,
     );
     expect(rootHasContent).toBe(true);
+
+    // Absolute public URLs must stay inside the packaged renderer origin.
+    const communityAsset = await win.evaluate(async () => {
+      const res = await fetch("/community/memory-video(1).jpg");
+      return {
+        ok: res.ok,
+        size: (await res.arrayBuffer()).byteLength,
+        allowOrigin: res.headers.get("access-control-allow-origin"),
+      };
+    });
+    expect(communityAsset.ok).toBe(true);
+    expect(communityAsset.size).toBeGreaterThan(0);
+    expect(communityAsset.allowOrigin).not.toBe("*");
+
+    const webPreferences = await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences(),
+    );
+    expect(webPreferences.webSecurity).not.toBe(false);
 
     // The desktop organizer IPC round-trips (listItems → {ok, items}).
     const listing = await win.evaluate(() =>
@@ -71,14 +111,22 @@ test("desktop shell boots: window, preload bridge, workbench root", async () => 
     expect(executeOnMain).toContain("not a webview");
   } finally {
     await app.close();
+    await rm(userDataDir, { recursive: true, force: true });
   }
 });
 
 test("desktop backend spawns and the renderer reaches it", async () => {
   const backendPort = 18000;
   const backendUrl = `http://127.0.0.1:${backendPort}`;
+  const userDataDir = await mkdtemp(
+    path.join(tmpdir(), "octopus-electron-backend-"),
+  );
   const app = await electron.launch({
-    args: [path.join(ELECTRON_DIR, "main.cjs"), "--smoke-test-backend"],
+    args: [
+      path.join(ELECTRON_DIR, "main.cjs"),
+      "--smoke-test-backend",
+      `--user-data-dir=${userDataDir}`,
+    ],
     cwd: REPO_ROOT,
     env: {
       ...process.env,
@@ -114,7 +162,74 @@ test("desktop backend spawns and the renderer reaches it", async () => {
       await new Promise((r) => setTimeout(r, 500));
     }
     expect(healthOk).toBe(true);
+
+    // This is the production contract that Node-side polling cannot prove:
+    // Chromium fetches native /api and /api/plugins paths from the fixed app
+    // origin, and the main process forwards them without disabling CORS.
+    const rendererContract = await win.evaluate(async () => {
+      const health = await fetch("/api/health");
+      const auth = await fetch("/api/auth/status");
+      const plugin = await fetch("/api/plugins/paper-trading/page");
+      return {
+        origin: window.location.origin,
+        healthStatus: health.status,
+        healthAllowOrigin: health.headers.get("access-control-allow-origin"),
+        authStatus: auth.status,
+        authBody: await auth.json(),
+        pluginStatus: plugin.status,
+        pluginContentType: plugin.headers.get("content-type"),
+        pluginBody: (await plugin.text()).slice(0, 500),
+      };
+    });
+    expect(rendererContract.origin).toBe("octopus-app://app");
+    expect(rendererContract.healthStatus).toBe(200);
+    expect(rendererContract.healthAllowOrigin).not.toBe("*");
+    expect(rendererContract.authStatus).toBe(200);
+    expect(rendererContract.authBody).toMatchObject({ enabled: true });
+    expect(rendererContract.pluginStatus).toBe(200);
+    expect(rendererContract.pluginContentType).toContain("text/html");
+    expect(rendererContract.pluginBody).toContain("<");
+
+    // Authenticate through the custom origin, then establish the raw
+    // loopback WebSocket transport used by realtime/terminal/tentacle hooks.
+    // This catches secure-context mixed-content regressions that HTTP fetch
+    // and Node-side backend polling cannot see.
+    const websocketContract = await win.evaluate(async () => {
+      const login = await fetch("/api/auth/local/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: `electron-e2e-${Date.now()}` }),
+      });
+      const body = (await login.json()) as { access_token?: string };
+      if (!login.ok || !body.access_token) {
+        return { loginStatus: login.status, websocket: "no-token" };
+      }
+      const backend = window.octopus?.backendBaseURL ?? "";
+      const websocketBase = backend.replace(/^http/, "ws");
+      const websocket = await new Promise<string>((resolve) => {
+        const socket = new WebSocket(
+          `${websocketBase}/api/realtime`,
+          ["bearer", body.access_token!],
+        );
+        const timer = window.setTimeout(() => {
+          socket.close();
+          resolve("timeout");
+        }, 5_000);
+        socket.onopen = () => {
+          window.clearTimeout(timer);
+          socket.close();
+          resolve("open");
+        };
+        socket.onerror = () => {
+          window.clearTimeout(timer);
+          resolve("error");
+        };
+      });
+      return { loginStatus: login.status, websocket };
+    });
+    expect(websocketContract).toEqual({ loginStatus: 200, websocket: "open" });
   } finally {
     await app.close();
+    await rm(userDataDir, { recursive: true, force: true });
   }
 });

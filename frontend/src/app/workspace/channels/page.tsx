@@ -215,11 +215,14 @@ export default function ChannelsPage() {
 
   async function assignAgent(channelId: string, agentId: string) {
     try {
-      const r = await fetch(`/api/channels/${channelId}/assistant`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ agent_id: agentId }),
-      });
+      const r = await fetch(
+        `${getBackendBaseURL()}/api/channels/${channelId}/assistant`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ agent_id: agentId }),
+        },
+      );
       if (!r.ok) {
         const detail = await r.text();
         throw new Error(detail || r.statusText);
@@ -242,9 +245,10 @@ export default function ChannelsPage() {
     )
       return;
     try {
-      const r = await fetch(`/api/channels/${channelId}/assistant`, {
-        method: "DELETE",
-      });
+      const r = await fetch(
+        `${getBackendBaseURL()}/api/channels/${channelId}/assistant`,
+        { method: "DELETE" },
+      );
       if (!r.ok) throw new Error(r.statusText);
       toast.success(t.channels.toastAgentUnbound);
       await loadAll();

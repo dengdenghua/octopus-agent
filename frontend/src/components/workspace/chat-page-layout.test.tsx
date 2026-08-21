@@ -74,6 +74,22 @@ describe("ChatPageLayout input overlay measurement", () => {
     });
   });
 
+  test("owns exactly one page-level heading", () => {
+    const { container } = renderWithProviders(
+      <ChatPageLayout
+        pageTitle="New task"
+        header={<div>Header</div>}
+        messageList={<div>Messages</div>}
+        inputArea={<h2>Welcome</h2>}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "New task" }),
+    ).toBeInTheDocument();
+    expect(container.querySelectorAll("h1")).toHaveLength(1);
+  });
+
   test("moves the secondary workbench into a drawer on common 1024px viewports", () => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,

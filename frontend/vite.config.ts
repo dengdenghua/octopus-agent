@@ -1,14 +1,60 @@
 /// <reference types="vitest" />
 import { defineConfig } from "vite";
+import type { Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { visualizer } from "rollup-plugin-visualizer";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "url";
 import { createRequire } from "module";
 import path from "path";
 import fs from "fs";
 
+import { WEB_BUILD_DEDUPLICATED_PET_ASSETS } from "./config/public-asset-dedup";
+
 const require = createRequire(import.meta.url);
 const vitePackage = require("vite/package.json");
+
+function sha256File(filename: string): string {
+  return createHash("sha256").update(fs.readFileSync(filename)).digest("hex");
+}
+
+function omitDuplicatePetAssetsFromWebBuild(): Plugin {
+  let rootDir = "";
+  let outputDir = "";
+
+  return {
+    name: "octopus-omit-duplicate-pet-authoring-assets",
+    apply: "build",
+    configResolved(config) {
+      rootDir = config.root;
+      outputDir = path.resolve(config.root, config.build.outDir);
+    },
+    closeBundle() {
+      // Both source assets remain in the repository. A future edit that makes
+      // either copy diverge fails the build instead of silently dropping a
+      // newly-used asset from the renderer package.
+      for (const asset of WEB_BUILD_DEDUPLICATED_PET_ASSETS) {
+        const publicSource = path.resolve(rootDir, "public", asset.publicPath);
+        const canonicalSource = path.resolve(rootDir, asset.canonicalPath);
+        if (!fs.existsSync(publicSource) || !fs.existsSync(canonicalSource)) {
+          throw new Error(
+            `Cannot deduplicate missing pet asset: ${asset.publicPath}`,
+          );
+        }
+        if (
+          fs.statSync(publicSource).size !==
+            fs.statSync(canonicalSource).size ||
+          sha256File(publicSource) !== sha256File(canonicalSource)
+        ) {
+          throw new Error(
+            `Pet asset copies diverged; keep the web copy until its loading contract is explicit: ${asset.publicPath}`,
+          );
+        }
+        fs.rmSync(path.resolve(outputDir, asset.publicPath), { force: true });
+      }
+    },
+  };
+}
 
 const gatewayTarget =
   process.env.OCTOPUS_INTERNAL_GATEWAY_BASE_URL ||
@@ -133,6 +179,7 @@ export default defineConfig({
     __VITE_VERSION__: JSON.stringify(vitePackage.version),
   },
   plugins: [
+    omitDuplicatePetAssetsFromWebBuild(),
     ...(process.env.OCTOPUS_BUILD_TRACE === "1" ? [buildTracePlugin()] : []),
     react(),
     // Build-size audit capability. Gated behind an env var so ordinary

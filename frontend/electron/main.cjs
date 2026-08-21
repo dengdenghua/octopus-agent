@@ -10,6 +10,8 @@ const {
   BrowserWindow,
   dialog,
   ipcMain,
+  net,
+  protocol,
   shell,
   session,
   webContents,
@@ -25,6 +27,11 @@ const {
 } = require("./backend-runtime.cjs");
 const petSidecar = require("./pet-sidecar.cjs");
 const desktopCore = require("./desktop-shell-core.cjs");
+const desktopProtocol = require("./desktop-protocol.cjs");
+const {
+  ensureDesktopConfigFile,
+  ensureDesktopResources,
+} = require("./desktop-config.cjs");
 
 const DEV_URL = process.env.ELECTRON_START_URL || "http://127.0.0.1:3000";
 const DESKTOP_DIR = path.join(os.homedir(), "Desktop");
@@ -34,9 +41,35 @@ const DESKTOP_DIR = path.join(os.homedir(), "Desktop");
 // prove the shell + preload bridge + workbench boot without a dev server.
 // ``--smoke-test-backend`` additionally spawns the Python backend (normally a
 // packaged-only path) so the spawn + health + renderer-connection chain is
-// exercised; the test reuses an existing venv via OCTOPUS_DESKTOP_BACKEND_ROOT.
+// exercised; that development smoke reuses an existing venv via
+// OCTOPUS_DESKTOP_BACKEND_ROOT. Release builds use only the bundled executable.
 const SMOKE_TEST = process.argv.includes("--smoke-test");
 const SMOKE_TEST_BACKEND = process.argv.includes("--smoke-test-backend");
+const BUILT_RENDERER_SMOKE = SMOKE_TEST || SMOKE_TEST_BACKEND;
+
+// A standard, secure application origin gives the packaged renderer normal
+// browser URL semantics and persistent storage without weakening Chromium's
+// web security. The handler is installed after ready and serves only bundled
+// assets plus a narrow loopback-backend proxy.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: desktopProtocol.DESKTOP_APP_SCHEME,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+      codeCache: true,
+    },
+  },
+]);
+
+// Preserve the identity of the previously shipped Windows shell so upgrades
+// retain their taskbar grouping, installer identity, and existing userData.
+if (process.platform === "win32") {
+  app.setAppUserModelId("ai.octopus.desktop");
+}
 
 // Force Chinese locale for native dialogs and system UI so native controls
 // (Cancel / New Folder / sidebar / search) follow the app's primary language.
@@ -88,20 +121,45 @@ let mainWindow = null;
 
 // ── backend URL ────────────────────────────────────────────────
 function resolveBackendBaseURL() {
-  return process.env.OCTOPUS_BACKEND_URL || "http://127.0.0.1:8000";
+  return desktopProtocol.normalizeLoopbackBackendBaseURL(
+    process.env.OCTOPUS_BACKEND_URL || "http://127.0.0.1:8000",
+  );
+}
+
+function installDesktopRendererProtocol() {
+  const distRoot = path.join(__dirname, "..", "dist");
+  if (!desktopProtocol.resolveDesktopAssetPath(distRoot, "/index.html")) {
+    throw new Error(`desktop renderer entry is missing from ${distRoot}`);
+  }
+  let lastProxyWarningAt = 0;
+  const handler = desktopProtocol.createDesktopProtocolHandler({
+    distRoot,
+    backendBaseURL: resolveBackendBaseURL(),
+    fetchImpl: (url, init) => net.fetch(url, init),
+    onProxyError: (error) => {
+      const now = Date.now();
+      if (now - lastProxyWarningAt < 5_000) return;
+      lastProxyWarningAt = now;
+      console.warn(
+        "[octopus] desktop backend proxy unavailable:",
+        error?.message || error,
+      );
+    },
+  });
+  protocol.handle(desktopProtocol.DESKTOP_APP_SCHEME, handler);
 }
 
 // ── packaged backend hosting ───────────────────────────────────
-// In packaged mode the main process owns the Python backend child process via
-// the uv-managed runtime (see backend-runtime.cjs). On first launch it creates
-// a venv + installs a lean core; heavy optional deps install on demand. In dev
-// mode the backend runs externally (pnpm dev:full) and backend.restart
+// In packaged mode the main process owns the fixed PyInstaller backend child
+// process (see backend-runtime.cjs). The installer is deliberately offline at
+// runtime: no venv creation, system uv fallback, or dependency downloads. In
+// dev mode the backend runs externally (pnpm dev:full) and backend.restart
 // degrades to {ok:false, reason}.
 
 function backendConfigPath() {
-  // ensureDesktopConfig() copies config.desktop.yaml into userData on first
-  // launch; the packaged backend reads that (user-editable) copy.
-  return path.join(app.getPath("userData"), "config.desktop.yaml");
+  // Keep the legacy shell's config.yaml filename so an in-place upgrade
+  // rotates its weak secret instead of silently creating a second config.
+  return path.join(app.getPath("userData"), "config.yaml");
 }
 
 function backendProgress({ stage, message }) {
@@ -117,23 +175,28 @@ function backendProgress({ stage, message }) {
 
 // ── first-launch config (packaging/desktop/config.desktop.yaml) ──
 function ensureDesktopConfig() {
-  try {
-    const target = path.join(app.getPath("userData"), "config.desktop.yaml");
-    if (fs.existsSync(target)) return;
-    const bundled = app.isPackaged
-      ? path.join(process.resourcesPath, "config.desktop.yaml")
-      : path.join(
-          __dirname,
-          "..",
-          "..",
-          "packaging",
-          "desktop",
-          "config.desktop.yaml",
-        );
-    if (fs.existsSync(bundled)) fs.copyFileSync(bundled, target);
-  } catch (err) {
-    console.warn("[octopus] config.desktop.yaml copy failed:", err.message);
-  }
+  const target = backendConfigPath();
+  const bundled = app.isPackaged
+    ? path.join(process.resourcesPath, "config.desktop.yaml")
+    : path.join(
+        __dirname,
+        "..",
+        "..",
+        "packaging",
+        "desktop",
+        "config.desktop.yaml",
+      );
+  return ensureDesktopConfigFile({ bundledPath: bundled, targetPath: target });
+}
+
+function ensurePackagedResources() {
+  const bundledRoot = app.isPackaged
+    ? process.resourcesPath
+    : path.join(__dirname, "..", "..");
+  return ensureDesktopResources({
+    bundledRoot,
+    targetRoot: path.join(app.getPath("userData"), "resources"),
+  });
 }
 
 // ── desktop organizer (the 桌面助手 backend) ───────────────────
@@ -805,7 +868,63 @@ function registerIpc() {
 }
 
 // ── window ─────────────────────────────────────────────────────
+function isSafeExternalURL(rawURL) {
+  try {
+    return ["http:", "https:", "mailto:"].includes(new URL(rawURL).protocol);
+  } catch {
+    return false;
+  }
+}
+
+function openSafeExternalURL(rawURL) {
+  if (!isSafeExternalURL(rawURL)) return;
+  shell.openExternal(rawURL).catch((error) => {
+    console.warn("[octopus] unable to open external URL:", error.message);
+  });
+}
+
+function isTrustedMainWindowURL(rawURL, useBuiltRenderer) {
+  if (useBuiltRenderer) {
+    const parsed = desktopProtocol.parseDesktopAppURL(rawURL);
+    return parsed?.pathname === "/index.html" || parsed?.pathname === "/";
+  }
+  try {
+    return new URL(rawURL).origin === new URL(DEV_URL).origin;
+  } catch {
+    return false;
+  }
+}
+
+function openDesktopAuxiliaryWindow(rawURL) {
+  if (!desktopProtocol.isDesktopAppURL(rawURL)) return;
+  const child = new BrowserWindow({
+    width: 1180,
+    height: 800,
+    parent: mainWindow || undefined,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webviewTag: false,
+    },
+  });
+  child.webContents.setWindowOpenHandler(({ url }) => {
+    openSafeExternalURL(url);
+    return { action: "deny" };
+  });
+  child.webContents.on("will-navigate", (event, url) => {
+    if (desktopProtocol.isDesktopAppURL(url)) return;
+    event.preventDefault();
+    openSafeExternalURL(url);
+  });
+  child.loadURL(rawURL).catch((error) => {
+    console.warn("[octopus] unable to open desktop page:", error.message);
+    child.close();
+  });
+}
+
 function createMainWindow() {
+  const useBuiltRenderer = app.isPackaged || BUILT_RENDERER_SMOKE;
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -825,12 +944,23 @@ function createMainWindow() {
 
   win.once("ready-to-show", () => win.show());
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (useBuiltRenderer && desktopProtocol.isDesktopAppURL(url)) {
+      openDesktopAuxiliaryWindow(url);
+    } else {
+      openSafeExternalURL(url);
+    }
     return { action: "deny" };
   });
+  win.webContents.on("will-navigate", (event, url) => {
+    if (isTrustedMainWindowURL(url, useBuiltRenderer)) return;
+    event.preventDefault();
+    openSafeExternalURL(url);
+  });
 
-  if (app.isPackaged || SMOKE_TEST) {
-    win.loadFile(path.join(__dirname, "..", "dist", "index.html"));
+  if (useBuiltRenderer) {
+    win.loadURL(desktopProtocol.DESKTOP_APP_ENTRY_URL).catch((error) => {
+      console.error("[octopus] desktop renderer failed to load:", error);
+    });
   } else {
     win.loadURL(DEV_URL);
     win.webContents.on("did-fail-load", (_e, code, desc) => {
@@ -888,17 +1018,35 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     if (!app.isPackaged) app.setAsDefaultProtocolClient("octopus");
-    ensureDesktopConfig();
+    try {
+      if (app.isPackaged || BUILT_RENDERER_SMOKE) {
+        installDesktopRendererProtocol();
+      }
+      ensureDesktopConfig();
+      ensurePackagedResources();
+    } catch (err) {
+      const message = `无法安全初始化桌面应用：${err.message}`;
+      console.error("[octopus] desktop initialization failed:", err);
+      dialog.showErrorBox("Octopus 启动失败", message);
+      app.exit(1);
+      return;
+    }
     registerIpc();
     setupAutoUpdater();
     trackDownloads(session.defaultSession);
     mainWindow = createMainWindow();
-    // Create the window before bootstrapping the backend so the renderer can
-    // show first-launch progress (uv downloads the Python runtime once).
+    // Create the window before starting the bundled backend so the renderer
+    // can show a bounded startup state while /readyz becomes available.
     if (app.isPackaged || SMOKE_TEST_BACKEND) {
-      spawnBackend(backendConfigPath(), backendProgress).catch((err) => {
-        console.error("[octopus] backend bootstrap failed:", err.message);
-      });
+      try {
+        await spawnBackend(backendConfigPath(), backendProgress);
+      } catch (err) {
+        const message = `无法启动随应用安装的后端：${err.message}`;
+        console.error("[octopus] bundled backend start failed:", err);
+        dialog.showErrorBox("Octopus 启动失败", message);
+        app.exit(1);
+        return;
+      }
     }
     await loadEnabledExtensions();
     watchDesktop();

@@ -1688,6 +1688,7 @@ function RealtimePageContent({
     return (
       models.find(
         (model) =>
+          model.selection_id === modelName ||
           model.name === modelName ||
           model.id === modelName ||
           model.model === modelName,

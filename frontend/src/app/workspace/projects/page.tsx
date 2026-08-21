@@ -15,6 +15,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import {
   ActivityIcon,
   AlertTriangleIcon,
@@ -66,7 +67,12 @@ interface MilestonePM {
   progress: number;
   total_estimate: number;
   remaining_estimate: number;
-  overdue_tasks: Array<{ id: string; goal: string; due_at: string; priority: string }>;
+  overdue_tasks: Array<{
+    id: string;
+    goal: string;
+    due_at: string;
+    priority: string;
+  }>;
   success_criteria: string[];
 }
 
@@ -177,6 +183,99 @@ interface ProjectSummary {
 }
 
 const BASE = () => `${getBackendBaseURL()}/api/projects`;
+const PROJECT_LOAD_ERROR_MESSAGE = "项目加载失败，请稍后重试。";
+const PROJECT_ACTION_ERROR_MESSAGE = "操作失败，请稍后重试。";
+const TRACE_HEADER_NAMES = [
+  "x-trace-id",
+  "x-request-id",
+  "trace-id",
+  "request-id",
+] as const;
+
+class ProjectRequestError extends Error {
+  readonly traceId: string | null;
+
+  constructor(traceId: string | null) {
+    super(PROJECT_LOAD_ERROR_MESSAGE);
+    this.name = "ProjectRequestError";
+    this.traceId = traceId;
+  }
+}
+
+function normalizeTraceId(value: string | null | undefined): string | null {
+  const traceId = value?.trim();
+  if (!traceId || traceId.length > 128) return null;
+  return /^[A-Za-z0-9._:/-]+$/.test(traceId) ? traceId : null;
+}
+
+function traceIdFromResponse(response: Response): string | null {
+  for (const header of TRACE_HEADER_NAMES) {
+    const traceId = normalizeTraceId(response.headers.get(header));
+    if (traceId) return traceId;
+  }
+  return null;
+}
+
+function traceIdFromError(error: unknown): string | null {
+  return error instanceof ProjectRequestError ? error.traceId : null;
+}
+
+function traceIdFromDetail(detail: string): string | null {
+  const match = detail.match(
+    /\b(?:trace[_ -]?id|request[_ -]?id)\s*[:=]\s*([A-Za-z0-9._/-]{6,128})/i,
+  );
+  return normalizeTraceId(match?.[1]);
+}
+
+function withTraceId(message: string, traceId: string | null): string {
+  return traceId ? `${message} 追踪 ID：${traceId}` : message;
+}
+
+function safeRiskDetail(risk: PmeReport["risks"][number]): string {
+  if (risk.type === "milestone") {
+    return "里程碑存在阻塞或延期，请检查相关任务状态。";
+  }
+  if (risk.health === "overdue") {
+    return "任务已逾期，请重新评估排期。";
+  }
+  if (risk.health === "blocked" || risk.health === "failed") {
+    return "任务执行失败或受阻，请检查配置后重试。";
+  }
+  return "任务状态需要关注，请检查任务详情。";
+}
+
+function ProjectLoadFailure({
+  error,
+  onRetry,
+  className = "",
+}: {
+  error: unknown;
+  onRetry: () => void;
+  className?: string;
+}) {
+  const traceId = traceIdFromError(error);
+  return (
+    <div
+      role="alert"
+      className={`flex flex-col items-center justify-center gap-3 px-4 text-center ${className}`}
+    >
+      <div>
+        <p className="text-sm font-medium text-foreground">
+          {PROJECT_LOAD_ERROR_MESSAGE}
+        </p>
+        {traceId && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            追踪 ID：<code>{traceId}</code>
+          </p>
+        )}
+      </div>
+      <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+        <RefreshCwIcon className="size-3.5" />
+        重试
+      </Button>
+    </div>
+  );
+}
 
 const STATUS_LABEL: Record<string, string> = {
   planning: "规划中",
@@ -270,7 +369,9 @@ function MetricCard({
           <div className="text-xs text-muted-foreground">{label}</div>
           <div className="mt-0.5 truncate text-lg font-semibold">{value}</div>
           {sub && (
-            <div className="mt-0.5 truncate text-xs text-muted-foreground">{sub}</div>
+            <div className="mt-0.5 truncate text-xs text-muted-foreground">
+              {sub}
+            </div>
           )}
         </div>
       </CardContent>
@@ -287,7 +388,7 @@ export default function ProjectsPage() {
     queryKey: ["projects"],
     queryFn: async () => {
       const res = await fetch(BASE(), { headers: authHeaders() });
-      if (!res.ok) throw new Error(`Failed to load projects: ${res.statusText}`);
+      if (!res.ok) throw new ProjectRequestError(traceIdFromResponse(res));
       const data = (await res.json()) as unknown;
       if (Array.isArray(data)) return data as ProjectSummary[];
       if (
@@ -301,7 +402,10 @@ export default function ProjectsPage() {
     },
   });
 
-  const projects = useMemo(() => projectsQuery.data ?? [], [projectsQuery.data]);
+  const projects = useMemo(
+    () => projectsQuery.data ?? [],
+    [projectsQuery.data],
+  );
   useEffect(() => {
     if (!selectedId && projects.length > 0) {
       const first = projects[0];
@@ -315,7 +419,7 @@ export default function ProjectsPage() {
       const res = await fetch(`${BASE()}/${selectedId}`, {
         headers: authHeaders(),
       });
-      if (!res.ok) throw new Error(`Failed to load project: ${res.statusText}`);
+      if (!res.ok) throw new ProjectRequestError(traceIdFromResponse(res));
       return res.json();
     },
     enabled: !!selectedId,
@@ -334,18 +438,22 @@ export default function ProjectsPage() {
       const res = await fetch(spec.api.path, {
         method: spec.api.method,
         headers: jsonAuthHeaders(),
-        body: spec.api.body || overrides ? JSON.stringify({ ...(spec.api.body ?? {}), ...(overrides ?? {}) }) : undefined,
+        body:
+          spec.api.body || overrides
+            ? JSON.stringify({ ...(spec.api.body ?? {}), ...(overrides ?? {}) })
+            : undefined,
       });
       if (!res.ok) {
-        const text = await res.text();
-        toast.error(`操作失败（${res.status}）：${text.slice(0, 200)}`);
+        toast.error(
+          withTraceId(PROJECT_ACTION_ERROR_MESSAGE, traceIdFromResponse(res)),
+        );
         return;
       }
       toast.success(`${spec.label} 已执行`);
       detailQuery.refetch();
       projectsQuery.refetch();
-    } catch (e) {
-      toast.error(`操作失败：${(e as Error).message}`);
+    } catch {
+      toast.error(PROJECT_ACTION_ERROR_MESSAGE);
     }
   };
 
@@ -361,7 +469,7 @@ export default function ProjectsPage() {
           {/* Header */}
           <div className="flex h-11 shrink-0 items-center justify-between gap-3 border-b px-4">
             <div className="flex items-center gap-2 text-sm font-semibold">
-              <span>🗂️ {t.sidebar.navProjects}</span>
+              <h1>🗂️ {t.sidebar.navProjects}</h1>
               <span className="text-xs font-normal text-muted-foreground">
                 里程碑健康度 · 风险 · 下一步 · 复盘 —— 真实 PM 视角
               </span>
@@ -388,20 +496,29 @@ export default function ProjectsPage() {
             </div>
           </div>
 
-          {projectsQuery.isLoading && !projects.length ? (
+          {projectsQuery.isLoading ? (
             <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
               加载中…
             </div>
+          ) : projectsQuery.isError ? (
+            <ProjectLoadFailure
+              error={projectsQuery.error}
+              onRetry={() => void projectsQuery.refetch()}
+              className="flex-1"
+            />
           ) : projects.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
               <ClipboardListIcon className="size-10 opacity-40" />
-              <div>还没有项目。在实时会话里用 /project 开启一个里程碑式项目，或先建一个项目。</div>
-              <a
-                href="/workspace/realtime/new"
+              <div>
+                还没有项目。在实时会话里用 /project
+                开启一个里程碑式项目，或先建一个项目。
+              </div>
+              <Link
+                to="/workspace/realtime/new"
                 className="text-xs text-primary underline-offset-4 hover:underline"
               >
                 去新建会话
-              </a>
+              </Link>
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 items-stretch">
@@ -442,15 +559,17 @@ export default function ProjectsPage() {
               </aside>
 
               {/* Main PM view */}
-              <main className="min-w-0 flex-1 overflow-y-auto">
+              <div className="min-w-0 flex-1 overflow-y-auto">
                 {detailQuery.isLoading ? (
                   <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                     加载中…
                   </div>
                 ) : detailQuery.isError ? (
-                  <div className="flex h-full items-center justify-center text-sm text-rose-500">
-                    加载失败：{(detailQuery.error as Error).message}
-                  </div>
+                  <ProjectLoadFailure
+                    error={detailQuery.error}
+                    onRetry={() => void detailQuery.refetch()}
+                    className="h-full"
+                  />
                 ) : detail ? (
                   <div className="mx-auto max-w-5xl space-y-4 p-4">
                     {/* Project header */}
@@ -464,12 +583,18 @@ export default function ProjectsPage() {
                               </h2>
                               <Badge
                                 variant="outline"
-                                className={STATUS_TONE[detail.project.status] ?? ""}
+                                className={
+                                  STATUS_TONE[detail.project.status] ?? ""
+                                }
                               >
-                                {STATUS_LABEL[detail.project.status] ?? detail.project.status}
+                                {STATUS_LABEL[detail.project.status] ??
+                                  detail.project.status}
                               </Badge>
                               {detail.project.owner && (
-                                <Badge variant="outline" className="gap-1 bg-muted/40 text-muted-foreground">
+                                <Badge
+                                  variant="outline"
+                                  className="gap-1 bg-muted/40 text-muted-foreground"
+                                >
                                   <UserRoundIcon className="size-3" />
                                   PM · {detail.project.owner}
                                 </Badge>
@@ -525,10 +650,13 @@ export default function ProjectsPage() {
                         {pm && (
                           <div className="space-y-1.5">
                             <div className="flex items-center justify-between text-xs text-muted-foreground">
-                              <span className="font-medium text-foreground">整体进度</span>
+                              <span className="font-medium text-foreground">
+                                整体进度
+                              </span>
                               <span>
                                 {pm.done_tasks}/{pm.total_tasks} 任务 · 剩余估时{" "}
-                                {pm.remaining_estimate}d / 共 {pm.total_estimate}d
+                                {pm.remaining_estimate}d / 共{" "}
+                                {pm.total_estimate}d
                               </span>
                             </div>
                             <Progress
@@ -576,7 +704,9 @@ export default function ProjectsPage() {
                         {/* Milestones */}
                         <Card>
                           <CardHeader className="pb-2">
-                            <CardTitle className="text-sm">里程碑健康度</CardTitle>
+                            <CardTitle className="text-sm">
+                              里程碑健康度
+                            </CardTitle>
                           </CardHeader>
                           <CardContent className="space-y-3">
                             {pm.milestones.length === 0 && (
@@ -591,7 +721,9 @@ export default function ProjectsPage() {
                               >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium">{m.name}</span>
+                                    <span className="text-sm font-medium">
+                                      {m.name}
+                                    </span>
                                     <Badge
                                       variant="outline"
                                       className={`gap-1 text-[10px] ${HEALTH_TONE[m.health] ?? ""}`}
@@ -617,7 +749,9 @@ export default function ProjectsPage() {
                                       </span>
                                     )}
                                     {m.planned_start && (
-                                      <span>计划 {fmtDate(m.planned_start)}</span>
+                                      <span>
+                                        计划 {fmtDate(m.planned_start)}
+                                      </span>
                                     )}
                                     <span>剩余 {m.remaining_estimate}d</span>
                                   </div>
@@ -673,20 +807,32 @@ export default function ProjectsPage() {
                                   暂无风险。
                                 </div>
                               )}
-                              {pm.risks.map((r, i) => (
-                                <div
-                                  key={`${r.type}-${i}`}
-                                  className="flex items-start gap-2 rounded-md border bg-card/50 px-2.5 py-2 text-xs"
-                                >
-                                  <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
-                                  <div className="min-w-0">
-                                    <div className="font-medium">
-                                      {r.type === "milestone" ? r.milestone : r.task}
+                              {pm.risks.map((r, i) => {
+                                const traceId = traceIdFromDetail(r.detail);
+                                return (
+                                  <div
+                                    key={`${r.type}-${i}`}
+                                    className="flex items-start gap-2 rounded-md border bg-card/50 px-2.5 py-2 text-xs"
+                                  >
+                                    <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
+                                    <div className="min-w-0">
+                                      <div className="font-medium">
+                                        {r.type === "milestone"
+                                          ? r.milestone
+                                          : r.task}
+                                      </div>
+                                      <div className="text-muted-foreground">
+                                        {safeRiskDetail(r)}
+                                      </div>
+                                      {traceId && (
+                                        <div className="mt-0.5 text-muted-foreground">
+                                          追踪 ID：<code>{traceId}</code>
+                                        </div>
+                                      )}
                                     </div>
-                                    <div className="text-muted-foreground">{r.detail}</div>
                                   </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </CardContent>
                           </Card>
 
@@ -718,8 +864,10 @@ export default function ProjectsPage() {
                                     <div className="font-medium">{a.task}</div>
                                     <div className="text-muted-foreground">
                                       {a.milestone}
-                                      {a.estimate > 0 && ` · 估时 ${a.estimate}d`}
-                                      {a.due_at && ` · 截止 ${fmtDate(a.due_at)}`}
+                                      {a.estimate > 0 &&
+                                        ` · 估时 ${a.estimate}d`}
+                                      {a.due_at &&
+                                        ` · 截止 ${fmtDate(a.due_at)}`}
                                     </div>
                                   </div>
                                 </div>
@@ -743,26 +891,30 @@ export default function ProjectsPage() {
                                   暂无指派。
                                 </div>
                               )}
-                              {Object.entries(pm.assignments).map(([who, taskIds]) => (
-                                <div
-                                  key={who}
-                                  className="flex items-center justify-between rounded-md border bg-card/50 px-2.5 py-2 text-xs"
-                                >
-                                  <span className="flex items-center gap-1.5 font-medium">
-                                    <UserRoundIcon className="size-3.5 text-muted-foreground" />
-                                    {who}
-                                  </span>
-                                  <span className="text-muted-foreground">
-                                    {taskIds.length} 个任务
-                                  </span>
-                                </div>
-                              ))}
+                              {Object.entries(pm.assignments).map(
+                                ([who, taskIds]) => (
+                                  <div
+                                    key={who}
+                                    className="flex items-center justify-between rounded-md border bg-card/50 px-2.5 py-2 text-xs"
+                                  >
+                                    <span className="flex items-center gap-1.5 font-medium">
+                                      <UserRoundIcon className="size-3.5 text-muted-foreground" />
+                                      {who}
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                      {taskIds.length} 个任务
+                                    </span>
+                                  </div>
+                                ),
+                              )}
                             </CardContent>
                           </Card>
 
                           <Card>
                             <CardHeader className="pb-2">
-                              <CardTitle className="text-sm">燃尽视图（剩余估时）</CardTitle>
+                              <CardTitle className="text-sm">
+                                燃尽视图（剩余估时）
+                              </CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-2">
                               {pm.burndown.length === 0 && (
@@ -773,7 +925,9 @@ export default function ProjectsPage() {
                               {pm.burndown.map((b) => (
                                 <div key={b.milestone} className="space-y-1">
                                   <div className="flex items-center justify-between text-xs">
-                                    <span className="truncate pr-2">{b.milestone}</span>
+                                    <span className="truncate pr-2">
+                                      {b.milestone}
+                                    </span>
                                     <span className="shrink-0 text-muted-foreground">
                                       {b.remaining_estimate}d
                                     </span>
@@ -822,21 +976,31 @@ export default function ProjectsPage() {
                             />
                             <MetricCard
                               label="实际耗时"
-                              value={retro.duration_days === null ? "—" : `${retro.duration_days} 天`}
+                              value={
+                                retro.duration_days === null
+                                  ? "—"
+                                  : `${retro.duration_days} 天`
+                              }
                               sub={`估时 ${retro.total_estimate}d`}
                               icon={<TimerIcon className="size-4" />}
                             />
                           </div>
                           <div>
                             <div className="mb-1.5 text-xs font-medium text-muted-foreground">
-                              阻塞里程碑：{retro.blocked_milestones.length > 0 ? retro.blocked_milestones.join("、") : "无"}
+                              阻塞里程碑：
+                              {retro.blocked_milestones.length > 0
+                                ? retro.blocked_milestones.join("、")
+                                : "无"}
                             </div>
                             <div className="text-xs font-medium text-muted-foreground">
                               建议：
                             </div>
                             <ul className="mt-1 space-y-1">
                               {retro.recommendations.map((r, i) => (
-                                <li key={i} className="flex items-start gap-1.5 text-xs">
+                                <li
+                                  key={i}
+                                  className="flex items-start gap-1.5 text-xs"
+                                >
                                   <ArrowRightIcon className="mt-0.5 size-3 shrink-0 text-sky-500" />
                                   <span>{r}</span>
                                 </li>
@@ -848,7 +1012,7 @@ export default function ProjectsPage() {
                     )}
                   </div>
                 ) : null}
-              </main>
+              </div>
             </div>
           )}
         </div>

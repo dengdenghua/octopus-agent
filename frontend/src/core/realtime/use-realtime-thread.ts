@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { getBackendBaseURL } from "@/core/config";
+import { getBackendTransportBaseURL } from "@/core/config";
 import { getToken } from "@/core/auth/api";
 import type { SandboxPolicy } from "@/core/permissions";
 import type { ReasoningEffort } from "@/core/threads";
@@ -73,7 +73,8 @@ export interface UseRealtimeThreadArgs {
    * Enables instant cold-start rendering from the persisted event log;
    * omit to disable the cache entirely. */
   replayCache?: ReplayCacheStore;
-  // Inject for tests. Defaults to a real client backed by getBackendBaseURL().
+  // Inject for tests. Defaults to a real client backed by the raw WebSocket
+  // transport URL (the packaged renderer uses a custom origin for HTTP only).
   clientFactory?: (deps: {
     onIncomingRequest: (req: JsonRpcRequest) => Promise<unknown>;
     onNotification: (n: {
@@ -867,7 +868,7 @@ export function useRealtimeThread(
         onClose?: (code: number, reason: string) => void;
       }) =>
         createDefaultClient({
-          baseURL: getBackendBaseURL(),
+          baseURL: getBackendTransportBaseURL(),
           authToken: () => getToken(),
           onIncomingRequest: deps.onIncomingRequest,
           onNotification: deps.onNotification,
@@ -1145,12 +1146,14 @@ export function useRealtimeThread(
     // Fire the interrupt request but don't await — update local UI immediately.
     // If the network call fails, the UI still shows interrupted (better UX than
     // leaving the turn stuck in inProgress on transient network errors).
-    client.request("turn/interrupt", {
-      threadId: args.threadId,
-      turnId: active.id,
-    }).catch((err) => {
-      console.error("[realtime] turn/interrupt request failed:", err);
-    });
+    client
+      .request("turn/interrupt", {
+        threadId: args.threadId,
+        turnId: active.id,
+      })
+      .catch((err) => {
+        console.error("[realtime] turn/interrupt request failed:", err);
+      });
 
     persistTurnTelemetry(active.id, "interrupted");
     applyEvent({

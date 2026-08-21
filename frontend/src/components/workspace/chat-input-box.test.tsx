@@ -5,6 +5,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/harness";
@@ -16,6 +17,9 @@ import { ChatInputBox } from "./chat-input-box";
 
 const uploadFilesMock = vi.fn();
 const uploadWithProgressMock = vi.fn();
+const modelCatalog = vi.hoisted(() => ({
+  current: [] as Array<Record<string, unknown>>,
+}));
 
 // Only the transport is stubbed — ``useAttachmentUploads`` runs for real so the
 // progress/gating tests exercise the actual state machine. The hook imports
@@ -33,7 +37,7 @@ vi.mock("@/core/uploads/api", async (importOriginal) => {
 
 vi.mock("@/core/models/hooks", () => ({
   useModels: () => ({
-    models: [{ id: "test-model", display_name: "Test Model" }],
+    models: modelCatalog.current,
   }),
 }));
 
@@ -96,6 +100,14 @@ function uploadedInfo(file: File) {
 }
 
 beforeEach(() => {
+  modelCatalog.current = [
+    {
+      id: "test-model",
+      name: "test-model",
+      model: "test-model",
+      display_name: "Test Model",
+    },
+  ];
   uploadFilesMock.mockReset();
   uploadWithProgressMock.mockReset();
   // Attaching now uploads immediately, so every test needs a transport.
@@ -113,6 +125,75 @@ beforeEach(() => {
 });
 
 describe("<ChatInputBox /> cowork materials", () => {
+  it("returns the selected row id when two endpoints share one wire model", async () => {
+    modelCatalog.current = [
+      {
+        id: "deepseek-v4-flash",
+        name: "deepseek-v4-flash",
+        model: "deepseek-v4-flash",
+        display_name: "DeepSeek primary",
+        entry_id: "deepseek-primary",
+        selection_id: "selection-deepseek-primary-default",
+        reasoning_efforts: ["off", "high"],
+        context_window: 256_000,
+        context_profile: "default",
+        supports_thinking: true,
+        supports_vision: false,
+        supports_tool_use: true,
+      },
+      {
+        id: "deepseek-v4-flash",
+        name: "deepseek-v4-flash",
+        model: "deepseek-v4-flash",
+        display_name: "DeepSeek backup",
+        entry_id: "deepseek-backup",
+        selection_id: "selection-deepseek-backup-default",
+        reasoning_efforts: ["off", "high", "xhigh"],
+        context_window: 128_000,
+        context_profile: "default",
+        supports_thinking: true,
+        supports_vision: true,
+        supports_tool_use: false,
+      },
+    ];
+    const user = userEvent.setup();
+    const onModelChange = vi.fn();
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-duplicate-models"
+        modelName="selection-deepseek-primary-default"
+        onModelChange={onModelChange}
+      />,
+    );
+
+    await user.click(screen.getByTestId("model-picker-trigger"));
+    const menu = await screen.findByTestId("model-picker-menu");
+    await user.click(
+      within(menu).getByText("DeepSeek backup").closest("button")!,
+    );
+
+    expect(onModelChange).toHaveBeenCalledWith(
+      "selection-deepseek-backup-default",
+    );
+  });
+
+  it("gives the composer a persistent accessible name", () => {
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-accessible-name"
+        onSubmit={vi.fn()}
+        onDeepResearch={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("chat-composer-input")).toHaveAttribute(
+      "aria-label",
+      "How can I assist you today?",
+    );
+  });
+
   it("keeps prompt-only shortcuts out of the quick tools menu", async () => {
     renderWithProviders(
       <ChatInputBox
@@ -981,7 +1062,9 @@ describe("<ChatInputBox /> upload on attach", () => {
     renderWithProviders(<ChatInputBox mode="react" threadId="thread-1" />);
     const image = pasteImage();
 
-    await waitFor(() => expect(uploadWithProgressMock).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(uploadWithProgressMock).toHaveBeenCalledTimes(1),
+    );
     expect(uploadWithProgressMock.mock.calls[0][0]).toBe("thread-1");
     expect(uploadWithProgressMock.mock.calls[0][1]).toEqual([image]);
   });

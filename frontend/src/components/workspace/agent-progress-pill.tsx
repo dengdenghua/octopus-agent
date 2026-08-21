@@ -22,6 +22,7 @@ import {
   workBlockTitle,
 } from "./work-blocks";
 import { useI18n } from "@/core/i18n/hooks";
+import { getBackendBaseURL } from "@/core/config";
 import type { StreamVitals } from "@/core/realtime";
 import { cn } from "@/lib/utils";
 import { agentRunBeadTone } from "./agent-run-status";
@@ -209,11 +210,14 @@ export function AgentProgressPill({
     if (!capabilityDisabledInfo || enablingCapability) return;
     setEnablingCapability(true);
     try {
-      const resp = await fetch("/api/capabilities/enable", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ group: capabilityDisabledInfo.group }),
-      });
+      const resp = await fetch(
+        `${getBackendBaseURL()}/api/capabilities/enable`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ group: capabilityDisabledInfo.group }),
+        },
+      );
       if (resp.ok) {
         window.location.reload();
       }

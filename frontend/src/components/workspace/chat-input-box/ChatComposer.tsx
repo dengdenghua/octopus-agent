@@ -202,17 +202,34 @@ export function ChatComposer({
     () =>
       models.map((m) => ({
         id: m.id,
-        name: m.id,
-        display_name: (m as { display_name?: string }).display_name ?? m.id,
+        name: m.name || m.id,
+        display_name: m.display_name || m.name || m.id,
+        description: m.description,
+        entry_id: m.entry_id,
+        selection_id: m.selection_id,
+        model: m.model,
+        provider: m.provider,
+        reasoning_efforts: m.reasoning_efforts,
+        context_window: m.context_window,
+        supports_thinking: m.supports_thinking,
+        supports_vision: m.supports_vision,
+        supports_tool_use: m.supports_tool_use,
+        supports_reasoning_effort: m.supports_reasoning_effort,
         // The picker folds a ``::1m`` row into its base model, which it can
         // only detect from context_profile. Dropping the field here made the
         // long-context variant render as a second, identically-labelled row.
-        context_profile: (m as { context_profile?: string }).context_profile,
+        context_profile: m.context_profile,
       })),
     [models],
   );
   const selectedModel =
-    pickerModels.find((m) => m.name === modelName || m.model === modelName) ??
+    pickerModels.find(
+      (m) =>
+        m.selection_id === modelName ||
+        m.entry_id === modelName ||
+        m.name === modelName ||
+        m.model === modelName,
+    ) ??
     (modelName
       ? { name: modelName, display_name: modelName }
       : pickerModels[0]);
@@ -927,6 +944,7 @@ export function ChatComposer({
         autoFocus={autoFocus}
         disabled={isBusy}
         placeholder={placeholder ?? t.inputBox.placeholder}
+        aria-label={placeholder ?? t.inputBox.placeholder}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={onKeyDown}
