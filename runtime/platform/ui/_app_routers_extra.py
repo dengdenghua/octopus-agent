@@ -577,6 +577,28 @@ def mount_routers_b(
         )
     )
 
+    # ─── A2A remote agent registry (a2a-agents-panel) ─────────────
+    # Frontend panel shipped earlier without backend routes; mount the
+    # protocol relay so registered remote agents can be listed, probed,
+    # and delegated tasks over the A2A wire protocol.
+    try:
+        from runtime.sensing.gateway.a2a_router import create_a2a_router
+
+        app.include_router(
+            create_a2a_router(
+                identity_store=ctx.identity_store,
+                require_auth=ctx.require_auth,
+                jwt_secret=ctx.jwt_secret,
+                jwt_issuer=ctx.jwt_issuer,
+                jwt_audience=ctx.jwt_audience,
+            )
+        )
+    except Exception as _a2a_exc:  # noqa: BLE001 — optional surface
+        logging.getLogger(__name__).warning(
+            "A2A router failed to initialize: %s",
+            _a2a_exc,
+        )
+
     from runtime.sensing.gateway.teach_repeat_router import create_teach_repeat_router
 
     # Wire the live journal + skill registry so REC stop forges a reusable

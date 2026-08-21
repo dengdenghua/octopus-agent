@@ -15,6 +15,7 @@ import {
   PuzzleIcon,
   SearchIcon,
   StoreIcon,
+  UsersIcon,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -70,6 +71,7 @@ import { AgentRoleProfileDialog } from "./agent-role-profile-dialog";
 import { AgentWorldCard } from "./agent-world-card";
 import { LocalAgentConnectDialog } from "./local-agent-connect-dialog";
 import { AppMarketplacePanel } from "@/components/store/app-marketplace-panel";
+import { WorkBuddyCloudStorePanel } from "@/components/store/workbuddy-cloud-store-panel";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -350,6 +352,7 @@ export function AgentsTab({
   onCreateAgent,
   onImportAgent,
   onConnectLocalPartner,
+  showManagementActions = true,
 }: {
   agents: AgentWorldAgent[];
   filteredAgents: AgentWorldAgent[];
@@ -364,6 +367,7 @@ export function AgentsTab({
   onCreateAgent: () => void;
   onImportAgent: () => void;
   onConnectLocalPartner: () => void;
+  showManagementActions?: boolean;
 }) {
   const { t } = useI18n();
   const [installingAll, setInstallingAll] = useState(false);
@@ -567,71 +571,73 @@ export function AgentsTab({
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground md:justify-end">
-          <span className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5">
-            <span className="text-muted-foreground/80">
-              {t.agentWorldUnified.installedLabel}
+        {showManagementActions ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground md:justify-end">
+            <span className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5">
+              <span className="text-muted-foreground/80">
+                {t.agentWorldUnified.installedLabel}
+              </span>
+              <span className="ml-1 font-medium text-foreground">
+                {installedCount}
+              </span>
             </span>
-            <span className="ml-1 font-medium text-foreground">
-              {installedCount}
+            <span className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5">
+              <span className="text-muted-foreground/80">
+                {t.agentWorldUnified.installableLabel}
+              </span>
+              <span className="ml-1 font-medium text-foreground">
+                {Math.max(0, installableCount)}
+              </span>
             </span>
-          </span>
-          <span className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5">
-            <span className="text-muted-foreground/80">
-              {t.agentWorldUnified.installableLabel}
-            </span>
-            <span className="ml-1 font-medium text-foreground">
-              {Math.max(0, installableCount)}
-            </span>
-          </span>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-8 rounded-lg border border-border bg-background px-2.5 text-xs font-medium text-muted-foreground shadow-none hover:bg-muted/45 hover:text-foreground"
-            disabled={installingAll || installableAgents.length === 0}
-            onClick={() => void handleInstallAll()}
-            title={
-              confirmInstallAll
-                ? t.agentWorldUnified.installAllConfirmTitle(
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-8 rounded-lg border border-border bg-background px-2.5 text-xs font-medium text-muted-foreground shadow-none hover:bg-muted/45 hover:text-foreground"
+              disabled={installingAll || installableAgents.length === 0}
+              onClick={() => void handleInstallAll()}
+              title={
+                confirmInstallAll
+                  ? t.agentWorldUnified.installAllConfirmTitle(
+                      installableAgents.length,
+                    )
+                  : t.agentWorldUnified.installAllConfirmHint
+              }
+            >
+              {installingAll && (
+                <Loader2Icon className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              )}
+              {confirmInstallAll
+                ? t.agentWorldUnified.installAllConfirmButton(
                     installableAgents.length,
                   )
-                : t.agentWorldUnified.installAllConfirmHint
-            }
-          >
-            {installingAll && (
-              <Loader2Icon className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-            )}
-            {confirmInstallAll
-              ? t.agentWorldUnified.installAllConfirmButton(
-                  installableAgents.length,
-                )
-              : t.agentWorldUnified.installAllButton}
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" className="h-8 rounded-lg px-2.5 shadow-none">
-                <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
-                {t.agentWorldUnified.addAgentButton}
-                <ChevronDownIcon className="ml-1 h-3.5 w-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem onSelect={onCreateAgent}>
-                <PlusIcon className="h-4 w-4" />
-                {t.agentWorld.newAgent}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onImportAgent}>
-                <ImportIcon className="h-4 w-4" />
-                {t.agentWorld.importAgentPack}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onConnectLocalPartner}>
-                <BotIcon className="h-4 w-4" />
-                {t.agentWorldUnified.connectLocalPartner}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+                : t.agentWorldUnified.installAllButton}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" className="h-8 rounded-lg px-2.5 shadow-none">
+                  <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
+                  {t.agentWorldUnified.addAgentButton}
+                  <ChevronDownIcon className="ml-1 h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem onSelect={onCreateAgent}>
+                  <PlusIcon className="h-4 w-4" />
+                  {t.agentWorld.newAgent}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={onImportAgent}>
+                  <ImportIcon className="h-4 w-4" />
+                  {t.agentWorld.importAgentPack}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={onConnectLocalPartner}>
+                  <BotIcon className="h-4 w-4" />
+                  {t.agentWorldUnified.connectLocalPartner}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ) : null}
       </div>
 
       {visibleAgents.length > 0 ? (
@@ -1118,7 +1124,8 @@ const LOCAL_LIBRARY_INSTALLED_ONLY = false;
 const HIDDEN_LOCAL_AGENT_IDS = new Set(["admin"]);
 
 export type HubMarketSection = "featured" | "agents" | "applications";
-export type HubApplicationView = "featured" | "all" | "library";
+export type HubApplicationView = "featured" | "all" | "library" | "remote";
+export type HubTalentView = "roles" | "experts" | "teams";
 
 export function resolveHubMarketRoute(search: string): {
   section: HubMarketSection;
@@ -1142,6 +1149,12 @@ export function resolveHubMarketRoute(search: string): {
   return { section: "featured", applicationView: "featured" };
 }
 
+export function resolveHubTalentView(search: string): HubTalentView {
+  const talent = new URLSearchParams(search).get("talent");
+  if (talent === "experts" || talent === "teams") return talent;
+  return "roles";
+}
+
 export function AgentWorldUnified() {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -1155,6 +1168,9 @@ export function AgentWorldUnified() {
   );
   const [applicationView, setApplicationView] = useState<HubApplicationView>(
     () => resolveHubMarketRoute(location.search).applicationView,
+  );
+  const [talentView, setTalentView] = useState<HubTalentView>(() =>
+    resolveHubTalentView(location.search),
   );
   const [activeCategory, setActiveCategory] =
     useState<AgentCategoryFilter>("all");
@@ -1210,6 +1226,7 @@ export function AgentWorldUnified() {
     const nextRoute = resolveHubMarketRoute(location.search);
     setActiveMarket(nextRoute.section);
     setApplicationView(nextRoute.applicationView);
+    setTalentView(resolveHubTalentView(location.search));
     if (params.get("connect") === "local") {
       setConnectOpen(true);
     }
@@ -1618,29 +1635,86 @@ export function AgentWorldUnified() {
             </TabsContent>
 
             <TabsContent value="agents" className="mt-0">
-              <div className="mb-4">
-                <h2 className="text-base font-semibold text-foreground">
-                  人才市场
-                </h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  按专业方向筛选人才，查看能力后即可试用或加入团队。
-                </p>
-              </div>
-              <AgentsTab
-                agents={dedupedAgents}
-                filteredAgents={filteredAgents}
-                loading={loading}
-                loadError={agentsLoadError}
-                activeCategory={activeCategory}
-                categoryCounts={categoryCounts}
-                onCategoryChange={setActiveCategory}
-                onSelectAgent={handleSelectAgent}
-                onInstallChange={handleInstallChange}
-                onRetry={() => void fetchAgents()}
-                onCreateAgent={() => navigate("/workspace/agents/new")}
-                onImportAgent={() => setImportOpen(true)}
-                onConnectLocalPartner={() => setConnectOpen(true)}
-              />
+              <Tabs
+                value={talentView}
+                onValueChange={(value) => setTalentView(value as HubTalentView)}
+              >
+                <div className="mb-4 flex flex-col gap-3 border-b border-border-subtle pb-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h2 className="text-base font-semibold text-foreground">
+                      人才市场
+                    </h2>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {talentView === "roles"
+                        ? "浏览已经加入的角色与本地人才。"
+                        : talentView === "experts"
+                          ? "浏览并添加 WorkBuddy 云端专家。"
+                          : "添加专家团主理人及配套技能。"}
+                    </p>
+                  </div>
+                  <TabsList
+                    aria-label="人才市场分区"
+                    className="flex w-fit items-center gap-1 rounded-lg bg-muted/60 p-1"
+                  >
+                    <TabsTrigger
+                      value="roles"
+                      className="h-8 gap-1.5 px-3 text-xs"
+                    >
+                      <BotIcon className="size-3.5" />
+                      角色
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="experts"
+                      className="h-8 gap-1.5 px-3 text-xs"
+                    >
+                      <StoreIcon className="size-3.5" />
+                      专家
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="teams"
+                      className="h-8 gap-1.5 px-3 text-xs"
+                    >
+                      <UsersIcon className="size-3.5" />
+                      专家团
+                    </TabsTrigger>
+                  </TabsList>
+                </div>
+
+                <TabsContent value="roles" className="mt-0">
+                  <AgentsTab
+                    agents={dedupedAgents}
+                    filteredAgents={filteredAgents}
+                    loading={loading}
+                    loadError={agentsLoadError}
+                    activeCategory={activeCategory}
+                    categoryCounts={categoryCounts}
+                    onCategoryChange={setActiveCategory}
+                    onSelectAgent={handleSelectAgent}
+                    onInstallChange={handleInstallChange}
+                    onRetry={() => void fetchAgents()}
+                    onCreateAgent={() => navigate("/workspace/agents/new")}
+                    onImportAgent={() => setImportOpen(true)}
+                    onConnectLocalPartner={() => setConnectOpen(true)}
+                    showManagementActions={false}
+                  />
+                </TabsContent>
+                <TabsContent value="experts" className="mt-0">
+                  <WorkBuddyCloudStorePanel
+                    embedded
+                    kind="agent"
+                    searchQuery={searchQuery}
+                    onInstalled={() => handleInstallChange()}
+                  />
+                </TabsContent>
+                <TabsContent value="teams" className="mt-0">
+                  <WorkBuddyCloudStorePanel
+                    embedded
+                    kind="team"
+                    searchQuery={searchQuery}
+                    onInstalled={() => handleInstallChange()}
+                  />
+                </TabsContent>
+              </Tabs>
             </TabsContent>
 
             <TabsContent value="applications" className="mt-0">

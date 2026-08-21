@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { Library, LayoutGrid, Sparkles } from "lucide-react";
+import { Library, LayoutGrid, Network, Sparkles } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 import { CapabilityMarketPanel } from "./capability-market-panel";
 import { UnifiedAssetsPanel } from "./unified-assets-panel";
+import { A2AAgentsPanel } from "@/components/workspace/a2a-agents-panel";
 
-export type AppMarketplaceView = "featured" | "all" | "library";
+export type AppMarketplaceView = "featured" | "all" | "library" | "remote";
 
 export interface AppMarketplacePanelProps {
   searchQuery?: string;
@@ -36,6 +37,7 @@ const VIEW_OPTIONS: ReadonlyArray<{
   { value: "featured", label: "精选", icon: Sparkles },
   { value: "all", label: "全部应用", icon: LayoutGrid },
   { value: "library", label: "我的库", icon: Library },
+  { value: "remote", label: "远程Agent", icon: Network },
 ];
 
 export function AppMarketplacePanel({
@@ -108,6 +110,9 @@ export function AppMarketplacePanel({
           allowedKinds={["plugin", "skill"]}
           showSyncAction={false}
         />
+      </TabsContent>
+      <TabsContent value="remote" className="mt-0">
+        <A2AAgentsPanel />
       </TabsContent>
     </Tabs>
   );
