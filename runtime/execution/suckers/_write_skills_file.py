@@ -211,6 +211,24 @@ def _edit_file(
 
     occurrences = original.count(old_string)
     if occurrences == 0:
+        # Hermes parity: detect the "edit already applied" case — the target
+        # text is gone but the replacement is present, so the model is likely
+        # retrying a completed edit rather than fixing a mismatch.
+        if new_string and new_string in original:
+            preview = new_string[:80].replace("\n", "\\n")
+            return {
+                "error": "edit_already_applied",
+                "occurrences": 0,
+                "hint": (
+                    f"old_string wasn't found, but new_string is already "
+                    f"present in the file — the edit appears to have been "
+                    f"applied already. No further action needed; if you "
+                    f"meant a different edit, re-read the file with "
+                    f"read_file(path) to see the current content."
+                ),
+                "new_string_present": True,
+                "preview": preview,
+            }
         # Help the model recover by hinting at the most common cause —
         # whitespace / line-ending / quoting drift between what they
         # remembered and what's actually on disk.

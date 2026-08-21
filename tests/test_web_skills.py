@@ -317,6 +317,79 @@ class TestWebSearchRouting:
         assert "error" in result
 
 
+class TestNearMissRetry:
+    def test_relaxed_query_strips_quotes_operators_and_filters(self):
+        from runtime.execution.suckers.web_skills import _relaxed_query
+
+        assert _relaxed_query('"exact phrase" AND site:example.com foo') == "exact phrase foo"
+        assert _relaxed_query('"a b" "c d" e f g h i j') == "a b c d e f"
+        assert _relaxed_query("(foo OR bar) baz") == "foo bar baz"
+        assert _relaxed_query("plain query") == "plain query"
+        assert _relaxed_query('"only quoted"') == "only quoted"
+
+    def test_empty_results_triggers_relaxed_retry(self, monkeypatch):
+        """Zero-result search retries once with a loosened query."""
+        monkeypatch.delenv("WEB_SEARCH_BACKEND", raising=False)
+        monkeypatch.delenv("DOUBAO_SEARCH_API_KEY", raising=False)
+        monkeypatch.setenv("TAVILY_API_KEY", "fake-test-key")
+        monkeypatch.delenv("BRAVE_API_KEY", raising=False)
+        monkeypatch.delenv("SERPER_API_KEY", raising=False)
+        monkeypatch.delenv("SEARXNG_URL", raising=False)
+
+        # First call returns nothing; second (relaxed) call returns a hit.
+        calls: list[dict] = []
+
+        def side_effect(url, **kw):
+            body = kw.get("json", {})
+            query = body.get("query", "")
+            calls.append(query)
+            if "relaxed-only-topic" in query and not query.startswith('"'):
+                return _MockResponse(
+                    status_code=200,
+                    json_data={
+                        "results": [
+                            {
+                                "title": "Relaxed hit",
+                                "url": "https://example.com/r",
+                                "snippet": "found it",
+                            }
+                        ]
+                    },
+                )
+            return _MockResponse(status_code=200, json_data={"results": []})
+
+        client = _MockClient(post_response=None)
+        client.post = side_effect  # type: ignore[method-assign]
+
+        result = _web_search(query='"relaxed-only-topic" AND other words', client=client)
+
+        assert result.get("near_miss_retry") is True
+        assert result["original_query"] == '"relaxed-only-topic" AND other words'
+        assert result["results"][0]["title"] == "Relaxed hit"
+        # Two dispatch attempts: original then relaxed.
+        assert len(calls) == 2
+        assert calls[1] == "relaxed-only-topic other words"
+
+    def test_no_retry_when_relaxed_query_identical(self, monkeypatch):
+        """A query that's already loose does not double-fire."""
+        monkeypatch.delenv("WEB_SEARCH_BACKEND", raising=False)
+        monkeypatch.delenv("DOUBAO_SEARCH_API_KEY", raising=False)
+        monkeypatch.setenv("TAVILY_API_KEY", "fake-test-key")
+
+        calls: list[str] = []
+
+        def side_effect(url, **kw):
+            calls.append(kw.get("json", {}).get("query", ""))
+            return _MockResponse(status_code=200, json_data={"results": []})
+
+        client = _MockClient(post_response=None)
+        client.post = side_effect  # type: ignore[method-assign]
+
+        result = _web_search(query="loose plain query", client=client)
+        assert not result.get("near_miss_retry")
+        assert len(calls) == 1
+
+
 # ═══════════════════════════════════════════════════════════
 # Brave / Serper / SearXNG
 # ═══════════════════════════════════════════════════════════
