@@ -309,7 +309,9 @@ def run_ui(
     uds: str | None = None,
 ) -> int:
     try:
-        import uvicorn
+        import uvicorn  # noqa: F401 - fail early when the optional UI extra is absent
+
+        from runtime.platform.ui.server_options import run_uvicorn
     except ImportError:
         print(_("cli.ui.not_installed"), file=sys.stderr)
         return 2
@@ -356,10 +358,10 @@ def run_ui(
         with contextlib.suppress(FileNotFoundError):
             os.unlink(uds)
         print(f"  unix socket: {uds}  (ws+unix:///{uds})")
-        uvicorn.run(app, uds=uds, log_level="info")
+        run_uvicorn(app, uds=uds, log_level="info")
     else:
         print(_("cli.ui.starting_fmt", host=host, port=port, journal=journal_path or "in-memory"))
-        uvicorn.run(app, host=host, port=port, log_level="info")
+        run_uvicorn(app, host=host, port=port, log_level="info")
     return 0
 
 

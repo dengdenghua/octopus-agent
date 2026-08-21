@@ -20,6 +20,7 @@
 
 sync 是幂等的(不覆盖已有、不删除源),index.json 是唯一动态产物,可随时重建。
 """
+
 from __future__ import annotations
 
 import json
@@ -40,9 +41,20 @@ LOCAL_SKILLS = Path.home() / ".octopus" / "skills"
 BUILTIN_SKILLS = REPO / "runtime" / "execution" / "all_skills"
 IMPORTED_ROOT = Path.home() / ".octopus" / "imported"
 AGENTS_ROOT = REPO / "agents"
-EXPERT_STORE = REPO / "extensions" / "workbuddy-experts" / "storefront" / "data" / "expert-store.json"
+EXPERT_STORE = (
+    REPO / "extensions" / "workbuddy-experts" / "storefront" / "data" / "expert-store.json"
+)
 
-_SKIP_DIRS = {"node_modules", "dist", "build", ".git", "__pycache__", "sessions", "visuals", "_shared"}
+_SKIP_DIRS = {
+    "node_modules",
+    "dist",
+    "build",
+    ".git",
+    "__pycache__",
+    "sessions",
+    "visuals",
+    "_shared",
+}
 _KIND_DIR = {"plugin": "plugins", "skill": "skills", "agent": "agents", "team": "agents"}
 _SLUG_RE = re.compile(r"[^a-z0-9_.-]+", re.I)
 
@@ -89,24 +101,31 @@ def _codex_plugins() -> list[dict[str, Any]]:
             continue
         root = plugin_json.parent.parent
         iface = meta.get("interface") or {}
-        skills = [
-            p.parent.name
-            for p in (root / "skills").rglob("SKILL.md")
-        ] if (root / "skills").is_dir() else []
-        out.append({
-            "id": str(meta.get("name")),
-            "kind": "plugin",
-            "source": "codex",
-            "type": "codex-plugin",
-            "name": str(iface.get("displayName") or meta.get("name")),
-            "name_zh": str(iface.get("displayName") or meta.get("name")),
-            "description": str(iface.get("shortDescription") or meta.get("description") or ""),
-            "version": str(meta.get("version") or "0.1.0"),
-            "author": str((meta.get("author") or {}).get("name", "") if isinstance(meta.get("author"), dict) else meta.get("author") or ""),
-            "skills": skills,
-            "skills_count": len(skills),
-            "origin": str(root),
-        })
+        skills = (
+            [p.parent.name for p in (root / "skills").rglob("SKILL.md")]
+            if (root / "skills").is_dir()
+            else []
+        )
+        out.append(
+            {
+                "id": str(meta.get("name")),
+                "kind": "plugin",
+                "source": "codex",
+                "type": "codex-plugin",
+                "name": str(iface.get("displayName") or meta.get("name")),
+                "name_zh": str(iface.get("displayName") or meta.get("name")),
+                "description": str(iface.get("shortDescription") or meta.get("description") or ""),
+                "version": str(meta.get("version") or "0.1.0"),
+                "author": str(
+                    (meta.get("author") or {}).get("name", "")
+                    if isinstance(meta.get("author"), dict)
+                    else meta.get("author") or ""
+                ),
+                "skills": skills,
+                "skills_count": len(skills),
+                "origin": str(root),
+            }
+        )
     return out
 
 
@@ -137,25 +156,25 @@ def _workbuddy_connectors() -> list[dict[str, Any]]:
         if not cid:
             continue
         cdir = CONNECTOR_ROOT / cid
-        skills = [
-            p.parent.name for p in cdir.rglob("SKILL.md")
-        ] if cdir.is_dir() else []
-        out.append({
-            "id": cid,
-            "kind": "plugin",
-            "source": "workbuddy",
-            "type": "connector",
-            "name": str(c.get("name") or cid),
-            "name_zh": str(c.get("name_zh") or c.get("name") or cid),
-            "description": str(c.get("description_zh") or c.get("description") or ""),
-            "version": "1.0.0",
-            "author": "WorkBuddy(腾讯)",
-            "auth_mode": str(c.get("auth_mode") or ""),
-            "mcp_servers": _mcp_names(c.get("mcp_servers")),
-            "skills": skills,
-            "skills_count": len(skills),
-            "origin": str(cdir) if cdir.is_dir() else "",
-        })
+        skills = [p.parent.name for p in cdir.rglob("SKILL.md")] if cdir.is_dir() else []
+        out.append(
+            {
+                "id": cid,
+                "kind": "plugin",
+                "source": "workbuddy",
+                "type": "connector",
+                "name": str(c.get("name") or cid),
+                "name_zh": str(c.get("name_zh") or c.get("name") or cid),
+                "description": str(c.get("description_zh") or c.get("description") or ""),
+                "version": "1.0.0",
+                "author": "WorkBuddy(腾讯)",
+                "auth_mode": str(c.get("auth_mode") or ""),
+                "mcp_servers": _mcp_names(c.get("mcp_servers")),
+                "skills": skills,
+                "skills_count": len(skills),
+                "origin": str(cdir) if cdir.is_dir() else "",
+            }
+        )
     return out
 
 
@@ -169,15 +188,17 @@ def _scan_skills(root: Path, source: str) -> list[dict[str, Any]]:
         text = md.read_text("utf-8", errors="replace")[:400]
         m = re.search(r"name:\s*[\"']?([^\n\"']+)", text)
         display = m.group(1).strip() if m else name
-        out.append({
-            "id": name,
-            "kind": "skill",
-            "source": source,
-            "name": display,
-            "description": "",
-            "version": "0.1.0",
-            "origin": str(md.parent),
-        })
+        out.append(
+            {
+                "id": name,
+                "kind": "skill",
+                "source": source,
+                "name": display,
+                "description": "",
+                "version": "0.1.0",
+                "origin": str(md.parent),
+            }
+        )
     return out
 
 
@@ -227,16 +248,18 @@ def _local_agents() -> list[dict[str, Any]]:
                 description = str(p.get("description") or p.get("bio") or "")
             except Exception:  # noqa: BLE001
                 pass
-        out.append({
-            "id": adir.name,
-            "kind": "agent",
-            "source": "local",
-            "name": name,
-            "name_zh": name,
-            "description": description,
-            "version": "1.0.0",
-            "origin": str(adir),
-        })
+        out.append(
+            {
+                "id": adir.name,
+                "kind": "agent",
+                "source": "local",
+                "name": name,
+                "name_zh": name,
+                "description": description,
+                "version": "1.0.0",
+                "origin": str(adir),
+            }
+        )
     return out
 
 
@@ -249,17 +272,31 @@ def _workbuddy_experts() -> list[dict[str, Any]]:
         pid = str(e.get("plugin") or e.get("id") or "")
         if not pid:
             continue
-        out.append({
-            "id": pid,
-            "kind": "agent" if str(e.get("expertType")) == "agent" else "team",
-            "source": "workbuddy",
-            "name": str((e.get("displayName") or {}).get("zh") or (e.get("displayName") or {}).get("en") or pid),
-            "name_zh": str((e.get("displayName") or {}).get("zh") or (e.get("displayName") or {}).get("en") or pid),
-            "description": str((e.get("description") or {}).get("zh") or (e.get("description") or {}).get("en") or ""),
-            "version": "1.0.0",
-            "category": str(e.get("categoryId") or ""),
-            "origin": str(EXPERT_STORE),
-        })
+        out.append(
+            {
+                "id": pid,
+                "kind": "agent" if str(e.get("expertType")) == "agent" else "team",
+                "source": "workbuddy",
+                "name": str(
+                    (e.get("displayName") or {}).get("zh")
+                    or (e.get("displayName") or {}).get("en")
+                    or pid
+                ),
+                "name_zh": str(
+                    (e.get("displayName") or {}).get("zh")
+                    or (e.get("displayName") or {}).get("en")
+                    or pid
+                ),
+                "description": str(
+                    (e.get("description") or {}).get("zh")
+                    or (e.get("description") or {}).get("en")
+                    or ""
+                ),
+                "version": "1.0.0",
+                "category": str(e.get("categoryId") or ""),
+                "origin": str(EXPERT_STORE),
+            }
+        )
     return out
 
 
@@ -304,7 +341,7 @@ def sync_assets(*, dest_root: str | Path | None = None) -> dict[str, Any]:
         src = Path(item.get("origin") or "")
         if not src.is_dir():
             continue  # 连接器/expert 的 origin 是 json 清单文件,不建快照
-        dest = root / _KIND_DIR.get(item["kind"], f'{item["kind"]}s') / item["dir"]
+        dest = root / _KIND_DIR.get(item["kind"], f"{item['kind']}s") / item["dir"]
         files_copied += _copy_light(src, dest)
 
     index = {
@@ -362,7 +399,8 @@ def list_assets(
     if search:
         q = search.lower()
         items = [
-            i for i in items
+            i
+            for i in items
             if q in str(i.get("name", "")).lower()
             or q in str(i.get("id", "")).lower()
             or q in str(i.get("description", "")).lower()

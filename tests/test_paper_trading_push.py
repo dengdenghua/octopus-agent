@@ -17,6 +17,8 @@ import base64
 import gzip
 import json
 
+import pytest
+
 from runtime.platform.plugins.bundled.paper_trading import PaperTradingPlugin
 from runtime.platform.plugins.bundled.paper_trading.live import (
     DEFAULT_BASE_URL,
@@ -24,6 +26,7 @@ from runtime.platform.plugins.bundled.paper_trading.live import (
     LivePushClient,
     PlatformClient,
     _gunzip_json_b64,
+    _secure_push_endpoint,
     _ws_sign,
 )
 
@@ -133,6 +136,47 @@ class TestPushClient:
         assert push.start() is False
         assert "凭证" in push._last_error
 
+    def test_stop_keeps_live_worker_reference_to_prevent_duplicate_start(self):
+        class _BlockedThread:
+            alive = True
+            joins = 0
+
+            def is_alive(self):
+                return self.alive
+
+            def join(self, timeout=None):  # noqa: ARG002
+                self.joins += 1
+
+        c = self._client()
+        push = LivePushClient(c, host="h", auto_start=False)
+        blocked = _BlockedThread()
+        push._thread = blocked
+
+        push.stop()
+
+        assert blocked.joins == 1
+        assert push._thread is blocked
+        # A reload/start attempt sees the still-live worker and is idempotent;
+        # it cannot launch a second authenticated connection.
+        assert push.start() is True
+        assert push._thread is blocked
+
+        blocked.alive = False
+        push.stop()
+        assert push._thread is None
+
+    def test_https_api_derives_wss_push_and_https_origin(self):
+        endpoint, origin = _secure_push_endpoint("https://up.test:9443/api")
+        assert endpoint == "wss://up.test:9443"
+        assert origin == "https://up.test:9443"
+
+    @pytest.mark.parametrize("base_url", ["http://up.test/api", "ws://up.test", "up.test"])
+    def test_push_rejects_non_https_base(self, base_url):
+        from runtime.platform.plugins.bundled.paper_trading.live import PlatformClientError
+
+        with pytest.raises(PlatformClientError, match="HTTPS"):
+            _secure_push_endpoint(base_url)
+
 
 class TestPluginPush:
     def test_push_client_none_without_credentials(self, tmp_path):
@@ -144,8 +188,6 @@ class TestPluginPush:
             credentials_file=str(tmp_path / "nope.json"),
         )
         assert plugin._push_client() is None
-
-
 
 
 class TestGlobalCallback:
@@ -211,14 +253,20 @@ class TestNormalize:
         assert n["code"] == "605080"
         assert n["price"] == 20.31
         assert n["change_pct"] == -0.68
-        assert n["bids"] == [{"level": "买1", "price": 20.3, "vol": 100}, {"level": "买2", "price": 20.29, "vol": 200}]
+        assert n["bids"] == [
+            {"level": "买1", "price": 20.3, "vol": 100},
+            {"level": "买2", "price": 20.29, "vol": 200},
+        ]
         assert n["asks"] == [{"level": "卖1", "price": 20.32, "vol": 50}]
         assert "minuteKDataVOList" not in n
 
     def test_normalize_push_kline(self):
         from runtime.platform.plugins.bundled.paper_trading.live import _normalize_push
 
-        data = {"code": 1, "data": [{"stockCode": "605080", "currentPrice": 20.31, "tenGearBuy": []}]}
+        data = {
+            "code": 1,
+            "data": [{"stockCode": "605080", "currentPrice": 20.31, "tenGearBuy": []}],
+        }
         out = _normalize_push("kLineRealTime", data)
         assert out["data"][0]["price"] == 20.31
 

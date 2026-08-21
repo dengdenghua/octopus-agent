@@ -64,7 +64,23 @@ def create_cli_team_router(
             jwt_audience=jwt_audience,
         )
 
-    router = APIRouter(tags=["cli-team"], dependencies=[Depends(_auth_dep)])
+    def _operator_dep(request: Request) -> None:
+        from runtime.safety.auth.principal import require_roles
+
+        require_roles(
+            request,
+            identity_store,
+            require_auth,
+            ("admin", "operator"),
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(
+        tags=["cli-team"],
+        dependencies=[Depends(_auth_dep), Depends(_operator_dep)],
+    )
 
     @router.get("/api/cli-team/status")
     def api_cli_team_status() -> dict[str, Any]:
@@ -95,7 +111,10 @@ def create_cli_team_router(
                 ),
                 "members": [],
             }
-        root = body.repo_root or os.getcwd()
+        # Shared deployments never accept an arbitrary server path from the
+        # client. The app's boot cwd is the only configured CLI-team root;
+        # local single-user mode keeps its historical repo picker.
+        root = os.getcwd() if require_auth else (body.repo_root or os.getcwd())
         # Diff-first: run the team and return every candidate; the UI reviews.
         return run_cli_team(goal, members, repo_root=root, turn_id=None)
 

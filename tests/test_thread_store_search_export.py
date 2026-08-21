@@ -28,9 +28,7 @@ class TestThreadStoreSearch:
         thread = store.create(
             values={
                 "title": "Authentication Bug",
-                "messages": [
-                    {"role": "user", "content": "Fix the login authentication issue"}
-                ],
+                "messages": [{"role": "user", "content": "Fix the login authentication issue"}],
             }
         )
 

@@ -53,6 +53,7 @@ def mount_reflex(
         jwt_secret=ctx.jwt_secret,
         jwt_issuer=ctx.jwt_issuer,
         jwt_audience=ctx.jwt_audience,
+        workspace_root=ctx.thread_workspace_root,
     )
 
     if stack is not None:

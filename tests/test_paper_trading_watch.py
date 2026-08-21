@@ -93,7 +93,14 @@ def _client_with_stub_request() -> tuple[PlatformClient, list]:
 
 def test_client_fetch_stock_choose_payload_and_decode() -> None:
     client, calls = _client_with_stub_request()
-    client._stub_responses.append({"code": 1, "data": _gzip_b64({"optionalVOList": [{"stockCode": "920169", "stockName": "七丰精工"}]})})
+    client._stub_responses.append(
+        {
+            "code": 1,
+            "data": _gzip_b64(
+                {"optionalVOList": [{"stockCode": "920169", "stockName": "七丰精工"}]}
+            ),
+        }
+    )
 
     data = client.fetch_stock_choose()
 
@@ -118,7 +125,9 @@ def test_client_fetch_stock_choose_raises_on_failure() -> None:
 
 def test_client_fetch_real_quotes_payload_and_decode() -> None:
     client, calls = _client_with_stub_request()
-    client._stub_responses.append({"code": 1, "data": _gzip_b64([{"stockCode": "605080", "currentPrice": 20.31}])})
+    client._stub_responses.append(
+        {"code": 1, "data": _gzip_b64([{"stockCode": "605080", "currentPrice": 20.31}])}
+    )
 
     data = client.fetch_real_quotes(["605080.sh", "003032.sz"])
 
@@ -146,8 +155,20 @@ def test_watch_aggregates_overview_positions_watchlist() -> None:
     # overview 依赖 _build_overview -> fetch_today_stock
     client.fetch_today_stock.return_value = {
         "stockStatus": "交易中",
-        "stockVOS": [{"symbol": "000001.sh", "name": "上证指数", "price": 3894.42, "yClose": 3990.3, "risefall": -95.88, "increase": -2.4}],
-        "up": 100, "down": 50, "unchanged": 10, "stop": 5,
+        "stockVOS": [
+            {
+                "symbol": "000001.sh",
+                "name": "上证指数",
+                "price": 3894.42,
+                "yClose": 3990.3,
+                "risefall": -95.88,
+                "increase": -2.4,
+            }
+        ],
+        "up": 100,
+        "down": 50,
+        "unchanged": 10,
+        "stop": 5,
     }
 
     live = _watch_live(client)
@@ -267,4 +288,4 @@ def test_watch_page_route_serves_html(tmp_path: Path) -> None:
     # 实时推送页:SSE 流 + 轮询兜底
     assert "push/stream" in r.text
     assert "EventSource" in r.text
-    assert "live/watch" in r.text or "PUSH+\"/watch\"" in r.text
+    assert "live/watch" in r.text or 'PUSH+"/watch"' in r.text

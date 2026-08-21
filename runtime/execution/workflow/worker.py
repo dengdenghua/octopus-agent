@@ -71,9 +71,7 @@ class WorkflowExecution:
         self._max_items_per_call = max_items_per_call
         self._started = 0
         self._active_slots = 0
-        self._slot_waiters: list[
-            tuple[asyncio.Future[None], Callable[[], None]]
-        ] = []
+        self._slot_waiters: list[tuple[asyncio.Future[None], Callable[[], None]]] = []
         self._cancelled = False
         self._cancel_reason = "workflow cancelled"
         self._current_phase: str | None = None
@@ -196,7 +194,11 @@ class WorkflowExecution:
         }
         globals_dict = build_globals(hooks, self._args)
         try:
-            exec(compiled, globals_dict)  # noqa: S102 — contract-checked above
+            # The workflow DSL is parsed by validate_script/check_meta_statement,
+            # wrapped into one async function, and receives only build_globals'
+            # restricted hook vocabulary.  This is the intentional interpreter
+            # boundary, not execution of an unchecked Python string.
+            exec(compiled, globals_dict)  # nosec B102  # noqa: S102
             main = globals_dict["__workflow_main"]
             raw = await main()
             self._throw_if_cancelled()

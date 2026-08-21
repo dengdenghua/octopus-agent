@@ -1,5 +1,5 @@
 [project]
-name = "octopus-agent"
+name = "octopus-agent-runtime"
 version = "0.2.0"
 description = "Biomimetic self-evolving agent OS."
 readme = "README.md"
@@ -66,11 +66,9 @@ serve = [
     "pyyaml>=6.0",
     "python-multipart>=0.0.31",
 ]
-# ── Packaged desktop core (uv-managed bootstrap) ─────────────
-# The lean dep set the desktop app installs on first launch via uv. Kept
-# deliberately small (server + http + pydantic) so the packaged app stays
-# ~350MB and boots offline; heavy optional capabilities (browser, vision,
-# code-intel, …) are installed on demand from the extras below. This is the
+# ── Packaged desktop core ────────────────────────────
+# The lean dependency set embedded into the self-contained Windows backend.
+# Development mode also uses it for its uv-managed smoke runtime. This is the
 # single source of truth for the curated core — keep in sync with
 # frontend/electron/backend-runtime.cjs::CORE_DEPS.
 desktop-core = [
@@ -86,6 +84,11 @@ desktop-core = [
     # planner through AnthropicModelRouter, constructed eagerly at startup.
     # Keep in sync with backend-runtime.cjs::CORE_DEPS.
     "anthropic>=0.40,<1.0",
+]
+# Build-only toolchain for the self-contained Windows backend. Keep the direct
+# tool pin exact; uv.lock pins its full transitive dependency graph.
+desktop-build = [
+    "pyinstaller==6.16.0",
 ]
 # ── Web skills · httpx-gated ─────────────────────────────
 web = [
@@ -153,9 +156,8 @@ channels = [
     "cryptography>=50.0.0",
 ]
 mantle-ssh = [
-    # 4.0.0 still advertises ssh-rsa/SHA-1. Runtime connections explicitly
-    # disable that algorithm; see docs/security/pip-audit-allowlist.md.
-    "paramiko>=4.0.0",
+    # 5.0.0 removes RSA/SHA-1 signing and verification upstream.
+    "paramiko>=5.0.0",
 ]
 hearts-redis = [
     "redis>=5.0",
@@ -178,6 +180,11 @@ docs = [
     "mkdocs>=1.6",
     "mkdocs-material>=9.5",
     "pymdown-extensions>=11.0.1",
+]
+# Release-only metadata validation. Keep this exact and lock it so the
+# privileged PyPI publishing job never installs an ambient tool version.
+release = [
+    "twine==7.0.0",
 ]
 all = [
     # serve
@@ -216,7 +223,7 @@ all = [
     # Implementation note.
     "cryptography>=50.0.0",
     # Implementation note.
-    "paramiko>=4.0.0",
+    "paramiko>=5.0.0",
     "redis>=5.0",
     "watchdog>=4.0",
     # local-auth

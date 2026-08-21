@@ -9,9 +9,12 @@ from typing import Any
 
 from runtime.platform.process.paths import project_root as default_project_root
 
-BUNDLE_SCHEMA = "octopus.behavioral_surpass_bundle.v1"
+BUNDLE_SCHEMA = "octopus.behavioral_surpass_bundle.v2"
 SUITE_SCHEMA = "octopus.behavioral_surpass_suite.v1"
 REPORT_SCHEMA = "octopus.behavioral_surpass_evidence.v1"
+SYSTEM_PROVENANCE_SCHEMA = "octopus.behavioral_system_provenance.v1"
+TRAJECTORY_SCHEMA = "octopus.behavioral_trajectory.v2"
+CODEX_DESKTOP_EXECUTABLE = "/Applications/ChatGPT.app/Contents/Resources/codex"
 REQUIRED_SYSTEMS = ("octopus", "codex")
 REQUIRED_DOMAINS = (
     "general_runtime_and_coding",
@@ -157,6 +160,17 @@ def compute_behavioral_surpass_evidence(
         sum(1 for row in system_rows.values() if row["present"]),
         len(REQUIRED_SYSTEMS),
         "Run the identical suite on both systems.",
+    )
+
+    provenance_valid = all(row["provenance_valid"] for row in system_rows.values())
+    _add_check(
+        checks,
+        "system_provenance",
+        "Config, model, and signed Codex identities match the approved policy",
+        provenance_valid,
+        sum(1 for row in system_rows.values() if row["provenance_valid"]),
+        len(REQUIRED_SYSTEMS),
+        "Regenerate evidence with the protected behavioral identity policy.",
     )
 
     case_sets = [set(row["case_ids"]) for row in system_rows.values()]
@@ -524,6 +538,24 @@ def _validate_system(
     errors: list[str],
 ) -> dict[str, Any]:
     present = isinstance(raw_system, dict) and bool(str(raw_system.get("version") or "").strip())
+    raw_provenance = raw_system.get("provenance") if isinstance(raw_system, dict) else None
+    provenance, provenance_digest, provenance_fields_valid = _validate_system_provenance(
+        raw_provenance,
+        system_id=system_id,
+        errors=errors,
+    )
+    recorded_provenance_digest = (
+        str(raw_system.get("provenance_sha256") or "").strip().lower()
+        if isinstance(raw_system, dict)
+        else ""
+    )
+    provenance_valid = bool(
+        provenance_fields_valid
+        and provenance_digest
+        and recorded_provenance_digest == provenance_digest
+    )
+    if provenance_fields_valid and recorded_provenance_digest != provenance_digest:
+        errors.append(f"{system_id} system provenance digest mismatch")
     cases = raw_system.get("cases") if isinstance(raw_system, dict) else None
     case_rows = cases if isinstance(cases, list) else []
     valid_cases = 0
@@ -586,6 +618,7 @@ def _validate_system(
                 system_version=(
                     str(raw_system.get("version") or "") if isinstance(raw_system, dict) else ""
                 ),
+                system_provenance_sha256=provenance_digest,
                 case_id=case_id,
                 prompt_digest=prompt_digest,
                 trial_index=trial_index,
@@ -616,6 +649,9 @@ def _validate_system(
     return {
         "present": present,
         "version": str(raw_system.get("version") or "") if isinstance(raw_system, dict) else "",
+        "provenance": provenance,
+        "provenance_sha256": recorded_provenance_digest,
+        "provenance_valid": provenance_valid,
         "total_cases": len(case_rows),
         "valid_cases": valid_cases,
         "methods_valid": bool(case_rows)
@@ -647,6 +683,7 @@ def _verify_artifact(
     *,
     system_id: str,
     system_version: str,
+    system_provenance_sha256: str,
     case_id: str,
     prompt_digest: str,
     trial_index: int,
@@ -680,9 +717,10 @@ def _verify_artifact(
     verdict = payload.get("verdict") if isinstance(payload, dict) else None
     semantic_match = bool(
         isinstance(payload, dict)
-        and payload.get("schema") == "octopus.behavioral_trajectory.v1"
+        and payload.get("schema") == TRAJECTORY_SCHEMA
         and payload.get("system_id") == system_id
         and payload.get("system_version") == system_version
+        and payload.get("system_provenance_sha256") == system_provenance_sha256
         and payload.get("case_id") == case_id
         and payload.get("trial_index") == trial_index
         and payload.get("prompt_sha256") == prompt_digest
@@ -696,6 +734,123 @@ def _verify_artifact(
         errors.append(f"artifact trajectory metadata mismatch: {relative}")
         return False, None
     return True, bool(verdict["passed"])
+
+
+def validate_behavioral_system_provenance(
+    raw: Any,
+    *,
+    system_id: str,
+) -> dict[str, Any]:
+    """Validate and normalize one system's release-evidence identity policy."""
+
+    errors: list[str] = []
+    normalized, _digest, valid = _validate_system_provenance(
+        raw,
+        system_id=system_id,
+        errors=errors,
+    )
+    if not valid:
+        detail = "; ".join(errors) or f"invalid {system_id} behavioral provenance"
+        raise ValueError(detail)
+    return normalized
+
+
+def behavioral_system_provenance_digest(provenance: dict[str, Any]) -> str:
+    """Return the canonical digest embedded in every trajectory artifact."""
+
+    serialized = json.dumps(
+        provenance,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _validate_system_provenance(
+    raw: Any,
+    *,
+    system_id: str,
+    errors: list[str],
+) -> tuple[dict[str, Any], str, bool]:
+    if not isinstance(raw, dict):
+        errors.append(f"{system_id} system provenance is missing")
+        return {}, "", False
+
+    model = raw.get("model")
+    model = model if isinstance(model, dict) else {}
+    expected_model = str(model.get("expected") or "").strip()
+    requested_model = str(model.get("requested") or "").strip()
+    base_valid = bool(
+        raw.get("schema") == SYSTEM_PROVENANCE_SCHEMA
+        and raw.get("system_id") == system_id
+        and expected_model
+        and requested_model == expected_model
+    )
+    normalized: dict[str, Any] = {
+        "schema": SYSTEM_PROVENANCE_SCHEMA,
+        "system_id": system_id,
+        "model": {
+            "expected": expected_model,
+            "requested": requested_model,
+        },
+    }
+
+    if system_id == "octopus":
+        config = raw.get("config")
+        config = config if isinstance(config, dict) else {}
+        expected_sha256 = str(config.get("expected_sha256") or "").strip().lower()
+        observed_sha256 = str(config.get("observed_sha256") or "").strip().lower()
+        normalized["config"] = {
+            "expected_sha256": expected_sha256,
+            "observed_sha256": observed_sha256,
+        }
+        identity_valid = bool(_is_sha256(expected_sha256) and observed_sha256 == expected_sha256)
+    elif system_id == "codex":
+        executable = raw.get("executable")
+        executable = executable if isinstance(executable, dict) else {}
+        codesign = executable.get("codesign")
+        codesign = codesign if isinstance(codesign, dict) else {}
+        path = str(executable.get("path") or "").strip()
+        expected_sha256 = str(executable.get("expected_sha256") or "").strip().lower()
+        observed_sha256 = str(executable.get("observed_sha256") or "").strip().lower()
+        expected_team = str(codesign.get("expected_team_identifier") or "").strip()
+        observed_team = str(codesign.get("observed_team_identifier") or "").strip()
+        expected_identifier = str(codesign.get("expected_identifier") or "").strip()
+        observed_identifier = str(codesign.get("observed_identifier") or "").strip()
+        normalized["executable"] = {
+            "path": path,
+            "expected_sha256": expected_sha256,
+            "observed_sha256": observed_sha256,
+            "codesign": {
+                "expected_team_identifier": expected_team,
+                "observed_team_identifier": observed_team,
+                "expected_identifier": expected_identifier,
+                "observed_identifier": observed_identifier,
+            },
+        }
+        identity_valid = bool(
+            path == CODEX_DESKTOP_EXECUTABLE
+            and _is_sha256(expected_sha256)
+            and observed_sha256 == expected_sha256
+            and expected_team
+            and observed_team == expected_team
+            and expected_identifier
+            and observed_identifier == expected_identifier
+        )
+    else:
+        errors.append(f"unsupported behavioral provenance system: {system_id}")
+        return normalized, "", False
+
+    valid = bool(base_valid and identity_valid)
+    if not valid:
+        errors.append(f"{system_id} system provenance does not match the approved identity")
+        return normalized, "", False
+    return normalized, behavioral_system_provenance_digest(normalized), True
+
+
+def _is_sha256(value: str) -> bool:
+    return len(value) == 64 and all(character in "0123456789abcdef" for character in value)
 
 
 def _compare_domains(
@@ -766,11 +921,16 @@ def _failure_verdict(checks: list[dict[str, Any]]) -> str:
 __all__ = [
     "ALLOWED_EXECUTION_MODES",
     "BUNDLE_SCHEMA",
+    "CODEX_DESKTOP_EXECUTABLE",
     "DEFAULT_BUNDLE_PATH",
     "DEFAULT_SUITE_MANIFEST_PATH",
     "REPORT_SCHEMA",
     "REQUIRED_DOMAINS",
     "REQUIRED_SYSTEMS",
     "SUITE_SCHEMA",
+    "SYSTEM_PROVENANCE_SCHEMA",
+    "TRAJECTORY_SCHEMA",
+    "behavioral_system_provenance_digest",
     "compute_behavioral_surpass_evidence",
+    "validate_behavioral_system_provenance",
 ]

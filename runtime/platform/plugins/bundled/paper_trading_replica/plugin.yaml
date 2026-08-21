@@ -9,5 +9,5 @@ tags:
   - replica
   - ui
 provides:
-  - paper_trading_replica.page
+  - paper_trading_replica.api
 config: {}

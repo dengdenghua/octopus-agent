@@ -56,7 +56,6 @@ def _passed(value: str, now: datetime | None) -> bool:
     return d is not None and d < _today(now)
 
 
-
 def _task_failure_detail(task: Task) -> str:
     """Best-effort failure text for a failed/blocked task.
 
@@ -86,9 +85,7 @@ def derive_milestone_pm(
     failed = sum(1 for t in tasks if t.status in ("failed", "blocked", "rejected"))
     total = len(tasks)
     total_estimate = round(sum(t.estimate for t in tasks), 2)
-    remaining_estimate = round(
-        sum(t.estimate for t in tasks if t.status != "done"), 2
-    )
+    remaining_estimate = round(sum(t.estimate for t in tasks if t.status != "done"), 2)
     progress = (done / total) if total else (1.0 if ms.status == "done" else 0.0)
     overdue_tasks = [
         {"id": t.id, "goal": t.goal, "due_at": t.due_at, "priority": t.priority}
@@ -160,16 +157,13 @@ def build_pm_report(
         return None
     milestones = store.milestones_for(project_id)
     milestones_pm = [
-        derive_milestone_pm(ms, store.tasks_for_milestone(ms.id), now=now)
-        for ms in milestones
+        derive_milestone_pm(ms, store.tasks_for_milestone(ms.id), now=now) for ms in milestones
     ]
     total_estimate = round(sum(m["total_estimate"] for m in milestones_pm), 2)
     remaining_estimate = round(sum(m["remaining_estimate"] for m in milestones_pm), 2)
     done_tasks = sum(m["done"] for m in milestones_pm)
     total_tasks = sum(m["total"] for m in milestones_pm)
-    overall_progress = (
-        round(done_tasks / total_tasks, 3) if total_tasks else 0.0
-    )
+    overall_progress = round(done_tasks / total_tasks, 3) if total_tasks else 0.0
 
     all_tasks: list[Task] = []
     for ms in milestones:
@@ -304,9 +298,7 @@ def build_retro(
     risks_hit = list(blocked_milestones)
     recommendations: list[str] = []
     if failed or rejected:
-        recommendations.append(
-            "曾有任务经过 QA 驳回/失败——建议在拆解阶段给出更明确的验收标准"
-        )
+        recommendations.append("曾有任务经过 QA 驳回/失败——建议在拆解阶段给出更明确的验收标准")
     if blocked_milestones:
         recommendations.append("存在被阻塞的里程碑——检查依赖与指派是否合理")
     if attempts > len(tasks):
@@ -357,7 +349,7 @@ def format_pm_report(report: dict[str, Any]) -> str:
     ]
     for m in report.get("milestones", []):
         lines.append(
-            f"- {m['name']}：{m['done']}/{m['total']} · {int(m['progress']*100)}%"
+            f"- {m['name']}：{m['done']}/{m['total']} · {int(m['progress'] * 100)}%"
             f" · {_fmt_health(m['health'])}"
             + (f" · 逾期 {len(m['overdue_tasks'])}" if m["overdue_tasks"] else "")
             + (f" · 截止 {m['due_at']}" if m["due_at"] else "")
@@ -367,7 +359,9 @@ def format_pm_report(report: dict[str, Any]) -> str:
         lines.append("")
         lines.append(f"风险/阻塞（{len(risks)}）：")
         for r in risks[:6]:
-            lines.append(f"- [{r.get('health')}] {r.get('milestone') or r.get('task')}：{r.get('detail')}")
+            lines.append(
+                f"- [{r.get('health')}] {r.get('milestone') or r.get('task')}：{r.get('detail')}"
+            )
     actions = report.get("next_actions") or []
     if actions:
         lines.append("")

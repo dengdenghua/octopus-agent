@@ -19,21 +19,48 @@ Policy knobs:
   at turn start. If the caller passes an explicit ``cwd`` (power user,
   single-shot script), that wins; otherwise we allocate.
 
-Stateless; a ``WorkspaceManager`` instance is cheap and does not hold
-locks across calls.
+Authenticated runtimes may bind a thread id to a deeper, server-verified
+tenant/actor path with ``bind_managed``.  That binding is deliberately kept on
+the app-local manager so every consumer (cwd, uploads and artifact outputs)
+uses the same layout for the lifetime of the runtime.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import os
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import RLock
 from typing import Any
 
 _logger = logging.getLogger(__name__)
+
+MANAGED_WORKSPACE_MARKER = "server-v1"
+MANAGED_WORKSPACE_METADATA_KEY = "_workspace_allocation"
+MANAGED_WORKSPACE_DELETION_KEY = "_workspace_deletion"
+MANAGED_WORKSPACE_DELETION_MARKER = "staged-v1"
+
+# These fields are controlled exclusively by the server in authenticated mode.
+# The shared policy lives below both execution and the HTTP gateway so neither
+# layer needs to depend on the other to enforce the filesystem boundary.
+PROTECTED_WORKSPACE_METADATA_KEYS = frozenset(
+    {
+        "workspace_path",
+        "extra_workspaces",
+        "personal_workspace_path",
+        "allowed_write_paths",
+        "attachment_read_roots",
+        "_artifact_output_root",
+        "cwd",
+        MANAGED_WORKSPACE_METADATA_KEY,
+        MANAGED_WORKSPACE_DELETION_KEY,
+    }
+)
 
 _GITIGNORE_BODY = (
     "# Auto-created by octopus runtime — per-thread isolated workspace.\n"
@@ -56,6 +83,125 @@ _STANDARD_DIRS = (
     "deploy",
     "skills",
 )
+
+
+def strip_client_workspace_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Return client metadata without server-owned filesystem scope fields."""
+    return {
+        key: value
+        for key, value in metadata.items()
+        if key not in PROTECTED_WORKSPACE_METADATA_KEYS
+    }
+
+
+def _scope_segment(value: str) -> str:
+    """Produce an opaque, traversal-safe stable path segment."""
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:24]
+
+
+def managed_workspace_path(
+    workspace_root: str | Path,
+    *,
+    tenant_id: str,
+    actor_id: str,
+    thread_id: str,
+) -> Path:
+    """Return the only valid server path for an authenticated thread."""
+    root = Path(workspace_root).expanduser().resolve(strict=False)
+    thread_segment = Path(thread_id)
+    if (
+        not thread_id
+        or thread_segment.is_absolute()
+        or len(thread_segment.parts) != 1
+        or thread_segment.name != thread_id
+    ):
+        raise ValueError("thread id is not a safe workspace path segment")
+    candidate = root / _scope_segment(tenant_id) / _scope_segment(actor_id) / thread_id
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("managed workspace path escapes its root") from exc
+    resolved = candidate.resolve(strict=False)
+    if resolved != candidate:
+        # Reject symlinks even when they redirect to another directory still
+        # under workspace_root; otherwise one tenant could alias another.
+        raise ValueError("managed workspace path contains a symlink")
+    return candidate
+
+
+def managed_workspace_metadata(
+    workspace_root: str | Path,
+    *,
+    tenant_id: str,
+    actor_id: str,
+    thread_id: str,
+) -> dict[str, str]:
+    """Build the immutable metadata written after server allocation."""
+    path = managed_workspace_path(
+        workspace_root,
+        tenant_id=tenant_id,
+        actor_id=actor_id,
+        thread_id=thread_id,
+    )
+    return {
+        "workspace_path": str(path),
+        MANAGED_WORKSPACE_METADATA_KEY: MANAGED_WORKSPACE_MARKER,
+    }
+
+
+def verified_managed_workspace(
+    workspace_root: str | Path | None,
+    *,
+    thread_id: str,
+    metadata: dict[str, Any],
+    allow_deleting: bool = False,
+) -> Path | None:
+    """Verify and return a server-managed workspace, otherwise ``None``.
+
+    Verification is structural rather than trusting the marker alone: the
+    stored path must exactly equal the deterministic path derived from the
+    thread's server-owned actor and tenant metadata.  Ordinary consumers are
+    denied while deletion is staged; only the deletion transaction opts into
+    ``allow_deleting`` to finish or retry cleanup.
+    """
+    if workspace_root is None:
+        return None
+    if (
+        metadata.get(MANAGED_WORKSPACE_DELETION_KEY) == MANAGED_WORKSPACE_DELETION_MARKER
+        and not allow_deleting
+    ):
+        # Once deletion is staged, ordinary filesystem consumers must not
+        # recreate the path while the cleanup transaction is in progress.
+        return None
+    if metadata.get(MANAGED_WORKSPACE_METADATA_KEY) != MANAGED_WORKSPACE_MARKER:
+        return None
+    actor_id = metadata.get("owner_actor_id")
+    tenant_id = metadata.get("tenant_id")
+    stored_path = metadata.get("workspace_path")
+    if not isinstance(actor_id, str) or not actor_id:
+        return None
+    if not isinstance(tenant_id, str) or not tenant_id:
+        return None
+    if not isinstance(stored_path, str) or not stored_path:
+        return None
+    try:
+        expected = managed_workspace_path(
+            workspace_root,
+            tenant_id=tenant_id,
+            actor_id=actor_id,
+            thread_id=thread_id,
+        )
+        raw_stored = Path(stored_path).expanduser()
+        if not raw_stored.is_absolute():
+            return None
+        # Normalize dot segments without following symlinks, then require the
+        # actual resolution to remain identical as a second symlink defense.
+        stored = Path(os.path.abspath(raw_stored))
+    except (OSError, RuntimeError, ValueError):
+        return None
+    if stored != expected or stored.resolve(strict=False) != expected:
+        return None
+    return stored
 
 
 @dataclass(frozen=True)
@@ -85,6 +231,18 @@ class WorkspaceLayout:
 @dataclass(frozen=True)
 class WorkspaceManager:
     root: Path
+    _managed_paths: dict[str, Path] = field(
+        default_factory=dict,
+        init=False,
+        repr=False,
+        compare=False,
+    )
+    _managed_lock: RLock = field(
+        default_factory=RLock,
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
         # Resolve once so ``_contains`` comparisons are robust against
@@ -93,8 +251,43 @@ class WorkspaceManager:
 
     def path_for(self, thread_id: str) -> Path:
         """Return a thread workspace path without creating directories."""
+        with self._managed_lock:
+            managed = self._managed_paths.get(thread_id)
+        if managed is not None:
+            return managed
         safe = _safe_slug(thread_id)
         return self.root / safe
+
+    def bind_managed(self, thread_id: str, workspace_path: str | Path) -> WorkspaceLayout:
+        """Bind ``thread_id`` to a server-verified path below ``root``.
+
+        Realtime execution has several consumers of the workspace manager. A
+        one-off cwd override would leave uploads and artifact outputs on the
+        legacy ``root/thread`` path, so authenticated allocation is registered
+        once and all subsequent ``layout`` calls resolve identically.
+
+        The caller must already have verified actor/tenant ownership. This
+        method supplies the final filesystem boundary: it rejects relative
+        paths, paths outside the manager root, symlinks and attempts to rebind
+        a live thread to a different directory.
+        """
+        raw = Path(workspace_path).expanduser()
+        if not raw.is_absolute():
+            raise ValueError("managed workspace path must be absolute")
+        normalized = Path(os.path.abspath(raw))
+        resolved = raw.resolve(strict=False)
+        if resolved != normalized:
+            raise ValueError("managed workspace path contains a symlink")
+        if not self._contains(resolved):
+            raise ValueError("managed workspace path is outside the workspace root")
+        with self._managed_lock:
+            existing = self._managed_paths.get(thread_id)
+            if existing is not None and existing != resolved:
+                raise ValueError("thread already has a different managed workspace")
+            self._managed_paths[thread_id] = resolved
+        resolved.mkdir(parents=True, exist_ok=True)
+        self._ensure_layout(resolved, thread_id)
+        return self.layout(thread_id)
 
     def allocate(self, thread_id: str) -> Path:
         """Create (if needed) and return the workspace dir for a thread."""
@@ -151,9 +344,15 @@ class WorkspaceManager:
             )
             return False
         if not resolved.exists():
+            with self._managed_lock:
+                self._managed_paths.pop(thread_id, None)
             return False
         shutil.rmtree(resolved, ignore_errors=True)
-        return not resolved.exists()
+        removed = not resolved.exists()
+        if removed:
+            with self._managed_lock:
+                self._managed_paths.pop(thread_id, None)
+        return removed
 
     def resolve_cwd(self, thread_id: str, explicit: str | None) -> str:
         """Decide which cwd a turn should use.
@@ -232,4 +431,16 @@ def _safe_slug(thread_id: str) -> str:
     return slug[:64]
 
 
-__all__ = ["WorkspaceLayout", "WorkspaceManager"]
+__all__ = [
+    "MANAGED_WORKSPACE_DELETION_KEY",
+    "MANAGED_WORKSPACE_DELETION_MARKER",
+    "MANAGED_WORKSPACE_MARKER",
+    "MANAGED_WORKSPACE_METADATA_KEY",
+    "PROTECTED_WORKSPACE_METADATA_KEYS",
+    "WorkspaceLayout",
+    "WorkspaceManager",
+    "managed_workspace_metadata",
+    "managed_workspace_path",
+    "strip_client_workspace_metadata",
+    "verified_managed_workspace",
+]

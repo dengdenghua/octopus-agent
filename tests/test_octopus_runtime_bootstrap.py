@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from pathlib import Path
 
 import pytest
 
 from octopus_runtime.bootstrap import bootstrap_skills, read_lockfile, write_lockfile
+from octopus_runtime.materialize import sync_skills
 
 
 def test_read_lockfile_missing_file_returns_empty(tmp_path) -> None:
@@ -83,6 +86,100 @@ def test_bootstrap_surfaces_skipped_sync_results(tmp_path, monkeypatch: pytest.M
     assert synced == []
     assert present == []
     assert errors == [("research-pack", "skipped:type=plugin/kind=code")]
+
+
+def test_bootstrap_forwards_best_effort_deadline_options(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lockfile = tmp_path / "skills.lock.json"
+    lockfile.write_text('{"skills": ["research-pack"]}', encoding="utf-8")
+    seen: dict[str, object] = {}
+
+    def fake_sync_skills(*_args, **kwargs):
+        seen.update(kwargs)
+        return [], [], [("research-pack", "refresh deadline exceeded after 0.050s")]
+
+    monkeypatch.setattr("octopus_runtime.bootstrap.sync_skills", fake_sync_skills)
+
+    _, _, errors = bootstrap_skills(
+        lockfile,
+        tmp_path / "skills",
+        request_timeout_s=0.04,
+        max_workers=3,
+        total_timeout_s=0.05,
+    )
+
+    assert seen["request_timeout_s"] == 0.04
+    assert seen["max_workers"] == 3
+    assert seen["total_timeout_s"] == 0.05
+    assert errors == [("research-pack", "refresh deadline exceeded after 0.050s")]
+
+
+def test_bounded_bootstrap_only_submits_missing_skills(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    skills = tmp_path / "skills"
+    (skills / "already-here").mkdir(parents=True)
+    (skills / "already-here" / "SKILL.md").write_text("present", encoding="utf-8")
+    lockfile = tmp_path / "skills.lock.json"
+    lockfile.write_text(
+        '{"skills": ["already-here", "missing-pack"]}',
+        encoding="utf-8",
+    )
+    submitted: list[str] = []
+
+    def fake_sync_skills(slugs, *_args, **_kwargs):
+        submitted.extend(slugs)
+        return [], [], [("missing-pack", "deadline")]
+
+    monkeypatch.setattr("octopus_runtime.bootstrap.sync_skills", fake_sync_skills)
+
+    _, present, _ = bootstrap_skills(
+        lockfile,
+        skills,
+        request_timeout_s=0.04,
+        total_timeout_s=0.05,
+    )
+
+    assert present == ["already-here"]
+    assert submitted == ["missing-pack"]
+
+
+def test_sync_skills_total_deadline_returns_while_fake_client_is_blocked(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started = threading.Event()
+    release = threading.Event()
+
+    def fake_sync_one(slug, *_args, **_kwargs):
+        started.set()
+        release.wait(timeout=2)
+        return slug, None, "__error__:released"
+
+    monkeypatch.setattr("octopus_runtime.materialize._sync_one", fake_sync_one)
+
+    began = time.monotonic()
+    try:
+        ok, skipped, errors = sync_skills(
+            ["blocked-a", "blocked-b"],
+            tmp_path / "skills",
+            max_workers=1,
+            request_timeout_s=0.04,
+            total_timeout_s=0.05,
+        )
+        elapsed = time.monotonic() - began
+    finally:
+        release.set()
+
+    assert started.is_set()
+    assert elapsed < 0.5
+    assert ok == []
+    assert skipped == []
+    assert {slug for slug, _ in errors} == {"blocked-a", "blocked-b"}
+    assert all("refresh deadline exceeded after 0.050s" in reason for _, reason in errors)
 
 
 def test_write_lockfile_only_includes_real_safe_skill_dirs(tmp_path) -> None:

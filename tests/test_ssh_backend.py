@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import inspect
+import socket
 from unittest.mock import MagicMock, patch
 
 import pytest
+from packaging.version import Version
 
 from runtime.sensing.server._ssh_security import paramiko_disabled_algorithms
 from runtime.sensing.server.ssh import (
@@ -45,6 +48,25 @@ def test_paramiko_policy_disables_rsa_sha1() -> None:
     policy = paramiko_disabled_algorithms()
     assert policy["keys"] == ["ssh-rsa"]
     assert policy["pubkeys"] == ["ssh-rsa"]
+
+
+def test_paramiko_5_accepts_disabled_algorithm_policy() -> None:
+    """Keep the shared defense-in-depth policy compatible with Paramiko."""
+    paramiko = pytest.importorskip("paramiko")
+    assert Version(paramiko.__version__) >= Version("5.0.0")
+    assert "disabled_algorithms" in inspect.signature(paramiko.SSHClient.connect).parameters
+
+    transport_socket, peer_socket = socket.socketpair()
+    transport = None
+    try:
+        policy = paramiko_disabled_algorithms()
+        transport = paramiko.Transport(transport_socket, disabled_algorithms=policy)
+        assert transport.disabled_algorithms == policy
+    finally:
+        if transport is not None:
+            transport.close()
+        transport_socket.close()
+        peer_socket.close()
 
 
 # ═══════════════════════════════════════════════════════════

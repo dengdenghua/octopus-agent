@@ -42,11 +42,11 @@ def project(tmp_path: Path) -> Path:
     return p
 
 
-
 def _user_commands(cmds):
     """Filter the always-shipped bundled tier out of count/name assertions."""
     bundled = {"project"}
     return [c for c in cmds if c.name not in bundled]
+
 
 # ═══════════════════════════════════════════════════════════
 # Loading

@@ -647,6 +647,17 @@ class TestAgentCompetitorScorecard:
 
         assert report["schema"] == "octopus.agent_competitor_scorecard.v1"
         assert report["target_score"] == 95
+        assert report["baseline_context"]["as_of"] == "2026-08-04"
+        assert report["baseline_context"]["source"] == "git_commit"
+        assert report["baseline_context"]["source_revision"] == (
+            "a41dc160a4056563891cc069fcbcf6b961cf56d9"
+        )
+        assert report["baseline_context"]["max_age_days"] == 90
+        assert (
+            "independent commit-bound release authority"
+            in (report["baseline_context"]["behavioral_authority"])
+        )
+        assert "override" not in report["baseline_context"]["score_basis"]
         assert sum(dimension.weight for dimension in DIMENSIONS) == 100
         assert report["overall"] == {
             "codex": 97,
@@ -982,6 +993,8 @@ class TestAgentCompetitorScorecard:
             "visual_replay_validation",
             "repair_recipe_learning",
             "operator_visibility",
+            "thread_native_browser_mode",
+            "external_chrome_mode",
             "automation_safety",
             "productized_api_bridge",
         ]

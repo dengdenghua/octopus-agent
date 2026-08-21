@@ -448,9 +448,7 @@ def _phase_6d_dispatch_and_observe(
                 if state.repeat_guard is not None:
                     for _r_idx, _r in enumerate(_parallel_results):
                         _r_parsed = _parse_action(step.actions[_r_idx])
-                        _r_name = _r.get("tool_name") or (
-                            _r_parsed[0] if _r_parsed else ""
-                        )
+                        _r_name = _r.get("tool_name") or (_r_parsed[0] if _r_parsed else "")
                         _r_args = (
                             _r_parsed[1]
                             if _r_parsed is not None and isinstance(_r_parsed[1], dict)
@@ -754,9 +752,7 @@ def _phase_6d_dispatch_and_observe(
                                 thread_id=thread_id,
                                 tool_name=resolved_name,
                                 tool_call_id=call_id,
-                                args_preview=(
-                                    str(_input_preview)[:500] if _input_preview else ""
-                                ),
+                                args_preview=(str(_input_preview)[:500] if _input_preview else ""),
                                 detail=_escalation_detail,
                             ),
                             timeout=120.0,
@@ -772,9 +768,7 @@ def _phase_6d_dispatch_and_observe(
                                     _escalation_decision.reason
                                     or "User declined sandbox escalation (run with network)"
                                 ),
-                                "duration_ms": int(
-                                    (time.monotonic() - _tool_started_at) * 1000
-                                ),
+                                "duration_ms": int((time.monotonic() - _tool_started_at) * 1000),
                             }
                             observation = (
                                 "(工具被沙箱拦截，用户拒绝放宽沙箱重跑；"

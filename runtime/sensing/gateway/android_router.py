@@ -95,6 +95,24 @@ def create_android_router(
     class _WsAuthError(Exception):
         """Raised to refuse a device WebSocket handshake (→ close 4401)."""
 
+        close_code = 4401
+
+    class _WsRoleError(_WsAuthError):
+        """Authenticated caller lacks an operational device role."""
+
+        close_code = 4403
+
+    def _ws_actor_for_identity(identity: Any) -> str:
+        if require_auth:
+            roles = {
+                str(role).strip().lower()
+                for role in (getattr(identity, "roles", ()) or ())
+                if str(role).strip()
+            }
+            if not roles.intersection({"admin", "operator"}):
+                raise _WsRoleError("operator role required for android device access")
+        return str(identity.actor_id)
+
     def _resolve_ws_actor(ws: WebSocket) -> str | None:
         """Authenticate the device WebSocket before ``accept()``.
 
@@ -137,12 +155,12 @@ def create_android_router(
                 trust_jwt_sub=False,
             )
             if identity is not None:
-                return identity.actor_id
+                return _ws_actor_for_identity(identity)
             if require_auth:
                 raise _WsAuthError("invalid jwt")
         identity = identity_store.verify_api_key(token)
         if identity is not None:
-            return identity.actor_id
+            return _ws_actor_for_identity(identity)
         if require_auth:
             raise _WsAuthError("invalid token")
         return None
@@ -265,7 +283,7 @@ def create_android_router(
             _resolve_ws_actor(ws)
         except _WsAuthError as exc:
             with contextlib.suppress(Exception):
-                await ws.close(code=4401, reason=str(exc))
+                await ws.close(code=exc.close_code, reason=str(exc))
             return
         await ws.accept()
 

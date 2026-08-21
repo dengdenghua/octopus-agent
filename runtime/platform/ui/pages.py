@@ -114,8 +114,11 @@ async function fetchJSON(url, opts={}) {
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 function metric(label, value, bad=false) {
-  return `<div class="metric"><span>${label}</span><span class="${bad?'bad':''}">${value}</span></div>`;
+  return `<div class="metric"><span>${escapeHtml(label)}</span><span class="${bad?'bad':''}">${escapeHtml(value)}</span></div>`;
 }
 
 async function loadStatus() {
@@ -171,7 +174,7 @@ async function loadReflect() {
     return;
   }
   if (r.error) {
-    document.getElementById('reflect').innerHTML = `<div style="color:#6e7278;font-size:12px;">${r.error}</div>`;
+    document.getElementById('reflect').innerHTML = `<div style="color:#6e7278;font-size:12px;">${escapeHtml(r.error)}</div>`;
     return;
   }
   document.getElementById('reflect').innerHTML = [
@@ -224,17 +227,18 @@ async function loadProgress() {
     const el = document.getElementById('tasks');
     if (!r.tasks.length) { el.textContent = '(no tasks yet)'; return; }
     el.innerHTML = r.tasks.map(t => {
-      const bar = '█'.repeat(Math.round(t.progress_pct / 10)) +
-                  '░'.repeat(10 - Math.round(t.progress_pct / 10));
+      const progress = Math.max(0, Math.min(100, Number(t.progress_pct) || 0));
+      const filled = Math.round(progress / 10);
+      const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
       const statusColor = t.status === 'running' ? '#f9e2af'
                         : t.status === 'completed' ? '#a6e3a1'
                         : t.status === 'failed' ? '#f38ba8' : '#6e7278';
-      const cur = t.current_node_id ? ` · at ${t.current_node_id}` : '';
+      const cur = t.current_node_id ? ` · at ${escapeHtml(t.current_node_id)}` : '';
       return `<div style="padding:4px 0;border-bottom:1px solid #1a1f2a">
-        <span style="color:${statusColor}">[${t.status}]</span>
-        <span>${t.task_id.slice(0, 8)}</span>
-        <span style="color:#6e7278">${t.strategy}</span>
-        <span>${bar} ${t.nodes_completed}/${t.total_nodes}</span>${cur}
+        <span style="color:${statusColor}">[${escapeHtml(t.status)}]</span>
+        <span>${escapeHtml(String(t.task_id ?? '').slice(0, 8))}</span>
+        <span style="color:#6e7278">${escapeHtml(t.strategy)}</span>
+        <span>${bar} ${escapeHtml(t.nodes_completed)}/${escapeHtml(t.total_nodes)}</span>${cur}
       </div>`;
     }).join('');
   } catch(e) {
@@ -378,14 +382,14 @@ async function refresh() {
       const s = stats.by_rule[r.rule_id] || { tries: 0, hits: 0, hit_rate: 0 };
       const pat = r.pattern || r.intent_type || (r.kind === 'cache' ? `ttl=${r.ttl_seconds}s` : '');
       const badges = [];
-      if (r.actions) r.actions.forEach(a => badges.push(`<span class="badge action">${a}</span>`));
+      if (r.actions) r.actions.forEach(a => badges.push(`<span class="badge action">${escapeHtml(a)}</span>`));
       if (r.variants) badges.push(`<span class="badge variant">A/B ×${r.variants.length}</span>`);
       if (staleSet.has(r.rule_id)) badges.push(`<span class="badge stale">stale</span>`);
       if (unexSet.has(r.rule_id)) badges.push(`<span class="badge unex">unexercised</span>`);
       let variantsHtml = '';
       if (r.variants) {
         variantsHtml = '<div class="variants">' + r.variants.map(v =>
-          `<div class="v"><span class="vid">${v.variant_id}</span><span class="preview">${escapeHtml(v.preview)}</span><span class="vhits">${v.hits}× (w=${v.weight})</span></div>`
+          `<div class="v"><span class="vid">${escapeHtml(v.variant_id)}</span><span class="preview">${escapeHtml(v.preview)}</span><span class="vhits">${escapeHtml(v.hits)}× (w=${escapeHtml(v.weight)})</span></div>`
         ).join('') + '</div>';
       }
       const rateClass = s.hits > 0 ? 'rate' : 'rate zero';
@@ -397,12 +401,12 @@ async function refresh() {
         else lastHit = `${(hours / 24).toFixed(1)}d ago`;
       }
       return `<tr>
-        <td class="id">${r.rule_id} ${badges.join(' ')}${variantsHtml}</td>
-        <td class="kind">${r.kind}</td>
+        <td class="id">${escapeHtml(r.rule_id)} ${badges.join(' ')}${variantsHtml}</td>
+        <td class="kind">${escapeHtml(r.kind)}</td>
         <td class="pat" title="${escapeHtml(pat)}">${escapeHtml(pat)}</td>
-        <td class="num">${r.priority}</td>
-        <td class="num">${s.tries}</td>
-        <td class="num">${s.hits}</td>
+        <td class="num">${escapeHtml(r.priority)}</td>
+        <td class="num">${escapeHtml(s.tries)}</td>
+        <td class="num">${escapeHtml(s.hits)}</td>
         <td class="num ${rateClass}">${(s.hit_rate * 100).toFixed(0)}%</td>
         <td class="num" style="color:#6c7086">${lastHit}</td>
       </tr>`;
@@ -413,22 +417,26 @@ async function refresh() {
   }
 }
 function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function setReloadMessage(message, kind) {
+  const element = document.getElementById('reload-msg');
+  element.className = kind || '';
+  element.textContent = String(message ?? '');
 }
 async function reload(reset) {
   const url = '/api/reflex/reload' + (reset ? '?reset_stats=true' : '');
   try {
     const r = await fetch(url, { method: 'POST' });
     const j = await r.json();
-    const msg = document.getElementById('reload-msg');
     if (j.ok) {
-      msg.innerHTML = `<span class="ok">✓ loaded ${j.rules_loaded} rules${j.stats_reset ? ' · stats reset' : ''}</span>`;
+      setReloadMessage(`✓ loaded ${j.rules_loaded} rules${j.stats_reset ? ' · stats reset' : ''}`, 'ok');
     } else {
-      msg.innerHTML = `<span class="err">✗ ${j.error}</span>`;
+      setReloadMessage(`✗ ${j.error}`, 'err');
     }
     refresh();
   } catch (e) {
-    document.getElementById('reload-msg').innerHTML = `<span class="err">✗ ${e.message}</span>`;
+    setReloadMessage(`✗ ${e.message}`, 'err');
   }
 }
 refresh();
@@ -537,7 +545,7 @@ async function runTests() {
   } else {
     body = '<span class="pass">✓ all green</span>';
   }
-  document.getElementById('testout').innerHTML = head + '\\n' + body;
+  document.getElementById('testout').innerHTML = escapeHtml(head) + '\\n' + body;
   setStatus(head, r.failed === 0 ? 'ok' : 'err');
 }
 function setStatus(msg, kind) {
@@ -546,7 +554,7 @@ function setStatus(msg, kind) {
   el.className = 'status' + (kind ? ' ' + kind : '');
 }
 function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 // Ctrl/Cmd+S = save+reload (vim-friendly).
 window.addEventListener('keydown', e => {

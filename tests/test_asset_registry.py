@@ -1,4 +1,5 @@
 """统一资产仓库(插件/技能/角色)测试 —— 纯 tmp 目录,不写真实 home。"""
+
 from __future__ import annotations
 
 import json
@@ -51,7 +52,14 @@ def _mk_agent(root: Path, aid: str, desc: str) -> None:
 @pytest.fixture
 def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
     src = tmp_path / "src"
-    for sub in ["codex_plugins", "connectors", "local_skills", "builtin_skills", "imported", "agents"]:
+    for sub in [
+        "codex_plugins",
+        "connectors",
+        "local_skills",
+        "builtin_skills",
+        "imported",
+        "agents",
+    ]:
         (src / sub).mkdir(parents=True)
 
     _mk_codex_plugin(src / "codex_plugins", "codex_a", "Codex A")
@@ -61,10 +69,22 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
         json.dumps(
             {
                 "connectors": [
-                    {"id": "wb_x", "name": "WB X", "name_zh": "连X", "description_zh": "conn x",
-                     "auth_mode": "oauth", "mcp_servers": [{"name": "srv1"}]},
-                    {"id": "wb_y", "name": "WB Y", "name_zh": "连Y", "description_zh": "conn y",
-                     "auth_mode": "token", "mcp_servers": {"alpha": {}, "beta": {}}},
+                    {
+                        "id": "wb_x",
+                        "name": "WB X",
+                        "name_zh": "连X",
+                        "description_zh": "conn x",
+                        "auth_mode": "oauth",
+                        "mcp_servers": [{"name": "srv1"}],
+                    },
+                    {
+                        "id": "wb_y",
+                        "name": "WB Y",
+                        "name_zh": "连Y",
+                        "description_zh": "conn y",
+                        "auth_mode": "token",
+                        "mcp_servers": {"alpha": {}, "beta": {}},
+                    },
                 ]
             }
         ),
@@ -89,10 +109,18 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
         json.dumps(
             {
                 "experts": [
-                    {"plugin": "wb_expert1", "expertType": "agent",
-                     "displayName": {"zh": "专家一"}, "description": {"zh": "专家一描述"}},
-                    {"plugin": "wb_team1", "expertType": "team",
-                     "displayName": {"zh": "团一"}, "description": {"zh": "团一描述"}},
+                    {
+                        "plugin": "wb_expert1",
+                        "expertType": "agent",
+                        "displayName": {"zh": "专家一"},
+                        "description": {"zh": "专家一描述"},
+                    },
+                    {
+                        "plugin": "wb_team1",
+                        "expertType": "team",
+                        "displayName": {"zh": "团一"},
+                        "description": {"zh": "团一描述"},
+                    },
                 ]
             }
         ),
@@ -175,7 +203,9 @@ def test_summary_none_before_sync(tmp_path: Path) -> None:
     assert ar.list_assets(root=tmp_path / "missing") == []
 
 
-def test_flat_plugins_layout_and_collision_suffix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_flat_plugins_layout_and_collision_suffix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     src = tmp_path / "src"
     (src / "codex_plugins").mkdir(parents=True)
     (src / "connectors").mkdir(parents=True)
@@ -186,7 +216,9 @@ def test_flat_plugins_layout_and_collision_suffix(tmp_path: Path, monkeypatch: p
 
     _mk_codex_plugin(src / "codex_plugins", "github", "GitHub Codex")
     (src / "connectors" / "octopus-manifest.json").write_text(
-        json.dumps({"connectors": [{"id": "github", "name": "GitHub WB", "name_zh": "GitHub 连接器"}]}),
+        json.dumps(
+            {"connectors": [{"id": "github", "name": "GitHub WB", "name_zh": "GitHub 连接器"}]}
+        ),
         "utf-8",
     )
     _mk_connector(src / "connectors", "github", "GitHub WB")
@@ -204,7 +236,7 @@ def test_flat_plugins_layout_and_collision_suffix(tmp_path: Path, monkeypatch: p
     ar.sync_assets(dest_root=dest)
 
     # 平铺:所有插件在 plugins/ 下,不按 source 嵌套
-    assert (dest / "plugins" / "github").is_dir()            # codex 先到,占 github
+    assert (dest / "plugins" / "github").is_dir()  # codex 先到,占 github
     assert (dest / "plugins" / "github-workbuddy").is_dir()  # 连接器后到,加 source 后缀
     assert not (dest / "plugins" / "codex").exists()
     assert not (dest / "plugins" / "workbuddy").exists()

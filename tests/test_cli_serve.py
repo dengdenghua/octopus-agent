@@ -5,7 +5,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import pytest
+
 from runtime.platform.i18n import set_lang
+
+pytestmark = pytest.mark.usefixtures("bypass_serve_port_guard")
 
 # ═══════════════════════════════════════════════════════════
 # Implementation note.
@@ -109,8 +113,8 @@ class TestServeBasics:
 
         uvicorn_calls = []
 
-        def fake_run(app, host, port, log_level):
-            uvicorn_calls.append({"host": host, "port": port})
+        def fake_run(app, host, port, log_level, ws):
+            uvicorn_calls.append({"host": host, "port": port, "ws": ws})
 
         import uvicorn
 
@@ -128,8 +132,39 @@ class TestServeBasics:
         assert rc == 0
         assert len(uvicorn_calls) == 1
         assert uvicorn_calls[0]["port"] == 9090
+        assert uvicorn_calls[0]["ws"] == "websockets-sansio"
         out = capsys.readouterr().out
         assert "http://127.0.0.1:9090" in out
+
+    def test_occupied_port_stands_down_before_runtime_side_effects(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        capsys,
+    ):
+        import runtime.cli_serve as cli_serve
+
+        prepared: list[object] = []
+        monkeypatch.setattr(cli_serve, "_port_held", lambda _host, _port: True)
+        monkeypatch.setattr(cli_serve, "_holder_is_octopus", lambda _port: True)
+        monkeypatch.setattr(
+            cli_serve,
+            "_prepare_execution_security",
+            lambda cfg: prepared.append(cfg) or (None, {}),
+        )
+
+        assert (
+            cli_serve.run_serve(
+                config_path=_write_cfg(tmp_path),
+                host="127.0.0.1",
+                port=9090,
+                learn_interval_s=0,
+                color=False,
+            )
+            == 0
+        )
+        assert prepared == []
+        assert "another octopus instance" in capsys.readouterr().err
 
     def test_serve_wires_the_opt_in_storage_supervisor(self, tmp_path: Path, monkeypatch, capsys):
         """The desktop/local entrypoint is ``serve``, not the legacy ``ui`` command."""
@@ -255,7 +290,7 @@ class TestIntelSchedulingIntegration:
         # Implementation note.
         captured_runner = {}
 
-        def spy_uvicorn_run(app, host, port, log_level):
+        def spy_uvicorn_run(app, host, port, log_level, ws):
             # Implementation note.
             # Implementation note.
             # Implementation note.
@@ -592,7 +627,7 @@ class TestCronImDelivery:
 
         ran = threading.Event()
 
-        def _fake_run_due(deliver=None):
+        def _fake_run_due(deliver=None, stop_event=None):
             try:
                 deliver(
                     {
@@ -649,7 +684,7 @@ class TestCronSchedulerDecoupling:
         started = threading.Event()
         release = threading.Event()
 
-        def _blocking_tick(deliver=None):
+        def _blocking_tick(deliver=None, stop_event=None):
             calls.append("start")
             started.set()
             release.wait(10)
@@ -678,3 +713,43 @@ class TestCronSchedulerDecoupling:
         while time.monotonic() < deadline and "end" not in calls:
             time.sleep(0.05)
         assert "end" in calls
+
+    def test_shutdown_callback_drains_dedicated_cron_pool(self, monkeypatch) -> None:
+        import threading
+
+        import runtime.cli_serve as cli_serve
+
+        captured: dict = {}
+
+        class _FakeRunner:
+            def add_periodic(self, name, *, interval_s, callback, jitter_s, run_on_start):
+                captured["callback"] = callback
+
+        started = threading.Event()
+        stopped = threading.Event()
+
+        def _cooperative_tick(deliver=None, stop_event=None):
+            started.set()
+            assert stop_event is not None
+            assert stop_event.wait(5), "shutdown signal never reached cron executor"
+            stopped.set()
+
+        import runtime.execution.cron_executor as cron_exec
+
+        monkeypatch.setattr(cron_exec, "run_due_cron_jobs", _cooperative_tick)
+        shutdown_callbacks = []
+        cli_serve.register_cron_executor_task(
+            _FakeRunner(),
+            [],
+            shutdown_callbacks=shutdown_callbacks,
+        )
+
+        captured["callback"]()
+        assert started.wait(5), "cron worker never started"
+        assert len(shutdown_callbacks) == 1
+        shutdown_callbacks[0]()
+        assert stopped.wait(1), "cron worker outlived shutdown callback"
+
+        # Idempotent lifespan + CLI-finally invocation, and no post-stop submit.
+        shutdown_callbacks[0]()
+        captured["callback"]()

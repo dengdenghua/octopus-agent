@@ -263,6 +263,19 @@ def create_invariants_router(
             jwt_audience=jwt_audience,
         )
 
+    def _require_operator(request: Request) -> None:
+        from runtime.safety.auth.principal import require_roles
+
+        require_roles(
+            request,
+            identity_store,
+            require_auth,
+            ("admin", "operator"),
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     def _format_catalog() -> dict[str, Any]:
         rules_map = _build_or_get_cache()
         rule_ids_sorted = sorted(rules_map.keys())
@@ -303,7 +316,7 @@ def create_invariants_router(
 
     @router.post("/api/invariants/refresh")
     def api_invariants_refresh(request: Request) -> dict[str, Any]:
-        _auth(request)
+        _require_operator(request)
         """Invalidate the cache and rebuild the catalog.
 
         Useful after a hot-reload pulls new safety-decorated modules

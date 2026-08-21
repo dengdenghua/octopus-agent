@@ -38,6 +38,11 @@ from runtime.sensing.gateway.realtime_thread_history import (
     _flatten_turns_to_messages,
     _title_from_messages,
 )
+from runtime.sensing.gateway.thread_workspace import (
+    MANAGED_WORKSPACE_MARKER,
+    MANAGED_WORKSPACE_METADATA_KEY,
+    strip_client_workspace_metadata,
+)
 
 if TYPE_CHECKING:
     from runtime.protocol import Turn
@@ -379,6 +384,22 @@ def _snapshot_to_thread_store(
                     if key == "actor_id"
                     else key
                 ] = v
+        # A realtime turn carries client context, so it must not be able to
+        # replace the filesystem allocation or owner previously established
+        # by the authenticated thread HTTP boundary. Local/user-selected
+        # workspaces have no server marker and retain their legacy behavior.
+        existing = store.get(thread_id) if hasattr(store, "get") else None
+        existing_metadata: dict[str, Any] = {}
+        if isinstance(existing, dict):
+            raw_existing_metadata = existing.get("metadata")
+            if isinstance(raw_existing_metadata, dict):
+                existing_metadata = raw_existing_metadata
+        if existing_metadata.get(MANAGED_WORKSPACE_METADATA_KEY) == MANAGED_WORKSPACE_MARKER:
+            metadata = strip_client_workspace_metadata(metadata)
+            for protected_key in ("owner_actor_id", "tenant_id"):
+                protected_value = existing_metadata.get(protected_key)
+                if protected_value is not None:
+                    metadata[protected_key] = protected_value
         store.ensure_thread(
             thread_id,
             metadata=metadata,

@@ -590,10 +590,7 @@ class RealtimeGateway:
 
     def _watching_connection(self, thread_id: str) -> RpcConnection | None:
         for conn in list(self._connections):
-            if (
-                thread_id in conn.watched_threads
-                and not getattr(conn, "_closed", False)
-            ):
+            if thread_id in conn.watched_threads and not getattr(conn, "_closed", False):
                 return conn
         return None
 
@@ -795,8 +792,7 @@ class RealtimeGateway:
             # server-side; a reconnected client catches up via
             # thread/resume replay + watcher fan-out.
             _logger.info(
-                "realtime: requester disconnected; turn for thread %s "
-                "continues server-side",
+                "realtime: requester disconnected; turn for thread %s continues server-side",
                 thread_id,
             )
             raise
@@ -859,27 +855,69 @@ class RealtimeGateway:
         if cleaned.get("approvalPolicy") == "never" and not self._allow_client_approval_bypass:
             cleaned["approvalPolicy"] = "on-request"
         if conn.actor_id is not None:
-            metadata = cleaned.get("metadata")
-            metadata_dict = dict(metadata) if isinstance(metadata, dict) else {}
-            metadata_dict.setdefault("actor_id", conn.actor_id)
+            tenant_id = conn.tenant_id or f"legacy:{conn.actor_id}"
+            from runtime.sensing.gateway.thread_workspace import (
+                PROTECTED_WORKSPACE_METADATA_KEYS,
+            )
+
+            path_keys = {
+                *PROTECTED_WORKSPACE_METADATA_KEYS,
+                "workspacePath",
+                "extraWorkspaces",
+                "personalWorkspacePath",
+                "allowedWritePaths",
+                "attachmentReadRoots",
+                "artifactOutputRoot",
+            }
+
+            def _authenticated_metadata(raw: Any) -> dict[str, Any]:
+                metadata_dict = dict(raw) if isinstance(raw, dict) else {}
+                for key in path_keys:
+                    metadata_dict.pop(key, None)
+                metadata_dict.pop("actorId", None)
+                raw_context = metadata_dict.get("context")
+                context = dict(raw_context) if isinstance(raw_context, dict) else {}
+                for key in path_keys:
+                    context.pop(key, None)
+                context.pop("actorId", None)
+                context["actor_id"] = conn.actor_id
+                context["owner_actor_id"] = conn.actor_id
+                context["tenant_id"] = tenant_id
+                metadata_dict["context"] = context
+                metadata_dict["actor_id"] = conn.actor_id
+                metadata_dict["owner_actor_id"] = conn.actor_id
+                metadata_dict["tenant_id"] = tenant_id
+                return metadata_dict
+
+            # Top-level cwd and every metadata-carried filesystem grant are
+            # client input. Authenticated turns always resolve their root from
+            # the server-owned thread allocation later in intent construction.
+            cleaned.pop("cwd", None)
+            metadata_dict = _authenticated_metadata(cleaned.get("metadata"))
             cleaned["metadata"] = metadata_dict
             blocks = cleaned.get("input")
             input_blocks = list(blocks) if isinstance(blocks, list) else []
             if not input_blocks:
                 input_blocks.append({"type": "metadata"})
-            first = (
-                dict(input_blocks[0]) if isinstance(input_blocks[0], dict) else {"type": "metadata"}
-            )
-            block_metadata = first.get("metadata")
-            block_metadata_dict = dict(block_metadata) if isinstance(block_metadata, dict) else {}
-            block_metadata_dict.setdefault("actor_id", conn.actor_id)
-            first["metadata"] = block_metadata_dict
-            input_blocks[0] = first
+            sanitized_blocks: list[Any] = []
+            for index, raw_block in enumerate(input_blocks):
+                block = dict(raw_block) if isinstance(raw_block, dict) else {"type": "metadata"}
+                if index == 0 or isinstance(block.get("metadata"), dict):
+                    block["metadata"] = _authenticated_metadata(block.get("metadata"))
+                sanitized_blocks.append(block)
+            input_blocks = sanitized_blocks
             cleaned["input"] = input_blocks
             # Server-injected ownership context. The client never chooses
             # these values; the gateway overwrites them after authentication.
-            cleaned["tenant_id"] = conn.tenant_id or f"legacy:{conn.actor_id}"
+            cleaned["tenant_id"] = tenant_id
             cleaned["owner_actor_id"] = conn.actor_id
+        else:
+            # These Pydantic fields are transport-internal. Anonymous/local
+            # callers retain explicit cwd/context compatibility, but cannot
+            # opt themselves into an authenticated principal by sending the
+            # hidden ownership field names directly.
+            cleaned.pop("tenant_id", None)
+            cleaned.pop("owner_actor_id", None)
         return cleaned
 
 

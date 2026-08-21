@@ -11,6 +11,7 @@
   - MCP      → 合并进 octopus MCP 配置(默认禁用,需显式启用)
   - state    → ~/.octopus/connectors/state.json
 """
+
 from __future__ import annotations
 
 import json
@@ -96,9 +97,7 @@ class ConnectorDefinition:
             "version": self.version,
             # CLI 连接器是否带 auth 登录命令(设备流/网页授权码登录)。
             # 有 auth 命令 → 可跳网页登录,无需手动填 token。
-            "has_cli_auth": bool(self.cli.get("auth")) or bool(
-                self.cli.get("authDeviceFlow")
-            ),
+            "has_cli_auth": bool(self.cli.get("auth")) or bool(self.cli.get("authDeviceFlow")),
         }
 
     def skill_count(self) -> int:
@@ -248,9 +247,8 @@ class ConnectorRegistry:
                 "init": init_res,
                 "version": version_res,
                 "auth_device_flow": bool(conn.cli.get("authDeviceFlow")),
-                "min_version": str(conn.cli.get("versionCheck") or {}).strip() and (
-                    (conn.cli.get("versionCheck") or {}).get("minVersion") or ""
-                ),
+                "min_version": str(conn.cli.get("versionCheck") or {}).strip()
+                and ((conn.cli.get("versionCheck") or {}).get("minVersion") or ""),
             }
         self._set_state(connector_id, installed=True, enabled=False, installed_at=None)
         msg = (

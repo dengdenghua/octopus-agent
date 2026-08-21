@@ -102,7 +102,9 @@ class FakeBundleClient:
     def __init__(self, bundle: bytes) -> None:
         self.bundle = bundle
 
-    def fetch_bundle(self, _asset_id: str) -> bytes:
+    def fetch_bundle(self, _asset_id: str, *, expected_size: int | None = None) -> bytes:
+        if expected_size is not None and len(self.bundle) != expected_size:
+            raise ValueError("registry bundle size mismatch")
         return self.bundle
 
 
@@ -138,12 +140,16 @@ def test_registry_plugin_bundle_manual_extraction_is_bounded(
         kind="code",
         name="Safe Plugin",
         description="safe",
-        bundle=BundleRef(ref="bundle.tar.gz"),
+        bundle=BundleRef(
+            ref="bundle.tar.gz",
+            checksum="sha256:" + hashlib.sha256(bundle).hexdigest(),
+        ),
     )
-    captured: dict[str, str] = {}
+    captured: dict[str, str | bool] = {}
 
-    def fake_install(source: Path, **_kwargs):
+    def fake_install(source: Path, **kwargs):
         captured["readme"] = (source / "README.md").read_text(encoding="utf-8")
+        captured["require_trusted_publisher"] = kwargs.get("require_trusted_publisher") is True
         return {"ok": True}
 
     monkeypatch.setattr(lifecycle, "install_local_plugin", fake_install)
@@ -155,9 +161,35 @@ def test_registry_plugin_bundle_manual_extraction_is_bounded(
     )
     assert result == {"ok": True}
     assert captured["readme"] == "bounded extraction"
+    assert captured["require_trusted_publisher"] is True
 
     monkeypatch.setattr(registry_router, "_MAX_PLUGIN_UNCOMPRESSED_BYTES", 8)
     with pytest.raises(ValueError, match="expands beyond"):
+        _install_registry_plugin_bundle(
+            asset,
+            client=FakeBundleClient(bundle),
+            plugin_root=tmp_path / "plugins",
+            publisher_trust_store_path=None,
+        )
+
+
+def test_registry_plugin_bundle_requires_sha256_checksum(tmp_path: Path) -> None:
+    bundle = _tar_bytes(
+        {
+            "unsafe-plugin/.codex-plugin/plugin.json": json.dumps(
+                {"name": "unsafe-plugin", "version": "1.0.0"}
+            )
+        }
+    )
+    asset = RegistryAsset(
+        id="plugin/unsafe-plugin",
+        type="plugin",
+        kind="code",
+        name="Unsafe Plugin",
+        bundle=BundleRef(ref="bundle.tar.gz"),
+    )
+
+    with pytest.raises(ValueError, match="requires a valid sha256 checksum"):
         _install_registry_plugin_bundle(
             asset,
             client=FakeBundleClient(bundle),
@@ -323,6 +355,74 @@ def test_plugins_are_browsable_and_install_as_prompt_capabilities(
     )
 
 
+def test_production_browses_registry_but_rejects_unsigned_prompt_mutations(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "production")
+
+    assert client.get("/api/registry/roles").status_code == 200
+    assert client.get("/api/registry/plugins").status_code == 200
+    skill = client.post("/api/registry/skills/remote-skill/install")
+    role = client.post("/api/registry/roles/role/researcher/install")
+    prompt_plugin = client.post("/api/registry/plugins/browser-tool/install")
+
+    assert skill.status_code == 403
+    assert role.status_code == 403
+    assert prompt_plugin.status_code == 403
+    assert "reviewed release artifact" in skill.json()["detail"]
+    assert "reviewed release artifact" in role.json()["detail"]
+    assert "trusted signed plugin bundle" in prompt_plugin.json()["detail"]
+
+
+def test_production_still_allows_trusted_signed_plugin_bundle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import octopus_runtime
+    import runtime.sensing.gateway.registry_consumer_router as registry_router
+
+    class SignedPluginClient(FakeRegistryClient):
+        def fetch(self, asset_id: str) -> AssetPayload:
+            assert asset_id == "plugin/signed-tool"
+            return AssetPayload(
+                id=asset_id,
+                type="plugin",
+                kind="code",
+                name="Signed Tool",
+                bundle=BundleRef(
+                    ref="bundle.tar.gz",
+                    checksum="sha256:" + "a" * 64,
+                ),
+            )
+
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "production")
+    monkeypatch.setattr(octopus_runtime, "RegistryClient", SignedPluginClient)
+    monkeypatch.setattr(
+        registry_router,
+        "_install_registry_plugin_bundle",
+        lambda *_args, **_kwargs: {"ok": True, "plugin_id": "signed-tool"},
+    )
+    app = FastAPI()
+    app.include_router(
+        create_registry_consumer_router(
+            registry_base="https://registry.test",
+            skills_root=tmp_path / "skills",
+            plugin_root=tmp_path / "plugins",
+        )
+    )
+
+    response = TestClient(app).post("/api/registry/plugins/signed-tool/install")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "installed": "plugin/signed-tool",
+        "install_mode": "plugin-bundle",
+        "ok": True,
+        "plugin_id": "signed-tool",
+    }
+
+
 def test_materialize_skill_rejects_unsafe_registry_slug(tmp_path) -> None:
     payload = AssetPayload(
         id="skill/../../escape",
@@ -449,6 +549,27 @@ def test_materialize_skill_replaces_existing_bundle_after_checksum_match(tmp_pat
     assert md.read_text(encoding="utf-8") == "new safe version"
 
 
+def test_materialize_skill_rejects_bundle_larger_than_declared_size(tmp_path) -> None:
+    bundle = _tar_bytes({"research-pack/SKILL.md": "safe skill"})
+    payload = AssetPayload(
+        id="skill/research-pack",
+        type="skill",
+        kind="data",
+        name="Research Pack",
+        description="bundle",
+        bundle=BundleRef(
+            ref="bundle.tar.gz",
+            checksum="sha256:" + hashlib.sha256(bundle).hexdigest(),
+            size=len(bundle) - 1,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="bundle size mismatch"):
+        materialize_skill(payload, tmp_path / "skills", client=FakeBundleClient(bundle))
+
+    assert not (tmp_path / "skills" / "research-pack").exists()
+
+
 def test_materialize_skill_bundle_replaces_existing_symlink_dir(tmp_path) -> None:
     outside = tmp_path / "outside"
     outside.mkdir()
@@ -493,6 +614,181 @@ def test_materialize_skill_rejects_bundle_parent_traversal_member(tmp_path) -> N
         materialize_skill(payload, tmp_path / "skills", client=FakeBundleClient(bundle))
 
     assert not (tmp_path / "skills" / "escape.txt").exists()
+
+
+def test_materialize_skill_rejects_bundle_over_member_count_limit(tmp_path) -> None:
+    bundle = _tar_bytes(
+        {
+            "research-pack/SKILL.md": "safe skill",
+            "research-pack/references/one.md": "one",
+            "research-pack/references/two.md": "two",
+        }
+    )
+    payload = AssetPayload(
+        id="skill/research-pack",
+        type="skill",
+        kind="data",
+        name="Research Pack",
+        bundle=BundleRef(ref="bundle.tar.gz"),
+    )
+
+    with pytest.raises(ValueError, match="exceeds 2 member limit"):
+        materialize_skill(
+            payload,
+            tmp_path / "skills",
+            client=FakeBundleClient(bundle),
+            max_bundle_members=2,
+        )
+
+    assert not (tmp_path / "skills" / "research-pack").exists()
+
+
+def test_materialize_skill_rejects_terabyte_declared_member_before_reading(tmp_path) -> None:
+    out = io.BytesIO()
+    with tarfile.open(fileobj=out, mode="w:gz") as tar:
+        info = tarfile.TarInfo("research-pack/SKILL.md")
+        info.size = 1 << 40
+        tar.addfile(info)
+    bundle = out.getvalue()
+    payload = AssetPayload(
+        id="skill/research-pack",
+        type="skill",
+        kind="data",
+        name="Research Pack",
+        bundle=BundleRef(ref="bundle.tar.gz"),
+    )
+
+    with pytest.raises(ValueError, match="declared size.*33554432 byte limit"):
+        materialize_skill(payload, tmp_path / "skills", client=FakeBundleClient(bundle))
+
+    assert len(bundle) < 1024
+    assert not (tmp_path / "skills" / "research-pack").exists()
+
+
+def test_materialize_skill_rejects_cumulative_declared_size_limit(tmp_path) -> None:
+    bundle = _tar_bytes(
+        {
+            "research-pack/SKILL.md": "1234",
+            "research-pack/references/one.md": "5678",
+            "research-pack/references/two.md": "9abc",
+        }
+    )
+    payload = AssetPayload(
+        id="skill/research-pack",
+        type="skill",
+        kind="data",
+        name="Research Pack",
+        bundle=BundleRef(ref="bundle.tar.gz"),
+    )
+
+    with pytest.raises(ValueError, match="cumulative declared bundle size exceeds 10"):
+        materialize_skill(
+            payload,
+            tmp_path / "skills",
+            client=FakeBundleClient(bundle),
+            max_bundle_extracted_bytes=10,
+        )
+
+    assert not (tmp_path / "skills" / "research-pack").exists()
+
+
+def test_materialize_skill_rejects_high_compression_ratio_bundle(tmp_path) -> None:
+    expanded = "A" * (2 * 1024 * 1024)
+    bundle = _tar_bytes({"research-pack/SKILL.md": expanded})
+    payload = AssetPayload(
+        id="skill/research-pack",
+        type="skill",
+        kind="data",
+        name="Research Pack",
+        bundle=BundleRef(ref="bundle.tar.gz"),
+    )
+
+    assert len(bundle) < 16 * 1024
+    with pytest.raises(ValueError, match="cumulative declared bundle size exceeds 1048576"):
+        materialize_skill(
+            payload,
+            tmp_path / "skills",
+            client=FakeBundleClient(bundle),
+            max_bundle_extracted_bytes=1024 * 1024,
+        )
+
+    assert not (tmp_path / "skills" / "research-pack").exists()
+
+
+def test_materialize_skill_stops_stream_before_writing_actual_bytes_over_limit(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundle = _tar_bytes({"research-pack/SKILL.md": "safe"})
+    payload = AssetPayload(
+        id="skill/research-pack",
+        type="skill",
+        kind="data",
+        name="Research Pack",
+        bundle=BundleRef(ref="bundle.tar.gz"),
+    )
+    original_extractfile = tarfile.TarFile.extractfile
+
+    def oversized_extractfile(self, member):
+        source = original_extractfile(self, member)
+        assert source is not None
+        with source:
+            return io.BytesIO(source.read() + b"X")
+
+    monkeypatch.setattr(tarfile.TarFile, "extractfile", oversized_extractfile)
+
+    with pytest.raises(ValueError, match="actual size.*exceeds 4 byte limit"):
+        materialize_skill(
+            payload,
+            tmp_path / "skills",
+            client=FakeBundleClient(bundle),
+            max_bundle_member_bytes=4,
+        )
+
+    assert not (tmp_path / "skills" / "research-pack").exists()
+
+
+@pytest.mark.parametrize(
+    ("member_type", "error"),
+    [
+        (tarfile.SYMTYPE, "link not allowed"),
+        (tarfile.LNKTYPE, "link not allowed"),
+        (tarfile.FIFOTYPE, "unsupported file type"),
+        (tarfile.CHRTYPE, "unsupported file type"),
+        (tarfile.BLKTYPE, "unsupported file type"),
+        (tarfile.GNUTYPE_SPARSE, "sparse file not allowed"),
+    ],
+)
+def test_materialize_skill_rejects_links_sparse_and_special_members(
+    tmp_path,
+    member_type: bytes,
+    error: str,
+) -> None:
+    out = io.BytesIO()
+    with tarfile.open(fileobj=out, mode="w:gz", format=tarfile.GNU_FORMAT) as tar:
+        skill = b"safe"
+        skill_info = tarfile.TarInfo("research-pack/SKILL.md")
+        skill_info.size = len(skill)
+        tar.addfile(skill_info, io.BytesIO(skill))
+        unsafe = tarfile.TarInfo("research-pack/unsafe")
+        unsafe.type = member_type
+        unsafe.linkname = (
+            "../../outside" if member_type in {tarfile.SYMTYPE, tarfile.LNKTYPE} else ""
+        )
+        tar.addfile(unsafe)
+    bundle = out.getvalue()
+    payload = AssetPayload(
+        id="skill/research-pack",
+        type="skill",
+        kind="data",
+        name="Research Pack",
+        bundle=BundleRef(ref="bundle.tar.gz"),
+    )
+
+    with pytest.raises(ValueError, match=error):
+        materialize_skill(payload, tmp_path / "skills", client=FakeBundleClient(bundle))
+
+    assert not (tmp_path / "skills" / "research-pack").exists()
 
 
 def test_materialize_skill_restores_existing_bundle_when_replace_fails(

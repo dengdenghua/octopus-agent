@@ -1,6 +1,6 @@
 name: paper_trading
 display_name: 模拟炒股
-version: 0.3.0
+version: 0.4.0
 description: 模拟炒股练习插件 — 本地模拟交易面板 + 「平台交易」页对接平台配资盘(申请资金/合约/持仓/真实买卖委托,全部二次确认),可选只读接入平台实时大盘。纯个人练习用。
 author: Octopus
 tags:
@@ -15,12 +15,13 @@ provides:
 config:
   initial_cash: 1000000.0
   data_dir: ~/.octopus/data/paper_trading
-  live_mode: true
+  live_mode: false
   base_url: http://114.66.32.152:58868/api
   live_ttl: 30
   credentials_file: ~/.octopus/data/paper_trading/credentials.json
   auto_trade: false
-  proxy_origin: true
+  proxy_origin: false
+  allow_same_origin_third_party_scripts: false
 config_schema:
   type: object
   properties:
@@ -36,12 +37,12 @@ config_schema:
     live_mode:
       type: boolean
       title: 平台实时行情
-      description: 开启后只读拉取平台后端真实大盘(指数/涨跌家数/市场状态),不进行任何交易
-      default: true
+      description: 默认关闭。开启后只读拉取平台后端真实大盘(指数/涨跌家数/市场状态),不进行任何交易；仅接受 HTTPS 上游，认证或多用户部署会禁用整个账户集成
+      default: false
     base_url:
       type: string
       title: 平台 API 地址
-      description: 只读行情来源的 API 根地址(默认 http://114.66.32.152:58868/api)
+      description: 平台 API 根地址；启用 live_mode、auto_trade 或同源代理时必须配置可信 HTTPS 地址
     live_ttl:
       type: number
       title: 实时行情缓存秒数
@@ -59,5 +60,10 @@ config_schema:
     proxy_origin:
       type: boolean
       title: 平台原站同源反代(嵌入原版网页)
-      description: "默认 false。设为 true 后把平台原站(/trade 网页及其 /api)反代到 /api/plugins/paper-trading/origin/*,页面即可直接嵌入原版交易界面并复用后端已缓存的登录态。代价:同源代理会让原站脚本以本应用 origin 的权限运行,可读取同源 localStorage(含本应用登录令牌),且原站为明文 HTTP。仅在信任该站点时开启。"
+      description: "默认 false。仅当此项和 allow_same_origin_third_party_scripts 都为 true、且 base_url 使用 HTTPS 时才会挂载。该功能会让第三方脚本运行在本应用 origin 下，仅限可信的单用户本地环境。"
+      default: false
+    allow_same_origin_third_party_scripts:
+      type: boolean
+      title: 允许第三方脚本使用应用同源权限(危险)
+      description: "独立的高风险确认开关。开启前必须确认上游可信；第三方脚本可能访问父页面会话并以当前用户身份调用 API。生产或多用户部署不得开启。"
       default: false

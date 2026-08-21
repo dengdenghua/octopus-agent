@@ -31,7 +31,10 @@ def test_resolve_attachment_data() -> None:
     att = Attachment(content_type="image/png", data=b"\x89PNG")
     assert resolve_attachment_data(att) == b"\x89PNG"
     # Non-http URL -> None
-    assert resolve_attachment_data(Attachment(content_type="text/plain", url="file:///etc/passwd")) is None
+    assert (
+        resolve_attachment_data(Attachment(content_type="text/plain", url="file:///etc/passwd"))
+        is None
+    )
     # Empty data and no url -> None
     assert resolve_attachment_data(Attachment(content_type="text/plain")) is None
 

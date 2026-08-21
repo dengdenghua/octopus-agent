@@ -778,9 +778,9 @@ class TestResolvedPosture:
         # Second resolution must return the identical cached instance and must
         # not re-run the (now-failing) resolution path.
         monkeypatch.setattr(
-            sandbox_mod, "resolve_process_backend", lambda *a, **k: (_ for _ in ()).throw(
-                AssertionError("must not re-resolve")
-            )
+            sandbox_mod,
+            "resolve_process_backend",
+            lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not re-resolve")),
         )
         second = sandbox_mod.resolved_process_backend()
         assert second is first

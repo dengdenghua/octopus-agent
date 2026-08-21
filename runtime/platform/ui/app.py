@@ -96,7 +96,10 @@ def create_app(
     from runtime.platform.ui._app_routers import mount_routers_a
     from runtime.platform.ui._app_routers_extra import mount_routers_b
     from runtime.platform.ui._app_setup import setup_app
-    from runtime.platform.ui._app_stack import wire_stack
+    from runtime.platform.ui._app_stack import (
+        wire_persistent_subagent_runner,
+        wire_stack,
+    )
 
     ctx = setup_app(
         journal_path=journal_path,
@@ -139,6 +142,7 @@ def create_app(
         frontend_proxy_target=frontend_proxy_target,
     )
     mount_agents(ctx, agent_registry=agent_registry, group_registry=group_registry)
+    wire_persistent_subagent_runner(ctx)
     mount_parallel(ctx, parallel_agent_orchestrator=parallel_agent_orchestrator)
     mount_collaboration(
         ctx,

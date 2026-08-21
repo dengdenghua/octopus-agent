@@ -213,6 +213,7 @@ class CerebrumRuntime:
         cowork_group_store: Any = None,
         project_store: Any = None,
         project_os_hooks: dict[str, Any] | None = None,
+        subagent_runner: Any = None,
         task_supervisor: Any = None,
         session_titles: Any = None,
     ) -> None:
@@ -271,6 +272,7 @@ class CerebrumRuntime:
         self._cowork_group_store = cowork_group_store
         self._project_store = project_store
         self._project_os_hooks = dict(project_os_hooks or {})
+        self._subagent_runner = subagent_runner
         # Server-side authority over auto-approval. When False (default),
         # a client setting ``approvalPolicy="never"`` is downgraded to
         # ``"on-request"`` server-side — the client never gets to silently

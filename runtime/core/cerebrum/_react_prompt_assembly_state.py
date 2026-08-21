@@ -265,11 +265,11 @@ def _recent_attachment_issue(conv_history: Any) -> bool:
 
 _VAGUE_ATTACHMENT_GUIDANCE = (
     "<vague-user-followup>\n"
-    "用户这条消息非常简短（如\"？\"），几乎肯定是在追问或表达对上一轮回复的不满。\n"
+    '用户这条消息非常简短（如"？"），几乎肯定是在追问或表达对上一轮回复的不满。\n'
     "最近对话里出现过用户图片/附件未能送达或无法查看的迹象。请直接围绕这一点回应：\n"
     "· 先说明当前到底能不能看到用户的图片，以及为什么（如模型不支持视觉输入 / 附件未上传成功）；\n"
     "· 给出可操作的下一步（重新上传、切换到支持图片的模型/会话，或请用户改用文字描述内容）；\n"
-    "· 不要使用\"请说明您需要我处理的具体内容\"这类空泛澄清模板——用户已经表达过诉求。\n"
+    '· 不要使用"请说明您需要我处理的具体内容"这类空泛澄清模板——用户已经表达过诉求。\n'
     "</vague-user-followup>"
 )
 
@@ -401,10 +401,7 @@ def _assemble_messages(state: _AssemblyState) -> None:
     # Bare interjection follow-up (``？``) on top of a recent image/attachment
     # failure: steer the model to address that concrete issue instead of
     # falling back to a generic "please clarify" template.
-    if (
-        _vague_user_goal(_current_goal)
-        and _recent_attachment_issue(conv_history)
-    ):
+    if _vague_user_goal(_current_goal) and _recent_attachment_issue(conv_history):
         messages.append(Message(role="system", content=_VAGUE_ATTACHMENT_GUIDANCE))
     if state.user_context.get("live_steering"):
         from runtime.core.cerebrum.live_steering import (

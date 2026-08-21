@@ -27,7 +27,9 @@ def _project(tmp_path: Path) -> Path:
 
 def test_summarize_file_python(tmp_path: Path) -> None:
     f = tmp_path / "mod.py"
-    f.write_text('"""A module docstring."""\n\ndef add(a, b):\n    return a + b\n', encoding="utf-8")
+    f.write_text(
+        '"""A module docstring."""\n\ndef add(a, b):\n    return a + b\n', encoding="utf-8"
+    )
     summary, symbols = wg._summarize_file(f, "python")
     assert "A module docstring" in summary
     assert "add" in symbols

@@ -9,6 +9,7 @@
   - connector_registry  连接器定义加载 / 安装 / 状态
   - auth_orchestrator   认证编排(connect / disconnect / status / resolve)
 """
+
 from runtime.platform.connectors.auth_orchestrator import (
     AuthOrchestrator,
     mcp_injection_for_server,

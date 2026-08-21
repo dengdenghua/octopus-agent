@@ -24,6 +24,14 @@ from runtime.platform.models import (
 )
 
 
+@pytest.fixture
+def bypass_serve_port_guard(monkeypatch):
+    """Keep mocked-Uvicorn assembly tests independent of host listeners."""
+    import runtime.cli_serve as cli_serve
+
+    monkeypatch.setattr(cli_serve, "_port_held", lambda _host, _port: False)
+
+
 @pytest.fixture(autouse=True)
 def _reset_module_state():
     """Reset process-wide mutable state between tests.

@@ -227,6 +227,7 @@ class ControlSessionStore:
         surface: str | None = None,
         limit: int = 50,
         creator_actor: str | None = None,
+        include_unowned: bool = False,
     ) -> list[dict[str, Any]]:
         # When creator_actor is provided (auth-on multi-tenant), the listing is
         # scoped to that principal so callers cannot enumerate other users'
@@ -238,7 +239,11 @@ class ControlSessionStore:
             clauses.append("surface=?")
             params.append(_surface(surface))
         if creator_actor is not None:
-            clauses.append("creator_actor=?")
+            clauses.append(
+                "(creator_actor=? OR creator_actor IS NULL)"
+                if include_unowned
+                else "creator_actor=?"
+            )
             params.append(_optional_text(creator_actor, max_len=256) or "")
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         with self._lock, self._connect() as conn:

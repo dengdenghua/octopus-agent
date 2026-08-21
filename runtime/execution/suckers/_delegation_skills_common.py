@@ -716,11 +716,7 @@ def _should_auto_retry(result: dict[str, Any]) -> bool:
         return False
     if _is_transient_error(result):
         return True
-    if (
-        result.get("partial")
-        or result.get("round_cap_exceeded")
-        or result.get("converged_early")
-    ):
+    if result.get("partial") or result.get("round_cap_exceeded") or result.get("converged_early"):
         return True
     err_msg = (result.get("error") or "").lower()
     exhaustion_markers = (

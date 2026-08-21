@@ -59,9 +59,7 @@ def test_ambient_scope_isolates_per_thread() -> None:
             seen.append(current_subagent_session_id())
 
     with subagent_session_scope("main-session"):
-        threads = [
-            threading.Thread(target=worker, args=(f"sid-{i}",)) for i in range(3)
-        ]
+        threads = [threading.Thread(target=worker, args=(f"sid-{i}",)) for i in range(3)]
         for t in threads:
             t.start()
         for t in threads:
@@ -134,16 +132,28 @@ def test_emit_summary_sums_only_attributed_rows() -> None:
     other = _sid(2)
     # This session's spend across two rounds.
     journal.write_token_usage(
-        task_id=_tid(1), session_id=sid, iteration=1, input_tokens=100, output_tokens=200,
+        task_id=_tid(1),
+        session_id=sid,
+        iteration=1,
+        input_tokens=100,
+        output_tokens=200,
         cost_usd=0.001,
     )
     journal.write_token_usage(
-        task_id=_tid(1), session_id=sid, iteration=2, input_tokens=50, output_tokens=100,
+        task_id=_tid(1),
+        session_id=sid,
+        iteration=2,
+        input_tokens=50,
+        output_tokens=100,
         cost_usd=0.002,
     )
     # A different session and a parent (unattributed) row must not leak in.
     journal.write_token_usage(
-        task_id=_tid(2), session_id=other, iteration=1, input_tokens=9999, output_tokens=9999,
+        task_id=_tid(2),
+        session_id=other,
+        iteration=1,
+        input_tokens=9999,
+        output_tokens=9999,
         cost_usd=9.0,
     )
     journal.write_token_usage(

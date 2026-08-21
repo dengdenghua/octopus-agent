@@ -436,9 +436,7 @@ class TestSnippetCap:
 
     def test_tavily_keeps_long_snippet(self):
         payload = {
-            "results": [
-                {"title": "AI", "url": "https://example.com/a", "content": _long_snippet()}
-            ]
+            "results": [{"title": "AI", "url": "https://example.com/a", "content": _long_snippet()}]
         }
         client = _MockClient(post_response=_MockResponse(status_code=200, json_data=payload))
         result = _tavily_search(client, "k", "q", max_results=5)

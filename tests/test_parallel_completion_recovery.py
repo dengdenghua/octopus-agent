@@ -85,6 +85,7 @@ def test_parallel_batch_timeout_drains_hung_lane():
     beak_steps: list[Any] = [None, None]
 
     with _cf.ThreadPoolExecutor(max_workers=2) as pool:
+
         def _hung() -> tuple[str, None]:
             release.wait(30)
             return "hung-done", None

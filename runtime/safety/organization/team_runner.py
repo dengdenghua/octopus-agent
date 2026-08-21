@@ -277,7 +277,6 @@ def _critic_has_issues(text: str) -> bool:
 
 
 class TeamRunner:
-
     """Drive one TeamTopology against one task."""
 
     def __init__(

@@ -26,7 +26,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 
 def _resolve_project(raw: Any) -> str:
@@ -58,11 +58,31 @@ def _require_flag() -> None:
 def create_ambient_suggestions_router(
     *,
     base_dir: Path | None = None,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
 ) -> APIRouter:
     """Factory. ``base_dir`` override is for tests; production uses
     ``<data>/ambient_suggestions/`` via the module default."""
 
-    router = APIRouter()
+    def _operator_dep(request: Request) -> None:
+        from runtime.safety.auth.principal import require_operator
+
+        # Suggestions currently use process-global buckets keyed by a
+        # caller-supplied host path.  Until storage is tenant-scoped, keep the
+        # entire surface operational-only in shared deployments.
+        require_operator(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(dependencies=[Depends(_operator_dep)])
 
     @router.get("/api/ambient-suggestions")
     def list_suggestions(project: str, locale: str | None = None) -> dict[str, Any]:

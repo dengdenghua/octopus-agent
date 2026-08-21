@@ -175,6 +175,7 @@ def test_verification_repair_request_is_bounded_and_carries_failure_evidence(
     assert "assert 1 == 2" in request["prompt"]
     assert "runtime will rerun" in request["prompt"]
 
+
 def test_agent_verification_request_is_bounded_and_carries_commands(tmp_path: Path) -> None:
     plan = _plan(tmp_path)
 

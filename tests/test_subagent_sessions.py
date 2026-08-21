@@ -209,6 +209,42 @@ def test_call_subagent_cross_thread_continuation_blocked(tmp_path: Path) -> None
         set_subagent_session_store(previous_store)
 
 
+def test_call_subagent_cross_principal_continuation_blocked(tmp_path: Path) -> None:
+    """A guessed session id stays private even when a legacy thread id collides."""
+    previous_runner = bridge.get_sub_agent_runner()
+    previous_store = get_subagent_session_store()
+    store = _store(tmp_path)
+    try:
+        bridge.set_sub_agent_runner(lambda prompt, **kw: "answer")  # type: ignore[arg-type]
+        set_subagent_session_store(store)
+        first = bridge.call_subagent(
+            agent_id="zzz_custom_session_role",
+            prompt="alice secret",
+            context={
+                "thread_id": "shared-legacy-thread",
+                "owner_actor_id": "alice",
+                "tenant_id": "tenant-a",
+            },
+        )
+        cross = bridge.call_subagent(
+            agent_id="zzz_custom_session_role",
+            prompt="steal",
+            continue_session_id=first["session_id"],
+            context={
+                "thread_id": "shared-legacy-thread",
+                "owner_actor_id": "bob",
+                "tenant_id": "tenant-b",
+            },
+        )
+    finally:
+        bridge.set_sub_agent_runner(previous_runner)
+        set_subagent_session_store(previous_store)
+
+    assert first["success"] is True
+    assert cross["success"] is False
+    assert cross["session_error"] == "unknown_session"
+
+
 def test_call_subagent_unknown_session_fails_loud(tmp_path: Path) -> None:
     seen: list[str] = []
     previous_runner = bridge.get_sub_agent_runner()

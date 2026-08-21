@@ -4,6 +4,7 @@ import ipaddress
 import socket
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 from urllib.parse import urlparse
 
 _SAFE_SCHEMES = frozenset({"http", "https"})
@@ -53,6 +54,13 @@ def check_url(
     scheme = (parsed.scheme or "").lower()
     if scheme not in _SAFE_SCHEMES:
         return URLVerdict(False, url, f"disallowed_scheme: {scheme!r}")
+
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        return URLVerdict(False, url, f"invalid_port: {exc}")
+    if port == 0:
+        return URLVerdict(False, url, "invalid_port: 0")
 
     host = parsed.hostname
     if not host:
@@ -139,33 +147,35 @@ def safe_urlopen(
     are all GETs.
     """
     import urllib.error
-    import urllib.request
 
-    verdict = check_url(url, allow_private=allow_private)
-    if not verdict.allow:
-        raise ValueError(f"url_guard rejected: {verdict.reason}")
+    try:
+        # Read one byte beyond the public contract so callers retain the
+        # historical truncation signal without ever buffering an unbounded
+        # response. Redirects are revalidated at every hop.
+        response = safe_httpx_request(
+            "GET",
+            url,
+            timeout=timeout,
+            allow_private=allow_private,
+            follow_redirects=True,
+            read_cap_bytes=read_cap_bytes + 1,
+        )
+        response.raise_for_status()
+    except ValueError:
+        raise
+    except Exception as exc:
+        # Preserve the legacy urllib-facing error contract used by the
+        # browser helpers while routing the actual connection through httpx.
+        try:
+            import httpx
+        except ImportError:  # pragma: no cover - safe_httpx_request already reports it
+            raise
+        if isinstance(exc, httpx.HTTPError):
+            raise urllib.error.URLError(str(exc)) from exc
+        raise
 
-    parsed = urlparse(url)
-    host = parsed.hostname or ""
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
-    resolved_ip = verdict.resolved_ip or host
-
-    # Build a URL whose authority is the resolved IP literal so the
-    # HTTP client connects to the exact IP we approved. Bracket IPv6.
-    ip_is_v6 = ":" in resolved_ip and "." not in resolved_ip
-    authority = f"[{resolved_ip}]:{port}" if ip_is_v6 else f"{resolved_ip}:{port}"
-    pinned_url = parsed._replace(netloc=authority).geturl()
-
-    # Preserve original Host header (vhost / SNI routing). urllib does
-    # not expose an SNI override, so for HTTPS we still rely on its
-    # default (which will use the pinned IP — broken SNI for TLS).
-    # That's fine for the internal probes we have today (fetch_url,
-    # browser probe). When someone needs real TLS-SNI safety, swap to
-    # httpx + a custom transport (see _safe_httpx_transport below).
-    req = urllib.request.Request(pinned_url, headers={"Host": host})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310 — audited pinned-IP probe
-        data = resp.read(read_cap_bytes + 1)
-        headers = {k: v for k, v in resp.headers.items()}
+    data = bytes(response.content)
+    headers = {key.title(): value for key, value in response.headers.items()}
     if len(data) > read_cap_bytes:
         data = data[:read_cap_bytes]
         headers["X-Octopus-Truncated"] = "true"
@@ -178,6 +188,7 @@ def safe_httpx_get(
     timeout: float = 30.0,
     allow_private: bool = False,
     follow_redirects: bool = False,
+    read_cap_bytes: int | None = None,
 ):
     """Rebinding-proof GET via httpx when the dep is available.
 
@@ -197,6 +208,7 @@ def safe_httpx_get(
         timeout=timeout,
         allow_private=allow_private,
         follow_redirects=follow_redirects,
+        read_cap_bytes=read_cap_bytes,
     )
 
 
@@ -210,6 +222,7 @@ def safe_httpx_request(
     timeout: float = 30.0,
     allow_private: bool = False,
     follow_redirects: bool = False,
+    read_cap_bytes: int | None = None,
 ):
     """Make one rebinding-resistant HTTP request.
 
@@ -217,12 +230,20 @@ def safe_httpx_request(
     to that exact approved IP. Redirects are disabled by default; callers that
     opt in get the same validation and IP pinning on every hop. This helper is
     intentionally the common path for control-plane proxying and OAuth
-    discovery/token calls.
+    discovery/token calls. When ``read_cap_bytes`` is set, the response is
+    consumed as a stream and the connection is aborted as soon as the decoded
+    body crosses the limit; callers therefore get a real memory bound rather
+    than a post-buffering length check.
     """
     try:
         import httpx
     except ImportError as exc:  # pragma: no cover - caller should check
         raise RuntimeError("httpx is required for safe_httpx_request") from exc
+
+    if read_cap_bytes is not None and read_cap_bytes <= 0:
+        raise ValueError("read_cap_bytes must be positive")
+    if headers and any(key.lower() == "accept-encoding" for key in headers):
+        raise ValueError("Accept-Encoding is managed by url_guard")
 
     visited: set[str] = set()
     current_url = url
@@ -238,6 +259,13 @@ def safe_httpx_request(
         parsed = urlparse(current_url)
         host = parsed.hostname or ""
         resolved_ip = verdict.resolved_ip or host
+        default_port = 443 if parsed.scheme.lower() == "https" else 80
+        host_literal = f"[{host}]" if ":" in host else host
+        host_header = (
+            f"{host_literal}:{parsed.port}"
+            if parsed.port is not None and parsed.port != default_port
+            else host_literal
+        )
 
         # httpx ``transport`` takes a resolver hook. Pin every host
         # seen in this request to the single IP we approved.
@@ -255,33 +283,94 @@ def safe_httpx_request(
                     # rewriting the URL host to the fake IP would drop SNI and
                     # fail the handshake. Keep the hostname URL in that case.
                     if not _is_fake_ip(self_inner._pinned_ip):
-                        new_url = request.url.copy_with(
-                            host=self_inner._pinned_ip
-                        )
+                        # httpcore uses this extension as the TLS
+                        # ``server_hostname`` while the rewritten URL controls
+                        # only the TCP destination. Without it, a normal public
+                        # DNS result would pin the socket correctly but validate
+                        # the certificate against the IP address.
+                        request.extensions["sni_hostname"] = target_host
+                        new_url = request.url.copy_with(host=self_inner._pinned_ip)
                         request.url = new_url
                     request.headers.setdefault("Host", target_host)
                 return super().handle_request(request)
 
         transport = _PinnedResolver(host, resolved_ip)
-        request_headers = dict(headers or {})
-        request_headers.setdefault("Host", host)
+        request_headers = {
+            key: value for key, value in (headers or {}).items() if key.lower() != "host"
+        }
+        # Pin the HTTP authority to the validated URL instead of trusting a
+        # caller-supplied Host header. Preserve non-default ports and IPv6
+        # brackets so virtual-host routing remains standards-compliant.
+        request_headers["Host"] = host_header
         with httpx.Client(transport=transport, timeout=timeout, follow_redirects=False) as client:
+            request_kwargs: dict[str, Any] = {
+                "headers": request_headers,
+                "json": json,
+            }
             if isinstance(data, (bytes, str)):
+                request_kwargs["content"] = data
+            else:
+                request_kwargs["data"] = data
+
+            if read_cap_bytes is None:
                 resp = client.request(
                     method.upper(),
                     current_url,
-                    headers=request_headers,
-                    json=json,
-                    content=data,
+                    **request_kwargs,
                 )
             else:
-                resp = client.request(
+                request = client.build_request(
                     method.upper(),
                     current_url,
-                    headers=request_headers,
-                    json=json,
-                    data=data,
+                    **request_kwargs,
                 )
+                streamed = client.send(request, stream=True)
+                try:
+                    advertised_encodings = {
+                        part.split(";", 1)[0].strip().lower()
+                        for part in request.headers.get("Accept-Encoding", "").split(",")
+                        if part.strip()
+                    }
+                    response_encodings = {
+                        part.strip().lower()
+                        for part in streamed.headers.get("Content-Encoding", "").split(",")
+                        if part.strip() and part.strip().lower() != "identity"
+                    }
+                    unsupported_encodings = response_encodings - advertised_encodings
+                    if unsupported_encodings and "*" not in advertised_encodings:
+                        unsupported = ", ".join(sorted(unsupported_encodings))
+                        raise httpx.DecodingError(
+                            f"response uses unadvertised content encoding: {unsupported}",
+                            request=streamed.request,
+                        )
+                    body = bytearray()
+                    for chunk in streamed.iter_bytes():
+                        if len(chunk) > read_cap_bytes - len(body):
+                            raise ValueError(f"response exceeds {read_cap_bytes} bytes")
+                        body.extend(chunk)
+                    # ``iter_bytes()`` yields decoded representation bytes.
+                    # Reusing the upstream Content-Encoding would make the
+                    # detached response try to decode the already-decoded body
+                    # a second time (and can raise httpx.DecodingError).  The
+                    # original length/transfer framing is stale for the same
+                    # reason, so expose headers that describe the detached
+                    # in-memory response instead.
+                    detached_headers = [
+                        (key, value)
+                        for key, value in streamed.headers.multi_items()
+                        if key.lower()
+                        not in {"content-encoding", "content-length", "transfer-encoding"}
+                    ]
+                    # Return a regular, fully-readable response whose content
+                    # no longer depends on the client/transport context.
+                    resp = httpx.Response(
+                        status_code=streamed.status_code,
+                        headers=detached_headers,
+                        content=bytes(body),
+                        request=streamed.request,
+                    )
+                finally:
+                    streamed.close()
             if not follow_redirects:
                 return resp
             if resp.status_code not in (301, 302, 303, 307, 308):

@@ -67,6 +67,8 @@ class SubagentDispatchRequest(BaseModel):
 
 _MIN_DISPATCH_TIMEOUT_S = 1
 _MAX_DISPATCH_TIMEOUT_S = 900
+_SUBAGENT_BUS_QUEUE_MAX = 256
+_SUBAGENT_BUS_REPLAY_MAX = 500
 
 
 def _bounded_dispatch_timeout(value: Any) -> int:
@@ -96,9 +98,20 @@ def _dispatch_context_from_body(body: SubagentDispatchRequest) -> dict[str, Any]
     return ctx
 
 
+def _put_bounded_bus_event(queue: Any, event: dict[str, Any]) -> None:
+    """Keep a slow SSE consumer bounded, retaining the newest lifecycle data."""
+    if queue.full():
+        with contextlib.suppress(Exception):
+            queue.get_nowait()
+    with contextlib.suppress(Exception):
+        queue.put_nowait(event)
+
+
 def create_subagents_router(
     *,
     registry: Any = None,
+    thread_store: Any = None,
+    workspace_root: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
     jwt_secret: str | None = None,
@@ -120,6 +133,149 @@ def create_subagents_router(
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
         )
+
+    def _require_root_thread_access(request: Any, root_thread_id: str) -> None:
+        actor = _auth(request)
+        if not require_auth:
+            return
+        principal = getattr(getattr(request, "state", None), "principal", None)
+        if not actor or principal is None:
+            raise HTTPException(401, "authentication required")
+        if thread_store is None:
+            raise HTTPException(503, "thread ownership store unavailable")
+        thread = None
+        if hasattr(thread_store, "get"):
+            thread = thread_store.get(root_thread_id)
+        if thread is None and hasattr(thread_store, "get_state"):
+            thread = thread_store.get_state(root_thread_id)
+        if not isinstance(thread, dict):
+            raise HTTPException(404, f"thread not found: {root_thread_id}")
+        raw_metadata = thread.get("metadata")
+        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+        owner = metadata.get("owner_actor_id") or metadata.get("actor_id")
+        privileged = bool(principal.roles.intersection({"admin", "operator"}))
+        if owner != actor and not privileged:
+            raise HTTPException(404, f"thread not found: {root_thread_id}")
+        if privileged:
+            return
+        stored_tenant = str(metadata.get("tenant_id") or "").strip()
+        principal_tenant = str(getattr(principal, "tenant_id", "") or "").strip()
+        if (
+            principal_tenant
+            and not principal_tenant.startswith("legacy:")
+            and stored_tenant != principal_tenant
+        ):
+            raise HTTPException(404, f"thread not found: {root_thread_id}")
+        if principal_tenant and stored_tenant and stored_tenant != principal_tenant:
+            raise HTTPException(404, f"thread not found: {root_thread_id}")
+
+    def _authenticated_dispatch_context(
+        request: Any,
+        body: SubagentDispatchRequest,
+    ) -> tuple[dict[str, Any], str | None, Any]:
+        """Resolve direct-dispatch execution authority from the owned thread.
+
+        Anonymous local mode retains the legacy caller-selected context. In
+        authenticated mode, the thread id is mandatory and the principal,
+        workspace and tool policy are all server-owned.
+        """
+        actor = _auth(request)
+        if not require_auth:
+            return _dispatch_context_from_body(body), None, None
+        principal = getattr(getattr(request, "state", None), "principal", None)
+        if not actor or principal is None:
+            raise HTTPException(401, "authentication required")
+        thread_id = str(body.thread_id or "").strip()
+        if not thread_id:
+            raise HTTPException(400, "thread_id is required")
+        try:
+            from runtime.memory.threads.event_log import validate_thread_id
+
+            thread_id = validate_thread_id(thread_id)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if thread_store is None or not hasattr(thread_store, "get"):
+            raise HTTPException(503, "thread ownership store unavailable")
+        thread = thread_store.get(thread_id)
+        raw_metadata = thread.get("metadata") if isinstance(thread, dict) else None
+        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+        if metadata.get("owner_actor_id") != actor:
+            raise HTTPException(404, f"thread not found: {thread_id}")
+        tenant_id = str(getattr(principal, "tenant_id", "") or "").strip()
+        if not tenant_id or metadata.get("tenant_id") != tenant_id:
+            raise HTTPException(404, f"thread not found: {thread_id}")
+
+        from runtime.sensing.gateway.thread_workspace import (
+            PROTECTED_WORKSPACE_METADATA_KEYS,
+            verified_managed_workspace,
+        )
+
+        workspace = verified_managed_workspace(
+            workspace_root,
+            thread_id=thread_id,
+            metadata=metadata,
+        )
+        if workspace is None:
+            raise HTTPException(409, "verified managed thread workspace required")
+
+        context = _dispatch_context_from_body(body)
+        untrusted_keys = {
+            *PROTECTED_WORKSPACE_METADATA_KEYS,
+            "workspace",
+            "sandbox_dir",
+            "locked_write_root",
+            "_locked_write_root",
+            "allowed_paths",
+            "tool_allowlist",
+            "tool_allowlist_mode",
+            "allowed_tools",
+            "tools",
+            "extra_tool_allowlist",
+            "extra_tools",
+            "extra_skills",
+            "actor",
+            "actor_id",
+            "owner_actor_id",
+            "tenant_id",
+            "caller_thread_id",
+        }
+        for key in untrusted_keys:
+            context.pop(key, None)
+        raw_runtime_metadata = context.get("runtime_session_metadata")
+        runtime_metadata = (
+            dict(raw_runtime_metadata) if isinstance(raw_runtime_metadata, dict) else {}
+        )
+        for key in untrusted_keys:
+            runtime_metadata.pop(key, None)
+        workspace_str = str(workspace)
+        runtime_metadata.update(
+            {
+                "thread_id": thread_id,
+                "workspace_path": workspace_str,
+                "_locked_write_root": workspace_str,
+                "_artifact_output_root": str(workspace / "output" / "final"),
+                "owner_actor_id": actor,
+                "tenant_id": tenant_id,
+            }
+        )
+        context.update(
+            {
+                "thread_id": thread_id,
+                "caller_thread_id": thread_id,
+                "actor": actor,
+                "actor_id": actor,
+                "owner_actor_id": actor,
+                "tenant_id": tenant_id,
+                "workspace_path": workspace_str,
+                "_locked_write_root": workspace_str,
+                # A client cannot promote a direct HTTP dispatch to the full
+                # catalog. The selected role's server-defined allowlist is the
+                # only positive tool grant.
+                "tool_allowlist_mode": "role",
+                "runtime_session_metadata": runtime_metadata,
+            }
+        )
+        return context, workspace_str, principal
 
     def _registry() -> Any:
         if registry is not None:
@@ -166,7 +322,23 @@ def create_subagents_router(
         substring ``query``, excluding ``target``. ``limit`` is clamped to
         [1, 200]. Best-effort — an unavailable store returns an empty list.
         """
-        _auth(request)  # AUTH-OK: actor-agnostic candidate discovery
+        actor = _auth(request)
+        principal = getattr(getattr(request, "state", None), "principal", None)
+        if require_auth:
+            if not target.strip():
+                raise HTTPException(400, "target thread is required")
+            if not actor or principal is None:
+                raise HTTPException(401, "authentication required")
+            if thread_store is None or not hasattr(thread_store, "get"):
+                raise HTTPException(503, "thread ownership store unavailable")
+            thread = thread_store.get(target.strip())
+            raw_metadata = thread.get("metadata") if isinstance(thread, dict) else None
+            metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+            if (
+                metadata.get("owner_actor_id") != actor
+                or metadata.get("tenant_id") != principal.tenant_id
+            ):
+                raise HTTPException(404, f"thread not found: {target.strip()}")
         from runtime.execution.subagents.sessions import get_subagent_session_store
 
         store = get_subagent_session_store()
@@ -180,6 +352,8 @@ def create_subagents_router(
             target_id=target or "",
             query=query or "",
             limit=limit_int,
+            owner_actor_id=(actor if require_auth else None),
+            tenant_id=(principal.tenant_id if require_auth and principal is not None else None),
         )
         return {"candidates": candidates}
 
@@ -206,7 +380,7 @@ def create_subagents_router(
 
     @router.post("/api/subagents/dispatch")
     def dispatch_subagent(request: Request, body: SubagentDispatchRequest) -> dict[str, Any]:
-        _auth(request)  # AUTH-OK: actor-agnostic — subagents are global; timeout is bounded below
+        ctx, workspace_path, _principal = _authenticated_dispatch_context(request, body)
         target = (body.subagent_type or body.name or "").strip()
         if not target:
             raise HTTPException(400, "subagent_type is required")
@@ -214,7 +388,6 @@ def create_subagents_router(
             raise HTTPException(400, "prompt is required")
         from runtime.execution.subagents import call_subagent
 
-        ctx = _dispatch_context_from_body(body)
         timeout_s = _bounded_dispatch_timeout(body.timeout_s)
         result = call_subagent(
             target,
@@ -222,6 +395,7 @@ def create_subagents_router(
             context=ctx,
             timeout_s=timeout_s,
             timeout_seconds=float(timeout_s),
+            workspace_path=workspace_path or "",
             requires_capabilities=body.requires_capabilities,
             continue_session_id=body.continue_session_id,
         )
@@ -252,7 +426,7 @@ def create_subagents_router(
         The terminal ``result`` event always fires last so consumers can
         treat it as the canonical end-of-stream marker.
         """
-        _auth(request)  # AUTH-OK: same as dispatch
+        stream_ctx, workspace_path, _principal = _authenticated_dispatch_context(request, body)
         target = (body.subagent_type or body.name or "").strip()
         if not target:
             raise HTTPException(400, "subagent_type is required")
@@ -277,7 +451,6 @@ def create_subagents_router(
 
         def _runner() -> None:
             try:
-                stream_ctx = _dispatch_context_from_body(body)
                 timeout_s = _bounded_dispatch_timeout(body.timeout_s)
                 result = call_subagent(
                     target,
@@ -285,6 +458,7 @@ def create_subagents_router(
                     context=stream_ctx,
                     timeout_s=timeout_s,
                     timeout_seconds=float(timeout_s),
+                    workspace_path=workspace_path or "",
                     event_emitter=_emitter,
                     requires_capabilities=body.requires_capabilities,
                     continue_session_id=body.continue_session_id,
@@ -339,11 +513,13 @@ def create_subagents_router(
                 "X-Accel-Buffering": "no",  # disable nginx buffering if proxied
             },
         )
+
     @router.get("/api/subagents/stream/{root_thread_id}")
     async def _subagents_bus_stream(
+        request: Request,
         root_thread_id: str,
         after_seq: int = Query(0, ge=0),
-        limit: int | None = Query(None, ge=1),
+        limit: int | None = Query(None, ge=1, le=_SUBAGENT_BUS_REPLAY_MAX),
     ) -> Any:
         """Live SSE stream of the typed sub-agent event bus for a root thread.
 
@@ -352,6 +528,7 @@ def create_subagents_router(
         full-fidelity stream of a sub-agent run. Pass ``limit`` for a bounded
         snapshot instead of a long-lived subscription.
         """
+        _require_root_thread_access(request, root_thread_id)
         return _subagent_bus_endpoint(root_thread_id, after_seq, limit)
 
     return router
@@ -395,10 +572,11 @@ async def _subagent_bus_sse(
     # ``None`` is the shutdown sentinel, so the live queue is widened relative to
     # the replay events above. Keep the streamed value in its own name: reusing
     # ``event`` from the replay loop would pin it to the narrower ``dict[str, Any]``.
-    queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+    queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue(maxsize=_SUBAGENT_BUS_QUEUE_MAX)
 
     def _on_event(event: dict[str, Any]) -> None:
-        loop.call_soon_threadsafe(queue.put_nowait, event)
+        with contextlib.suppress(RuntimeError):
+            loop.call_soon_threadsafe(_put_bounded_bus_event, queue, event)
 
     unsubscribe = bus.subscribe(_on_event)
     try:
@@ -434,5 +612,6 @@ def _subagent_bus_endpoint(
             "X-Accel-Buffering": "no",  # disable nginx buffering if proxied
         },
     )
+
 
 __all__ = ["SubagentDispatchRequest", "create_subagents_router"]

@@ -66,7 +66,10 @@ def derive_model_messages(
     """
 
     events = journal.read_all()
-    steps: list[StepEvent] = [e for e in events if e.event_type == "step"]
+    # Parsed step rows are concrete ``StepEvent`` instances. Narrow by the
+    # runtime class rather than only the discriminator string so static and
+    # runtime consumers agree that ``step`` is available below.
+    steps = [e for e in events if isinstance(e, StepEvent)]
     if task_id is not None:
         wanted = str(task_id)
         steps = [e for e in steps if str(e.task_id) == wanted]

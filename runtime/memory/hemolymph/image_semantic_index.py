@@ -554,7 +554,6 @@ def search_face(
 # ---------------------------------------------------------------------------
 
 
-
 _READ_DB_QUERIES = {
     ("image_categories", "name"): "SELECT name FROM image_categories",
     ("image_hashes", "path, dhash"): "SELECT path, dhash FROM image_hashes",

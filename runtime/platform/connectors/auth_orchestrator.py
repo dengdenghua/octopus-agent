@@ -9,6 +9,7 @@
 注意: CLI auth 命令会弹浏览器/起交互进程;网关调用 connect 时默认以
 ``detached`` 方式(仅输出提示)执行,除非显式 ``run=true`` 同步跑。
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -105,9 +106,9 @@ class AuthOrchestrator:
                 "connected": code == 0 and self._match_status(conn, stdout),
             }
         # 设备流:status 确认已登录(或超时) → 终止并清理后台 auth 进程
-        cli_connected = bool(
-            (detail.get("cli_status") or {}).get("connected")
-        ) or bool(detail.get("has_token"))
+        cli_connected = bool((detail.get("cli_status") or {}).get("connected")) or bool(
+            detail.get("has_token")
+        )
         self._finish_device_flow(conn, cli_connected)
         return detail
 
@@ -295,7 +296,11 @@ class AuthOrchestrator:
             sess = _device_flows.get(conn.id)
             if sess is None:
                 return {"connector_id": conn.id, "active": False, "device_flow": None}
-            return {"connector_id": conn.id, "active": True, **self._device_flow_payload(conn, sess)}
+            return {
+                "connector_id": conn.id,
+                "active": True,
+                **self._device_flow_payload(conn, sess),
+            }
 
     def cancel_device_flow(self, conn: ConnectorDefinition) -> dict[str, Any]:
         """取消进行中的设备流登录(终止后台进程)。"""
@@ -312,10 +317,9 @@ class AuthOrchestrator:
         headers: dict[str, str] = {}
         # 0) oneid-token(腾讯统一身份):注入 X-ONEID-ACCESS-TOKEN
         if conn.auth_mode == "oneid-token":
-            tok = (
-                self._credentials.get_secret(conn.id, "oneid_token")
-                or self._credentials.get_secret(conn.id, "access_token")
-            )
+            tok = self._credentials.get_secret(
+                conn.id, "oneid_token"
+            ) or self._credentials.get_secret(conn.id, "access_token")
             if tok:
                 headers["X-ONEID-ACCESS-TOKEN"] = tok
         # 1) connector 自带规则(connectors.json auth_injection_rules)

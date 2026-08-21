@@ -37,7 +37,9 @@ def test_assert_item_cap() -> None:
 def test_read_agent_options() -> None:
     ex = _exec()
     assert ex._read_agent_options(None) == {}
-    opts = ex._read_agent_options({"label": "l", "phase": "p", "model": "m", "schema": {"type": "object"}})
+    opts = ex._read_agent_options(
+        {"label": "l", "phase": "p", "model": "m", "schema": {"type": "object"}}
+    )
     assert opts["label"] == "l"
     with pytest.raises(WorkflowError):
         ex._read_agent_options("not-a-dict")

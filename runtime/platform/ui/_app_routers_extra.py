@@ -38,7 +38,15 @@ def mount_routers_b(
             create_ambient_suggestions_router,
         )
 
-        app.include_router(create_ambient_suggestions_router())
+        app.include_router(
+            create_ambient_suggestions_router(
+                identity_store=ctx.identity_store,
+                require_auth=ctx.require_auth,
+                jwt_secret=ctx.jwt_secret,
+                jwt_issuer=ctx.jwt_issuer,
+                jwt_audience=ctx.jwt_audience,
+            )
+        )
     except Exception as _amb_exc:  # noqa: BLE001
         logging.getLogger(__name__).warning(
             "ambient_suggestions_router failed to mount: %s",
@@ -350,7 +358,10 @@ def mount_routers_b(
                 try:
                     from runtime.projectos.llm_hooks import create_llm_hooks
 
-                    _project_os_hooks = create_llm_hooks(ctx.project_model_router)
+                    _project_os_hooks = create_llm_hooks(
+                        ctx.project_model_router,
+                        subagent_runner=ctx.subagent_runner,
+                    )
                 except Exception as exc:  # noqa: BLE001
                     logging.getLogger(__name__).warning(
                         "projectos llm hooks unavailable for realtime: %s",
@@ -387,7 +398,9 @@ def mount_routers_b(
                 agent_registry=ctx.agent_registry,
                 logs_root=str(_realtime_logs_root),
                 policy_path=app_paths().permissions_path,
-                workspace_root=str(app_paths().data_dir / "workspaces"),
+                workspace_root=str(
+                    ctx.thread_workspace_root or (app_paths().data_dir / "workspaces")
+                ),
                 compaction_policy=_compaction_policy,
                 summary_router=_summary_router,
                 thread_store=ctx.thread_store,
@@ -402,6 +415,7 @@ def mount_routers_b(
                 ),
                 project_store=ctx.project_store,
                 project_os_hooks=_project_os_hooks,
+                subagent_runner=ctx.subagent_runner,
                 session_titles=_session_titles,
             )
         else:

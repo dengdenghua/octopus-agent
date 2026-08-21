@@ -59,6 +59,16 @@ class _DetachedTurnEmitter:
         self._thread_id = thread_id
         self._owner = owner
 
+    @property
+    def actor_id(self) -> str | None:
+        """Authenticated actor captured when the resident turn was created."""
+        return getattr(self._owner, "actor_id", None)
+
+    @property
+    def tenant_id(self) -> str | None:
+        """Authenticated tenant captured with ``actor_id`` for the turn."""
+        return getattr(self._owner, "tenant_id", None)
+
     # ── targeting ──────────────────────────────────────────────
 
     @staticmethod
@@ -130,9 +140,7 @@ class _DetachedTurnEmitter:
                 if remaining <= 0:
                     break
                 try:
-                    return await targets[0].request_approval(
-                        method, params, timeout=remaining
-                    )
+                    return await targets[0].request_approval(method, params, timeout=remaining)
                 except _ApprovalError:
                     # Real approval semantics (timeout/decline) from a
                     # live connection — surface unchanged.

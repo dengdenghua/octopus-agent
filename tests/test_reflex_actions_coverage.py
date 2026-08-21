@@ -23,7 +23,9 @@ from runtime.core.nerves.reflex.actions import (
 def test_action_spec_from_entry() -> None:
     assert ActionSpec.from_entry(None) is None
     assert ActionSpec.from_entry({}) is None
-    spec = ActionSpec.from_entry({"webhook": {"url": "https://x"}, "exec": {"cmd": "ls"}, "mqtt": {"broker": "b"}})
+    spec = ActionSpec.from_entry(
+        {"webhook": {"url": "https://x"}, "exec": {"cmd": "ls"}, "mqtt": {"broker": "b"}}
+    )
     assert spec.webhook["url"] == "https://x"
     assert spec.exec["cmd"] == "ls"
     assert spec.mqtt["broker"] == "b"
@@ -153,7 +155,21 @@ def test_run_mqtt_validation(monkeypatch) -> None:
     assert _run_mqtt("r1", {"topic": "t"}).error == "missing broker"
     assert _run_mqtt("r1", {"broker": "b"}).error == "missing topic"
 
-    res = _run_mqtt("r1", {"broker": "localhost:1884", "topic": "t", "qos": 9, "retain": True, "payload": {"x": 1}, "username": "u", "password": "p", "tls": True, "client_id": "cid", "timeout_ms": 1000})
+    res = _run_mqtt(
+        "r1",
+        {
+            "broker": "localhost:1884",
+            "topic": "t",
+            "qos": 9,
+            "retain": True,
+            "payload": {"x": 1},
+            "username": "u",
+            "password": "p",
+            "tls": True,
+            "client_id": "cid",
+            "timeout_ms": 1000,
+        },
+    )
     assert res.success is True
     assert "localhost:1884" in res.detail
 
@@ -196,7 +212,10 @@ def test_execute_action_order(monkeypatch) -> None:
     assert len(out) == 3
 
     # Exceptions inside runners are swallowed defensively.
-    monkeypatch.setattr("runtime.core.nerves.reflex.actions._run_webhook", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(
+        "runtime.core.nerves.reflex.actions._run_webhook",
+        lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
     out = execute_action(ActionSpec(webhook={"url": "x"}), "r1")
     assert out == []
 

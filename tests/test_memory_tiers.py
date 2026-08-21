@@ -274,7 +274,6 @@ class TestThreeTierStacking:
         )
         assert "Long-term Memory" not in soul
 
-
     def test_oversized_memory_tier_is_bounded(
         self,
         tmp_path: Path,
@@ -293,7 +292,7 @@ class TestThreeTierStacking:
         repo.mkdir()
         monkeypatch.chdir(repo)
 
-        big_memory = ("- [claude] topic-%03d: summary line \n" * 1500)
+        big_memory = "- [claude] topic-%03d: summary line \n" * 1500
         project_mem = repo / ".octopus" / "MEMORY.md"
         project_mem.parent.mkdir()
         project_mem.write_text(big_memory, encoding="utf-8")

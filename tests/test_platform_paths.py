@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from runtime.platform.process.paths import app_paths, project_root, resources_root
+from runtime.platform.process.paths import (
+    app_paths,
+    bundled_market_skills_dir,
+    project_root,
+    resources_root,
+)
 
 
 def _make_project(root: Path) -> Path:
@@ -20,6 +25,7 @@ def test_app_paths_follow_octopus_data_dir(monkeypatch, tmp_path):
 
     assert paths.root == data_dir.resolve().parent
     assert paths.data_dir == data_dir.resolve()
+    assert paths.codex_plugins_path == data_dir.resolve() / "plugins" / "codex"
     assert paths.threads_path == data_dir.resolve() / "threads.jsonl"
     assert paths.agent_trace_path == data_dir.resolve() / "agent_trace.sqlite"
     assert paths.permissions_path == data_dir.resolve() / "permissions.json"
@@ -76,9 +82,9 @@ def test_project_root_falls_back_to_cwd_without_sentinels(monkeypatch, tmp_path)
 
 def test_resources_root_honours_env(monkeypatch, tmp_path):
     # The Docker image pip-installs the code and runs from /data, so
-    # project_root() can't find bundled skills/prompts/protocols. The
+    # project_root() can't find deployment-owned skills/prompts/protocols. The
     # image sets OCTOPUS_RESOURCES_DIR=/app/resources; resources_root()
-    # must honour it so the 87+ file-backed skills actually load.
+    # must honour it so the skill lock and external resources are discoverable.
     res = tmp_path / "resources"
     res.mkdir()
     monkeypatch.setenv("OCTOPUS_RESOURCES_DIR", str(res))
@@ -103,6 +109,20 @@ def test_resources_root_resolves_assets_when_cwd_outside_tree(monkeypatch, tmp_p
     assert (rr / "skills" / "public").is_dir()
     # project_root(), by contrast, degrades to cwd when no sentinel is found.
     assert project_root() == scratch.resolve()
+
+
+def test_bundled_market_skills_are_package_relative(monkeypatch, tmp_path):
+    """The offline catalog must not depend on cwd or a repository resource root."""
+
+    scratch = tmp_path / "outside-repository"
+    scratch.mkdir()
+    monkeypatch.chdir(scratch)
+    monkeypatch.setenv("OCTOPUS_RESOURCES_DIR", str(tmp_path / "empty-resources"))
+
+    bundled = bundled_market_skills_dir()
+
+    assert bundled.name == "all_skills"
+    assert len(list(bundled.glob("*/SKILL.md"))) >= 3
 
 
 def test_project_root_survives_a_deleted_cwd(monkeypatch, tmp_path):

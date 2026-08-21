@@ -369,9 +369,7 @@ def run_group_fanout(
             return rec
 
         results: list[dict[str, Any]] = []
-        with _cf.ThreadPoolExecutor(
-            max_workers=workers, thread_name_prefix="group-fanout"
-        ) as pool:
+        with _cf.ThreadPoolExecutor(max_workers=workers, thread_name_prefix="group-fanout") as pool:
             futures = [pool.submit(_one, m) for m in clean]
             for fut in _cf.as_completed(futures):
                 results.append(fut.result())
@@ -408,11 +406,15 @@ def run_group_fanout(
     spoke = sum(1 for r in all_replies if r["ok"] and r["reply"].strip())
     arbitration = arbitrate_group_fanout(all_replies, turn_id=turn_id)
     synthesis = synthesize_group_fanout(all_replies, arbitration)
-    debate = {
-        "rounds": max([int(r.get("round") or 1) for r in all_replies], default=1),
-        "transcript": transcript,
-        "mentioned": mentioned or [],
-    } if rounds > 1 else None
+    debate = (
+        {
+            "rounds": max([int(r.get("round") or 1) for r in all_replies], default=1),
+            "transcript": transcript,
+            "mentioned": mentioned or [],
+        }
+        if rounds > 1
+        else None
+    )
     return {
         "ok": spoke > 0,
         "replies": all_replies,

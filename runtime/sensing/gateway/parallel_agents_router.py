@@ -34,6 +34,18 @@ def create_parallel_agents_router(
 
     router = APIRouter(tags=["parallel-agents"])
 
+    def _principal(request: Any) -> Any:
+        from runtime.safety.auth.principal import resolve_principal
+
+        return resolve_principal(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     def _auth(request: Any) -> str | None:
         """Authenticate the caller and return actor_id.
 
@@ -44,16 +56,8 @@ def create_parallel_agents_router(
         and the orchestrator treats None-owner as visible-to-everyone,
         so dev workflows are unchanged.
         """
-        from .openai_gateway_router import _resolve_actor
-
-        return _resolve_actor(
-            request,
-            identity_store,
-            require_auth,
-            jwt_secret=jwt_secret,
-            jwt_issuer=jwt_issuer,
-            jwt_audience=jwt_audience,
-        )
+        principal = _principal(request)
+        return principal.actor_id if principal is not None else None
 
     def _require_batch_owner(request: Any, batch_id: str) -> str | None:
         """Enforce that the caller owns ``batch_id`` (or no auth).
@@ -61,7 +65,8 @@ def create_parallel_agents_router(
         Returns actor_id (None in dev mode). Raises 404 for missing
         batches, 403 for cross-user access.
         """
-        actor = _auth(request)
+        principal = _principal(request)
+        actor = principal.actor_id if principal is not None else None
         # In dev mode (no auth required) skip the check.
         if not require_auth:
             return actor
@@ -72,25 +77,27 @@ def create_parallel_agents_router(
         # existence info to non-owners.
         if owner is None and orchestrator.get_batch(batch_id) is None:
             raise HTTPException(404, f"batch not found: {batch_id}")
-        # Legacy unowned batches are visible to everyone (owner == None
-        # but batch exists). Once everything is created with owner_id,
-        # this branch rarely fires.
-        if owner is not None and owner != actor:
+        if owner is None:
+            # Fail closed after an auth-on upgrade. Legacy/unmigrated batches
+            # are visible only to administrators, not to every new tenant.
+            if principal is None or "admin" not in principal.roles:
+                raise HTTPException(404, f"batch not found: {batch_id}")
+        elif owner != actor:
             raise HTTPException(403, "not the owner of this batch")
         return actor
 
     def _require_task_owner(request: Any, task_id: str) -> str | None:
         """Enforce that the caller owns the batch containing ``task_id``."""
-        actor = _auth(request)
+        principal = _principal(request)
+        actor = principal.actor_id if principal is not None else None
         if not require_auth:
             return actor
         if not actor:
             raise HTTPException(401, "authentication required")
         owner = orchestrator.get_task_owner(task_id)
         if owner is None:
-            # Either task doesn't exist OR it's a legacy unowned
-            # batch. Defer to cancel_task's own existence check —
-            # don't 403 for unowned batches.
+            if principal is None or "admin" not in principal.roles:
+                raise HTTPException(404, f"task not found: {task_id}")
             return actor
         if owner != actor:
             raise HTTPException(403, "not the owner of the task's batch")

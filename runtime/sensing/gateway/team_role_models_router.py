@@ -55,6 +55,19 @@ def create_team_role_models_router(
             jwt_audience=jwt_audience,
         )
 
+    def _operator_dep(request: Request) -> None:
+        from runtime.safety.auth.principal import require_roles
+
+        require_roles(
+            request,
+            identity_store,
+            require_auth,
+            ("admin", "operator"),
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     router = APIRouter(
         tags=["team-role-models"],
         dependencies=[Depends(_auth_dep)],
@@ -78,7 +91,10 @@ def create_team_role_models_router(
             "tiers": ["default", "cheap", "primary"],
         }
 
-    @router.put("/api/team/role-models")
+    @router.put(
+        "/api/team/role-models",
+        dependencies=[Depends(_operator_dep)],
+    )
     def api_put_role_models(body: RoleModelsBody) -> dict[str, Any]:
         from runtime.safety.organization.team_role_models import save_overrides
 

@@ -69,7 +69,9 @@ def _git_env_with_node(base_env: dict[str, str] | None = None) -> dict[str, str]
     extra = [d for d in _node_bin_dirs() if d and d not in existing_path.split(os.pathsep)]
     if not extra:
         return src
-    src["PATH"] = os.pathsep.join([*extra, existing_path]) if existing_path else os.pathsep.join(extra)
+    src["PATH"] = (
+        os.pathsep.join([*extra, existing_path]) if existing_path else os.pathsep.join(extra)
+    )
     return src
 
 

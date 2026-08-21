@@ -53,9 +53,7 @@ class IdentityStore:
                     _verify_plaintext_against_hash(api_key_plaintext, existing)
                     for existing in self._by_hash
                 ):
-                    raise ValueError(
-                        "api key hash collision with an existing identity"
-                    )
+                    raise ValueError("api key hash collision with an existing identity")
                 self._by_hash[h] = identity
 
             self._by_actor[identity.actor_id] = identity
@@ -214,9 +212,7 @@ def _verify_plaintext_against_hash(plaintext: str, stored_hash: str) -> bool:
             iterations = int(iters_s)
             salt = bytes.fromhex(salt_hex)
             expected = bytes.fromhex(digest_hex)
-            actual = hashlib.pbkdf2_hmac(
-                "sha256", plaintext.encode("utf-8"), salt, iterations
-            )
+            actual = hashlib.pbkdf2_hmac("sha256", plaintext.encode("utf-8"), salt, iterations)
             return hmac.compare_digest(actual, expected)
         except (ValueError, TypeError):
             return False

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,23 @@ _log = logging.getLogger(__name__)
 
 _MAX_INSTRUCTIONS_BYTES = 32 * 1024  # Implementation note.
 _MAX_RESOURCES_PER_SKILL = 50  # Implementation note.
+
+# A packaged catalog makes registry refresh an update concern, not a startup
+# dependency. Operators may tune the small best-effort window, but it remains
+# hard-capped so a bad value cannot restore the historical multi-minute boot.
+_PROMPT_REFRESH_DEADLINE_ENV = "OCTOPUS_PROMPT_SKILL_REFRESH_DEADLINE_S"
+_PROMPT_REFRESH_DEFAULT_DEADLINE_S = 0.5
+_PROMPT_REFRESH_MAX_DEADLINE_S = 5.0
+_PROMPT_REFRESH_REQUEST_TIMEOUT_S = 0.4
+_PROMPT_REFRESH_MAX_WORKERS = 8
+_IMMUTABLE_PROMPT_CATALOG_MODES = frozenset(
+    {
+        "commercial",
+        "production",
+        "shared",
+        "server",
+    }
+)
 
 _KNOWN_META_KEYS = frozenset(
     {
@@ -297,6 +315,18 @@ def register_market_skills(
         # runtime/execution/suckers/market_skills.py → runtime/execution/all_skills
         all_skills_dir = Path(__file__).resolve().parent.parent / "all_skills"
     all_skills_dir = Path(all_skills_dir)
+    if immutable_prompt_catalog_required():
+        from runtime.platform.process.paths import bundled_market_skills_dir
+
+        if all_skills_dir.resolve(strict=False) != bundled_market_skills_dir().resolve(
+            strict=False
+        ):
+            _log.warning(
+                "refusing mutable prompt-skill catalog %s in %s mode",
+                all_skills_dir,
+                os.environ.get("OCTOPUS_DEPLOYMENT_MODE", "").strip().lower(),
+            )
+            return 0
     if not all_skills_dir.is_dir():
         return 0
 
@@ -451,6 +481,256 @@ def register_market_skills(
     return registered
 
 
+def _has_market_skill_files(path: Path) -> bool:
+    """Whether ``path`` contains a catalog the market loader can consume."""
+
+    return path.is_dir() and any(path.glob("*/SKILL.md"))
+
+
+def immutable_prompt_catalog_required() -> bool:
+    """Whether startup must use only the catalog shipped in this build.
+
+    Registry lockfiles currently identify skills by slug rather than by a
+    publisher signature and locally pinned content digest.  A shared or
+    production process therefore cannot safely let a remote registry (or a
+    previously materialized mutable cache) replace executable prompt text.
+    """
+
+    deployment_mode = os.environ.get("OCTOPUS_DEPLOYMENT_MODE", "").strip().lower()
+    return deployment_mode in _IMMUTABLE_PROMPT_CATALOG_MODES
+
+
+def _prompt_refresh_deadline(explicit: float | None) -> float:
+    raw: Any = explicit
+    if raw is None:
+        raw = os.environ.get(_PROMPT_REFRESH_DEADLINE_ENV)
+    if raw is None or raw == "":
+        return _PROMPT_REFRESH_DEFAULT_DEADLINE_S
+    try:
+        configured = float(raw)
+    except (TypeError, ValueError):
+        _log.warning(
+            "invalid %s=%r; using %.1fs",
+            _PROMPT_REFRESH_DEADLINE_ENV,
+            raw,
+            _PROMPT_REFRESH_DEFAULT_DEADLINE_S,
+        )
+        return _PROMPT_REFRESH_DEFAULT_DEADLINE_S
+    return max(0.0, min(configured, _PROMPT_REFRESH_MAX_DEADLINE_S))
+
+
+def _refresh_prompt_catalog_with_deadline(
+    lockfile: Path,
+    external_skills_dir: Path,
+    *,
+    deadline_s: float,
+) -> None:
+    """Best-effort refresh missing external skills within a startup deadline.
+
+    ``bootstrap_skills(force=False)`` only materializes missing directories.
+    Existing external handlers and the bundled handlers registered by the
+    current process therefore remain stable; newly downloaded skills become
+    visible on the next registry construction/startup.
+    """
+
+    if deadline_s <= 0:
+        _log.info(
+            "prompt-skill refresh disabled by %s=0; current process uses its local catalog",
+            _PROMPT_REFRESH_DEADLINE_ENV,
+        )
+        return
+    request_timeout_s = min(_PROMPT_REFRESH_REQUEST_TIMEOUT_S, deadline_s)
+    _log.info(
+        "prompt-skill bounded refresh started for %s "
+        "(total deadline %.3fs, request timeout %.3fs, workers %d)",
+        lockfile,
+        deadline_s,
+        request_timeout_s,
+        _PROMPT_REFRESH_MAX_WORKERS,
+    )
+    try:
+        from octopus_runtime import bootstrap_skills
+
+        synced, present, errors = bootstrap_skills(
+            lockfile,
+            external_skills_dir,
+            request_timeout_s=request_timeout_s,
+            max_workers=_PROMPT_REFRESH_MAX_WORKERS,
+            total_timeout_s=deadline_s,
+        )
+    except Exception:  # noqa: BLE001 - the local catalog is already serving startup
+        _log.exception(
+            "prompt-skill bounded refresh failed for %s; "
+            "current process continues with its local catalog",
+            lockfile,
+        )
+        return
+
+    if errors:
+        sample = "; ".join(f"{slug}: {reason}" for slug, reason in errors[:3])
+        _log.warning(
+            "prompt-skill bounded refresh incomplete for %s: %d failure(s) "
+            "(sample: %s); current process continues with its local catalog and "
+            "successful downloads apply after the next restart",
+            lockfile,
+            len(errors),
+            sample,
+        )
+        return
+    _log.info(
+        "prompt-skill bounded refresh complete for %s: %d synced, %d already present; "
+        "new skills apply after the next restart",
+        lockfile,
+        len(synced),
+        len(present),
+    )
+
+
+def _bootstrap_prompt_catalog_synchronously(
+    lockfile: Path,
+    external_skills_dir: Path,
+) -> bool:
+    """Retain the historical blocking bootstrap when no bundle can serve."""
+
+    try:
+        from octopus_runtime import bootstrap_skills
+
+        synced, present, errors = bootstrap_skills(lockfile, external_skills_dir)
+    except Exception:  # noqa: BLE001 - caller will validate external availability
+        _log.exception("prompt-skill bootstrap failed for %s", lockfile)
+        return False
+    if errors:
+        sample = "; ".join(f"{slug}: {reason}" for slug, reason in errors[:3])
+        _log.warning(
+            "prompt-skill bootstrap incomplete for %s: %d failure(s) (sample: %s)",
+            lockfile,
+            len(errors),
+            sample,
+        )
+        return False
+    if synced:
+        _log.info(
+            "prompt-skill bootstrap synced %d skill(s); %d already present",
+            len(synced),
+            len(present),
+        )
+    return True
+
+
+def register_prompt_market_skills(
+    registry: SkillRegistry,
+    *,
+    resource_dir: Path | None = None,
+    bundled_dir: Path | None = None,
+    refresh_deadline_s: float | None = None,
+) -> int:
+    """Bootstrap and register the external prompt catalog with a bundled fallback.
+
+    A clean checkout intentionally contains only ``skills.lock.json`` plus
+    ``skills/public`` metadata. Registry sync may be unavailable at cold
+    start, and the mere existence of that metadata directory must not shadow
+    the deterministic catalog shipped in the wheel. When that packaged catalog
+    exists, ``refresh_deadline_s`` (or
+    ``OCTOPUS_PROMPT_SKILL_REFRESH_DEADLINE_S``) bounds the best-effort update;
+    the value is hard-capped and ``0`` disables startup refresh entirely.
+    """
+
+    from runtime.platform.process.paths import (
+        bundled_market_skills_dir,
+        resources_root,
+    )
+
+    resources = Path(resource_dir) if resource_dir is not None else resources_root()
+    external_skills_dir = resources / "skills" / "public"
+    packaged_skills_dir = (
+        Path(bundled_dir) if bundled_dir is not None else bundled_market_skills_dir()
+    )
+    skills_lockfile = resources / "skills.lock.json"
+    bundled_available = _has_market_skill_files(packaged_skills_dir)
+
+    if immutable_prompt_catalog_required():
+        if not bundled_available:
+            raise RuntimeError(
+                "production prompt-skill catalog is unavailable: "
+                f"bundled={packaged_skills_dir}. Remote and mutable external "
+                "catalogs are disabled in shared/commercial deployment modes."
+            )
+        if _has_market_skill_files(external_skills_dir):
+            _log.warning(
+                "ignoring mutable external prompt-skill catalog %s in %s mode; "
+                "using only the build-bound catalog %s",
+                external_skills_dir,
+                os.environ.get("OCTOPUS_DEPLOYMENT_MODE", "").strip().lower(),
+                packaged_skills_dir,
+            )
+        bundled_count = register_market_skills(
+            registry,
+            all_skills_dir=packaged_skills_dir,
+        )
+        if bundled_count:
+            _log.info(
+                "using immutable build-bound prompt-skill catalog %s (%d registered)",
+                packaged_skills_dir,
+                bundled_count,
+            )
+            return bundled_count
+        raise RuntimeError(
+            "production prompt-skill catalog registered zero usable skills: "
+            f"bundled={packaged_skills_dir}. The installation is incomplete."
+        )
+
+    # With a packaged catalog, resolve the complete *local* view before any
+    # network I/O. Existing external entries retain precedence over bundled
+    # fallbacks; the latter only fill missing names. The bounded force=False
+    # refresh then writes missing directories for the next construction and
+    # never changes this live registry's capability set.
+    if not bundled_available and skills_lockfile.is_file():
+        _bootstrap_prompt_catalog_synchronously(skills_lockfile, external_skills_dir)
+
+    external_count = 0
+    if _has_market_skill_files(external_skills_dir):
+        external_count = register_market_skills(
+            registry,
+            all_skills_dir=external_skills_dir,
+        )
+        if not external_count:
+            _log.warning(
+                "external prompt-skill catalog %s contains SKILL.md files but registered"
+                " zero usable skills; checking bundled fallback",
+                external_skills_dir,
+            )
+
+    bundled_count = 0
+    if bundled_available:
+        bundled_count = register_market_skills(
+            registry,
+            all_skills_dir=packaged_skills_dir,
+        )
+        if bundled_count:
+            _log.info(
+                "using bundled prompt-skill fallback %s (%d registered; %d external)",
+                packaged_skills_dir,
+                bundled_count,
+                external_count,
+            )
+
+    registered = external_count + bundled_count
+    if registered:
+        if bundled_available and skills_lockfile.is_file():
+            _refresh_prompt_catalog_with_deadline(
+                skills_lockfile,
+                external_skills_dir,
+                deadline_s=_prompt_refresh_deadline(refresh_deadline_s),
+            )
+        return registered
+
+    raise RuntimeError(
+        "no usable prompt/market skills were registered: "
+        f"external={external_skills_dir}, bundled={packaged_skills_dir}, "
+        f"lockfile={skills_lockfile}. The installation is incomplete."
+    )
+
+
 def load_single_market_skill(
     registry: SkillRegistry,
     skill_id: str,
@@ -462,6 +742,19 @@ def load_single_market_skill(
     if all_skills_dir is None:
         all_skills_dir = Path(__file__).resolve().parent.parent / "all_skills"
     all_skills_dir = Path(all_skills_dir)
+    if immutable_prompt_catalog_required():
+        from runtime.platform.process.paths import bundled_market_skills_dir
+
+        if all_skills_dir.resolve(strict=False) != bundled_market_skills_dir().resolve(
+            strict=False
+        ):
+            _log.warning(
+                "refusing mutable prompt skill %r from %s in %s mode",
+                skill_id,
+                all_skills_dir,
+                os.environ.get("OCTOPUS_DEPLOYMENT_MODE", "").strip().lower(),
+            )
+            return False
     if not all_skills_dir.is_dir():
         return False
 
@@ -541,6 +834,8 @@ def load_single_market_skill(
 
 
 __all__ = [
+    "immutable_prompt_catalog_required",
     "register_market_skills",
+    "register_prompt_market_skills",
     "load_single_market_skill",
 ]

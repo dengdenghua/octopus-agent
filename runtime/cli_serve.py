@@ -10,6 +10,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import os
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -325,7 +326,11 @@ def register_memory_distill_task(runner: Any, stack: Any) -> int:
     return 1
 
 
-def register_cron_executor_task(runner: Any, channel_manager_holder: list | None = None) -> int:
+def register_cron_executor_task(
+    runner: Any,
+    channel_manager_holder: list | None = None,
+    shutdown_callbacks: list[Callable[[], None]] | None = None,
+) -> int:
     """Fire persisted cron jobs (settings-UI shell jobs + schedule_task prompts).
 
     The store/router/skill only *register* jobs — without this periodic
@@ -402,26 +407,53 @@ def register_cron_executor_task(runner: Any, channel_manager_holder: list | None
 
     _cron_pool = _ThreadPoolExecutor(max_workers=2, thread_name_prefix="cron-exec")
     _tick_in_flight = _threading.Event()
+    _tick_drained = _threading.Event()
+    _tick_drained.set()
+    _stopping = _threading.Event()
+    _shutdown_lock = _threading.Lock()
+    _shutdown_started = False
+
+    def _shutdown() -> None:
+        """Stop dispatch and cooperatively terminate an active cron process."""
+        nonlocal _shutdown_started
+        with _shutdown_lock:
+            if _shutdown_started:
+                return
+            _shutdown_started = True
+            _stopping.set()
+            _cron_pool.shutdown(wait=False, cancel_futures=True)
+        if _tick_in_flight.is_set() and not _tick_drained.wait(timeout=5.0):
+            logging.getLogger(__name__).warning(
+                "cron executor did not drain within 5s during service shutdown"
+            )
+
+    if shutdown_callbacks is not None:
+        shutdown_callbacks.append(_shutdown)
 
     def _tick() -> None:
-        if _tick_in_flight.is_set():
+        if _stopping.is_set() or _tick_in_flight.is_set():
             return  # previous tick still draining; the next poll retries
         from runtime.execution.cron_executor import run_due_cron_jobs
 
         def _run() -> None:
             try:
-                run_due_cron_jobs(deliver=_deliver)
+                run_due_cron_jobs(deliver=_deliver, stop_event=_stopping)
             except Exception:  # noqa: BLE001 — a tick fault must not kill the cron pool
                 logging.getLogger(__name__).exception("cron tick failed")
-            finally:
-                _tick_in_flight.clear()
+
+        def _done(_future: Any) -> None:
+            _tick_in_flight.clear()
+            _tick_drained.set()
 
         _tick_in_flight.set()
+        _tick_drained.clear()
         try:
-            _cron_pool.submit(_run)
+            future = _cron_pool.submit(_run)
+            future.add_done_callback(_done)
         except RuntimeError:
             # Pool shut down while serve is stopping — drop this tick.
             _tick_in_flight.clear()
+            _tick_drained.set()
 
     runner.add_periodic(
         "cron_job_executor",
@@ -685,7 +717,12 @@ def run_serve(
     # this function, so hand over a one-element holder and populate it
     # once the manager exists (see below).
     _cron_channel_holder: list = []
-    register_cron_executor_task(runner, _cron_channel_holder)
+    _cron_shutdown_callbacks: list[Callable[[], None]] = []
+    register_cron_executor_task(
+        runner,
+        _cron_channel_holder,
+        shutdown_callbacks=_cron_shutdown_callbacks,
+    )
 
     register_memory_distill_task(runner, stack)
 
@@ -784,6 +821,11 @@ def run_serve(
         tentacle_enabled=cfg.tentacle.enabled,
         tentacle_ws_port=cfg.tentacle.ws_port,
     )
+    for _shutdown_cron in _cron_shutdown_callbacks:
+        # Uvicorn drives this hook on normal SIGTERM. The CLI finally block
+        # invokes it again (idempotently) for startup failures/test runners that
+        # return without entering ASGI lifespan.
+        app.router.add_event_handler("shutdown", _shutdown_cron)
 
     # For a single-machine setup, let the regular ``octopus serve`` path own
     # the optional File Agent service too.  This deliberately lives next to
@@ -879,8 +921,10 @@ def run_serve(
         else:
             run_uvicorn(app, host=host, port=port, log_level="info")
     finally:
-        _restore_execution_security(execution_env_previous)
         runner.stop()
+        for _shutdown_cron in _cron_shutdown_callbacks:
+            _shutdown_cron()
+        _restore_execution_security(execution_env_previous)
         try:
             from runtime.adapters.mcp_client import close_all_persistent_clients
 

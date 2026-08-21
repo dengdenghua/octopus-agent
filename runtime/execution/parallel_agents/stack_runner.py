@@ -193,6 +193,19 @@ def make_stack_subagent_runner(
         if model and model not in ("octopus-agent", ""):
             plan_kwargs["model"] = model
 
+        actor = ctx.get("actor") or ctx.get("file_write_owner") if isinstance(ctx, dict) else None
+        runtime_metadata = (
+            ctx.get("runtime_session_metadata")
+            if isinstance(ctx, dict) and isinstance(ctx.get("runtime_session_metadata"), dict)
+            else {}
+        )
+        emit_tool_event = (
+            ctx.get("emit_tool_event")
+            if isinstance(ctx, dict) and callable(ctx.get("emit_tool_event"))
+            else None
+        )
+        thread_id = ctx.get("thread_id") if isinstance(ctx, dict) else None
+
         # 3. Intent
         user_context = {
             "subagent_name": subagent_name,
@@ -229,44 +242,32 @@ def make_stack_subagent_runner(
         )
 
         safe_kwargs = {k: v for k, v in plan_kwargs.items() if k in _accepted}
-        try:
-            graph = planner.plan(intent, **safe_kwargs)
-        except PlannerError as e:
-            _log.info("planner error for subagent=%s · msg=%s", subagent_name, e)
-            return f"[planner error] {e}"
-
-        if cancel_event is not None and cancel_event.is_set():
-            return ""
-
-        budget = Budget(
-            task_id=graph.task_id,
-            limits=BudgetLimits(
-                tokens=default_tokens,
-                usd=default_usd,
-                latency_ms=default_latency_ms,
-            ),
-        )
-
-        arm_for_log = agent.agent_id if agent is not None else default_arm
-        actor = ctx.get("actor") or ctx.get("file_write_owner") if isinstance(ctx, dict) else None
-        runtime_metadata = (
-            ctx.get("runtime_session_metadata")
-            if isinstance(ctx, dict) and isinstance(ctx.get("runtime_session_metadata"), dict)
-            else {}
-        )
-        emit_tool_event = (
-            ctx.get("emit_tool_event")
-            if isinstance(ctx, dict) and callable(ctx.get("emit_tool_event"))
-            else None
-        )
-
-        # 6. Execute
         with session_scope(
             Session(
-                thread_id=ctx.get("thread_id") if isinstance(ctx, dict) else None,
+                actor=actor,
+                thread_id=thread_id,
                 metadata=runtime_metadata,
             )
         ):
+            try:
+                graph = planner.plan(intent, **safe_kwargs)
+            except PlannerError as e:
+                _log.info("planner error for subagent=%s · msg=%s", subagent_name, e)
+                return f"[planner error] {e}"
+
+            if cancel_event is not None and cancel_event.is_set():
+                return ""
+
+            budget = Budget(
+                task_id=graph.task_id,
+                limits=BudgetLimits(
+                    tokens=default_tokens,
+                    usd=default_usd,
+                    latency_ms=default_latency_ms,
+                ),
+            )
+
+            arm_for_log = agent.agent_id if agent is not None else default_arm
             traj: Trajectory = runtime.run(
                 graph,
                 budget=budget,

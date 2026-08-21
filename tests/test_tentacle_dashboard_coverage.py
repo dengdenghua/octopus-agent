@@ -20,7 +20,7 @@ def _coordinator(**kw) -> SimpleNamespace:
 
 def _client(coordinator) -> TestClient:
     app = FastAPI()
-    app.include_router(create_tentacle_router(coordinator))
+    app.include_router(create_tentacle_router(coordinator, require_auth=False))
     return TestClient(app)
 
 

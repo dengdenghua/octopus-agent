@@ -321,9 +321,7 @@ def test_timeout_worker_inherits_ambient_session_and_blackboard_scope() -> None:
     assert get_blackboard(turn_id).read("worker-result") == {"ok": True}
 
 
-def test_flipped_child_keeps_parent_artifact_root(
-    tmp_path, monkeypatch
-) -> None:
+def test_flipped_child_keeps_parent_artifact_root(tmp_path, monkeypatch) -> None:
     captured: dict[str, Any] = {}
     monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path))
 

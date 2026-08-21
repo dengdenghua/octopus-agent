@@ -85,6 +85,9 @@ from runtime.execution.suckers.lsp_skills import (
 from runtime.execution.suckers.market_skills import (
     register_market_skills as _register_market,
 )
+from runtime.execution.suckers.market_skills import (
+    register_prompt_market_skills as _register_prompt_market,
+)
 from runtime.execution.suckers.memory_skills import (
     register_memory_skills as _register_memory,
 )
@@ -495,9 +498,13 @@ def is_known_but_disabled_tool(name: str) -> tuple[bool, str | None]:
 
 
 def _register_groups(registry: SkillRegistry, groups: set[str] | frozenset[str]) -> None:
-    from runtime.platform import capabilities as _caps_mod
+    # Import the runtime-policy module directly.  ``runtime.platform`` also
+    # contains a legacy ``capabilities`` package, so importing the attribute
+    # from the parent package becomes order-dependent once that package has
+    # been imported and may resolve to a module without ``load``.
+    from runtime.platform.runtime_policy.capabilities import load as _load_capabilities
 
-    disabled = _caps_mod.load().disabled_skill_groups()
+    disabled = _load_capabilities().disabled_skill_groups()
     for name, fn in _GROUP_REGISTRARS.items():
         if name not in groups:
             continue
@@ -520,22 +527,16 @@ def _register_groups(registry: SkillRegistry, groups: set[str] | frozenset[str])
 
 
 def register_all(registry: SkillRegistry) -> None:
-    _register_groups(registry, set(_GROUP_REGISTRARS))
-    try:
-        from runtime.platform.process.paths import resources_root
-
-        _register_market(
-            registry,
-            all_skills_dir=resources_root() / "skills" / "public",
-            respect_enabled_flag=False,
-            verify_tests=False,
-        )
-    except Exception as exc:  # noqa: BLE001
-        _log.warning(
-            "public prompt skills failed to register (%s: %s) — skipping",
-            type(exc).__name__,
-            exc,
-        )
+    # Native registrars win name collisions with prompt packs.  The external
+    # registry catalog is then bootstrapped/loaded (or falls back to packaged
+    # skills), and the legacy market group finally fills non-colliding offline
+    # capabilities.  A completely missing distribution is a startup error;
+    # register_prompt_market_skills deliberately does not fail silently.
+    groups = set(_GROUP_REGISTRARS)
+    groups.remove("market")
+    _register_groups(registry, groups)
+    _register_prompt_market(registry)
+    _register_groups(registry, {"market"})
 
 
 def register_local(registry: SkillRegistry) -> None:

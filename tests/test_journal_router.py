@@ -171,6 +171,10 @@ def test_authenticated_journal_queries_are_tenant_scoped(tmp_path: Path) -> None
         Identity(actor_id="bob", metadata={"tenant_id": "tenant-b"}),
         api_key_plaintext="bob-key",
     )
+    identities.add(
+        Identity(actor_id="admin", roles=("admin",)),
+        api_key_plaintext="admin-key",
+    )
     app = FastAPI()
     app.include_router(
         create_journal_router(
@@ -184,6 +188,12 @@ def test_authenticated_journal_queries_are_tenant_scoped(tmp_path: Path) -> None
     assert (
         client.post(
             "/api/journal/reindex", headers={"Authorization": "Bearer alice-key"}
+        ).status_code
+        == 403
+    )
+    assert (
+        client.post(
+            "/api/journal/reindex", headers={"Authorization": "Bearer admin-key"}
         ).status_code
         == 200
     )

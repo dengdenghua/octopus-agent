@@ -90,7 +90,9 @@ http://<octopus地址>/api/plugins/paper-trading/page
 
 ## 平台实时大盘(live_mode)
 
-默认开启(`plugin.yaml` → `config.live_mode: true`),通过配置的 `base_url` 只读拉取平台行情:
+默认关闭(`plugin.yaml` → `config.live_mode: false`)。只在可信的单用户本地环境中显式
+开启后，才会通过配置的可信 HTTPS `base_url` 拉取平台行情。HTTP、跳转响应以及
+认证/多用户宿主都会 fail-closed：
 
 - 登录:`POST /api/member/member/login`(RSA-1024 加密密码,与对方 App 一致),JWT 缓存到
   `~/.octopus/data/paper_trading/token.json`,过期自动重登。
@@ -99,7 +101,8 @@ http://<octopus地址>/api/plugins/paper-trading/page
 ### 实时行情推送(WS,供量化/盯盘)
 
 平台在**交易时段持续推送**行情(非轮询、非截图)。本插件按对方 App 协议连一条常驻
-WebSocket(socket.io v2 / engine.io v3),把行情**推**到本地:
+WSS WebSocket(socket.io v2 / engine.io v3),把行情**推**到本地；不会从 HTTPS 降级到
+明文 WS:
 
 - 握手:`/socket.io/?EIO=3&source=h5&sign=<getSignString(1234)>&transport=websocket`。
 - 订阅事件:
@@ -135,7 +138,7 @@ push.add_global_callback(lambda ev, data: ...)  # 全事件回调
 - 后端也强制校验:每个写接口都要求请求体带 `confirm: true`,否则直接返回
   `{ok:false, error:"已拦截:该操作将在平台真实执行…"}`,**绝不在缺少确认时调平台**。
 - 只读接口(合约/持仓/委托/费率/档位/卖出面板)失败会优雅降级 `{ok:false, error}`,不影响页面。
-- 本插件运行在本地明文 HTTP,配资盘操作请在可信环境使用。
+- 平台请求只允许 HTTPS/WSS，且拒绝重定向；配资盘操作仍只应在可信单用户环境使用。
 
 ### 自动交易(agent/程序化下单,`auto_trade`)
 
@@ -163,21 +166,23 @@ push.add_global_callback(lambda ev, data: ...)  # 全事件回调
 - 凭证只保存在本机 `~/.octopus/data/paper_trading/credentials.json`(**chmod 600**),
   页面不会回显密码;也可用「清除凭证」按钮删掉。
 - 不用页面时,也可用环境变量 `PAPER_TRADING_PHONE` / `PAPER_TRADING_PASSWORD` 配置。
-- 凭证保存后会写本地文件(个人练习便利);请注意本插件运行在本地、明文 HTTP 环境,请勿用于公网/多用户部署。
+- 凭证保存后会写本地文件(个人练习便利)；认证、多用户或公网部署会关闭整个账户集成。
 - 无凭证 / 网络异常 / 登录失败时**自动降级**:页面照常显示本地模拟行情,实时大盘区块显示「未连接」。
 - 请求按 `live_ttl`(默认 30s)合并缓存,避免高频打对方后端。
 
 > 这是个人练习用途,只读真实行情、不做真实交易;行情仅供参考,不构成投资建议。
 
-### 前端 = 平台原版网页(iframe)
+### 平台原版网页(高风险可选功能)
 
-工作台前端「模拟炒股」页现在**直接内嵌平台原站**(`http://114.66.32.152:58868/trade/#/transaction`),
-所见即平台原版,实时行情与交易完全走平台自己的页面,1:1、零维护。
+工作台默认只显示安全说明页，不加载平台原站。历史同源反向代理会让第三方脚本获得
+本应用 origin 的权限，因此现在必须同时满足以下条件才会挂载：
 
-- 平台响应**没有** `X-Frame-Options` / CSP `frame-ancestors`,也没有 frame-busting,可正常内嵌。
-- 首次进入需在页面里**手动登录一次**(手机号+密码);登录态由平台存在浏览器 localStorage
-  里(同一浏览器/源),之后一般自动保持登录。
-- 顶部有「新窗口打开 ↗」链接,可独立弹出平台原站标签页。
+- `proxy_origin: true`；
+- `allow_same_origin_third_party_scripts: true`；
+- `base_url` 使用 HTTPS。
+
+生产、多用户或公网部署不得开启这两个开关。当前示例平台仅提供明文 HTTP，因此会被
+代理层直接拒绝；如需访问，只能使用页面上的独立新窗口链接，并自行承担上游传输风险。
 
 ### 复刻版 → 插件中心
 
@@ -197,4 +202,3 @@ push.add_global_callback(lambda ev, data: ...)  # 全事件回调
 
 「交易」页的行情与成交为本地模拟,不对应真实市场,不构成投资建议。
 「平台交易」页会把你确认的操作真实提交到平台配资盘账户(平台侧为模拟盘),请仔细核对后再确认。
-

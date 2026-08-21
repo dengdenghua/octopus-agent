@@ -273,9 +273,7 @@ def run_external_hook(
         cmd = cmd.replace("${CLAUDE_PLUGIN_ROOT}", shlex.quote(plugin_root))
     if project_dir:
         cmd = cmd.replace("${CLAUDE_PROJECT_DIR}", shlex.quote(project_dir))
-    if allowed_commands and not any(
-        fnmatch.fnmatch(cmd, pattern) for pattern in allowed_commands
-    ):
+    if allowed_commands and not any(fnmatch.fnmatch(cmd, pattern) for pattern in allowed_commands):
         _logger.warning(
             "external hook command not allowed by allowlist (refused): %s",
             cmd[:120],
@@ -381,7 +379,9 @@ def parse_external_hooks(
     return specs, skipped
 
 
-def load_external_hooks(path: Path, dialect: HookDialect) -> tuple[list[ExternalHookSpec], list[str]]:
+def load_external_hooks(
+    path: Path, dialect: HookDialect
+) -> tuple[list[ExternalHookSpec], list[str]]:
     """Read one ``hooks.json``. Missing / unparsable → empty, never raises."""
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
@@ -400,16 +400,10 @@ def load_external_hooks(path: Path, dialect: HookDialect) -> tuple[list[External
 def _session_fields(session: Any) -> dict[str, str]:
     session_id = cwd = workspace = ""
     if session is not None:
-        session_id = str(
-            getattr(session, "session_id", "")
-            or getattr(session, "id", "")
-            or ""
-        )
+        session_id = str(getattr(session, "session_id", "") or getattr(session, "id", "") or "")
         cwd = str(getattr(session, "cwd", "") or "")
         workspace = str(
-            getattr(session, "workspace_path", "")
-            or getattr(session, "workspace", "")
-            or ""
+            getattr(session, "workspace_path", "") or getattr(session, "workspace", "") or ""
         )
     return {
         "session_id": session_id,
@@ -505,11 +499,7 @@ def _journal_hook_pair(
     session_id = ""
     turn_id = ""
     if session is not None:
-        session_id = str(
-            getattr(session, "session_id", "")
-            or getattr(session, "id", "")
-            or ""
-        )
+        session_id = str(getattr(session, "session_id", "") or getattr(session, "id", "") or "")
         turn_id = str(getattr(session, "turn_id", "") or "")
         meta = getattr(session, "metadata", None) or {}
         if not isinstance(meta, dict):

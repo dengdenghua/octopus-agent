@@ -3,13 +3,12 @@
 
 Exposes the built-in agents under `agents/` as a browsable store and
 persists install/uninstall state to a lightweight JSON file under the
-user's home directory. This makes the frontend Agent Market usable even
+runtime data directory. This makes the frontend Agent Market usable even
 before a remote marketplace exists.
 """
 
 from __future__ import annotations
 
-import os
 import shutil
 from pathlib import Path
 from typing import Any
@@ -29,7 +28,7 @@ except ImportError:  # pragma: no cover
 from runtime.execution.agents.loader import default_agents_root
 from runtime.execution.misc.agent_avatar import pixel_agent_avatar_svg
 from runtime.platform.io import atomic_write_json, atomic_write_text, read_json_with_backup
-from runtime.platform.process.paths import resources_root
+from runtime.platform.process.paths import app_paths, resources_root
 from runtime.sensing._fastapi_guard import require_fastapi
 
 # ── Re-exports from helper submodule ──────────────────────────────
@@ -54,7 +53,7 @@ from ._agent_world_helpers import (
     _template_source_root,
 )
 
-_INSTALL_STATE = Path(os.path.expanduser("~/.octopus/agents-installed.json"))
+_INSTALL_STATE = app_paths().data_dir / "agents-installed.json"
 _MARKET_INSTALL_SOURCE = "agent-market-template"
 
 
@@ -334,6 +333,20 @@ def create_agent_world_router(
             jwt_audience=jwt_audience,
         )
 
+    def _admin_dep(request: Request) -> None:
+        """Protect shared executable-content mutations in auth-on mode."""
+        from runtime.safety.auth.principal import require_roles
+
+        require_roles(
+            request,
+            identity_store,
+            require_auth,
+            ("admin",),
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     router = APIRouter(tags=["agent-market"], dependencies=[Depends(_auth_dep)])
 
     @router.get("/api/agent-market/store")
@@ -393,7 +406,10 @@ def create_agent_world_router(
             return _template_to_agent_dict(template, installed=_read_install_state())
         raise HTTPException(404, f"agent not found: {agent_id}")
 
-    @router.post("/api/agent-market/store/{agent_id}/install")
+    @router.post(
+        "/api/agent-market/store/{agent_id}/install",
+        dependencies=[Depends(_admin_dep)],
+    )
     def api_agent_market_install(agent_id: str) -> dict[str, Any]:
         try:
             agent_id = _require_safe_agent_id(agent_id)
@@ -452,7 +468,10 @@ def create_agent_world_router(
             "tool_registry": str(tool_registry_path),
         }
 
-    @router.delete("/api/agent-market/store/{agent_id}/install")
+    @router.delete(
+        "/api/agent-market/store/{agent_id}/install",
+        dependencies=[Depends(_admin_dep)],
+    )
     def api_agent_market_uninstall(agent_id: str) -> dict[str, Any]:
         try:
             agent_id = _require_safe_agent_id(agent_id)
@@ -524,7 +543,10 @@ def create_agent_world_router(
     def api_agent_market_ratings(agent_id: str) -> dict[str, Any]:
         return {"ratings": []}
 
-    @router.get("/api/agent-market/packs/preview")
+    @router.get(
+        "/api/agent-market/packs/preview",
+        dependencies=[Depends(_admin_dep)],
+    )
     def api_agent_pack_preview(path: str) -> dict[str, Any]:
         from runtime.execution.misc.agent_packs import scan_agent_pack
 
@@ -535,7 +557,10 @@ def create_agent_world_router(
         except NotADirectoryError as exc:
             raise HTTPException(400, str(exc)) from exc
 
-    @router.post("/api/agent-market/packs/import-agent")
+    @router.post(
+        "/api/agent-market/packs/import-agent",
+        dependencies=[Depends(_admin_dep)],
+    )
     def api_agent_pack_import_agent(body: dict[str, Any]) -> dict[str, Any]:
         from runtime.execution.misc.agent_packs import (
             AgentPackAgentNotFound,
@@ -617,9 +642,20 @@ def create_agent_world_router(
         agent["prompt_file"] = e.get("promptFile") or ""
         return agent
 
-    @router.post("/api/agent-market/cloud/store/{expert_id}/install")
+    @router.post(
+        "/api/agent-market/cloud/store/{expert_id}/install",
+        dependencies=[Depends(_admin_dep)],
+    )
     def api_agent_market_cloud_install(expert_id: str) -> dict[str, Any]:
         from runtime.execution.misc.agent_packs import AgentPackAgentNotFound
+        from runtime.execution.suckers.market_skills import immutable_prompt_catalog_required
+
+        if immutable_prompt_catalog_required():
+            raise HTTPException(
+                403,
+                "remote expert installation is disabled in shared/commercial deployments; "
+                "ship expert prompts in a reviewed release artifact",
+            )
 
         store = _cloud_store()
         try:
@@ -683,8 +719,19 @@ def create_agent_world_router(
         }
 
     # ── 云商城安装(下载内容包 → 解包落地) ─────────────────────
-    @router.post("/api/agent-market/cloud/skills/{name}/install")
+    @router.post(
+        "/api/agent-market/cloud/skills/{name}/install",
+        dependencies=[Depends(_admin_dep)],
+    )
     def api_agent_market_cloud_skill_install(name: str) -> dict[str, Any]:
+        from runtime.execution.suckers.market_skills import immutable_prompt_catalog_required
+
+        if immutable_prompt_catalog_required():
+            raise HTTPException(
+                403,
+                "remote skill installation is disabled in shared/commercial deployments; "
+                "ship skill prompts in a reviewed release artifact",
+            )
         cat = _cloud_catalog("skills")
         try:
             return cat.install_skill(name)
@@ -693,8 +740,19 @@ def create_agent_world_router(
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
 
-    @router.post("/api/agent-market/cloud/plugins/{plugin_id}/install")
+    @router.post(
+        "/api/agent-market/cloud/plugins/{plugin_id}/install",
+        dependencies=[Depends(_admin_dep)],
+    )
     def api_agent_market_cloud_plugin_install(plugin_id: str) -> dict[str, Any]:
+        from runtime.execution.suckers.market_skills import immutable_prompt_catalog_required
+
+        if immutable_prompt_catalog_required():
+            raise HTTPException(
+                403,
+                "unsigned cloud plugin installation is disabled in shared/commercial "
+                "deployments; ship a reviewed signed plugin release",
+            )
         cat = _cloud_catalog("plugins")
         item = next((i for i in cat.items() if i.get("id") == plugin_id), None)
         if item is None:

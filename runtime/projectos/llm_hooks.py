@@ -173,10 +173,10 @@ def llm_decompose_tasks(router: Any, *, model: str = DEFAULT_MODEL):
             'review","goal","team_mode":"single|swarm|cluster",'
             '"priority":"P0|P1|P2|P3","estimate":1.5,"due_at":"YYYY-MM-DD",'
             '"acceptance_criteria":["..."],"depends_on":[earlier goals]}. '
-            'team_mode=swarm for research that benefits from diverse angles; '
-            'team_mode=cluster for big build tasks that need orchestration; '
-            'single otherwise. Keep estimates in person-days and due dates within '
-            'the milestone window.'
+            "team_mode=swarm for research that benefits from diverse angles; "
+            "team_mode=cluster for big build tasks that need orchestration; "
+            "single otherwise. Keep estimates in person-days and due dates within "
+            "the milestone window."
             f"\n\nMilestone: {ms.goal}\nSpec: {json.dumps(ms.spec, ensure_ascii=False)}"
             f"\nSuccess criteria: {ms.success_criteria}"
         )
@@ -190,7 +190,12 @@ def llm_decompose_tasks(router: Any, *, model: str = DEFAULT_MODEL):
     return _decompose
 
 
-def subagent_execute_task(task: Task, context: dict[str, Any]) -> str:
+def subagent_execute_task(
+    task: Task,
+    context: dict[str, Any],
+    *,
+    subagent_runner: Callable[..., str] | None = None,
+) -> str:
     """Run a task through the production subagent path (the cowork bridge)."""
     from runtime.execution.subagents import call_subagent
 
@@ -198,13 +203,45 @@ def subagent_execute_task(task: Task, context: dict[str, Any]) -> str:
     prompt = task.goal
     if context.get("milestone_goal"):
         prompt = f"Milestone: {context['milestone_goal']}\nTask: {task.goal}"
-    result = call_subagent(
-        agent,
-        prompt,
-        context={"source": "projectos_task", "task_id": task.id, "projectos": context},
-        timeout_s=900,
-        timeout_seconds=900.0,
+    thread_id = str(context.get("thread_id") or "")
+    actor = str(context.get("owner_id") or "")
+    tenant_id = str(context.get("tenant_id") or "")
+    project_id = str(context.get("project_id") or "")
+    inherited_runtime_metadata = context.get("runtime_session_metadata")
+    runtime_session_metadata = (
+        dict(inherited_runtime_metadata) if isinstance(inherited_runtime_metadata, dict) else {}
     )
+    runtime_session_metadata.update(
+        {
+            "source": "projectos_task",
+            "project_id": project_id,
+            "tenant_id": tenant_id,
+        }
+    )
+    dispatch_context: dict[str, Any] = {
+        "source": "projectos_task",
+        "task_id": task.id,
+        "projectos": context,
+        "runtime_session_metadata": runtime_session_metadata,
+    }
+    if thread_id:
+        dispatch_context["thread_id"] = thread_id
+    if actor:
+        dispatch_context["actor"] = actor
+    if tenant_id:
+        dispatch_context["tenant_id"] = tenant_id
+    workspace_path = context.get("workspace_path")
+    if isinstance(workspace_path, str) and workspace_path:
+        dispatch_context["workspace_path"] = workspace_path
+
+    call_kwargs: dict[str, Any] = {
+        "context": dispatch_context,
+        "timeout_s": 900,
+        "timeout_seconds": 900.0,
+    }
+    if subagent_runner is not None:
+        call_kwargs["runner"] = subagent_runner
+    result = call_subagent(agent, prompt, **call_kwargs)
     if not result.get("success"):
         raise RuntimeError(str(result.get("error") or "subagent failed"))
     return str(result.get("output") or result.get("parsed") or "")
@@ -260,11 +297,24 @@ def _criterion_touched(criterion: str, output: str) -> bool:
     return any(w in low for w in words) if words else True
 
 
-def create_llm_hooks(router: Any, *, model: str = DEFAULT_MODEL) -> dict[str, Any]:
+def create_llm_hooks(
+    router: Any,
+    *,
+    model: str = DEFAULT_MODEL,
+    subagent_runner: Callable[..., str] | None = None,
+) -> dict[str, Any]:
     """Hook kwargs for ProjectEngine: LLM milestones/tasks/QA + subagent execute."""
+
+    def _execute_task(task: Task, context: dict[str, Any]) -> str:
+        return subagent_execute_task(
+            task,
+            context,
+            subagent_runner=subagent_runner,
+        )
+
     return {
         "generate_milestones": llm_generate_milestones(router, model=model),
         "decompose_tasks": llm_decompose_tasks(router, model=model),
-        "execute_task": subagent_execute_task,
+        "execute_task": _execute_task,
         "qa_task": spec_qa(router, model=model),
     }

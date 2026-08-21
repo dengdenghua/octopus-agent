@@ -42,7 +42,14 @@ def test_bundled_paper_trading_is_discoverable_and_loadable() -> None:
     assert len(matches) == 1
     assert matches[0]["bundled"] is True
     assert matches[0]["name"] == "模拟炒股"  # display_name 折进 name,id 保持 ASCII
-    assert hub.load(PLUGIN_ID) is not None
+    assert matches[0]["version"] == PaperTradingPlugin.version
+    plugin = hub.load(PLUGIN_ID)
+    assert plugin is not None
+    assert plugin.live is None
+    assert plugin.proxy_origin is False
+    assert hub.get_plugin_config(PLUGIN_ID)["live_mode"] is False
+    assert hub.get_plugin_config(PLUGIN_ID)["proxy_origin"] is False
+    assert hub.get_plugin_config(PLUGIN_ID)["allow_same_origin_third_party_scripts"] is False
 
 
 def test_plugin_registers_skill_into_registry(tmp_path: Path) -> None:
@@ -164,6 +171,55 @@ def test_routes_via_module_context(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert len(orders["orders"]) == 1
 
     assert client.get("/api/plugins/paper-trading/quote/999999").status_code == 404
+
+
+def test_authenticated_host_only_mounts_static_landing_pages(tmp_path: Path) -> None:
+    """A process-wide portfolio/account must never be shared between users."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from runtime.platform.ui._app_auth import _install_legacy_control_plane_auth
+    from runtime.safety.auth import IdentityStore
+
+    app = FastAPI()
+    app.state.octopus_require_auth = True
+    plugin = PaperTradingPlugin()
+    plugin.on_load(
+        ModuleContext(
+            plugin_name=PLUGIN_ID,
+            plugin_dir=str(PLUGIN_DIR),
+            manifest=None,
+            fastapi_app=app,
+            config={
+                "data_dir": str(tmp_path / "pt"),
+                "base_url": "https://up.test/api",
+                "live_mode": True,
+                "auto_trade": True,
+                "proxy_origin": True,
+                "allow_same_origin_third_party_scripts": True,
+            },
+        )
+    )
+    _install_legacy_control_plane_auth(
+        app,
+        identity_store=IdentityStore(),
+        require_auth=True,
+        jwt_secret=None,
+        jwt_issuer=None,
+        jwt_audience=None,
+    )
+
+    client = TestClient(app)
+    page = client.get("/api/plugins/paper-trading/page")
+    assert page.status_code == 200
+    assert "当前实例已开启身份认证" in page.text
+    assert "default-src 'none'" in page.headers["content-security-policy"]
+    assert client.get("/api/plugins/paper-trading/watch").status_code == 200
+    assert client.get("/api/plugins/paper-trading/account").status_code == 401
+    assert plugin.live is None
+    assert plugin.auto_trade is False
+    assert plugin.proxy_origin is False
+    assert not any(type(route).__name__ == "APIWebSocketRoute" for route in app.routes)
 
 
 # ── 自选股分组(watchlist) ───────────────────────────────
@@ -343,9 +399,13 @@ def test_proxy_origin_rewrites_html_and_injects_session(tmp_path: Path) -> None:
     from runtime.platform.plugins.bundled.paper_trading.proxy import register_origin_proxy
 
     # 造一个带 memberId 的假 JWT(仅 payload 段需可解)
-    payload = base64.urlsafe_b64encode(
-        json.dumps({"memberId": "42", "account": "HL1", "phone": "138"}).encode()
-    ).decode().rstrip("=")
+    payload = (
+        base64.urlsafe_b64encode(
+            json.dumps({"memberId": "42", "account": "HL1", "phone": "138"}).encode()
+        )
+        .decode()
+        .rstrip("=")
+    )
     state = tmp_path / "pt"
     state.mkdir(parents=True, exist_ok=True)
     (state / "token.json").write_text(json.dumps({"token": f"h.{payload}.s"}), encoding="utf-8")
@@ -363,7 +423,7 @@ def test_proxy_origin_rewrites_html_and_injects_session(tmp_path: Path) -> None:
     router = APIRouter(prefix="/api/plugins/paper-trading")
     assert register_origin_proxy(
         router,
-        base_url="http://up.test:9/api",
+        base_url="https://up.test:9/api",
         state_dir=str(state),
         credentials_file=str(state / "credentials.json"),
         http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
@@ -386,6 +446,50 @@ def test_proxy_origin_rewrites_html_and_injects_session(tmp_path: Path) -> None:
     assert '"/api/plugins/paper-trading/origin/api"' in resp.text
 
 
+def test_proxy_never_forwards_octopus_authorization_to_upstream(tmp_path: Path) -> None:
+    import httpx
+    from fastapi import APIRouter, FastAPI
+    from fastapi.testclient import TestClient
+
+    from runtime.platform.plugins.bundled.paper_trading.proxy import register_origin_proxy
+
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        # A text response exercises the proxy's buffered rewrite branch; a
+        # MockTransport JSON response is already consumed before raw streaming.
+        return httpx.Response(
+            200,
+            text="window.ok=true",
+            headers={"content-type": "application/javascript"},
+        )
+
+    router = APIRouter(prefix="/api/plugins/paper-trading")
+    assert register_origin_proxy(
+        router,
+        base_url="https://up.test/api",
+        state_dir=str(tmp_path),
+        credentials_file=str(tmp_path / "credentials.json"),
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    app = FastAPI()
+    app.include_router(router)
+
+    response = TestClient(app).get(
+        "/api/plugins/paper-trading/origin/api/market",
+        headers={
+            "Authorization": "Bearer octopus-host-token",
+            "token": "platform-token",
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(seen) == 1
+    assert "authorization" not in seen[0].headers
+    assert seen[0].headers["token"] == "platform-token"
+
+
 def test_proxy_origin_rejects_paths_outside_allowlist(tmp_path: Path) -> None:
     """只允许 trade//api//static/ 三个前缀,避免退化成任意 URL 转发器。"""
     import httpx
@@ -400,7 +504,7 @@ def test_proxy_origin_rejects_paths_outside_allowlist(tmp_path: Path) -> None:
     router = APIRouter(prefix="/api/plugins/paper-trading")
     register_origin_proxy(
         router,
-        base_url="http://up.test:9/api",
+        base_url="https://up.test:9/api",
         state_dir=str(tmp_path / "pt"),
         credentials_file=str(tmp_path / "pt" / "credentials.json"),
         http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
@@ -422,6 +526,154 @@ def test_proxy_origin_not_mounted_when_base_url_unusable(tmp_path: Path) -> None
     router = APIRouter(prefix="/api/plugins/paper-trading")
     assert register_origin_proxy(router, base_url="") is False
     assert register_origin_proxy(router, base_url="not-a-url") is False
+
+
+def test_proxy_origin_rejects_plain_http_upstream() -> None:
+    from fastapi import APIRouter
+
+    from runtime.platform.plugins.bundled.paper_trading.proxy import register_origin_proxy
+
+    router = APIRouter(prefix="/api/plugins/paper-trading")
+    assert register_origin_proxy(router, base_url="http://up.test:9/api") is False
+
+
+def test_proxy_origin_requires_separate_risk_acceptance(tmp_path: Path) -> None:
+    without_acceptance = _proxy_plugin(
+        tmp_path,
+        proxy_origin=True,
+        base_url="https://up.test:9/api",
+    )
+    assert without_acceptance.proxy_origin is False
+
+    plain_http = _proxy_plugin(
+        tmp_path,
+        proxy_origin=True,
+        allow_same_origin_third_party_scripts=True,
+        base_url="http://up.test:9/api",
+    )
+    assert plain_http.proxy_origin is False
+
+
+def test_security_switches_reject_string_booleans(tmp_path: Path) -> None:
+    from fastapi import FastAPI
+
+    registry = MagicMock()
+    plugin = PaperTradingPlugin()
+    plugin.on_load(
+        ModuleContext(
+            plugin_name=PLUGIN_ID,
+            plugin_dir=str(PLUGIN_DIR),
+            manifest=None,
+            fastapi_app=FastAPI(),
+            skill_registry=registry,
+            config={
+                "data_dir": str(tmp_path / "pt"),
+                "base_url": "https://up.test/api",
+                "live_mode": "false",
+                "auto_trade": "false",
+                "proxy_origin": "false",
+                "allow_same_origin_third_party_scripts": "false",
+            },
+        )
+    )
+
+    assert plugin.live is None
+    assert plugin.auto_trade is False
+    assert plugin.proxy_origin is False
+    registered = [call.args[0].name for call in registry.register.call_args_list]
+    assert registered == ["paper_trading.quote"]
+
+
+def test_live_and_auto_trade_reject_plain_http_upstream(tmp_path: Path) -> None:
+    from fastapi import FastAPI
+
+    registry = MagicMock()
+    plugin = PaperTradingPlugin()
+    plugin.on_load(
+        ModuleContext(
+            plugin_name=PLUGIN_ID,
+            plugin_dir=str(PLUGIN_DIR),
+            manifest=None,
+            fastapi_app=FastAPI(),
+            skill_registry=registry,
+            config={
+                "data_dir": str(tmp_path / "pt"),
+                "base_url": "http://up.test/api",
+                "live_mode": True,
+                "auto_trade": True,
+            },
+        )
+    )
+
+    assert plugin.live is None
+    assert plugin.auto_trade is False
+    registered = [call.args[0].name for call in registry.register.call_args_list]
+    assert registered == ["paper_trading.quote"]
+
+
+def test_reload_and_unload_stop_existing_push(tmp_path: Path) -> None:
+    from fastapi import FastAPI
+
+    plugin = PaperTradingPlugin()
+    old_push = MagicMock()
+    plugin.push = old_push
+    plugin.on_load(
+        ModuleContext(
+            plugin_name=PLUGIN_ID,
+            plugin_dir=str(PLUGIN_DIR),
+            manifest=None,
+            fastapi_app=FastAPI(),
+            config={"data_dir": str(tmp_path / "pt")},
+        )
+    )
+    old_push.stop.assert_called_once_with()
+    assert plugin.push is None
+
+    active_push = MagicMock()
+    plugin.push = active_push
+    plugin.on_unload(plugin.ctx)
+    active_push.stop.assert_called_once_with()
+    assert plugin.push is None
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "https://[::1",
+        "https://example.com:bad/api",
+        "https://user:password@example.com/api",
+        "https://bad host.example/api",
+    ],
+)
+def test_proxy_origin_rejects_malformed_or_credentialed_urls(
+    tmp_path: Path,
+    base_url: str,
+) -> None:
+    plugin = _proxy_plugin(
+        tmp_path,
+        proxy_origin=True,
+        allow_same_origin_third_party_scripts=True,
+        base_url=base_url,
+    )
+
+    assert plugin.proxy_origin is False
+
+
+def test_proxy_disabled_page_escapes_configured_origin(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+
+    plugin = _proxy_plugin(
+        tmp_path,
+        base_url='https://safe.example"><svg onload=alert(document.domain)>/api',
+    )
+
+    response = TestClient(plugin._test_app).get(  # type: ignore[attr-defined]
+        "/api/plugins/paper-trading/page"
+    )
+
+    assert response.status_code == 200
+    assert "<svg" not in response.text
+    assert "default-src 'none'" in response.headers["content-security-policy"]
 
 
 def test_proxy_origin_rewrites_both_api_bases() -> None:
@@ -469,14 +721,12 @@ def test_proxy_origin_registers_websocket_route(tmp_path: Path) -> None:
     router = APIRouter(prefix="/api/plugins/paper-trading")
     register_origin_proxy(
         router,
-        base_url="http://up.test:9/api",
+        base_url="https://up.test:9/api",
         state_dir=str(tmp_path),
         credentials_file=str(tmp_path / "credentials.json"),
     )
 
-    ws_paths = [
-        r.path for r in router.routes if type(r).__name__ == "APIWebSocketRoute"
-    ]
+    ws_paths = [r.path for r in router.routes if type(r).__name__ == "APIWebSocketRoute"]
     assert ws_paths == ["/api/plugins/paper-trading/origin/socket.io/{ws_path:path}"]
 
 
@@ -485,3 +735,22 @@ def test_proxy_origin_allows_socket_io_prefix() -> None:
     from runtime.platform.plugins.bundled.paper_trading.proxy import _safe_upstream_path
 
     assert _safe_upstream_path("socket.io/") == "socket.io/"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "trade/%2e%2e/admin",
+        "trade/%252e%252e/admin",
+        "trade/%255c..%255cadmin",
+        "trade/%25invalid",
+    ],
+)
+def test_proxy_origin_rejects_nested_encoded_path_ambiguity(path: str) -> None:
+    from fastapi import HTTPException
+
+    from runtime.platform.plugins.bundled.paper_trading.proxy import _safe_upstream_path
+
+    with pytest.raises(HTTPException) as exc_info:
+        _safe_upstream_path(path)
+    assert exc_info.value.status_code == 404

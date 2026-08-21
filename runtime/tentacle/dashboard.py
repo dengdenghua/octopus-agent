@@ -58,17 +58,18 @@ def create_tentacle_router(
     """
     router = APIRouter(prefix="/api/tentacle", tags=["tentacle"])
 
-    # Security default: auth is enforced whenever an identity store is
-    # available (``_enforce_auth``). With ``require_auth=True`` but no
-    # identity store the router degrades to anonymous with a warning — the
-    # coordinator normally supplies a store built from the WebSocket auth
-    # token, so a real deployment always enforces.
-    _enforce_auth = require_auth and identity_store is not None
+    # ``require_auth`` is the deployment boundary.  Missing credentials must
+    # never silently turn an explicitly protected dashboard into an anonymous
+    # one; local callers that want the historical unauthenticated dashboard
+    # opt into it by leaving ``require_auth`` disabled.
+    _enforce_auth = require_auth
 
     def _require_http_auth(request: FastAPIRequest) -> None:
         """FastAPI dependency: enforce auth on HTTP endpoints when enabled."""
         if not _enforce_auth:
             return
+        if identity_store is None:
+            raise HTTPException(401, "tentacle identity store unavailable")
         token: str | None = None
         auth_header = request.headers.get("authorization") or ""
         if auth_header.lower().startswith("bearer "):
@@ -87,8 +88,6 @@ def create_tentacle_router(
         if identity_store.verify_api_key(token) is not None:
             return
         raise HTTPException(401, "invalid tentacle auth token")
-
-
 
     # 任务历史记录（内存，重启清空）
     _task_history: list[dict[str, Any]] = []

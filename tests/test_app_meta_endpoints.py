@@ -81,6 +81,30 @@ def client(isolated_cwd: Path) -> Iterator[TestClient]:
         yield test_client
 
 
+class TestSecurityHeaders:
+    def test_default_http_responses_block_sniffing_and_cross_origin_frames(
+        self,
+        client: TestClient,
+    ) -> None:
+        response = client.get("/api/health")
+
+        assert response.status_code == 200
+        assert response.headers["x-content-type-options"] == "nosniff"
+        assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+        assert response.headers["x-frame-options"] == "SAMEORIGIN"
+        assert response.headers["content-security-policy"] == "frame-ancestors 'self'"
+        assert "strict-transport-security" not in response.headers
+
+    def test_https_response_enables_hsts(self, isolated_cwd: Path) -> None:
+        with TestClient(create_app(), base_url="https://testserver") as https_client:
+            response = https_client.get("/api/health")
+
+        assert response.status_code == 200
+        assert response.headers["strict-transport-security"] == (
+            "max-age=31536000; includeSubDomains"
+        )
+
+
 @pytest.fixture
 def secured_meta_client(
     isolated_cwd: Path,
@@ -625,17 +649,32 @@ class TestAgentMarket:
         assert data["key_skills"] == ["kyc-doc-parse", "kyc-rules", "xlsx-author"]
         assert data["available_skills"] == data["key_skills"]
 
-    def test_financial_services_category_filter_empty_locally(
+    def test_financial_services_templates_stay_registry_only_with_local_twins(
         self,
         client: TestClient,
     ) -> None:
-        """category=financial used to match the 10 local financial-services
-        templates; those are registry-only now, so the local store has none."""
+        """The category may contain physical local roles, but not catalog templates.
+
+        The four digital-twin profiles are shipped under ``agents/`` and therefore
+        belong in the local store. The ten Anthropic financial-services templates
+        remain registry-only and must not leak into this list.
+        """
         r = client.get("/api/agent-market/store?category=financial&limit=50")
         assert r.status_code == 200
 
         data = r.json()
-        assert data["total"] == 0
+        assert {agent["id"] for agent in data["agents"]} == {
+            "twin_audit",
+            "twin_finance",
+            "twin_investment",
+            "twin_tax",
+        }
+        assert data["total"] == 4
+        assert all(
+            agent["author"] != "anthropics/financial-services"
+            and not agent["id"].startswith("financial_")
+            for agent in data["agents"]
+        )
 
     def test_financial_services_install_carries_key_skills(
         self,
@@ -921,3 +960,20 @@ class TestAdminMetaMutations:
             ).status_code
             == 400
         )
+
+    def test_production_rejects_url_based_prompt_install_for_admin(
+        self,
+        secured_meta_client: tuple[TestClient, dict[str, dict[str, str]], SkillRegistry],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        client, headers, _registry = secured_meta_client
+        monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "production")
+
+        response = client.post(
+            "/api/skills/install",
+            json={"url": "https://example.com/unsigned-skill.zip"},
+            headers=headers["admin"],
+        )
+
+        assert response.status_code == 403
+        assert "reviewed release artifact" in response.json()["detail"]

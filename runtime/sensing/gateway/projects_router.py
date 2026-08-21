@@ -73,7 +73,9 @@ def create_projects_router(
     group_store: Any = None,
     collaboration_store: Any = None,
     thread_store: Any = None,
+    workspace_root: Any = None,
     model_router: Any = None,
+    subagent_runner: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
     jwt_secret: str | None = None,
@@ -95,7 +97,10 @@ def create_projects_router(
         if model_router is not None:
             from runtime.projectos.llm_hooks import create_llm_hooks
 
-            return create_llm_hooks(model_router)
+            return create_llm_hooks(
+                model_router,
+                subagent_runner=subagent_runner,
+            )
         return {
             "generate_milestones": stub_generate_milestones,
             "decompose_tasks": stub_decompose_tasks,
@@ -136,7 +141,58 @@ def create_projects_router(
             owner_id=principal.actor_id if principal is not None else "",
             tenant_id=principal.tenant_id if principal is not None else "",
             scope=scope,
+            resolve_thread_context=_execution_context_resolver(principal),
         )
+
+    def _execution_context_resolver(principal: CurrentPrincipal | None = None):
+        if not require_auth:
+            return None
+
+        def _resolve(thread_id: str) -> dict[str, Any]:
+            if not thread_id or thread_store is None or not hasattr(thread_store, "get"):
+                raise RuntimeError("project must be bound to a managed thread workspace")
+            thread = thread_store.get(thread_id)
+            raw_metadata = thread.get("metadata") if isinstance(thread, dict) else None
+            metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+            if principal is not None and not principal.roles.intersection({"admin", "operator"}):
+                if metadata.get("owner_actor_id") != principal.actor_id:
+                    raise PermissionError("project thread belongs to another actor")
+                stored_tenant = str(metadata.get("tenant_id") or "")
+                if stored_tenant != principal.tenant_id:
+                    raise PermissionError("project thread belongs to another tenant")
+            from runtime.sensing.gateway.thread_workspace import verified_managed_workspace
+
+            workspace = verified_managed_workspace(
+                workspace_root,
+                thread_id=thread_id,
+                metadata=metadata,
+            )
+            if workspace is None:
+                raise RuntimeError("project thread has no verified managed workspace")
+            return {
+                "workspace_path": str(workspace),
+                "runtime_session_metadata": {
+                    "workspace_path": str(workspace),
+                    "_artifact_output_root": str(workspace / "output" / "final"),
+                    "tenant_id": str(metadata.get("tenant_id") or ""),
+                    "owner_actor_id": str(metadata.get("owner_actor_id") or ""),
+                },
+            }
+
+        return _resolve
+
+    def _require_execution_context(request: Request, project_id: str) -> None:
+        resolver = _execution_context_resolver(_principal(request))
+        if resolver is None:
+            return
+        thread_id = _scoped_store(request).thread_for_project(project_id) or ""
+        try:
+            resolver(thread_id)
+        except (OSError, PermissionError, RuntimeError, TypeError, ValueError) as exc:
+            raise HTTPException(
+                409,
+                "project execution requires a verified managed thread workspace",
+            ) from exc
 
     def _auth_dep(request: Request) -> None:
         _principal(request)
@@ -407,7 +463,11 @@ def create_projects_router(
             raise _bad_request(exc) from exc
         from runtime.projectos.pm import build_retro
 
-        return {"project_id": project_id, "project": project.name, "retro": build_retro(scoped_store, project_id) or {}}
+        return {
+            "project_id": project_id,
+            "project": project.name,
+            "retro": build_retro(scoped_store, project_id) or {},
+        }
 
     @router.get("/api/projects/{project_id}/events")
     def events(request: Request, project_id: str, limit: int = 100) -> dict[str, Any]:
@@ -471,16 +531,32 @@ def create_projects_router(
         capability — not the fixed 4 roles. This is "assemble a group → turn on
         project mode"."""
         principal = _thread_access(request, thread_id)
+        if body.run and require_auth:
+            resolver = _execution_context_resolver(principal)
+            try:
+                if resolver is None:
+                    raise RuntimeError("managed thread workspace resolver unavailable")
+                resolver(thread_id)
+            except (OSError, PermissionError, RuntimeError, TypeError, ValueError) as exc:
+                raise HTTPException(
+                    409,
+                    "project execution requires a verified managed thread workspace",
+                ) from exc
         try:
+            hooks = _base_hooks()
+            resolver = _execution_context_resolver(principal)
+            if resolver is not None:
+                hooks["resolve_thread_context"] = resolver
             result = run_project_from_group(
                 _scoped_store(request),
                 _group_store(),
                 thread_id,
                 name=body.name,
                 goal=body.goal,
-                hooks=_base_hooks(),
+                hooks=hooks,
                 run=body.run,
                 max_ticks=body.max_ticks,
+                subagent_runner=subagent_runner,
                 owner_id=principal.actor_id if principal is not None else "",
                 tenant_id=principal.tenant_id if principal is not None else "",
             )
@@ -493,12 +569,13 @@ def create_projects_router(
         except ValueError as exc:
             raise _bad_request(exc) from exc
         except Exception as exc:  # noqa: BLE001
-            raise HTTPException(500, f"project run failed: {exc}") from exc
+            raise HTTPException(500, "project run failed") from exc
 
     @router.post("/api/projects/{project_id}/tick", dependencies=[Depends(_auth_dep)])
     def tick(request: Request, project_id: str) -> dict[str, Any]:
         """Advance the project one loop iteration."""
         _project_or_404(request, project_id)
+        _require_execution_context(request, project_id)
         try:
             result = _engine(_principal(request)).tick(project_id)
             thread_project = _scoped_store(request).thread_for_project(project_id)
@@ -511,6 +588,7 @@ def create_projects_router(
     def run(request: Request, project_id: str, body: RunBody) -> dict[str, Any]:
         """Drive the loop until the project is done/blocked or max_ticks."""
         _project_or_404(request, project_id)
+        _require_execution_context(request, project_id)
         try:
             result = _engine(_principal(request)).run(project_id, max_ticks=body.max_ticks)
             thread_project = _scoped_store(request).thread_for_project(project_id)
@@ -534,6 +612,7 @@ def create_projects_router(
         except ValueError as exc:
             raise _bad_request(exc) from exc
         if body.run:
+            _require_execution_context(request, project_id)
             try:
                 run_result = engine.run(project_id, max_ticks=body.max_ticks)
             except ValueError as exc:
@@ -582,6 +661,7 @@ def create_projects_router(
         if any(str(event).startswith("unknown_task_action:") for event in intervention["events"]):
             raise HTTPException(400, "unknown task intervention action")
         if body.run:
+            _require_execution_context(request, project_id)
             try:
                 run_result = engine.run(project_id, max_ticks=body.max_ticks)
             except ValueError as exc:

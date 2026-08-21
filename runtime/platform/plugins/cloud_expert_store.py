@@ -15,6 +15,7 @@
   3) 复用 runtime.execution.misc.agent_packs.import_agent_from_pack
      (已支持 .codebuddy-plugin 格式)导入为 agents/<slug>/ 标准 agent
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -24,11 +25,11 @@ import re
 import shutil
 import tarfile
 import tempfile
-import urllib.request
 from pathlib import Path
 from typing import Any
 
 from runtime.execution.agents.loader import default_agents_root
+from runtime.platform.plugins._secure_fetch import fetch_public_https_bytes
 from runtime.platform.process.paths import resources_root
 from runtime.sensing.gateway._agent_world_helpers import _category_for
 
@@ -39,11 +40,21 @@ REMOTE_STORE_URL = os.environ.get(
 )
 LOCAL_MIRROR = (
     Path(__file__).resolve().parents[3]
-    / "extensions" / "workbuddy-experts" / "storefront" / "data" / "expert-store.json"
+    / "extensions"
+    / "workbuddy-experts"
+    / "storefront"
+    / "data"
+    / "expert-store.json"
 )
 # 缓存远程数据,避免每次请求都拉全量(796KB)
 CACHE_DIR = Path(os.path.expanduser("~/.octopus/cache"))
 CACHE_FILE = CACHE_DIR / "cloud-expert-store.json"
+
+_MAX_CATALOG_BYTES = 8 * 1024 * 1024
+_MAX_BUNDLE_BYTES = 128 * 1024 * 1024
+_MAX_ARCHIVE_MEMBERS = 10_000
+_MAX_EXTRACTED_BYTES = 256 * 1024 * 1024
+_MAX_MEMBER_BYTES = 64 * 1024 * 1024
 
 
 def _installed_agent_dir(plugin: str) -> str:
@@ -58,9 +69,12 @@ def _installed_agent_dir(plugin: str) -> str:
 def _load_remote(url: str) -> dict[str, Any] | None:
     """拉取远程 expert-store.json;失败返回 None。"""
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "octopus-agent/1.0"})
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+        body = fetch_public_https_bytes(
+            url,
+            timeout=20,
+            max_bytes=_MAX_CATALOG_BYTES,
+        )
+        return json.loads(body.decode("utf-8"))
     except Exception:  # noqa: BLE001 — 网络/解析失败统一走本地镜像
         return None
 
@@ -188,7 +202,9 @@ class CloudExpertStore:
             "is_team": is_team,
             "created_at": str(e.get("updatedAt") or ""),
             "bundle_url": e.get("bundleUrl") or "",
-            "quick_prompts": [p.get("zh") or p.get("en") or "" for p in (e.get("quickPrompts") or [])],
+            "quick_prompts": [
+                p.get("zh") or p.get("en") or "" for p in (e.get("quickPrompts") or [])
+            ],
             "profession": zh(e.get("profession")),
             "source": "workbuddy-cloud",
         }
@@ -274,9 +290,7 @@ class CloudExpertStore:
 
         # 先检查是否已装(wire id 带 wb_ 前缀;磁盘目录是 slugified 名)
         agent_id = f"wb_{e.get('plugin')}" if e.get("plugin") else expert_id
-        installed_dir = (
-            _installed_agent_dir(e.get("plugin")) if e.get("plugin") else agent_id
-        )
+        installed_dir = _installed_agent_dir(e.get("plugin")) if e.get("plugin") else agent_id
         if (agents_root / agent_id).exists() or (agents_root / installed_dir).exists():
             return {
                 "installed": True,
@@ -316,10 +330,14 @@ class CloudExpertStore:
 
     @staticmethod
     def _download(url: str, dest_dir: Path, plugin: str) -> Path:
-        out = Path(dest_dir) / f"{plugin}.tar.gz"
-        req = urllib.request.Request(url, headers={"User-Agent": "octopus-agent/1.0"})
-        with urllib.request.urlopen(req, timeout=120) as resp, open(out, "wb") as f:
-            shutil.copyfileobj(resp, f)
+        safe_plugin = _installed_agent_dir(plugin)
+        out = Path(dest_dir) / f"{safe_plugin}.tar.gz"
+        body = fetch_public_https_bytes(
+            url,
+            timeout=120,
+            max_bytes=_MAX_BUNDLE_BYTES,
+        )
+        out.write_bytes(body)
         return out
 
     @staticmethod
@@ -327,13 +345,37 @@ class CloudExpertStore:
         out = Path(dest_dir) / "unpack"
         out.mkdir(exist_ok=True)
         with tarfile.open(bundle_path, "r:gz") as tf:
-            # Path-traversal-safe extraction (Python 3.9 compatible)
+            members = tf.getmembers()
+            if len(members) > _MAX_ARCHIVE_MEMBERS:
+                raise ValueError("expert bundle contains too many members")
             dest_res = out.resolve()
-            for member in tf.getmembers():
+            extracted_bytes = 0
+            validated: list[tuple[tarfile.TarInfo, Path]] = []
+            for member in members:
+                if "\\" in member.name or "\x00" in member.name:
+                    raise ValueError(f"unsafe tar path: {member.name}")
+                if not (member.isdir() or member.isreg()):
+                    raise ValueError(f"unsupported tar member: {member.name}")
                 target = (dest_res / member.name).resolve()
                 if dest_res not in target.parents and target != dest_res:
                     raise ValueError(f"unsafe tar path: {member.name}")
-            tf.extractall(dest_res)
+                if member.isreg():
+                    if member.size < 0 or member.size > _MAX_MEMBER_BYTES:
+                        raise ValueError(f"tar member is too large: {member.name}")
+                    extracted_bytes += member.size
+                    if extracted_bytes > _MAX_EXTRACTED_BYTES:
+                        raise ValueError("expert bundle expands beyond the size limit")
+                validated.append((member, target))
+            for member, target in validated:
+                if member.isdir():
+                    target.mkdir(parents=True, exist_ok=True)
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                source = tf.extractfile(member)
+                if source is None:
+                    raise ValueError(f"tar member has no file content: {member.name}")
+                with source, target.open("wb") as output:
+                    shutil.copyfileobj(source, output, length=1024 * 1024)
         return out
 
     def clear_cache(self) -> None:

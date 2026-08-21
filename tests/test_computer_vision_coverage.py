@@ -96,7 +96,11 @@ def test_call_openai_vision_validation(tmp_path, monkeypatch) -> None:
     # httpx unavailable -> 503
     monkeypatch.setattr(cv, "HTTPX_AVAILABLE", False)
     with pytest.raises(HTTPException) as ei:
-        cv._call_openai_vision(config={"provider": "openai", "base_url": "https://x", "model": "gpt-4o"}, goal="g", data_url="d")
+        cv._call_openai_vision(
+            config={"provider": "openai", "base_url": "https://x", "model": "gpt-4o"},
+            goal="g",
+            data_url="d",
+        )
     assert ei.value.status_code == 503
 
     monkeypatch.setattr(cv, "HTTPX_AVAILABLE", True)
@@ -105,7 +109,9 @@ def test_call_openai_vision_validation(tmp_path, monkeypatch) -> None:
     assert ei.value.status_code == 400
 
     with pytest.raises(HTTPException) as ei:
-        cv._call_openai_vision(config={"provider": "openai", "base_url": "", "model": ""}, goal="g", data_url="d")
+        cv._call_openai_vision(
+            config={"provider": "openai", "base_url": "", "model": ""}, goal="g", data_url="d"
+        )
     assert ei.value.status_code == 400
 
 
@@ -148,7 +154,21 @@ def test_call_openai_vision_success_and_errors(tmp_path, monkeypatch) -> None:
         cv,
         "httpx",
         SimpleNamespace(
-            post=lambda *a, **kw: _Resp(200, {"choices": [{"message": {"content": [{"type": "text", "text": "A"}, {"type": "text", "text": "B"}]}}]})
+            post=lambda *a, **kw: _Resp(
+                200,
+                {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": [
+                                    {"type": "text", "text": "A"},
+                                    {"type": "text", "text": "B"},
+                                ]
+                            }
+                        }
+                    ]
+                },
+            )
         ),
     )
     out = cv._call_openai_vision(config=cfg, goal="g", data_url="d")
@@ -182,13 +202,19 @@ def test_call_openai_vision_success_and_errors(tmp_path, monkeypatch) -> None:
     assert ei.value.status_code == 502
 
     # No choices / empty content
-    monkeypatch.setattr(cv, "httpx", SimpleNamespace(post=lambda *a, **kw: _Resp(200, {"choices": []})))
+    monkeypatch.setattr(
+        cv, "httpx", SimpleNamespace(post=lambda *a, **kw: _Resp(200, {"choices": []}))
+    )
     with pytest.raises(HTTPException) as ei:
         cv._call_openai_vision(config=cfg, goal="g", data_url="d")
     assert ei.value.status_code == 502
 
     monkeypatch.setattr(
-        cv, "httpx", SimpleNamespace(post=lambda *a, **kw: _Resp(200, {"choices": [{"message": {"content": "  "}}]}))
+        cv,
+        "httpx",
+        SimpleNamespace(
+            post=lambda *a, **kw: _Resp(200, {"choices": [{"message": {"content": "  "}}]})
+        ),
     )
     with pytest.raises(HTTPException) as ei:
         cv._call_openai_vision(config=cfg, goal="g", data_url="d")

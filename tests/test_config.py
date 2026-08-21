@@ -36,6 +36,11 @@ class TestSchemaDefaults:
         assert cfg.budget.convergence_max_tokens == 2000
         assert cfg.immunity.unknown_policy == "quarantine"
         assert cfg.local_auth.allow_any_username is False
+        assert cfg.local_auth.login_max_failures == 5
+        assert cfg.local_auth.login_ip_max_failures == 20
+        assert cfg.local_auth.login_failure_window_seconds == 300
+        assert cfg.local_auth.login_lockout_seconds == 60
+        assert cfg.local_auth.login_rate_limit_max_entries == 10_000
         assert cfg.intel_sources == []
         assert cfg.mcp_servers == []
         assert cfg.execution.deployment_mode == "local"

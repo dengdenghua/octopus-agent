@@ -75,11 +75,7 @@ def _turn() -> Any:
 
 
 def _started_items(emitter: _FakeEmitter) -> list[dict[str, Any]]:
-    return [
-        params["item"]
-        for method, params in emitter.notified
-        if method == "item/started"
-    ]
+    return [params["item"] for method, params in emitter.notified if method == "item/started"]
 
 
 def test_streams_growing_summary_live_and_completes() -> None:

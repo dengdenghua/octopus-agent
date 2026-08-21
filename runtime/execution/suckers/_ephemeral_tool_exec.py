@@ -57,9 +57,7 @@ def _ephemeral_write_confine_block(call: Any, skill: Any) -> str | None:
     # can cd anywhere and write straight into the main tree). Fail closed
     # inside an isolated spawn instead of letting the sub-agent escape.
     shell_affinity = any(a in ("shell", "exec") for a in affinity)
-    shell_name = any(
-        tok in name for tok in ("exec_shell", "background_exec", "run_command")
-    )
+    shell_name = any(tok in name for tok in ("exec_shell", "background_exec", "run_command"))
     if shell_affinity or shell_name:
         return (
             f"(blocked: '{getattr(call, 'name', '?')}' is a shell/exec tool and "
@@ -183,10 +181,7 @@ def _execute_tool_in_subagent(
         _scope_meta = getattr(current_session(), "metadata", None) or {}
     except (ImportError, AttributeError, LookupError):
         _scope_meta = {}
-    if (
-        isinstance(getattr(call, "input", None), dict)
-        and not _scope_meta.get("_locked_write_root")
-    ):
+    if isinstance(getattr(call, "input", None), dict) and not _scope_meta.get("_locked_write_root"):
         from runtime.execution.tool_engine._executor_helpers import (
             _prepare_scoped_args,
         )

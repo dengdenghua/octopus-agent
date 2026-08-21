@@ -9,6 +9,7 @@ authorize/token 端点)。探测要访问外部服务,所以:
   - 列表先返回缓存命中结果,未命中返回 ``None``(前端不显示标识,探测完成
     后刷新即出现)。
 """
+
 from __future__ import annotations
 
 import json
@@ -35,8 +36,7 @@ def _load() -> None:
     try:
         data = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
         _memory = {
-            str(k): (float(v.get("ts", 0)), bool(v.get("ok", False)))
-            for k, v in data.items()
+            str(k): (float(v.get("ts", 0)), bool(v.get("ok", False))) for k, v in data.items()
         }
     except Exception:  # noqa: BLE001 - 缓存损坏按空处理
         _memory = {}
@@ -46,10 +46,7 @@ def _load() -> None:
 def _save() -> None:
     try:
         CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            k: {"ts": round(t, 2), "ok": ok}
-            for k, (t, ok) in _memory.items()
-        }
+        payload = {k: {"ts": round(t, 2), "ok": ok} for k, (t, ok) in _memory.items()}
         CACHE_FILE.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     except Exception:  # noqa: BLE001 - 写盘失败不阻断
         pass
@@ -85,10 +82,7 @@ def prewarm(urls: list[str]) -> None:
             u
             for u in urls
             if u
-            and (
-                u not in _memory
-                or now - _memory[u][0] >= CACHE_TTL_SECONDS
-            )
+            and (u not in _memory or now - _memory[u][0] >= CACHE_TTL_SECONDS)
             and u not in _prewarming
         ]
         _prewarming.update(todo)

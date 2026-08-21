@@ -215,6 +215,19 @@ def create_enterprise_assets_router(
             jwt_audience=jwt_audience,
         )
 
+    def _require_admin(request: Request) -> None:
+        from runtime.safety.auth.principal import require_roles
+
+        require_roles(
+            request,
+            identity_store,
+            require_auth,
+            ("admin",),
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     @router.get("/api/agent-market/enterprise")
     def list_enterprise_assets(
         request: Request, category: str | None = None, search: str | None = None
@@ -246,7 +259,7 @@ def create_enterprise_assets_router(
 
     @router.post("/api/agent-market/enterprise/{asset_id}/install")
     def install_enterprise_asset(request: Request, asset_id: str) -> dict[str, Any]:
-        _auth(request)
+        _require_admin(request)
         """把企业版角色资产导入本地:取 body → scaffold → load+register。"""
         asset_id = _safe_enterprise_asset_id(asset_id)
         res = _enterprise_get(f"/api/v1/agent-assets/{asset_id}")

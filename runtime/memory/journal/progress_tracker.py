@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import threading
+from dataclasses import replace
 from typing import Any
 from uuid import UUID
 
@@ -165,19 +166,4 @@ def _empty_snapshot(task_id: str) -> TaskProgressSnapshot:
 
 
 def _copy(snap: TaskProgressSnapshot, **updates: Any) -> TaskProgressSnapshot:
-    data = {
-        "task_id": snap.task_id,
-        "total_nodes": snap.total_nodes,
-        "nodes_completed": snap.nodes_completed,
-        "current_node_id": snap.current_node_id,
-        "current_node_index": snap.current_node_index,
-        "status": snap.status,
-        "started_at": snap.started_at,
-        "last_event_ts": snap.last_event_ts,
-        "strategy": snap.strategy,
-        "task_type": snap.task_type,
-        "tokens_spent": snap.tokens_spent,
-        "usd_spent": snap.usd_spent,
-    }
-    data.update(updates)
-    return TaskProgressSnapshot(**data)
+    return replace(snap, **updates)

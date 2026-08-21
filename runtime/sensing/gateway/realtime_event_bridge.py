@@ -626,9 +626,7 @@ class _ReactBridgeState:
                 "name": pending_delta["name"],
                 "arguments": pending_delta["arguments"],
             }
-            self._tool_call_delta_emitted[provider_call_id] = len(
-                pending_delta["arguments"]
-            )
+            self._tool_call_delta_emitted[provider_call_id] = len(pending_delta["arguments"])
         start_narrative = None if has_open_public_prose else _tool_start_public_narrative(evt)
         self.tool_public_narrative_started[call_key] = bool(start_narrative)
         if start_narrative:

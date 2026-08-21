@@ -78,7 +78,9 @@ def test_app_client_store_roundtrip(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert store.get_app_client("github") is None
 
 
-def test_start_pending_without_pkce_keeps_secret(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_start_pending_without_pkce_keeps_secret(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _reset(monkeypatch, tmp_path)
     store = oauth.get_oauth_store()
     state = store.start_pending(
@@ -106,7 +108,9 @@ def test_provider_for_capability_github() -> None:
 
 def test_provider_for_capability_unknown_falls_through() -> None:
     assert (
-        oauth_providers.get_provider_for_capability({"id": "tdx-connector", "source": "tdx-connector"})
+        oauth_providers.get_provider_for_capability(
+            {"id": "tdx-connector", "source": "tdx-connector"}
+        )
         is None
     )
 

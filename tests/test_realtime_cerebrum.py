@@ -215,7 +215,7 @@ def test_flatten_collapses_near_identical_resent_report() -> None:
     base = "# AI4S（AI for Science）领域调研报告\n\n## 一、执行摘要\n\n" + body
     mid = len(base) // 2
     draft = base
-    retry = base[:mid] + "据公开披露约" + base[mid + 6:]  # same-length fact fix
+    retry = base[:mid] + "据公开披露约" + base[mid + 6 :]  # same-length fact fix
 
     turn = Turn.model_validate(
         {
@@ -291,7 +291,10 @@ def test_flatten_keeps_genuinely_different_answers_apart() -> None:
     from runtime.sensing.gateway.realtime_cerebrum import _flatten_turns_to_messages
 
     first = "# AI4S 领域调研报告\n\n" + "AI for Science 正在走向科研范式重构。" * 40
-    second = "# 智能睡眠行业调研报告\n\n" + "智能睡眠是睡眠经济与 AI 结合的最新赛道，覆盖监测硬件、助眠内容与数字疗法。" * 30
+    second = (
+        "# 智能睡眠行业调研报告\n\n"
+        + "智能睡眠是睡眠经济与 AI 结合的最新赛道，覆盖监测硬件、助眠内容与数字疗法。" * 30
+    )
 
     turn = Turn.model_validate(
         {
@@ -2075,6 +2078,152 @@ def test_cowork_project_mode_runs_project_os(
     }
     assert assigned <= {"research-agent", "build-agent"}
     assert assigned
+
+
+def test_authenticated_cowork_project_mode_owns_project_and_subagent_workspace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member, set_mode
+    from runtime.memory.threads import ThreadStateStore
+    from runtime.projectos.llm_hooks import subagent_execute_task
+    from runtime.projectos.model import Milestone, Task
+    from runtime.projectos.store import ProjectStore
+    from runtime.safety.auth import Identity, IdentityStore
+    from runtime.safety.auth.scope import TenantScope
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+    from runtime.sensing.gateway.thread_workspace import managed_workspace_path
+
+    thread_id = "th-auth-project"
+    groups = GroupStore(base_dir=tmp_path / "cowork")
+    invite_member(groups, thread_id, actor="alice", target_id="build-agent", kind="agent")
+    set_mode(groups, thread_id, actor="alice", mode="project")
+    projects = ProjectStore(base_dir=tmp_path / "projectos")
+    threads = ThreadStateStore()
+    workspace_root = tmp_path / "managed"
+    dispatched: list[dict[str, Any]] = []
+
+    def fake_call_subagent(_agent: str, _prompt: str, **kwargs: Any) -> dict[str, Any]:
+        dispatched.append(dict(kwargs.get("context") or {}))
+        return {"success": True, "output": "delivered"}
+
+    monkeypatch.setattr(
+        "runtime.execution.subagents.call_subagent",
+        fake_call_subagent,
+    )
+
+    def milestones(goal: str) -> list[Milestone]:
+        return [Milestone(id="MS-auth", name="build", goal=goal)]
+
+    def tasks(milestone: Milestone) -> list[Task]:
+        return [
+            Task(
+                id="MS-auth-T1",
+                milestone_id=milestone.id,
+                type="code",
+                goal="deliver securely",
+            )
+        ]
+
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "logs"),
+        workspace_root=workspace_root,
+        thread_store=threads,
+        cowork_group_store=groups,
+        project_store=projects,
+        project_os_hooks={
+            "generate_milestones": milestones,
+            "decompose_tasks": tasks,
+            "execute_task": subagent_execute_task,
+            "qa_task": lambda _task, _milestone: {"approved": True, "reason": "ok"},
+        },
+    )
+    identities = IdentityStore()
+    identities.add(
+        Identity(actor_id="alice", metadata={"tenant_id": "tenant-a"}),
+        api_key_plaintext="sk-alice",
+    )
+    gateway = RealtimeGateway(
+        runtime=runtime,
+        approval_timeout=5.0,
+        identity_store=identities,
+        require_auth=True,
+    )
+    app = FastAPI()
+    app.include_router(gateway.router)
+    outside = tmp_path / "client-selected"
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime?token=sk-alice") as ws:
+        created = _drive(
+            ws,
+            {
+                "threadId": thread_id,
+                "cwd": str(outside),
+                "input": [
+                    {
+                        "type": "text",
+                        "text": "交付认证项目",
+                        "metadata": {
+                            "context": {
+                                "workspace_path": str(outside),
+                                "extra_workspaces": [str(tmp_path)],
+                            }
+                        },
+                    }
+                ],
+                "approvalPolicy": "never",
+            },
+        )
+        reported = _drive(
+            ws,
+            {
+                "threadId": thread_id,
+                "input": [{"type": "text", "text": "/project report"}],
+            },
+        )
+
+    assert created["response"].result["turn"]["status"] == "completed"
+    report_text = "\n".join(
+        item["text"]
+        for item in reported["response"].result["turn"]["items"]
+        if item["type"] == "agentMessage"
+    )
+    assert "Project OS 已执行控制命令" in report_text
+
+    project = projects.project_for_thread(thread_id)
+    assert project is not None
+    assert project.owner_id == "alice"
+    assert project.tenant_id == "tenant-a"
+    assert projects.with_scope(
+        TenantScope(tenant_id="tenant-a", actor_id="alice")
+    ).list_projects() == [project]
+    assert (
+        projects.with_scope(TenantScope(tenant_id="tenant-a", actor_id="bob")).list_projects() == []
+    )
+
+    expected = managed_workspace_path(
+        workspace_root,
+        tenant_id="tenant-a",
+        actor_id="alice",
+        thread_id=thread_id,
+    )
+    persisted = threads.get(thread_id)["metadata"]
+    assert persisted["workspace_path"] == str(expected)
+    assert persisted["owner_actor_id"] == "alice"
+    assert persisted["tenant_id"] == "tenant-a"
+    assert dispatched
+    dispatch = dispatched[0]
+    assert dispatch["thread_id"] == thread_id
+    assert dispatch["actor"] == "alice"
+    assert dispatch["tenant_id"] == "tenant-a"
+    assert dispatch["workspace_path"] == str(expected)
+    runtime_metadata = dispatch["runtime_session_metadata"]
+    assert runtime_metadata["workspace_path"] == str(expected)
+    assert runtime_metadata["_artifact_output_root"] == str(expected / "output" / "final")
 
 
 def test_cowork_project_mode_unhandled_failure_reports_driver_source(

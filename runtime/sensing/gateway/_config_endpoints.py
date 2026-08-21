@@ -55,6 +55,8 @@ class _ConfigCtx:
     load: Callable[[], None]
     register: Callable[[dict[str, Any]], dict[str, Any]]
     unregister_entry: Callable[..., bool]
+    rebuild_routes: Callable[[], dict[str, dict[str, Any]]]
+    serialize_custom_models: Callable[[Callable[..., Any]], Callable[..., Any]]
     require_admin: Callable[[Request], None]
     stack: Any
 

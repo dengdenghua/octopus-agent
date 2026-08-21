@@ -146,6 +146,7 @@ def _call_handler_with_transient_retry(
     be force-killed, so the worker is released (``shutdown(wait=False)``)
     and the caller proceeds instead of pinning its thread forever.
     """
+
     def _run() -> tuple[Any, list[str]]:
         try:
             return handler(**args), []

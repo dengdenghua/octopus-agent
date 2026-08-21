@@ -23,6 +23,7 @@ def _is_finite_num(value: Any) -> bool:
     except (TypeError, ValueError):
         return False
 
+
 TaskType = Literal["design", "code", "research", "analysis", "review"]
 TaskStatus = Literal["pending", "ready", "running", "blocked", "done", "failed", "rejected"]
 # How a project task node is executed: a single member (single), a leaderless
@@ -86,7 +87,9 @@ class Task:
             priority=raw.get("priority")
             if raw.get("priority") in ("P0", "P1", "P2", "P3")
             else "P2",
-            estimate=float(raw.get("estimate") or 0) if _is_finite_num(raw.get("estimate")) else 0.0,
+            estimate=float(raw.get("estimate") or 0)
+            if _is_finite_num(raw.get("estimate"))
+            else 0.0,
             due_at=str(raw.get("due_at") or ""),
             acceptance_criteria=[str(c) for c in (raw.get("acceptance_criteria") or [])],
             status=raw.get("status")
@@ -155,6 +158,7 @@ class Project:
     status: ProjectStatus = "planning"
     owner_id: str = ""
     tenant_id: str = ""
+    execution_thread_id: str = ""
     # ── 现实 PM 维度 ───────────────────────────────
     owner: str = ""  # project manager display name
     created_at: str = ""  # ISO timestamp
@@ -178,6 +182,7 @@ class Project:
             else "planning",
             owner_id=str(raw.get("owner_id") or ""),
             tenant_id=str(raw.get("tenant_id") or ""),
+            execution_thread_id=str(raw.get("execution_thread_id") or ""),
             owner=str(raw.get("owner") or ""),
             created_at=str(raw.get("created_at") or ""),
             started_at=str(raw.get("started_at") or ""),

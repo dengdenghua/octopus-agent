@@ -1056,7 +1056,9 @@ def resolve_process_backend(mode: str | None = None) -> BackendChoice:
 
     for backend, name in _hard_backend_candidates(raw):
         if backend.available() and probe_backend_runs(backend):
-            return _set_resolved(raw, BackendChoice(backend, name, hard=True, strict=raw == "strict"))
+            return _set_resolved(
+                raw, BackendChoice(backend, name, hard=True, strict=raw == "strict")
+            )
 
     if raw == "auto":
         # Never a silent downgrade: a hard backend is present-but-broken or

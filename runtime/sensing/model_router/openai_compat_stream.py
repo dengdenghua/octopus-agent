@@ -196,9 +196,10 @@ def iter_openai_sse(
                 0,
                 {"id": "function_call_0", "name": "", "arguments": ""},
             )
-            if legacy_function_call.get("name") and str(
-                legacy_function_call["name"]
-            ) != slot["name"]:
+            if (
+                legacy_function_call.get("name")
+                and str(legacy_function_call["name"]) != slot["name"]
+            ):
                 slot["name"] = str(legacy_function_call["name"])
                 yield ModelStreamEvent(
                     type="tool_call_delta",

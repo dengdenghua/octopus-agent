@@ -1179,11 +1179,12 @@ def test_audit_ultracode_does_not_force_orchestration() -> None:
     # No runtime-injected orchestration: the model answered directly, with
     # the orchestration skill available for it to choose.
     assert not any(
-        event.get("type") == "tool_start"
-        and event.get("tool_name") == "run_orchestration"
+        event.get("type") == "tool_start" and event.get("tool_name") == "run_orchestration"
         for event in events
     )
     assert router.calls == 1
+
+
 def test_personal_agent_mode_prompt_steers_build_mode() -> None:
     prompt = _build_personal_agent_mode_prompt("build")
 
@@ -9215,8 +9216,6 @@ def test_react_action_block_leaked_into_answer_is_rejected() -> None:
     assert not _looks_like_observation_echo("The Action field in the ReAct schema is required.")
 
 
-
-
 # ─── dsh repeat-tool-reminder integration ──────────────────────
 
 
@@ -9232,16 +9231,12 @@ def test_repeat_guard_injects_gentle_reminder_mid_turn() -> None:
     stack = _build_stack_with_executor(router)
     intent = _intent("ping then list")
     intent.user_context["repeat_tool_reminder"] = {"thresholds": [2, 4]}
-    events, result = _drain(
-        stream_react_loop(stack, intent, agent=None, max_iterations=6)
-    )
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=6))
 
     assert result is not None and result.success
     # The gentle reminder rides the third model request — right after the
     # second echo observation, before the next model call.
-    third_request = "\n".join(
-        str(message.content) for message in router.requests[2].messages
-    )
+    third_request = "\n".join(str(message.content) for message in router.requests[2].messages)
     assert "REPEAT-CALL REMINDER" in third_request
     assert "You are repeating the exact same tool call" in third_request
     # A different tool resets the chain — no detailed/escalated tier. The
@@ -9281,9 +9276,7 @@ def test_repeat_guard_detailed_escalation_never_blocks(
     stack = _build_stack_with_executor(router)
     intent = _intent("ping four times")
     intent.user_context["repeat_tool_reminder"] = {"thresholds": [2, 4]}
-    events, result = _drain(
-        stream_react_loop(stack, intent, agent=None, max_iterations=6)
-    )
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=6))
 
     assert result is not None and result.success
     echo_starts = [
@@ -9293,13 +9286,9 @@ def test_repeat_guard_detailed_escalation_never_blocks(
     ]
     assert len(echo_starts) == 4
     # Detailed tier (4th consecutive call) names the tool and the run length.
-    fourth_request = "\n".join(
-        str(message.content) for message in router.requests[3].messages
-    )
+    fourth_request = "\n".join(str(message.content) for message in router.requests[3].messages)
     assert "REPEAT-CALL REMINDER" in fourth_request
-    fifth_request = "\n".join(
-        str(message.content) for message in router.requests[4].messages
-    )
+    fifth_request = "\n".join(str(message.content) for message in router.requests[4].messages)
     assert "Repeated tool call detected:" in fifth_request
     assert "tool: echo" in fifth_request
     assert "consecutive_calls: 4" in fifth_request
@@ -9330,9 +9319,7 @@ def test_repeat_guard_coexists_with_final_answer_loop_guards() -> None:
     ]
     assert len(echo_starts) == 3
     # The mid-turn gentle reminder landed before the model tried to finish…
-    fourth_request = "\n".join(
-        str(message.content) for message in router.requests[3].messages
-    )
+    fourth_request = "\n".join(str(message.content) for message in router.requests[3].messages)
     assert "REPEAT-CALL REMINDER" in fourth_request
     # …and the pre-existing hard guard still blocked the final answer.
     assert result is not None
@@ -9354,9 +9341,7 @@ def test_repeat_guard_config_through_user_context() -> None:
         "thresholds": [2, 4],
         "exclude": ["echo"],
     }
-    events, result = _drain(
-        stream_react_loop(stack, intent, agent=None, max_iterations=6)
-    )
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=6))
 
     assert result is not None and result.success
     for request in router.requests:
@@ -9379,9 +9364,7 @@ def test_repeat_guard_disabled_through_user_context() -> None:
         "thresholds": [2, 4],
         "enabled": False,
     }
-    events, result = _drain(
-        stream_react_loop(stack, intent, agent=None, max_iterations=6)
-    )
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=6))
 
     assert result is not None and result.success
     for request in router.requests:

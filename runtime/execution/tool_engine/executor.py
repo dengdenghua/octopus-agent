@@ -849,11 +849,7 @@ class ToolExecutor:
                     dispatch_post_tool_failure(
                         sucker_id=str(sucker_id),
                         args=args,
-                        error=(
-                            result.error_type
-                            if isinstance(result.error_type, str)
-                            else ""
-                        ),
+                        error=(result.error_type if isinstance(result.error_type, str) else ""),
                         session=_cs3(),
                     )
                 except (TypeError, ValueError, RuntimeError):  # noqa: BLE001

@@ -38,7 +38,15 @@ def test_check_version_passes(monkeypatch):
 
     monkeypatch.setattr(cli_lifecycle.subprocess, "run", fake_run)
     res = cli_lifecycle.check_version(
-        _conn({"versionCheck": {"command": "xparse-cli version", "minVersion": "2.2.1", "versionPattern": r"v?(\d+\.\d+\.\d+)"}})
+        _conn(
+            {
+                "versionCheck": {
+                    "command": "xparse-cli version",
+                    "minVersion": "2.2.1",
+                    "versionPattern": r"v?(\d+\.\d+\.\d+)",
+                }
+            }
+        )
     )
     assert res["ok"] is True
     assert res["version"] == "2.3.0"
@@ -55,7 +63,15 @@ def test_check_version_too_low(monkeypatch):
 
     monkeypatch.setattr(cli_lifecycle.subprocess, "run", fake_run)
     res = cli_lifecycle.check_version(
-        _conn({"versionCheck": {"command": "xparse-cli version", "minVersion": "2.2.1", "versionPattern": r"v?(\d+\.\d+\.\d+)"}})
+        _conn(
+            {
+                "versionCheck": {
+                    "command": "xparse-cli version",
+                    "minVersion": "2.2.1",
+                    "versionPattern": r"v?(\d+\.\d+\.\d+)",
+                }
+            }
+        )
     )
     assert res["ok"] is False
     assert "版本过低" in (res["error"] or "")
@@ -66,6 +82,7 @@ def test_run_init_executes(monkeypatch):
 
     def fake_run(cmd, *a, **k):  # noqa: ARG001
         captured["cmd"] = cmd
+
         class R:
             returncode = 0
             stdout = "ok"

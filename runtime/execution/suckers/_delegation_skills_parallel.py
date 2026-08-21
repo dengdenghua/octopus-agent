@@ -12,6 +12,7 @@ same pattern used by ``_delegation_skills_agent`` / ``_write_skills_background``
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 from typing import Any
 
@@ -39,6 +40,8 @@ from .delegation_budget import (
 from .delegation_budget import (
     remaining_flat_delegations as _remaining_flat_delegations,
 )
+
+_log = logging.getLogger(__name__)
 
 
 def _coerce_parallel_specs(specs: Any) -> list[dict[str, Any]] | None:
@@ -412,8 +415,7 @@ def _call_agent_parallel(
             next_depth = parent_depth + 1
             can_spawn_further = next_depth < MAX_DELEGATION_DEPTH
             call_context["allow_subdelegation"] = (
-                spec.get("allow_subdelegation", False)
-                and can_spawn_further
+                spec.get("allow_subdelegation", False) and can_spawn_further
             )
 
             # Inject role-specific delegation guidance when subdelegation is allowed
@@ -426,8 +428,8 @@ def _call_agent_parallel(
                     guidance = get_delegation_guidance(spec["agent_id"])
                     if guidance:
                         call_context["delegation_guidance"] = guidance
-                except (ImportError, KeyError, AttributeError):
-                    pass  # Guidance is optional
+                except (ImportError, KeyError, AttributeError) as exc:
+                    _log.debug("optional delegation guidance unavailable", exc_info=exc)
         if parent_tool_use_id:
             call_context["parent_tool_use_id"] = parent_tool_use_id
         if call_context.get("react_stack") is None and _ambient_react_stack is not None:

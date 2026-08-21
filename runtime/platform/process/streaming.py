@@ -378,18 +378,18 @@ def stream_run(
                     # the direct backend then runs with explicit human consent.
                 else:
                     return {
-                    "error": "sandbox_fallback_needs_approval: no hard sandbox "
-                    "backend is available and no approval provider is "
-                    "configured; refuse unconfined execution",
-                    "sandbox_backend": "direct",
-                    "sandbox_hard": False,
-                    "execution_policy": _policy_snapshot(
-                        result={
-                            "status": "needs_approval",
-                            "error_type": "sandbox_fallback_needs_approval",
-                        }
-                    ),
-                }
+                        "error": "sandbox_fallback_needs_approval: no hard sandbox "
+                        "backend is available and no approval provider is "
+                        "configured; refuse unconfined execution",
+                        "sandbox_backend": "direct",
+                        "sandbox_hard": False,
+                        "execution_policy": _policy_snapshot(
+                            result={
+                                "status": "needs_approval",
+                                "error_type": "sandbox_fallback_needs_approval",
+                            }
+                        ),
+                    }
             run_argv, run_env, transformed_cwd = choice.backend.transform(
                 list(argv),
                 run_env,

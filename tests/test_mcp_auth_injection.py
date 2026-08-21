@@ -5,6 +5,7 @@
   - HttpMCPClient._transport:headers 合并 + 用户手填优先级最高
   - StdioMCPClient._stdio_env:config env + connector env 合并
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -20,7 +21,9 @@ from runtime.platform.connectors.credential_store import CredentialStore
 FORK = Path(__file__).resolve().parents[1] / "extensions" / "workbuddy-connectors"
 
 
-def _setup(tmp_path, connector_id: str = "westock-mcp") -> tuple[ConnectorRegistry, AuthOrchestrator]:
+def _setup(
+    tmp_path, connector_id: str = "westock-mcp"
+) -> tuple[ConnectorRegistry, AuthOrchestrator]:
     reg = ConnectorRegistry(
         marketplace_root=FORK,
         skills_root=tmp_path / "skills",

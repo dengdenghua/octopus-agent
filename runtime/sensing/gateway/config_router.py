@@ -41,10 +41,16 @@ Design notes
 from __future__ import annotations
 
 import json
+import logging
+import os
+import tempfile
+import threading
 from dataclasses import dataclass
+from functools import wraps
 from pathlib import Path
 from typing import Any
 
+from runtime.platform.models.custom_model_selection import selections_for_entry
 from runtime.platform.process.paths import app_paths
 
 try:
@@ -211,6 +217,19 @@ def create_config_router(
         else app_paths().custom_models_path
     )
     custom_models_state: dict[str, dict[str, Any]] = {}
+    # FastAPI executes these synchronous handlers in a shared thread pool.
+    # Serialize custom-model reads and mutations so concurrent PUT/DELETE/import
+    # requests cannot race the read-modify-write persistence cycle or expose a
+    # partially rebuilt dispatch table to listing endpoints.
+    custom_models_lock = threading.RLock()
+
+    def _serialize_custom_models(handler: Any) -> Any:
+        @wraps(handler)
+        def _locked(*args: Any, **kwargs: Any) -> Any:
+            with custom_models_lock:
+                return handler(*args, **kwargs)
+
+        return _locked
 
     # ─── Persistence helpers ────────────────────────────────
     # These used to be nested inside create_app; moving them here
@@ -242,43 +261,75 @@ def create_config_router(
         ids makes this a no-op write, which keeps a bare ``save()`` from
         clobbering anything.
         """
-        merged = _disk_state()
-        for model_id in touched:
-            entry = custom_models_state.get(model_id)
-            if entry is None:
-                merged.pop(model_id, None)
-            else:
-                merged[model_id] = entry
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(
-                json.dumps(merged, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-        except OSError:  # noqa: BLE001 — disk full / permission denied; in-memory PUT already succeeded
-            # Disk full / permission denied / etc. — surfacing this as
-            # a 5xx would mask the PUT that actually worked in-memory;
-            # the next save attempt retries.
-            pass
+        with custom_models_lock:
+            merged = _disk_state()
+            for model_id in touched:
+                entry = custom_models_state.get(model_id)
+                if entry is None:
+                    merged.pop(model_id, None)
+                else:
+                    merged[model_id] = entry
+            temp_path: Path | None = None
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                # Same-directory replace keeps readers from observing a
+                # partially-written JSON document after a crash or concurrent
+                # request. NamedTemporaryFile is closed before os.replace for
+                # Windows compatibility.
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    encoding="utf-8",
+                    dir=path.parent,
+                    prefix=f".{path.name}.",
+                    suffix=".tmp",
+                    delete=False,
+                ) as handle:
+                    temp_path = Path(handle.name)
+                    json.dump(merged, handle, ensure_ascii=False, indent=2)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temp_path, path)
+                temp_path = None
+            except OSError as exc:  # noqa: BLE001 — in-memory mutation already succeeded
+                # Preserve the historical best-effort API contract, but make
+                # restart data-loss risk visible to operators.
+                logging.getLogger(__name__).error(
+                    "failed to persist custom model config to %s: %s",
+                    path,
+                    exc,
+                )
+            finally:
+                if temp_path is not None:
+                    try:
+                        temp_path.unlink(missing_ok=True)
+                    except OSError:
+                        logging.getLogger(__name__).debug(
+                            "failed to remove temporary custom model config %s",
+                            temp_path,
+                            exc_info=True,
+                        )
 
     def _load() -> None:
-        try:
-            raw = path.read_text(encoding="utf-8")
-            data = json.loads(raw)
-            if isinstance(data, dict):
-                for entry in data.values():
-                    if isinstance(entry, dict):
-                        entry.pop("max_tokens", None)
-                custom_models_state.update({k: v for k, v in data.items() if isinstance(v, dict)})
-                # Boot-time rewrite: the loop above stripped the retired
-                # ``max_tokens`` field, so every id we just read is one
-                # we changed and has to be written back.
-                _save(*custom_models_state)
-        except (OSError, json.JSONDecodeError):  # noqa: BLE001 — fresh install or corrupt file; start empty rather than crash boot
-            # Fresh install (no file) or corrupted file — start empty
-            # rather than crashing app boot. Corrupt files should be
-            # inspected by ops, not auto-wiped.
-            pass
+        with custom_models_lock:
+            try:
+                raw = path.read_text(encoding="utf-8")
+                data = json.loads(raw)
+                if isinstance(data, dict):
+                    for entry in data.values():
+                        if isinstance(entry, dict):
+                            entry.pop("max_tokens", None)
+                    custom_models_state.update(
+                        {k: v for k, v in data.items() if isinstance(v, dict)}
+                    )
+                    # Boot-time rewrite: the loop above stripped the retired
+                    # ``max_tokens`` field, so every id we just read is one
+                    # we changed and has to be written back.
+                    _save(*custom_models_state)
+            except (OSError, json.JSONDecodeError):  # noqa: BLE001 — fresh install or corrupt file; start empty rather than crash boot
+                # Fresh install (no file) or corrupted file — start empty
+                # rather than crashing app boot. Corrupt files should be
+                # inspected by ops, not auto-wiped.
+                pass
 
     # ─── Dispatcher registration · sub-router builder ─────────
     # Given a user-supplied provider config, construct the right
@@ -368,6 +419,7 @@ def create_config_router(
                     api_key=api_key or "dummy",
                     default_model=primary_model,
                     extra_headers=default_headers,
+                    custom_model_entry=entry,
                 )
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "error": f"router init failed: {e}"}
@@ -399,12 +451,21 @@ def create_config_router(
                 a stronger tier.
             """
 
-            def __init__(self, inner: _MRR, upstreams: list[str]) -> None:
+            def __init__(
+                self,
+                inner: _MRR,
+                upstreams: list[str],
+                selection_models: dict[str, str],
+            ) -> None:
                 self._inner = inner
                 self._upstreams = list(upstreams)
+                self._selection_models = dict(selection_models)
                 self._default = self._upstreams[0] if self._upstreams else ""
 
             def _resolve(self, request: _MR) -> str:
+                selected = self._selection_models.get(request.model)
+                if selected is not None:
+                    return selected
                 requested = request.model.removesuffix("::1m")
                 if requested in self._upstreams:
                     return requested
@@ -432,7 +493,15 @@ def create_config_router(
             def default_model(self) -> str:
                 return self._default
 
-        wrapper = _UpstreamModelRewrite(sub_router, upstreams)
+        selection_models = {
+            selection.selection_id: selection.model
+            for selection in selections_for_entry(model_id, entry)
+        }
+        wrapper = _UpstreamModelRewrite(
+            sub_router,
+            upstreams,
+            selection_models,
+        )
         for route_id in _entry_route_ids(entry, model_id):
             dispatcher.register(route_id, wrapper)
         return {"ok": True, "model_id": model_id}
@@ -442,6 +511,17 @@ def create_config_router(
             custom_models_state.get(model_id),
             fallback_id=model_id,
         )
+
+    def _rebuild_routes() -> dict[str, dict[str, Any]]:
+        """Re-register all live entries in stable insertion order.
+
+        Legacy model aliases can intentionally overlap across entries. Removing
+        or updating the entry that currently owns such an alias first removes
+        its old routes; replaying the remaining entries restores the alias to
+        the last still-configured owner while row-level selection ids stay
+        unambiguous.
+        """
+        return {model_id: _register(entry) for model_id, entry in custom_models_state.items()}
 
     # Hydrate from disk + re-register each entry so the dispatcher
     # sees them on the first request.
@@ -457,6 +537,8 @@ def create_config_router(
             load=_load,
             register=_register,
             unregister_entry=_unregister_entry,
+            rebuild_routes=_rebuild_routes,
+            serialize_custom_models=_serialize_custom_models,
             require_admin=_require_admin,
             stack=stack,
         )

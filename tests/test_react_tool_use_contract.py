@@ -96,9 +96,7 @@ def test_audit_mode_skips_tool_use_contract() -> None:
 
 
 def test_no_tool_turn_skips_tool_use_contract() -> None:
-    text = _system_text(
-        _make_state(goal="直接回答，不要使用任何工具", no_tool_turn=True)
-    )
+    text = _system_text(_make_state(goal="直接回答，不要使用任何工具", no_tool_turn=True))
     assert "<tool-use-contract>" not in text
     assert "<direct-answer-contract>" in text
 
@@ -115,7 +113,9 @@ def test_contract_wording_aligns_with_guard_regex() -> None:
         _incomplete_final_answer_guard,
     )
 
-    assert _incomplete_final_answer_guard("我继续核对广义健康板块，确认是否跟随医药大涨") is not None
+    assert (
+        _incomplete_final_answer_guard("我继续核对广义健康板块，确认是否跟随医药大涨") is not None
+    )
     assert _incomplete_final_answer_guard("我先核对三个文件再给结论") is not None
     assert _incomplete_final_answer_guard("我将检查这些数据") is not None
     assert re.search(r"禁止用预告式措辞代替执行", _TOOL_USE_CONTRACT)

@@ -3,11 +3,14 @@
 覆盖:目录解析、内容包解包安全、install_skill 落地/幂等、install_plugin 落地 +
 捆绑技能复制。内容包用内存 tar.gz 构造,不依赖公网。
 """
+
 from __future__ import annotations
 
 import io
 import json
 import tarfile
+
+import pytest
 
 from runtime.platform.plugins.cloud_catalog import CloudCatalog
 
@@ -77,6 +80,20 @@ class TestExtractMember:
             return
         raise AssertionError("path traversal not rejected")
 
+    def test_rejects_symlink_member(self, tmp_path):
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+            link = tarfile.TarInfo("skills/evil/link")
+            link.type = tarfile.SYMTYPE
+            link.linkname = "../../outside"
+            tf.addfile(link)
+        pack = tmp_path / "symlink.tar.gz"
+        pack.write_bytes(buf.getvalue())
+
+        cat = CloudCatalog("skills", use_remote=False, use_cache=False)
+        with pytest.raises(ValueError, match="unsupported tar member"):
+            cat._extract_member(pack, "skills", tmp_path / "x", "evil")
+
 
 class TestInstallSkill:
     def test_installs_to_target_and_is_idempotent(self, tmp_path, monkeypatch):
@@ -106,9 +123,7 @@ class TestInstalledPlugins:
         # codex 格式插件(octopus 布局 <plugin>/.codex-plugin/plugin.json)
         cache = tmp_path / "codex-cache" / "sites"
         (cache / ".codex-plugin").mkdir(parents=True)
-        (cache / ".codex-plugin" / "plugin.json").write_text(
-            '{"name":"sites"}', encoding="utf-8"
-        )
+        (cache / ".codex-plugin" / "plugin.json").write_text('{"name":"sites"}', encoding="utf-8")
         monkeypatch.setattr(
             "runtime.platform.plugins.cloud_catalog.CloudCatalog.CODEX_CACHE_ROOT",
             tmp_path / "codex-cache",
@@ -117,8 +132,12 @@ class TestInstalledPlugins:
         st = tmp_path / "connectors" / "state.json"
         st.parent.mkdir(parents=True)
         st.write_text(
-            json.dumps({"github": {"id": "github", "installed": True},
-                        "wecom": {"id": "wecom", "installed": False}}),
+            json.dumps(
+                {
+                    "github": {"id": "github", "installed": True},
+                    "wecom": {"id": "wecom", "installed": False},
+                }
+            ),
             encoding="utf-8",
         )
         monkeypatch.setattr(
@@ -126,12 +145,13 @@ class TestInstalledPlugins:
             st,
         )
         got = cat.installed_plugins()
-        assert "wecom" in got          # 云安装落点
-        assert "figma" in got          # 云安装落点(codex)
-        assert "sites" in got          # codex 缓存
-        assert "github" in got         # 连接器状态 installed=true
+        assert "wecom" in got  # 云安装落点
+        assert "figma" in got  # 云安装落点(codex)
+        assert "sites" in got  # codex 缓存
+        assert "github" in got  # 连接器状态 installed=true
         assert "tencent-docs" not in got  # 未安装的连接器不标
         assert got == sorted(got)
+
 
 class TestInstallPlugin:
     def test_connector_lands_and_copies_skills(self, tmp_path, monkeypatch):
@@ -176,6 +196,7 @@ class TestInstallPlugin:
         res = cat.install_plugin("figma", plugin_kind="codex")
         assert (tmp_path / "plugins" / "codex" / "figma" / ".codex-plugin" / "plugin.json").exists()
         assert res["kind"] == "codex"
+
 
 class TestSyncCodexCache:
     def test_migrates_legacy_cache_to_octopus_layout(self, tmp_path):

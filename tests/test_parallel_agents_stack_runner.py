@@ -138,12 +138,21 @@ class TestRunnerHappyPath:
     def test_binds_runtime_session_metadata_and_file_owner(self):
         stack = _build_stack()
         captured: dict = {}
+        real_planner = stack.planner
+
+        class _Planner:
+            def plan(self, intent, **kwargs):
+                session = current_session()
+                captured["planner_actor"] = session.actor if session is not None else None
+                captured["planner_thread_id"] = session.thread_id if session is not None else None
+                return real_planner.plan(intent, **kwargs)
 
         class _Runtime:
             def run(self, graph, *, budget, caller, arm_id, actor):
                 session = current_session()
                 captured["metadata"] = session.metadata if session is not None else None
                 captured["thread_id"] = session.thread_id if session is not None else None
+                captured["runtime_session_actor"] = session.actor if session is not None else None
                 captured["actor"] = actor
                 return Trajectory(
                     task_id=graph.task_id,
@@ -151,6 +160,7 @@ class TestRunnerHappyPath:
                     outcome=TrajectoryOutcome(success=True),
                 )
 
+        stack.planner = _Planner()
         stack.runtime = _Runtime()
         metadata = {"workspace_path": "C:/workspace"}
         runner = make_stack_subagent_runner(stack=stack)
@@ -168,6 +178,9 @@ class TestRunnerHappyPath:
         assert "OK" in out
         assert captured["metadata"] is metadata
         assert captured["thread_id"] == "thread-1"
+        assert captured["planner_thread_id"] == "thread-1"
+        assert captured["planner_actor"] == "task-a"
+        assert captured["runtime_session_actor"] == "task-a"
         assert captured["actor"] == "task-a"
 
     def test_via_orchestrator_end_to_end(self):
@@ -265,7 +278,7 @@ class TestAgentRegistryLookup:
             agent_registry=reg,
         )
         runner("list", subagent_name="scout", context={})
-        assert _SpyPlanner.captured.get("soul") == "You are a scout."
+        assert str(_SpyPlanner.captured.get("soul") or "").startswith("You are a scout.")
         assert _SpyPlanner.captured.get("model") == "test-model"
 
     def test_context_model_overrides_agent_model(self):

@@ -23,6 +23,7 @@ from ._fs_router_paths import (
     _allowed_fs_roots,
     _assert_within_allowed_roots,
 )
+from .thread_workspace import verified_managed_workspace
 
 
 @dataclass
@@ -36,6 +37,7 @@ class _FsContext:
     jwt_secret: str | None = None
     jwt_issuer: str | None = None
     jwt_audience: str | None = None
+    workspace_root: Any = None
     workspace_store: Any = None
     lease_store: Any = None
     mount_registry: Any = None
@@ -57,6 +59,30 @@ def _scope_roots(
     thread_id: str | None = None,
     workspace_path: str | None = None,
 ) -> list[Path]:
+    # Shared mode has exactly one source of truth: a structurally verified
+    # server allocation on an owned thread. Client query/body paths and legacy
+    # metadata are intentionally ignored.
+    if ctx.require_auth:
+        if ctx.thread_store is None or not thread_id:
+            return []
+        try:
+            thread = None
+            if hasattr(ctx.thread_store, "get"):
+                thread = ctx.thread_store.get(thread_id)
+            if thread is None and hasattr(ctx.thread_store, "get_state"):
+                thread = ctx.thread_store.get_state(thread_id)
+            metadata = (thread or {}).get("metadata", {}) if thread else {}
+            if not isinstance(metadata, dict):
+                return []
+            managed = verified_managed_workspace(
+                ctx.workspace_root,
+                thread_id=thread_id,
+                metadata=metadata,
+            )
+            return [managed] if managed is not None else []
+        except (OSError, RuntimeError, TypeError, ValueError):
+            return []
+
     roots: list[Path] = []
     if ctx.thread_store is not None and thread_id:
         try:
@@ -75,21 +101,6 @@ def _scope_roots(
         except (OSError, TypeError, ValueError):  # noqa: BLE001 — scope root resolution failed; fall through to workspace
             pass
     _add_scope_root(roots, workspace_path)
-
-    # In shared/authenticated mode a thread's metadata is user-controlled
-    # input at creation time.  Do not let a caller turn that metadata into a
-    # bypass of the process-wide filesystem policy by declaring ``/`` or
-    # another arbitrary host path as its workspace.  Local single-user mode
-    # retains the historical user-chosen-directory behaviour.
-    if ctx.require_auth:
-        safe_roots: list[Path] = []
-        for root in roots:
-            try:
-                _assert_within_allowed_roots(root)
-            except HTTPException:
-                continue
-            safe_roots.append(root)
-        roots = safe_roots
 
     deduped: list[Path] = []
     seen: set[str] = set()
@@ -126,6 +137,15 @@ def _assert_in_scope(
         workspace_path=workspace_path,
     )
     if not roots:
+        if ctx.require_auth:
+            raise HTTPException(
+                403,
+                {
+                    "error": "managed_workspace_required",
+                    "thread_id": thread_id,
+                    "hint": "use a server-created authenticated thread workspace",
+                },
+            )
         # No per-thread workspace scope (the common case for the
         # desktop file browser). Fail CLOSED to the process-wide
         # allowed fs roots (data dir / home / project / explicit
@@ -176,17 +196,37 @@ def _assert_local_request_scope(
     raw_metadata = thread.get("metadata")
     metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
     owner = metadata.get("owner_actor_id") or metadata.get("actor_id")
-    if owner != principal.actor_id and not principal.roles.intersection({"admin", "operator"}):
+    privileged = bool(principal.roles.intersection({"admin", "operator"}))
+    if owner != principal.actor_id and not privileged:
         raise HTTPException(404, f"thread not found: {thread_id}")
+    stored_tenant = str(metadata.get("tenant_id") or "").strip()
+    principal_tenant = str(getattr(principal, "tenant_id", "") or "").strip()
+    if not privileged:
+        if (
+            principal_tenant
+            and not principal_tenant.startswith("legacy:")
+            and stored_tenant != principal_tenant
+        ):
+            raise HTTPException(404, f"thread not found: {thread_id}")
+        if principal_tenant and stored_tenant and stored_tenant != principal_tenant:
+            raise HTTPException(404, f"thread not found: {thread_id}")
+    managed = verified_managed_workspace(
+        ctx.workspace_root,
+        thread_id=thread_id,
+        metadata=metadata,
+    )
+    if managed is None:
+        raise HTTPException(
+            403,
+            {
+                "error": "managed_workspace_required",
+                "thread_id": thread_id,
+                "hint": "thread workspace is missing or not server-managed",
+            },
+        )
     if workspace_path:
         requested = _resolved_path(workspace_path)
-        declared: list[Path] = []
-        _add_scope_root(declared, metadata.get("workspace_path"))
-        extra = metadata.get("extra_workspaces")
-        if isinstance(extra, list):
-            for root in extra:
-                _add_scope_root(declared, root)
-        if not any(_path_in_root(requested, root) for root in declared):
+        if not _path_in_root(requested, managed):
             raise HTTPException(403, "workspace_path is outside the thread workspace scope")
 
 
@@ -218,9 +258,9 @@ def _require_local_thread_scope(
         raise HTTPException(
             403,
             {
-                "error": "workspace_root_not_allowed",
+                "error": "managed_workspace_required",
                 "thread_id": thread_id,
-                "hint": "declare a workspace under OCTOPUS_FS_ALLOWED_ROOTS",
+                "hint": "use a server-created authenticated thread workspace",
             },
         )
     return roots

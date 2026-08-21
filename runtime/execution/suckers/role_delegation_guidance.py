@@ -5,6 +5,7 @@ When a sub-agent is allowed to spawn its own sub-agents (recursive delegation),
 this module provides role-specific guidance on HOW to decompose work and WHAT
 dimensions to consider.
 """
+
 from __future__ import annotations
 
 # Role ID → delegation guidance mapping

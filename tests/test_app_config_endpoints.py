@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -95,11 +96,18 @@ def secured_client(isolated_cwd: Path) -> tuple[TestClient, dict[str, str]]:
 
     store = IdentityStore()
     store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    store.add(
+        Identity(actor_id="admin", roles=("admin",)),
+        api_key_plaintext="sk-admin",
+    )
     app = create_app(
         cocoloop_require_auth=True,
         cocoloop_identity_store=store,
     )
-    return TestClient(app), {"Authorization": "Bearer sk-alice"}
+    return TestClient(app), {
+        "user": "Bearer sk-alice",
+        "admin": "Bearer sk-admin",
+    }
 
 
 # ═══════════════════════════════════════════════════════════
@@ -189,7 +197,7 @@ class TestConfigAuth:
         assert (
             client.get(
                 "/api/config/identity-lock",
-                headers=headers,
+                headers={"Authorization": headers["user"]},
             ).status_code
             == 200
         )
@@ -212,7 +220,15 @@ class TestConfigAuth:
             client.put(
                 "/api/config/custom-models/claude-mirror",
                 json=payload,
-                headers=headers,
+                headers={"Authorization": headers["user"]},
+            ).status_code
+            == 403
+        )
+        assert (
+            client.put(
+                "/api/config/custom-models/claude-mirror",
+                json=payload,
+                headers={"Authorization": headers["admin"]},
             ).status_code
             == 200
         )
@@ -539,6 +555,115 @@ class TestCustomModelsUpsert:
         assert not dispatcher.has("kimi-for-coding-v2")
         assert not dispatcher.has("kimi-for-coding-v2::1m")
 
+    def test_selection_ids_dispatch_exact_endpoint_variant_and_profile(
+        self,
+        isolated_cwd: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from runtime.sensing.model_router.models import ModelRequest, ModelResponse
+
+        class _Fallback(ModelRouter):
+            def call(self, request):
+                raise AssertionError("fallback should not be called")
+
+        class _RecordingOpenAI(ModelRouter):
+            def __init__(
+                self,
+                *,
+                base_url: str,
+                default_model: str,
+                **_kwargs,
+            ) -> None:
+                self.base_url = base_url
+                self.default_model = default_model
+
+            def call(self, request):
+                return ModelResponse(
+                    text=self.base_url,
+                    model=request.model,
+                    provider="recording",
+                )
+
+        monkeypatch.setattr(
+            "runtime.sensing.model_router.openai_router.OpenAIModelRouter",
+            _RecordingOpenAI,
+        )
+        dispatcher = ModelDispatchRouter(fallback=_Fallback())
+        stack = SimpleNamespace(planner=SimpleNamespace(router=dispatcher))
+        app = FastAPI()
+        app.include_router(create_config_router(stack=stack).router)
+        client = TestClient(app)
+
+        for entry_id, base_url, models in (
+            (
+                "primary",
+                "https://primary.example/v1",
+                ["economy-model", "shared-model"],
+            ),
+            ("backup", "https://backup.example/v1", ["shared-model"]),
+        ):
+            response = client.put(
+                f"/api/config/custom-models/{entry_id}",
+                json={
+                    "provider": "openai",
+                    "base_url": base_url,
+                    "api_key": "not-exposed",
+                    "models": models,
+                    "enable_1m_context": True,
+                },
+            )
+            assert response.status_code == 200
+
+        rows = [
+            row
+            for row in client.get("/api/llm-models").json()["models"]
+            if row.get("entry_id") in {"primary", "backup"}
+        ]
+        assert len(rows) == 6
+        assert len({row["selection_id"] for row in rows}) == 6
+        assert all("not-exposed" not in row["selection_id"] for row in rows)
+        configured = client.get("/api/config/custom-models").json()["models"]
+        configured_ids = {
+            selection_id
+            for entry in configured
+            if entry["id"] in {"primary", "backup"}
+            for selection_id in entry["selection_ids"]
+        }
+        assert configured_ids == {row["selection_id"] for row in rows}
+
+        expected = {
+            ("primary", "economy-model", "default"): "primary.example",
+            ("primary", "economy-model", "1m"): "primary.example",
+            ("primary", "shared-model", "default"): "primary.example",
+            ("primary", "shared-model", "1m"): "primary.example",
+            ("backup", "shared-model", "default"): "backup.example",
+            ("backup", "shared-model", "1m"): "backup.example",
+        }
+        for row in rows:
+            key = (row["entry_id"], row["model"], row["context_profile"])
+            response = dispatcher.call(
+                ModelRequest(model=row["selection_id"], messages=[]),
+            )
+            assert response.model == row["model"]
+            assert expected[key] in response.text
+
+        # Entry aliases and concrete model aliases are retained for old clients.
+        assert dispatcher.has("primary")
+        assert dispatcher.has("economy-model")
+        assert dispatcher.has("shared-model")
+        assert dispatcher.has("shared-model::1m")
+
+        # Deleting the entry that most recently claimed a legacy alias must
+        # restore that alias to the remaining entry. Stored threads and older
+        # API clients can still carry the bare upstream id instead of the new
+        # row-level selection id.
+        assert client.delete("/api/config/custom-models/backup").status_code == 200
+        assert dispatcher.has("shared-model")
+        assert dispatcher.has("shared-model::1m")
+        legacy = dispatcher.call(ModelRequest(model="shared-model", messages=[]))
+        assert legacy.text == "https://primary.example/v1"
+        assert legacy.model == "shared-model"
+
 
 class TestCustomModelsExternalEdits:
     """The file is hand-edited while the server runs.
@@ -557,6 +682,34 @@ class TestCustomModelsExternalEdits:
 
     def _read(self, cwd: Path) -> dict:
         return json.loads((cwd / "data" / "custom_models.json").read_text(encoding="utf-8"))
+
+    def test_concurrent_upserts_persist_every_entry_atomically(
+        self,
+        isolated_cwd: Path,
+    ) -> None:
+        persisted = isolated_cwd / "data" / "custom_models.json"
+        config = create_config_router(custom_models_path=persisted)
+        endpoint = next(
+            route.endpoint
+            for route in config.router.routes
+            if route.path == "/api/config/custom-models/{model_id}" and "PUT" in route.methods
+        )
+
+        def _upsert(index: int) -> None:
+            endpoint(
+                model_id=f"concurrent-{index}",
+                body={
+                    "base_url": f"https://model-{index}.example/v1",
+                    "models": [f"model-{index}"],
+                },
+            )
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            list(pool.map(_upsert, range(24)))
+
+        stored = json.loads(persisted.read_text(encoding="utf-8"))
+        assert set(stored) == {f"concurrent-{index}" for index in range(24)}
+        assert not list(persisted.parent.glob(f".{persisted.name}.*.tmp"))
 
     def test_an_unrelated_hand_added_entry_survives_an_upsert(
         self,

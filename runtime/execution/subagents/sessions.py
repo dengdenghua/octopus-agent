@@ -127,6 +127,8 @@ class SubagentSession:
     thread_id: str
     created_at: str
     updated_at: str
+    owner_actor_id: str = ""
+    tenant_id: str = ""
     turns: list[SubagentSessionTurn] = field(default_factory=list)
     reports: list[SubagentReport] = field(default_factory=list)
     reports_delivered_up_to: int = 0
@@ -144,6 +146,8 @@ class SubagentSession:
             thread_id=str(data.get("thread_id") or ""),
             created_at=str(data.get("created_at") or ""),
             updated_at=str(data.get("updated_at") or ""),
+            owner_actor_id=str(data.get("owner_actor_id") or ""),
+            tenant_id=str(data.get("tenant_id") or ""),
             turns=turns,
             reports=[
                 SubagentReport.from_dict(item)
@@ -160,6 +164,8 @@ class SubagentSession:
             "thread_id": self.thread_id,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "owner_actor_id": self.owner_actor_id,
+            "tenant_id": self.tenant_id,
             "turns": [asdict(turn) for turn in self.turns],
             "reports": [asdict(report) for report in self.reports],
             "reports_delivered_up_to": self.reports_delivered_up_to,
@@ -320,7 +326,13 @@ class SubagentSessionStore:
             pass
         return loaded
 
-    def _reference_records_locked(self, *, scope_thread_id: str | None = None) -> list[Any]:
+    def _reference_records_locked(
+        self,
+        *,
+        scope_thread_id: str | None = None,
+        owner_actor_id: str | None = None,
+        tenant_id: str | None = None,
+    ) -> list[Any]:
         """Candidate records from cached + durable sessions (dsh listCandidates).
 
         When ``scope_thread_id`` is provided, only sessions owned by that
@@ -340,6 +352,10 @@ class SubagentSessionStore:
                 continue
             if scope_thread_id is not None and session.thread_id != scope_thread_id:
                 continue
+            if owner_actor_id is not None and session.owner_actor_id != owner_actor_id:
+                continue
+            if tenant_id is not None and session.tenant_id != tenant_id:
+                continue
             seen.add(session.session_id)
             records.append(
                 SessionReferenceRecord(
@@ -352,7 +368,14 @@ class SubagentSessionStore:
             )
         return records
 
-    def create(self, *, agent_id: str, thread_id: str = "") -> SubagentSession:
+    def create(
+        self,
+        *,
+        agent_id: str,
+        thread_id: str = "",
+        owner_actor_id: str = "",
+        tenant_id: str = "",
+    ) -> SubagentSession:
         now = _utc_now_iso()
         session = SubagentSession(
             session_id=uuid4().hex,
@@ -360,6 +383,8 @@ class SubagentSessionStore:
             thread_id=thread_id,
             created_at=now,
             updated_at=now,
+            owner_actor_id=owner_actor_id,
+            tenant_id=tenant_id,
         )
         with self._lock:
             self._store_locked(session)
@@ -368,7 +393,14 @@ class SubagentSessionStore:
             self._write_locked(session)
         return session
 
-    def get(self, session_id: str, *, scope_thread_id: str | None = None) -> SubagentSession | None:
+    def get(
+        self,
+        session_id: str,
+        *,
+        scope_thread_id: str | None = None,
+        owner_actor_id: str | None = None,
+        tenant_id: str | None = None,
+    ) -> SubagentSession | None:
         """Load a session, optionally scoped to a parent thread.
 
         With ``scope_thread_id`` set, a session whose ``thread_id`` differs is
@@ -381,6 +413,10 @@ class SubagentSessionStore:
             if cached is not None:
                 self._touch_locked(session_id)
                 if scope_thread_id is not None and cached.thread_id != scope_thread_id:
+                    return None
+                if owner_actor_id is not None and cached.owner_actor_id != owner_actor_id:
+                    return None
+                if tenant_id is not None and cached.tenant_id != tenant_id:
                     return None
                 return _copy_session(cached)
             path = self._path_for(session_id)
@@ -395,6 +431,10 @@ class SubagentSessionStore:
             if session is None or not session.session_id:
                 return None
             if scope_thread_id is not None and session.thread_id != scope_thread_id:
+                return None
+            if owner_actor_id is not None and session.owner_actor_id != owner_actor_id:
+                return None
+            if tenant_id is not None and session.tenant_id != tenant_id:
                 return None
             self._store_locked(session)
             return _copy_session(session)
@@ -421,6 +461,8 @@ class SubagentSessionStore:
         target_id: str,
         query: str = "",
         limit: int = 50,
+        owner_actor_id: str | None = None,
+        tenant_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """List subagent sessions as reference candidates (dsh listCandidates).
 
@@ -438,7 +480,11 @@ class SubagentSessionStore:
         )
 
         with self._lock:
-            records = self._reference_records_locked(scope_thread_id=target_id)
+            records = self._reference_records_locked(
+                scope_thread_id=target_id,
+                owner_actor_id=owner_actor_id,
+                tenant_id=tenant_id,
+            )
         resolver = SessionReferenceResolver()
         return [
             {
@@ -1020,6 +1066,8 @@ def _copy_session(session: SubagentSession) -> SubagentSession:
         thread_id=session.thread_id,
         created_at=session.created_at,
         updated_at=session.updated_at,
+        owner_actor_id=session.owner_actor_id,
+        tenant_id=session.tenant_id,
         turns=[SubagentSessionTurn(**asdict(turn)) for turn in session.turns],
         reports=[SubagentReport(**asdict(report)) for report in session.reports],
         reports_delivered_up_to=session.reports_delivered_up_to,

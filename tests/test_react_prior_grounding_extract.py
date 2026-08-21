@@ -16,8 +16,14 @@ def test_extracts_only_observation_user_messages() -> None:
     history = [
         {"role": "user", "content": "你帮我找下这3个数据"},
         {"role": "assistant", "content": "我这就去查。"},
-        {"role": "user", "content": "Observation: {\"ok\": true, \"results\": [{\"title\": \"X\", \"url\": \"https://a.com\"}]}"},
-        {"role": "user", "content": "Observation: Global Market Insights: 2025 智能床垫市场 17.6 亿美元"},
+        {
+            "role": "user",
+            "content": 'Observation: {"ok": true, "results": [{"title": "X", "url": "https://a.com"}]}',
+        },
+        {
+            "role": "user",
+            "content": "Observation: Global Market Insights: 2025 智能床垫市场 17.6 亿美元",
+        },
         {"role": "assistant", "content": "更新：已确认 17.6 亿美元。"},
     ]
     out = _extract_prior_observations(history)

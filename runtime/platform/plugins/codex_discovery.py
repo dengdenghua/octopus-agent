@@ -27,6 +27,57 @@ from runtime.platform.process.paths import project_root
 _PROVENANCE_IGNORED_DIRS = frozenset({".git", ".pytest_cache", "__pycache__", "node_modules"})
 _PROVENANCE_MAX_FILES = 2048
 _PROVENANCE_MAX_BYTES = 64 * 1024 * 1024
+_PUBLIC_IMAGE_SUFFIXES = frozenset(
+    {".avif", ".gif", ".ico", ".jpeg", ".jpg", ".png", ".svg", ".webp"}
+)
+_PUBLIC_ASSET_FORBIDDEN_PARTS = frozenset(
+    {
+        ".codex-plugin",
+        ".git",
+        ".github",
+        "commands",
+        "node_modules",
+        "scripts",
+        "skills",
+        "source",
+        "src",
+        "tests",
+    }
+)
+_SENSITIVE_ASSET_SUFFIXES = frozenset(
+    {
+        ".bash",
+        ".cfg",
+        ".cjs",
+        ".class",
+        ".conf",
+        ".go",
+        ".ini",
+        ".jar",
+        ".java",
+        ".js",
+        ".json",
+        ".jsonc",
+        ".jsx",
+        ".key",
+        ".lock",
+        ".mjs",
+        ".pem",
+        ".php",
+        ".ps1",
+        ".py",
+        ".rb",
+        ".rs",
+        ".sh",
+        ".toml",
+        ".ts",
+        ".tsx",
+        ".wasm",
+        ".yaml",
+        ".yml",
+        ".zsh",
+    }
+)
 
 
 def _default_plugin_roots() -> list[Path]:
@@ -168,19 +219,76 @@ def _dependencies(manifest: dict[str, Any]) -> list[str]:
     return sorted(set(deps))
 
 
-def _asset_url(plugin_dir: Path, plugin_id: str, raw_path: Any) -> str | None:
+def _public_interface_asset_path(plugin_dir: Path, raw_path: Any) -> Path | None:
+    """Resolve a manifest-declared image that is safe to expose anonymously.
+
+    The public surface is intentionally narrower than the authenticated asset
+    endpoint: only image-shaped logo/composer metadata may cross it.  In
+    particular, declaring source, configuration, or ``.env`` content as a logo
+    must not turn that file into an unauthenticated same-origin download.
+    """
+
     rel = _string(raw_path).strip()
     if not rel:
         return None
     asset_path = Path(rel)
     if asset_path.is_absolute() or ".." in asset_path.parts:
         return None
-    candidate = (plugin_dir / asset_path).resolve()
+    if is_sensitive_plugin_asset_path(asset_path):
+        return None
+    if asset_path.suffix.casefold() not in _PUBLIC_IMAGE_SUFFIXES:
+        return None
+
+    root = plugin_dir.resolve()
+    unresolved = plugin_dir.joinpath(*asset_path.parts)
+    current = plugin_dir
+    for part in asset_path.parts:
+        current /= part
+        if current.is_symlink():
+            return None
+    candidate = unresolved.resolve()
     try:
-        candidate.relative_to(plugin_dir.resolve())
+        candidate.relative_to(root)
     except ValueError:
         return None
     if not candidate.is_file():
+        return None
+    return candidate
+
+
+def is_sensitive_plugin_asset_path(asset_path: str | Path) -> bool:
+    """Whether an asset path must never be exposed by the file-serving route."""
+
+    requested = Path(asset_path)
+    if requested.is_absolute() or ".." in requested.parts:
+        return True
+    lowered_parts = tuple(part.casefold() for part in requested.parts)
+    if any(part in _PUBLIC_ASSET_FORBIDDEN_PARTS or part.startswith(".") for part in lowered_parts):
+        return True
+    return requested.suffix.casefold() in _SENSITIVE_ASSET_SUFFIXES
+
+
+def public_plugin_asset_paths(
+    plugin_dir: Path,
+    manifest: dict[str, Any],
+) -> frozenset[str]:
+    """Return exact relative paths allowed on the anonymous asset surface."""
+
+    interface = manifest.get("interface")
+    if not isinstance(interface, dict):
+        return frozenset()
+    root = plugin_dir.resolve()
+    paths: set[str] = set()
+    for key in ("logo", "composerIcon"):
+        candidate = _public_interface_asset_path(plugin_dir, interface.get(key))
+        if candidate is not None:
+            paths.add(candidate.relative_to(root).as_posix())
+    return frozenset(paths)
+
+
+def _asset_url(plugin_dir: Path, plugin_id: str, raw_path: Any) -> str | None:
+    candidate = _public_interface_asset_path(plugin_dir, raw_path)
+    if candidate is None:
         return None
     posix_rel = candidate.relative_to(plugin_dir.resolve()).as_posix()
     return f"/api/plugins/{quote(plugin_id, safe='')}/assets/{quote(posix_rel, safe='/')}"
@@ -307,7 +415,8 @@ def _plugin_smoke_check(
         "manifest is missing version",
     )
 
-    interface = manifest.get("interface") if isinstance(manifest.get("interface"), dict) else {}
+    raw_interface = manifest.get("interface")
+    interface: dict[str, Any] = raw_interface if isinstance(raw_interface, dict) else {}
     has_capabilities = bool(info.get("capabilities"))
     has_skills = _has_skill_files(plugin_dir)
     has_apps = bool(manifest.get("apps")) or _has_app_manifest(plugin_dir)
@@ -494,3 +603,10 @@ def discover_codex_plugins(
             )
             out[info["id"]] = info
     return sorted(out.values(), key=lambda item: item["name"].lower())
+
+
+__all__ = [
+    "discover_codex_plugins",
+    "is_sensitive_plugin_asset_path",
+    "public_plugin_asset_paths",
+]

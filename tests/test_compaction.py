@@ -85,10 +85,7 @@ class TestTokenVolumeTrigger:
     def test_fires_below_turn_threshold_on_volume(self) -> None:
         # 6 turns × ~30k chars ≈ 60k estimated tokens — far under the
         # turn threshold but over the token one.
-        turns = [
-            _make_turn(i, user_text=f"ask-{i} ", agent_text="x" * 30_000)
-            for i in range(6)
-        ]
+        turns = [_make_turn(i, user_text=f"ask-{i} ", agent_text="x" * 30_000) for i in range(6)]
         policy = CompactionPolicy(
             trigger_at=24,
             keep_recent=2,
@@ -98,10 +95,7 @@ class TestTokenVolumeTrigger:
         assert should_compact(turns, policy) is True
 
     def test_volume_path_disabled_by_default(self) -> None:
-        turns = [
-            _make_turn(i, user_text="ask", agent_text="x" * 30_000)
-            for i in range(6)
-        ]
+        turns = [_make_turn(i, user_text="ask", agent_text="x" * 30_000) for i in range(6)]
         # trigger_tokens unset → historical count-only behaviour.
         assert should_compact(turns, CompactionPolicy(trigger_at=24, keep_recent=2)) is False
 

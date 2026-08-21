@@ -147,8 +147,7 @@ class Budget:
             # budget so every later reserve fails instead of silently running
             # over budget.
             if (
-                self._tokens_spent > self.limits.tokens
-                or self._usd_spent > self.limits.usd
+                self._tokens_spent > self.limits.tokens or self._usd_spent > self.limits.usd
             ) and self._status == "active":
                 self._status = "exceeded"
 

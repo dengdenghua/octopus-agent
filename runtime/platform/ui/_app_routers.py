@@ -171,7 +171,9 @@ def mount_routers_a(
                 else None
             ),
             thread_store=ctx.thread_store,
+            workspace_root=ctx.thread_workspace_root,
             model_router=project_model_router,
+            subagent_runner=ctx.subagent_runner,
             identity_store=ctx.identity_store,
             require_auth=ctx.require_auth,
             jwt_secret=ctx.jwt_secret,
@@ -198,12 +200,21 @@ def mount_routers_a(
             jwt_secret=ctx.jwt_secret,
             jwt_issuer=ctx.jwt_issuer,
             jwt_audience=ctx.jwt_audience,
+            workspace_root=ctx.thread_workspace_root,
         )
     )
 
     from runtime.sensing.gateway.agent_modes_router import create_agent_modes_router
 
-    app.include_router(create_agent_modes_router())
+    app.include_router(
+        create_agent_modes_router(
+            identity_store=ctx.identity_store,
+            require_auth=ctx.require_auth,
+            jwt_secret=ctx.jwt_secret,
+            jwt_issuer=ctx.jwt_issuer,
+            jwt_audience=ctx.jwt_audience,
+        )
+    )
 
     try:
         from runtime.sensing.gateway.workspaces_router import create_workspaces_router
@@ -242,7 +253,18 @@ def mount_routers_a(
 
     from runtime.sensing.gateway.lsp_router import create_lsp_router
 
-    app.include_router(create_lsp_router(state.registry))
+    app.include_router(
+        create_lsp_router(
+            state.registry,
+            thread_store=ctx.thread_store,
+            workspace_root=ctx.thread_workspace_root,
+            identity_store=ctx.identity_store,
+            require_auth=ctx.require_auth,
+            jwt_secret=ctx.jwt_secret,
+            jwt_issuer=ctx.jwt_issuer,
+            jwt_audience=ctx.jwt_audience,
+        )
+    )
 
     try:
         from runtime.execution.loops import (
@@ -283,9 +305,7 @@ def mount_routers_a(
                     _pruned,
                 )
         except Exception as _prune_exc:  # noqa: BLE001
-            logging.getLogger(__name__).warning(
-                "loop run retention prune failed: %s", _prune_exc
-            )
+            logging.getLogger(__name__).warning("loop run retention prune failed: %s", _prune_exc)
         _loop_review_queue = ReviewQueue(app_paths().review_queue_path)
         _loop_controller = (
             LoopController(
@@ -437,7 +457,18 @@ def mount_routers_a(
 
     from runtime.execution.misc.parallel_runner import create_parallel_task_router
 
-    app.include_router(create_parallel_task_router(stack=stack))
+    app.include_router(
+        create_parallel_task_router(
+            stack=stack,
+            thread_store=ctx.thread_store,
+            workspace_root=ctx.thread_workspace_root,
+            identity_store=ctx.identity_store,
+            require_auth=ctx.require_auth,
+            jwt_secret=ctx.jwt_secret,
+            jwt_issuer=ctx.jwt_issuer,
+            jwt_audience=ctx.jwt_audience,
+        )
+    )
 
     # ─── Uploads/artifacts router · extracted to uploads_router.py
     # The 4 endpoints + 2 helpers that used to live here inline now
@@ -652,9 +683,7 @@ def mount_routers_a(
             )
         )
     except Exception as _asset_exc:  # noqa: BLE001
-        logging.getLogger(__name__).warning(
-            "asset_registry_router failed to mount: %s", _asset_exc
-        )
+        logging.getLogger(__name__).warning("asset_registry_router failed to mount: %s", _asset_exc)
 
     # ─── 连接器市场(WorkBuddy 连接器 fork · 认证编排层)──────────────
     # 浏览/安装 108 个连接器 + 认证编排(connect/status/headers 注入)。
@@ -671,9 +700,7 @@ def mount_routers_a(
             )
         )
     except Exception as _conn_exc:  # noqa: BLE001
-        logging.getLogger(__name__).warning(
-            "connector_router failed to mount: %s", _conn_exc
-        )
+        logging.getLogger(__name__).warning("connector_router failed to mount: %s", _conn_exc)
 
     # ─── 统一能力市场(连接器 + Codex 插件归一)──────────────
     # 一个市场统一管理连接器(WorkBuddy 108)与 Codex 插件(我们正在运行的),
@@ -693,9 +720,7 @@ def mount_routers_a(
             )
         )
     except Exception as _cap_exc:  # noqa: BLE001
-        logging.getLogger(__name__).warning(
-            "capability_router failed to mount: %s", _cap_exc
-        )
+        logging.getLogger(__name__).warning("capability_router failed to mount: %s", _cap_exc)
 
     # ─── 企业版角色资产消费(数字分身归并 C·只读)──────────────
     # 配 OCTOPUS_ENTERPRISE_URL 时,市场可列举企业版托管的角色资产;不配则

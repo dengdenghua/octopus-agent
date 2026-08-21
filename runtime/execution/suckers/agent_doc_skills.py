@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .market_skills import load_single_market_skill
+from .market_skills import immutable_prompt_catalog_required, load_single_market_skill
 from .registry import SkillRegistry
 
 AGENT_DOC_SKILL_IDS: tuple[str, ...] = (
@@ -41,7 +41,13 @@ def register_agent_doc_skills(registry: SkillRegistry) -> int:
 
     external_dir = resources_root() / "skills" / "public"
     legacy_dir = Path(__file__).resolve().parent.parent / "all_skills"
-    all_skills_dir = external_dir if external_dir.is_dir() else legacy_dir
+    all_skills_dir = (
+        legacy_dir
+        if immutable_prompt_catalog_required()
+        else external_dir
+        if external_dir.is_dir()
+        else legacy_dir
+    )
     registered = 0
     for skill_id in AGENT_DOC_SKILL_IDS:
         if load_single_market_skill(

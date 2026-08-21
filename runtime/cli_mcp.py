@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import ipaddress
 import json
 import os
 import sys
@@ -247,11 +248,9 @@ def _serve_mcp(args: argparse.Namespace) -> int:
     if stdio:
         # Stdio 模式：不需要 coordinator，独立运行
         asyncio.run(_run_stdio_server())
-    else:
-        # SSE 模式：启动 coordinator + dashboard（含 SSE 端点）
-        asyncio.run(_run_sse_server(host, port))
-
-    return 0
+        return 0
+    # SSE 模式：启动 coordinator + dashboard（含 SSE 端点）
+    return asyncio.run(_run_sse_server(host, port))
 
 
 async def _run_stdio_server() -> None:
@@ -263,20 +262,48 @@ async def _run_stdio_server() -> None:
     await serve_stdio(coordinator=None)
 
 
-async def _run_sse_server(host: str, port: int) -> None:
+def _is_loopback_host(host: str) -> bool:
+    normalized = str(host or "").strip().lower().strip("[]")
+    if normalized == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        # Unknown hostnames may resolve to a routable interface. Treat them as
+        # network-facing so standalone MCP never disables auth on assumption.
+        return False
+
+
+async def _run_sse_server(host: str, port: int) -> int:
     """运行 SSE 模式的 MCP server（集成到 Dashboard）."""
     try:
         from runtime.tentacle.coordinator import TentacleCoordinator
     except ImportError as e:
         print(f"Error: tentacle module not available: {e}", file=sys.stderr)
-        return
+        return 2
 
-    # 创建 coordinator（启用 MCP server）
+    auth_token = (os.environ.get("OCTOPUS_TENTACLE_TOKEN") or "").strip() or None
+    loopback = _is_loopback_host(host)
+    if not loopback and auth_token is None:
+        print(
+            "Error: refusing to expose Tentacle MCP SSE without authentication; "
+            "set OCTOPUS_TENTACLE_TOKEN or bind --host 127.0.0.1",
+            file=sys.stderr,
+        )
+        return 2
+
+    # The CLI owns both the device WebSocket and the dashboard/MCP HTTP
+    # listener. Keep them on the requested interface. Local loopback without a
+    # token is the explicit development mode; every network-facing listener
+    # reuses the pairing token as its Bearer/API-key credential.
     coordinator = TentacleCoordinator(
         host=host,
         port=port - 1,  # WebSocket 端口比 dashboard 少 1
         dashboard_port=port,
+        dashboard_host=host,
         mcp_server=True,
+        auth_token=auth_token,
+        dashboard_require_auth=auth_token is not None,
     )
 
     print(f"Starting Tentacle MCP Server (SSE mode) at http://{host}:{port}")
@@ -310,3 +337,4 @@ async def _run_sse_server(host: str, port: int) -> None:
         pass
     finally:
         await coordinator.stop()
+    return 0

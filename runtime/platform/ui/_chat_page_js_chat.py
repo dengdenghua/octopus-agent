@@ -199,7 +199,7 @@ async function renderChat() {
             id="input"
             rows="1"
             ${isMolili ? '' : 'disabled'}
-            placeholder="${isMolili ? '给 ' + (modelById(currentModel)?.label || currentModel) + ' 发消息…' : '本地模式不接 LLM · 请切手机号登录'}"
+            placeholder="${escapeHtml(isMolili ? '给 ' + (modelById(currentModel)?.label || currentModel) + ' 发消息…' : '本地模式不接 LLM · 请切手机号登录')}"
           ></textarea>
           <button class="send-btn" id="send-btn" ${isMolili ? '' : 'disabled'} title="发送 (Enter)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l7-7 7 7"/><path d="M12 19V5"/></svg>
@@ -385,7 +385,7 @@ async function renderChat() {
       sel.disabled = false;
       sel.innerHTML = availableAgents.map(a => {
         const id = idOf(a);
-        return `<option value="${escapeHtml(id)}" ${id === currentAgent ? 'selected' : ''} title="${escapeHtml((a.description||'').slice(0,120))}">${a.icon || '🤖'} ${escapeHtml(a.display_name || id)}</option>`;
+        return `<option value="${escapeHtml(id)}" ${id === currentAgent ? 'selected' : ''} title="${escapeHtml((a.description||'').slice(0,120))}">${escapeHtml(a.icon || '🤖')} ${escapeHtml(a.display_name || id)}</option>`;
       }).join('');
       // Section logic.
       if (!availableAgents.some(a => idOf(a) === currentAgent)) {
@@ -465,7 +465,7 @@ async function renderChat() {
     const thinking = document.createElement('div');
     thinking.className = 'msg-row assistant';
     thinking.innerHTML = `
-      <div class="msg-avatar">${agentIcon}</div>
+      <div class="msg-avatar">${escapeHtml(agentIcon)}</div>
       <div class="msg-body">
         <div class="msg-meta"><span class="role">${escapeHtml(agentLabel)}</span>
           <span class="model">${escapeHtml(currentModel)}</span></div>
@@ -556,7 +556,7 @@ async function renderChat() {
           <div class="empty-sub">
             ${modeTxt}
             <br><br>
-            ${routeTxt}
+            ${escapeHtml(routeTxt)}
             <br><br>
             <span class="hint-kbd">Enter</span> 发送 · <span class="hint-kbd">Shift+Enter</span> 换行 · 积分实时扣
           </div>
@@ -579,11 +579,11 @@ async function renderChat() {
       const label = m._error ? '错误' : (m._agentLabel || 'Assistant');
       const modelTag = m._model || currentModel;
       const u = m._usage ? `<div class="msg-usage">
-        ↑ ${m._usage.prompt_tokens||0} · ↓ ${m._usage.completion_tokens||0}${
-          m._usage.total_tokens ? ' · total ' + m._usage.total_tokens : ''
+        ↑ ${escapeHtml(m._usage.prompt_tokens||0)} · ↓ ${escapeHtml(m._usage.completion_tokens||0)}${
+          m._usage.total_tokens ? ' · total ' + escapeHtml(m._usage.total_tokens) : ''
         }</div>` : '';
       return `<div class="msg-row assistant ${m._error?'error':''}">
-        <div class="msg-avatar">${icon}</div>
+        <div class="msg-avatar">${escapeHtml(icon)}</div>
         <div class="msg-body">
           <div class="msg-meta">
             <span class="role">${escapeHtml(label)}</span>

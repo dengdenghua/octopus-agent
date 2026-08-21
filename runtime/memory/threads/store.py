@@ -379,9 +379,30 @@ class ThreadStateStore:
             if thread_id not in self._threads:
                 return False
             thread = _deepcopy(self._threads[thread_id])
+            # Persist the tombstone before making the deletion visible in
+            # memory.  If durable append fails, callers can retry against the
+            # unchanged thread instead of receiving success for a state that
+            # would resurrect on restart.
+            self._append_delete(thread_id, thread)
             del self._threads[thread_id]
             self._history.pop(thread_id, None)
+            return True
+
+    def delete_if_unchanged(self, thread_id: str, expected: dict[str, Any]) -> bool:
+        """Atomically delete a thread only while it matches *expected*.
+
+        Allocation rollback uses this compare-and-delete primitive so a
+        failure cannot erase a thread that another request updated or claimed
+        between the compensating read and delete.
+        """
+        with self._lock:
+            current = self._threads.get(thread_id)
+            if current is None or current != expected:
+                return False
+            thread = _deepcopy(current)
             self._append_delete(thread_id, thread)
+            del self._threads[thread_id]
+            self._history.pop(thread_id, None)
             return True
 
     def clear(self) -> None:
@@ -463,6 +484,51 @@ class ThreadStateStore:
             self._history.setdefault(thread_id, []).append(state)
             self._append_upsert(thread, state)
             return _deepcopy(state)
+
+    def update_state_if_unchanged(
+        self,
+        thread_id: str,
+        expected: dict[str, Any],
+        *,
+        values: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+        status: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Atomically update a thread only while it matches ``expected``.
+
+        Managed-workspace deletion uses this transition to persist its
+        retryable tombstone before moving any directory.  A concurrent owner,
+        scope or state change therefore aborts deletion instead of applying a
+        stale filesystem decision.
+        """
+        with self._lock:
+            current = self._threads.get(thread_id)
+            if current is None or current != expected:
+                return None
+            thread = _deepcopy(current)
+            merged_values = _default_values(thread.get("values"))
+            if values:
+                for key, value in values.items():
+                    merged_values[key] = _deepcopy(value)
+            merged_metadata = _deepcopy(thread.get("metadata", {}))
+            if metadata:
+                merged_metadata.update(_deepcopy(metadata))
+            owner_agent_id = self._agent_id_for(thread)
+            if owner_agent_id:
+                merged_metadata["agent"] = owner_agent_id
+                for key in ("agent_name", "agent_id", "assistant_id"):
+                    if key in merged_metadata:
+                        merged_metadata[key] = owner_agent_id
+            thread["values"] = merged_values
+            thread["metadata"] = merged_metadata
+            thread["updated_at"] = _utc_now_iso()
+            if status is not None:
+                thread["status"] = status
+            state = self._make_state(thread)
+            self._threads[thread_id] = thread
+            self._history.setdefault(thread_id, []).append(state)
+            self._append_upsert(thread, state)
+            return _deepcopy(thread)
 
     def __len__(self) -> int:
         with self._lock:
@@ -1230,4 +1296,3 @@ class ThreadStateStore:
             min_feedback_count=min_feedback_count,
             feedback_type_filter=feedback_type_filter,
         )
-

@@ -12,9 +12,7 @@ from runtime.execution.tool_spec_builder import (
 
 
 class _FakeSkill:
-    def __init__(
-        self, name: str, description: str, handler: Any = None
-    ) -> None:
+    def __init__(self, name: str, description: str, handler: Any = None) -> None:
         self.name = name
         self.description = description
         self.handler = handler
@@ -51,9 +49,7 @@ def _registry() -> _FakeRegistry:
         "mcp_payments_refund": _FakeSkill(
             "mcp_payments_refund", "Refund a payment via the payments API"
         ),
-        "mcp_analytics_events": _FakeSkill(
-            "mcp_analytics_events", "Query analytics event stream"
-        ),
+        "mcp_analytics_events": _FakeSkill("mcp_analytics_events", "Query analytics event stream"),
         "mcp_inventory_stock": _FakeSkill(
             "mcp_inventory_stock", "Check warehouse inventory levels"
         ),

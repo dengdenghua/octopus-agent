@@ -707,9 +707,34 @@ def _build_intent(
     allow_client_auto_approve: bool = False,
     conversation_messages: list[dict[str, str]] | None = None,
 ) -> ParsedIntent:
-    cwd = params.cwd
-    if workspaces is not None:
-        cwd = workspaces.resolve_cwd(params.thread_id, params.cwd)
+    owner_actor_id = str(getattr(params, "owner_actor_id", None) or "").strip()
+    tenant_id = str(getattr(params, "tenant_id", None) or "").strip()
+    authenticated_workspace = bool(owner_actor_id or tenant_id)
+    if authenticated_workspace and (not owner_actor_id or not tenant_id):
+        raise RuntimeError("authenticated realtime principal is incomplete")
+
+    managed_layout: Any = None
+    cwd: str | None
+    if authenticated_workspace:
+        if workspaces is None or thread_store is None:
+            raise RuntimeError("authenticated realtime workspace service unavailable")
+        from runtime.sensing.gateway.thread_workspace import (
+            ensure_managed_thread_workspace,
+        )
+
+        managed_workspace = ensure_managed_thread_workspace(
+            getattr(workspaces, "root", None),
+            thread_id=params.thread_id,
+            actor_id=owner_actor_id,
+            tenant_id=tenant_id,
+            store=thread_store,
+        )
+        managed_layout = workspaces.bind_managed(params.thread_id, managed_workspace)
+        cwd = str(managed_layout.root)
+    else:
+        cwd = params.cwd
+        if workspaces is not None:
+            cwd = workspaces.resolve_cwd(params.thread_id, params.cwd)
     text, marker_mode = _extract_codex_composer_mode(text)
     metadata = _input_metadata(params)
     context = metadata.get("context")
@@ -721,6 +746,9 @@ def _build_intent(
             thread_id=params.thread_id,
             body={"context": context_payload},
             store=thread_store,
+            authoritative_workspace=(managed_layout.root if managed_layout is not None else None),
+            owner_actor_id=owner_actor_id or None,
+            tenant_id=tenant_id or None,
         )
     context_payload = dict(context_payload)
     attachments = _input_attachments(params.input)
@@ -742,7 +770,9 @@ def _build_intent(
     # to the same project context the interactive work-directory selector
     # emits.  Auto-allocated per-thread cwd values still follow the personal
     # workspace path below and do not gain project scope implicitly.
-    explicit_cwd = isinstance(params.cwd, str) and bool(params.cwd.strip())
+    explicit_cwd = (
+        not authenticated_workspace and isinstance(params.cwd, str) and bool(params.cwd.strip())
+    )
     if explicit_cwd and isinstance(cwd, str) and cwd.strip():
         context_payload.setdefault("workspace_path", cwd.strip())
         context_payload.setdefault("workspace_scope", "project")
@@ -755,9 +785,26 @@ def _build_intent(
         if marker_mode == "goal":
             context_payload.setdefault("goal_mode", True)
     context_payload = _apply_runtime_surface_context(text, context_payload)
-    actor_id = metadata.get("actor_id") or metadata.get("actorId")
+    actor_id = owner_actor_id or metadata.get("actor_id") or metadata.get("actorId")
     if isinstance(actor_id, str) and actor_id.strip():
-        context_payload.setdefault("owner_actor_id", actor_id.strip())
+        if authenticated_workspace:
+            context_payload["owner_actor_id"] = actor_id.strip()
+            context_payload["tenant_id"] = tenant_id
+        else:
+            context_payload.setdefault("owner_actor_id", actor_id.strip())
+    if managed_layout is not None:
+        # Reassert the execution boundary after all client-controlled context
+        # shaping. These paths are consumed independently by cwd resolution,
+        # filesystem scope, attachments and artifact publishing.
+        for key in (
+            "extra_workspaces",
+            "personal_workspace_path",
+            "allowed_write_paths",
+        ):
+            context_payload.pop(key, None)
+        context_payload["workspace_path"] = str(managed_layout.root)
+        context_payload["workspace_scope"] = "project"
+        context_payload["_artifact_output_root"] = str(managed_layout.final)
     if conversation_messages and not isinstance(
         context_payload.get("conversation_messages"),
         list,

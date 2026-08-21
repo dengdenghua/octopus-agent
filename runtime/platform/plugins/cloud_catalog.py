@@ -6,6 +6,7 @@
   extensions/workbuddy-experts/scripts/build-skill-registry.py → skill-registry.json
   extensions/workbuddy-experts/scripts/publish-cloud.py        → 推到 gh-pages
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -15,27 +16,36 @@ import re
 import shutil
 import tarfile
 import tempfile
-import urllib.request
 from pathlib import Path
 from typing import Any
 
+from runtime.platform.plugins._secure_fetch import fetch_public_https_bytes
+from runtime.platform.process.paths import app_paths
+
 REPO = Path(__file__).resolve().parents[3]
 LOCAL_MIRROR_DIR = REPO / "extensions" / "workbuddy-experts" / "storefront" / "data"
-CACHE_DIR = Path(os.path.expanduser("~/.octopus/cache"))
+CACHE_DIR = app_paths().data_dir / "cache"
 
 _REMOTE_BASE = os.environ.get(
     "OCTOPUS_CLOUD_STORE_URL",
     "https://raw.githubusercontent.com/dengdenghua/workbuddy-expert-market/gh-pages/data",
 )
 
+_MAX_CATALOG_BYTES = 8 * 1024 * 1024
+_MAX_ARCHIVE_BYTES = 128 * 1024 * 1024
+_MAX_ARCHIVE_MEMBERS = 10_000
+_MAX_EXTRACTED_BYTES = 256 * 1024 * 1024
+_MAX_MEMBER_BYTES = 64 * 1024 * 1024
+
 
 def _load_remote(name: str) -> dict[str, Any] | None:
     try:
-        req = urllib.request.Request(
-            f"{_REMOTE_BASE}/{name}", headers={"User-Agent": "octopus-agent/1.0"}
+        body = fetch_public_https_bytes(
+            f"{_REMOTE_BASE.rstrip('/')}/{name}",
+            timeout=15,
+            max_bytes=_MAX_CATALOG_BYTES,
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+        return json.loads(body.decode("utf-8"))
     except Exception:  # noqa: BLE001
         return None
 
@@ -84,7 +94,9 @@ class CloudCatalog:
                             json.dumps(store, ensure_ascii=False), encoding="utf-8"
                         )
         if store is None:
-            raise RuntimeError(f"cloud {self._kind} catalog unavailable (remote + local mirror both failed)")
+            raise RuntimeError(
+                f"cloud {self._kind} catalog unavailable (remote + local mirror both failed)"
+            )
         self._store = store
         return store
 
@@ -140,19 +152,26 @@ class CloudCatalog:
     def _archive_path(self) -> Path:
         """下载并缓存内容包 tar.gz,返回本地路径。"""
         url = os.environ.get(
-            "OCTOPUS_PLUGINS_CONTENT_URL" if self._kind == "plugins" else "OCTOPUS_SKILLS_CONTENT_URL",
+            "OCTOPUS_PLUGINS_CONTENT_URL"
+            if self._kind == "plugins"
+            else "OCTOPUS_SKILLS_CONTENT_URL",
             self.CONTENT_URLS[self._kind],
         )
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         dest = CACHE_DIR / f"octopus-{self._kind}.tar.gz"
         # 已缓存且非空 → 直接用
         if dest.exists() and dest.stat().st_size > 0:
+            if dest.stat().st_size > _MAX_ARCHIVE_BYTES:
+                raise ValueError("cached marketplace archive is too large")
             return dest
         tmp = dest.with_suffix(".part")
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "octopus-agent/1.0"})
-            with urllib.request.urlopen(req, timeout=180) as resp, open(tmp, "wb") as f:
-                shutil.copyfileobj(resp, f)
+            body = fetch_public_https_bytes(
+                url,
+                timeout=180,
+                max_bytes=_MAX_ARCHIVE_BYTES,
+            )
+            tmp.write_bytes(body)
             tmp.replace(dest)
         finally:
             with contextlib.suppress(OSError):
@@ -160,38 +179,59 @@ class CloudCatalog:
         return dest
 
     @staticmethod
-    def _extract_member(archive: Path, member_prefix: str, dest_dir: Path, member_name: str) -> Path | None:
+    def _extract_member(
+        archive: Path, member_prefix: str, dest_dir: Path, member_name: str
+    ) -> Path | None:
         """从 tar.gz 解出 prefix 下的单个目录到 dest_dir,路径穿越安全。返回解出目录或 None。"""
         with tarfile.open(archive, "r:gz") as tf:
             prefix = f"{member_prefix.rstrip('/')}/{member_name}"
-            members = [m for m in tf.getmembers() if m.name == prefix or m.name.startswith(prefix + "/")]
+            members = [
+                m for m in tf.getmembers() if m.name == prefix or m.name.startswith(prefix + "/")
+            ]
             if not members:
                 return None
-            dest_res = dest_dir.resolve()
+            if len(members) > _MAX_ARCHIVE_MEMBERS:
+                raise ValueError("marketplace archive contains too many members")
             out = dest_dir / member_name
             out.mkdir(parents=True, exist_ok=True)
-            # 安全校验:每个成员相对 prefix 的路径必须落在 out 内
+            out_res = out.resolve()
+            extracted_bytes = 0
+            validated: list[tuple[tarfile.TarInfo, Path]] = []
+            # 安全校验:每个成员相对 prefix 的路径必须落在 out 内。
+            # Links/devices/FIFOs are not needed by skills or plugins and are
+            # rejected so a later member cannot write through them.
             for m in members:
+                if "\\" in m.name or "\x00" in m.name:
+                    raise ValueError(f"unsafe tar path: {m.name}")
+                if not (m.isdir() or m.isreg()):
+                    raise ValueError(f"unsupported tar member: {m.name}")
                 rel = os.path.relpath(m.name, prefix)
                 target = (out / rel).resolve()
-                if dest_res not in target.parents and target != dest_res:
+                if out_res not in target.parents and target != out_res:
                     raise ValueError(f"unsafe tar path: {m.name}")
-            for m in members:
-                rel = os.path.relpath(m.name, prefix)
-                target = out / rel
+                if m.isreg():
+                    if m.size < 0 or m.size > _MAX_MEMBER_BYTES:
+                        raise ValueError(f"tar member is too large: {m.name}")
+                    extracted_bytes += m.size
+                    if extracted_bytes > _MAX_EXTRACTED_BYTES:
+                        raise ValueError("marketplace archive expands beyond the size limit")
+                validated.append((m, target))
+            for m, target in validated:
                 if m.isdir():
                     target.mkdir(parents=True, exist_ok=True)
                 else:
                     target.parent.mkdir(parents=True, exist_ok=True)
-                    f = tf.extractfile(m)
-                    if f is not None:
-                        target.write_bytes(f.read())
+                    source = tf.extractfile(m)
+                    if source is None:
+                        raise ValueError(f"tar member has no file content: {m.name}")
+                    with source, target.open("wb") as output:
+                        shutil.copyfileobj(source, output, length=1024 * 1024)
         return out
 
     def install_skill(self, name: str, *, skills_dir: str | Path | None = None) -> dict[str, Any]:
         """下载技能内容包,把 skills/<name> 落地到技能目录。"""
         safe = re.sub(r"[^A-Za-z0-9_-]", "_", name).strip("_") or "skill"
-        dest_root = Path(skills_dir or os.path.expanduser("~/.octopus/skills"))
+        dest_root = Path(skills_dir or self.SKILLS_ROOT)
         dest_root.mkdir(parents=True, exist_ok=True)
         target = dest_root / safe
         if (target / "SKILL.md").exists():
@@ -205,14 +245,15 @@ class CloudCatalog:
             shutil.copytree(extracted, target)
         return {"installed": True, "name": safe, "path": str(target), "source": "cloud"}
 
-    # 插件安装落点:codex 插件 ~/.octopus/plugins/codex/<id>,连接器 ~/.octopus/plugins/connector/<id>
-    PLUGIN_INSTALL_ROOT = Path(os.path.expanduser("~/.octopus/plugins"))
-    # 本地技能库根(复制捆绑技能用)
-    SKILLS_ROOT = Path(os.path.expanduser("~/.octopus/skills"))
-    # Codex 格式插件根(octopus 名下,本地已装识别用;旧 ~/.codex 缓存由同步补入)
-    CODEX_CACHE_ROOT = Path.home() / ".octopus" / "plugins" / "codex"
+    # All mutable deployment state follows OCTOPUS_DATA_DIR. In the container
+    # that is the /data PVC/bind mount, never the read-only image layer.
+    PLUGIN_INSTALL_ROOT = app_paths().data_dir / "plugins"
+    # Cloud-catalog skills are mutable runtime state under the data volume.
+    SKILLS_ROOT = app_paths().data_dir / "skills"
+    # Codex-format plugins use the same writable path as registry consumers.
+    CODEX_CACHE_ROOT = app_paths().codex_plugins_path
     # 连接器安装状态(与 connector_registry 的 state.json 同文件,标记已安装)
-    CONNECTOR_STATE_FILE = Path(os.path.expanduser("~/.octopus/connectors/state.json"))
+    CONNECTOR_STATE_FILE = app_paths().data_dir / "connectors" / "state.json"
 
     @staticmethod
     def _slug(value: str) -> str:
@@ -224,7 +265,8 @@ class CloudCatalog:
         if not root.exists():
             return []
         return sorted(
-            d.name for d in root.iterdir()
+            d.name
+            for d in root.iterdir()
             if d.is_dir() and (d / "SKILL.md").exists() and not d.name.startswith((".", "_"))
         )
 
@@ -310,7 +352,9 @@ class CloudCatalog:
         )
         return copied
 
-    def install_plugin(self, plugin_id: str, *, plugin_kind: str = "connector", dest_root: str | Path | None = None) -> dict[str, Any]:
+    def install_plugin(
+        self, plugin_id: str, *, plugin_kind: str = "connector", dest_root: str | Path | None = None
+    ) -> dict[str, Any]:
         """下载插件内容包,把 plugins/<kind>/<id> 落地 + 复制捆绑技能到本地技能库。"""
         safe = re.sub(r"[^A-Za-z0-9_-]", "_", plugin_id).strip("_") or "plugin"
         member_prefix = f"plugins/{plugin_kind}"

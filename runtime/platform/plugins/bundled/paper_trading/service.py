@@ -98,6 +98,16 @@ def is_trading_time(now: datetime | None = None) -> bool:
     return (MORNING_OPEN <= t <= MORNING_CLOSE) or (AFTERNOON_OPEN <= t <= AFTERNOON_CLOSE)
 
 
+def _build_engine(
+    initial_cash: float = 1_000_000.0,
+    data_dir: str = "~/.octopus/data/paper_trading",
+) -> PaperTradingEngine:
+    """Construct and hydrate the persistent local simulation engine."""
+    engine = PaperTradingEngine(initial_cash=initial_cash, data_dir=data_dir)
+    engine.load()
+    return engine
+
+
 def _session_label(now: datetime | None = None) -> str:
     now = now or _now()
     if now.weekday() >= 5:

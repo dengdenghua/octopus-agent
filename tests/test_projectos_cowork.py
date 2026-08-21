@@ -192,6 +192,7 @@ def test_from_group_endpoint_turns_a_group_into_a_project_team(tmp_path) -> None
         == 400
     )
 
+
 # ── 项目模式 × 蜂群/集群（任务级 team_mode）──────────────────────
 
 
@@ -206,7 +207,9 @@ def test_team_swarm_runs_task_as_fanout() -> None:
 
     run_team = team_execute_for_group(roster, agent_caller=caller, debate_rounds=1)
     out = run_team(
-        Task(id="T", milestone_id="M", type="research", goal="怎么给这个功能定价", team_mode="swarm"),
+        Task(
+            id="T", milestone_id="M", type="research", goal="怎么给这个功能定价", team_mode="swarm"
+        ),
         {},
     )
     assert out.startswith("# 蜂群交付")
@@ -269,3 +272,103 @@ def test_engine_for_group_wires_team_executor_and_runs_swarm_node(tmp_path) -> N
     p = eng.plan("custom", "设计一套定价策略")
     eng.run(p.id, max_ticks=50)
     assert "researcher-a" in called and "researcher-b" in called
+
+
+def _managed_project_context() -> dict:
+    return {
+        "project_id": "P-managed",
+        "owner_id": "alice",
+        "tenant_id": "tenant-a",
+        "thread_id": "thread-managed",
+        "milestone_goal": "secure delivery",
+        "workspace_path": "/managed/thread-managed",
+        "runtime_session_metadata": {
+            "workspace_path": "/managed/thread-managed",
+            "_artifact_output_root": "/managed/thread-managed/output/final",
+            "preserved": "yes",
+        },
+    }
+
+
+def _assert_team_scope(calls: list[dict], explicit_runner) -> None:
+    assert calls
+    for call in calls:
+        assert call["runner"] is explicit_runner
+        context = call["context"]
+        assert context["thread_id"] == "thread-managed"
+        assert context["actor"] == "alice"
+        assert context["tenant_id"] == "tenant-a"
+        assert context["workspace_path"] == "/managed/thread-managed"
+        assert context["source"] == "projectos_team_task"
+        assert context["task_id"] == "T-managed"
+        assert context["runtime_session_metadata"] == {
+            "workspace_path": "/managed/thread-managed",
+            "_artifact_output_root": "/managed/thread-managed/output/final",
+            "preserved": "yes",
+            "source": "projectos_team_task",
+            "project_id": "P-managed",
+            "task_id": "T-managed",
+            "tenant_id": "tenant-a",
+        }
+
+
+def test_team_swarm_propagates_managed_project_scope(monkeypatch) -> None:
+    calls: list[dict] = []
+
+    def fake_call_subagent(agent_id, prompt, **kwargs):
+        calls.append({"agent_id": agent_id, "prompt": prompt, **kwargs})
+        return {"success": True, "output": f"swarm output from {agent_id}"}
+
+    def explicit_runner(prompt: str, **kwargs) -> str:
+        return "unused"
+
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", fake_call_subagent)
+    run_team = team_execute_for_group(
+        [("researcher-a", "researcher-a"), ("researcher-b", "researcher-b")],
+        subagent_runner=explicit_runner,
+        debate_rounds=0,
+    )
+    output = run_team(
+        Task(
+            id="T-managed",
+            milestone_id="M",
+            type="research",
+            goal="research safely",
+            team_mode="swarm",
+        ),
+        _managed_project_context(),
+    )
+
+    assert output.startswith("# 蜂群交付")
+    _assert_team_scope(calls, explicit_runner)
+
+
+def test_team_cluster_propagates_managed_project_scope(monkeypatch) -> None:
+    calls: list[dict] = []
+
+    def fake_call_subagent(agent_id, prompt, **kwargs):
+        calls.append({"agent_id": agent_id, "prompt": prompt, **kwargs})
+        return {"success": True, "output": f"cluster output from {agent_id}"}
+
+    def explicit_runner(prompt: str, **kwargs) -> str:
+        return "unused"
+
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", fake_call_subagent)
+    run_team = team_execute_for_group(
+        [("researcher-a", "researcher-a"), ("researcher-b", "researcher-b")],
+        subagent_runner=explicit_runner,
+    )
+    output = run_team(
+        Task(
+            id="T-managed",
+            milestone_id="M",
+            type="code",
+            goal="build safely",
+            team_mode="cluster",
+            assigned_agent="lead-agent",
+        ),
+        _managed_project_context(),
+    )
+
+    assert output.startswith("# 集群交付")
+    _assert_team_scope(calls, explicit_runner)

@@ -10,6 +10,7 @@ client_secret),凭据加密存到本地,连接时走 服务商授权页 → 回�
 
 新增服务商只需在 ``PROVIDERS`` 加一行(authorize/token 端点是公开已知的)。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

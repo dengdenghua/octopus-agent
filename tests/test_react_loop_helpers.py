@@ -153,7 +153,6 @@ def test_model_deadline_closes_underlying_stream() -> None:
     assert events and events[-1] is _MODEL_STREAM_DEADLINE
 
 
-
 # ─── Audit T-14: default checkpoint interval is throttled ───────────────────
 
 

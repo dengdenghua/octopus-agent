@@ -466,6 +466,8 @@ def create_meta_router(
     async def api_install_skill(request: Request) -> dict[str, Any]:
         import tempfile
 
+        from runtime.execution.suckers.market_skills import immutable_prompt_catalog_required
+
         # Auth: this endpoint mutates skills/public which is auto-loaded
         # as Python code on next boot. It's effectively arbitrary-code
         # installation, so we require BOTH:
@@ -473,6 +475,12 @@ def create_meta_router(
         #      router config)
         #   2. admin role
         _require_admin(request, purpose="install skills")
+        if immutable_prompt_catalog_required():
+            raise HTTPException(
+                403,
+                "URL-based prompt installation is disabled in shared/commercial deployments; "
+                "ship prompt changes in a reviewed release artifact",
+            )
 
         try:
             body = await request.json()

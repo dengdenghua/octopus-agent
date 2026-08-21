@@ -11,9 +11,8 @@
 
 **为什么默认关闭**
 
-同源代理意味着原站的 JS 以**我们 origin 的权限**运行,而我们的鉴权 token 就存在
-同源可读的 ``localStorage``(``octopus_auth_token``),且原站是明文 HTTP。
-因此本模块只在插件配置 ``proxy_origin: true`` 时才被挂载。
+同源代理意味着原站的 JS 以**我们 origin 的权限**运行，可访问父页面会话并以当前
+用户身份调用 API。因此插件层要求两个独立的显式开关，且本模块拒绝非 HTTPS 上游。
 
 结构照 ``runtime/sensing/gateway/storage_proxy_router.py``:头白名单(而非盲转)、
 路径前缀白名单、请求体上限、``follow_redirects=False``、流式转发且 ``aclose()``
@@ -30,11 +29,13 @@ import logging
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import unquote
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+
+from .upstream_url import secure_upstream_origin
 
 _logger = logging.getLogger(__name__)
 
@@ -54,7 +55,6 @@ _FORWARDED_REQUEST_HEADERS = {
     # 平台用非标准的 `token` 头鉴权(见 live.py::_request),
     # 照抄 storage 代理的白名单会把它丢掉。
     "token",
-    "authorization",
 }
 
 # 刻意**不**转发 content-security-policy / x-frame-options:
@@ -72,25 +72,29 @@ _FORWARDED_RESPONSE_HEADERS = {
 }
 
 
-def upstream_origin(base_url: str) -> str:
-    """从插件配置的 ``base_url`` 推导站点 origin。
-
-    配置值形如 ``http://host:port/api``(带 ``/api`` 后缀),而网页应用在同一
-    origin 的 ``/trade/`` 下,所以这里只取 scheme + netloc,不要硬编码整串。
-    """
-    parts = urlsplit(base_url or "")
-    if not parts.scheme or not parts.netloc:
-        return ""
-    return f"{parts.scheme}://{parts.netloc}"
-
-
 def _safe_upstream_path(path: str) -> str:
     clean = str(path or "").strip().lstrip("/")
     if not clean:
         raise HTTPException(404, "unknown upstream route")
+    # Validate the fully decoded meaning, not merely the first form Starlette
+    # handed us. Otherwise ``trade/%252e%252e/admin`` can become traversal
+    # only after a downstream proxy/upstream performs another decode.
+    decoded = clean
+    try:
+        for _ in range(8):
+            expanded = unquote(decoded, errors="strict")
+            if expanded == decoded:
+                break
+            decoded = expanded
+        else:
+            raise ValueError("excessive nested path encoding")
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise HTTPException(404, "unknown upstream route") from exc
+    if "%" in decoded or "\\" in decoded or any(ord(char) < 32 for char in decoded):
+        raise HTTPException(404, "unknown upstream route")
     # 末尾斜杠要放过 —— ``trade/`` 正是原站入口的常态形式;
     # 但中间的空段(``a//b``)和 ``.`` / ``..`` 一律拒绝。
-    parts = clean.rstrip("/").split("/")
+    parts = decoded.rstrip("/").split("/")
     if any(part in {"", ".", ".."} for part in parts):
         raise HTTPException(404, "unknown upstream route")
     if parts[0] not in _ALLOWED_PREFIXES:
@@ -176,7 +180,7 @@ _API_BASE_NEEDLES = (
     # 在调用点塞第二个参数会被直接忽略。
     (
         't.socketIo=o()(t.getSocketIoUrlPath,{forceNew:!1,transports:["websocket"]})',
-        "t.socketIo=o()(t.getSocketIoUrlPath,{forceNew:!1,transports:[\"websocket\"],"
+        't.socketIo=o()(t.getSocketIoUrlPath,{forceNew:!1,transports:["websocket"],'
         f'path:"{_API_BASE_PREFIX}/socket.io"}})',
     ),
 )
@@ -262,11 +266,12 @@ def register_origin_proxy(
     ``/api/plugins/*/assets/*`` 的 GET/HEAD,取名 ``assets`` 会造出一个
     永久免鉴权的开放代理。
 
-    返回是否挂载成功(``base_url`` 不可解析时不挂)。
+    返回是否挂载成功。``base_url`` 不可解析或不是 HTTPS 时不挂；这是底层的
+    纵深防护，即使调用方遗漏插件配置校验也不会把明文第三方脚本引入应用同源。
     """
-    origin = upstream_origin(base_url)
+    origin = secure_upstream_origin(base_url)
     if not origin:
-        _logger.warning("paper_trading proxy: base_url 无法解析出 origin,代理未挂载")
+        _logger.warning("paper_trading proxy: 上游 URL 无效或不是 HTTPS,代理未挂载")
         return False
 
     state_path = Path(state_dir).expanduser()
@@ -382,7 +387,10 @@ def register_origin_proxy(
             "Origin": origin,
             "Referer": origin + "/",
         }
-        for name in ("token", "authorization", "cookie", "user-agent"):
+        # `Authorization` and `Cookie` belong to the Octopus host.  Forwarding
+        # either would disclose the user's host session to the third party.
+        # The upstream platform uses its distinct non-standard `token` header.
+        for name in ("token", "user-agent"):
             value = websocket.headers.get(name)
             if value:
                 upstream_headers[name] = value
@@ -414,8 +422,10 @@ def register_origin_proxy(
 
                 # 任一方向先结束就收摊,避免残留的 pump 协程泄漏。
                 done, pending = await asyncio.wait(
-                    [asyncio.create_task(pump_to_upstream()),
-                     asyncio.create_task(pump_to_client())],
+                    [
+                        asyncio.create_task(pump_to_upstream()),
+                        asyncio.create_task(pump_to_client()),
+                    ],
                     return_when=asyncio.FIRST_COMPLETED,
                 )
                 for task in pending:

@@ -36,8 +36,16 @@ def build_turn_metadata(
     thread_id: str,
     body: dict[str, Any],
     store: Any,
+    authoritative_workspace: Path | None = None,
+    owner_actor_id: str | None = None,
+    tenant_id: str | None = None,
 ) -> dict[str, Any]:
-    """Merge per-turn context with persisted thread metadata."""
+    """Merge per-turn context with persisted thread metadata.
+
+    ``authoritative_workspace`` is supplied only after the authenticated
+    realtime boundary has verified/allocated it. In that mode all persisted
+    and per-turn filesystem grants are presentation input, not authority.
+    """
     ctx = body.get("context") or {}
     if not isinstance(ctx, dict):
         ctx = {}
@@ -94,29 +102,36 @@ def build_turn_metadata(
             if isinstance(value, str) and value.strip():
                 metadata[key] = value.strip()
 
-    extra_ws: list[str] = []
-    ew = stored_meta.get("extra_workspaces")
-    if isinstance(ew, list):
-        extra_ws.extend(x for x in ew if isinstance(x, str) and x)
+    if authoritative_workspace is not None:
+        metadata["workspace_path"] = str(authoritative_workspace)
+        if isinstance(owner_actor_id, str) and owner_actor_id.strip():
+            metadata["owner_actor_id"] = owner_actor_id.strip()
+        if isinstance(tenant_id, str) and tenant_id.strip():
+            metadata["tenant_id"] = tenant_id.strip()
+    else:
+        extra_ws: list[str] = []
+        ew = stored_meta.get("extra_workspaces")
+        if isinstance(ew, list):
+            extra_ws.extend(x for x in ew if isinstance(x, str) and x)
 
-    wp = ctx.get("workspace_path") or stored_meta.get("workspace_path")
-    if isinstance(wp, str) and wp.strip():
-        clean = wp.strip()
-        if Path(clean).expanduser().is_absolute():
-            if clean not in extra_ws:
-                extra_ws.insert(0, clean)
-        else:
-            logging.getLogger(__name__).warning(
-                "build_turn_metadata: rejecting relative workspace_path %r for thread %s",
-                clean,
-                thread_id,
-            )
-            wp = None
-
-    if extra_ws:
-        metadata["extra_workspaces"] = extra_ws
+        wp = ctx.get("workspace_path") or stored_meta.get("workspace_path")
         if isinstance(wp, str) and wp.strip():
-            metadata["workspace_path"] = wp.strip()
+            clean = wp.strip()
+            if Path(clean).expanduser().is_absolute():
+                if clean not in extra_ws:
+                    extra_ws.insert(0, clean)
+            else:
+                logging.getLogger(__name__).warning(
+                    "build_turn_metadata: rejecting relative workspace_path %r for thread %s",
+                    clean,
+                    thread_id,
+                )
+                wp = None
+
+        if extra_ws:
+            metadata["extra_workspaces"] = extra_ws
+            if isinstance(wp, str) and wp.strip():
+                metadata["workspace_path"] = wp.strip()
 
     sb_mode = ctx.get("sandbox_mode") or stored_meta.get("sandbox_mode")
     if isinstance(sb_mode, str) and sb_mode in ("sandbox", "full"):
@@ -144,6 +159,8 @@ def build_turn_metadata(
         "browser_operation_mode",
         "chrome_operation_mode",
     ):
+        if authoritative_workspace is not None and key == "personal_workspace_path":
+            continue
         if explicit_conversation_mode and key in {
             "capability_mode",
             "code_mode",
@@ -214,15 +231,18 @@ def build_turn_metadata(
         if clean_surfaces:
             metadata["runtime_surfaces"] = clean_surfaces
 
-    allowed_write_paths = ctx.get("allowed_write_paths")
-    if allowed_write_paths is None and not explicit_conversation_mode:
-        allowed_write_paths = stored_meta.get("allowed_write_paths")
-    if isinstance(allowed_write_paths, list):
-        clean_write_paths = [
-            item.strip() for item in allowed_write_paths if isinstance(item, str) and item.strip()
-        ]
-        if clean_write_paths:
-            metadata["allowed_write_paths"] = clean_write_paths
+    if authoritative_workspace is None:
+        allowed_write_paths = ctx.get("allowed_write_paths")
+        if allowed_write_paths is None and not explicit_conversation_mode:
+            allowed_write_paths = stored_meta.get("allowed_write_paths")
+        if isinstance(allowed_write_paths, list):
+            clean_write_paths = [
+                item.strip()
+                for item in allowed_write_paths
+                if isinstance(item, str) and item.strip()
+            ]
+            if clean_write_paths:
+                metadata["allowed_write_paths"] = clean_write_paths
 
     project_signals = ctx.get("project_signals") or stored_meta.get("project_signals")
     if isinstance(project_signals, dict):

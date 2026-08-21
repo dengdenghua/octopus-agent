@@ -10,6 +10,7 @@ WorkBuddy 的 CLI 连接器不只是「跑一条 auth 命令」,完整协议还�
 
 所有网络/子进程操作都带超时,失败只降级返回,绝不阻断。
 """
+
 from __future__ import annotations
 
 import os
@@ -69,7 +70,12 @@ def check_runtime(conn: Any) -> dict[str, Any]:
             )
             node_v = (r.stdout or "").strip() or (r.stderr or "").strip()
         except Exception as exc:  # noqa: BLE001
-            return {"ok": False, "runtime": "node", "node_version": "", "error": f"node 不可用: {exc}"}
+            return {
+                "ok": False,
+                "runtime": "node",
+                "node_version": "",
+                "error": f"node 不可用: {exc}",
+            }
         return {"ok": True, "runtime": "node", "node_version": node_v}
     return {"ok": True, "runtime": rtype or ""}
 
@@ -106,9 +112,9 @@ def check_version(conn: Any, *, env: dict[str, str] | None = None) -> dict[str, 
         "version": version or "",
         "min_version": min_v,
         "output": output[:300],
-        "error": None if ok else (
-            f"版本过低:当前 {version or '未知'} < 需要 {min_v}" if version else "无法解析版本"
-        ),
+        "error": None
+        if ok
+        else (f"版本过低:当前 {version or '未知'} < 需要 {min_v}" if version else "无法解析版本"),
     }
 
 

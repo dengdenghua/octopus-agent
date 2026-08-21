@@ -9,10 +9,14 @@ thin client:**拉取 → 验签 → 落地到产品现有磁盘布局**,再绑�
 
 from .bootstrap import bootstrap_skills, read_lockfile, write_lockfile
 from .client import (
+    DEFAULT_BUNDLE_RESPONSE_MAX_BYTES,
+    DEFAULT_JSON_RESPONSE_MAX_BYTES,
+    DEFAULT_SKILL_RESPONSE_MAX_BYTES,
     AssetContent,
     AssetPayload,
     RegistryAsset,
     RegistryClient,
+    RegistryResponseTooLarge,
     safe_registry_asset_id,
     safe_registry_skill_slug,
 )
@@ -20,9 +24,13 @@ from .materialize import SAFE_TYPES, materialize_skill, sync_skills
 
 __all__ = [
     "RegistryClient",
+    "RegistryResponseTooLarge",
     "RegistryAsset",
     "AssetPayload",
     "AssetContent",
+    "DEFAULT_JSON_RESPONSE_MAX_BYTES",
+    "DEFAULT_SKILL_RESPONSE_MAX_BYTES",
+    "DEFAULT_BUNDLE_RESPONSE_MAX_BYTES",
     "materialize_skill",
     "sync_skills",
     "SAFE_TYPES",

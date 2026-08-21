@@ -1,15 +1,17 @@
 name: mx2025_viewer
 display_name: MX技术小筑
-version: 0.1.0
-description: MX技术小筑网站查看器 — 通过同源反向代理访问 https://mx2025.hhhuu.com
+version: 0.2.0
+description: MX技术小筑网站查看器 — 可选的本地同源代理，默认安全关闭
 author: Octopus
 tags:
   - viewer
   - web
 provides:
-  - mx2025_viewer.page
+  - mx2025_viewer.api
 config:
   base_url: https://mx2025.hhhuu.com
+  proxy_origin: false
+  allow_same_origin_third_party_scripts: false
 config_schema:
   type: object
   properties:
@@ -18,3 +20,14 @@ config_schema:
       title: 网站地址
       description: MX技术小筑的完整 URL(默认 https://mx2025.hhhuu.com)
       default: https://mx2025.hhhuu.com
+      format: uri
+    proxy_origin:
+      type: boolean
+      title: 同源反向代理
+      description: 默认 false。仅当本项与独立风险确认开关均为 true、上游为 HTTPS 且宿主未开启认证时挂载；只适用于隔离的单用户本地环境。
+      default: false
+    allow_same_origin_third_party_scripts:
+      type: boolean
+      title: 允许第三方脚本使用应用同源权限（危险）
+      description: 独立高风险确认开关。第三方脚本可能以当前应用 origin 调用宿主 API；生产、多用户或认证部署不得开启。
+      default: false

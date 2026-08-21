@@ -625,7 +625,9 @@ async def _drive_group_fanout(
                 if round_no > 1 and round_no != last_round_emitted:
                     last_round_emitted = round_no
                     await _emit(
-                        "⚔️ 第 " + str(round_no) + " 轮 · 成员互见辩论 —— 大家看到彼此观点后点名回应：",
+                        "⚔️ 第 "
+                        + str(round_no)
+                        + " 轮 · 成员互见辩论 —— 大家看到彼此观点后点名回应：",
                         display_name="主持人",
                         agent_id="swarm-moderator",
                         icon="⚔️",

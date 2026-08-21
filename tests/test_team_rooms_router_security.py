@@ -12,6 +12,7 @@ share the same underlying authz model.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -172,6 +173,27 @@ def test_create_invite_blocks_non_member(tmp_path: Path) -> None:
     assert resp.status_code == 403
 
 
+def test_plain_member_cannot_issue_owner_invite(tmp_path: Path) -> None:
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+    _invite_and_join(client, keys, "alice-team", "alice", "bob")
+
+    denied = client.post(
+        "/api/teams/alice-team/invite",
+        json={"role": "owner"},
+        headers=_bearer(keys["bob"]),
+    )
+    allowed = client.post(
+        "/api/teams/alice-team/invite",
+        json={"role": "owner"},
+        headers=_bearer(keys["alice"]),
+    )
+
+    assert denied.status_code == 403
+    assert allowed.status_code == 200
+    assert allowed.json()["invite_role"] == "owner"
+
+
 # ── unauthenticated callers are blocked at the auth layer ──────────
 
 
@@ -273,6 +295,61 @@ def _invite_and_join(
     )
     assert joined.status_code == 200, joined.json()
     return joined.json()["participant"]["id"]
+
+
+def test_invite_join_ignores_client_selected_participant_id(tmp_path: Path) -> None:
+    client, keys = _build_app(tmp_path)
+    team = _create_team(client, keys, "alice-team", owner="alice")
+    invite = client.post(
+        "/api/teams/alice-team/invite",
+        json={"role": "member"},
+        headers=_bearer(keys["alice"]),
+    )
+
+    joined = client.post(
+        f"/api/team-invites/{invite.json()['invite_token']}/join",
+        json={"participant_id": "owner-alice", "display_name": "Bob"},
+        headers=_bearer(keys["bob"]),
+    )
+
+    assert joined.status_code == 200
+    assert joined.json()["participant"]["id"] == "actor-bob"
+    participants = joined.json()["team"]["participants"]
+    assert any(
+        item["id"] == "owner-alice" and item["actor_id"] == "alice" and item["role"] == "owner"
+        for item in participants
+    )
+    assert team["owner_id"] == "alice"
+
+
+def test_removed_member_cannot_rejoin_with_still_valid_invite(tmp_path: Path) -> None:
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+    invite = client.post(
+        "/api/teams/alice-team/invite",
+        json={"role": "member"},
+        headers=_bearer(keys["alice"]),
+    )
+    token = invite.json()["invite_token"]
+    joined = client.post(
+        f"/api/team-invites/{token}/join",
+        json={},
+        headers=_bearer(keys["bob"]),
+    )
+    participant_id = joined.json()["participant"]["id"]
+    removed = client.delete(
+        f"/api/teams/alice-team/participants/{participant_id}",
+        headers=_bearer(keys["alice"]),
+    )
+    assert removed.status_code == 200
+
+    rejoin = client.post(
+        f"/api/team-invites/{token}/join",
+        json={"participant_id": "fresh-seat"},
+        headers=_bearer(keys["bob"]),
+    )
+
+    assert rejoin.status_code == 403
 
 
 def test_member_cannot_promote_self_to_owner(tmp_path: Path) -> None:
@@ -528,3 +605,102 @@ def test_hosted_mode_requires_host_id(tmp_path: Path) -> None:
         headers=_bearer(keys["bob"]),
     )
     assert resp.status_code == 400
+
+
+# ── transcript + websocket membership share the HTTP invite boundary ──
+
+
+def test_room_transcript_requires_active_membership(tmp_path: Path) -> None:
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+
+    assert client.get("/api/teams/alice-team/messages").status_code == 401
+    assert (
+        client.get(
+            "/api/teams/alice-team/messages",
+            headers=_bearer(keys["bob"]),
+        ).status_code
+        == 403
+    )
+    allowed = client.get(
+        "/api/teams/alice-team/messages",
+        headers=_bearer(keys["alice"]),
+    )
+    assert allowed.status_code == 200
+    assert allowed.json()["team_id"] == "alice-team"
+
+
+def test_room_websocket_rejects_authenticated_non_member(tmp_path: Path) -> None:
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+
+    with client.websocket_connect(
+        "/api/teams/alice-team/ws?participant_id=guessed-bob",
+        headers=_bearer(keys["bob"]),
+    ) as websocket:
+        error = websocket.receive_json()
+        assert error == {"type": "error", "message": "team invite required"}
+
+
+def test_room_websocket_allows_invited_actor_and_resolves_stale_client_id(
+    tmp_path: Path,
+) -> None:
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+    bob_pid = _invite_and_join(client, keys, "alice-team", "alice", "bob")
+
+    with client.websocket_connect(
+        "/api/teams/alice-team/ws?participant_id=stale-browser-id",
+        headers=_bearer(keys["bob"]),
+    ) as websocket:
+        ready = websocket.receive_json()
+        assert ready["type"] == "ready"
+        assert ready["participant"]["id"] == bob_pid
+        assert ready["participant"]["actor_id"] == "bob"
+
+
+def test_transcript_rejects_unbound_legacy_participant_id(tmp_path: Path) -> None:
+    """A client-chosen participant id is not an authenticated membership."""
+    state_path = tmp_path / "rooms.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "teams": [
+                    {
+                        "id": "legacy-room",
+                        "name": "Legacy room",
+                        "owner_id": "alice",
+                        "created_at": "2026-01-01T00:00:00Z",
+                        "updated_at": "2026-01-01T00:00:00Z",
+                        "participants": [
+                            {
+                                "id": "bob",
+                                "display_name": "Unbound Bob",
+                                "actor_id": None,
+                                "joined_at": "2026-01-01T00:00:00Z",
+                                "status": "active",
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    identities = IdentityStore()
+    identities.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    identities.add(Identity(actor_id="bob"), api_key_plaintext="sk-bob")
+    app = FastAPI()
+    app.include_router(
+        create_team_rooms_router(
+            state_path=state_path,
+            identity_store=identities,
+            require_auth=True,
+        )
+    )
+
+    response = TestClient(app).get(
+        "/api/teams/legacy-room/messages",
+        headers={"Authorization": "Bearer sk-bob"},
+    )
+    assert response.status_code == 403

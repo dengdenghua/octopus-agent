@@ -53,9 +53,7 @@ _DEFAULT_TIMEOUT_S = 240.0
 _MAX_OUTPUT_CHARS = 20_000
 
 _SLASH_COMMAND_RE = re.compile(r"^/([A-Za-z][A-Za-z0-9_-]*)(?:\s+(.*))?$")
-_MODEL_FLAG_PARTNERS = frozenset(
-    {"claude-code", "codex-cli", "codebuddy-cli", "opencode-cli"}
-)
+_MODEL_FLAG_PARTNERS = frozenset({"claude-code", "codex-cli", "codebuddy-cli", "opencode-cli"})
 _CONTROL_ONLY_SLASH_COMMANDS = frozenset(
     {
         "clear",

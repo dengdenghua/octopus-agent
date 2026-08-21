@@ -94,6 +94,7 @@ class TeamRoomWsContext:
     broadcast_presence: Callable[[str], Awaitable[None]]
     broadcast_floor: Callable[[str, TeamRoomWire], Awaitable[None]]
     active_participant: Callable[[str, str], TeamParticipantWire | None]
+    require_auth: bool = False
     # A TestClient connection, embedded server, or multi-loop host may own
     # different sockets from different event loops. Broadcasts must schedule
     # each send on the loop that accepted that socket; directly awaiting a
@@ -316,6 +317,28 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
             )
             if existing and existing.status == "removed":
                 reject_reason = "participant removed"
+            elif ctx.require_auth:
+                if existing is not None and existing.actor_id != actor:
+                    # Shared mode never binds an authenticated actor to a
+                    # legacy/unowned participant merely because they guessed
+                    # its id.
+                    reject_reason = "participant actor mismatch"
+                elif existing is None:
+                    # Browser clients may carry a stale/random local participant
+                    # id. Resolve that to the participant established by the
+                    # invite flow, but never create a new membership here.
+                    existing = next(
+                        (
+                            p
+                            for p in team.participants
+                            if p.actor_id == actor and p.status == "active"
+                        ),
+                        None,
+                    )
+                    if existing is None:
+                        reject_reason = "team invite required"
+                    else:
+                        participant_id = existing.id
             elif (
                 existing is not None
                 and existing.actor_id
@@ -323,7 +346,10 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                 and existing.actor_id != actor
             ):
                 reject_reason = "participant actor mismatch"
-            else:
+
+            if reject_reason is None:
+                # In shared mode ``existing`` is guaranteed here: membership is
+                # established only by room creation or the HTTP invite flow.
                 participants = [p for p in team.participants if p.id != participant_id]
                 participant = TeamParticipantWire(
                     id=participant_id,

@@ -36,15 +36,18 @@ def test_settings_dir_and_render(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     assert ss._settings_dir() == tmp_path / ".octopus" / "searxng"
     rendered = ss._render_settings("sekrit")
-    assert "secret_key: \"sekrit\"" in rendered
+    assert 'secret_key: "sekrit"' in rendered
     assert "- json" in rendered
     assert "limiter: false" in rendered
 
 
 def test_run_argv_shape() -> None:
     argv = ss._run_argv(
-        docker="docker", name="searx", port="8888",
-        settings_file="/tmp/settings.yml", image="img/searx",
+        docker="docker",
+        name="searx",
+        port="8888",
+        settings_file="/tmp/settings.yml",
+        image="img/searx",
     )
     assert argv[0] == "docker"
     assert "--name" in argv and argv[argv.index("--name") + 1] == "searx"
@@ -54,7 +57,15 @@ def test_run_argv_shape() -> None:
 
 
 def test_should_restart_matrix() -> None:
-    base = dict(up=False, managed=True, container_running=False, docker_present=True, now=100.0, last_restart=0.0, backoff_s=10.0)
+    base = dict(
+        up=False,
+        managed=True,
+        container_running=False,
+        docker_present=True,
+        now=100.0,
+        last_restart=0.0,
+        backoff_s=10.0,
+    )
     assert ss._should_restart(**base) is True
     assert ss._should_restart(**{**base, "up": True}) is False
     assert ss._should_restart(**{**base, "managed": False}) is False
@@ -78,7 +89,9 @@ def test_docker_probes(monkeypatch) -> None:
     assert ss._docker_running("docker") is True
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: _proc(1))
     assert ss._docker_running("docker") is False
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(OSError("no docker")))
+    monkeypatch.setattr(
+        subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(OSError("no docker"))
+    )
     assert ss._docker_running("docker") is False
 
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: _proc(0, "abc123\n"))

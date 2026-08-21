@@ -19,6 +19,16 @@ function authHeaders() {
   return jwt ? { 'Authorization': 'Bearer ' + jwt } : {};
 }
 
+function renderErrorMessage(container, message) {
+  if (!container) return;
+  container.replaceChildren();
+  if (!message) return;
+  const error = document.createElement('div');
+  error.className = 'err';
+  error.textContent = String(message);
+  container.appendChild(error);
+}
+
 async function api(method, path, body = null) {
   const isAuthEndpoint = path.startsWith('/api/auth/');
   const r = await fetch(path, {
@@ -83,9 +93,10 @@ async function renderLogin() {
     const r = await api('GET', '/api/auth/providers');
     providers = r.providers || [];
   } catch (e) {
-    document.getElementById('login-card').innerHTML = `
-      <div class="err">加载登录方式失败：${e.message}</div>
-    `;
+    renderErrorMessage(
+      document.getElementById('login-card'),
+      '加载登录方式失败：' + (e.message || e),
+    );
     return;
   }
 
@@ -163,7 +174,7 @@ function smsForm(mockMode) {
   let cooldown = 0, cooldownTimer = null;
 
   function showErr(msg) {
-    errBox.innerHTML = msg ? `<div class="err">${msg}</div>` : '';
+    renderErrorMessage(errBox, msg);
   }
   function tick() {
     if (cooldown > 0) {
@@ -278,15 +289,15 @@ function localForm(passwordRequired) {
       ? null
       : document.getElementById('display').value.trim();
     if (!/^[A-Za-z0-9._@-]{1,64}$/.test(u)) {
-      errBox.innerHTML = `<div class="err">用户名只能含字母/数字/._@-</div>`;
+      renderErrorMessage(errBox, '用户名只能含字母/数字/._@-');
       return;
     }
     if (passwordRequired && !p) {
-      errBox.innerHTML = `<div class="err">请输入密码</div>`;
+      renderErrorMessage(errBox, '请输入密码');
       return;
     }
     btn.disabled = true;
-    errBox.innerHTML = '';
+    renderErrorMessage(errBox, '');
     try {
       const payload = { username: u };
       if (p) payload.password = p;
@@ -299,7 +310,7 @@ function localForm(passwordRequired) {
       LS.set('octopus.display', r.user?.display_name || r.user?.username || u);
       render();
     } catch (e) {
-      errBox.innerHTML = `<div class="err">${explainErr(e)}</div>`;
+      renderErrorMessage(errBox, explainErr(e));
       btn.disabled = false;
     }
   }

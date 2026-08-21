@@ -1,19 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any
-
-
-def _baseline_as_of(now: datetime | None = None) -> str:
-    """Calibration date for the architecture capability estimate.
-
-    Static scores are point-in-time estimates and must carry a date so the
-    radar cannot silently self-inflate as competitors ship. The K3 behavioral
-    bundle is the ground truth; this date only stamps the architecture layer.
-    """
-    return (now or datetime.now(UTC)).strftime("%Y-%m-%d")
-
 
 COMPETITORS: tuple[str, ...] = (
     "codex",
@@ -27,13 +15,19 @@ EXTERNAL_COMPETITORS: tuple[str, ...] = tuple(
     competitor for competitor in COMPETITORS if competitor != OCTOPUS_COMPETITOR
 )
 DEFAULT_TARGET_SCORE = 95
+SCORECARD_CALIBRATION_AS_OF = "2026-08-04"
+SCORECARD_CALIBRATION_SOURCE_REVISION = "a41dc160a4056563891cc069fcbcf6b961cf56d9"
+SCORECARD_CALIBRATION_MAX_AGE_DAYS = 90
 BASELINE_CONTEXT: dict[str, Any] = {
-    "as_of": _baseline_as_of(),
+    "as_of": SCORECARD_CALIBRATION_AS_OF,
+    "source": "git_commit",
+    "source_revision": SCORECARD_CALIBRATION_SOURCE_REVISION,
+    "source_path": "runtime/safety/evolution/_agent_competitor_scorecard_models.py",
+    "max_age_days": SCORECARD_CALIBRATION_MAX_AGE_DAYS,
     "score_kind": "architecture_capability_estimate",
     "score_basis": (
-        "static architecture estimate calibrated against public Codex surface; "
-        "K3 same-task behavioral bundle is ground truth and overrides this layer "
-        "when current (see behavioral_head_to_head)"
+        "version-controlled static architecture estimate calibrated against the public "
+        "Codex surface; it remains separate from behavioral release evidence"
     ),
     "codex_surface": (
         "combined Codex desktop app, CLI, cloud execution, skills/plugins, "
@@ -41,7 +35,7 @@ BASELINE_CONTEXT: dict[str, Any] = {
     ),
     "excludes": "legacy CLI-only comparisons",
     "behavioral_authority": (
-        "same-task behavioral bundle and parity certification, when current and available"
+        "independent commit-bound release authority; it does not mutate static overall scores"
     ),
     "official_references": (
         "https://openai.com/index/introducing-the-codex-app/",

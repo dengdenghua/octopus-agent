@@ -133,6 +133,7 @@ class OpenAIModelRouter(Provider, ModelRouter):
         timeout_seconds: float = 60.0,
         pricing_per_1k: dict[str, tuple[float, float]] | None = None,
         extra_headers: dict[str, str] | None = None,
+        custom_model_entry: dict[str, Any] | None = None,
         client: Any = None,
     ) -> None:
         if not HTTPX_AVAILABLE:
@@ -145,6 +146,12 @@ class OpenAIModelRouter(Provider, ModelRouter):
         self.timeout_seconds = timeout_seconds
         self.pricing_per_1k = pricing_per_1k or {}
         self.extra_headers = dict(extra_headers or {})
+        # A routed selection_id already resolved one exact endpoint entry.
+        # Bind that metadata so entries sharing the same upstream model cannot
+        # borrow each other's capability or compatibility flags after rewrite.
+        self._custom_model_entry = (
+            dict(custom_model_entry) if isinstance(custom_model_entry, dict) else None
+        )
         self._client = client  # Implementation note.
         self._owns_client = client is None
         self._provider_profile = resolve_openai_compat_profile(
@@ -397,7 +404,12 @@ class OpenAIModelRouter(Provider, ModelRouter):
         # hosting dozens of models nobody hand-configures each one. The
         # operator's own ``omit_sampling_parameters`` still takes precedence by
         # being checked first.
-        if not model_omits_sampling_parameters(model) and not model_rejects_temperature(model):
+        omits_sampling = (
+            bool(self._custom_model_entry.get("omit_sampling_parameters"))
+            if self._custom_model_entry is not None
+            else model_omits_sampling_parameters(model)
+        )
+        if not omits_sampling and not model_rejects_temperature(model):
             payload["temperature"] = request.temperature
         max_tokens = request.max_tokens
         # A reasoning model spends max_tokens on reasoning FIRST, so a budget
@@ -408,7 +420,14 @@ class OpenAIModelRouter(Provider, ModelRouter):
         # thinking`` returns False for those, so the floor never applied where
         # it was needed most.
         if (
-            (request.enable_thinking or _model_might_think(model))
+            (
+                request.enable_thinking
+                or (
+                    bool(self._custom_model_entry.get("supports_thinking"))
+                    if self._custom_model_entry is not None
+                    else _model_might_think(model)
+                )
+            )
             and max_tokens is not None
             and max_tokens < _MIN_THINKING_OUTPUT_TOKENS
         ):
@@ -428,7 +447,12 @@ class OpenAIModelRouter(Provider, ModelRouter):
         # model id, so the LLM doesn't get a tools spec it can't act
         # on. The caller (ReAct loop / ephemeral runner) will see
         # the lack of tool_calls and fall back to text-only synthesis.
-        if request.tools and model_supports_tool_use(model):
+        supports_tool_use = (
+            self._custom_model_entry.get("supports_tool_use") is not False
+            if self._custom_model_entry is not None
+            else model_supports_tool_use(model)
+        )
+        if request.tools and supports_tool_use:
             payload["tools"] = [
                 {
                     "type": "function",
@@ -473,7 +497,7 @@ class OpenAIModelRouter(Provider, ModelRouter):
         if profile.id == "openai_compat" and self._can_fall_back_to_entry_profile(model):
             profile = self._provider_profile
         return apply_custom_openai_compat_profile(
-            custom_model_entry_for(model),
+            self._custom_model_entry or custom_model_entry_for(model),
             base_profile=profile,
         )
 

@@ -140,6 +140,7 @@ AgentAssigner = Callable[[Task], str]  # (task) -> concrete agent/member id
 # 集群) instead of a single agent. Injected by the cowork bridge so a project
 # task can fan out to the group roster and reuse the cluster/swarm engines.
 TaskTeamRunner = Callable[[Task, dict[str, Any]], Any]
+ThreadContextResolver = Callable[[str], dict[str, Any]]
 
 
 class ProjectEngine:
@@ -157,6 +158,7 @@ class ProjectEngine:
         owner_id: str = "",
         tenant_id: str = "",
         scope: TenantScope | None = None,
+        resolve_thread_context: ThreadContextResolver | None = None,
     ) -> None:
         if scope is None and owner_id and tenant_id:
             scope = TenantScope(tenant_id=tenant_id, actor_id=owner_id)
@@ -171,6 +173,7 @@ class ProjectEngine:
         self._run_task_team = run_task_team
         self.owner_id = owner_id
         self.tenant_id = tenant_id
+        self._resolve_thread_context = resolve_thread_context
 
     # ── planning ─────────────────────────────────────────────────────────────
     def plan(self, name: str, goal: str) -> Project:
@@ -610,16 +613,13 @@ class ProjectEngine:
             if claimed.status != "running":
                 events.append(f"task_stale_claim_ignored:{task.id}")
                 continue
-            context = self._context(project, ms, tasks)
             try:
+                context = self._context(project, ms, tasks)
                 # 项目模式 × 集群/蜂群：任务节点声明了 team_mode（swarm/cluster）
                 # 且注入了 run_task_team 时，把它交给团队执行器（蜂群 fan-out /
                 # 集群角色流水线），否则退回单 agent 执行。这样项目 DAG 里可以
                 # 混排「单点任务」和「团队任务」。
-                if (
-                    task.team_mode in ("swarm", "cluster")
-                    and self._run_task_team is not None
-                ):
+                if task.team_mode in ("swarm", "cluster") and self._run_task_team is not None:
                     task.output = self._run_task_team(task, context)
                 else:
                     task.output = self._execute(task, context)
@@ -767,10 +767,29 @@ class ProjectEngine:
             self.store.append_event(project_id, kind=kind, payload=payload)
 
     def _context(self, project: Project, ms: Milestone, tasks: list[Task]) -> dict[str, Any]:
-        return {
+        try:
+            thread_id = self.store.thread_for_project(project.id) or ""
+        except (AttributeError, TypeError, ValueError):
+            thread_id = ""
+        context = {
+            "project_id": project.id,
             "project_goal": project.goal,
+            "owner_id": project.owner_id,
+            "tenant_id": project.tenant_id,
+            "thread_id": thread_id,
             "milestone_goal": ms.goal,
             "milestone_spec": ms.spec,
             "success_criteria": ms.success_criteria,
             "done_outputs": {t.id: t.output for t in tasks if t.status == "done"},
         }
+        if self._resolve_thread_context is not None:
+            resolved = self._resolve_thread_context(thread_id)
+            if not isinstance(resolved, dict):
+                raise TypeError("thread context resolver must return a mapping")
+            workspace_path = resolved.get("workspace_path")
+            runtime_metadata = resolved.get("runtime_session_metadata")
+            if isinstance(workspace_path, str) and workspace_path:
+                context["workspace_path"] = workspace_path
+            if isinstance(runtime_metadata, dict):
+                context["runtime_session_metadata"] = dict(runtime_metadata)
+        return context

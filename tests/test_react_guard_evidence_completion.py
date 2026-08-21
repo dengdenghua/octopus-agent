@@ -91,13 +91,13 @@ def test_named_file_guard_accepts_successful_writes_for_named_file() -> None:
         ReActStep(
             iteration=1,
             action='write_text_file({"path":"hello.py","content":"print(42)\\n"})',
-            observation='(real tool execution succeeded) write_text_file',
+            observation="(real tool execution succeeded) write_text_file",
             action_results=[{"ok": True}],
         ),
         ReActStep(
             iteration=2,
             action='exec_shell({"command":"python3 hello.py"})',
-            observation='(real tool execution succeeded) exec_shell',
+            observation="(real tool execution succeeded) exec_shell",
             action_results=[{"ok": True}],
         ),
     ]
@@ -118,7 +118,7 @@ def test_named_file_guard_still_rejects_unwritten_read_target() -> None:
         ReActStep(
             iteration=1,
             action='write_text_file({"path":"other.py","content":"x"})',
-            observation='(real tool execution succeeded) write_text_file',
+            observation="(real tool execution succeeded) write_text_file",
             action_results=[{"ok": True}],
         ),
     ]
@@ -316,8 +316,7 @@ def test_incomplete_final_answer_accepts_past_tense_look_report() -> None:
         is None
     )
     assert (
-        _incomplete_final_answer_guard("我看过代码后，发现整体结构清晰，因此评价为良好。")
-        is None
+        _incomplete_final_answer_guard("我看过代码后，发现整体结构清晰，因此评价为良好。") is None
     )
 
 
@@ -517,8 +516,7 @@ def test_incomplete_final_answer_accepts_past_tense_bare_intention_verbs() -> No
     """Completed, past-tense statements with the same characters must keep
     passing — only the future-intent prefix triggers the guard."""
     assert (
-        _incomplete_final_answer_guard("我查了资料，结论是智能床垫市场规模 17.6 亿美元。")
-        is None
+        _incomplete_final_answer_guard("我查了资料，结论是智能床垫市场规模 17.6 亿美元。") is None
     )
     assert _incomplete_final_answer_guard("我找到了答案：两者的定义完全一致。") is None
     assert _incomplete_final_answer_guard("我分析了数据，得出三点结论。") is None
@@ -530,13 +528,9 @@ def test_incomplete_final_answer_rejects_promised_synthesis() -> None:
     delivered as a *completed* turn — a promise to synthesize with zero actual
     output. A short, body-less promise-to-produce must be rejected like the
     read/search announce prefixes."""
+    assert _incomplete_final_answer_guard("四个方向都收齐了，马上综合。") is not None
     assert (
-        _incomplete_final_answer_guard("四个方向都收齐了，马上综合。")
-        is not None
-    )
-    assert (
-        _incomplete_final_answer_guard("抱歉刚才掉线了，马上把4位成员的成果综合出来。")
-        is not None
+        _incomplete_final_answer_guard("抱歉刚才掉线了，马上把4位成员的成果综合出来。") is not None
     )
     assert (
         _incomplete_final_answer_guard(

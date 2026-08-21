@@ -111,9 +111,7 @@ def test_custom_model_fallback_prefers_a_different_upstream_over_name_score(
         lambda: SimpleNamespace(custom_models_path=config_path),
     )
 
-    assert (
-        next_custom_model_fallback("kimi-k3", {"kimi-k3"}) == "agnes-2.5-flash"
-    )
+    assert next_custom_model_fallback("kimi-k3", {"kimi-k3"}) == "agnes-2.5-flash"
 
 
 def test_custom_model_fallback_uses_same_upstream_as_last_resort(
@@ -144,9 +142,7 @@ def test_custom_model_fallback_uses_same_upstream_as_last_resort(
         lambda: SimpleNamespace(custom_models_path=config_path),
     )
 
-    assert (
-        next_custom_model_fallback("kimi-k3", {"kimi-k3"}) == "ark-code-latest"
-    )
+    assert next_custom_model_fallback("kimi-k3", {"kimi-k3"}) == "ark-code-latest"
 
 
 def test_custom_model_fallback_skips_a_recently_stalled_model(

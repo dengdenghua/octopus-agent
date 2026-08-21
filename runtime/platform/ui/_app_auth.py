@@ -73,6 +73,21 @@ def _is_public_plugin_asset_request(method: str, path: str) -> bool:
     )
 
 
+def _is_public_plugin_landing_request(method: str, path: str) -> bool:
+    """Allow only inert auth-host explanation pages from bundled plugins.
+
+    These plugins deliberately mount no stateful API, proxy, or WebSocket
+    routes on an authenticated (therefore potentially multi-user) host. A
+    browser iframe cannot attach a Bearer header, so the exact static pages
+    are public; no wildcard or child path is accepted.
+    """
+    return method.upper() in {"GET", "HEAD"} and path in {
+        "/api/plugins/paper-trading/page",
+        "/api/plugins/paper-trading/watch",
+        "/api/plugins/mx2025_viewer/page",
+    }
+
+
 def _is_oauth_callback_request(method: str, path: str) -> bool:
     # The MCP OAuth callback is reached by the *provider* redirecting the
     # user's browser, which carries no Authorization header — gating it
@@ -100,6 +115,8 @@ def _install_legacy_control_plane_auth(
             return await call_next(request)
         path = str(getattr(getattr(request, "url", None), "path", "") or "")
         if _is_public_plugin_asset_request(request.method, path):
+            return await call_next(request)
+        if _is_public_plugin_landing_request(request.method, path):
             return await call_next(request)
         if _is_oauth_callback_request(request.method, path):
             return await call_next(request)

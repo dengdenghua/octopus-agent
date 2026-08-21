@@ -15,6 +15,7 @@
 
 统一模型: runtime/platform/capabilities/capability_registry.py
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -60,6 +61,19 @@ def create_capability_router(
             request,
             identity_store,
             require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    def _operator_dep(request: Request) -> None:
+        from runtime.safety.auth.principal import require_roles
+
+        require_roles(
+            request,
+            identity_store,
+            require_auth,
+            ("admin", "operator"),
             jwt_secret=jwt_secret,
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
@@ -126,35 +140,43 @@ def create_capability_router(
             i["manual_token_only"] = _is_manual_token_only(i)
         if not include_manual:
             # 移除「只能手动填 token」且未安装的插件(已安装的保留以便管理/卸载)
-            items = [
-                i
-                for i in items
-                if not i["manual_token_only"] or i.get("installed")
-            ]
+            items = [i for i in items if not i["manual_token_only"] or i.get("installed")]
         return {"capabilities": items[:limit], "total": len(items)}
 
     @router.get("/api/capabilities/{cid}")
     def capability_detail(cid: str) -> dict[str, Any]:
         return _get(cid)
 
-    @router.post("/api/capabilities/{cid}/install")
+    @router.post(
+        "/api/capabilities/{cid}/install",
+        dependencies=[Depends(_operator_dep)],
+    )
     def capability_install(cid: str) -> dict[str, Any]:
         _get(cid)
         return registry.install(cid)
 
-    @router.delete("/api/capabilities/{cid}/install")
+    @router.delete(
+        "/api/capabilities/{cid}/install",
+        dependencies=[Depends(_operator_dep)],
+    )
     def capability_uninstall(cid: str) -> dict[str, Any]:
         if not registry.uninstall(cid):
             raise HTTPException(404, f"capability not installed: {cid}")
         return {"installed": False, "capability_id": cid}
 
-    @router.post("/api/capabilities/{cid}/enable")
+    @router.post(
+        "/api/capabilities/{cid}/enable",
+        dependencies=[Depends(_operator_dep)],
+    )
     def capability_enable(cid: str) -> dict[str, Any]:
         if not registry.set_enabled(cid, True):
             raise HTTPException(404, f"capability not installed: {cid}")
         return {"enabled": True, "capability_id": cid}
 
-    @router.post("/api/capabilities/{cid}/disable")
+    @router.post(
+        "/api/capabilities/{cid}/disable",
+        dependencies=[Depends(_operator_dep)],
+    )
     def capability_disable(cid: str) -> dict[str, Any]:
         if not registry.set_enabled(cid, False):
             raise HTTPException(404, f"capability not installed: {cid}")
@@ -165,7 +187,10 @@ def create_capability_router(
         _get(cid)
         return registry.status(cid)
 
-    @router.post("/api/capabilities/{cid}/connect")
+    @router.post(
+        "/api/capabilities/{cid}/connect",
+        dependencies=[Depends(_operator_dep)],
+    )
     async def capability_connect(cid: str, request: Request) -> dict[str, Any]:
         _get(cid)
         body: dict[str, Any] = {}
@@ -179,14 +204,26 @@ def create_capability_router(
             run_cli=bool(body.get("run_cli")),
         )
 
-    @router.post("/api/capabilities/{cid}/disconnect")
+    @router.post(
+        "/api/capabilities/{cid}/disconnect",
+        dependencies=[Depends(_operator_dep)],
+    )
     def capability_disconnect(cid: str) -> dict[str, Any]:
         _get(cid)
         return registry.disconnect(cid)
 
-    @router.get("/api/capabilities/{cid}/headers")
+    @router.get(
+        "/api/capabilities/{cid}/headers",
+        dependencies=[Depends(_operator_dep)],
+    )
     def capability_headers(cid: str) -> dict[str, Any]:
         _get(cid)
-        return registry.resolve_headers(cid)
+        resolved = registry.resolve_headers(cid)
+        raw_headers = resolved.get("headers") if isinstance(resolved, dict) else None
+        headers = raw_headers if isinstance(raw_headers, dict) else {}
+        return {
+            "configured": bool(headers),
+            "header_names": sorted(str(name) for name in headers),
+        }
 
     return router

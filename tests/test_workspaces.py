@@ -91,6 +91,29 @@ class TestAllocate:
         assert manifest["schema"] == "octopus.workspace.v1"
         assert manifest["thread_id"] == "th-manifest"
 
+    def test_managed_binding_unifies_every_layout_consumer(self, tmp_path: Path) -> None:
+        mgr = WorkspaceManager(tmp_path / "workspaces")
+        managed = mgr.root / "tenant-hash" / "actor-hash" / "th-managed"
+
+        layout = mgr.bind_managed("th-managed", managed)
+
+        assert mgr.path_for("th-managed") == managed
+        assert Path(mgr.resolve_cwd("th-managed", None)) == managed
+        assert mgr.layout("th-managed").upload == layout.upload
+        assert mgr.layout("th-managed").final == layout.final
+        assert layout.upload.is_dir()
+        assert layout.final.is_dir()
+
+    def test_managed_binding_rejects_escape_and_rebind(self, tmp_path: Path) -> None:
+        mgr = WorkspaceManager(tmp_path / "workspaces")
+        first = mgr.root / "tenant" / "actor" / "th"
+        mgr.bind_managed("th", first)
+
+        with pytest.raises(ValueError, match="outside"):
+            mgr.bind_managed("escape", tmp_path / "outside")
+        with pytest.raises(ValueError, match="different"):
+            mgr.bind_managed("th", mgr.root / "other" / "th")
+
 
 class TestResolveCwd:
     def test_explicit_wins(self, tmp_path: Path) -> None:

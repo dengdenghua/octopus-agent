@@ -17,7 +17,9 @@ def test_guess_language() -> None:
 
 
 def test_analyze_generic_languages() -> None:
-    js = h._analyze_generic("export function foo() {}\nclass Bar {}\nimport x from 'y';\n", "a.js", "javascript")
+    js = h._analyze_generic(
+        "export function foo() {}\nclass Bar {}\nimport x from 'y';\n", "a.js", "javascript"
+    )
     assert any(f["name"] == "foo" for f in js["functions"])
     assert any(c["name"] == "Bar" for c in js["classes"])
     assert "y" in js["imports"]
@@ -48,8 +50,8 @@ def test_split_into_chunks() -> None:
     short = h._split_into_chunks("def f():\n    pass\n", "m.py")
     assert len(short) == 1 and "m.py" in short[0]
     # A boundary (blank line) after the 50-line threshold triggers a split.
-    many = "\n".join(f"line{i}" for i in range(55)) + "\n\n" + "\n".join(
-        f"tail{i}" for i in range(20)
+    many = (
+        "\n".join(f"line{i}" for i in range(55)) + "\n\n" + "\n".join(f"tail{i}" for i in range(20))
     )
     chunks = h._split_into_chunks(many, "big.py")
     assert len(chunks) >= 2

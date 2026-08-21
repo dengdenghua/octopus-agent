@@ -395,6 +395,10 @@ def test_router_requires_auth_when_enabled() -> None:
 
     store = IdentityStore()
     store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    store.add(
+        Identity(actor_id="operator", roles=("operator",)),
+        api_key_plaintext="sk-operator",
+    )
     app = FastAPI()
     app.include_router(
         create_cli_team_router(
@@ -409,6 +413,13 @@ def test_router_requires_auth_when_enabled() -> None:
         client.get(
             "/api/cli-team/status",
             headers={"Authorization": "Bearer sk-alice"},
+        ).status_code
+        == 403
+    )
+    assert (
+        client.get(
+            "/api/cli-team/status",
+            headers={"Authorization": "Bearer sk-operator"},
         ).status_code
         == 200
     )

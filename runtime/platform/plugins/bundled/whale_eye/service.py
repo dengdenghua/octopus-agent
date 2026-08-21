@@ -16,9 +16,10 @@ import json
 import logging
 import mimetypes
 import os
-import urllib.request
 from pathlib import Path
 from typing import Any
+
+from runtime.safety.auth.url_guard import safe_httpx_request
 
 _logger = logging.getLogger(__name__)
 
@@ -154,20 +155,27 @@ def _chat(
         ],
         "max_tokens": max_tokens,
     }
-    req = urllib.request.Request(
-        f"{cfg['base_url']}/chat/completions",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {cfg['api_key']}",
-        },
-    )
+    endpoint = f"{cfg['base_url']}/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {cfg['api_key']}",
+    }
     for attempt in range(2):
-        # nosec B310 — the URL is built by describe_image from a caller-
-        # supplied image_b64/data: URL or https URL only; data: scheme is
-        # intentional (inline base64 image to the vision endpoint).
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
+        # The endpoint is operator-owned model configuration and may point at
+        # a loopback inference server. Redirects stay disabled so its bearer
+        # credential can never be forwarded to another origin.
+        response = safe_httpx_request(
+            "POST",
+            endpoint,
+            json=payload,
+            headers=headers,
+            timeout=timeout,
+            allow_private=True,
+            follow_redirects=False,
+            read_cap_bytes=8 * 1024 * 1024,
+        )
+        response.raise_for_status()
+        body = response.json()
         content = body["choices"][0]["message"]["content"] or ""
         if content.strip() or attempt == 1:
             return content

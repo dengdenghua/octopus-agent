@@ -42,6 +42,19 @@ def create_cookbook_router(
             jwt_audience=jwt_audience,
         )
 
+    def _operator_dep(request: Request) -> None:
+        from runtime.safety.auth.principal import require_roles
+
+        require_roles(
+            request,
+            identity_store,
+            require_auth,
+            ("admin", "operator"),
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     router = APIRouter(tags=["cookbook"])
 
     @router.get("/api/cookbook/snapshot")
@@ -53,7 +66,10 @@ def create_cookbook_router(
             return cookbook_snapshot()
         return {"hardware": None, "ollama_available": False, "recommendations": [], "pulls": {}}
 
-    @router.post("/api/cookbook/pull", dependencies=[Depends(_auth_dep)])
+    @router.post(
+        "/api/cookbook/pull",
+        dependencies=[Depends(_auth_dep), Depends(_operator_dep)],
+    )
     def pull(body: PullRequest) -> dict[str, Any]:
         """One-click pull a recommended model via ollama (runs in the background)."""
         from runtime.sensing.model_router.hwfit import start_pull

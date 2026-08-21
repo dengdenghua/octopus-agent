@@ -71,6 +71,74 @@ def _fake_today() -> dict:
     }
 
 
+def test_platform_http_client_rejects_redirects_with_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A trusted HTTPS URL cannot redirect platform tokens to another origin."""
+    import io
+    import urllib.error
+
+    from runtime.platform.plugins.bundled.paper_trading import live as live_module
+
+    requests = []
+
+    class _RedirectingOpener:
+        def open(self, request, timeout):  # noqa: ANN001
+            requests.append(request)
+            raise urllib.error.HTTPError(
+                request.full_url,
+                302,
+                "Found",
+                {"Location": "http://evil.test/collect"},
+                io.BytesIO(b"redirect refused"),
+            )
+
+    monkeypatch.setattr(live_module, "_NO_REDIRECT_OPENER", _RedirectingOpener())
+    client = PlatformClient("https://trusted.test/api")
+    client._token = "platform-secret"
+
+    with pytest.raises(live_module.PlatformClientError, match="HTTP 302"):
+        client._request_once("GET", "/market")
+
+    assert len(requests) == 1
+    assert requests[0].full_url == "https://trusted.test/api/market"
+    assert requests[0].get_header("Authorization") == "Bearer platform-secret"
+    assert requests[0].get_header("Token") == "platform-secret"
+
+
+def test_no_redirect_handler_never_builds_followup_request() -> None:
+    from runtime.platform.plugins.bundled.paper_trading.live import _NoRedirectHandler
+
+    handler = _NoRedirectHandler()
+    assert (
+        handler.redirect_request(
+            None,
+            None,
+            302,
+            "Found",
+            {"Location": "http://evil.test/collect"},
+            "http://evil.test/collect",
+        )
+        is None
+    )
+
+
+def test_platform_http_client_rejects_plain_http_before_network(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.platform.plugins.bundled.paper_trading import live as live_module
+
+    opener = MagicMock()
+    monkeypatch.setattr(live_module, "_NO_REDIRECT_OPENER", opener)
+    client = PlatformClient("http://up.test/api")
+    client._token = "platform-secret"
+
+    with pytest.raises(live_module.PlatformClientError, match="HTTPS"):
+        client._request_once("GET", "/market")
+
+    opener.open.assert_not_called()
+
+
 def _mock_client() -> MagicMock:
     client = MagicMock(spec=PlatformClient)
     client.has_credentials = True

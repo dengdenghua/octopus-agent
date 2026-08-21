@@ -163,10 +163,7 @@ def _bounded_memory_text(text: str) -> str:
     if len(text) <= _MAX_MEMORY_TIER_CHARS:
         return text
     head = text[:_MAX_MEMORY_TIER_CHARS].rstrip()
-    return (
-        f"{head}\n\n…(记忆过长，已截断为前 {_MAX_MEMORY_TIER_CHARS} 字符，"
-        f"原文 {len(text)} 字符)"
-    )
+    return f"{head}\n\n…(记忆过长，已截断为前 {_MAX_MEMORY_TIER_CHARS} 字符，原文 {len(text)} 字符)"
 
 
 def _compose_soul(
@@ -248,8 +245,7 @@ def _compose_soul(
             txt = _read_or_empty(tier_path)
             if txt and not _is_template_only(txt):
                 parts.append(
-                    f"## Long-term Memory ({tier_name})\n\n"
-                    f"{_bounded_memory_text(txt)}",
+                    f"## Long-term Memory ({tier_name})\n\n{_bounded_memory_text(txt)}",
                 )
 
     # Constitution summary · internalize the five principles. On by
@@ -351,8 +347,7 @@ def render_runtime_memory_sections(
         txt = _read_or_empty(tier_path)
         if txt and not _is_template_only(txt):
             parts.append(
-                f"## Long-term Memory ({tier_name})\n\n"
-                f"{_bounded_memory_text(txt)}",
+                f"## Long-term Memory ({tier_name})\n\n{_bounded_memory_text(txt)}",
             )
     return "\n\n".join(parts)
 

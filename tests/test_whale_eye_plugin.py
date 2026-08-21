@@ -99,6 +99,46 @@ def test_image_to_data_url_encodes_png(tmp_path: Path) -> None:
     assert url.split(",", 1)[1] == "iVBORw0KGgoAAAAAAAAAAA=="
 
 
+def test_chat_never_follows_redirect_or_forwards_key_to_private_redirect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.platform.plugins.bundled.whale_eye import service as whale_eye_service
+
+    captured: dict[str, object] = {}
+
+    class _Response:
+        status_code = 200
+
+        @staticmethod
+        def raise_for_status() -> None:
+            return None
+
+        @staticmethod
+        def json() -> dict[str, object]:
+            return {"choices": [{"message": {"content": "ok"}}]}
+
+    def _request(method, url, **kwargs):
+        captured.update({"method": method, "url": url, **kwargs})
+        return _Response()
+
+    monkeypatch.setattr(whale_eye_service, "safe_httpx_request", _request)
+
+    result = whale_eye_service._chat(
+        {"base_url": "http://127.0.0.1:9000/v1", "model": "vision", "api_key": "secret"},
+        "data:image/png;base64,AA==",
+        "describe",
+    )
+
+    assert result == "ok"
+    assert captured["follow_redirects"] is False
+    assert captured["allow_private"] is True
+    assert captured["read_cap_bytes"] == 8 * 1024 * 1024
+    assert captured["headers"] == {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer secret",
+    }
+
+
 def test_judge_missing_local_image(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from runtime.platform.plugins.bundled.whale_eye import service as whale_eye_service
 

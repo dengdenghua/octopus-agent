@@ -85,11 +85,11 @@ def test_invalid_token_rejected() -> None:
     assert r.status_code == 401
 
 
-def test_anonymous_degraded_without_identity_store() -> None:
-    """无 identity store 时(本地 loopback)降级为匿名, 不破坏既有行为."""
+def test_require_auth_without_identity_store_fails_closed() -> None:
+    """显式要求认证时，缺少 identity store 也不能降级为匿名。"""
     client = _client(require_auth=True, store=None)
     r = client.get("/api/tentacle/stats")
-    assert r.status_code == 200
+    assert r.status_code == 401
 
 
 def test_default_require_auth_is_enabled() -> None:

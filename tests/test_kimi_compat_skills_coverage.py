@@ -85,8 +85,13 @@ def test_yahoo_finance_parses_rows() -> None:
                     "timestamp": [1, 2],
                     "indicators": {
                         "quote": [
-                            {"open": [10, 11], "high": [12, 13], "low": [9, 9.5],
-                             "close": [11.5, 12.5], "volume": [100, 200]}
+                            {
+                                "open": [10, 11],
+                                "high": [12, 13],
+                                "low": [9, 9.5],
+                                "close": [11.5, 12.5],
+                                "volume": [100, 200],
+                            }
                         ]
                     },
                 }
@@ -130,8 +135,12 @@ def test_arxiv_search_parses_atom() -> None:
 def test_openalex_search_parses_works() -> None:
     data = {
         "results": [
-            {"title": "LLMs", "doi": "https://doi.org/1", "publication_year": 2024,
-             "cited_by_count": 3}
+            {
+                "title": "LLMs",
+                "doi": "https://doi.org/1",
+                "publication_year": 2024,
+                "cited_by_count": 3,
+            }
         ]
     }
     client = _FakeClient([_FakeResp(json=data)])
@@ -147,8 +156,12 @@ def test_crossref_search_parses_items() -> None:
     data = {
         "message": {
             "items": [
-                {"title": ["Chips"], "URL": "http://c/1", "DOI": "10.1/x",
-                 "published-print": {"date-parts": [[2023, 5]]}}
+                {
+                    "title": ["Chips"],
+                    "URL": "http://c/1",
+                    "DOI": "10.1/x",
+                    "published-print": {"date-parts": [[2023, 5]]},
+                }
             ]
         }
     }
@@ -162,7 +175,9 @@ def test_crossref_search_parses_items() -> None:
 
 
 def test_get_data_source_routes(monkeypatch) -> None:
-    monkeypatch.setattr(kcs, "_client", lambda **k: _FakeClient([_FakeResp(json={"chart": {"result": []}})]))
+    monkeypatch.setattr(
+        kcs, "_client", lambda **k: _FakeClient([_FakeResp(json={"chart": {"result": []}})])
+    )
 
     def fake_yahoo(client, symbol, rng, interval):
         return {"source": "yahoo_finance", "symbol": symbol}
@@ -307,9 +322,10 @@ def test_website_version_manager_full_lifecycle(tmp_path: Path, monkeypatch) -> 
     monkeypatch.setattr(pp, "app_paths", lambda: type("P", (), {"data_dir": tmp_path / "d"})())
     proj = _project_dir(tmp_path)
     assert "missing project_dir" in kcs._website_version_manager(project_dir="")["error"]
-    assert "project_dir not found" in kcs._website_version_manager(
-        project_dir=str(tmp_path / "nope")
-    )["error"]
+    assert (
+        "project_dir not found"
+        in kcs._website_version_manager(project_dir=str(tmp_path / "nope"))["error"]
+    )
 
     listed = kcs._website_version_manager("list", project_dir=str(proj))
     assert listed["ok"] is True and listed["versions"] == []
@@ -333,15 +349,17 @@ def test_website_version_manager_full_lifecycle(tmp_path: Path, monkeypatch) -> 
     listed3 = kcs._website_version_manager("list", project_dir=str(proj))
     assert listed3["versions"] == []
 
-    assert "missing version_id" in kcs._website_version_manager(
-        "restore", project_dir=str(proj)
-    )["error"]
-    assert "version not found" in kcs._website_version_manager(
-        "restore", project_dir=str(proj), version_id="nope"
-    )["error"]
-    assert "unknown action" in kcs._website_version_manager(
-        "bogus", project_dir=str(proj)
-    )["error"]
+    assert (
+        "missing version_id"
+        in kcs._website_version_manager("restore", project_dir=str(proj))["error"]
+    )
+    assert (
+        "version not found"
+        in kcs._website_version_manager("restore", project_dir=str(proj), version_id="nope")[
+            "error"
+        ]
+    )
+    assert "unknown action" in kcs._website_version_manager("bogus", project_dir=str(proj))["error"]
 
 
 def test_screenshot_web_full_page(monkeypatch) -> None:

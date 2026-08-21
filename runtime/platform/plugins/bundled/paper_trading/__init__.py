@@ -18,145 +18,51 @@ import contextlib
 import json
 import logging
 import queue
+import threading
 from pathlib import Path
 from typing import Any
 
 from runtime.execution.suckers.registry import Skill
 from runtime.platform.plugins.plugin_base import ModulePlugin
 
+from ._http_support import (
+    _authenticated_host_page,
+    _CredentialsIn,
+    _FavIn,
+    _GroupIn,
+    _OrderIn,
+    _PlatformApplyIn,
+    _PlatformCancelIn,
+    _PlatformMoneyIn,
+    _PlatformOrderIn,
+    _PlatformStockIn,  # noqa: F401 - retain the package's existing private symbol
+    _proxy_disabled_page,
+    _StockIn,
+)
 from .live import (
     DEFAULT_BASE_URL,
     LiveDataSource,
     LivePushClient,
     _normalize_push,
 )
-from .service import PaperTradingEngine, WatchlistStore, is_trading_time
+from .service import PaperTradingEngine, WatchlistStore, _build_engine, is_trading_time
+from .upstream_url import secure_upstream_origin
 
 try:
     from fastapi import APIRouter, HTTPException
     from fastapi.responses import HTMLResponse, StreamingResponse
-    from pydantic import BaseModel
 except ImportError:  # pragma: no cover
     APIRouter = None  # type: ignore[assignment,misc]
     HTTPException = None  # type: ignore[assignment,misc]
     HTMLResponse = None  # type: ignore[assignment,misc]
     StreamingResponse = None  # type: ignore[assignment,misc]
-    BaseModel = None  # type: ignore[assignment,misc]
 
 _logger = logging.getLogger(__name__)
 
 
-class _OrderIn(BaseModel):  # type: ignore[misc]  # noqa: PGH003
-    code: str
-    side: str = "buy"
-    order_type: str = "market"
-    price: float | None = None
-    qty: int = 100
-
-
-class _CredentialsIn(BaseModel):  # type: ignore[misc]  # noqa: PGH003
-    phone: str = ""
-    password: str = ""
-
-
-class _GroupIn(BaseModel):  # type: ignore[misc]  # noqa: PGH003
-    name: str = ""
-
-
-class _StockIn(BaseModel):  # type: ignore[misc]  # noqa: PGH003
-    code: str = ""
-
-
-class _FavIn(BaseModel):  # type: ignore[misc]  # noqa: PGH003
-    code: str = ""
-
-
-class _PlatformApplyIn(BaseModel):  # type: ignore[misc]  # noqa: PGH003
-    """申请/扩大配资合约(真实操作,需 confirm)。"""
-
-    contract_type: int = 1  # 1按天 2按周 3按月
-    principal: float = 1000.0  # 保证金
-    multiple: int = 10  # 倍数
-    confirm: bool = False
-
-
-class _PlatformOrderIn(BaseModel):  # type: ignore[misc]  # noqa: PGH003
-    """平台真实买卖委托(需 confirm)。entrust_type: 0限价 1市价。"""
-
-    contract_id: str = ""
-    stock_code: str = ""
-    stock_name: str = ""
-    entrust_type: int = 0
-    price: float | None = None
-    qty: int = 100
-    confirm: bool = False
-
-
-class _PlatformMoneyIn(BaseModel):  # type: ignore[misc]  # noqa: PGH003
-    """追加资金 / 提盈(需 confirm)。"""
-
-    contract_id: str = ""
-    money: float = 0.0
-    confirm: bool = False
-
-
-class _PlatformCancelIn(BaseModel):  # type: ignore[misc]  # noqa: PGH003
-    """撤单(需 confirm)。"""
-
-    order_id: str = ""
-    contract_id: str = ""
-    confirm: bool = False
-
-
-class _PlatformStockIn(BaseModel):  # type: ignore[misc]  # noqa: PGH003
-    """平台卖出面板查询(只读)。"""
-
-    contract_id: str = ""
-    stock_code: str = ""
-
-
-def _build_engine(
-    initial_cash: float = 1_000_000.0,
-    data_dir: str = "~/.octopus/data/paper_trading",
-) -> PaperTradingEngine:
-    engine = PaperTradingEngine(initial_cash=initial_cash, data_dir=data_dir)
-    engine.load()
-    return engine
-
-
-def _proxy_disabled_page(base_url: str) -> str:
-    """``proxy_origin`` 未开启时的说明页。
-
-    不静默给一个空白 iframe —— 直接说明为什么关着、怎么开、以及开启的代价。
-    """
-    from .proxy import upstream_origin
-
-    origin = upstream_origin(base_url) or "http://114.66.32.152:58868"
-    return f"""<!DOCTYPE html>
-<html lang="zh-CN"><head><meta charset="utf-8">
-<title>模拟炒股 · 平台原站未接入</title>
-<style>
-  body{{margin:0;background:#10131f;color:#e6e9f0;
-       font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
-       display:flex;align-items:center;justify-content:center;height:100vh;}}
-  .box{{max-width:560px;padding:28px 32px;background:#1a1d33;
-        border:1px solid #39415f;border-radius:8px;line-height:1.9;}}
-  h1{{font-size:16px;margin:0 0 12px;color:#f0b90b;}}
-  code{{background:#10131f;border:1px solid #39415f;border-radius:3px;
-        padding:1px 6px;font-size:12px;}}
-  p{{margin:10px 0;font-size:13px;color:#9aa4b8;}}
-  a{{color:#f0b90b;}}
-</style></head><body><div class="box">
-<h1>平台原站接入未开启</h1>
-<p>本页通过同源反向代理嵌入平台原站。该功能默认关闭,需在插件配置里设置
-   <code>proxy_origin: true</code> 后重启后端。</p>
-<p><b>开启前请了解代价</b>:同源代理会让原站脚本以本应用的 origin 权限运行,
-   可读取同源 <code>localStorage</code>(其中包含本应用的登录令牌);
-   且原站为明文 HTTP 传输。</p>
-<p>也可以直接在新窗口打开原站(不共享登录态):
-   <a href="{origin}/trade/#/transaction" target="_blank" rel="noreferrer noopener">
-   {origin}/trade ↗</a></p>
-</div></body></html>"""
+def _explicitly_enabled(config: dict[str, Any], key: str) -> bool:
+    """Accept only a real boolean ``true`` for security-sensitive switches."""
+    return config.get(key) is True
 
 
 class PaperTradingPlugin(ModulePlugin):
@@ -181,11 +87,24 @@ class PaperTradingPlugin(ModulePlugin):
         self._proxy_base_url = ""
         self._proxy_state_dir = "~/.octopus/data/paper_trading"
         self._proxy_credentials_file = "~/.octopus/data/paper_trading/credentials.json"
+        self._authenticated_host = False
+        self._push_lock = threading.RLock()
+        self._push_accepting = False
 
     # ── 生命周期 ─────────────────────────────────────────
 
     def on_load(self, ctx: Any) -> None:
+        with self._push_lock:
+            self._push_accepting = False
+            self.live = None
+        self._stop_push()
         cfg = dict(ctx.config or {})
+        self.auto_trade = False
+        self.proxy_origin = False
+        app = getattr(ctx, "fastapi_app", None)
+        self._authenticated_host = bool(
+            app is not None and getattr(getattr(app, "state", None), "octopus_require_auth", False)
+        )
         initial_cash = float(cfg.get("initial_cash", 1_000_000))
         data_dir = str(cfg.get("data_dir") or "~/.octopus/data/paper_trading")
         self.engine = _build_engine(initial_cash=initial_cash, data_dir=data_dir)
@@ -193,17 +112,74 @@ class PaperTradingPlugin(ModulePlugin):
         credentials_file = str(
             cfg.get("credentials_file") or "~/.octopus/data/paper_trading/credentials.json"
         )
+        self._proxy_base_url = str(cfg.get("base_url") or DEFAULT_BASE_URL)
+        secure_upstream = bool(secure_upstream_origin(self._proxy_base_url))
         # 可选平台实时行情(只读)。无凭证/失败自动降级,不影响本地模拟。
-        if bool(cfg.get("live_mode", True)):
+        live_requested = _explicitly_enabled(cfg, "live_mode")
+        if live_requested and secure_upstream and not self._authenticated_host:
             self.live = LiveDataSource.from_config(
                 cfg, state_dir=data_dir, credentials_file=credentials_file
             )
-        self.auto_trade = bool(cfg.get("auto_trade", False))
-        self.proxy_origin = bool(cfg.get("proxy_origin", False))
-        self._proxy_base_url = str(cfg.get("base_url") or DEFAULT_BASE_URL)
+        elif live_requested and not secure_upstream:
+            _logger.warning("paper_trading: 已拒绝启用平台行情与凭证（base_url 不是 HTTPS）")
+        elif live_requested:
+            _logger.warning("paper_trading: 已拒绝启用平台行情与凭证（主应用已开启认证）")
+        auto_trade_requested = _explicitly_enabled(cfg, "auto_trade")
+        self.auto_trade = (
+            auto_trade_requested
+            and self.live is not None
+            and secure_upstream
+            and not self._authenticated_host
+        )
+        if auto_trade_requested and not self.auto_trade:
+            _logger.warning("paper_trading: 已拒绝启用自动交易（安全平台连接未启用）")
+        proxy_requested = _explicitly_enabled(cfg, "proxy_origin")
+        unsafe_proxy_accepted = _explicitly_enabled(cfg, "allow_same_origin_third_party_scripts")
+        self.proxy_origin = (
+            proxy_requested
+            and unsafe_proxy_accepted
+            and secure_upstream
+            and not self._authenticated_host
+        )
+        if proxy_requested and not self.proxy_origin:
+            reasons = []
+            if not unsafe_proxy_accepted:
+                reasons.append("缺少 allow_same_origin_third_party_scripts=true")
+            if not secure_upstream:
+                reasons.append("base_url 不是 HTTPS")
+            _logger.warning(
+                "paper_trading: 已拒绝挂载同源原站代理（%s）",
+                "；".join(reasons) or "安全前置条件不满足",
+            )
+        if self._authenticated_host:
+            _logger.warning("paper_trading: 主应用已开启认证，已禁用共享账户、交易、代理和实时连接")
         self._proxy_state_dir = data_dir
         self._proxy_credentials_file = credentials_file
+        with self._push_lock:
+            self._push_accepting = self.live is not None
         super().on_load(ctx)
+
+    def _stop_push(self) -> None:
+        with self._push_lock:
+            push, self.push = self.push, None
+        if push is None:
+            return
+        try:
+            push.stop()
+        except Exception as exc:  # noqa: BLE001 - lifecycle cleanup must remain idempotent
+            _logger.warning("paper_trading: 停止实时推送失败: %s", exc)
+
+    def on_stop(self, ctx: Any) -> None:
+        with self._push_lock:
+            self._push_accepting = False
+            self.live = None
+        self._stop_push()
+
+    def on_unload(self, ctx: Any) -> None:
+        with self._push_lock:
+            self._push_accepting = False
+            self.live = None
+        self._stop_push()
 
     # ── Skill:agent 可查询模拟报价 ────────────────────────
 
@@ -384,21 +360,23 @@ class PaperTradingPlugin(ModulePlugin):
         首次调用时启动后台线程;凭证缺失/依赖缺失时返回 None(纯降级,不抛异常)。
         供页面 SSE、量化策略回调、/live/push/* 使用。
         """
-        live = self.live
-        if live is None or not live.configured:
-            return None
-        push = self.push
-        if push is None:
-            host = live.client.base_url.replace("http://", "").replace("https://", "").rstrip("/")
-            if host.endswith("/api"):
-                host = host[:-4]
-            try:
-                push = LivePushClient(live.client, host=host, auto_start=True)
-            except Exception as exc:  # noqa: BLE001
-                _logger.warning("paper_trading: 推送客户端创建失败: %s", exc)
+        with self._push_lock:
+            live = self.live
+            if not self._push_accepting or live is None or not live.configured:
                 return None
-            self.push = push
-        return push
+            push = self.push
+            if push is None:
+                try:
+                    push = LivePushClient(
+                        live.client,
+                        host=live.client.base_url,
+                        auto_start=True,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    _logger.warning("paper_trading: 推送客户端创建失败: %s", exc)
+                    return None
+                self.push = push
+            return push
 
     def _platform_read(self, fn, **kw):
         """只读平台接口:统一包装,失败/未登录优雅降级为 {ok:false}。"""
@@ -452,6 +430,29 @@ class PaperTradingPlugin(ModulePlugin):
 
         router = APIRouter(prefix="/api/plugins/paper-trading", tags=["paper_trading"])
 
+        # The plugin owns one process-wide engine/platform account.  Until
+        # those resources are principal-scoped, an auth-enabled host must not
+        # expose any stateful HTTP or WebSocket route.  The two exact static
+        # landing pages are allowed through the host auth middleware so iframe
+        # navigation works without putting a long-lived token in a URL.
+        if self._authenticated_host:
+
+            @router.get("/page", response_class=HTMLResponse)
+            @router.get("/watch", response_class=HTMLResponse)
+            def serve_authenticated_host_notice() -> HTMLResponse:
+                return HTMLResponse(
+                    content=_authenticated_host_page(),
+                    headers={
+                        "Content-Security-Policy": (
+                            "default-src 'none'; style-src 'unsafe-inline'; "
+                            "base-uri 'none'; form-action 'none'; frame-ancestors 'self'"
+                        )
+                    },
+                )
+
+            app.include_router(router)
+            return
+
         # 平台原站同源反代(默认关闭)。开启后 /page 里的 iframe 才有东西可指。
         # 段名必须是 origin 而非 assets —— 详见 proxy.py 的说明。
         proxy_mounted = False
@@ -468,7 +469,15 @@ class PaperTradingPlugin(ModulePlugin):
         @router.get("/page", response_class=HTMLResponse)
         def serve_page() -> HTMLResponse:
             if not proxy_mounted:
-                return HTMLResponse(content=_proxy_disabled_page(self._proxy_base_url))
+                return HTMLResponse(
+                    content=_proxy_disabled_page(self._proxy_base_url),
+                    headers={
+                        "Content-Security-Policy": (
+                            "default-src 'none'; style-src 'unsafe-inline'; "
+                            "base-uri 'none'; form-action 'none'; frame-ancestors 'self'"
+                        )
+                    },
+                )
             html = "模拟炒股页面缺失(page/index.html)"
             try:
                 if page_path.exists():
@@ -559,7 +568,12 @@ class PaperTradingPlugin(ModulePlugin):
             """实时推送连接状态(WS 是否在连、各事件订阅与最近推送时间)。"""
             push = self._push_client()
             if push is None:
-                return {"enabled": False, "running": False, "connected": False, "error": "推送未启用(缺凭证/依赖)"}
+                return {
+                    "enabled": False,
+                    "running": False,
+                    "connected": False,
+                    "error": "推送未启用(缺凭证/依赖)",
+                }
             return push.status()
 
         @router.get("/live/push/subscribe")
@@ -933,8 +947,8 @@ class PaperTradingPlugin(ModulePlugin):
                 for g in wl.list():
                     wl.remove_stock(g["id"], payload.code)
                 return {"ok": True, "code": payload.code, "in_watchlist": False}
-            g = wl.default_group()
-            return wl.add_stock(g.id, payload.code)
+            default_group = wl.default_group()
+            return wl.add_stock(default_group.id, payload.code)
 
         @router.get("/account")
         def account() -> dict[str, Any]:

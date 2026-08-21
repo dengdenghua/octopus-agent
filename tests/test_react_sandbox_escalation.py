@@ -29,7 +29,9 @@ from runtime.safety.auth import TrustEngine
 
 class TestSandboxViolationDetection:
     def test_detects_sandbox_violation_observation(self) -> None:
-        assert _looks_like_sandbox_violation("exec_failed: sandbox_violation: network denied") is True
+        assert (
+            _looks_like_sandbox_violation("exec_failed: sandbox_violation: network denied") is True
+        )
         assert _looks_like_sandbox_violation("(工具失败) ... sandbox_violation ...") is True
         assert _looks_like_sandbox_violation("command ran fine") is False
         assert _looks_like_sandbox_violation(None) is False
@@ -81,9 +83,7 @@ class TestSandboxOverride:
             normalized_goal="run it",
             user_context={},
         )
-        with session_scope(
-            Session(thread_id="t-esc", metadata={"sandbox_policy": dict(original)})
-        ):
+        with session_scope(Session(thread_id="t-esc", metadata={"sandbox_policy": dict(original)})):
             observation, _step = _execute_action_via_beak(
                 stack,
                 'exec_shell({"command": "echo hi"})',

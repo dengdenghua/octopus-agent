@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from runtime.memory.cowork.async_work import AsyncWorkStore
+from runtime.memory.cowork.group import MemberEvent
 from runtime.memory.cowork.group_store import GroupStore
+from runtime.memory.threads import ThreadStateStore
 from runtime.platform.ui.app import create_app
 from runtime.safety.auth import Identity, IdentityStore
 from runtime.sensing.gateway.cowork_group_router import create_cowork_group_router
@@ -161,17 +166,24 @@ def test_advanced_cowork_endpoints(tmp_path) -> None:
 def test_mutations_require_auth_when_enabled(tmp_path) -> None:
     store = IdentityStore()
     store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    thread_store = ThreadStateStore()
+    thread_store.ensure_thread(
+        "thread-auth",
+        metadata={"owner_actor_id": "alice", "tenant_id": "legacy:alice"},
+    )
     app = FastAPI()
     app.include_router(
         create_cowork_group_router(
             store=GroupStore(base_dir=tmp_path),
+            runtime=SimpleNamespace(thread_store=thread_store),
             identity_store=store,
             require_auth=True,
         )
     )
     client = TestClient(app)
+    headers = {"Authorization": "Bearer sk-alice"}
 
-    assert client.get("/api/cowork/thread-auth").status_code == 200
+    assert client.get("/api/cowork/thread-auth").status_code == 401
     assert (
         client.post(
             "/api/cowork/thread-auth/members",
@@ -183,11 +195,166 @@ def test_mutations_require_auth_when_enabled(tmp_path) -> None:
     ok = client.post(
         "/api/cowork/thread-auth/members",
         json={"target_id": "alice", "kind": "agent"},
-        headers={"Authorization": "Bearer sk-alice"},
+        headers=headers,
     )
     assert ok.status_code == 200
-    body = client.get("/api/cowork/thread-auth").json()
+    body = client.get("/api/cowork/thread-auth", headers=headers).json()
     assert body["events"][0]["actor"] == "alice"
+
+
+def test_cowork_and_collab_are_bound_to_thread_owner_and_tenant(tmp_path) -> None:
+    identities = IdentityStore()
+    identities.add(
+        Identity(actor_id="alice", metadata={"tenant_id": "tenant-a"}),
+        api_key_plaintext="sk-alice",
+    )
+    identities.add(
+        Identity(actor_id="bob", metadata={"tenant_id": "tenant-b"}),
+        api_key_plaintext="sk-bob",
+    )
+    thread_store = ThreadStateStore()
+    thread_store.ensure_thread(
+        "alice-private",
+        metadata={"owner_actor_id": "alice", "tenant_id": "tenant-a"},
+    )
+    group_store = GroupStore(base_dir=tmp_path)
+    group_store.append(
+        "alice-private",
+        MemberEvent(action="invite", actor="alice", target_id="seed-agent"),
+    )
+    group_store.blackboard("alice-private").write("private", "alice-only", writer="alice")
+    async_store = AsyncWorkStore(base_dir=tmp_path, group_store=group_store)
+    async_store.assign("alice-private", "seed-agent", "private task", actor="alice")
+
+    app = FastAPI()
+    app.include_router(
+        create_cowork_group_router(
+            store=group_store,
+            async_store=async_store,
+            runtime=SimpleNamespace(thread_store=thread_store),
+            identity_store=identities,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+    alice = {"Authorization": "Bearer sk-alice"}
+    bob = {"Authorization": "Bearer sk-bob"}
+
+    for path in (
+        "/api/cowork/alice-private",
+        "/api/collab/alice-private",
+        "/api/cowork/alice-private/tasks",
+    ):
+        assert client.get(path, headers=bob).status_code == 404
+        assert client.get(path, headers=alice).status_code == 200
+
+    attacks = (
+        (
+            "/api/cowork/alice-private/members",
+            {"target_id": "bob-agent", "kind": "agent"},
+        ),
+        ("/api/cowork/alice-private/mode", {"mode": "swarm"}),
+        ("/api/cowork/alice-private/blackboard", {"key": "hijack", "value": True}),
+        (
+            "/api/cowork/alice-private/tasks",
+            {"assignee": "bob-agent", "prompt": "steal context"},
+        ),
+    )
+    event_count = len(group_store.events("alice-private"))
+    task_count = len(async_store.list("alice-private"))
+    for path, body in attacks:
+        assert client.post(path, json=body, headers=bob).status_code == 404
+    assert len(group_store.events("alice-private")) == event_count
+    assert len(async_store.list("alice-private")) == task_count
+    assert "hijack" not in group_store.blackboard_snapshot("alice-private")
+
+    assert client.post(attacks[0][0], json=attacks[0][1], headers=alice).status_code == 200
+    assert client.post(attacks[1][0], json=attacks[1][1], headers=alice).status_code == 200
+    assert client.post(attacks[2][0], json=attacks[2][1], headers=alice).status_code == 200
+    assert client.post(attacks[3][0], json=attacks[3][1], headers=alice).status_code == 200
+
+    # Cowork cannot claim an arbitrary id and bypass the managed-thread path.
+    assert client.get("/api/cowork/not-managed", headers=alice).status_code == 404
+
+
+def test_collab_room_projection_preserves_team_room_membership(tmp_path) -> None:
+    from runtime.memory.cowork.session import link_room
+    from runtime.sensing.gateway.team_rooms_router import create_team_rooms_router
+
+    identities = IdentityStore()
+    identities.add(
+        Identity(actor_id="alice", metadata={"tenant_id": "tenant-a"}),
+        api_key_plaintext="sk-alice",
+    )
+    identities.add(
+        Identity(actor_id="bob", metadata={"tenant_id": "tenant-b"}),
+        api_key_plaintext="sk-bob",
+    )
+    thread_store = ThreadStateStore()
+    thread_store.ensure_thread(
+        "alice-room-thread",
+        metadata={"owner_actor_id": "alice", "tenant_id": "tenant-a"},
+    )
+    group_store = GroupStore(base_dir=tmp_path / "cowork")
+    rooms = create_team_rooms_router(
+        state_path=tmp_path / "team_rooms.json",
+        identity_store=identities,
+        require_auth=True,
+    )
+    app = FastAPI()
+    app.include_router(rooms)
+    app.include_router(
+        create_cowork_group_router(
+            store=group_store,
+            team_rooms_state_path=tmp_path / "team_rooms.json",
+            team_rooms_router=rooms,
+            runtime=SimpleNamespace(thread_store=thread_store),
+            identity_store=identities,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+    alice = {"Authorization": "Bearer sk-alice"}
+    bob = {"Authorization": "Bearer sk-bob"}
+
+    bob_room = client.post(
+        "/api/teams",
+        headers=bob,
+        json={"name": "Bob private", "members": [{"name": "worker"}]},
+    ).json()
+    link_room(group_store, "alice-room-thread", bob_room["id"], actor="seed")
+
+    # The thread owner may still use the room-independent group surface, but
+    # cannot project or relink a Team Room they do not belong to.
+    assert client.get("/api/cowork/alice-room-thread", headers=alice).status_code == 200
+    assert client.get("/api/collab/alice-room-thread", headers=alice).status_code == 403
+    assert (
+        client.get("/api/cowork/alice-room-thread/search?q=private", headers=alice).status_code
+        == 403
+    )
+    assert (
+        client.post(
+            "/api/collab/alice-room-thread/link-room",
+            headers=alice,
+            json={"room_id": bob_room["id"]},
+        ).status_code
+        == 403
+    )
+
+    alice_room = client.post(
+        "/api/teams",
+        headers=alice,
+        json={"name": "Alice room", "members": [{"name": "worker"}]},
+    ).json()
+    assert (
+        client.post(
+            "/api/collab/alice-room-thread/link-room",
+            headers=alice,
+            json={"room_id": alice_room["id"]},
+        ).status_code
+        == 200
+    )
+    assert client.get("/api/collab/alice-room-thread", headers=alice).status_code == 200
 
 
 def test_app_cowork_router_uses_shared_runtime_store(tmp_path, monkeypatch) -> None:

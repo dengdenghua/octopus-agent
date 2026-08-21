@@ -79,9 +79,7 @@ def _iso_to_us(value: str) -> int:
 def _us_to_iso(value: int) -> str:
     # Pydantic serialises UTC datetimes with a ``Z`` suffix; emit the
     # same spelling so packed rows decode to byte-identical JSON.
-    return (_EPOCH + timedelta(microseconds=int(value))).isoformat().replace(
-        "+00:00", "Z"
-    )
+    return (_EPOCH + timedelta(microseconds=int(value))).isoformat().replace("+00:00", "Z")
 
 
 def is_chunk_row(data: dict[str, Any]) -> bool:
@@ -108,7 +106,9 @@ def classify_chunk(event: Any) -> dict[str, Any] | None:
     if not isinstance(ts, str):
         return None
     extra = {key: data.get(key) for key in _EXTRA_KEYS[event_type]}
-    if not all(isinstance(value, (str, int, float, bool)) or value is None for value in extra.values()):
+    if not all(
+        isinstance(value, (str, int, float, bool)) or value is None for value in extra.values()
+    ):
         return None
     return {
         "event_type": event_type,
@@ -146,10 +146,7 @@ def pack_chunk_row(run: list[dict[str, Any]]) -> dict[str, Any]:
         "dt_us": [entry["ts_us"] - run[i - 1]["ts_us"] for i, entry in enumerate(run) if i],
         "common": first["common"],
         "extra": first["extra"],
-        "members": [
-            {"event_id": entry["event_id"], "delta": entry["delta"]}
-            for entry in run
-        ],
+        "members": [{"event_id": entry["event_id"], "delta": entry["delta"]} for entry in run],
     }
 
 

@@ -20,10 +20,19 @@ from threading import Lock
 from typing import Any
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
-
 from runtime.platform.process.paths import app_paths
 
+from .team_rooms_models import (
+    CreateTeamInviteRequest,
+    CreateTeamRoomRequest,
+    JoinInviteRequest,
+    TeamMemberWire,
+    TeamParticipantWire,
+    TeamRoomWire,
+    UpdateDelegationRequest,
+    UpdateSpeakerPolicyRequest,
+    UpdateTeamParticipantRequest,
+)
 from .team_rooms_ws import TeamRoomWsContext, team_room_ws
 from .team_speaker_policy import (
     _authorized_to_speak_for,
@@ -53,117 +62,6 @@ except ImportError:  # pragma: no cover
     WebSocket = None  # type: ignore[assignment,misc]
 
 from runtime.sensing._fastapi_guard import require_fastapi  # noqa: E402, I001 — after FASTAPI_AVAILABLE flag
-
-
-class TeamMemberWire(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    name: str
-    display_name: str | None = None
-    description: str = ""
-    icon: str | None = None
-    avatar_url: str | None = None
-    model: str | None = None
-    tool_groups: list[str] | None = None
-
-
-class TeamParticipantWire(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    id: str
-    display_name: str
-    role: str = "guest"
-    actor_id: str | None = None
-    joined_at: str
-    last_seen_at: str | None = None
-    status: str = "active"
-    # Governance: an admin-imposed per-member mute. Applies on top of any
-    # room ``speaker_policy`` — a muted member cannot broadcast messages
-    # regardless of the policy. Only the team owner can set it.
-    muted: bool = False
-    # Delegated speaking (the bound person's OWN opt-in — the owner cannot
-    # impose it, which would be impersonation):
-    #   speak_mode    — "manual" (the human speaks), "twin" (a bound agent
-    #                    speaks for them), or "hosted" (a human host does)
-    #   twin_agent_id — the digital-twin agent authorized when speak_mode=twin
-    #   host_id       — the human host authorized when speak_mode=hosted
-    speak_mode: str = "manual"
-    twin_agent_id: str | None = None
-    host_id: str | None = None
-
-
-class TeamRoomWire(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    id: str
-    name: str
-    members: list[TeamMemberWire] = Field(default_factory=list)
-    leaderId: str | None = None  # noqa: N815 — frontend wire field uses camelCase
-    owner_id: str | None = None
-    created_at: str
-    updated_at: str
-    participants: list[TeamParticipantWire] = Field(default_factory=list)
-    invite_token: str | None = None
-    invite_role: str = "member"
-    invite_created_at: str | None = None
-    # Governance: who may speak in the room. ``free`` = anyone not
-    # individually muted; ``admin_only`` = only the owner/admins (a
-    # whole-room mute); ``round_robin`` / ``roll_call`` / ``moderated`` are
-    # turn-based — only the participant holding the floor may speak.
-    speaker_policy: str = "free"
-    # Turn-engine floor state (only meaningful in turn-based policies):
-    #   current_speaker_id — participant id holding the floor (None = open)
-    #   moderator_id       — who controls the floor in roll_call/moderated
-    #                        (defaults to the owner on mode entry)
-    #   floor_requests     — raised-hands queue (participant ids) for moderated
-    current_speaker_id: str | None = None
-    moderator_id: str | None = None
-    floor_requests: list[str] = Field(default_factory=list)
-
-
-class CreateTeamRoomRequest(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    id: str | None = None
-    name: str
-    members: list[TeamMemberWire] = Field(default_factory=list)
-    leaderId: str | None = None  # noqa: N815 — frontend wire field uses camelCase
-
-
-class JoinInviteRequest(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    display_name: str | None = None
-    participant_id: str | None = None
-
-
-class CreateTeamInviteRequest(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    role: str = "member"
-
-
-class UpdateTeamParticipantRequest(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    display_name: str | None = None
-    role: str | None = None
-    status: str | None = None
-    muted: bool | None = None
-
-
-class UpdateSpeakerPolicyRequest(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    speaker_policy: str
-
-
-class UpdateDelegationRequest(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    speak_mode: str
-    twin_agent_id: str | None = None
-    host_id: str | None = None
 
 
 def create_team_rooms_router(
@@ -514,7 +412,12 @@ def create_team_rooms_router(
             for participant in team.participants:
                 if participant.status != "active":
                     continue
-                actor_id = getattr(participant, "actor_id", None) or participant.id
+                actor_id = getattr(participant, "actor_id", None)
+                if not actor_id and not require_auth:
+                    # Legacy/local rooms historically used participant ids as
+                    # their only identity. In shared mode that id is supplied
+                    # by the client, so it is never proof of membership.
+                    actor_id = participant.id
                 if actor_id and actor_id not in actors:
                     actors.append(actor_id)
             return actors
@@ -789,13 +692,15 @@ def create_team_rooms_router(
         team_id: str,
         body: CreateTeamInviteRequest | None = None,
     ) -> dict[str, Any]:
-        _require_member(request, team_id)
+        actor = _require_member(request, team_id)
         with lock:
             team = teams.get(team_id)
             if team is None:
                 raise HTTPException(404, f"team not found: {team_id}")
             token = team.invite_token or secrets.token_urlsafe(24)
             invite_role = _normalize_participant_role(body.role if body else None)
+            if require_auth and invite_role == "owner" and not _caller_is_team_admin(team, actor):
+                raise HTTPException(403, "only a team owner can issue an owner invite")
             team = team.model_copy(
                 update={
                     "invite_token": token,
@@ -835,18 +740,41 @@ def create_team_rooms_router(
             if team is None:
                 raise HTTPException(404, "invite not found")
             now = _now()
-            participant_id = body.participant_id or (
-                f"actor-{actor}" if actor else f"guest-{uuid4().hex[:10]}"
+            existing_actor = (
+                next((p for p in team.participants if p.actor_id == actor), None)
+                if require_auth and actor
+                else None
             )
+            if existing_actor is not None and existing_actor.status == "removed":
+                # Removal is an authorization revocation. A still-valid room
+                # invite must not silently reactivate the same principal.
+                raise HTTPException(403, "participant was removed from this team")
+            if require_auth:
+                # The authenticated principal, never a client-selected seat id,
+                # determines the participant record. This prevents one invitee
+                # from replacing/rebinding another participant by guessing its id.
+                participant_id = (
+                    existing_actor.id if existing_actor is not None else f"actor-{actor}"
+                )
+            else:
+                participant_id = body.participant_id or f"guest-{uuid4().hex[:10]}"
             display_name = body.display_name or actor or "Guest"
             participants = [p for p in team.participants if p.id != participant_id]
             participant = TeamParticipantWire(
                 id=participant_id,
                 display_name=display_name,
-                role=_normalize_participant_role(team.invite_role),
+                role=_normalize_participant_role(
+                    existing_actor.role if existing_actor is not None else team.invite_role
+                ),
                 actor_id=actor,
-                joined_at=now,
+                joined_at=(existing_actor.joined_at if existing_actor is not None else now),
                 last_seen_at=now,
+                muted=bool(existing_actor.muted) if existing_actor is not None else False,
+                speak_mode=existing_actor.speak_mode if existing_actor is not None else "manual",
+                twin_agent_id=(
+                    existing_actor.twin_agent_id if existing_actor is not None else None
+                ),
+                host_id=existing_actor.host_id if existing_actor is not None else None,
             )
             participants.append(participant)
             team = team.model_copy(
@@ -880,6 +808,7 @@ def create_team_rooms_router(
         broadcast_presence=_broadcast_presence,
         broadcast_floor=_broadcast_floor,
         active_participant=_active_participant,
+        require_auth=require_auth,
         twin_responder=twin_responder,
         message_store=room_message_store,
         message_projection=room_message_projection,
@@ -887,6 +816,7 @@ def create_team_rooms_router(
 
     @router.get("/api/teams/{team_id}/messages")
     def get_room_messages(
+        request: Request,
         team_id: str,
         limit: int = 200,
         after_seq: int = 0,
@@ -895,6 +825,7 @@ def create_team_rooms_router(
         """Durable room transcript — reconnect catch-up (``after_seq``) and
         search (``q``). Closes the gap where room chat was live-only / a 20-line
         in-memory ring."""
+        _require_member(request, team_id)
         messages: list[dict[str, Any]] = []
         if room_message_provider is not None:
             try:
@@ -977,6 +908,15 @@ def _save_state(path: Path, teams: dict[str, TeamRoomWire]) -> None:
 
 
 __all__ = [
+    "CreateTeamInviteRequest",
+    "CreateTeamRoomRequest",
+    "JoinInviteRequest",
+    "TeamMemberWire",
+    "TeamParticipantWire",
+    "TeamRoomWire",
+    "UpdateDelegationRequest",
+    "UpdateSpeakerPolicyRequest",
+    "UpdateTeamParticipantRequest",
     "create_team_rooms_router",
     # Re-exported from team_speaker_policy so existing
     # ``from team_rooms_router import _participant_can_speak`` call sites

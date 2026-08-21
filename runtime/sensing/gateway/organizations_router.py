@@ -22,12 +22,13 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from fastapi import APIRouter, HTTPException, Query, Request
+    from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment, misc]
+    Depends = None  # type: ignore[assignment, misc]
     HTTPException = None  # type: ignore[assignment, misc]
     Query = None  # type: ignore[assignment, misc]
     Request = object  # type: ignore[assignment, misc]
@@ -120,6 +121,19 @@ def create_organizations_router(
                 raise HTTPException(401, "auth required") from exc
             return None
 
+    def _operator_dep(request: Request) -> None:
+        from runtime.safety.auth.principal import require_roles
+
+        require_roles(
+            request,
+            identity_store,
+            require_auth,
+            ("admin", "operator"),
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     # ── GET /api/organizations/topologies ─────────────────
 
     @router.get("/api/organizations/topologies")
@@ -155,7 +169,10 @@ def create_organizations_router(
 
     # ── POST .../proposals/{idx}/promote ──────────────────
 
-    @router.post("/api/organizations/topology-proposals/{idx}/promote")
+    @router.post(
+        "/api/organizations/topology-proposals/{idx}/promote",
+        dependencies=[Depends(_operator_dep)],
+    )
     async def promote_proposal(
         idx: int,
         request: Request,
@@ -227,7 +244,10 @@ def create_organizations_router(
 
     # ── POST .../topologies/{fp}/retire ───────────────────
 
-    @router.post("/api/organizations/topologies/{fingerprint}/retire")
+    @router.post(
+        "/api/organizations/topologies/{fingerprint}/retire",
+        dependencies=[Depends(_operator_dep)],
+    )
     def retire_topology(fingerprint: str, request: Request) -> dict[str, Any]:
         # Mutation: force-auth.
         actor = _auth(request, force=True)

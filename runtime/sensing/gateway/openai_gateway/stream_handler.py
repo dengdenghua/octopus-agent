@@ -166,6 +166,7 @@ def _direct_llm_fallback_impl(
         if model and model not in ("octopus-agent", "")
         else getattr(stack.planner, "planner_model", None) or "molili"
     )
+    requested_model = effective_model
     router, effective_model = _resolve_custom_model_router(
         effective_model,
         router,
@@ -178,7 +179,7 @@ def _direct_llm_fallback_impl(
                 resolved_model = getattr(_sub, "default_model", None) or effective_model
         except (AttributeError, TypeError):  # noqa: BLE001 — subrouter doesn't expose default_model; fall back to effective_model
             pass
-    wants_thinking, max_tokens = _model_runtime_options(effective_model, resolved_model)
+    wants_thinking, max_tokens = _model_runtime_options(requested_model, resolved_model)
     if max_tokens_cap is not None and (max_tokens is None or max_tokens > max_tokens_cap):
         max_tokens = max_tokens_cap
     normalized_effort = normalize_reasoning_effort(
@@ -291,8 +292,9 @@ def _stream_direct_llm_fallback(
         pass
     # _resolve_custom_model_router needs a concrete name — never
     # the "auto" sentinel (which has no custom_models.json entry).
+    requested_model = cast(str, effective_model)
     router, effective_model = _resolve_custom_model_router(
-        cast(str, effective_model),
+        requested_model,
         router,
     )
     resolved_model = effective_model
@@ -303,7 +305,7 @@ def _stream_direct_llm_fallback(
                 resolved_model = getattr(_sub, "default_model", None) or effective_model
         except (AttributeError, TypeError):  # noqa: BLE001 — subrouter doesn't expose default_model; fall back to effective_model
             pass
-    wants_thinking, max_tokens = _model_runtime_options(effective_model, resolved_model)
+    wants_thinking, max_tokens = _model_runtime_options(requested_model, resolved_model)
     normalized_effort = normalize_reasoning_effort(
         reasoning_effort or (intent.user_context or {}).get("reasoning_effort"),
     )

@@ -513,6 +513,11 @@ def test_android_device_ws_requires_token_when_auth_enabled(
     """
     monkeypatch.chdir(tmp_path)
     store, keys = _store_with_actors()
+    store.add(
+        Identity(actor_id="operator", roles=("operator",)),
+        api_key_plaintext="sk-test-operator",
+    )
+    keys["operator"] = "sk-test-operator"
     app = create_app(cocoloop_require_auth=True, cocoloop_identity_store=store)
     client = TestClient(app)
 
@@ -523,10 +528,22 @@ def test_android_device_ws_requires_token_when_auth_enabled(
     ):
         ws.receive_text()
 
-    # Valid token → handshake accepted.
+    # A valid ordinary-user token is authenticated but lacks device-control
+    # authority, so the handshake closes with the distinct role code.
+    with (
+        pytest.raises(WebSocketDisconnect) as exc_info,
+        client.websocket_connect(
+            "/api/android/ws/dev1",
+            headers=_bearer(keys["alice"]),
+        ),
+    ):
+        pass
+    assert exc_info.value.code == 4403
+
+    # Valid operator token → handshake accepted.
     with client.websocket_connect(
         "/api/android/ws/dev1",
-        headers=_bearer(keys["alice"]),
+        headers=_bearer(keys["operator"]),
     ) as ws:
         ws.send_json({"model": "Pixel", "android_version": "14"})
 

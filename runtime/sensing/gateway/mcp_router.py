@@ -691,7 +691,6 @@ window.close();
     # OAuth App(client_id + client_secret)完成网页登录。凭据与 token 一起
     # 加密存到 ~/.octopus/mcp_oauth.json,接口不返回明文 secret。
 
-
     @router.get("/api/mcp/oauth/app/{provider}")
     def api_mcp_oauth_app_get(provider: str, request: Request) -> dict[str, Any]:
         from runtime.adapters.mcp_client import oauth, oauth_providers

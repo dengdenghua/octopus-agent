@@ -313,18 +313,18 @@ def create_wiki_router(
     router = APIRouter(tags=["wiki"])
 
     def _auth(request: Request) -> str | None:
-        if require_auth and identity_store is None:
-            raise HTTPException(401, "auth required")
-        from runtime.sensing.gateway.openai_gateway_router import _resolve_actor
+        from runtime.safety.auth.principal import require_roles
 
-        return _resolve_actor(
+        principal = require_roles(
             request,
             identity_store,
             require_auth,
+            ("admin", "operator"),
             jwt_secret=jwt_secret,
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
         )
+        return principal.actor_id if principal is not None else None
 
     # Lazy-import the generic generator so the router file stays the
     # only place that knows about the dual-mode dispatch.

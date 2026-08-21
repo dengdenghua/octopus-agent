@@ -573,8 +573,9 @@ def test_on_load_reads_auto_trade_from_config(tmp_path: Path) -> None:
         manifest=None,
         fastapi_app=app,
         config={
-            "live_mode": False,
+            "live_mode": True,
             "auto_trade": True,
+            "base_url": "https://up.test/api",
             "data_dir": str(tmp_path / "pt"),
         },
     )

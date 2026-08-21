@@ -116,7 +116,7 @@ def build_from_config(config: AgentConfig) -> BuiltStack:
         if client is not None:
             mcp_clients.append(client)
 
-# 3. Journal
+    # 3. Journal
     # Default-on secret redaction: the journal is the source-of-truth audit log
     # and records tool args/outputs, so run every payload through the redactor
     # before persistence to keep accidental secrets (.env values, keys) off disk.
@@ -440,7 +440,11 @@ def _register_mcp_server(
         register_mcp_tools_as_skills(registry, client, name_prefix=entry.name_prefix)
     except (OSError, TypeError, ValueError):
         # Release the client (subprocess / connection) when registration fails.
-        with contextlib.suppress((OSError, IOError)):
+        # ``IOError`` is an alias of ``OSError`` on supported Python
+        # versions; passing a tuple as one suppress argument is both redundant
+        # and incorrectly typed (contextlib expects exception classes as
+        # separate positional arguments).
+        with contextlib.suppress(OSError):
             client.close()
         return None
     return client

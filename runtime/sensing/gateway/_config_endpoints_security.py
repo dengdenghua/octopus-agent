@@ -75,6 +75,7 @@ def _register_security(router: Any, ctx: _ConfigCtx) -> None:
     @router.put(
         "/api/config/identity-lock",
         response_model=IdentityLockResponse,
+        dependencies=[Depends(require_admin)],
     )
     def api_identity_lock_put(body: dict[str, Any]) -> dict[str, Any]:
         """Admin · toggle identity lock at runtime.
@@ -120,6 +121,7 @@ def _register_security(router: Any, ctx: _ConfigCtx) -> None:
     @router.put(
         "/api/safety/constitution-profile",
         response_model=ConstitutionProfileResponse,
+        dependencies=[Depends(require_admin)],
     )
     def api_constitution_profile_put(body: dict[str, Any]) -> dict[str, Any]:
         from runtime.safety.validation import get_profile, set_profile
@@ -161,7 +163,7 @@ def _register_security(router: Any, ctx: _ConfigCtx) -> None:
     def api_llm_judge_get() -> dict[str, Any]:
         return _judge_state()
 
-    @router.put("/api/safety/llm-judge")
+    @router.put("/api/safety/llm-judge", dependencies=[Depends(require_admin)])
     def api_llm_judge_put(body: dict[str, Any]) -> dict[str, Any]:
         from runtime.safety.validation.judge import set_judge
 

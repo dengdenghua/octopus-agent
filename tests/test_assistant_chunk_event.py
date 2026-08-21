@@ -111,9 +111,7 @@ def test_derive_filters_by_iteration() -> None:
     journal.write_assistant_chunk(iteration=2, delta="B")
 
     streams = derive_assistant_stream(journal, iteration=2)
-    assert streams == [
-        AssistantChunkStream(iteration=2, text="B", chunk_count=1)
-    ]
+    assert streams == [AssistantChunkStream(iteration=2, text="B", chunk_count=1)]
 
 
 def test_derive_empty_journal_yields_nothing() -> None:
@@ -127,9 +125,7 @@ def test_derive_skips_non_chunk_events() -> None:
     journal.write_goal_change({"kind": "goal/change", "operation": "clear"})
 
     streams = derive_assistant_stream(journal)
-    assert streams == [
-        AssistantChunkStream(iteration=1, text="live", chunk_count=1)
-    ]
+    assert streams == [AssistantChunkStream(iteration=1, text="live", chunk_count=1)]
 
 
 def test_assert_logged_assistant_reconstructs_roundtrip() -> None:
@@ -163,22 +159,14 @@ def test_emit_reasoning_delta_writes_kind() -> None:
 def test_derive_separates_reasoning_lane_by_default() -> None:
     journal = InMemoryJournal()
     journal.write_assistant_chunk(iteration=1, delta="可见答案")
-    journal.write_assistant_chunk(
-        iteration=1, delta="私密推理", kind="reasoning-delta"
-    )
+    journal.write_assistant_chunk(iteration=1, delta="私密推理", kind="reasoning-delta")
 
     # Default kind="text-delta" keeps the visible reply lane only.
     streams = derive_assistant_stream(journal)
-    assert streams == [
-        AssistantChunkStream(iteration=1, text="可见答案", chunk_count=1)
-    ]
+    assert streams == [AssistantChunkStream(iteration=1, text="可见答案", chunk_count=1)]
 
     reasoning = derive_assistant_stream(journal, kind="reasoning-delta")
-    assert reasoning == [
-        AssistantChunkStream(iteration=1, text="私密推理", chunk_count=1)
-    ]
+    assert reasoning == [AssistantChunkStream(iteration=1, text="私密推理", chunk_count=1)]
 
     everything = derive_assistant_stream(journal, kind=None)
-    assert everything == [
-        AssistantChunkStream(iteration=1, text="可见答案私密推理", chunk_count=2)
-    ]
+    assert everything == [AssistantChunkStream(iteration=1, text="可见答案私密推理", chunk_count=2)]

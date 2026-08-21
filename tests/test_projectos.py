@@ -58,8 +58,15 @@ def test_ready_tasks_respects_dag() -> None:
 
 
 def test_roundtrips() -> None:
-    p = Project(id="P1", name="x", goal="g", milestone_ids=["M1"])
+    p = Project(
+        id="P1",
+        name="x",
+        goal="g",
+        milestone_ids=["M1"],
+        execution_thread_id="thread-primary",
+    )
     assert Project.from_dict(p.to_dict()).milestone_ids == ["M1"]
+    assert Project.from_dict(p.to_dict()).execution_thread_id == "thread-primary"
     m = Milestone(
         id="M1",
         name="n",
@@ -76,8 +83,12 @@ def test_roundtrips() -> None:
     assert Task.from_dict(tw.to_dict()).team_mode == "swarm"
     tc = Task(id="T3", milestone_id="M1", type="code", goal="g", team_mode="cluster")
     assert Task.from_dict(tc.to_dict()).team_mode == "cluster"
-    assert Task.from_dict({"id": "T4", "milestone_id": "M1", "type": "code",
-                           "goal": "g", "team_mode": "banana"}).team_mode == "single"
+    assert (
+        Task.from_dict(
+            {"id": "T4", "milestone_id": "M1", "type": "code", "goal": "g", "team_mode": "banana"}
+        ).team_mode
+        == "single"
+    )
 
 
 # ── store ────────────────────────────────────────────────────────────────────
@@ -97,6 +108,23 @@ def test_store_binds_thread_to_project(tmp_path) -> None:
     s.bind_thread("thread-1", "P1")
     assert s.project_for_thread("thread-1").id == "P1"
     assert s.project_for_thread("missing") is None
+
+
+def test_store_uses_most_recent_binding_as_project_execution_thread(tmp_path) -> None:
+    store = ProjectStore(base_dir=tmp_path)
+    store.save_project(Project(id="P1", name="one", goal="g"))
+    store.save_project(Project(id="P2", name="two", goal="g"))
+
+    store.bind_thread("thread-a", "P1")
+    store.bind_thread("thread-b", "P1")
+
+    assert store.thread_for_project("P1") == "thread-b"
+    assert store.get_project("P1").execution_thread_id == "thread-b"
+
+    store.bind_thread("thread-b", "P2")
+
+    assert store.thread_for_project("P1") == "thread-a"
+    assert store.thread_for_project("P2") == "thread-b"
 
 
 def test_store_delete_project_cascades_owned_rows_and_bindings(tmp_path) -> None:
@@ -329,6 +357,60 @@ def test_full_run_drives_project_to_done(tmp_path) -> None:
     # all tasks done
     for ms_id in ("MS1", "MS2", "MS3"):
         assert all(t.status == "done" for t in eng.store.tasks_for_milestone(ms_id))
+
+
+def test_task_execution_context_carries_project_identity_and_thread(tmp_path) -> None:
+    captured: list[dict] = []
+    workspace = tmp_path / "managed-workspace"
+
+    def one_milestone(goal: str) -> list[Milestone]:
+        return [Milestone(id="MS-context", name="build", goal=goal)]
+
+    def one_task(ms: Milestone) -> list[Task]:
+        return [
+            Task(
+                id="T-context",
+                milestone_id=ms.id,
+                type="code",
+                goal="ship it",
+            )
+        ]
+
+    def capture_context(task: Task, context: dict) -> str:
+        captured.append(context)
+        return f"done:{task.id}"
+
+    engine = ProjectEngine(
+        ProjectStore(base_dir=tmp_path),
+        generate_milestones=one_milestone,
+        decompose_tasks=one_task,
+        execute_task=capture_context,
+        owner_id="alice",
+        tenant_id="acme",
+        resolve_thread_context=lambda thread_id: {
+            "workspace_path": str(workspace),
+            "runtime_session_metadata": {
+                "workspace_path": str(workspace),
+                "resolved_thread_id": thread_id,
+            },
+        },
+    )
+    project = engine.plan("context", "preserve dispatch identity")
+    engine.store.bind_thread("thread-context", project.id)
+
+    result = engine.run(project.id, max_ticks=10)
+
+    assert result["final_status"] == "done"
+    assert len(captured) == 1
+    assert captured[0]["project_id"] == project.id
+    assert captured[0]["owner_id"] == "alice"
+    assert captured[0]["tenant_id"] == "acme"
+    assert captured[0]["thread_id"] == "thread-context"
+    assert captured[0]["workspace_path"] == str(workspace)
+    assert captured[0]["runtime_session_metadata"] == {
+        "workspace_path": str(workspace),
+        "resolved_thread_id": "thread-context",
+    }
 
 
 def test_project_process_timeline_persists_plan_run_and_state(tmp_path) -> None:

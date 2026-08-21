@@ -10,11 +10,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from fastapi import Depends
+
 if TYPE_CHECKING:
     from ._config_endpoints import _ConfigCtx
 
 
 def _register_system(router: Any, ctx: _ConfigCtx) -> None:
+    require_admin = ctx.require_admin
     # ─── Feature flags ─────────────────────────────────────
     #
     # Returns the live catalog so the frontend can gate
@@ -38,7 +41,7 @@ def _register_system(router: Any, ctx: _ConfigCtx) -> None:
 
         return {"flags": _ff.describe()}
 
-    @router.post("/api/feature-flags/reload")
+    @router.post("/api/feature-flags/reload", dependencies=[Depends(require_admin)])
     def api_feature_flags_reload() -> dict[str, Any]:
         """Force a re-resolve from env + override file.
 
@@ -128,7 +131,7 @@ def _register_system(router: Any, ctx: _ConfigCtx) -> None:
             ],
         }
 
-    @router.post("/api/ai-mode")
+    @router.post("/api/ai-mode", dependencies=[Depends(require_admin)])
     def api_ai_mode_set(payload: dict[str, Any]) -> dict[str, Any]:
         """Persist the user's AI mode choice."""
         from runtime.core.cerebrum.ai_mode import set_ai_mode

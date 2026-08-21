@@ -416,3 +416,60 @@ def wire_stack(
     ctx.cowork_runtime = cowork_runtime
     ctx.stack_mcp_servers = _stack_mcp_servers
     ctx.subagent_registry = subagent_registry
+
+
+def wire_persistent_subagent_runner(ctx: AppContext) -> None:
+    """Bind Claude-style persistent subagents to the live execution stack.
+
+    ``wire_stack`` runs before :func:`mount_agents`, so the application agent
+    registry is not available there yet.  Project OS and other persistent
+    dispatchers use ``runtime.execution.subagents.call_subagent`` and therefore
+    need a runner only *after* the agent registry has been mounted. Keeping this
+    as a second, explicit wiring phase avoids silently falling back to the
+    bridge's ``runner not configured`` error at execution time.
+
+    The runner is retained on this app's context and passed explicitly by
+    Project OS. The bridge's process-global slot remains a compatibility
+    fallback for older callers. The shutdown hook only clears that fallback
+    when it still owns the installed instance, so overlapping app factories
+    cannot tear down a newer app's runner.
+    """
+
+    stack = ctx.stack
+    app = ctx.app
+    ctx.subagent_runner = None
+    app.state.subagent_runner_ready = False
+    if stack is None:
+        return
+
+    try:
+        from runtime.execution.parallel_agents.stack_runner import (
+            make_stack_subagent_runner,
+        )
+        from runtime.execution.subagents import (
+            get_sub_agent_runner,
+            set_sub_agent_runner,
+        )
+
+        runner = make_stack_subagent_runner(
+            stack=stack,
+            agent_registry=ctx.agent_registry,
+        )
+        set_sub_agent_runner(runner)
+        ctx.subagent_runner = runner
+        app.state.subagent_runner = runner
+        app.state.subagent_runner_ready = True
+
+        def _clear_persistent_subagent_runner() -> None:
+            if get_sub_agent_runner() is runner:
+                set_sub_agent_runner(None)
+
+        app.router.add_event_handler("shutdown", _clear_persistent_subagent_runner)
+        logging.getLogger(__name__).info("persistent subagent runner wired to execution stack")
+    except (ImportError, AttributeError, TypeError, ValueError) as exc:
+        logging.getLogger(__name__).error(
+            "persistent subagent runner wiring failed (%s: %s) · "
+            "Project OS execution is unavailable",
+            type(exc).__name__,
+            exc,
+        )

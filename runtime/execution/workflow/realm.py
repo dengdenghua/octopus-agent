@@ -132,8 +132,7 @@ def validate_script(body: str, *, name: str = "workflow") -> None:
     visitor.visit(tree)
     if visitor.violations:
         raise WorkflowError(
-            "workflow script violates the supported subset: "
-            + "; ".join(visitor.violations),
+            "workflow script violates the supported subset: " + "; ".join(visitor.violations),
             "SCRIPT_PARSE",
         )
 
@@ -167,9 +166,7 @@ def wrap_body(body: str) -> str:
 
     Execution reports line numbers shifted by +1 (the wrapper line).
     """
-    indented = "\n".join(
-        f"    {line}" if line.strip() else line for line in body.splitlines()
-    )
+    indented = "\n".join(f"    {line}" if line.strip() else line for line in body.splitlines())
     return f"async def __workflow_main():\n{indented}"
 
 

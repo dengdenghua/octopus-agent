@@ -36,6 +36,7 @@ class AppContext:
     cowork_runtime: Any = None
     stack_mcp_servers: Any = None
     subagent_registry: Any = None
+    subagent_runner: Any = None
     parallel_agent_orchestrator: Any = None
     project_store: Any = None
     project_model_router: Any = None

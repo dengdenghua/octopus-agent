@@ -26,8 +26,7 @@ def test_generic_clarification_is_not_public_progress() -> None:
     from runtime.core.cerebrum.react_public_updates import _safe_public_update
 
     assert (
-        _safe_public_update("Update: 请说明您需要我处理的具体内容，我将据此进行核对或调整。")
-        == ""
+        _safe_public_update("Update: 请说明您需要我处理的具体内容，我将据此进行核对或调整。") == ""
     )
     assert _safe_public_update("请提供更多信息。") == ""
     assert _safe_public_update("请详细描述您的需求。") == ""

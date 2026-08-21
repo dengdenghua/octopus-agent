@@ -22,6 +22,18 @@ except ImportError:  # pragma: no cover
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
+from .thread_workspace import (
+    MANAGED_WORKSPACE_DELETION_KEY,
+    MANAGED_WORKSPACE_DELETION_MARKER,
+    _create_workspace_directory,
+    _remove_workspace_directory_if_unchanged,
+    discard_staged_managed_workspace,
+    managed_workspace_metadata,
+    stage_managed_workspace_deletion,
+    strip_client_workspace_metadata,
+    verified_managed_workspace,
+)
+
 _logger = logging.getLogger(__name__)
 
 
@@ -106,6 +118,7 @@ def create_thread_state_router(
     jwt_secret: str | None = None,
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
+    workspace_root: Path | str | None = None,
 ) -> Any:
     require_fastapi(__name__)
 
@@ -133,6 +146,117 @@ def create_thread_state_router(
     def _require_store() -> None:
         if store is None:
             raise HTTPException(503, "thread state unavailable")
+
+    def _assign_managed_workspace(
+        thread: dict[str, Any],
+        *,
+        actor_id: str,
+        tenant_id: str,
+    ) -> dict[str, Any]:
+        """Allocate and persist the authenticated thread's server-owned root."""
+        if workspace_root is None:
+            raise HTTPException(503, "managed thread workspace unavailable")
+        thread_id = thread.get("thread_id")
+        if not isinstance(thread_id, str) or not thread_id:
+            raise HTTPException(503, "thread store returned an invalid thread id")
+        try:
+            allocation = managed_workspace_metadata(
+                workspace_root,
+                tenant_id=tenant_id,
+                actor_id=actor_id,
+                thread_id=thread_id,
+            )
+            workspace = Path(allocation["workspace_path"])
+            directory_identity = _create_workspace_directory(workspace)
+        except FileExistsError:
+            # A prior/concurrent request is successful only when the store has
+            # the exact server-derived allocation for this principal.
+            current = store.get(thread_id) if hasattr(store, "get") else None
+            raw_metadata = current.get("metadata") if isinstance(current, dict) else None
+            current_metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+            verified = verified_managed_workspace(
+                workspace_root,
+                thread_id=thread_id,
+                metadata=current_metadata,
+            )
+            if (
+                isinstance(current, dict)
+                and verified is not None
+                and current_metadata.get("owner_actor_id") == actor_id
+                and current_metadata.get("tenant_id") == tenant_id
+            ):
+                return current
+            raise HTTPException(409, "managed thread workspace already exists") from None
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            _logger.error("managed workspace allocation failed for %s: %s", thread_id, exc)
+            raise HTTPException(503, "managed thread workspace unavailable") from exc
+
+        def _recover_committed() -> dict[str, Any] | None:
+            try:
+                current = store.get(thread_id) if hasattr(store, "get") else None
+                raw_metadata = current.get("metadata") if isinstance(current, dict) else None
+                current_metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+                verified = verified_managed_workspace(
+                    workspace_root,
+                    thread_id=thread_id,
+                    metadata=current_metadata,
+                )
+            except (OSError, RuntimeError, TypeError, ValueError):
+                return None
+            if (
+                isinstance(current, dict)
+                and verified is not None
+                and current_metadata.get("owner_actor_id") == actor_id
+                and current_metadata.get("tenant_id") == tenant_id
+            ):
+                return current
+            return None
+
+        def _rollback_uncommitted() -> None:
+            # ``thread`` was created/forked by this request. Compare-and-delete
+            # under the store lock; if anything changed, assume another request
+            # took it over and leave both state and directory untouched.
+            delete_if_unchanged = getattr(store, "delete_if_unchanged", None)
+            if not callable(delete_if_unchanged):
+                return
+            try:
+                deleted = bool(delete_if_unchanged(thread_id, thread))
+            except (OSError, RuntimeError, TypeError, ValueError):
+                return
+            if deleted:
+                _remove_workspace_directory_if_unchanged(workspace, directory_identity)
+
+        try:
+            if not hasattr(store, "update_state"):
+                raise RuntimeError("thread store cannot persist managed workspace metadata")
+            store.update_state(thread_id, metadata=allocation)
+            updated = store.get(thread_id) if hasattr(store, "get") else None
+        except Exception as exc:  # noqa: BLE001 - compensate every ordinary adapter failure
+            recovered = _recover_committed()
+            if recovered is not None:
+                return recovered
+            _rollback_uncommitted()
+            _logger.error("managed workspace allocation failed for %s: %s", thread_id, exc)
+            raise HTTPException(503, "managed thread workspace unavailable") from exc
+        raw_updated_metadata = updated.get("metadata") if isinstance(updated, dict) else None
+        updated_metadata = raw_updated_metadata if isinstance(raw_updated_metadata, dict) else {}
+        verified = verified_managed_workspace(
+            workspace_root,
+            thread_id=thread_id,
+            metadata=updated_metadata,
+        )
+        if (
+            not isinstance(updated, dict)
+            or verified is None
+            or updated_metadata.get("owner_actor_id") != actor_id
+            or updated_metadata.get("tenant_id") != tenant_id
+        ):
+            recovered = _recover_committed()
+            if recovered is not None:
+                return recovered
+            _rollback_uncommitted()
+            raise HTTPException(503, "managed thread workspace persistence failed")
+        return updated
 
     def _title_service() -> Any:
         if store is None:
@@ -200,9 +324,25 @@ def create_thread_state_router(
             # server-derived and cannot be assigned to another actor.
             metadata["owner_actor_id"] = actor_id
             metadata["tenant_id"] = tenant_id or ""
+        if require_auth:
+            # A shared-mode client may describe presentation state, but it can
+            # never choose a host filesystem root or forge the server marker.
+            metadata = strip_client_workspace_metadata(metadata)
         raw_values = payload.get("values")
         values = raw_values if isinstance(raw_values, dict) else {}
-        return store.create(metadata=metadata, values=values)
+        created = store.create(metadata=metadata, values=values)
+        if require_auth:
+            # ``_auth`` is fail-closed above, so these values are guaranteed in
+            # authenticated mode. Keep the guard explicit for type safety and
+            # for custom identity-store adapters.
+            if not actor_id:
+                raise HTTPException(401, "authentication required")
+            return _assign_managed_workspace(
+                created,
+                actor_id=actor_id,
+                tenant_id=tenant_id or f"legacy:{actor_id}",
+            )
+        return created
 
     @router.get("/api/threads/search")
     def search_threads_get(
@@ -356,9 +496,7 @@ def create_thread_state_router(
         if not isinstance(message_index, int) or message_index < 0:
             raise HTTPException(400, "message_index must be non-negative integer")
         if feedback_type not in ("thumbs_up", "thumbs_down"):
-            raise HTTPException(
-                400, "feedback_type must be 'thumbs_up' or 'thumbs_down'"
-            )
+            raise HTTPException(400, "feedback_type must be 'thumbs_up' or 'thumbs_down'")
         if not isinstance(tags, list):
             raise HTTPException(400, "tags must be a list")
         try:
@@ -474,6 +612,127 @@ def create_thread_state_router(
         existing = store.get(thread_id)
         if existing is not None and not _can_access(existing, actor_id, tenant_id):
             raise HTTPException(404, f"thread not found: {thread_id}")
+
+        if require_auth:
+            # Authenticated deletion is a retryable filesystem transaction.
+            # Log-only rows are insufficient authority: the persisted thread
+            # owns the actor/tenant allocation used for every path decision.
+            if not isinstance(existing, dict) or not actor_id or not tenant_id:
+                raise HTTPException(404, f"thread not found: {thread_id}")
+
+            def _verified_metadata(thread: Any) -> dict[str, Any]:
+                raw = thread.get("metadata") if isinstance(thread, dict) else None
+                metadata = dict(raw) if isinstance(raw, dict) else {}
+                if (
+                    metadata.get("owner_actor_id") != actor_id
+                    or metadata.get("tenant_id") != tenant_id
+                ):
+                    raise HTTPException(404, f"thread not found: {thread_id}")
+                if (
+                    verified_managed_workspace(
+                        workspace_root,
+                        thread_id=thread_id,
+                        metadata=metadata,
+                        allow_deleting=True,
+                    )
+                    is None
+                ):
+                    raise HTTPException(409, "managed thread workspace verification failed")
+                deletion_marker = metadata.get(MANAGED_WORKSPACE_DELETION_KEY)
+                if deletion_marker not in (None, MANAGED_WORKSPACE_DELETION_MARKER):
+                    raise HTTPException(409, "managed thread workspace deletion state invalid")
+                return metadata
+
+            metadata = _verified_metadata(existing)
+            if metadata.get(MANAGED_WORKSPACE_DELETION_KEY) is None:
+                update_if_unchanged = getattr(store, "update_state_if_unchanged", None)
+                if not callable(update_if_unchanged):
+                    raise HTTPException(503, "managed thread workspace deletion unavailable")
+                try:
+                    marked = update_if_unchanged(
+                        thread_id,
+                        existing,
+                        metadata={
+                            MANAGED_WORKSPACE_DELETION_KEY: MANAGED_WORKSPACE_DELETION_MARKER,
+                        },
+                        status="deleting",
+                    )
+                except Exception as exc:  # noqa: BLE001 - adapter errors must stay retryable
+                    marked = None
+                    _logger.error(
+                        "managed workspace deletion marker failed for %s: %s",
+                        thread_id,
+                        exc,
+                    )
+                current = store.get(thread_id)
+                try:
+                    current_metadata = _verified_metadata(current)
+                except HTTPException:
+                    raise HTTPException(
+                        503,
+                        "managed thread workspace deletion state unavailable",
+                    ) from None
+                if (
+                    marked is None
+                    and current_metadata.get(MANAGED_WORKSPACE_DELETION_KEY)
+                    != MANAGED_WORKSPACE_DELETION_MARKER
+                ):
+                    raise HTTPException(503, "managed thread workspace deletion conflicted")
+                metadata = current_metadata
+            if metadata.get(MANAGED_WORKSPACE_DELETION_KEY) != MANAGED_WORKSPACE_DELETION_MARKER:
+                raise HTTPException(503, "managed thread workspace deletion state unavailable")
+
+            try:
+                staged = stage_managed_workspace_deletion(
+                    workspace_root,
+                    thread_id=thread_id,
+                    metadata=metadata,
+                )
+                discard_staged_managed_workspace(staged)
+            except PermissionError as exc:
+                raise HTTPException(409, "managed thread workspace verification failed") from exc
+            except (OSError, RuntimeError, TypeError, ValueError) as exc:
+                _logger.error("managed workspace cleanup failed for %s: %s", thread_id, exc)
+                raise HTTPException(503, "managed thread workspace cleanup failed") from exc
+
+            # Archive before deleting state.  If archival or durable deletion
+            # fails, the persisted deletion marker lets the same request retry.
+            if logs_root is not None and not _is_archived(thread_id):
+                from runtime.memory.threads.event_log import archive_thread
+
+                try:
+                    archive_thread(logs_root, thread_id)
+                except (OSError, RuntimeError, ValueError) as exc:
+                    _logger.error("thread log archival failed for %s: %s", thread_id, exc)
+                    raise HTTPException(503, "thread log archival failed") from exc
+
+            current = store.get(thread_id)
+            current_metadata = _verified_metadata(current)
+            try:
+                # A turn that started before the deletion marker was persisted
+                # may have recreated the active path.  Reap that final race
+                # before the durable state tombstone is committed.
+                staged = stage_managed_workspace_deletion(
+                    workspace_root,
+                    thread_id=thread_id,
+                    metadata=current_metadata,
+                )
+                discard_staged_managed_workspace(staged)
+            except (OSError, PermissionError, RuntimeError, TypeError, ValueError) as exc:
+                _logger.error("final managed workspace cleanup failed for %s: %s", thread_id, exc)
+                raise HTTPException(503, "managed thread workspace cleanup failed") from exc
+            delete_if_unchanged = getattr(store, "delete_if_unchanged", None)
+            if not callable(delete_if_unchanged):
+                raise HTTPException(503, "thread state deletion unavailable")
+            try:
+                deleted_state = bool(delete_if_unchanged(thread_id, current))
+            except Exception as exc:  # noqa: BLE001 - durable adapter failure is retryable
+                _logger.error("thread state deletion failed for %s: %s", thread_id, exc)
+                raise HTTPException(503, "thread state deletion failed") from exc
+            if not deleted_state:
+                raise HTTPException(503, "thread state deletion conflicted")
+            return
+
         deleted_state = store.delete(thread_id)
         archived_log = False
         if logs_root is not None:
@@ -548,6 +807,8 @@ def create_thread_state_router(
         try:
             metadata = body.get("metadata") if isinstance(body.get("metadata"), dict) else None
             metadata = dict(metadata) if metadata is not None else None
+            if require_auth and metadata is not None:
+                metadata = strip_client_workspace_metadata(metadata)
             if actor_id is not None:
                 metadata = metadata or {}
                 metadata["owner_actor_id"] = actor_id
@@ -612,6 +873,14 @@ def create_thread_state_router(
             raise HTTPException(404, f"thread not found: {thread_id}") from exc
         except ForkUnavailableError as exc:
             raise HTTPException(409, "fork-unavailable") from exc
+        if require_auth:
+            if not actor_id:
+                raise HTTPException(401, "authentication required")
+            child = _assign_managed_workspace(
+                child,
+                actor_id=actor_id,
+                tenant_id=tenant_id or f"legacy:{actor_id}",
+            )
         _seed_child_realtime_log(logs_root, thread_id, child["thread_id"], at_index)
         values = child.get("values") if isinstance(child.get("values"), dict) else {}
         seeded = values.get("messages") or []

@@ -348,6 +348,11 @@ class LocalAuthConfig(BaseModel):
     allow_any_username: bool = False
     allowed_usernames: list[str] = Field(default_factory=list)
     users: dict[str, str] = Field(default_factory=dict)
+    login_max_failures: int = Field(default=5, ge=1, le=100)
+    login_ip_max_failures: int = Field(default=20, ge=1, le=1_000)
+    login_failure_window_seconds: float = Field(default=300.0, gt=0, le=86_400)
+    login_lockout_seconds: float = Field(default=60.0, gt=0, le=86_400)
+    login_rate_limit_max_entries: int = Field(default=10_000, ge=1, le=1_000_000)
     jwt_secret: str | None = Field(default=None, min_length=32)
     jwt_expire_seconds: int = Field(default=604_800, gt=0)
     jwt_issuer: str = "octopus-agent"

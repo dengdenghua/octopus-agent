@@ -52,6 +52,7 @@ if FASTAPI_AVAILABLE:
         # matters · index 0 is the picker default, index -1 is the
         # strongest tier for Auto mode's performance verdict.
         models: list[str] = Field(default_factory=list)
+        selection_ids: list[str] = Field(default_factory=list)
         display_name: str
         has_api_key: bool
         max_tokens: int | None = None

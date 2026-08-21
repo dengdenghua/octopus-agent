@@ -64,7 +64,8 @@ def _compose_swarm_output(result: dict[str, Any], prompt: str) -> str:
     synthesis = result.get("synthesis") if isinstance(result.get("synthesis"), dict) else {}
     primary = str(synthesis.get("primary_reply") or "").strip()
     support = [
-        r for r in (result.get("replies") or [])
+        r
+        for r in (result.get("replies") or [])
         if isinstance(r, dict) and r.get("ok") and str(r.get("reply") or "").strip()
     ]
     if not primary and not support:
@@ -94,6 +95,7 @@ def team_execute_for_group(
     roster: list[tuple[str, str]],
     *,
     agent_caller: Callable[[str, str, int], dict[str, Any]] | None = None,
+    subagent_runner: Callable[..., str] | None = None,
     debate_rounds: int = 2,
 ) -> Callable[[Task, dict[str, Any]], Any]:
     """ProjectEngine.run_task_team hook: execute a project task node as a team.
@@ -109,19 +111,65 @@ def team_execute_for_group(
     members = [{"name": mid, "display_name": mid} for mid, _ in roster]
     ids = [mid for mid, _ in roster]
 
-    def _call_agent(agent_id: str, prompt: str, timeout_s: int = 300) -> dict[str, Any]:
+    def _call_agent(
+        agent_id: str,
+        prompt: str,
+        timeout_s: int = 300,
+        *,
+        execution_context: dict[str, Any] | None = None,
+        role_context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if agent_caller is not None:
             return agent_caller(agent_id, prompt, timeout_s)
         from runtime.execution.subagents import call_subagent
 
+        project_context = dict(execution_context or {})
+        thread_id = str(project_context.get("thread_id") or "")
+        actor = str(project_context.get("owner_id") or project_context.get("actor") or "")
+        tenant_id = str(project_context.get("tenant_id") or "")
+        project_id = str(project_context.get("project_id") or "")
+        task_id = str(project_context.get("task_id") or "")
+        workspace_path = project_context.get("workspace_path")
+        inherited_metadata = project_context.get("runtime_session_metadata")
+        runtime_session_metadata = (
+            dict(inherited_metadata) if isinstance(inherited_metadata, dict) else {}
+        )
+        runtime_session_metadata.update(
+            {
+                "source": "projectos_team_task",
+                "project_id": project_id,
+                "task_id": task_id,
+                "tenant_id": tenant_id,
+            }
+        )
+        if isinstance(workspace_path, str) and workspace_path:
+            runtime_session_metadata.setdefault("workspace_path", workspace_path)
+        dispatch_context: dict[str, Any] = dict(role_context or {})
+        dispatch_context.update(
+            {
+                "source": "projectos_team_task",
+                "task_id": task_id,
+                "projectos": project_context,
+                "runtime_session_metadata": runtime_session_metadata,
+            }
+        )
+        if thread_id:
+            dispatch_context["thread_id"] = thread_id
+        if actor:
+            dispatch_context["actor"] = actor
+        if tenant_id:
+            dispatch_context["tenant_id"] = tenant_id
+        if isinstance(workspace_path, str) and workspace_path:
+            dispatch_context["workspace_path"] = workspace_path
+        call_kwargs: dict[str, Any] = {
+            "context": dispatch_context,
+            "timeout_s": timeout_s,
+            "timeout_seconds": float(timeout_s),
+        }
+        if subagent_runner is not None:
+            call_kwargs["runner"] = subagent_runner
         try:
-            result = call_subagent(
-                agent_id,
-                prompt,
-                context={"source": "projectos_team_task"},
-                timeout_s=timeout_s,
-                timeout_seconds=float(timeout_s),
-            )
+            result = call_subagent(agent_id, prompt, **call_kwargs)
             return {
                 "success": bool(result.get("success")),
                 "output": str(result.get("output") or result.get("parsed") or ""),
@@ -139,18 +187,27 @@ def team_execute_for_group(
         milestone_goal = context.get("milestone_goal")
         if milestone_goal:
             prompt = f"Milestone: {milestone_goal}\nTask: {task.goal}"
+        execution_context = {**context, "task_id": task.id}
         if task.team_mode == "swarm":
-            return _run_swarm(prompt)
-        return _run_cluster(task, prompt)
+            return _run_swarm(prompt, execution_context)
+        return _run_cluster(task, prompt, execution_context)
 
-    def _run_swarm(prompt: str) -> str:
+    def _run_swarm(prompt: str, execution_context: dict[str, Any]) -> str:
         from runtime.execution.agents.group_fanout import run_group_fanout
+
+        def _scoped_call(agent_id: str, prompt: str, timeout_s: int = 300):
+            return _call_agent(
+                agent_id,
+                prompt,
+                timeout_s,
+                execution_context=execution_context,
+            )
 
         n = max(1, len(members))
         result = run_group_fanout(
             prompt,
             members,
-            agent_caller=_call_agent,
+            agent_caller=_scoped_call,
             max_members=n,
             max_concurrency=min(32, n),
             scale_mode="safe",
@@ -158,7 +215,11 @@ def team_execute_for_group(
         )
         return _compose_swarm_output(result, prompt)
 
-    def _run_cluster(task: Task, prompt: str) -> str:
+    def _run_cluster(
+        task: Task,
+        prompt: str,
+        execution_context: dict[str, Any],
+    ) -> str:
         if not ids:
             raise RuntimeError("project cluster task needs at least one roster member")
         from runtime.safety.organization import (
@@ -199,7 +260,13 @@ def team_execute_for_group(
             actual = agent_id
             if role == "researcher" and isinstance(idx, int) and 1 <= idx <= len(ids):
                 actual = ids[idx - 1]
-            return _call_agent(actual, prompt, timeout_s=timeout_seconds or 300)
+            return _call_agent(
+                actual,
+                prompt,
+                timeout_s=timeout_seconds or 300,
+                execution_context=execution_context,
+                role_context=context,
+            )
 
         runner = TeamRunner(role_caller=_role_caller, timeout_seconds=900)
         return _compose_cluster_output(runner.run(topology, prompt), prompt)
@@ -216,6 +283,7 @@ def engine_for_group(
     competence: CompetenceStore | None = None,
     owner_id: str = "",
     tenant_id: str = "",
+    subagent_runner: Callable[..., str] | None = None,
 ) -> ProjectEngine:
     """A ProjectEngine whose task→agent routing uses the cowork thread's roster.
 
@@ -230,7 +298,10 @@ def engine_for_group(
     # 项目模式 × 集群/蜂群：有可执行成员时注入任务级团队执行器，让声明了
     # team_mode 的任务节点跑成蜂群/集群，而不是一律单 agent。
     if roster:
-        kwargs["run_task_team"] = team_execute_for_group(roster)
+        kwargs["run_task_team"] = team_execute_for_group(
+            roster,
+            subagent_runner=subagent_runner,
+        )
     return ProjectEngine(
         project_store,
         **kwargs,
@@ -297,11 +368,7 @@ def full_project_state(project_store: ProjectStore, project_id: str) -> dict[str
     from runtime.projectos.pm import build_pm_report, build_retro
 
     pm = build_pm_report(project_store, project_id)
-    retro = (
-        build_retro(project_store, project_id)
-        if project.status in ("done", "failed")
-        else None
-    )
+    retro = build_retro(project_store, project_id) if project.status in ("done", "failed") else None
     return {
         "project": project.to_dict(),
         "milestones": [milestone.to_dict() for milestone in milestones],
@@ -531,6 +598,7 @@ def run_project_from_group(
     reuse_active: bool = False,
     owner_id: str = "",
     tenant_id: str = "",
+    subagent_runner: Callable[..., str] | None = None,
 ) -> dict[str, Any]:
     """Create a Project OS project from a cowork group and optionally run it.
 
@@ -556,6 +624,7 @@ def run_project_from_group(
         competence=competence,
         owner_id=owner_id,
         tenant_id=tenant_id,
+        subagent_runner=subagent_runner,
     )
     project = project_store.project_for_thread(thread_id) if reuse_active else None
     reused = bool(project is not None and project.status not in {"done", "failed"})

@@ -4,11 +4,14 @@ import contextlib
 import json
 import os
 import shutil
-import urllib.request
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from runtime.platform.plugins._secure_fetch import fetch_public_https_bytes
+
+_MAX_REMOTE_REGISTRY_BYTES = 8 * 1024 * 1024
 
 
 class SkillMeta(BaseModel):
@@ -251,9 +254,12 @@ class SkillMarket:
     def _remote_registry(self) -> list[dict[str, Any]]:
         """拉取云端 skill-registry.json;失败返回 []。"""
         try:
-            req = urllib.request.Request(self._remote_url, headers={"User-Agent": "octopus-agent/1.0"})
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
+            body = fetch_public_https_bytes(
+                self._remote_url,
+                timeout=15,
+                max_bytes=_MAX_REMOTE_REGISTRY_BYTES,
+            )
+            data = json.loads(body.decode("utf-8"))
             skills = data.get("skills") if isinstance(data, dict) else data
             if isinstance(skills, list):
                 return skills

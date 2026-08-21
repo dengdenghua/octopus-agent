@@ -209,9 +209,7 @@ class FeedbackStore:
 
         return feedbacks
 
-    def get_message_feedback(
-        self, thread_id: str, message_index: int
-    ) -> list[MessageFeedback]:
+    def get_message_feedback(self, thread_id: str, message_index: int) -> list[MessageFeedback]:
         """Get all feedback for a specific message.
 
         Args:

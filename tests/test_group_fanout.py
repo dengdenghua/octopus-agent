@@ -364,7 +364,6 @@ def test_debate_reply_to_extraction() -> None:
 def test_fanout_emits_failure_rows() -> None:
     """② 失败可视化: 蜂群成员失败应 emit 一条 '未能回应 · 原因' 行."""
 
-
     emitted: list[dict] = []
 
     async def fake_emit(body, *, display_name=None, agent_id=None, icon=None, reply_to=None):

@@ -156,6 +156,9 @@ def _normalize_project(project: Project) -> Project:
         status=project.status if project.status in _PROJECT_STATUSES else "planning",
         owner_id=_text(project.owner_id, label="owner_id", max_length=256),
         tenant_id=_text(project.tenant_id, label="tenant_id", max_length=256),
+        execution_thread_id=(
+            _optional_id(project.execution_thread_id, label="execution_thread_id") or ""
+        ),
         owner=_text(project.owner, label="project owner", max_length=256),
         created_at=_text(project.created_at, label="created_at", max_length=64),
         started_at=_text(project.started_at, label="started_at", max_length=64),
@@ -473,15 +476,19 @@ class ProjectStore:
         thread = _require_id(thread_id, label="thread_id")
         project = _require_id(project_id, label="project_id")
         with self._lock, self._conn() as conn:
-            if (
-                self._effective_scope(scope) is not None
-                and self._project_doc_for_scope(conn, project, scope) is None
-            ):
+            project_doc = self._project_doc_for_scope(conn, project, scope)
+            if project_doc is None:
                 raise PermissionError("project belongs to another tenant or does not exist")
             conn.execute(
                 "INSERT INTO thread_projects(thread_id, project_id) VALUES (?, ?) "
                 "ON CONFLICT(thread_id) DO UPDATE SET project_id=excluded.project_id",
                 (thread, project),
+            )
+            project_doc.execution_thread_id = thread
+            normalized = _normalize_project(project_doc)
+            conn.execute(
+                "UPDATE projects SET doc=? WHERE id=?",
+                (json.dumps(normalized.to_dict(), ensure_ascii=False), project),
             )
 
     def project_for_thread(
@@ -502,10 +509,20 @@ class ProjectStore:
     ) -> str | None:
         project = _require_id(project_id, label="project_id")
         with self._lock, self._conn() as conn:
-            if self._project_doc_for_scope(conn, project, scope) is None:
+            project_doc = self._project_doc_for_scope(conn, project, scope)
+            if project_doc is None:
                 return None
+            preferred = project_doc.execution_thread_id
+            if preferred:
+                row = conn.execute(
+                    "SELECT thread_id FROM thread_projects WHERE project_id=? AND thread_id=?",
+                    (project, preferred),
+                ).fetchone()
+                if row:
+                    return preferred
             row = conn.execute(
-                "SELECT thread_id FROM thread_projects WHERE project_id=?",
+                "SELECT thread_id FROM thread_projects WHERE project_id=? "
+                "ORDER BY thread_id LIMIT 1",
                 (project,),
             ).fetchone()
         if not row:

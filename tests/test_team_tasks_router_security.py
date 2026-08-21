@@ -402,6 +402,52 @@ def test_list_tasks_room_scope_membership(tmp_path: Path) -> None:
     assert other.status_code == 403
 
 
+def test_unscoped_task_list_only_contains_member_rooms(tmp_path: Path) -> None:
+    client, _, keys = _build_app(tmp_path)
+    _create_room(client, keys, "room-alice", owner="alice")
+    _create_room(client, keys, "room-bob", owner="bob")
+    client.post(
+        "/api/team-tasks",
+        json={"room_id": "room-alice", "title": "alice task"},
+        headers=_auth_header(keys["alice"]),
+    )
+    client.post(
+        "/api/team-tasks",
+        json={"room_id": "room-bob", "title": "bob secret task"},
+        headers=_auth_header(keys["bob"]),
+    )
+
+    listed = client.get("/api/team-tasks", headers=_auth_header(keys["alice"]))
+
+    assert listed.status_code == 200
+    assert [item["title"] for item in listed.json()["tasks"]] == ["alice task"]
+
+
+def test_auth_on_without_membership_resolver_fails_closed(tmp_path: Path) -> None:
+    store = IdentityStore()
+    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    app = FastAPI()
+    app.include_router(
+        create_team_tasks_router(
+            state_path=tmp_path / "tasks.json",
+            identity_store=store,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+    headers = _auth_header("sk-alice")
+
+    assert client.get("/api/team-tasks", headers=headers).status_code == 503
+    assert (
+        client.post(
+            "/api/team-tasks",
+            headers=headers,
+            json={"room_id": "unverified-room", "title": "must fail"},
+        ).status_code
+        == 503
+    )
+
+
 def test_single_user_dev_mode_skips_membership_check(tmp_path: Path) -> None:
     """When require_auth=False (single-user dev mode), the membership
     resolver is a no-op so tests / local dev flows aren't broken."""

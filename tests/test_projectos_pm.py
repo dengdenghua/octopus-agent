@@ -155,7 +155,9 @@ def _store_with_project(tmp_path) -> ProjectStore:
         "P1",
         Milestone(id="M1", name="build", goal="g", status="in_progress", due_at="2026-08-25"),
     )
-    s.save_milestone("P1", Milestone(id="M2", name="ship", goal="g", due_at="2026-09-01", dependencies=["M1"]))
+    s.save_milestone(
+        "P1", Milestone(id="M2", name="ship", goal="g", due_at="2026-09-01", dependencies=["M1"])
+    )
     s.save_task(
         Task(
             id="T1",
@@ -242,10 +244,26 @@ def test_retro_on_done_project(tmp_path) -> None:
     )
     s.save_milestone("P1", Milestone(id="M1", name="build", goal="g", status="done"))
     s.save_task(
-        Task(id="T1", milestone_id="M1", type="code", goal="a", status="done", attempts=1, estimate=1.0)
+        Task(
+            id="T1",
+            milestone_id="M1",
+            type="code",
+            goal="a",
+            status="done",
+            attempts=1,
+            estimate=1.0,
+        )
     )
     s.save_task(
-        Task(id="T2", milestone_id="M1", type="code", goal="b", status="failed", attempts=2, estimate=0.5)
+        Task(
+            id="T2",
+            milestone_id="M1",
+            type="code",
+            goal="b",
+            status="failed",
+            attempts=2,
+            estimate=0.5,
+        )
     )
     retro = build_retro(s, "P1")
     assert retro is not None

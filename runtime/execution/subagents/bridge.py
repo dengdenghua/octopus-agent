@@ -191,6 +191,7 @@ def call_subagent(
     schema_max_retries: int = 1,
     requires_capabilities: Iterable[str] | None = None,
     continue_session_id: str | None = None,
+    runner: SubAgentRunner | None = None,
     **_kw: Any,
 ) -> dict[str, Any]:
     """Invoke a subagent and return a structured result.
@@ -239,6 +240,11 @@ def call_subagent(
         runner work. When omitted, a fresh session is created (best-effort)
         and its id is attached to the result as ``session_id`` so the caller
         can continue this subagent later.
+    runner :
+        Explicit caller-owned persistent runner. When omitted, the historical
+        process-global runner installed by :func:`set_sub_agent_runner` remains
+        the compatibility fallback. Application routers should pass their own
+        runner so multiple app instances cannot overwrite one another.
     """
     agent_id = agent_id or role or name
     prompt = prompt or task or message or query
@@ -441,12 +447,24 @@ def call_subagent(
     except ImportError:  # pragma: no cover - sessions module absent
         get_subagent_session_store = None  # type: ignore[assignment]
     _session_store = get_subagent_session_store() if get_subagent_session_store else None
+    _session_owner_actor_id = ""
+    _session_tenant_id = ""
+    if isinstance(context, dict):
+        _session_owner_actor_id = str(
+            context.get("owner_actor_id") or context.get("actor_id") or context.get("actor") or ""
+        ).strip()
+        _session_tenant_id = str(context.get("tenant_id") or "").strip()
     if continue_session_id:
         # Session continuation is scoped to the spawning thread: a session
         # created by another thread must read as unknown (cross-tenant IDOR
         # guard — mirrors the owner-binding on control sessions/terminals).
         loaded = (
-            _session_store.get(continue_session_id, scope_thread_id=_memory_thread_id)
+            _session_store.get(
+                continue_session_id,
+                scope_thread_id=_memory_thread_id,
+                owner_actor_id=_session_owner_actor_id or None,
+                tenant_id=_session_tenant_id or None,
+            )
             if _session_store
             else None
         )
@@ -468,6 +486,8 @@ def call_subagent(
         created = _session_store.create(
             agent_id=agent_id,
             thread_id=_memory_thread_id,
+            owner_actor_id=_session_owner_actor_id,
+            tenant_id=_session_tenant_id,
         )
         _active_session["session"] = created
         _active_session["session_id"] = created.session_id
@@ -648,8 +668,8 @@ def call_subagent(
                         _parent_artifact_root = str(thread_artifact_root(_parent_thread_id))
                 if isinstance(_parent_artifact_root, str) and _parent_artifact_root.strip():
                     _extra_meta["_artifact_output_root"] = _parent_artifact_root.strip()
-            except (ImportError, OSError, ValueError):
-                pass
+            except (ImportError, OSError, ValueError) as exc:
+                _log.debug("could not preserve parent artifact root", exc_info=exc)
         # Stamp the per-child codename onto the run Session so the typed
         # event-bus helpers (which key lanes by codename) can attribute tool /
         # conclude / fail events to the right sub-agent thread — even when
@@ -734,6 +754,7 @@ def call_subagent(
                         session=run_session,
                         event_emitter=_tracking_emitter,
                         use_cheap_model=use_cheap_model,
+                        runner=runner,
                     )
         finally:
             if scope_token is not None:
@@ -1280,6 +1301,7 @@ def _dispatch(
     session: Any,
     event_emitter: Callable[[dict], None] | None,
     use_cheap_model: bool = False,
+    runner: SubAgentRunner | None = None,
 ) -> dict[str, Any]:
     """Inner dispatch — runs in the caller's thread or a worker thread."""
     _log.info(
@@ -1350,8 +1372,8 @@ def _dispatch(
             timeout_s=timeout_s,
         )
 
-    runner = _RUNNER
-    if runner is None:
+    selected_runner = runner if runner is not None else _RUNNER
+    if selected_runner is None:
         return {
             "agent_id": agent_id,
             "output": "",
@@ -1388,7 +1410,7 @@ def _dispatch(
         merged_ctx.setdefault("caller_session", session)
 
     try:
-        output = runner(prompt, subagent_name=agent_id, context=merged_ctx)
+        output = selected_runner(prompt, subagent_name=agent_id, context=merged_ctx)
     except Exception as exc:  # noqa: BLE001
         _log.warning(
             "subagent %s runner raised %s: %s",

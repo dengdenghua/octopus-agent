@@ -59,7 +59,7 @@ def app_and_coord():
     loop.run_until_complete(coord.pool.register(device))
 
     app = FastAPI()
-    app.include_router(create_tentacle_router(coord))
+    app.include_router(create_tentacle_router(coord, require_auth=False))
 
     return app, coord
 

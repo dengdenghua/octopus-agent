@@ -33,7 +33,11 @@ def test_bytes_content_and_hash_stable(tmp_path: Path) -> None:
     a = save_artifact(b"data", name="blob.bin", workspace_path=str(tmp_path), root_thread_id="r")
     b = save_artifact(b"data", name="blob.bin", workspace_path=str(tmp_path), root_thread_id="r")
     assert a["ok"] and b["ok"]
-    assert a["hash"] == b["hash"] == read_artifact(a["path"])["hash"] if False else a["hash"] == b["hash"]
+    assert (
+        a["hash"] == b["hash"] == read_artifact(a["path"])["hash"]
+        if False
+        else a["hash"] == b["hash"]
+    )
 
 
 def test_name_sanitized_no_traversal(tmp_path: Path) -> None:

@@ -69,6 +69,17 @@ from ._journal_models import (
 )
 from ._journal_parse import _parse_event, _parse_event_data
 
+
+def _lock_windows_fd(fd: int, mode_name: str) -> None:
+    """Call the Windows-only ``msvcrt.locking`` API without making POSIX
+    type-checking depend on attributes absent from its platform stubs."""
+
+    import msvcrt
+
+    namespace = vars(msvcrt)
+    namespace["locking"](fd, namespace[mode_name], 1)
+
+
 __all__ = [
     "CURRENT_SCHEMA_VERSION",
     "AntigenSignature",
@@ -294,9 +305,7 @@ class JSONLJournal(Journal):
         try:
             try:
                 if _os.name == "nt":
-                    import msvcrt as _msvcrt
-
-                    _msvcrt.locking(fd, _msvcrt.LK_LOCK, 1)
+                    _lock_windows_fd(fd, "LK_LOCK")
                     locked = True
                 else:
                     import fcntl as _fcntl
@@ -310,11 +319,9 @@ class JSONLJournal(Journal):
             if locked:
                 try:
                     if _os.name == "nt":
-                        import msvcrt as _msvcrt
-
                         with contextlib.suppress(OSError):
                             lock_file.seek(0)
-                        _msvcrt.locking(fd, _msvcrt.LK_UNLCK, 1)
+                        _lock_windows_fd(fd, "LK_UNLCK")
                     else:
                         import fcntl as _fcntl
 
@@ -401,12 +408,10 @@ class JSONLJournal(Journal):
                 try:
                     if _os.name == "nt":
                         try:
-                            import msvcrt as _msvcrt
-
                             # LK_LOCK: block up to ~10s per attempt, retry
                             # a few times. LK_LOCK retries internally, so
                             # a single call is enough in practice.
-                            _msvcrt.locking(fd, _msvcrt.LK_LOCK, 1)
+                            _lock_windows_fd(fd, "LK_LOCK")
                             _locked = True
                         except OSError:
                             _locked = False
@@ -434,14 +439,12 @@ class JSONLJournal(Journal):
                     if _locked:
                         try:
                             if _os.name == "nt":
-                                import msvcrt as _msvcrt
-
                                 # Seek back to the lock byte before unlocking.
                                 try:  # noqa: SIM105
                                     f.seek(0, 0)
                                 except OSError:  # noqa: BLE001 — file lock/seek/fsync best-effort
                                     pass
-                                _msvcrt.locking(fd, _msvcrt.LK_UNLCK, 1)
+                                _lock_windows_fd(fd, "LK_UNLCK")
                             else:
                                 import fcntl as _fcntl
 

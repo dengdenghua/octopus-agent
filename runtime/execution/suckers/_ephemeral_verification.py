@@ -106,10 +106,7 @@ def is_verification_tool(name: str, tool_input: Any) -> bool:
         command = ""
         if isinstance(tool_input, dict):
             command = str(
-                tool_input.get("command")
-                or tool_input.get("cmd")
-                or tool_input.get("script")
-                or ""
+                tool_input.get("command") or tool_input.get("cmd") or tool_input.get("script") or ""
             )
         return bool(_VERIFY_CMD_RE.search(command))
     return False
@@ -137,11 +134,7 @@ def verification_gate_nudge(
         name = str(call.get("name") or "")
         # Only a SUCCESSFUL code write counts: a failed write changed nothing,
         # so there is nothing to verify (and forcing one would be noise).
-        if (
-            call.get("ok")
-            and is_code_write_tool(name)
-            and written_code_path(call.get("input"))
-        ):
+        if call.get("ok") and is_code_write_tool(name) and written_code_path(call.get("input")):
             last_write_idx = idx
         if is_verification_tool(name, call.get("input")):
             last_verify_idx = idx

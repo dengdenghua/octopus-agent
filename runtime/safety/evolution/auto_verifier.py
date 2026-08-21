@@ -188,11 +188,14 @@ def build_agent_verification_request(
         for command in (plan.get("commands") or [])
         if isinstance(command, dict) and str(command.get("command") or "").strip()
     ]
-    command_lines = "\n".join(
-        f"- [{command['kind']}] {command['command']}"
-        + (f" :: {command['reason']}" if command["reason"] else "")
-        for command in commands
-    ) or "- (no recommended command matched; pick the repository's test / lint / build)"
+    command_lines = (
+        "\n".join(
+            f"- [{command['kind']}] {command['command']}"
+            + (f" :: {command['reason']}" if command["reason"] else "")
+            for command in commands
+        )
+        or "- (no recommended command matched; pick the repository's test / lint / build)"
+    )
     prompt = "\n".join(
         [
             f"Verification attempt {bounded_attempt}/{bounded_max}.",

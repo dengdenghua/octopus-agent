@@ -4,6 +4,7 @@ Proof-of-concept test for recursive delegation (Phase 1).
 Validates that ephemeral sub-agents can spawn their own sub-agents when
 explicitly allowed, with proper depth and budget propagation.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -202,13 +203,15 @@ def test_end_to_end_hierarchical_spawn(monkeypatch):
 
     def mock_call_subagent(*args, **kwargs):
         ctx = kwargs.get("context", {})
-        spawn_tree.append({
-            "agent_id": kwargs.get("agent_id"),
-            "depth": ctx.get("delegation_depth", 0),
-            "budget": ctx.get("orchestration_token_budget", 0),
-            "sub_budget": ctx.get("subdelegation_budget", 0),
-            "allow_sub": ctx.get("allow_subdelegation", False),
-        })
+        spawn_tree.append(
+            {
+                "agent_id": kwargs.get("agent_id"),
+                "depth": ctx.get("delegation_depth", 0),
+                "budget": ctx.get("orchestration_token_budget", 0),
+                "sub_budget": ctx.get("subdelegation_budget", 0),
+                "allow_sub": ctx.get("allow_subdelegation", False),
+            }
+        )
         return {
             "agent_id": kwargs.get("agent_id", "unknown"),
             "output": f"audit result from {kwargs.get('agent_id')}",

@@ -89,6 +89,21 @@ def create_journal_router(
         request.state.journal_scope = scope_from_principal(principal)
         return principal.actor_id if principal is not None else None
 
+    def _operator(request: Request) -> None:
+        from runtime.safety.auth.principal import require_operator
+
+        # Reindex mutates the process-global SQLite index and historically
+        # accepted an arbitrary server path. Keep scoped reads available to
+        # users, but reserve host-file ingestion for operational roles.
+        require_operator(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     @router.get("/api/journal/events")
     def list_events(
         request: Request,
@@ -120,7 +135,7 @@ def create_journal_router(
 
     @router.post("/api/journal/reindex")
     def reindex(request: Request, body: dict[str, Any] | None = None) -> dict[str, Any]:
-        _auth(request)
+        _operator(request)
         payload = body or {}
         path_override = payload.get("jsonl_path")
         if path_override:

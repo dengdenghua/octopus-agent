@@ -13,6 +13,11 @@ from pathlib import Path
 
 import pytest
 
+from runtime.platform.models.custom_model_selection import (
+    custom_model_selection_id,
+    resolve_custom_model_selection,
+)
+
 
 @pytest.fixture(autouse=True)
 def _custom_models_path(
@@ -172,6 +177,128 @@ def test_variant_lookup_walks_multiple_entries(
     assert resolved == "second-large"
     # Should have built the second provider's router (its base_url).
     assert "second.example.com" in getattr(new_router, "base_url", "")
+
+
+def test_selection_ids_route_two_variants_within_one_entry(
+    _custom_models_path: Path,
+) -> None:
+    from runtime.sensing.gateway.openai_gateway.request_parser import (
+        _resolve_custom_model_router,
+    )
+
+    payload = {
+        "relay": {
+            "id": "relay",
+            "provider": "openai",
+            "base_url": "https://relay.example/v1",
+            "api_key": "secret-not-in-selection-id",
+            "models": ["economy-model", "performance-model"],
+        },
+    }
+    _write(_custom_models_path, payload)
+    economy_id = custom_model_selection_id("relay", "economy-model")
+    performance_id = custom_model_selection_id("relay", "performance-model")
+
+    assert economy_id != performance_id
+    assert "secret" not in economy_id
+    for selection_id, expected_model in (
+        (economy_id, "economy-model"),
+        (performance_id, "performance-model"),
+    ):
+        selected = resolve_custom_model_selection(payload, selection_id)
+        assert selected is not None
+        assert selected.model == expected_model
+        router, resolved = _resolve_custom_model_router(selection_id, object())
+        assert resolved == expected_model
+        assert getattr(router, "default_model", None) == expected_model
+        assert "relay.example" in getattr(router, "base_url", "")
+
+
+def test_selection_ids_disambiguate_two_entries_with_same_variant(
+    _custom_models_path: Path,
+) -> None:
+    from runtime.sensing.gateway.openai_gateway.request_parser import (
+        _resolve_custom_model_router,
+    )
+
+    payload = {
+        "primary": {
+            "id": "primary",
+            "provider": "openai",
+            "base_url": "https://primary.example/v1",
+            "api_key": "primary-key",
+            "models": ["shared-model"],
+        },
+        "backup": {
+            "id": "backup",
+            "provider": "openai",
+            "base_url": "https://backup.example/v1",
+            "api_key": "backup-key",
+            "models": ["shared-model"],
+        },
+    }
+    _write(_custom_models_path, payload)
+    primary_id = custom_model_selection_id("primary", "shared-model")
+    backup_id = custom_model_selection_id("backup", "shared-model")
+
+    assert primary_id != backup_id
+    for selection_id, endpoint in (
+        (primary_id, "primary.example"),
+        (backup_id, "backup.example"),
+    ):
+        router, resolved = _resolve_custom_model_router(selection_id, object())
+        assert resolved == "shared-model"
+        assert endpoint in getattr(router, "base_url", "")
+
+    # Bare variants remain compatible and retain their historical first-match
+    # behavior; new clients use selection_id when the endpoint matters.
+    legacy_router, legacy_model = _resolve_custom_model_router("shared-model", object())
+    assert legacy_model == "shared-model"
+    assert "primary.example" in getattr(legacy_router, "base_url", "")
+
+
+def test_one_million_selection_ids_preserve_endpoint_variant_and_profile(
+    _custom_models_path: Path,
+) -> None:
+    from runtime.platform.models.custom_model_flags import model_context_window
+    from runtime.sensing.gateway.openai_gateway.request_parser import (
+        _resolve_custom_model_router,
+    )
+
+    payload = {
+        "primary": {
+            "id": "primary",
+            "provider": "openai",
+            "base_url": "https://primary.example/v1",
+            "models": ["shared-model"],
+            "context_window": 128_000,
+            "enable_1m_context": True,
+        },
+        "backup": {
+            "id": "backup",
+            "provider": "openai",
+            "base_url": "https://backup.example/v1",
+            "models": ["shared-model"],
+            "context_window": 256_000,
+            "enable_1m_context": True,
+        },
+    }
+    _write(_custom_models_path, payload)
+
+    for entry_id, endpoint in (
+        ("primary", "primary.example"),
+        ("backup", "backup.example"),
+    ):
+        default_id = custom_model_selection_id(entry_id, "shared-model", "default")
+        long_id = custom_model_selection_id(entry_id, "shared-model", "1m")
+        assert default_id != long_id
+        selected = resolve_custom_model_selection(payload, long_id)
+        assert selected is not None
+        assert selected.context_profile == "1m"
+        router, resolved = _resolve_custom_model_router(long_id, object())
+        assert resolved == "shared-model"
+        assert endpoint in getattr(router, "base_url", "")
+        assert model_context_window(long_id) == 1_000_000
 
 
 def test_legacy_single_model_field_still_works(

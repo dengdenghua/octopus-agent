@@ -1,8 +1,15 @@
 """连接器认证编排层测试:加密凭据库 + 注册表 + auth 编排器 + 网关路由。"""
+
 from __future__ import annotations
 
+import base64
+import concurrent.futures
 import json
+import os
+import stat
 from pathlib import Path
+
+import pytest
 
 from runtime.platform.connectors.auth_orchestrator import AuthOrchestrator
 from runtime.platform.connectors.connector_registry import ConnectorRegistry
@@ -13,6 +20,16 @@ FORK = Path(__file__).resolve().parents[1] / "extensions" / "workbuddy-connector
 
 
 class TestCredentialStore:
+    def test_root_override_owns_default_files(self, tmp_path):
+        root = tmp_path / "isolated-connectors"
+
+        store = CredentialStore(root=root)
+        store.set_secret("x", "token", "secret")
+
+        assert (root / "master.key").is_file()
+        assert (root / "credentials.v1.json").is_file()
+        assert store.get_secret("x", "token") == "secret"
+
     def test_roundtrip_encrypted(self, tmp_path):
         s = CredentialStore(
             root=tmp_path,
@@ -47,6 +64,79 @@ class TestCredentialStore:
         assert s.list_secrets("a") == ["k2"]
         assert s.clear_connector("a") is True
         assert not s.has_credentials("a")
+
+    def test_concurrent_updates_do_not_lose_secrets(self, tmp_path):
+        store = CredentialStore(root=tmp_path)
+
+        def write(index: int) -> None:
+            store.set_secret("parallel", f"key-{index}", f"value-{index}")
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=12) as executor:
+            list(executor.map(write, range(40)))
+
+        assert set(store.list_secrets("parallel")) == {f"key-{index}" for index in range(40)}
+        for index in range(40):
+            assert store.get_secret("parallel", f"key-{index}") == f"value-{index}"
+
+    def test_failed_atomic_replace_preserves_original_file(self, tmp_path, monkeypatch):
+        store = CredentialStore(root=tmp_path)
+        store.set_secret("x", "first", "value-1")
+        credential_file = tmp_path / "credentials.v1.json"
+        original = credential_file.read_bytes()
+        real_replace = os.replace
+
+        def fail_credential_replace(source, destination):
+            if Path(destination) == credential_file:
+                raise OSError("injected replace failure")
+            real_replace(source, destination)
+
+        monkeypatch.setattr(os, "replace", fail_credential_replace)
+        with pytest.raises(OSError, match="injected replace failure"):
+            store.set_secret("x", "second", "value-2")
+
+        assert credential_file.read_bytes() == original
+        assert store.get_secret("x", "first") == "value-1"
+        assert store.get_secret("x", "second") is None
+        assert not list(tmp_path.glob(".credentials.v1.json.*.tmp"))
+
+    def test_existing_files_are_tightened_to_owner_only(self, tmp_path):
+        store = CredentialStore(root=tmp_path)
+        store.set_secret("x", "token", "secret")
+        key_file = tmp_path / "master.key"
+        credential_file = tmp_path / "credentials.v1.json"
+        key_file.chmod(0o666)
+        credential_file.chmod(0o666)
+
+        CredentialStore(root=tmp_path)
+
+        assert stat.S_IMODE(key_file.stat().st_mode) == 0o600
+        assert stat.S_IMODE(credential_file.stat().st_mode) == 0o600
+
+    @pytest.mark.parametrize(
+        "encoded_key",
+        [b"not-base64!", base64.b64encode(b"too-short")],
+    )
+    def test_invalid_existing_master_key_fails_closed(self, tmp_path, encoded_key):
+        key_file = tmp_path / "master.key"
+        key_file.write_bytes(encoded_key)
+
+        with pytest.raises(RuntimeError, match="connector master key"):
+            CredentialStore(root=tmp_path)
+
+        assert key_file.read_bytes() == encoded_key
+        assert not (tmp_path / "credentials.v1.json").exists()
+
+    def test_missing_master_key_for_existing_credentials_fails_closed(self, tmp_path):
+        credential_file = tmp_path / "credentials.v1.json"
+        credential_file.write_text(
+            '{"version": 1, "connectors": {"x": {}}}',
+            encoding="utf-8",
+        )
+
+        with pytest.raises(RuntimeError, match="master key is missing"):
+            CredentialStore(root=tmp_path)
+
+        assert not (tmp_path / "master.key").exists()
 
 
 class TestConnectorRegistry:
@@ -171,7 +261,11 @@ class TestConnectorRouter:
 
         r = client.get("/api/connectors/westock-mcp/headers")
         assert r.status_code == 200
-        assert r.json()["headers"].get("Authorization") == "Bearer abc"
+        assert r.json() == {
+            "configured": True,
+            "header_names": ["Authorization"],
+        }
+        assert "abc" not in r.text
 
         r = client.get("/api/connectors/nope")
         assert r.status_code == 404

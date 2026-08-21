@@ -4,6 +4,10 @@ import json
 import logging
 from typing import Any
 
+from runtime.platform.models.custom_model_selection import (
+    resolve_custom_model_selection,
+)
+
 _DEFAULT_MAX_TOKENS = 131072
 
 
@@ -37,21 +41,27 @@ def _resolve_custom_model_router(
         _custom_data = json.loads(_custom_path.read_text(encoding="utf-8"))
         if not isinstance(_custom_data, dict):
             return router, model_name
-        _custom_entry = _custom_data.get(model_name)
+        _selection = resolve_custom_model_selection(_custom_data, model_name)
+        _custom_entry = _selection.entry if _selection is not None else None
+        _upstream_model = _selection.model if _selection is not None else ""
+        _legacy_name = model_name.removesuffix("::1m")
+        if _custom_entry is None:
+            _custom_entry = _custom_data.get(_legacy_name)
         # Variant lookup: walk every entry's models list and pick the
         # entry whose models[] contains the given name. The variant
         # itself becomes the upstream model name (no slot remap).
-        _variant_match = False
+        _variant_match = _selection is not None
         if not isinstance(_custom_entry, dict):
             for _entry_id, _entry in _custom_data.items():
                 if not isinstance(_entry, dict):
                     continue
                 _models = _entry.get("models")
                 if isinstance(_models, list) and any(
-                    isinstance(_m, str) and _m.strip() == model_name for _m in _models
+                    isinstance(_m, str) and _m.strip() == _legacy_name for _m in _models
                 ):
                     _custom_entry = _entry
                     _variant_match = True
+                    _upstream_model = _legacy_name
                     break
         if not isinstance(_custom_entry, dict):
             return router, model_name
@@ -61,10 +71,7 @@ def _resolve_custom_model_router(
         # When the caller passed a variant name, that exact name IS
         # the upstream model. Otherwise pick the first model in the
         # entry's models[] list (legacy "entry-as-alias" behavior).
-        if _variant_match:
-            _upstream_model = model_name
-        else:
-            _upstream_model = ""
+        if not _variant_match:
             _raw_models = _custom_entry.get("models")
             if isinstance(_raw_models, list):
                 for _m in _raw_models:
@@ -107,6 +114,7 @@ def _resolve_custom_model_router(
                 api_key=_api_key,
                 default_model=_upstream_model,
                 extra_headers=_headers,
+                custom_model_entry=_custom_entry,
             )
         else:
             return router, model_name
@@ -128,7 +136,10 @@ def _custom_model_entry(model_name: str) -> dict[str, Any] | None:
         _custom_data = json.loads(_custom_path.read_text(encoding="utf-8"))
         if not isinstance(_custom_data, dict):
             return None
-        entry = _custom_data.get(model_name)
+        selection = resolve_custom_model_selection(_custom_data, model_name)
+        if selection is not None:
+            return selection.entry
+        entry = _custom_data.get(model_name.removesuffix("::1m"))
         return entry if isinstance(entry, dict) else None
     except Exception as _e:  # noqa: BLE001
         logging.getLogger(__name__).debug(

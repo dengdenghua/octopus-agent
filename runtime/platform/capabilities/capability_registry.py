@@ -11,6 +11,7 @@ WorkBuddy 连接器(108)、Codex 格式插件(~/.octopus/plugins/codex)本质都
   install → 复制 skills 到 ~/.octopus/skills + 登记 MCP
   connect → 认证编排(带认证的插件走 token/oauth;其余默认无需认证)
 """
+
 from __future__ import annotations
 
 import json
@@ -160,9 +161,7 @@ class CapabilityRegistry:
             if not self._codex_cache.is_dir():
                 return []
         out = []
-        for manifest_path in sorted(
-            self._codex_cache.glob("*/.codex-plugin/plugin.json")
-        ):
+        for manifest_path in sorted(self._codex_cache.glob("*/.codex-plugin/plugin.json")):
             try:
                 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):  # noqa: BLE001
@@ -297,9 +296,7 @@ class CapabilityRegistry:
                 from runtime.adapters.mcp_client import oauth
 
                 oauth_servers = [
-                    name
-                    for name in conn.mcp_servers
-                    if oauth.get_oauth_store().has_tokens(name)
+                    name for name in conn.mcp_servers if oauth.get_oauth_store().has_tokens(name)
                 ]
                 if oauth_servers:
                     st["connected"] = True
@@ -315,7 +312,9 @@ class CapabilityRegistry:
             "stored_keys": [],
         }
 
-    def connect(self, cid: str, *, tokens: dict[str, str] | None = None, run_cli: bool = False) -> dict[str, Any]:
+    def connect(
+        self, cid: str, *, tokens: dict[str, str] | None = None, run_cli: bool = False
+    ) -> dict[str, Any]:
         item = self.get(cid)
         if item is None:
             raise KeyError(f"capability not found: {cid}")

@@ -153,26 +153,28 @@ def stream_react_loop(
     """
     _mark_subagent_owner_thread(thread_id, busy=True)
     try:
-        return (yield from _stream_react_loop_impl(
-            stack,
-            intent,
-            agent,
-            model=model,
-            max_iterations=max_iterations,
-            temperature=temperature,
-            enable_tools=enable_tools,
-            resume_task_id=resume_task_id,
-            thread_id=thread_id,
-            max_tokens_budget=max_tokens_budget,
-            max_usd_budget=max_usd_budget,
-            approval_provider=approval_provider,
-            output_chunk_sink=output_chunk_sink,
-            step_evaluator=step_evaluator,
-            planning_mode=planning_mode,
-            reasoning_effort=reasoning_effort,
-            steering_drain=steering_drain,
-            on_auto_parallel_batch=on_auto_parallel_batch,
-        ))
+        return (
+            yield from _stream_react_loop_impl(
+                stack,
+                intent,
+                agent,
+                model=model,
+                max_iterations=max_iterations,
+                temperature=temperature,
+                enable_tools=enable_tools,
+                resume_task_id=resume_task_id,
+                thread_id=thread_id,
+                max_tokens_budget=max_tokens_budget,
+                max_usd_budget=max_usd_budget,
+                approval_provider=approval_provider,
+                output_chunk_sink=output_chunk_sink,
+                step_evaluator=step_evaluator,
+                planning_mode=planning_mode,
+                reasoning_effort=reasoning_effort,
+                steering_drain=steering_drain,
+                on_auto_parallel_batch=on_auto_parallel_batch,
+            )
+        )
     finally:
         _mark_subagent_owner_thread(thread_id, busy=False)
 
@@ -263,7 +265,9 @@ def _stream_react_loop_impl(
 
         if active_trace() is None:
             _visibility_token = set_active_trace(new_trace())
-    except ImportError:  # pragma: no cover — module is always present  # noqa: BLE001 — visibility token is optional
+    except (
+        ImportError
+    ):  # pragma: no cover — module is always present  # noqa: BLE001 — visibility token is optional
         pass
     # PHASE 3→4.7 share a turn-scoped ContextVar trace. Wrap them in
     # try/finally so the token is reset even if a consumer closes the
@@ -343,7 +347,9 @@ def _stream_react_loop_impl(
             from runtime.core.cerebrum._visibility_trace import active_trace
 
             _visibility_trace = active_trace()
-        except ImportError:  # pragma: no cover — module is always present  # noqa: BLE001 — optional tooling hook
+        except (
+            ImportError
+        ):  # pragma: no cover — module is always present  # noqa: BLE001 — optional tooling hook
             pass
         if _visibility_trace is None:
             # ``activation`` is normally not bound in this scope; the
@@ -409,7 +415,6 @@ def _stream_react_loop_impl(
     executed_beak_steps: list[Step] = []
     final_answer_segments: list[str] = []
     final_answer_emitted = False
-
 
     # Throughput sampler — chars/sec across all delta yields. We emit a
     # ``throughput`` event every ~500ms so the UI can show a live

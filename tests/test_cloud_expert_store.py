@@ -3,12 +3,15 @@
 覆盖:本地镜像加载、列表/搜索/分类、详情、bundle 解压安全性、安装编排。
 网络相关路径用 monkeypatch 短路,不依赖公网。
 """
+
 from __future__ import annotations
 
 import io
 import json
 import tarfile
 from pathlib import Path
+
+import pytest
 
 from runtime.platform.plugins import cloud_expert_store as ces
 
@@ -36,9 +39,7 @@ def _make_store_json(expert_count: int = 3) -> dict:
         )
     return {
         "meta": {"count": expert_count, "agentCount": 2, "teamCount": 1},
-        "categories": [
-            {"id": "02-Engineering", "name": {"en": "Engineering", "zh": "技术工程"}}
-        ],
+        "categories": [{"id": "02-Engineering", "name": {"en": "Engineering", "zh": "技术工程"}}],
         "experts": experts,
     }
 
@@ -139,6 +140,36 @@ class TestBundleUnpack:
         s = ces.CloudExpertStore(use_remote=False)
         out = s._unpack(bundle, dest)
         assert (out / "plugins/x/.codebuddy-plugin/plugin.json").exists()
+
+    def test_rejects_symlink_before_writing_following_member(self, tmp_path):
+        bundle = tmp_path / "symlink.tar.gz"
+        with tarfile.open(bundle, "w:gz") as tf:
+            link = tarfile.TarInfo("plugins/x/link")
+            link.type = tarfile.SYMTYPE
+            link.linkname = "../../../outside"
+            tf.addfile(link)
+            payload = b"escape"
+            file_info = tarfile.TarInfo("plugins/x/link/payload")
+            file_info.size = len(payload)
+            tf.addfile(file_info, io.BytesIO(payload))
+
+        s = ces.CloudExpertStore(use_remote=False)
+        with pytest.raises(ValueError, match="unsupported tar member"):
+            s._unpack(bundle, tmp_path)
+        assert not (tmp_path / "outside" / "payload").exists()
+
+    def test_download_sanitizes_remote_plugin_filename(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ces, "fetch_public_https_bytes", lambda *a, **kw: b"bundle")
+
+        out = ces.CloudExpertStore._download(
+            "https://example.com/bundle.tar.gz",
+            tmp_path,
+            "../../escaped",
+        )
+
+        assert out.parent == tmp_path
+        assert out.name == "escaped.tar.gz"
+        assert out.read_bytes() == b"bundle"
 
 
 class TestFindPackRoot:

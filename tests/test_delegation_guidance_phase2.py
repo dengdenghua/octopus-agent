@@ -4,6 +4,7 @@ Test role-specific delegation guidance (Phase 2).
 Validates that sub-agents with subdelegation enabled receive role-specific
 orchestration guidance in their system prompts.
 """
+
 from __future__ import annotations
 
 
@@ -78,6 +79,7 @@ def test_no_guidance_without_subdelegation():
         }
 
     import runtime.execution.subagents
+
     original = runtime.execution.subagents.call_subagent
     runtime.execution.subagents.call_subagent = mock_call_subagent
 
@@ -150,10 +152,12 @@ def test_multiple_roles_get_different_guidance(monkeypatch):
     captured_contexts = []
 
     def mock_call_subagent(*args, **kwargs):
-        captured_contexts.append({
-            "agent_id": kwargs.get("agent_id"),
-            "guidance": kwargs.get("context", {}).get("delegation_guidance", ""),
-        })
+        captured_contexts.append(
+            {
+                "agent_id": kwargs.get("agent_id"),
+                "guidance": kwargs.get("context", {}).get("delegation_guidance", ""),
+            }
+        )
         return {
             "agent_id": kwargs.get("agent_id", "unknown"),
             "output": "mock output",

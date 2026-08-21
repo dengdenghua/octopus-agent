@@ -11,6 +11,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from runtime.platform.models.custom_model_selection import (
+    LONG_CONTEXT_PROFILE,
+    resolve_custom_model_selection,
+    selections_for_entry,
+)
+
 
 def read_custom_models() -> dict[str, Any] | None:
     try:
@@ -31,6 +37,11 @@ def entry_matches_model(entry: Any, model: str) -> bool:
     target = (model or "").strip()
     if not target:
         return False
+    entry_id = str(entry.get("id") or "").strip()
+    if entry_id and any(
+        selection.selection_id == target for selection in selections_for_entry(entry_id, entry)
+    ):
+        return True
     target = target.removesuffix("::1m")
     candidates = {
         str(value).strip()
@@ -54,6 +65,9 @@ def custom_model_entry_for(model: str) -> dict[str, Any] | None:
     data = read_custom_models()
     if not isinstance(data, dict):
         return None
+    selection = resolve_custom_model_selection(data, model)
+    if selection is not None:
+        return selection.entry
     for entry in data.values():
         if entry_matches_model(entry, model):
             return entry
@@ -70,13 +84,8 @@ def model_supports_tool_use(model: str) -> bool:
     explicitly declared incompatibility, so we don't accidentally
     disable working providers.
     """
-    data = read_custom_models()
-    if not isinstance(data, dict):
-        return True
-    for entry in data.values():
-        if entry_matches_model(entry, model) and entry.get("supports_tool_use") is False:
-            return False
-    return True
+    entry = custom_model_entry_for(model)
+    return not (isinstance(entry, dict) and entry.get("supports_tool_use") is False)
 
 
 def model_omits_sampling_parameters(model: str) -> bool:
@@ -87,34 +96,31 @@ def model_omits_sampling_parameters(model: str) -> bool:
     ``omit_sampling_parameters=true`` in ``custom_models.json`` so
     Octopus sends only model/messages/max_tokens/tool fields.
     """
-    data = read_custom_models()
-    if not isinstance(data, dict):
-        return False
-    for entry in data.values():
-        if entry_matches_model(entry, model):
-            return bool(entry.get("omit_sampling_parameters"))
-    return False
+    entry = custom_model_entry_for(model)
+    return bool(entry.get("omit_sampling_parameters")) if isinstance(entry, dict) else False
 
 
 def custom_model_supports_thinking(model: str) -> bool:
-    data = read_custom_models()
-    if not isinstance(data, dict):
-        return False
-    for entry in data.values():
-        if entry_matches_model(entry, model):
-            return bool(entry.get("supports_thinking"))
-    return False
+    entry = custom_model_entry_for(model)
+    return bool(entry.get("supports_thinking")) if isinstance(entry, dict) else False
 
 
 def model_context_window(model: str) -> int | None:
     """Return the operator-declared input window for a custom model."""
-    entry = custom_model_entry_for(model)
+    data = read_custom_models()
+    selection = resolve_custom_model_selection(data, model) if isinstance(data, dict) else None
+    entry = selection.entry if selection is not None else custom_model_entry_for(model)
     if not isinstance(entry, dict):
         return None
-    if model.strip().endswith("::1m"):
+    if (
+        selection is not None and selection.context_profile == LONG_CONTEXT_PROFILE
+    ) or model.strip().endswith("::1m"):
         return 1_000_000
+    raw_context_window = entry.get("context_window")
+    if raw_context_window is None:
+        return None
     try:
-        value = int(entry.get("context_window"))
+        value = int(raw_context_window)
     except (TypeError, ValueError):
         return None
     return value if 8_192 <= value <= 2_000_000 else 256_000

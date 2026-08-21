@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -479,7 +480,9 @@ def test_tick_skips_job_with_inflight_marker(tmp_path: Path) -> None:
             }
         ],
     )
-    result = run_due_cron_jobs(cron_path=path, now=NOW + timedelta(minutes=1), shell_runner=_ok_shell)
+    result = run_due_cron_jobs(
+        cron_path=path, now=NOW + timedelta(minutes=1), shell_runner=_ok_shell
+    )
     assert result["fired"] == 0
     job = _read_jobs(path)[0]
     assert job["started_at"]  # marker preserved, untouched
@@ -510,6 +513,58 @@ def test_marker_persisted_before_dispatch_and_cleared_after(tmp_path: Path) -> N
     assert job["last_run"] is not None
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX process-group recovery contract")
+def test_real_subprocess_pid_is_persisted_and_shutdown_is_cooperative(tmp_path: Path) -> None:
+    """The real pgid reaches disk while the child is alive, and a service
+    stop terminates that group instead of leaving the executor thread stuck."""
+    import os
+    import shlex
+    import sys
+    import threading
+    import time
+
+    from runtime.platform.process.tree import terminate_pid_tree
+
+    path = tmp_path / "cron_jobs.json"
+    command = shlex.join([sys.executable, "-c", "import time; time.sleep(30)"])
+    _write_jobs(path, [{"name": "long", "command": command, "cron_expression": "* * * * *"}])
+    stop_event = threading.Event()
+    result: dict[str, Any] = {}
+
+    def _run() -> None:
+        result.update(run_due_cron_jobs(cron_path=path, now=NOW, stop_event=stop_event))
+
+    worker = threading.Thread(target=_run, daemon=True)
+    worker.start()
+    child_pid: int | None = None
+    try:
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            job = _read_jobs(path)[0]
+            if isinstance(job.get("pid"), int):
+                child_pid = job["pid"]
+                break
+            time.sleep(0.02)
+        assert child_pid is not None, "child process-group id was never persisted"
+        assert _read_jobs(path)[0]["started_at"]
+        os.killpg(child_pid, 0)
+    finally:
+        stop_event.set()
+        worker.join(timeout=7)
+        if child_pid is not None and worker.is_alive():
+            terminate_pid_tree(child_pid, grace_s=0.1, kill_wait_s=0.5)
+            worker.join(timeout=2)
+
+    assert not worker.is_alive()
+    assert result["fired"] == 1
+    job = _read_jobs(path)[0]
+    assert job["last_status"] == "interrupted"
+    assert "started_at" not in job
+    assert "pid" not in job
+    with pytest.raises(ProcessLookupError):
+        os.killpg(child_pid, 0)
+
+
 def test_recover_clears_stale_marker_and_prevents_refire(tmp_path: Path) -> None:
     """Startup recovery: a marker with a dead pid is cleared, recorded as
     interrupted, and last_run is stamped so the job does not re-fire."""
@@ -537,7 +592,9 @@ def test_recover_clears_stale_marker_and_prevents_refire(tmp_path: Path) -> None
     assert job["last_status"] == "interrupted"
     assert job["last_run"] is not None
     # After recovery the job must NOT fire on the catch-up tick (no double run).
-    fired = run_due_cron_jobs(cron_path=path, now=NOW + timedelta(minutes=1), shell_runner=_ok_shell)
+    fired = run_due_cron_jobs(
+        cron_path=path, now=NOW + timedelta(minutes=1), shell_runner=_ok_shell
+    )
     assert fired["fired"] == 0
 
 
@@ -600,9 +657,7 @@ def test_read_run_ledger_mid_file_cut_skips_partial_line(tmp_path: Path) -> None
 
     ledger = tmp_path / "cron_runs.jsonl"
     ledger.write_text(
-        "".join(
-            json.dumps({"name": f"job{i}", "status": "ok"}) + "\n" for i in range(30)
-        ),
+        "".join(json.dumps({"name": f"job{i}", "status": "ok"}) + "\n" for i in range(30)),
         encoding="utf-8",
     )
     runs = read_run_ledger(ledger, limit=3)

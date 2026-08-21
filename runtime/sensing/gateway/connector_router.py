@@ -16,6 +16,7 @@
 后端实现: runtime/platform/connectors/{credential_store,connector_registry,auth_orchestrator}
 数据源:  extensions/workbuddy-connectors/(WorkBuddy 108 连接器 fork)
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -69,6 +70,19 @@ def create_connector_router(
             jwt_audience=jwt_audience,
         )
 
+    def _operator_dep(request: Request) -> None:
+        from runtime.safety.auth.principal import require_roles
+
+        require_roles(
+            request,
+            identity_store,
+            require_auth,
+            ("admin", "operator"),
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     router = APIRouter(tags=["connectors"], dependencies=[Depends(_auth_dep)])
 
     def _get_connector(cid: str) -> Any:
@@ -103,31 +117,45 @@ def create_connector_router(
         conn = _get_connector(connector_id)
         state = registry._state().get(connector_id) or {}
         return {
-            **conn.to_dict(installed=bool(state.get("installed")), enabled=bool(state.get("enabled"))),
+            **conn.to_dict(
+                installed=bool(state.get("installed")), enabled=bool(state.get("enabled"))
+            ),
             "mcp_config": conn.mcp_servers,
             "cli": conn.cli,
             "skills_dir": str(conn.skills_dir) if conn.skills_dir else None,
             "examples_zh": conn.examples_zh,
         }
 
-    @router.post("/api/connectors/{connector_id}/install")
+    @router.post(
+        "/api/connectors/{connector_id}/install",
+        dependencies=[Depends(_operator_dep)],
+    )
     def connector_install(connector_id: str) -> dict[str, Any]:
         _get_connector(connector_id)
         return registry.install(connector_id)
 
-    @router.delete("/api/connectors/{connector_id}/install")
+    @router.delete(
+        "/api/connectors/{connector_id}/install",
+        dependencies=[Depends(_operator_dep)],
+    )
     def connector_uninstall(connector_id: str) -> dict[str, Any]:
         if not registry.uninstall(connector_id):
             raise HTTPException(404, f"connector not installed: {connector_id}")
         return {"installed": False, "connector_id": connector_id}
 
-    @router.post("/api/connectors/{connector_id}/enable")
+    @router.post(
+        "/api/connectors/{connector_id}/enable",
+        dependencies=[Depends(_operator_dep)],
+    )
     def connector_enable(connector_id: str) -> dict[str, Any]:
         if not registry.set_enabled(connector_id, True):
             raise HTTPException(404, f"connector not installed: {connector_id}")
         return {"enabled": True, "connector_id": connector_id}
 
-    @router.post("/api/connectors/{connector_id}/disable")
+    @router.post(
+        "/api/connectors/{connector_id}/disable",
+        dependencies=[Depends(_operator_dep)],
+    )
     def connector_disable(connector_id: str) -> dict[str, Any]:
         if not registry.set_enabled(connector_id, False):
             raise HTTPException(404, f"connector not installed: {connector_id}")
@@ -138,7 +166,10 @@ def create_connector_router(
         conn = _get_connector(connector_id)
         return orchestrator.status(conn)
 
-    @router.post("/api/connectors/{connector_id}/connect")
+    @router.post(
+        "/api/connectors/{connector_id}/connect",
+        dependencies=[Depends(_operator_dep)],
+    )
     async def connector_connect(connector_id: str, request: Request) -> dict[str, Any]:
         conn = _get_connector(connector_id)
         body: dict[str, Any] = {}
@@ -150,14 +181,24 @@ def create_connector_router(
         run_cli = bool(body.get("run_cli"))
         return orchestrator.connect(conn, tokens=tokens, run_cli=run_cli)
 
-    @router.post("/api/connectors/{connector_id}/disconnect")
+    @router.post(
+        "/api/connectors/{connector_id}/disconnect",
+        dependencies=[Depends(_operator_dep)],
+    )
     def connector_disconnect(connector_id: str) -> dict[str, Any]:
         conn = _get_connector(connector_id)
         return orchestrator.disconnect(conn)
 
-    @router.get("/api/connectors/{connector_id}/headers")
+    @router.get(
+        "/api/connectors/{connector_id}/headers",
+        dependencies=[Depends(_operator_dep)],
+    )
     def connector_headers(connector_id: str) -> dict[str, Any]:
         conn = _get_connector(connector_id)
-        return {"headers": orchestrator.resolve_headers(conn)}
+        headers = orchestrator.resolve_headers(conn)
+        return {
+            "configured": bool(headers),
+            "header_names": sorted(str(name) for name in headers),
+        }
 
     return router

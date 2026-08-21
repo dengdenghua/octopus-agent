@@ -27,12 +27,17 @@ def make_auth_dep(ctx: ObservabilityContext) -> Callable[[Request], None]:
     """
 
     def _auth_dep(request: Request) -> None:
-        from runtime.adapters.web_auth import _resolve_actor
+        from runtime.safety.auth.principal import require_roles
 
-        _resolve_actor(  # AUTH-OK: actor-agnostic — router-level dep, 401 enforcement only
+        # Journal/SSE/KG/progress are process-global today and cannot be
+        # reliably filtered by actor/tenant at read time. Until the event
+        # schema carries authoritative ownership, fail closed to operational
+        # roles in shared mode rather than exposing other users' transcripts.
+        require_roles(
             request,
             ctx.identity_store,
             ctx.require_auth,
+            ("admin", "operator"),
             jwt_secret=ctx.jwt_secret,
             jwt_issuer=ctx.jwt_issuer,
             jwt_audience=ctx.jwt_audience,

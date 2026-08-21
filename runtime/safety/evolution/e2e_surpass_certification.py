@@ -74,6 +74,8 @@ REQUIRED_COVERAGE_DOMAINS: tuple[E2ECoverageDomain, ...] = (
             "visual_replay_validation",
             "repair_recipe_learning",
             "operator_visibility",
+            "thread_native_browser_mode",
+            "external_chrome_mode",
             "automation_safety",
             "productized_api_bridge",
         ),

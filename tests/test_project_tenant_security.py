@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -10,6 +12,7 @@ from runtime.projectos.store import ProjectStore
 from runtime.safety.auth import Identity, IdentityStore
 from runtime.safety.auth.scope import TenantScope
 from runtime.sensing.gateway.projects_router import create_projects_router
+from runtime.sensing.gateway.thread_workspace import managed_workspace_metadata
 
 
 def _client(tmp_path):
@@ -64,6 +67,90 @@ def test_authenticated_plan_stamps_principal_owner_and_tenant(tmp_path) -> None:
     project = response.json()["project"]
     assert project["owner_id"] == "alice"
     assert project["tenant_id"] == "tenant-a"
+
+
+def test_authenticated_run_requires_managed_thread_workspace(tmp_path) -> None:
+    client, _ = _client(tmp_path)
+    headers = {"Authorization": "Bearer sk-alice"}
+    project_id = client.post(
+        "/api/projects",
+        headers=headers,
+        json={"name": "owned", "goal": "ship safely"},
+    ).json()["project"]["id"]
+
+    response = client.post(
+        f"/api/projects/{project_id}/run",
+        headers=headers,
+        json={"max_ticks": 10},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "project execution requires a verified managed thread workspace"
+    )
+
+
+def test_authenticated_run_uses_verified_managed_thread_workspace(tmp_path) -> None:
+    identities = IdentityStore()
+    identities.add(
+        Identity(actor_id="alice", metadata={"tenant_id": "tenant-a"}),
+        api_key_plaintext="sk-alice",
+    )
+    workspace_root = tmp_path / "workspaces"
+    metadata = {
+        "owner_actor_id": "alice",
+        "tenant_id": "tenant-a",
+        **managed_workspace_metadata(
+            workspace_root,
+            tenant_id="tenant-a",
+            actor_id="alice",
+            thread_id="thread-managed",
+        ),
+    }
+    # The helper returns an absolute path; create that exact server allocation.
+    Path(metadata["workspace_path"]).mkdir(parents=True)
+
+    class _Threads:
+        def get(self, thread_id):
+            if thread_id != "thread-managed":
+                return None
+            return {"thread_id": thread_id, "metadata": metadata}
+
+    store = ProjectStore(base_dir=tmp_path / "projects")
+    app = FastAPI()
+    app.include_router(
+        create_projects_router(
+            store=store,
+            thread_store=_Threads(),
+            workspace_root=workspace_root,
+            identity_store=identities,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+    headers = {"Authorization": "Bearer sk-alice"}
+    project_id = client.post(
+        "/api/projects",
+        headers=headers,
+        json={"name": "owned", "goal": "ship safely"},
+    ).json()["project"]["id"]
+    assert (
+        client.post(
+            "/api/projects/move",
+            headers=headers,
+            json={"thread_id": "thread-managed", "project_id": project_id},
+        ).status_code
+        == 200
+    )
+
+    response = client.post(
+        f"/api/projects/{project_id}/run",
+        headers=headers,
+        json={"max_ticks": 20},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["final_status"] == "done"
 
 
 def test_scoped_store_blocks_cross_tenant_reads_writes_and_bindings(tmp_path) -> None:

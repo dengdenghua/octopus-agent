@@ -8,6 +8,7 @@
 
 设计:只读浏览统一仓库 + 显式重建,不改变各来源的既有读写路径(兼容层)。
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -51,6 +52,19 @@ def create_asset_registry_router(
             jwt_audience=jwt_audience,
         )
 
+    def _admin_dep(request: Request) -> None:
+        from runtime.safety.auth.principal import require_roles
+
+        require_roles(
+            request,
+            identity_store,
+            require_auth,
+            ("admin",),
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     router = APIRouter(tags=["assets"], dependencies=[Depends(_auth_dep)])
 
     @router.get("/api/assets")
@@ -84,7 +98,7 @@ def create_asset_registry_router(
             raise HTTPException(404, f"asset not found: {kind}/{asset_id}")
         return item
 
-    @router.post("/api/assets/sync")
+    @router.post("/api/assets/sync", dependencies=[Depends(_admin_dep)])
     def sync_unified_assets() -> dict[str, Any]:
         from runtime.platform.assets.asset_registry import sync_assets
 

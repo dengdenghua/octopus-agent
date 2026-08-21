@@ -227,8 +227,15 @@ class _StubDispatcher:
 
 def _build_client(tmp_path, *, include_task_supervisor: bool = False):
     identity_store = IdentityStore()
-    identity_store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    identity_store.add(
+        Identity(actor_id="alice", roles=("operator",)),
+        api_key_plaintext="sk-alice",
+    )
     identity_store.add(Identity(actor_id="bob"), api_key_plaintext="sk-bob")
+    identity_store.add(
+        Identity(actor_id="admin", roles=("admin",)),
+        api_key_plaintext="sk-admin",
+    )
     store = LoopRunStore(tmp_path / "loop_runs.json")
     controller = _StubController(store)
     dispatcher = _StubDispatcher(store)
@@ -250,6 +257,43 @@ def _build_client(tmp_path, *, include_task_supervisor: bool = False):
     )
     client = TestClient(app)
     return client, controller, dispatcher, store, task_supervisor
+
+
+def test_loop_execution_rejects_ordinary_authenticated_user(tmp_path) -> None:
+    client, _controller, _dispatcher, _store, _task_supervisor = _build_client(tmp_path)
+
+    response = client.post(
+        "/api/loops/start",
+        headers={"Authorization": "Bearer sk-bob"},
+        json={"goal": "scan host", "workspace_path": "/etc", "execute": True},
+    )
+
+    assert response.status_code == 403
+
+
+def test_legacy_unowned_loop_is_hidden_except_for_admin(tmp_path) -> None:
+    client, _controller, _dispatcher, store, _task_supervisor = _build_client(tmp_path)
+    legacy = store.create(LoopRun(goal="legacy run", owner_id=None))
+
+    assert (
+        client.get(
+            f"/api/loops/{legacy.run_id}",
+            headers={"Authorization": "Bearer sk-bob"},
+        ).status_code
+        == 404
+    )
+    assert (
+        client.get(
+            f"/api/loops/{legacy.run_id}",
+            headers={"Authorization": "Bearer sk-admin"},
+        ).status_code
+        == 200
+    )
+    admin_list = client.get(
+        "/api/loops",
+        headers={"Authorization": "Bearer sk-admin"},
+    ).json()
+    assert [item["run_id"] for item in admin_list["runs"]] == [legacy.run_id]
 
 
 def test_loop_router_create_list_get_and_execute_with_owner_isolation(tmp_path) -> None:
@@ -333,7 +377,10 @@ def test_loop_router_create_list_get_and_execute_with_owner_isolation(tmp_path) 
 
 def test_loop_router_execute_requires_controller_when_requested(tmp_path) -> None:
     identity_store = IdentityStore()
-    identity_store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    identity_store.add(
+        Identity(actor_id="alice", roles=("operator",)),
+        api_key_plaintext="sk-alice",
+    )
     store = LoopRunStore(tmp_path / "loop_runs.json")
     app = FastAPI()
     app.include_router(
@@ -358,7 +405,10 @@ def test_loop_router_execute_requires_controller_when_requested(tmp_path) -> Non
 
 def test_loop_router_status_degrades_without_dispatcher(tmp_path) -> None:
     identity_store = IdentityStore()
-    identity_store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    identity_store.add(
+        Identity(actor_id="alice", roles=("operator",)),
+        api_key_plaintext="sk-alice",
+    )
     store = LoopRunStore(tmp_path / "loop_runs.json")
     app = FastAPI()
     app.include_router(

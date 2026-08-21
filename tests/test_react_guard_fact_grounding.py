@@ -162,7 +162,9 @@ def test_end_to_end_via_registry() -> None:
 def test_no_fire_when_fact_grounded_in_prior_turn_observation() -> None:
     steps = [_search_step("本轮只补了竞争格局。")]
     prior = "Global Market Insights: 2025 智能床垫市场 17.6 亿美元，CAGR 6.6%。"
-    msg = _ungrounded_external_fact_guard(steps, "全球智能床垫 2025 年约 17.6 亿美元，CAGR 6.6%。", prior_observations=prior)
+    msg = _ungrounded_external_fact_guard(
+        steps, "全球智能床垫 2025 年约 17.6 亿美元，CAGR 6.6%。", prior_observations=prior
+    )
     assert msg is None
 
 

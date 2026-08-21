@@ -12,12 +12,47 @@ import logging
 from typing import Any
 
 from fastapi import FastAPI
+from starlette.datastructures import MutableHeaders
 
 from runtime.platform.ui.compression import GzipStaticMiddleware
 from runtime.platform.ui.state import AppState
 
 from ._app_auth import _install_legacy_control_plane_auth
 from ._app_context import AppContext
+
+
+class _SecurityHeadersMiddleware:
+    """Small, policy-safe browser hardening applied to every HTTP response.
+
+    The app still has legacy inline UI and same-origin plugin frames, so a
+    broad script/style CSP would be a breaking policy change. ``frame-ancestors``
+    alone closes cross-origin clickjacking without affecting those resources;
+    explicit plugin headers remain authoritative through ``setdefault``.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def _send(message: Any) -> None:
+            if message.get("type") == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers.setdefault("X-Content-Type-Options", "nosniff")
+                headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+                headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+                headers.setdefault("Content-Security-Policy", "frame-ancestors 'self'")
+                if str(scope.get("scheme") or "").lower() == "https":
+                    headers.setdefault(
+                        "Strict-Transport-Security",
+                        "max-age=31536000; includeSubDomains",
+                    )
+            await send(message)
+
+        await self.app(scope, receive, _send)
 
 
 def setup_app(
@@ -51,6 +86,10 @@ def setup_app(
 
     app = FastAPI(title="octopus-agent", version=__version__)
     app.state.octopus_state = state
+    # Plugins are process-wide today.  Expose the host auth posture before
+    # PluginHub loads so plugins with singleton account/state cannot
+    # accidentally mount multi-user APIs or unauthenticated WebSockets.
+    app.state.octopus_require_auth = bool(cocoloop_require_auth)
 
     # Gzip the static Vite UI bundle (~18 MB raw) and JSON API responses while
     # leaving SSE / streaming endpoints untouched. See GzipStaticMiddleware.
@@ -165,6 +204,9 @@ def setup_app(
         jwt_issuer=cocoloop_jwt_issuer,
         jwt_audience=cocoloop_jwt_audience,
     )
+    # Install last so these headers also wrap early 401/403 responses emitted
+    # by the legacy control-plane auth middleware.
+    app.add_middleware(_SecurityHeadersMiddleware)
 
     return AppContext(
         app=app,

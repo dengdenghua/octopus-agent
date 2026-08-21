@@ -181,8 +181,10 @@ def create_team_tasks_router(
         member of ``room_id``. No-op when auth is disabled or no
         resolver is wired (legacy / single-user mode).
         """
-        if not require_auth or room_membership_resolver is None:
+        if not require_auth:
             return
+        if room_membership_resolver is None:
+            raise HTTPException(503, "room membership resolver unavailable")
         if not actor:
             raise HTTPException(401, "authentication required")
         try:
@@ -191,6 +193,19 @@ def create_team_tasks_router(
             members = []
         if actor not in members:
             raise HTTPException(403, "actor is not a member of this room")
+
+    def _is_member(actor: str | None, room_id: str) -> bool:
+        if not require_auth:
+            return True
+        if room_membership_resolver is None:
+            raise HTTPException(503, "room membership resolver unavailable")
+        if not actor:
+            raise HTTPException(401, "authentication required")
+        try:
+            members = room_membership_resolver(room_id) or []
+        except (KeyError, ValueError, RuntimeError):
+            return False
+        return actor in members
 
     def _validate_sop_template(value: str) -> str:
         """Normalize and reject sop_template values that could escape
@@ -840,6 +855,13 @@ def create_team_tasks_router(
         if room_id:
             _require_member(actor, room_id)
             items = [t for t in items if t.room_id == room_id]
+        elif require_auth:
+            # An omitted room filter is a convenience query, not an
+            # authorization bypass. Return the union of rooms the caller can
+            # actually enter instead of every persisted team's task list.
+            if room_membership_resolver is None:
+                raise HTTPException(503, "room membership resolver unavailable")
+            items = [task for task in items if _is_member(actor, task.room_id)]
         items.sort(key=lambda t: t.updated_at, reverse=True)
         return {
             "tasks": [t.model_dump() for t in items],

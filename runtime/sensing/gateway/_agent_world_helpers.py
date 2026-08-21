@@ -493,7 +493,9 @@ def _template_source_root(template: dict[str, Any]) -> Path:
 
 
 def _register_public_prompt_skills(skill_registry: Any, skills_root: Path) -> int:
-    if skill_registry is None or not skills_root.is_dir():
+    from runtime.execution.suckers.market_skills import immutable_prompt_catalog_required
+
+    if skill_registry is None or not skills_root.is_dir() or immutable_prompt_catalog_required():
         return 0
     try:
         from runtime.execution.suckers.market_skills import register_market_skills
