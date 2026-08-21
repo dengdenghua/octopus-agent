@@ -311,8 +311,9 @@ export function WorkBuddyCloudStorePanel() {
   const timersRef = useRef<number[]>([]);
 
   useEffect(() => {
+    const timers = timersRef.current;
     return () => {
-      for (const id of timersRef.current) window.clearTimeout(id);
+      for (const id of timers) window.clearTimeout(id);
     };
   }, []);
 
