@@ -34,9 +34,15 @@ from runtime.platform.plugins.plugin_base import ModuleContext, ModulePlugin
 try:
     from fastapi import (
         Request as _FastAPIRequest,  # noqa: F401 – needed for route annotation resolution
+        WebSocket as _FastAPIWebSocket,  # noqa: F401 – websocket route annotation
+    )
+    from starlette.websockets import (
+        WebSocketDisconnect as _FastAPIWebSocketDisconnect,  # noqa: F401
     )
 except ImportError:
     _FastAPIRequest = None  # type: ignore[assignment,misc]
+    _FastAPIWebSocket = None  # type: ignore[assignment,misc]
+    _FastAPIWebSocketDisconnect = None  # type: ignore[assignment,misc]
 
 _LOG = logging.getLogger("octopus.platform.plugin_hub")
 
@@ -636,9 +642,22 @@ class PluginHub:
         manifest_data: dict[str, Any],
         plugin_dir: Path,
     ) -> None:
-        """Automatically mount webhook routes declared in the manifest."""
+        """Automatically mount routes declared in the manifest.
+
+        ``webhooks`` items mount HTTP routes (path/method/handler); each
+        handler receives ``(body: bytes, headers: dict)`` and may return a
+        sync value or a coroutine. ``websockets`` items mount WebSocket
+        routes (path/handler) for realtime streams — voice, co-editing,
+        shared terminals. The websocket handler is a plugin coroutine
+        receiving the ``WebSocket``; it owns accept/close (the hub closes
+        with 4404 when the handler is missing, 1011 on handler error).
+        """
+        if self._fastapi_app is None:
+            return
+
         webhooks = manifest_data.get("webhooks", [])
-        if not webhooks or self._fastapi_app is None:
+        websockets = manifest_data.get("websockets", [])
+        if not webhooks and not websockets:
             return
 
         try:
@@ -647,7 +666,7 @@ class PluginHub:
             route_prefix = f"/api/plugins/webhooks/{name}"
             router = APIRouter(prefix=route_prefix, tags=[f"webhook:{name}"])
 
-            for wh in webhooks:
+            for wh in webhooks or []:
                 path = wh.get("path", "/")
                 method = wh.get("method", "POST").lower()
                 handler_name = wh.get("handler", "handle_webhook")
@@ -695,6 +714,56 @@ class PluginHub:
                     route_prefix,
                     path,
                     method.upper(),
+                    name,
+                    handler_name,
+                )
+
+            # WebSocket routes: realtime streams (voice / co-editing / …).
+            # Manifest shape: ``websockets: [{path: "/ws/voice", handler: "…"}]``.
+            for ws_item in websockets or []:
+                path = str(ws_item.get("path", "/"))
+                handler_name = ws_item.get("handler", "handle_websocket")
+
+                def _build_ws_handler(
+                    _name: str = name,
+                    _handler_name: str = handler_name,
+                ):
+                    async def _handler(websocket: _FastAPIWebSocket):  # type: ignore[valid-type]
+                        instance = self._plugins.get(_name)
+                        if instance is None or not hasattr(instance, _handler_name):
+                            await websocket.close(code=4404)
+                            return
+                        try:
+                            fn = getattr(instance, _handler_name)
+                            result = fn(websocket)
+                            import inspect
+
+                            if inspect.iscoroutine(result):
+                                await result
+                        except _FastAPIWebSocketDisconnect:
+                            # Client disconnected — normal WebSocket teardown,
+                            # not a handler failure. Propagate so the ASGI
+                            # framework finalizes the connection cleanly.
+                            raise
+                        except Exception as exc:  # noqa: BLE001 — surface, never crash
+                            _LOG.error(
+                                "WebSocket handler %s/%s failed: %s",
+                                _name,
+                                _handler_name,
+                                exc,
+                            )
+                            try:
+                                await websocket.close(code=1011)
+                            except Exception:  # noqa: BLE001 — close is best-effort
+                                pass
+
+                    return _handler
+
+                router.add_websocket_route(path, _build_ws_handler())
+                _LOG.info(
+                    "Mounted websocket: %s%s -> %s.%s",
+                    route_prefix,
+                    path,
                     name,
                     handler_name,
                 )
