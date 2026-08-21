@@ -55,10 +55,7 @@ import { cn } from "@/lib/utils";
 // 一个市场统一管理:安装→技能/MCP,连接→认证编排,插件直接就绪。
 // 数据来自后端 /api/capabilities(见 runtime/sensing/gateway/capability_router.py)。
 
-const TYPE_META: Record<
-  string,
-  { badge: string; label: string }
-> = {
+const TYPE_META: Record<string, { badge: string; label: string }> = {
   mcp: { badge: "bg-primary/10 text-primary", label: "MCP" },
   cli: {
     badge: "bg-chart-3/10 text-chart-3 dark:text-chart-3",
@@ -197,7 +194,8 @@ function ConnectDialog({
             "octopus-device-flow",
             "popup=yes,width=560,height=720",
           );
-          if (!popup) setMessage("已复制授权地址,请手动打开(浏览器拦截了弹窗)。");
+          if (!popup)
+            setMessage("已复制授权地址,请手动打开(浏览器拦截了弹窗)。");
         }
         const ok = await pollConnected(
           (res.device_flow.expires_in || 240) * 1000,
@@ -232,14 +230,15 @@ function ConnectDialog({
             连接 · {capability.name_zh}
           </DialogTitle>
           <DialogDescription className="text-caption leading-5">
-            类型 {(TYPE_META[capability.type] ?? DEFAULT_TYPE_META).label} · 认证{" "}
-            {AUTH_LABEL[capability.auth_mode] ?? capability.auth_mode}
+            类型 {(TYPE_META[capability.type] ?? DEFAULT_TYPE_META).label} ·
+            认证 {AUTH_LABEL[capability.auth_mode] ?? capability.auth_mode}
           </DialogDescription>
         </DialogHeader>
 
         {isPlugin && (
           <p className="text-xs leading-5 text-muted-foreground">
-            插件(Octopus 插件)无需认证,安装后技能即可用。点「保存凭据」直接确认就绪。
+            插件(Octopus
+            插件)无需认证,安装后技能即可用。点「保存凭据」直接确认就绪。
           </p>
         )}
 
@@ -436,8 +435,8 @@ function OAuthAppDialog({
             🔗 配置 {providerName} OAuth App
           </DialogTitle>
           <DialogDescription className="text-caption leading-5">
-            该服务商不支持自动发现(MCP .well-known),网页登录需要你注册一个
-            OAuth App 获取凭据,和 WorkBuddy 用自己平台注册的 App 一个原理。
+            该服务商不支持自动发现(MCP .well-known),网页登录需要你注册一个 OAuth
+            App 获取凭据,和 WorkBuddy 用自己平台注册的 App 一个原理。
             凭据仅保存在本机(加密),不会上传。
           </DialogDescription>
         </DialogHeader>
@@ -454,7 +453,9 @@ function OAuthAppDialog({
             </a>
           ) : null}
           <div className="rounded-md bg-muted/60 px-2.5 py-2 leading-5">
-            <div className="font-medium text-foreground">回调地址(注册 App 时填写)</div>
+            <div className="font-medium text-foreground">
+              回调地址(注册 App 时填写)
+            </div>
             <code className="mt-0.5 block break-all text-[11px] text-muted-foreground">
               {redirectUri}
             </code>
@@ -464,8 +465,10 @@ function OAuthAppDialog({
         {hasExisting ? (
           <div className="flex items-center justify-between gap-2 rounded-md border border-border-default px-2.5 py-2 text-xs">
             <span className="text-muted-foreground">
-              已保存 OAuth App:{' '}
-              <code className="text-foreground">{existingMask || "已配置"}</code>
+              已保存 OAuth App:{" "}
+              <code className="text-foreground">
+                {existingMask || "已配置"}
+              </code>
             </span>
             <Button
               type="button"
@@ -520,7 +523,12 @@ function OAuthAppDialog({
           >
             取消
           </Button>
-          <Button type="button" size="sm" disabled={busy} onClick={() => void onSubmit()}>
+          <Button
+            type="button"
+            size="sm"
+            disabled={busy}
+            onClick={() => void onSubmit()}
+          >
             {busy ? (
               <Loader2 className="mr-1 h-3 w-3 animate-spin" />
             ) : (
@@ -534,7 +542,44 @@ function OAuthAppDialog({
   );
 }
 
-export function CapabilityMarketPanel() {
+export type CapabilityMarketView = "featured" | "all" | "installed";
+
+export interface CapabilityMarketPanelProps {
+  /** 上层市场搜索词；与面板自己的搜索词同时生效。 */
+  searchQuery?: string;
+  /** 精选、全部或仅已安装。默认保持原来的全部市场。 */
+  view?: CapabilityMarketView;
+  /** 精选视图按这里的 ID 顺序展示，不补造排行或热度数据。 */
+  featuredIds?: readonly string[];
+  /** 最多展示多少项。 */
+  maxItems?: number;
+  /** 是否显示原有类型、搜索和刷新工具栏。 */
+  showToolbar?: boolean;
+}
+
+function capabilityMatchesQuery(capability: CapabilityInfo, query: string) {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return true;
+  return [
+    capability.name,
+    capability.name_zh,
+    capability.id,
+    capability.description,
+    capability.description_zh,
+    capability.author,
+  ]
+    .join(" ")
+    .toLowerCase()
+    .includes(normalized);
+}
+
+export function CapabilityMarketPanel({
+  searchQuery = "",
+  view = "all",
+  featuredIds = [],
+  maxItems,
+  showToolbar = true,
+}: CapabilityMarketPanelProps = {}) {
   const [items, setItems] = useState<CapabilityInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -564,7 +609,10 @@ export function CapabilityMarketPanel() {
     setLoading(true);
     setError(null);
     try {
-      const res = await listCapabilities({ limit: 500, includeManual: showManual });
+      const res = await listCapabilities({
+        limit: 500,
+        includeManual: showManual,
+      });
       setItems(res.capabilities);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -601,15 +649,38 @@ export function CapabilityMarketPanel() {
   const setBusy = (id: string, busy: boolean) =>
     setBusyMap((m) => ({ ...m, [id]: busy }));
 
-  const q = query.trim().toLowerCase();
-  const filtered = items.filter((c) => {
+  const viewItems = useMemo(() => {
+    if (view === "installed") {
+      return items.filter((capability) => capability.installed);
+    }
+    if (view !== "featured") return items;
+
+    const firstById = new Map<string, CapabilityInfo>();
+    for (const capability of items) {
+      if (!firstById.has(capability.id)) {
+        firstById.set(capability.id, capability);
+      }
+    }
+    const seen = new Set<string>();
+    return featuredIds.flatMap((id) => {
+      if (seen.has(id)) return [];
+      seen.add(id);
+      const capability = firstById.get(id);
+      return capability ? [capability] : [];
+    });
+  }, [featuredIds, items, view]);
+
+  const filtered = viewItems.filter((c) => {
     if (typeFilter !== "all" && c.type !== typeFilter) return false;
-    if (!q) return true;
-    return [c.name, c.name_zh, c.id, c.description, c.description_zh, c.author]
-      .join(" ")
-      .toLowerCase()
-      .includes(q);
+    return (
+      capabilityMatchesQuery(c, searchQuery) && capabilityMatchesQuery(c, query)
+    );
   });
+  const visibleItems =
+    typeof maxItems === "number"
+      ? filtered.slice(0, Math.max(0, Math.floor(maxItems)))
+      : filtered;
+  const isFeaturedView = view === "featured";
 
   const counts = useMemo(() => {
     const out: Record<string, number> = { all: items.length };
@@ -674,9 +745,7 @@ export function CapabilityMarketPanel() {
     try {
       await setCapabilityEnabled(cap.id, !cap.enabled);
       setItems((prev) =>
-        prev.map((c) =>
-          c.id === cap.id ? { ...c, enabled: !c.enabled } : c,
-        ),
+        prev.map((c) => (c.id === cap.id ? { ...c, enabled: !c.enabled } : c)),
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -699,9 +768,19 @@ export function CapabilityMarketPanel() {
   };
 
   // 跑一遍「网页授权」:authorize → 弹窗 → 轮询回调结果。
-  const runWebOAuth = async (cap: CapabilityInfo, server: string, url: string) => {
-    const { authorize_url, needs_app_credentials, provider, provider_name, docs_url, redirect_uri } =
-      await oauthAuthorize(server, url, cap.oauth_provider ?? undefined);
+  const runWebOAuth = async (
+    cap: CapabilityInfo,
+    server: string,
+    url: string,
+  ) => {
+    const {
+      authorize_url,
+      needs_app_credentials,
+      provider,
+      provider_name,
+      docs_url,
+      redirect_uri,
+    } = await oauthAuthorize(server, url, cap.oauth_provider ?? undefined);
     // 服务商直连 OAuth(GitHub 等)还没配置 OAuth App 凭据 → 引导用户填写
     if (needs_app_credentials && provider) {
       setOAuthAppDialog({
@@ -777,78 +856,85 @@ export function CapabilityMarketPanel() {
   return (
     <div className="space-y-3">
       {/* 来源 + 类型 + 搜索 */}
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Button
-            type="button"
-            size="sm"
-            variant={typeFilter === "all" ? "secondary" : "ghost"}
-            onClick={() => setTypeFilter("all")}
-            className="h-8 px-2.5 text-xs"
-          >
-            全部<span className="ml-1 text-xs text-muted-foreground">{counts.all}</span>
-          </Button>
-          {(["all", "mcp", "cli", "skill-only", "plugin"] as const).map(
-            (tp) => (
-              <Button
-                key={tp}
-                type="button"
-                size="sm"
-                variant={typeFilter === tp ? "secondary" : "ghost"}
-                onClick={() => setTypeFilter(tp)}
-                className="h-8 px-2.5 text-xs"
-              >
-                {tp === "all"
-                  ? "全部类型"
-                  : tp === "mcp"
-                    ? "MCP"
-                    : tp === "cli"
-                      ? "CLI"
-                      : tp === "plugin"
-                        ? "插件"
-                        : "技能"}
-                <span className="ml-1 text-xs text-muted-foreground">
-                  {counts[tp] ?? 0}
-                </span>
-              </Button>
-            ),
-          )}
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1.5">
-          <span className="text-xs text-muted-foreground">
-            {filtered.length}/{items.length}
-          </span>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索插件"
-              aria-label="搜索插件"
-              className="h-8 w-44 rounded-md border border-border-default bg-background pl-7 pr-2 text-sm outline-none focus:border-primary/50"
-            />
+      {showToolbar ? (
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant={typeFilter === "all" ? "secondary" : "ghost"}
+              onClick={() => setTypeFilter("all")}
+              className="h-8 px-2.5 text-xs"
+            >
+              全部
+              <span className="ml-1 text-xs text-muted-foreground">
+                {counts.all}
+              </span>
+            </Button>
+            {(["all", "mcp", "cli", "skill-only", "plugin"] as const).map(
+              (tp) => (
+                <Button
+                  key={tp}
+                  type="button"
+                  size="sm"
+                  variant={typeFilter === tp ? "secondary" : "ghost"}
+                  onClick={() => setTypeFilter(tp)}
+                  className="h-8 px-2.5 text-xs"
+                >
+                  {tp === "all"
+                    ? "全部类型"
+                    : tp === "mcp"
+                      ? "MCP"
+                      : tp === "cli"
+                        ? "CLI"
+                        : tp === "plugin"
+                          ? "插件"
+                          : "技能"}
+                  <span className="ml-1 text-xs text-muted-foreground">
+                    {counts[tp] ?? 0}
+                  </span>
+                </Button>
+              ),
+            )}
           </div>
-          <Button
-            size="sm"
-            variant={showManual ? "secondary" : "ghost"}
-            disabled={loading}
-            onClick={() => setShowManual((v) => !v)}
-            title="显示只能手动填 token、不能跳网页授权的插件"
-          >
-            {showManual ? "隐藏手动填" : "显示手动填"}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={loading}
-            onClick={() => void load()}
-            title="刷新能力列表"
-          >
-            <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
-          </Button>
+
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">
+              {visibleItems.length}/{viewItems.length}
+            </span>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="搜索插件"
+                aria-label="搜索插件"
+                className="h-8 w-44 rounded-md border border-border-default bg-background pl-7 pr-2 text-sm outline-none focus:border-primary/50"
+              />
+            </div>
+            <Button
+              size="sm"
+              variant={showManual ? "secondary" : "ghost"}
+              disabled={loading}
+              onClick={() => setShowManual((v) => !v)}
+              title="显示只能手动填 token、不能跳网页授权的插件"
+            >
+              {showManual ? "隐藏手动填" : "显示手动填"}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={loading}
+              onClick={() => void load()}
+              title="刷新能力列表"
+            >
+              <RefreshCw
+                className={cn("size-3.5", loading && "animate-spin")}
+              />
+            </Button>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -867,16 +953,27 @@ export function CapabilityMarketPanel() {
           <Loader2 className="size-5 animate-spin" />
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-          {filtered.map((cap) => {
+        <div
+          className={cn(
+            "grid grid-cols-1 gap-3 sm:grid-cols-2",
+            isFeaturedView
+              ? "xl:grid-cols-3"
+              : "lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5",
+          )}
+        >
+          {visibleItems.map((cap) => {
             const typeMeta = TYPE_META[cap.type] ?? DEFAULT_TYPE_META;
             const busy = busyMap[cap.id];
             const connected = statusMap[cap.id];
             const isPlugin = cap.source === "codex_plugin";
             return (
               <Card
-                key={cap.id}
-                className="gap-2.5 py-3 transition-colors hover:border-primary/40"
+                key={`${cap.source}:${cap.id}`}
+                data-capability-id={cap.id}
+                className={cn(
+                  "gap-2.5 py-3 transition-colors hover:border-primary/40",
+                  isFeaturedView && "min-h-44 rounded-xl py-4",
+                )}
               >
                 <CardHeader className="flex-row items-center gap-2.5 px-3 pt-0">
                   <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border-default bg-muted text-base">
@@ -895,8 +992,9 @@ export function CapabilityMarketPanel() {
                       {cap.name_zh}
                     </CardTitle>
                     <CardDescription className="truncate text-xs">
-                      {cap.id} ·{" "}
-                      {AUTH_LABEL[cap.auth_mode] ?? cap.auth_mode}
+                      {isFeaturedView
+                        ? `来自 ${cap.author || "Octopus"}`
+                        : `${cap.id} · ${AUTH_LABEL[cap.auth_mode] ?? cap.auth_mode}`}
                     </CardDescription>
                   </div>
                 </CardHeader>
@@ -909,21 +1007,24 @@ export function CapabilityMarketPanel() {
                   >
                     {typeMeta.label}
                   </Badge>
-                  {(cap.oauth_supported || cap.has_cli_auth) && (
+                  {!isFeaturedView &&
+                    (cap.oauth_supported || cap.has_cli_auth) && (
+                      <Badge
+                        className="border-transparent bg-sky-500/15 text-[11px] text-sky-600 dark:text-sky-400"
+                        title="支持跳转网页登录授权,无需手动填 token"
+                      >
+                        🔗 网页登录
+                      </Badge>
+                    )}
+                  {!isFeaturedView ? (
                     <Badge
-                      className="border-transparent bg-sky-500/15 text-[11px] text-sky-600 dark:text-sky-400"
-                      title="支持跳转网页登录授权,无需手动填 token"
+                      variant="outline"
+                      className="text-[11px] font-normal text-muted-foreground"
                     >
-                      🔗 网页登录
+                      技能 ×{cap.skill_count}
                     </Badge>
-                  )}
-                  <Badge
-                    variant="outline"
-                    className="text-[11px] font-normal text-muted-foreground"
-                  >
-                    技能 ×{cap.skill_count}
-                  </Badge>
-                  {cap.mcp_servers.length > 0 && (
+                  ) : null}
+                  {!isFeaturedView && cap.mcp_servers.length > 0 && (
                     <Badge
                       variant="outline"
                       className="text-[11px] font-normal text-muted-foreground"
@@ -949,7 +1050,7 @@ export function CapabilityMarketPanel() {
                   <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">
                     {cap.description_zh || cap.description}
                   </p>
-                  {cap.author ? (
+                  {cap.author && !isFeaturedView ? (
                     <p className="mt-0.5 text-[11px] text-muted-foreground/70">
                       作者:{cap.author}
                     </p>
@@ -1028,9 +1129,13 @@ export function CapabilityMarketPanel() {
               </Card>
             );
           })}
-          {filtered.length === 0 && !loading && (
+          {visibleItems.length === 0 && !loading && (
             <div className="col-span-full py-8 text-center text-sm text-muted-foreground">
-              没有匹配的插件
+              {view === "featured"
+                ? "暂无精选应用"
+                : view === "installed"
+                  ? "还没有已安装应用"
+                  : "没有匹配的应用"}
             </div>
           )}
         </div>

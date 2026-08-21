@@ -7,10 +7,8 @@ import {
   ArrowRightIcon,
   BoxesIcon,
   BotIcon,
-  Building2Icon,
   LayoutGridIcon,
   ChevronDownIcon,
-  CloudDownloadIcon,
   ImportIcon,
   Loader2Icon,
   PlusIcon,
@@ -51,7 +49,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { EnterpriseAssetsTab } from "@/components/workspace/agents/enterprise-assets-tab";
 import { ACTIVE_AGENT_KEY } from "@/core/agents/active";
 import { emitAgentChanged } from "@/core/events";
 import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
@@ -72,13 +69,7 @@ import { AgentCard } from "./agent-card";
 import { AgentRoleProfileDialog } from "./agent-role-profile-dialog";
 import { AgentWorldCard } from "./agent-world-card";
 import { LocalAgentConnectDialog } from "./local-agent-connect-dialog";
-import { CapabilityMarketPanel } from "@/components/store/capability-market-panel";
-import { LocalSkillDirectoryPanel } from "@/components/store/local-skill-directory-panel";
-import { RegistryPluginsPanel } from "@/components/store/registry-plugins-panel";
-import { RegistrySkillsPanel } from "@/components/store/registry-skills-panel";
-import { CloudCatalogPanel } from "@/components/store/cloud-catalog-panel";
-import { WorkBuddyCloudStorePanel } from "@/components/store/workbuddy-cloud-store-panel";
-import { UnifiedAssetsPanel } from "@/components/store/unified-assets-panel";
+import { AppMarketplacePanel } from "@/components/store/app-marketplace-panel";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1111,23 +1102,45 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
   );
 }
 
+// Kept as a compatibility implementation while legacy callers migrate to
+// AppMarketplacePanel. It is intentionally not rendered by the HUB surface.
+void PluginsTabContent;
+
 // ---------------------------------------------------------------------------
 // Main Unified Component
 // ---------------------------------------------------------------------------
 
-// Hub keeps the local, ready-to-run agents on this page. Enterprise assets can
-// be re-enabled as a separate tab when that registry is connected.
-const SHOW_LOCAL_AGENT_LIBRARY = true;
-// Enterprise assets tab is hidden on the consumer surface for now.
-const SHOW_ENTERPRISE_ASSETS = false;
 // Hub shows all available agents (installed + installable).
 const LOCAL_LIBRARY_INSTALLED_ONLY = false;
-// 商城 tab 展示 WorkBuddy 专家商城(421)取代第三方 octoapk 角色商城。
-// 置 false 则完全隐藏商城 tab,只剩本地角色。
 // Only the system-level admin persona is hidden from the hub;
 // desktop_operator (Raven) is a first-class user-facing CUA persona
 // since #22 (CUA productization).
 const HIDDEN_LOCAL_AGENT_IDS = new Set(["admin"]);
+
+export type HubMarketSection = "featured" | "agents" | "applications";
+export type HubApplicationView = "featured" | "all" | "library";
+
+export function resolveHubMarketRoute(search: string): {
+  section: HubMarketSection;
+  applicationView: HubApplicationView;
+} {
+  const tab = new URLSearchParams(search).get("tab");
+  if (tab === "agents" || tab === "enterprise") {
+    return { section: "agents", applicationView: "featured" };
+  }
+  if (
+    tab === "plugins" ||
+    tab === "skills" ||
+    tab === "packs" ||
+    tab === "skill-packs"
+  ) {
+    return { section: "applications", applicationView: "all" };
+  }
+  if (tab === "assets") {
+    return { section: "applications", applicationView: "library" };
+  }
+  return { section: "featured", applicationView: "featured" };
+}
 
 export function AgentWorldUnified() {
   const { t } = useI18n();
@@ -1137,14 +1150,12 @@ export function AgentWorldUnified() {
 
   // State
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState(() => {
-    const params = new URLSearchParams(location.search);
-    const tab = params.get("tab");
-    if (tab === "plugins") return "plugins";
-    if (tab === "skills") return "skills";
-    if (tab === "assets") return "assets";
-    return "agents";
-  });
+  const [activeMarket, setActiveMarket] = useState<HubMarketSection>(
+    () => resolveHubMarketRoute(location.search).section,
+  );
+  const [applicationView, setApplicationView] = useState<HubApplicationView>(
+    () => resolveHubMarketRoute(location.search).applicationView,
+  );
   const [activeCategory, setActiveCategory] =
     useState<AgentCategoryFilter>("all");
   const [importOpen, setImportOpen] = useState(false);
@@ -1196,14 +1207,9 @@ export function AgentWorldUnified() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const tab = params.get("tab");
-    if (tab === "plugins") {
-      setActiveTab("plugins");
-    } else if (tab === "skills" || tab === "packs" || tab === "skill-packs") {
-      setActiveTab("skills");
-    } else if (tab === "agents" || tab === "enterprise") {
-      setActiveTab("agents");
-    }
+    const nextRoute = resolveHubMarketRoute(location.search);
+    setActiveMarket(nextRoute.section);
+    setApplicationView(nextRoute.applicationView);
     if (params.get("connect") === "local") {
       setConnectOpen(true);
     }
@@ -1306,12 +1312,28 @@ export function AgentWorldUnified() {
     return taskWorkspaceRoute({ agentId: agent?.name });
   }, []);
 
-  const searchPlaceholder: Record<string, string> = {
-    agents: t.agentWorldUnified.searchPlaceholderAgents,
-    plugins: t.agentWorldUnified.searchPlaceholderPlugins,
-    skills: t.agentWorldUnified.searchPlaceholderSkills,
-    enterprise: t.agentWorldUnified.searchPlaceholderAgents,
-  };
+  const featuredAgents = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const matches = query
+      ? dedupedAgents.filter((agent) =>
+          [agent.display_name, agent.description, agent.author, ...agent.tags]
+            .join(" ")
+            .toLowerCase()
+            .includes(query),
+        )
+      : dedupedAgents;
+    return matches
+      .slice()
+      .sort((a, b) => scoreAgentForDisplay(b) - scoreAgentForDisplay(a))
+      .slice(0, 4);
+  }, [dedupedAgents, searchQuery]);
+
+  const searchPlaceholder =
+    activeMarket === "agents"
+      ? "搜索人才、能力或行业…"
+      : activeMarket === "applications"
+        ? "搜索应用，或描述你需要的能力…"
+        : "搜索人才、应用，或描述你想解决的问题…";
 
   return (
     <div className="relative flex size-full flex-col gap-2 px-2 pb-2 pt-2 md:px-3">
@@ -1334,12 +1356,8 @@ export function AgentWorldUnified() {
               <SearchIcon className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
               <Input
                 data-testid="agents-search-input"
-                aria-label={
-                  searchPlaceholder[activeTab] ?? t.agentWorld.searchPlaceholder
-                }
-                placeholder={
-                  searchPlaceholder[activeTab] ?? t.agentWorld.searchPlaceholder
-                }
+                aria-label={searchPlaceholder}
+                placeholder={searchPlaceholder}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="h-9 rounded-lg border-border-default bg-background/85 pl-8 text-xs shadow-none transition-colors hover:border-border-strong focus-visible:bg-background"
@@ -1352,144 +1370,261 @@ export function AgentWorldUnified() {
       {/* Main Content */}
       {!hudOnly && (
         <div className="relative flex-1 overflow-y-auto rounded-lg border border-border-default bg-card/70 px-3 py-3 shadow-[var(--shadow-xs)] md:px-4 md:py-4">
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <div className="relative mb-3 max-w-full after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:w-7 after:bg-gradient-to-l after:from-card after:to-transparent md:after:hidden">
-              <TabsList
-                variant="line"
-                className="mb-0 w-full justify-start overflow-x-auto pr-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:pr-0"
-              >
-                <TabsTrigger
-                  value="assets"
-                  className="h-8 gap-1.5 px-3 text-xs"
+          <Tabs
+            value={activeMarket}
+            onValueChange={(value) =>
+              setActiveMarket(value as HubMarketSection)
+            }
+          >
+            <div
+              data-testid="hub-market-navigation"
+              className="mb-4 flex flex-col gap-2 border-b border-border-subtle pb-2 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="relative max-w-full after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:w-7 after:bg-gradient-to-l after:from-card after:to-transparent md:after:hidden">
+                <TabsList
+                  variant="line"
+                  className="mb-0 w-full justify-start overflow-x-auto pr-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:pr-0"
                 >
-                  <LayoutGridIcon className="h-3.5 w-3.5" />
-                  统一资产
-                </TabsTrigger>
-                {SHOW_LOCAL_AGENT_LIBRARY && (
                   <TabsTrigger
-                    value="agents"
-                    className="h-8 gap-1.5 px-3 text-xs"
-                  >
-                    <BotIcon className="h-3.5 w-3.5" />
-                    {t.agentWorldUnified.roleLibrary}
-                  </TabsTrigger>
-                )}
-                <TabsTrigger
-                  value="plugins"
-                  className="h-8 gap-1.5 px-3 text-xs"
-                >
-                  <PuzzleIcon className="h-3.5 w-3.5" />
-                  {t.plugins.pageTitle}
-                </TabsTrigger>
-                <TabsTrigger
-                  value="skills"
-                  className="h-8 gap-1.5 px-3 text-xs"
-                >
-                  <BoxesIcon className="h-3.5 w-3.5" />
-                  {t.plugins.tabSkillMarket}
-                </TabsTrigger>
-                {SHOW_ENTERPRISE_ASSETS && (
-                  <TabsTrigger
-                    value="enterprise"
-                    className="h-8 gap-1.5 px-3 text-xs"
-                  >
-                    <Building2Icon className="h-3.5 w-3.5" />
-                    {t.agentWorldUnified.enterprise}
-                  </TabsTrigger>
-                )}
-              </TabsList>
-            </div>
-
-            <TabsContent value="assets" className="mt-0">
-              <Tabs defaultValue="browse">
-                <TabsList variant="line" className="mb-3">
-                  <TabsTrigger
-                    value="browse"
-                    className="h-8 gap-1.5 px-3 text-xs"
+                    value="featured"
+                    className="h-9 gap-1.5 px-3 text-xs"
                   >
                     <LayoutGridIcon className="h-3.5 w-3.5" />
-                    统一资产
+                    精选
                   </TabsTrigger>
                   <TabsTrigger
-                    value="install"
-                    className="h-8 gap-1.5 px-3 text-xs"
+                    value="agents"
+                    className="h-9 gap-1.5 px-3 text-xs"
                   >
-                    <CloudDownloadIcon className="h-3.5 w-3.5" />
-                    在线安装
+                    <BotIcon className="h-3.5 w-3.5" />
+                    人才市场
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="applications"
+                    className="h-9 gap-1.5 px-3 text-xs"
+                  >
+                    <PuzzleIcon className="h-3.5 w-3.5" />
+                    应用市场
                   </TabsTrigger>
                 </TabsList>
-                <TabsContent value="browse" className="mt-0">
-                  <UnifiedAssetsPanel searchQuery={searchQuery} />
-                </TabsContent>
-                <TabsContent
-                  value="install"
-                  className="mt-0 flex flex-col gap-4"
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 rounded-lg px-2.5 text-xs shadow-none"
+                  aria-pressed={
+                    activeMarket === "applications" &&
+                    applicationView === "library"
+                  }
+                  onClick={() => {
+                    setActiveMarket("applications");
+                    setApplicationView("library");
+                  }}
                 >
-                  <div className="flex items-center gap-2 border-b border-border-default pb-2">
-                    <PuzzleIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-xs font-medium text-muted-foreground">
-                      插件 · 连接器 + Codex 统一安装
-                    </span>
-                  </div>
-                  <CapabilityMarketPanel />
-                  <div className="flex items-center gap-2 border-b border-border-default pb-2">
-                    <BotIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-xs font-medium text-muted-foreground">
-                      角色 · WorkBuddy 专家 / 专家团
-                    </span>
-                  </div>
-                  <WorkBuddyCloudStorePanel />
-                  <div className="flex items-center gap-2 border-b border-border-default pb-2">
-                    <BoxesIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-xs font-medium text-muted-foreground">
-                      技能 · 云端技能目录
-                    </span>
-                  </div>
-                  <CloudCatalogPanel />
-                  <div className="flex items-center gap-2 border-b border-border-default pb-2">
-                    <PuzzleIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-xs font-medium text-muted-foreground">
-                      公网注册表 · Octopus 插件生态
-                    </span>
-                  </div>
-                  <RegistryPluginsPanel />
-                  <div className="flex items-center gap-2 border-b border-border-default pb-2">
-                    <BoxesIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-xs font-medium text-muted-foreground">
-                      公网注册表 · 技能
-                    </span>
-                  </div>
-                  <RegistrySkillsPanel />
-                  <div className="mt-2 flex items-center justify-between rounded-md border border-border-subtle bg-muted/20 px-3 py-2">
-                    <span className="text-xs text-muted-foreground">
-                      想买/卖社区好物(模板、素材、玩法,积分交易)?
-                    </span>
-                    <button
+                  <BoxesIcon className="mr-1.5 size-3.5" />
+                  我的库
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
                       type="button"
-                      onClick={() => navigate("/workspace/community?view=market")}
-                      className="flex shrink-0 items-center gap-1 text-xs font-medium text-primary underline underline-offset-4 hover:text-primary/80"
+                      size="sm"
+                      className="h-8 rounded-lg px-2.5 text-xs shadow-none"
                     >
-                      前往社区集市
-                      <ArrowRightIcon className="size-3.5" />
-                    </button>
+                      <PlusIcon className="mr-1.5 size-3.5" />
+                      发布
+                      <ChevronDownIcon className="ml-1 size-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuItem
+                      onSelect={() => navigate("/workspace/agents/new")}
+                    >
+                      <BotIcon className="size-4" />
+                      发布人才
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setImportOpen(true)}>
+                      <ImportIcon className="size-4" />
+                      {t.agentWorld.importAgentPack}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setConnectOpen(true)}>
+                      <PlusIcon className="size-4" />
+                      {t.agentWorldUnified.connectLocalPartner}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+
+            <TabsContent value="featured" className="mt-0 space-y-5">
+              <section className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/12 via-card to-card px-5 py-6 sm:px-7 sm:py-8">
+                <div className="pointer-events-none absolute -right-16 -top-20 size-56 rounded-full bg-primary/10 blur-3xl" />
+                <div className="relative max-w-2xl">
+                  <Badge
+                    variant="outline"
+                    className="mb-3 border-primary/25 bg-background/70 text-primary"
+                  >
+                    HUB 精选
+                  </Badge>
+                  <h2 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+                    为任务找到合适的人与工具
+                  </h2>
+                  <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+                    选择专业人才负责结果，再用应用补齐数据、自动化与协作能力。
+                  </p>
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => setActiveMarket("agents")}
+                    >
+                      浏览人才
+                      <ArrowRightIcon className="ml-1.5 size-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setActiveMarket("applications");
+                        setApplicationView("featured");
+                      }}
+                    >
+                      探索应用
+                    </Button>
                   </div>
-                </TabsContent>
-              </Tabs>
+                </div>
+              </section>
+
+              <div className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(260px,0.75fr)]">
+                <section aria-labelledby="featured-agents-title">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <h2
+                        id="featured-agents-title"
+                        className="text-sm font-semibold text-foreground"
+                      >
+                        热门人才
+                      </h2>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        值得优先认识的专业角色
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-xs"
+                      onClick={() => setActiveMarket("agents")}
+                    >
+                      查看全部
+                      <ArrowRightIcon className="ml-1 size-3.5" />
+                    </Button>
+                  </div>
+                  {loading ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {Array.from({ length: 4 }).map((_, index) => (
+                        <Skeleton key={index} className="h-44" />
+                      ))}
+                    </div>
+                  ) : featuredAgents.length > 0 ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {featuredAgents.map((agent) =>
+                        agent.is_installed ? (
+                          <AgentCard
+                            key={agent.id}
+                            agent={worldAgentToAgent(agent)}
+                            isDefault={
+                              agent.is_official || LOCAL_AGENT_IDS.has(agent.id)
+                            }
+                            onSelect={() => handleSelectAgent(agent)}
+                          />
+                        ) : (
+                          <AgentWorldCard
+                            key={agent.id}
+                            agent={agent}
+                            featured
+                            onSelect={handleSelectAgent}
+                            onInstallChange={handleInstallChange}
+                          />
+                        ),
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-border px-5 py-10 text-center text-sm text-muted-foreground">
+                      没有找到匹配的人才
+                    </div>
+                  )}
+                </section>
+
+                <aside aria-labelledby="featured-apps-title">
+                  <div className="mb-3">
+                    <h2
+                      id="featured-apps-title"
+                      className="text-sm font-semibold text-foreground"
+                    >
+                      精选应用
+                    </h2>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      按工作目标发现能力扩展
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    {[
+                      ["工作协同", "连接项目、消息与日程"],
+                      ["数据与研究", "获取可信信息并加速分析"],
+                      ["创作与交付", "从想法快速形成可用成果"],
+                    ].map(([title, description]) => (
+                      <button
+                        key={title}
+                        type="button"
+                        className="group flex w-full items-center gap-3 rounded-xl border border-border-default bg-background/75 p-3 text-left transition-colors hover:border-primary/30 hover:bg-muted/30"
+                        onClick={() => {
+                          setActiveMarket("applications");
+                          setApplicationView("featured");
+                        }}
+                      >
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <PuzzleIcon className="size-4" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-medium text-foreground">
+                            {title}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                            {description}
+                          </span>
+                        </span>
+                        <ArrowRightIcon className="size-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                      </button>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 w-full"
+                    onClick={() => {
+                      setActiveMarket("applications");
+                      setApplicationView("featured");
+                    }}
+                  >
+                    进入应用市场
+                  </Button>
+                </aside>
+              </div>
             </TabsContent>
 
             <TabsContent value="agents" className="mt-0">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <BotIcon className="h-3.5 w-3.5" />
-                  {t.agentWorldUnified.localTab} · 本地角色
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("assets")}
-                  className="text-xs text-primary underline underline-offset-4 hover:text-primary/80"
-                >
-                  在线角色 → 统一资产 · 在线安装
-                </button>
+              <div className="mb-4">
+                <h2 className="text-base font-semibold text-foreground">
+                  人才市场
+                </h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  按专业方向筛选人才，查看能力后即可试用或加入团队。
+                </p>
               </div>
               <AgentsTab
                 agents={dedupedAgents}
@@ -1508,42 +1643,12 @@ export function AgentWorldUnified() {
               />
             </TabsContent>
 
-            <TabsContent value="plugins" className="mt-0">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <PuzzleIcon className="h-3.5 w-3.5" />
-                  {t.agentWorldUnified.localTab} · 本地插件
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("assets")}
-                  className="text-xs text-primary underline underline-offset-4 hover:text-primary/80"
-                >
-                  在线插件 → 统一资产 · 在线安装
-                </button>
-              </div>
-              <PluginsTabContent searchQuery={searchQuery} />
-            </TabsContent>
-
-            <TabsContent value="skills" className="mt-0">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <BoxesIcon className="h-3.5 w-3.5" />
-                  {t.agentWorldUnified.localTab} · 本地技能
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("assets")}
-                  className="text-xs text-primary underline underline-offset-4 hover:text-primary/80"
-                >
-                  在线技能 → 统一资产 · 在线安装
-                </button>
-              </div>
-              <LocalSkillDirectoryPanel searchQuery={searchQuery} />
-            </TabsContent>
-
-            <TabsContent value="enterprise" className="mt-0">
-              <EnterpriseAssetsTab query={searchQuery} />
+            <TabsContent value="applications" className="mt-0">
+              <AppMarketplacePanel
+                searchQuery={searchQuery}
+                view={applicationView}
+                onViewChange={setApplicationView}
+              />
             </TabsContent>
           </Tabs>
         </div>
@@ -1580,7 +1685,7 @@ export function AgentWorldUnified() {
             onImported={() => {
               void queryClient.invalidateQueries({ queryKey: ["agents"] });
               void fetchAgents();
-              setActiveTab("agents");
+              setActiveMarket("agents");
             }}
           />
         </DialogContent>

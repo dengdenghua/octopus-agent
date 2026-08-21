@@ -22,7 +22,7 @@ const agent: Agent = {
   description: "负责专项协作。",
   icon: "🤖",
   model: null,
-  tool_groups: null,
+  tool_groups: ["web_read", "fs_writer", "git", "不应显示"],
 };
 
 describe("AgentCard", () => {
@@ -31,7 +31,7 @@ describe("AgentCard", () => {
     deleteAgentMock.mockResolvedValue(undefined);
   });
 
-  it("exposes contextual profile, chat, and delete actions", async () => {
+  it("presents a concise talent profile with independent primary and detail actions", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
     renderWithProviders(
@@ -45,11 +45,18 @@ describe("AgentCard", () => {
     expect(
       screen.getByRole("button", { name: "与 自定义角色 开聊" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("已加入")).toBeInTheDocument();
+    expect(screen.getByText("网页研究")).toBeInTheDocument();
+    expect(screen.getByText("文档交付")).toBeInTheDocument();
+    expect(screen.getByText("代码协作")).toBeInTheDocument();
+    expect(screen.queryByText("web_read")).not.toBeInTheDocument();
+    expect(screen.queryByText("不应显示")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "删除角色 自定义角色" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("menuitem", { name: "删除角色 自定义角色" }),
+    ).not.toBeInTheDocument();
 
-    await user.click(profileAction);
+    profileAction.focus();
+    await user.keyboard("{Enter}");
     expect(onSelect).toHaveBeenCalledWith(agent);
   });
 
@@ -59,8 +66,9 @@ describe("AgentCard", () => {
       locale: "zh-CN",
     });
 
+    await user.click(screen.getByRole("button", { name: "更多：自定义角色" }));
     await user.click(
-      screen.getByRole("button", { name: "删除角色 自定义角色" }),
+      screen.getByRole("menuitem", { name: "删除角色 自定义角色" }),
     );
     const dialog = screen.getByRole("dialog", {
       name: "删除角色“自定义角色”",

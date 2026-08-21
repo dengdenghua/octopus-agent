@@ -31,10 +31,44 @@ const summary = {
 
 function makeItems() {
   return [
-    { id: "browser", kind: "plugin", source: "codex", type: "codex-plugin", name: "Browser", name_zh: "浏览器", description: "控制浏览器", version: "1.0.0", skills_count: 1 },
-    { id: "github", kind: "plugin", source: "workbuddy", type: "connector", name: "GitHub", name_zh: "GitHub 连接器", description: "GitHub 授权", auth_mode: "oauth", mcp_servers: ["github"] },
-    { id: "writing", kind: "skill", source: "local", name: "Writing", name_zh: "写作", description: "写作技能" },
-    { id: "wb_agent", kind: "agent", source: "workbuddy", name: "专家一", name_zh: "专家一", description: "领域专家" },
+    {
+      id: "browser",
+      kind: "plugin",
+      source: "codex",
+      type: "codex-plugin",
+      name: "Browser",
+      name_zh: "浏览器",
+      description: "控制浏览器",
+      version: "1.0.0",
+      skills_count: 1,
+    },
+    {
+      id: "github",
+      kind: "plugin",
+      source: "workbuddy",
+      type: "connector",
+      name: "GitHub",
+      name_zh: "GitHub 连接器",
+      description: "GitHub 授权",
+      auth_mode: "oauth",
+      mcp_servers: ["github"],
+    },
+    {
+      id: "writing",
+      kind: "skill",
+      source: "local",
+      name: "Writing",
+      name_zh: "写作",
+      description: "写作技能",
+    },
+    {
+      id: "wb_agent",
+      kind: "agent",
+      source: "workbuddy",
+      name: "专家一",
+      name_zh: "专家一",
+      description: "领域专家",
+    },
   ] as const;
 }
 
@@ -61,15 +95,17 @@ describe("UnifiedAssetsPanel", () => {
   });
 
   it("切换技能 tab 会按 skill 重新拉取", async () => {
-    mocks.fetchUnifiedAssets.mockImplementation(async (params: { kind?: string }) => {
-      const all = makeItems();
-      return {
-        summary,
-        total: all.filter((i) => i.kind === params.kind).length,
-        items: all.filter((i) => i.kind === params.kind),
-        kind_filter: params.kind ?? null,
-      };
-    });
+    mocks.fetchUnifiedAssets.mockImplementation(
+      async (params: { kind?: string }) => {
+        const all = makeItems();
+        return {
+          summary,
+          total: all.filter((i) => i.kind === params.kind).length,
+          items: all.filter((i) => i.kind === params.kind),
+          kind_filter: params.kind ?? null,
+        };
+      },
+    );
     renderWithProviders(<UnifiedAssetsPanel />);
     await userEvent.click(screen.getByRole("tab", { name: /技能/ }));
     await waitFor(() => {
@@ -80,6 +116,44 @@ describe("UnifiedAssetsPanel", () => {
     );
   });
 
+  it("应用库模式只展示插件和技能并隐藏维护入口", async () => {
+    mocks.fetchUnifiedAssets.mockImplementation(
+      async (params: { kind?: string }) => {
+        const all = makeItems();
+        return {
+          summary,
+          total: all.filter((i) => i.kind === params.kind).length,
+          items: all.filter((i) => i.kind === params.kind),
+          kind_filter: params.kind ?? null,
+        };
+      },
+    );
+
+    renderWithProviders(
+      <UnifiedAssetsPanel
+        allowedKinds={["plugin", "skill"]}
+        showSyncAction={false}
+      />,
+    );
+
+    expect(screen.getByRole("tab", { name: /插件/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /技能/ })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /角色/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: /专家团/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /重建索引/ }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("tab", { name: /技能/ }));
+    await waitFor(() => {
+      expect(mocks.fetchUnifiedAssets).toHaveBeenLastCalledWith(
+        expect.objectContaining({ kind: "skill" }),
+      );
+    });
+  });
+
   it("点击卡片打开详情", async () => {
     mocks.fetchUnifiedAssets.mockResolvedValue({
       summary,
@@ -88,7 +162,9 @@ describe("UnifiedAssetsPanel", () => {
       kind_filter: "plugin",
     });
     renderWithProviders(<UnifiedAssetsPanel />);
-    await waitFor(() => expect(screen.getByText("GitHub 连接器")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("GitHub 连接器")).toBeInTheDocument(),
+    );
     await userEvent.click(screen.getByText("GitHub 连接器"));
     await waitFor(() => {
       // 详情弹窗里才有的标签(MCP 服务行)

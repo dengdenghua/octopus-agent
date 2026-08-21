@@ -1,5 +1,5 @@
 /* Implementation note. */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BoxesIcon,
   BotIcon,
@@ -33,7 +33,11 @@ import { cn } from "@/lib/utils";
 // 统一资产面板:插件 / 技能 / 角色 一次看全,不管来自 WorkBuddy / Codex / 本地 / 内置。
 // 数据源:GET /api/assets(统一 index.json,runtime/platform/assets/asset_registry.py)。
 
-const KIND_TABS: { key: UnifiedAssetKind | "team"; label: string; icon: typeof PuzzleIcon }[] = [
+const KIND_TABS: {
+  key: UnifiedAssetKind | "team";
+  label: string;
+  icon: typeof PuzzleIcon;
+}[] = [
   { key: "plugin", label: "插件", icon: PuzzleIcon },
   { key: "skill", label: "技能", icon: BoxesIcon },
   { key: "agent", label: "角色", icon: BotIcon },
@@ -66,6 +70,7 @@ const SOURCE_LABEL: Record<UnifiedAssetSource, string> = {
 };
 
 const PAGE_SIZE = 60;
+type AssetKindFilter = UnifiedAssetKind | "team";
 
 function SourceBadge({ source }: { source: UnifiedAssetSource }) {
   return (
@@ -184,7 +189,9 @@ function DetailDialog({
           </div>
         </div>
         {asset.description ? (
-          <p className="mt-3 text-sm text-muted-foreground">{asset.description}</p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            {asset.description}
+          </p>
         ) : null}
         <dl className="mt-4 flex flex-col gap-2 text-xs">
           <div className="flex justify-between gap-4">
@@ -230,7 +237,9 @@ function DetailDialog({
           {asset.origin ? (
             <div className="flex flex-col gap-1">
               <dt className="text-muted-foreground">位置</dt>
-              <dd className="break-all font-mono text-[11px]">{asset.origin}</dd>
+              <dd className="break-all font-mono text-[11px]">
+                {asset.origin}
+              </dd>
             </div>
           ) : null}
         </dl>
@@ -247,11 +256,30 @@ function DetailDialog({
 export function UnifiedAssetsPanel({
   searchQuery = "",
   className,
+  allowedKinds = ["plugin", "skill", "agent", "team"],
+  initialKind = "plugin",
+  showSyncAction = true,
 }: {
   searchQuery?: string;
   className?: string;
+  allowedKinds?: readonly AssetKindFilter[];
+  initialKind?: AssetKindFilter;
+  showSyncAction?: boolean;
 }) {
-  const [kind, setKind] = useState<UnifiedAssetKind | "team">("plugin");
+  const allowedKindsKey = allowedKinds.join("|");
+  const visibleKindTabs = useMemo(() => {
+    const allowed = new Set<AssetKindFilter>(
+      allowedKindsKey.split("|").filter(Boolean) as AssetKindFilter[],
+    );
+    const tabs = KIND_TABS.filter((tab) => allowed.has(tab.key));
+    return tabs.length > 0 ? tabs : KIND_TABS;
+  }, [allowedKindsKey]);
+  const fallbackKind = visibleKindTabs[0]?.key ?? "plugin";
+  const [kind, setKind] = useState<AssetKindFilter>(() =>
+    visibleKindTabs.some((tab) => tab.key === initialKind)
+      ? initialKind
+      : fallbackKind,
+  );
   const [source, setSource] = useState<UnifiedAssetSource | "all">("all");
   const [summary, setSummary] = useState<UnifiedAssetsSummary | null>(null);
   const [items, setItems] = useState<UnifiedAsset[]>([]);
@@ -261,8 +289,14 @@ export function UnifiedAssetsPanel({
   const [detail, setDetail] = useState<UnifiedAsset | null>(null);
   const [visible, setVisible] = useState(PAGE_SIZE);
 
+  useEffect(() => {
+    if (!visibleKindTabs.some((tab) => tab.key === kind)) {
+      setKind(fallbackKind);
+    }
+  }, [fallbackKind, kind, visibleKindTabs]);
+
   const load = useCallback(
-    async (k: UnifiedAssetKind | "team", s: UnifiedAssetSource | "all", q: string) => {
+    async (k: AssetKindFilter, s: UnifiedAssetSource | "all", q: string) => {
       setLoading(true);
       setError(null);
       setVisible(PAGE_SIZE);
@@ -310,12 +344,9 @@ export function UnifiedAssetsPanel({
   return (
     <div className={cn("flex flex-col gap-3", className)}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Tabs
-          value={kind}
-          onValueChange={(v) => setKind(v as UnifiedAssetKind | "team")}
-        >
+        <Tabs value={kind} onValueChange={(v) => setKind(v as AssetKindFilter)}>
           <TabsList variant="line" className="mb-0">
-            {KIND_TABS.map((tab) => (
+            {visibleKindTabs.map((tab) => (
               <TabsTrigger
                 key={tab.key}
                 value={tab.key}
@@ -332,16 +363,20 @@ export function UnifiedAssetsPanel({
             ))}
           </TabsList>
         </Tabs>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void onSync()}
-          disabled={syncing}
-          className="shrink-0"
-        >
-          <RefreshCwIcon className={cn("size-3.5", syncing && "animate-spin")} />
-          重建索引
-        </Button>
+        {showSyncAction ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void onSync()}
+            disabled={syncing}
+            className="shrink-0"
+          >
+            <RefreshCwIcon
+              className={cn("size-3.5", syncing && "animate-spin")}
+            />
+            重建索引
+          </Button>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
@@ -382,7 +417,11 @@ export function UnifiedAssetsPanel({
         <>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {items.slice(0, visible).map((asset) => (
-              <AssetCard key={`${asset.kind}:${asset.source}:${asset.id}`} asset={asset} onOpen={setDetail} />
+              <AssetCard
+                key={`${asset.kind}:${asset.source}:${asset.id}`}
+                asset={asset}
+                onOpen={setDetail}
+              />
             ))}
           </div>
           {items.length > visible ? (
