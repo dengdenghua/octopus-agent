@@ -58,6 +58,7 @@ tier: "standard"
 | `_event_bridge_tool_items.py` | Tool-event → item/description builders for the realtime bridge. |
 | `_evolution_helpers.py` | — |
 | `_evolution_models.py` | — |
+| `_evolution_ops_insights.py` | Read-model builders for the evolution operator console. |
 | `_fs_router_diff.py` | Unified-diff parsing / reverse-apply helpers for the filesystem router. |
 | `_fs_router_endpoints.py` | Endpoint handlers for the filesystem router. |
 | `_fs_router_helpers.py` | Shared helpers for the filesystem router factory. |
@@ -93,6 +94,7 @@ tier: "standard"
 | `_realtime_react_stream_drive.py` | ReAct loop stream driver. |
 | `_realtime_react_stream_helpers.py` | Shared helpers & reactive predicates for the realtime stream drivers. |
 | `_realtime_react_stream_reflection.py` | Direct-LLM reflection fast-path stream driver. |
+| `_realtime_subagent_journal_items.py` | Journal-to-realtime item projections for sub-agent workbench lanes. |
 | `_realtime_team_stream_mesh.py` | Mesh swarm stream driver — auto-selecting swarm (mesh vs team) + fallback. |
 | `_realtime_turn_lifecycle_helpers.py` | Shared helpers for the realtime turn lifecycle. |
 | `_realtime_turn_lifecycle_resume.py` | Resume-intent persistence for the realtime turn lifecycle. |
@@ -226,6 +228,7 @@ tier: "standard"
 | `task_runs_router.py` | — |
 | `teach_repeat_router.py` | Teach & Repeat API. |
 | `team_role_models_router.py` | Team role-model settings router · ``/api/team/role-models``. |
+| `team_rooms_models.py` | Wire and request models shared by the Team Rooms HTTP and WS surfaces. |
 | `team_rooms_router.py` | Persistent team rooms API. |
 | `team_rooms_ws.py` | Realtime Team Room WebSocket handler. |
 | `team_speaker_policy.py` | Pure team-room governance helpers. |
@@ -233,6 +236,7 @@ tier: "standard"
 | `tentacle_join_router.py` | Tentacle join router · ``/api/tentacle/join-info``. |
 | `terminal_router.py` | terminal_router · WebSocket-based persistent shell sessions. |
 | `thread_state_router.py` | Thread state HTTP router used by the realtime UI. |
+| `thread_workspace.py` | Server-managed workspace paths for authenticated thread filesystem access. |
 | `tool_bridge.py` | tool_bridge · the agentic-loop helper that turns Octopus skills into Claude-native ``tool_use`` calls and loops result → next turn. |
 | `turn_session.py` | Turn session metadata assembly for realtime execution. |
 | `uploads_router.py` | Thread uploads / artifacts router. |
@@ -303,6 +307,16 @@ tier: "standard"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def register_channel_constructor(platform, constructor)` |  |
+
+### `_evolution_ops_insights.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def evolution_overview_payload(journal, registry, planner)` |  |
+| func | `def evolution_story_payload(journal, registry, planner, thread_store, limit)` | Build plain-language evidence for what the system actually learned. |
+| func | `def evolution_memory_growth_payload(journal, registry, planner, days)` |  |
+| func | `def evolution_learning_curve_payload(journal, weeks)` |  |
+| func | `def evolution_recommendations_payload(journal, registry, planner)` |  |
 
 ### `_fs_router_endpoints.py`
 
@@ -449,7 +463,7 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def create_agent_modes_router()` |  |
+| func | `def create_agent_modes_router(identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
 
 ### `agent_trace_router.py`
 
@@ -515,7 +529,7 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def create_ambient_suggestions_router(base_dir)` | Factory. ``base_dir`` override is for tests; production uses ``<data>/ambient_suggestions/`` via the module default. |
+| func | `def create_ambient_suggestions_router(base_dir, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` | Factory. ``base_dir`` override is for tests; production uses ``<data>/ambient_suggestions/`` via the module default. |
 
 ### `android_router.py`
 
@@ -716,7 +730,7 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def create_fs_router(thread_store, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, workspace_store, lease_store, mount_registry, group_store)` | Build the FastAPI router. State is per-request (the path parameter); auth, when an identity store is wired and ``require_auth`` is set, is e |
+| func | `def create_fs_router(thread_store, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, workspace_root, workspace_store, lease_store, mount_registry, group_store)` | Build the FastAPI router. State is per-request (the path parameter); auth, when an identity store is wired and ``require_auth`` is set, is e |
 
 ### `index_router.py`
 
@@ -767,7 +781,7 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def create_lsp_router(registry)` |  |
+| func | `def create_lsp_router(registry, thread_store, workspace_root, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
 
 ### `mcp_router.py`
 
@@ -871,7 +885,7 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def is_public_plugin_asset_request(method, path)` |  |
+| func | `def is_public_plugin_asset_request(method, path, plugins)` |  |
 | func | `def create_plugins_router(plugin_roots, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, approval_policy_path, promotion_audit_path, publisher_trust_store_path, plugin_registry_path)` |  |
 
 ### `projects_router.py`
@@ -884,7 +898,7 @@ tier: "standard"
 | class | `class RecoverBody(BaseModel)` |  |
 | class | `class TaskInterventionBody(BaseModel)` |  |
 | class | `class FromGroupBody(BaseModel)` |  |
-| func | `def create_projects_router(store, group_store, collaboration_store, thread_store, model_router, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` | Create the ``/api/projects/*`` router. |
+| func | `def create_projects_router(store, group_store, collaboration_store, thread_store, workspace_root, model_router, subagent_runner, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` | Create the ``/api/projects/*`` router. |
 
 ### `prompts_router.py`
 
@@ -1039,7 +1053,7 @@ tier: "standard"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | class | `class SubagentDispatchRequest(BaseModel)` |  |
-| func | `def create_subagents_router(registry, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
+| func | `def create_subagents_router(registry, thread_store, workspace_root, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
 
 ### `system_router.py`
 
@@ -1071,7 +1085,7 @@ tier: "standard"
 | class | `class RoleModelsBody(BaseModel)` |  |
 | func | `def create_team_role_models_router(identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` | Build + return the router. |
 
-### `team_rooms_router.py`
+### `team_rooms_models.py`
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
@@ -1084,6 +1098,11 @@ tier: "standard"
 | class | `class UpdateTeamParticipantRequest(BaseModel)` |  |
 | class | `class UpdateSpeakerPolicyRequest(BaseModel)` |  |
 | class | `class UpdateDelegationRequest(BaseModel)` |  |
+
+### `team_rooms_router.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
 | func | `def create_team_rooms_router(state_path, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, reset_callback, room_message_store, room_projection, room_delete_projection, room_message_projection, room_message_provider, twin_responder)` | Create `/api/teams/*` routes. |
 
 ### `team_rooms_ws.py`
@@ -1128,15 +1147,24 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def create_thread_state_router(store, logs_root, session_titles, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
+| func | `def create_thread_state_router(store, logs_root, session_titles, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, workspace_root)` |  |
 | func | `def build_auto_title_service(store, model_router)` | Wire a ``SessionTitleService`` for first-turn auto-title (dsh auto-title). |
+
+### `thread_workspace.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class ManagedWorkspaceDeletion` | A server-derived, retryable workspace deletion staging area. |
+| func | `def stage_managed_workspace_deletion(workspace_root, thread_id, metadata)` | Atomically isolate a verified workspace below the managed trash root. |
+| func | `def discard_staged_managed_workspace(token)` | Remove one staged managed workspace, raising on any residual data. |
+| func | `def ensure_managed_thread_workspace(workspace_root, thread_id, actor_id, tenant_id, store)` | Return (and, for a new thread, allocate) its authenticated workspace. |
 
 ### `turn_session.py`
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def thread_owner_agent_id(thread_id, store)` | Return the immutable persona bound to an existing solo thread. |
-| func | `def build_turn_metadata(thread_id, body, store)` | Merge per-turn context with persisted thread metadata. |
+| func | `def build_turn_metadata(thread_id, body, store, authoritative_workspace, owner_actor_id, tenant_id)` | Merge per-turn context with persisted thread metadata. |
 | func | `def build_turn_session(actor, agent, thread_id, body, store)` | Assemble the per-turn ``Session`` object from request and state. |
 
 ### `uploads_router.py`

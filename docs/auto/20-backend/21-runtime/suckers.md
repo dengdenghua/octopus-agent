@@ -539,6 +539,8 @@ Suckers = skill pool.
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def register_market_skills(registry, all_skills_dir, respect_enabled_flag, verify_tests)` |  |
+| func | `def immutable_prompt_catalog_required()` | Whether startup must use only the catalog shipped in this build. |
+| func | `def register_prompt_market_skills(registry, resource_dir, bundled_dir, refresh_deadline_s)` | Bootstrap and register the external prompt catalog with a bundled fallback. |
 | func | `def load_single_market_skill(registry, skill_id, all_skills_dir, ignore_frontmatter_enabled, verify_tests)` |  |
 
 ### `memory_file_ops.py`
@@ -671,7 +673,7 @@ Suckers = skill pool.
 
 ## Who imports this
 
-**67** file(s) reference this package:
+**68** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
@@ -720,13 +722,13 @@ Suckers = skill pool.
   - `runtime/safety/hooks/tool_edge_hooks.py`
   - `runtime/safety/recovery/intel_collector.py`
   - `runtime/safety/recovery/skill_forge.py`
-- **`runtime/sensing/`** · 22 file(s)
+- **`runtime/sensing/`** · 23 file(s)
   - `runtime/sensing/gateway/_agent_world_helpers.py`
   - `runtime/sensing/gateway/_meta_mentions.py`
   - `runtime/sensing/gateway/_realtime_react_stream_drive.py`
   - `runtime/sensing/gateway/_realtime_react_stream_helpers.py`
   - `runtime/sensing/gateway/_team_stream_group_fanout.py`
-  - _… and 17 more_
+  - _… and 18 more_
 - **`runtime/tour.py/`** · 1 file(s)
   - `runtime/tour.py`
 

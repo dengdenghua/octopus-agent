@@ -129,4 +129,4 @@ See docs/streaming-optimization-complete-report.md for details"
 
 ---
 
-**完整文档**: [`docs/streaming-optimization-complete-report.md`](docs/streaming-optimization-complete-report.md)
+**完整文档**: [`docs/streaming-optimization-complete-report.md`](../streaming-optimization-complete-report.md)

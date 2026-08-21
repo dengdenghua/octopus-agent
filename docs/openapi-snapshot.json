@@ -1636,6 +1636,13 @@
             ],
             "title": "Reasoning Efforts"
           },
+          "selection_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Selection Ids",
+            "type": "array"
+          },
           "strict_tool_schema": {
             "anyOf": [
               {
@@ -31980,232 +31987,25 @@
         ]
       }
     },
-    "/api/plugins/mx2025_viewer/origin/{upstream_path}": {
-      "delete": {
-        "operationId": "mx2025_viewer_proxy_delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "upstream_path",
-            "required": true,
-            "schema": {
-              "title": "Upstream Path",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Proxy Http"
-      },
-      "get": {
-        "operationId": "mx2025_viewer_proxy_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "upstream_path",
-            "required": true,
-            "schema": {
-              "title": "Upstream Path",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Proxy Http"
-      },
-      "head": {
-        "operationId": "mx2025_viewer_proxy_head",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "upstream_path",
-            "required": true,
-            "schema": {
-              "title": "Upstream Path",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Proxy Http"
-      },
-      "patch": {
-        "operationId": "mx2025_viewer_proxy_patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "upstream_path",
-            "required": true,
-            "schema": {
-              "title": "Upstream Path",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Proxy Http"
-      },
-      "post": {
-        "operationId": "mx2025_viewer_proxy_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "upstream_path",
-            "required": true,
-            "schema": {
-              "title": "Upstream Path",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Proxy Http"
-      },
-      "put": {
-        "operationId": "mx2025_viewer_proxy_put",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "upstream_path",
-            "required": true,
-            "schema": {
-              "title": "Upstream Path",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Proxy Http"
-      }
-    },
     "/api/plugins/mx2025_viewer/page": {
       "get": {
-        "operationId": "mx2025_viewer_page",
+        "operationId": "viewer_page_api_plugins_mx2025_viewer_page_get",
         "responses": {
           "200": {
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "description": "Successful Response"
           }
         },
-        "summary": "Get Page"
+        "summary": "Viewer Page",
+        "tags": [
+          "mx2025_viewer"
+        ]
       }
     },
     "/api/plugins/paper-trading-replica/health": {
@@ -38067,6 +37867,7 @@
             "schema": {
               "anyOf": [
                 {
+                  "maximum": 500,
                   "minimum": 1,
                   "type": "integer"
                 },

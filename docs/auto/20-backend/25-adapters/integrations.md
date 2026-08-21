@@ -40,7 +40,7 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def create_local_auth_router(config, identity_store)` |  |
+| func | `def create_local_auth_router(config, identity_store, clock)` |  |
 
 ### `oct/client.py`
 
