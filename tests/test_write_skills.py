@@ -71,6 +71,46 @@ class TestWriteTextFile:
         assert p.read_text(encoding="utf-8") == "hello"
         assert r["bytes_written"] == 5
 
+    def test_write_marks_verified_on_disk(self, tmp_path: Path):
+        """Write-after verification (Hermes parity): success returns verified=True."""
+        p = tmp_path / "verify.txt"
+        r = _write_text_file(path=str(p), content="hello")
+        assert "error" not in r
+        assert r["verified"] is True
+        assert "verify_error" not in r
+
+    def test_write_reports_read_back_failure(self, tmp_path: Path, monkeypatch):
+        """A read-back failure surfaces as verify_error, not silent success."""
+        from pathlib import Path as PathCls
+
+        p = tmp_path / "verify-fail.txt"
+
+        def broken_read_bytes(self, *args, **kwargs):
+            raise OSError("simulated read-back failure")
+
+        monkeypatch.setattr(PathCls, "read_bytes", broken_read_bytes)
+        r = _write_text_file(path=str(p), content="hello")
+        assert "error" not in r  # write itself succeeded
+        assert "verify_error" in r
+        assert "read_back_failed" in r["verify_error"]
+
+    def test_write_reports_content_mismatch(self, tmp_path: Path, monkeypatch):
+        """Disk content differing from what we wrote is not silently accepted."""
+        from pathlib import Path as PathCls
+
+        p = tmp_path / "verify-mismatch.txt"
+
+        real_write_bytes = PathCls.write_bytes
+
+        def corrupt_write_bytes(self, data, *args, **kwargs):
+            # Simulate a partial write: only half the bytes land.
+            real_write_bytes(self, data[: len(data) // 2])
+
+        monkeypatch.setattr(PathCls, "write_bytes", corrupt_write_bytes)
+        r = _write_text_file(path=str(p), content="hello world")
+        assert "verify_error" in r
+        assert "read_back_mismatch" in r["verify_error"]
+
     def test_refuse_overwrite_by_default(self, tmp_path: Path):
         p = tmp_path / "exists.txt"
         p.write_text("old", encoding="utf-8")
