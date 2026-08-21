@@ -97,20 +97,21 @@ class TestHttpTransportInjection:
         client = HttpMCPClient(
             MCPServerConfig(name="westock-mcp", transport="http", url="http://x/mcp")
         )
-        # _transport 返回 async CM;headers 在构造 sse/streamablehttp 时传入,
-        # 直接调用会尝试网络。这里改为检查构造参数:
+        # MCP 2.x: headers 注入到 httpx2.AsyncClient 并传给 streamable_http_client。
+        # _transport 返回 async CM;这里检查构造参数,不真正连网。
         import mcp.client.streamable_http as mod
 
         captured: dict = {}
 
-        def fake_factory(url, headers=None, timeout=None, **kw):
-            captured["headers"] = headers
+        def fake_factory(url, *, http_client=None, **kw):
+            captured["http_client"] = http_client
             return _FakeCtx()
 
-        monkeypatch.setattr(mod, "streamablehttp_client", fake_factory)
+        monkeypatch.setattr(mod, "streamable_http_client", fake_factory)
         _ = client._transport()
-        assert captured["headers"].get("Authorization") == "Bearer conn-tok"
-        assert captured["headers"].get("x-api-key") == "k"
+        assert captured["http_client"] is not None
+        assert captured["http_client"].headers.get("Authorization") == "Bearer conn-tok"
+        assert captured["http_client"].headers.get("x-api-key") == "k"
         client.close()
 
     def test_user_headers_win_over_connector(self, monkeypatch):
@@ -133,13 +134,14 @@ class TestHttpTransportInjection:
 
         captured: dict = {}
 
-        def fake_factory(url, headers=None, timeout=None, **kw):
-            captured["headers"] = headers
+        def fake_factory(url, *, http_client=None, **kw):
+            captured["http_client"] = http_client
             return _FakeCtx()
 
-        monkeypatch.setattr(mod, "streamablehttp_client", fake_factory)
+        monkeypatch.setattr(mod, "streamable_http_client", fake_factory)
         _ = client._transport()
-        assert captured["headers"].get("Authorization") == "Bearer manual"
+        assert captured["http_client"] is not None
+        assert captured["http_client"].headers.get("Authorization") == "Bearer manual"
         client.close()
 
 

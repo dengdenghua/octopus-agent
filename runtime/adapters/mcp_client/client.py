@@ -408,9 +408,38 @@ class HttpMCPClient(MCPClient):
             from mcp.client.sse import sse_client
 
             return sse_client(self.config.url, headers=headers, timeout=timeout)
-        from mcp.client.streamable_http import streamablehttp_client
+        return self._streamable_http_client(headers=headers, timeout=timeout)
 
-        return streamablehttp_client(self.config.url, headers=headers, timeout=timeout)
+    def _streamable_http_client(self, *, headers: dict[str, str] | None, timeout: float):
+        """Streamable HTTP transport, compatible with both MCP SDK 1.x and 2.x.
+
+        MCP 2.0 renamed ``streamablehttp_client`` → ``streamable_http_client``
+        and moved header/timeout configuration onto an injected
+        ``httpx2.AsyncClient`` (``httpx2`` replaces ``httpx`` in the 2.x
+        client stack). 1.x kept ``headers=``/``timeout=`` kwargs. Both yield
+        ``(read_stream, write_stream)`` so callers unpack identically.
+        """
+        try:
+            from mcp.client.streamable_http import (  # MCP >= 2.0
+                streamable_http_client as _new_client,
+            )
+        except ImportError:  # pragma: no cover — 1.x fallback
+            from mcp.client.streamable_http import (  # MCP < 2.0
+                streamablehttp_client as _new_client,
+            )
+
+            return _new_client(self.config.url, headers=headers, timeout=timeout)
+
+        # 2.x: inject headers/timeout via an httpx2.AsyncClient.
+        try:
+            import httpx2
+
+            client = httpx2.AsyncClient(headers=headers, timeout=timeout)
+        except ImportError:  # pragma: no cover — httpx2 missing, degrade to default
+            client = None
+        if client is None:
+            return _new_client(self.config.url)
+        return _new_client(self.config.url, http_client=client)
 
     async def _list_tools_async(self) -> list[MCPTool]:
         from mcp import ClientSession

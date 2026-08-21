@@ -332,17 +332,20 @@ class PersistentStdioMCPClient(MCPClient):
             if request_id is None:
                 return
             try:
-                await self._session.send_notification(
-                    mcp_types.ClientNotification(
-                        mcp_types.CancelledNotification(
-                            params=mcp_types.CancelledNotificationParams(
-                                requestId=request_id,
-                                reason=reason or "turn redirected",
-                            )
-                        )
-                    ),
-                    related_request_id=request_id,
+                cancelled = mcp_types.CancelledNotification(
+                    params=mcp_types.CancelledNotificationParams(
+                        requestId=request_id,
+                        reason=reason or "turn redirected",
+                    )
                 )
+                # MCP 1.x wraps in ``ClientNotification``; 2.x made it a
+                # Union type and accepts the notification directly.
+                if isinstance(mcp_types.ClientNotification, type):
+                    await self._session.send_notification(
+                        mcp_types.ClientNotification(cancelled),
+                    )
+                else:
+                    await self._session.send_notification(cancelled)
             except Exception as exc:  # noqa: BLE001 — remote cancellation is best-effort
                 _LOG.debug("MCP cancel notification failed: %s", exc)
 

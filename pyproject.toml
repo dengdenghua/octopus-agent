@@ -109,7 +109,7 @@ anthropic = [
 ]
 # ── MCP client ───────────────────────────────────────────
 mcp = [
-    "mcp>=1.28.1,<2.0",
+    "mcp>=2.0.0,<3.0",
     "pydantic-settings>=2.14.2",
     "pyjwt[crypto]>=2.13.0",
 ]
@@ -199,7 +199,7 @@ all = [
     # LLM providers
     "anthropic>=0.40,<1.0",
     # MCP client
-    "mcp>=1.28.1,<2.0",
+    "mcp>=2.0.0,<3.0",
     "pydantic-settings>=2.14.2",
     "pyjwt[crypto]>=2.13.0",
     # browsers
