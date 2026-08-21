@@ -739,6 +739,25 @@ def _compose_system_prompt(
         <three tiers>
     """
     parts: list[str] = [role.system_prompt]
+
+    # Tool-use contract for multi-agent sub-agents. The single-agent react
+    # loop injects ``_TOOL_USE_CONTRACT`` (react_prompt_assembly_sections.py);
+    # this lane bypasses that assembly (react_stack is None → mini-loop), so
+    # inject an equivalent "default to tools" instruction here. Gated on the
+    # sub-agent actually holding tools (set by ``run_ephemeral_definition``) —
+    # a tool-less role is never told to call tools it doesn't have.
+    if (context or {}).get("_ephemeral_tools_available"):
+        parts.append(
+            "## Tool use contract\n\n"
+            "You have tools available in this turn and are expected to use "
+            "them. Any task that requires searching, reading, computing, "
+            "verifying, retrieving, or acting on information MUST call the "
+            "appropriate tool first and base your answer on its Observation. "
+            "Do not end the turn with an announcement instead of an action — "
+            'phrases like "I will check…", "I\'ll continue…", "Let me look '
+            'into…", or "I\'ll proceed to…" are not answers. If the tools are '
+            "available, use them before you respond."
+        )
     addendum = (context or {}).get("system_addendum")
     if isinstance(addendum, str) and addendum.strip():
         parts.append(
@@ -924,6 +943,13 @@ def run_ephemeral_definition(
     )
     if grant_note:
         call_context["dynamic_skill_grant_note"] = grant_note
+    # Feed tool availability into ``_compose_system_prompt`` so the tool-use
+    # contract is injected only when the sub-agent actually holds tools.
+    # (This lane bypasses the single-agent react prompt assembly, whose
+    # _TOOL_USE_CONTRACT it mirrors — see _react_prompt_assembly_sections.py.)
+    call_context["_ephemeral_tools_available"] = bool(
+        effective_tool_policy.allow_all or effective_tool_allowlist
+    )
     composed = _compose_system_prompt(role, session, context=call_context)
     call = EphemeralCall(
         role=role,
