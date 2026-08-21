@@ -50,6 +50,50 @@ def _insecure_bind_error(*, host: str, uds: str | None, require_auth: bool) -> s
     )
 
 
+def _port_held(host: str, port: int) -> bool:
+    """Return whether the requested TCP address is already bound."""
+    import socket
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind((host, port))
+        return False
+    except OSError:
+        return True
+
+
+def _holder_is_octopus(port: int) -> bool:
+    """Best-effort detection for a sibling ``runtime serve`` process."""
+    import subprocess
+
+    try:
+        output = (
+            subprocess.run(
+                ["lsof", "-ti", f":{port}", "-sTCP:LISTEN"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            ).stdout
+            or ""
+        )
+        pids = [pid for pid in output.split() if pid.strip().isdigit()]
+        if not pids:
+            return False
+        command = (
+            subprocess.run(
+                ["ps", "-o", "command=", "-p", ",".join(pids)],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            ).stdout
+            or ""
+        )
+        return any("runtime serve" in line for line in command.splitlines())
+    except Exception:
+        return False
+
+
 def _prepare_execution_security(cfg: Any) -> tuple[str | None, dict[str, str | None]]:
     """Apply and validate the config-backed process isolation contract.
 
@@ -511,6 +555,31 @@ def run_serve(
         print(c.red(f"security error: {bind_error}"), file=sys.stderr)
         return 2
 
+    # Debounce a duplicate desktop/launchd instance before initializing any
+    # execution environment, scheduler, watcher, or app-global runner.  The
+    # old late check returned after those side effects and leaked workers.
+    if not uds and host:
+        try:
+            if _port_held(host, port):
+                sibling = _holder_is_octopus(port)
+                print(
+                    c.red(
+                        f"port {host}:{port} is already in use"
+                        + (
+                            " by another octopus instance; standing down — "
+                            "launchd KeepAlive will retry once the stale holder exits"
+                            if sibling
+                            else "; refusing to start over a foreign service"
+                        )
+                    ),
+                    file=sys.stderr,
+                )
+                # Preserve the launchd contract: a clean exit lets KeepAlive
+                # retry after the existing holder goes away.
+                return 0
+        except Exception as exc:  # noqa: BLE001 - probe failure must not block startup
+            logging.getLogger(__name__).debug("port guard failed: %s", exc)
+
     execution_error, execution_env_previous = _prepare_execution_security(cfg)
     if execution_error is not None:
         print(c.red(f"security error: {execution_error}"), file=sys.stderr)
@@ -529,9 +598,10 @@ def run_serve(
         logging.getLogger(__name__).debug("startup canary failed", exc_info=True)
 
     try:
-        import uvicorn
+        import uvicorn  # noqa: F401 - fail early when the optional UI extra is absent
 
         from runtime.platform.ui import create_app
+        from runtime.platform.ui.server_options import run_uvicorn
     except ImportError:
         _restore_execution_security(execution_env_previous)
         print(_("cli.ui.not_installed"), file=sys.stderr)
@@ -554,8 +624,7 @@ def run_serve(
         closed_jobs = sweep_interrupted_jobs(getattr(stack, "journal", None))
         if closed_jobs:
             logging.getLogger(__name__).warning(
-                "jobs: closed %d background job(s) left running by a previous "
-                "process: %s",
+                "jobs: closed %d background job(s) left running by a previous process: %s",
                 len(closed_jobs),
                 ", ".join(item["job_id"] for item in closed_jobs),
             )
@@ -806,9 +875,9 @@ def run_serve(
 
             with contextlib.suppress(FileNotFoundError):
                 os.unlink(uds)
-            uvicorn.run(app, uds=uds, log_level="info")
+            run_uvicorn(app, uds=uds, log_level="info")
         else:
-            uvicorn.run(app, host=host, port=port, log_level="info")
+            run_uvicorn(app, host=host, port=port, log_level="info")
     finally:
         _restore_execution_security(execution_env_previous)
         runner.stop()
