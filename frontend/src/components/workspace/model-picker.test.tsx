@@ -111,12 +111,14 @@ describe("<ModelPicker />", () => {
 
     await user.click(screen.getByTestId("model-picker-trigger"));
     const menu = await screen.findByTestId("model-picker-menu");
+    expect(menu.querySelector("button button")).toBeNull();
     // One row for the model, not two near-identical ones. Scoped to the menu
     // because the trigger also renders the selected model's label.
     expect(within(menu).getAllByText("DeepSeek V4 Pro")).toHaveLength(1);
     // The long-context variant is still reachable, as an inline affordance.
     await user.click(screen.getByTestId("model-picker-1m-deepseek-v4-pro"));
-    expect(onChange).toHaveBeenCalledWith("deepseek-v4-pro::1m");
+    expect(onChange).toHaveBeenCalledOnce();
+    expect(onChange).toHaveBeenLastCalledWith("deepseek-v4-pro::1m");
   });
 
   it("selecting the row itself keeps the default context window", async () => {
@@ -151,6 +153,191 @@ describe("<ModelPicker />", () => {
       within(menu).getByText("DeepSeek V4 Pro").closest("button")!,
     );
     expect(onChange).toHaveBeenCalledWith("deepseek-v4-pro");
+  });
+
+  it("distinguishes two custom entries sharing the same wire model id", async () => {
+    // A primary provider and its backup can both advertise the same wire
+    // model id ("deepseek-v4-flash") while carrying distinct entry_ids.
+    // Selecting one must send its own entry_id and resolve its own label —
+    // never highlight or echo the other.
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const DUP_MODELS: PickerModel[] = [
+      {
+        name: "deepseek-v4-flash",
+        model: "deepseek-v4-flash",
+        display_name: "deepseek-v4-flash",
+        entry_id: "deepseek-v4-flash",
+        context_profile: "default",
+      },
+      {
+        name: "deepseek-v4-flash",
+        model: "deepseek-v4-flash",
+        display_name: "deepseek-v4-flash (api.b.ai)",
+        entry_id: "deepseek-v4-flash-bai",
+        context_profile: "default",
+      },
+    ];
+    const { rerender } = render(
+      withRouter(
+        <ModelPicker
+          models={DUP_MODELS}
+          value="deepseek-v4-flash"
+          onChange={onChange}
+        />,
+      ),
+    );
+
+    // Both rows render side by side even though their wire id is identical.
+    await user.click(screen.getByTestId("model-picker-trigger"));
+    const menu = await screen.findByTestId("model-picker-menu");
+    expect(within(menu).getByText("deepseek-v4-flash")).toBeInTheDocument();
+    expect(
+      within(menu).getByText("deepseek-v4-flash (api.b.ai)"),
+    ).toBeInTheDocument();
+
+    // Selecting the backup row sends its unique entry_id, not the shared
+    // wire id.
+    await user.click(
+      within(menu).getByText("deepseek-v4-flash (api.b.ai)").closest("button")!,
+    );
+    expect(onChange).toHaveBeenLastCalledWith("deepseek-v4-flash-bai");
+
+    // Selecting the primary row sends its own entry_id.
+    await user.click(screen.getByTestId("model-picker-trigger"));
+    const menu2 = await screen.findByTestId("model-picker-menu");
+    await user.click(
+      within(menu2).getByText("deepseek-v4-flash").closest("button")!,
+    );
+    expect(onChange).toHaveBeenLastCalledWith("deepseek-v4-flash");
+
+    // With the backup selected, the trigger resolves the label via
+    // entry_id instead of falling back to the raw model string.
+    rerender(
+      withRouter(
+        <ModelPicker
+          models={DUP_MODELS}
+          value="deepseek-v4-flash-bai"
+          onChange={onChange}
+        />,
+      ),
+    );
+    expect(screen.getByRole("button", { name: "选择模型" })).toHaveTextContent(
+      "deepseek-v4-flash (api.b.ai)",
+    );
+  });
+
+  it("uses row selection ids for variants, duplicate endpoints, and 1M siblings", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const rows: PickerModel[] = [
+      {
+        name: "economy-model",
+        model: "economy-model",
+        display_name: "Primary economy",
+        entry_id: "primary",
+        selection_id: "selection-primary-economy-default",
+        context_profile: "default",
+      },
+      {
+        name: "economy-model::1m",
+        model: "economy-model",
+        display_name: "Primary economy",
+        entry_id: "primary",
+        selection_id: "selection-primary-economy-1m",
+        context_profile: "1m",
+      },
+      {
+        name: "shared-model",
+        model: "shared-model",
+        display_name: "Primary performance",
+        entry_id: "primary",
+        selection_id: "selection-primary-shared-default",
+        context_profile: "default",
+      },
+      {
+        name: "shared-model::1m",
+        model: "shared-model",
+        display_name: "Primary performance",
+        entry_id: "primary",
+        selection_id: "selection-primary-shared-1m",
+        context_profile: "1m",
+      },
+      {
+        name: "shared-model",
+        model: "shared-model",
+        display_name: "Backup performance",
+        entry_id: "backup",
+        selection_id: "selection-backup-shared-default",
+        context_profile: "default",
+      },
+      {
+        name: "shared-model::1m",
+        model: "shared-model",
+        display_name: "Backup performance",
+        entry_id: "backup",
+        selection_id: "selection-backup-shared-1m",
+        context_profile: "1m",
+      },
+    ];
+    const { rerender } = render(
+      withRouter(
+        <ModelPicker
+          models={rows}
+          value="selection-primary-economy-default"
+          onChange={onChange}
+        />,
+      ),
+    );
+
+    await user.click(screen.getByTestId("model-picker-trigger"));
+    const backupDefault = screen.getByRole("button", {
+      name: "Backup performance",
+    });
+    backupDefault.focus();
+    expect(backupDefault).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(onChange).toHaveBeenLastCalledWith(
+      "selection-backup-shared-default",
+    );
+    expect(onChange).toHaveBeenCalledOnce();
+    onChange.mockClear();
+
+    rerender(
+      withRouter(
+        <ModelPicker
+          models={rows}
+          value="selection-primary-shared-default"
+          onChange={onChange}
+        />,
+      ),
+    );
+    await user.click(screen.getByTestId("model-picker-trigger"));
+    const primaryLong = screen.getByTestId(
+      "model-picker-1m-selection-primary-shared-default",
+    );
+    primaryLong.focus();
+    expect(primaryLong).toHaveFocus();
+    await user.keyboard(" ");
+    expect(onChange).toHaveBeenLastCalledWith("selection-primary-shared-1m");
+    expect(onChange).toHaveBeenCalledOnce();
+    onChange.mockClear();
+
+    rerender(
+      withRouter(
+        <ModelPicker
+          models={rows}
+          value="selection-backup-shared-default"
+          onChange={onChange}
+        />,
+      ),
+    );
+    await user.click(screen.getByTestId("model-picker-trigger"));
+    await user.click(
+      screen.getByTestId("model-picker-1m-selection-backup-shared-default"),
+    );
+    expect(onChange).toHaveBeenLastCalledWith("selection-backup-shared-1m");
+    expect(onChange).toHaveBeenCalledOnce();
   });
 
   it("keeps reasoning effort inside the model dropdown", async () => {

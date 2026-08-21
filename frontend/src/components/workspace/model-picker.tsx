@@ -13,16 +13,40 @@ import { cn } from "@/lib/utils";
 
 /** Minimal slice of the backend model shape used by the picker. */
 export interface PickerModel {
+  id?: string | null;
   name: string;
   display_name?: string | null;
   description?: string | null;
+  entry_id?: string | null;
+  selection_id?: string | null;
   model?: string | null;
   supports_thinking?: boolean;
   supports_vision?: boolean;
+  supports_tool_use?: boolean;
+  supports_reasoning_effort?: boolean;
   /** UI effort tiers this model genuinely accepts. undefined/null = full
    *  default set; [] = no meaningful effort control (picker hides it). */
   reasoning_efforts?: ReasoningEffort[] | null;
+  context_window?: number | null;
+  context_profile?: string | null;
   [key: string]: unknown;
+}
+
+function selectionValue(model: PickerModel): string {
+  return model.selection_id || model.entry_id || model.name;
+}
+
+function longContextSelectionValue(model: PickerModel): string {
+  // Older catalogs have no selection_id; their routable 1M alias is the
+  // ``variant::1m`` name, not the entry id (which means the default profile).
+  return model.selection_id || model.name;
+}
+
+function modelFamilyKey(model: PickerModel): string {
+  if (model.entry_id && model.model) {
+    return `${model.entry_id}\u0000${model.model}`;
+  }
+  return model.name.replace(/::1m$/, "");
 }
 
 interface OfficialMeta {
@@ -187,10 +211,15 @@ function ReasoningEffortSetting({
   );
 }
 
-/** Single row in the list. `right` is the trailing muted text. */
+/**
+ * Single row in the list. The primary action and any trailing action are
+ * sibling buttons so each option remains valid, independently focusable HTML.
+ * `right` is reserved for passive content that belongs to the primary action.
+ */
 function PickerRow({
   label,
   right,
+  trailingAction,
   badge,
   selected,
   disabled,
@@ -198,22 +227,20 @@ function PickerRow({
 }: {
   label: ReactNode;
   right?: ReactNode;
+  trailingAction?: ReactNode;
   badge?: ReactNode;
   selected?: boolean;
   disabled?: boolean;
   onSelect: () => void;
 }) {
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onSelect}
+    <div
       className={cn(
         // Match sidebar NavRow language: h-8, opacity-based emphasis,
         // monochrome. No color accent — selection reads via opacity and
         // a 2px leading bar the way active nav items do.
-        "group/row relative flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs opacity-75 transition-[opacity,background-color]",
-        "hover:opacity-100 hover:bg-muted/40",
+        "group/row relative flex h-7 w-full items-stretch rounded-md text-xs opacity-75 transition-[opacity,background-color]",
+        "hover:bg-muted/40 hover:opacity-100 focus-within:bg-muted/40 focus-within:opacity-100",
         disabled &&
           "cursor-not-allowed opacity-35 hover:opacity-35 hover:bg-transparent",
         selected &&
@@ -221,16 +248,30 @@ function PickerRow({
           "opacity-100 bg-[color:color-mix(in_oklch,var(--sidebar-accent)_55%,transparent)] before:absolute before:left-0 before:top-1 before:bottom-1 before:w-[2px] before:rounded-r before:bg-primary/70",
       )}
     >
-      <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate">
-        <span className="truncate">{label}</span>
-        {badge}
-      </span>
-      {right !== undefined && (
-        <span className="shrink-0 text-xs tabular-nums text-muted-foreground/70 group-hover/row:text-muted-foreground transition-colors">
-          {right}
+      <button
+        type="button"
+        disabled={disabled}
+        aria-pressed={selected}
+        onClick={onSelect}
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-left",
+          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset",
+          trailingAction && "rounded-r-none pr-1",
+          disabled && "cursor-not-allowed",
+        )}
+      >
+        <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate">
+          <span className="truncate">{label}</span>
+          {badge}
         </span>
-      )}
-    </button>
+        {right !== undefined && (
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground/70 transition-colors group-hover/row:text-muted-foreground">
+            {right}
+          </span>
+        )}
+      </button>
+      {trailingAction}
+    </div>
   );
 }
 
@@ -280,7 +321,9 @@ export function ModelPicker({
         (m) =>
           m.name === value ||
           m.model === value ||
-          ("id" in m && m.id === value),
+          ("id" in m && m.id === value) ||
+          m.entry_id === value ||
+          m.selection_id === value,
       );
       // A stored selection the current catalog no longer advertises (a
       // removed/renamed custom model, or the list still loading) must stay
@@ -350,7 +393,9 @@ export function ModelPicker({
     const map = new Map<string, PickerModel>();
     for (const m of models) {
       if (m.context_profile !== "1m") continue;
-      map.set(m.name.replace(/::1m$/, ""), m);
+      // A long-context sibling belongs to one endpoint+variant pair. entry_id
+      // alone is insufficient because one endpoint may expose cheap/pro rows.
+      map.set(modelFamilyKey(m), m);
     }
     return map;
   }, [models]);
@@ -462,28 +507,35 @@ export function ModelPicker({
               </div>
             ) : (
               flatEntries.map((m) => {
-                const long = longContextFor.get(m.name);
+                // selection_id identifies endpoint + upstream variant +
+                // context profile. Legacy catalogs fall back to entry/name.
+                const selectKey = selectionValue(m);
+                const long = longContextFor.get(modelFamilyKey(m));
+                const longSelectKey = long
+                  ? longContextSelectionValue(long)
+                  : undefined;
                 return (
                   <PickerRow
-                    key={m.name}
+                    key={selectKey}
                     label={m.display_name || m.name}
-                    right={
+                    trailingAction={
                       long ? (
                         <button
                           type="button"
-                          data-testid={`model-picker-1m-${m.name}`}
+                          data-testid={`model-picker-1m-${selectKey}`}
+                          aria-label={`${m.display_name || m.name} · ${t.modelPicker.longContextHint}`}
+                          aria-pressed={longSelectKey === value}
                           title={t.modelPicker.longContextHint}
-                          onClick={(e) => {
+                          onClick={() => {
                             // The row itself selects the default context
                             // window; this affordance is the only way to
                             // reach the 1M variant now that it no longer
                             // occupies its own row.
-                            e.stopPropagation();
-                            handleSelect(long.name);
+                            handleSelect(longSelectKey!);
                           }}
                           className={cn(
-                            "rounded border px-1 text-xs transition",
-                            long.name === value
+                            "mr-1 self-center rounded border px-1 text-xs transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                            longSelectKey === value
                               ? "border-primary/60 text-foreground"
                               : "border-border-default/60 text-muted-foreground hover:text-foreground",
                           )}
@@ -492,8 +544,8 @@ export function ModelPicker({
                         </button>
                       ) : undefined
                     }
-                    selected={m.name === value}
-                    onSelect={() => handleSelect(m.name)}
+                    selected={selectKey === value}
+                    onSelect={() => handleSelect(selectKey)}
                   />
                 );
               })
