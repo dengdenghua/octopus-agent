@@ -244,6 +244,8 @@ export interface MentionMemberInput {
   icon?: string | null;
   description?: string | null;
   avatar_url?: string | null;
+  /** Optional stable token inserted after `@` (for example `agent:planner`). */
+  mention_value?: string | null;
 }
 
 /** Resolve an agent avatar_url to an absolute, cache-busted src. */
@@ -290,7 +292,7 @@ function withMemberMentions(
       return {
         type: "agent",
         label,
-        value: label,
+        value: m.mention_value?.trim() || label,
         description: m.description || "群成员",
         icon: m.icon?.trim() || "bot",
         avatarUrl: resolveMentionAvatar(

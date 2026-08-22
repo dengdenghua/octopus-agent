@@ -153,6 +153,7 @@ def test_setup_failure_recorded() -> None:
     result = run_case(case, runner=_mock_runner_echo, k=1)
     assert result.passes == 0
     assert "setup failed" in (result.trajectories[0].error or "")
+    assert result.trajectories[0].failure_category == "infrastructure"
 
 
 def test_grader_observes_state_before_teardown() -> None:
@@ -184,6 +185,7 @@ def test_grader_exception_becomes_failed_trajectory() -> None:
     assert result.passes == 0
     assert result.verdicts[0].reason == "grader raised: verifier unavailable"
     assert result.trajectories[0].error == "grader raised: verifier unavailable"
+    assert result.trajectories[0].failure_category == "infrastructure"
 
 
 def test_runner_exception_captured() -> None:
@@ -196,6 +198,27 @@ def test_runner_exception_captured() -> None:
     assert result.passes == 0
     assert "blew up" in (result.trajectories[0].error or "")
     assert "blew up" in result.verdicts[0].reason
+    assert result.trajectories[0].failure_category == "infrastructure"
+
+
+def test_teardown_exception_is_infrastructure_failure() -> None:
+    def bad_teardown() -> None:
+        raise RuntimeError("cleanup unavailable")
+
+    result = run_case(
+        EvalCase(
+            id="teardown-error",
+            prompt="x",
+            grader=lambda _trajectory: True,
+            teardown=bad_teardown,
+        ),
+        runner=_mock_runner_echo,
+        k=1,
+    )
+
+    assert result.passes == 0
+    assert result.trajectories[0].failure_category == "infrastructure"
+    assert "teardown failed: cleanup unavailable" in result.verdicts[0].reason
 
 
 def test_runner_error_event_fails_with_structured_reason() -> None:
@@ -212,6 +235,7 @@ def test_runner_error_event_fails_with_structured_reason() -> None:
     assert result.passes == 0
     assert result.trajectories[0].error is not None
     assert '"type": "timeout"' in result.verdicts[0].reason
+    assert result.trajectories[0].failure_category is None
 
 
 def test_infrastructure_error_is_not_eligible_for_behavioral_evidence(tmp_path) -> None:

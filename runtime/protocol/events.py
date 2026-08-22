@@ -19,6 +19,7 @@ class ClientMethod(StrEnum):
     # Thread lifecycle
     THREAD_START = "thread/start"
     THREAD_RESUME = "thread/resume"
+    THREAD_EVENTS = "thread/events"
     THREAD_READ = "thread/read"
     THREAD_LIST = "thread/list"
     THREAD_ARCHIVE = "thread/archive"

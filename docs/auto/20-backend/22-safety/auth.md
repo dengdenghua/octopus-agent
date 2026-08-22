@@ -179,7 +179,7 @@ tier: "core"
 
 ## Who imports this
 
-**112** file(s) reference this package:
+**114** file(s) reference this package:
 
 - **`runtime/adapters/`** · 5 file(s)
   - `runtime/adapters/integrations/local_auth/router.py`
@@ -221,13 +221,13 @@ tier: "core"
   - `runtime/projectos/store.py`
 - **`runtime/safety/`** · 1 file(s)
   - `runtime/safety/evolution/proposal_ledger.py`
-- **`runtime/sensing/`** · 58 file(s)
+- **`runtime/sensing/`** · 60 file(s)
   - `runtime/sensing/gateway/_agent_trace_router_stores.py`
   - `runtime/sensing/gateway/_config_endpoints_local_models.py`
   - `runtime/sensing/gateway/_config_endpoints_security.py`
+  - `runtime/sensing/gateway/_cowork_group_access.py`
   - `runtime/sensing/gateway/_observability_auth.py`
-  - `runtime/sensing/gateway/_observability_rollback_panels.py`
-  - _… and 53 more_
+  - _… and 55 more_
 - **`runtime/tentacle/`** · 2 file(s)
   - `runtime/tentacle/coordinator.py`
   - `runtime/tentacle/dashboard.py`

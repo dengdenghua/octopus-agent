@@ -374,12 +374,26 @@ export const enUS: Translations = {
   chatInputBox: {
     quickCapabilities: "Tools",
     collaborators: "Collaboration",
-    collaboratorsSingle: "Solo",
+    collaboratorsSingle: "On demand",
     collaboratorsCountUnit: "members",
     collaboratorsHelp:
-      "Start solo by default; add collaborators to route the prompt into a team task with cluster or swarm formation.",
+      "Only @mentioned AI members reply by default; add collaborators for coordinated or parallel work.",
     collaboratorsSearchPlaceholder: "Search agents / local partners",
     collaboratorsTaskFallback: "Team task",
+    responseMode: "AI participation",
+    responseModeTeamRequired:
+      "Add an AI member before using Coordinated or Parallel collaboration",
+    groupTaskTools: "Start a task or add content",
+    groupTaskStart: "Start a task",
+    groupTaskAddContent: "Add content",
+    groupTaskAuto: "Auto",
+    groupTaskBuild: "Create deliverable",
+    groupTaskResearch: "Deep research",
+    groupTaskDevelop: "Develop",
+    groupTaskAudit: "Read-only audit",
+    groupTaskUxui: "UX/UI review",
+    groupTaskActive: "Task",
+    groupTaskClear: "Return to automatic handling",
     addResearchMaterial: "Add material",
     codexPlan: "Plan",
     codexSpec: "Spec",
@@ -490,9 +504,42 @@ export const enUS: Translations = {
     categoryHomework: "Homework",
     categoryWriting: "Writing",
     categoryTravel: "Travel",
-    hint: "Projects help you organize related conversations. Move threads in after you create one.",
+    aiMembersLabel: "Initial AI collaborators",
+    aiMembersDescription:
+      "They join the project group immediately. Keep at least one; you can adjust the roster later.",
+    aiMembersSelected: (count) => `${count} selected`,
+    agentsLoading: "Loading available AI…",
+    agentsUnavailable:
+      "The list is unavailable. The project will use the default general assistant.",
+    humanMembersLabel: "People",
+    humanMembersAfterCreate: "Invite after creation",
+    humanMembersDescription:
+      "After creation, you will enter the project group and can invite members or viewers with a secure link.",
+    invitePeopleOnArrival: "Invite people when the group opens",
+    creatorRoleLabel: "Your project role",
+    creatorRole: "Project owner · Group owner",
+    creatorRoleDescription:
+      "You can manage the project, orchestrate AI, and invite people.",
+    hint: "The project, its group, and the right-side workbench are created and linked together.",
     cancel: "Cancel",
     create: "Create project",
+  },
+
+  promoteProjectDialog: {
+    trigger: "Convert to project",
+    title: "Convert this work group to a project",
+    description:
+      "Keep the current members and full chat history, then add milestones, items, files, and a project workbench.",
+    nameLabel: "Project name",
+    namePlaceholder: "For example: Fall product launch",
+    goalLabel: "Project goal",
+    goalPlaceholder:
+      "Describe the outcome you want. The first milestones will be planned from it.",
+    cancel: "Cancel",
+    submit: "Create and attach",
+    submitting: "Creating…",
+    success: "This work group is now a project group",
+    failed: "Could not convert this group. Try again.",
   },
 
   // Clarification Questionnaire
@@ -1232,12 +1279,17 @@ export const enUS: Translations = {
     statusDone: "Done",
     progress: "Progress",
     currentObjective: "Current objective",
-    currentObjectiveHint: "The Agent is working on this item. A result receipt will appear when it is complete.",
+    currentObjectiveHint:
+      "The Agent is working on this item. A result receipt will appear when it is complete.",
     resultReceipt: "Result receipt",
-    resultReceiptDescription: "Completed work, artifacts, and unresolved issues in one place for quick verification.",
-    recoveredOperations: (count) => `${count} recovered operation${count === 1 ? "" : "s"}`,
-    verifiedSteps: (count) => `${count} completed item${count === 1 ? "" : "s"}`,
-    unresolvedSteps: (count) => `${count} unresolved item${count === 1 ? "" : "s"}`,
+    resultReceiptDescription:
+      "Completed work, artifacts, and unresolved issues in one place for quick verification.",
+    recoveredOperations: (count) =>
+      `${count} recovered operation${count === 1 ? "" : "s"}`,
+    verifiedSteps: (count) =>
+      `${count} completed item${count === 1 ? "" : "s"}`,
+    unresolvedSteps: (count) =>
+      `${count} unresolved item${count === 1 ? "" : "s"}`,
     noResultYet: "The result will appear when execution finishes",
     thinkingDetail: "Thinking",
     thinkingInProgress: "Thinking",
@@ -5534,21 +5586,21 @@ Strategy:
     teamModes: [
       {
         id: "chat",
-        label: "Solo",
+        label: "On demand",
         description:
-          "One agent answers — @someone routes to them, else the leader.",
+          "@ an AI to request a reply; without @, AI members stay quiet.",
       },
       {
         id: "cluster",
-        label: "Cluster",
+        label: "Coordinated",
         description:
           "Leader decomposes → dispatches → each role works → merges (orchestrated, centralized).",
       },
       {
         id: "swarm",
-        label: "Swarm",
+        label: "Parallel",
         description:
-          "Agents react to a shared blackboard, parallel & leaderless (decentralized, self-organizing).",
+          "Multiple AI members explore the same goal in parallel and build on one another.",
       },
       {
         id: "project",
@@ -5626,6 +5678,62 @@ Strategy:
       noMatches: "No matching Agents",
       inTeam: "In Team",
       add: "Add",
+    },
+    humanInvite: {
+      trigger: "Invite people",
+      dialogTitle: "Invite people to this workgroup",
+      dialogDescription:
+        "Create an invite link with a role and expiry. AI members remain in collaboration settings.",
+      roleLabel: "Role after joining",
+      expiresLabel: "Link expiry",
+      expiresHour: "1 hour",
+      expiresDay: "1 day",
+      expiresWeek: "7 days",
+      expiresMonth: "30 days",
+      createLink: "Create invite link",
+      creatingLink: "Creating...",
+      currentLink: "New invite link",
+      linkVisibleOnce:
+        "For security, the complete link is only shown after it is created.",
+      recordsTitle: "Invite history",
+      refresh: "Refresh",
+      emptyRecords: "No invites yet",
+      loadingRecords: "Loading invites...",
+      createFailed: "Failed to create invite link",
+      loadFailed: "Failed to load invites",
+      revoke: "Revoke invite",
+      revokeSuccess: "Invite revoked",
+      revokeFailed: "Failed to revoke invite",
+      statusActive: "Active",
+      statusExpired: "Expired",
+      statusExhausted: "Used up",
+      statusRevoked: "Revoked",
+      neverExpires: "Never expires",
+      expiresAt: (value: string) => `Expires: ${value}`,
+      usage: (used: number, max: number | null) =>
+        max == null ? `${used} uses` : `${used}/${max} uses`,
+      roomRequired: "Create the workgroup before inviting people",
+      joinPolicyLabel: "Join method",
+      joinPolicyApply: "Request approval",
+      joinPolicyApplyDesc:
+        "Project groups require owner approval before project and chat access is granted.",
+      joinPolicyDirect: "Join directly",
+      joinPolicyDirectDesc:
+        "People in the same tenant with a valid link can join immediately.",
+      directJoinConfirmTitle: "Allow direct joining?",
+      directJoinConfirmDescription:
+        "All currently active invite links will immediately let people enter this project group without owner approval.",
+      directJoinConfirmAction: "Allow direct joining",
+      directJoinConfirmCancel: "Keep approval",
+      policySaveFailed: "Failed to save the join method",
+      pendingRequestsTitle: "Pending requests",
+      pendingRequestsEmpty: "No pending requests",
+      requestsLoadFailed: "Failed to load join requests",
+      approveRequest: "Approve",
+      rejectRequest: "Reject",
+      approveSuccess: "Join request approved",
+      rejectSuccess: "Join request rejected",
+      requestActionFailed: "Failed to process the join request",
     },
     mobileJoin: {
       title: "Connect mobile",
@@ -8320,6 +8428,27 @@ Strategy:
     displayNamePlaceholder: "Your display name",
     joining: "Joining...",
     joinButton: "Join task",
+    applyButton: "Request to join",
+    applying: "Submitting request...",
+    approvalRequired: "Owner approval required",
+    approvalRequiredDescription:
+      "Project workspace and group messages stay private until approval.",
+    requestPendingTitle: "Request submitted",
+    requestPendingDescription:
+      "This page will enter the project group after the owner approves you.",
+    requestSubmitted: "Join request submitted",
+    requestRejected: "The join request was rejected",
+    requestWithdrawn: "The join request was withdrawn",
+    requestExpired: "The join request expired",
+    requestCancelled: "The join request was cancelled",
+    requestApprovedButUnavailable:
+      "The request was approved, but the membership is no longer active. Contact the owner.",
+    refreshStatus: "Refresh status",
+    withdrawRequest: "Withdraw request",
+    withdrawFailed: "Failed to withdraw the request",
+    statusCheckFailed: "Failed to check approval status",
+    missingDestination:
+      "You joined the group, but its chat destination is not linked. Contact the owner.",
   },
 
   evolutionIndicator: {

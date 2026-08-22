@@ -117,6 +117,7 @@ def _set_script(events: list[dict[str, Any]]) -> None:
     _SCRIPT.clear()
     _SCRIPT.extend(events)
     _SCRIPT_POP_ONCE = False
+    _LAST_STREAM_ARGS.clear()
     _LAST_STREAM_KWARGS.clear()
     _LAST_SESSION.clear()
 
@@ -660,6 +661,132 @@ def test_text_delta_maps_to_agent_message(gateway: Any) -> None:
     assert len(agent_items) == 1
     assert agent_items[0]["text"] == "hello world"
     assert agent_items[0]["status"] == "completed"
+
+
+def test_codex_partner_routes_to_app_server_before_legacy_cli(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The selected Codex role must enter one and only one inner engine."""
+    from types import SimpleNamespace
+
+    from runtime.platform.runtime_policy import feature_flags
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "local")
+    monkeypatch.delenv("OCTOPUS_CODEX_APP_SERVER_ENABLED", raising=False)
+    feature_flags.reload()
+    calls: list[str] = []
+
+    async def fake_codex(
+        runtime: CerebrumRuntime,
+        turn: Any,
+        log: Any,
+        emitter: Any,
+        intent: Any,
+        agent: Any,
+        provider: Any,
+        *,
+        text: str,
+    ) -> bool:
+        del intent, agent, provider
+        calls.append(f"app-server:{text}")
+        await runtime._emit_agent_message(turn, log, emitter, "由 Codex App Server 完成")
+        return True
+
+    async def forbidden_legacy(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("legacy codex exec must not run beside App Server")
+
+    monkeypatch.setattr(CerebrumRuntime, "_drive_codex_app_server", fake_codex)
+    monkeypatch.setattr(CerebrumRuntime, "_drive_local_partner", forbidden_legacy)
+    agent = SimpleNamespace(
+        agent_id="local_codex_cli",
+        display_name="Codex CLI 伙伴",
+        capabilities={
+            "local_partner": True,
+            "local_partner_id": "codex-cli",
+            "local_partner_executable": "/opt/octopus/bin/codex",
+        },
+    )
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=agent,
+        logs_root=str(tmp_path / "threads"),
+    )
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-codex-app-server",
+                "input": [{"type": "text", "text": "修复测试"}],
+                "approvalPolicy": "on-request",
+            },
+        )
+
+    assert calls == ["app-server:修复测试"]
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "completed"
+    assert [item["text"] for item in turn["items"] if item["type"] == "agentMessage"] == [
+        "由 Codex App Server 完成"
+    ]
+
+
+def test_codex_partner_failure_reports_the_actual_driver(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from runtime.platform.runtime_policy import feature_flags
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "local")
+    monkeypatch.delenv("OCTOPUS_CODEX_APP_SERVER_ENABLED", raising=False)
+    feature_flags.reload()
+
+    async def fail_codex(*_args: Any, **_kwargs: Any) -> bool:
+        raise RuntimeError("codex protocol failed")
+
+    monkeypatch.setattr(CerebrumRuntime, "_drive_codex_app_server", fail_codex)
+    agent = SimpleNamespace(
+        agent_id="local_codex_cli",
+        display_name="Codex CLI 伙伴",
+        capabilities={
+            "local_partner": True,
+            "local_partner_id": "codex-cli",
+            "local_partner_executable": "/opt/octopus/bin/codex",
+        },
+    )
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=agent,
+        logs_root=str(tmp_path / "threads"),
+    )
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-codex-app-server-error",
+                "input": [{"type": "text", "text": "修复测试"}],
+                "approvalPolicy": "on-request",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "failed"
+    errors = [item for item in turn["items"] if item["type"] == "error"]
+    assert errors[-1]["message"] == "codex protocol failed"
+    assert errors[-1]["errorInfo"]["driver"] == "codex_app_server"
 
 
 def test_user_turn_refills_subagent_wake_budget(gateway: Any, tmp_path: Path) -> None:
@@ -1809,6 +1936,201 @@ def test_team_subagent_lifecycle_maps_to_first_class_item(
     assert sub_items[0]["status"] == "completed"
 
 
+def test_persistent_cowork_chat_without_mention_completes_without_model(
+    tmp_path: Path,
+) -> None:
+    from runtime.memory.cowork.collaboration_store import CollaborationStore
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member
+    from runtime.memory.cowork.session import link_room
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    groups = GroupStore(base_dir=tmp_path / "cowork")
+    collaboration = CollaborationStore(base_dir=tmp_path / "cowork")
+    invite_member(groups, "th-project-room", actor="u", target_id="general", kind="agent")
+    link_room(groups, "th-project-room", "room-project", actor="u")
+    collaboration.upsert_room(
+        "th-project-room",
+        {"id": "room-project", "name": "Project room", "participants": []},
+    )
+    _set_script(
+        [
+            {"type": "text_delta", "delta": "must not run"},
+            {"type": "react_completed"},
+        ]
+    )
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "threads"),
+        cowork_group_store=groups,
+        collaboration_store=collaboration,
+    )
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-project-room",
+                "input": [{"type": "text", "text": "这是一条普通项目群消息"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "completed"
+    assert turn["outcomeReason"] == "cowork_waiting_for_mention"
+    assert [item["type"] for item in turn["items"]] == ["userMessage"]
+    assert _LAST_STREAM_ARGS == {}
+
+    messages = collaboration.messages_for_session("th-project-room")
+    assert len(messages) == 1
+    message = messages[0]
+    user_item = turn["items"][0]
+    assert message["text"] == "这是一条普通项目群消息"
+    assert message["participant_id"] == "anonymous"
+    assert message["display_name"] == "我"
+    assert message["metadata"]["source_message_id"] == f"thread:{user_item['id']}"
+
+    # Emulate the frontend's lazy Project-action mirror.  The shared source id
+    # must resolve to the existing canonical row, never append a second copy.
+    repeated_seq = collaboration.append_message(
+        "th-project-room",
+        room_id="room-project",
+        text=message["text"],
+        participant_id="anonymous",
+        display_name="我",
+        metadata={"source_message_id": message["metadata"]["source_message_id"]},
+    )
+    assert repeated_seq == message["seq"]
+    assert len(collaboration.messages_for_session("th-project-room")) == 1
+
+
+def test_persistent_cowork_chat_mention_drives_addressed_agent(
+    tmp_path: Path,
+) -> None:
+    from runtime.memory.cowork.collaboration_store import CollaborationStore
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member
+    from runtime.memory.cowork.session import link_room
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    class FakeAgent:
+        def __init__(self, agent_id: str) -> None:
+            self.agent_id = agent_id
+            self.display_name = agent_id.title()
+
+    class Registry:
+        def __init__(self, agents: list[FakeAgent]) -> None:
+            self.agents = {agent.agent_id: agent for agent in agents}
+
+        def has(self, agent_id: str) -> bool:
+            return agent_id in self.agents
+
+        def get(self, agent_id: str) -> FakeAgent:
+            return self.agents[agent_id]
+
+    general = FakeAgent("general")
+    eve = FakeAgent("eve")
+    registry = Registry([general, eve])
+    groups = GroupStore(base_dir=tmp_path / "cowork")
+    collaboration = CollaborationStore(base_dir=tmp_path / "cowork")
+    invite_member(groups, "th-addressed-room", actor="u", target_id="general", kind="agent")
+    invite_member(groups, "th-addressed-room", actor="u", target_id="eve", kind="agent")
+    link_room(groups, "th-addressed-room", "room-addressed", actor="u")
+    collaboration.upsert_room(
+        "th-addressed-room",
+        {"id": "room-addressed", "name": "Addressed room", "participants": []},
+    )
+    _set_script(
+        [
+            {"type": "text_delta", "delta": "Eve handled it"},
+            {"type": "react_completed"},
+        ]
+    )
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=general,
+        agent_registry=registry,
+        logs_root=str(tmp_path / "threads"),
+        cowork_group_store=groups,
+        collaboration_store=collaboration,
+    )
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-addressed-room",
+                "input": [{"type": "text", "text": "@agent:eve 请检查一下"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "completed"
+    assert _LAST_STREAM_ARGS["args"][2] is eve
+    assert [item["text"] for item in turn["items"] if item["type"] == "agentMessage"] == [
+        "Eve handled it"
+    ]
+    messages = collaboration.messages_for_session("th-addressed-room")
+    assert len(messages) == 1
+    assert messages[0]["text"] == "@agent:eve 请检查一下"
+
+
+def test_unlinked_single_agent_cowork_chat_keeps_one_to_one_react(
+    tmp_path: Path,
+) -> None:
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    groups = GroupStore(base_dir=tmp_path / "cowork")
+    invite_member(groups, "th-private", actor="u", target_id="general", kind="agent")
+    _set_script(
+        [
+            {"type": "text_delta", "delta": "normal reply"},
+            {"type": "react_completed"},
+        ]
+    )
+    default_agent = object()
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=default_agent,
+        logs_root=str(tmp_path / "threads"),
+        cowork_group_store=groups,
+    )
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-private",
+                "input": [{"type": "text", "text": "hello"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "completed"
+    assert _LAST_STREAM_ARGS["args"][2] is default_agent
+    assert [item["text"] for item in turn["items"] if item["type"] == "agentMessage"] == [
+        "normal reply"
+    ]
+
+
 def test_cowork_swarm_plan_drives_group_fanout(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1824,9 +2146,36 @@ def test_cowork_swarm_plan_drives_group_fanout(
     set_mode(store, "th-cowork", actor="u", mode="swarm")
     seen: dict[str, Any] = {}
 
+    def fake_member_call(
+        *,
+        agent_id: str,
+        prompt: str,
+        context: dict[str, Any] | None = None,
+        **_kwargs: Any,
+    ) -> dict[str, Any]:
+        seen.setdefault("member_calls", []).append(
+            {
+                "agent_id": agent_id,
+                "prompt": prompt,
+                "context": dict(context or {}),
+            }
+        )
+        return {"success": True, "output": f"{agent_id} replied", "error": None}
+
+    monkeypatch.setattr(
+        "runtime.execution.suckers.delegation_skills._call_agent",
+        fake_member_call,
+    )
+
     def fake_fanout(message: str, members: list[dict[str, Any]], **_kwargs: Any) -> dict[str, Any]:
         seen["message"] = message
         seen["members"] = members
+        caller = _kwargs["agent_caller"]
+        for member in members:
+            caller(
+                agent_id=member["name"],
+                prompt=f"fanout prompt for {member['name']}",
+            )
         return {
             "ok": True,
             "count": len(members),
@@ -1898,13 +2247,39 @@ def test_cowork_swarm_plan_drives_group_fanout(
             ws,
             {
                 "threadId": "th-cowork",
-                "input": [{"type": "text", "text": "大家一起看下"}],
+                "input": [
+                    {
+                        "type": "text",
+                        "text": "大家一起看下",
+                        "metadata": {
+                            "context": {
+                                "agent_mode": "audit",
+                                "personal_mode": "research",
+                                "personal_instructions": "优先引用一手来源。",
+                                "workflow_preset": "audit.deep",
+                                "verification_policy": "strict",
+                            }
+                        },
+                    }
+                ],
                 "approvalPolicy": "never",
             },
         )
 
     assert seen["message"] == "大家一起看下"
     assert [m["name"] for m in seen["members"]] == ["db-agent", "ui-agent"]
+    assert len(seen["member_calls"]) == 2
+    for member_call in seen["member_calls"]:
+        member_context = member_call["context"]
+        assert member_context["agent_mode"] == "audit"
+        assert member_context["personal_mode"] == "research"
+        assert member_context["personal_instructions"] == "优先引用一手来源。"
+        assert member_context["workflow_preset"] == "audit.deep"
+        assert member_context["verification_policy"] == "strict"
+        assert member_context["tool_allowlist_read_only"] is True
+        assert "audit.deep" in member_context["system_addendum"]
+        assert "当前任务类型: research" in member_context["system_addendum"]
+        assert "audit.deep" in member_call["prompt"]
     turn = out["response"].result["turn"]
     team_items = [
         item

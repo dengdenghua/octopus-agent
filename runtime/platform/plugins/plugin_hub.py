@@ -26,18 +26,17 @@ import json
 import logging
 import sys
 import threading
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
 from runtime.platform.plugins.plugin_base import ModuleContext, ModulePlugin
 
 try:
-    from fastapi import (
-        Request as _FastAPIRequest,  # noqa: F401 – needed for route annotation resolution
-        WebSocket as _FastAPIWebSocket,  # noqa: F401 – websocket route annotation
-    )
-    from starlette.websockets import (
-        WebSocketDisconnect as _FastAPIWebSocketDisconnect,  # noqa: F401
+    from fastapi import Request as _FastAPIRequest  # noqa: F401 – route annotation
+    from fastapi import WebSocket as _FastAPIWebSocket  # noqa: F401 – route annotation
+    from starlette.websockets import (  # noqa: F401
+        WebSocketDisconnect as _FastAPIWebSocketDisconnect,
     )
 except ImportError:
     _FastAPIRequest = None  # type: ignore[assignment,misc]
@@ -752,10 +751,8 @@ class PluginHub:
                                 _handler_name,
                                 exc,
                             )
-                            try:
+                            with suppress(Exception):  # noqa: BLE001 – best-effort close
                                 await websocket.close(code=1011)
-                            except Exception:  # noqa: BLE001 — close is best-effort
-                                pass
 
                     return _handler
 

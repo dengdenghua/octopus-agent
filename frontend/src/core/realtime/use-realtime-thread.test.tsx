@@ -683,6 +683,439 @@ describe("useRealtimeThread reconnect reconciliation", () => {
   });
 });
 
+describe("useRealtimeThread cross-worker tail recovery", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const TS = "2026-01-01T00:00:00.000Z";
+
+  function activeTurn(withMessage = false) {
+    return {
+      id: "turn-live",
+      threadId: "th",
+      status: "inProgress",
+      items: withMessage
+        ? [
+            {
+              id: "message-1",
+              type: "agentMessage",
+              status: "inProgress",
+              createdAt: TS,
+              text: "",
+            },
+          ]
+        : [],
+      startedAt: TS,
+      completedAt: null,
+      error: null,
+    };
+  }
+
+  function cacheThatSkipsBackgroundBackfill() {
+    let loads = 0;
+    return {
+      load: vi.fn(async () => {
+        loads += 1;
+        if (loads === 1) return null;
+        return {
+          streamId: "stream-a",
+          cursor: 1,
+          partialFrom: 1,
+          events: [
+            {
+              sequence: 1,
+              event: "thread_started",
+              eventId: "cached-prefix",
+              threadId: "th",
+              ts: TS,
+              payload: {},
+            },
+          ],
+        };
+      }),
+      append: vi.fn(async () => {}),
+      clear: vi.fn(async () => {}),
+    };
+  }
+
+  async function flushPromises() {
+    await act(async () => {
+      for (let index = 0; index < 8; index += 1) {
+        await Promise.resolve();
+      }
+    });
+  }
+
+  it("polls single-flight, dedupes live overlap, then performs exactly one final drain", async () => {
+    let emitNotification!: (n: {
+      method: string;
+      params: Record<string, unknown>;
+    }) => void;
+    let resolveFirstPoll!: (value: ThreadEventsTestResponse) => void;
+    let eventCalls = 0;
+    let eventRequestsInFlight = 0;
+    let maxEventRequestsInFlight = 0;
+
+    interface ThreadEventsTestResponse {
+      events: Array<Record<string, unknown>>;
+      cursor: number;
+      streamId: string;
+      requiresReset: boolean;
+      hasMore: boolean;
+      turnCount: number;
+      lastTurnId: string;
+      lastTurnStatus: string;
+    }
+
+    const responseForCall = (
+      call: number,
+    ): Promise<ThreadEventsTestResponse> => {
+      if (call === 1) {
+        return new Promise((resolve) => {
+          resolveFirstPoll = resolve;
+        });
+      }
+      if (call === 2) {
+        return Promise.resolve({
+          events: [
+            {
+              sequence: 12,
+              event: "turn_completed",
+              eventId: "terminal-event",
+              threadId: "th",
+              turnId: "turn-live",
+              ts: "2026-01-01T00:00:05.000Z",
+              payload: { status: "completed", error: null },
+            },
+          ],
+          cursor: 12,
+          streamId: "stream-a",
+          requiresReset: false,
+          hasMore: false,
+          turnCount: 1,
+          lastTurnId: "turn-live",
+          lastTurnStatus: "completed",
+        });
+      }
+      return Promise.resolve({
+        events: [],
+        cursor: 12,
+        streamId: "stream-a",
+        requiresReset: false,
+        hasMore: false,
+        turnCount: 1,
+        lastTurnId: "turn-live",
+        lastTurnStatus: "completed",
+      });
+    };
+
+    const factory = (deps: {
+      onNotification: (n: {
+        method: string;
+        params: Record<string, unknown>;
+      }) => void;
+      onOpen?: () => void;
+    }) => {
+      emitNotification = deps.onNotification;
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string) => {
+          if (method === "thread/resume") {
+            return Promise.resolve({
+              thread: { id: "th" },
+              turns: [activeTurn(true)],
+              hasMore: false,
+              incremental: false,
+              nextEventSequence: 10,
+              eventStreamId: "stream-a",
+            });
+          }
+          if (method !== "thread/events") return Promise.resolve({});
+          eventCalls += 1;
+          eventRequestsInFlight += 1;
+          maxEventRequestsInFlight = Math.max(
+            maxEventRequestsInFlight,
+            eventRequestsInFlight,
+          );
+          return responseForCall(eventCalls).finally(() => {
+            eventRequestsInFlight -= 1;
+          });
+        },
+      };
+    };
+
+    const replayCache = cacheThatSkipsBackgroundBackfill();
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: replayCache as never,
+      }),
+    );
+    await flushPromises();
+    expect(rendered.result.current.state.turns.at(-1)?.status).toBe(
+      "inProgress",
+    );
+
+    act(() => {
+      emitNotification({
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: "th",
+          turnId: "turn-live",
+          itemId: "message-1",
+          delta: "abc",
+          eventId: "live-and-poll",
+        },
+      });
+      vi.advanceTimersByTime(750);
+    });
+    expect(eventCalls).toBe(1);
+
+    // A slow request must not be overlapped by timer ticks.
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(eventCalls).toBe(1);
+    expect(maxEventRequestsInFlight).toBe(1);
+
+    resolveFirstPoll({
+      events: [
+        {
+          sequence: 11,
+          event: "item_delta",
+          eventId: "live-and-poll",
+          threadId: "th",
+          turnId: "turn-live",
+          ts: "2026-01-01T00:00:01.000Z",
+          payload: {
+            itemId: "message-1",
+            kind: "agentMessage",
+            delta: "abc",
+          },
+        },
+      ],
+      cursor: 11,
+      streamId: "stream-a",
+      requiresReset: false,
+      hasMore: false,
+      turnCount: 1,
+      lastTurnId: "turn-live",
+      lastTurnStatus: "inProgress",
+    });
+    await flushPromises();
+    const message = rendered.result.current.state.turns[0]?.items[0];
+    expect(message?.type === "agentMessage" && message.text).toBe("abc");
+
+    act(() => {
+      vi.advanceTimersByTime(750);
+    });
+    expect(eventCalls).toBe(2);
+    await flushPromises();
+    expect(rendered.result.current.state.turns.at(-1)?.status).toBe(
+      "completed",
+    );
+
+    // First terminal observation schedules one immediate durable tail drain.
+    act(() => {
+      vi.advanceTimersByTime(0);
+    });
+    expect(eventCalls).toBe(3);
+    await flushPromises();
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(eventCalls).toBe(3);
+    expect(maxEventRequestsInFlight).toBe(1);
+    rendered.unmount();
+  });
+
+  it("stops recovery polling while offline and after unmount", async () => {
+    let emitOpen!: () => void;
+    let emitClose!: () => void;
+    let resolveOldPoll!: (value: Record<string, unknown>) => void;
+    let eventCalls = 0;
+    let eventRequestsInFlight = 0;
+    let maxEventRequestsInFlight = 0;
+    const factory = (deps: {
+      onOpen?: () => void;
+      onClose?: (code: number, reason: string) => void;
+    }) => {
+      emitOpen = () => deps.onOpen?.();
+      emitClose = () => deps.onClose?.(1006, "offline");
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string) => {
+          if (method === "thread/resume") {
+            return Promise.resolve({
+              thread: { id: "th" },
+              turns: [activeTurn()],
+              hasMore: false,
+              incremental: false,
+              nextEventSequence: 10,
+              eventStreamId: "stream-a",
+            });
+          }
+          if (method === "thread/events") {
+            eventCalls += 1;
+            eventRequestsInFlight += 1;
+            maxEventRequestsInFlight = Math.max(
+              maxEventRequestsInFlight,
+              eventRequestsInFlight,
+            );
+            const response = {
+              events: [] as Array<Record<string, unknown>>,
+              cursor: 10,
+              streamId: "stream-a",
+              requiresReset: false,
+              hasMore: false,
+              turnCount: 1,
+              lastTurnId: "turn-live",
+              lastTurnStatus: "inProgress",
+            };
+            const pending =
+              eventCalls === 1
+                ? new Promise<Record<string, unknown>>((resolve) => {
+                    resolveOldPoll = resolve;
+                  })
+                : Promise.resolve(response);
+            return pending.finally(() => {
+              eventRequestsInFlight -= 1;
+            });
+          }
+          return Promise.resolve({});
+        },
+      };
+    };
+    const replayCache = cacheThatSkipsBackgroundBackfill();
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: replayCache as never,
+      }),
+    );
+    await flushPromises();
+
+    // Let the first poll start and remain unresolved across a close/open.
+    act(() => vi.advanceTimersByTime(750));
+    expect(eventCalls).toBe(1);
+    act(() => emitClose());
+    act(() => vi.advanceTimersByTime(5_000));
+    expect(eventCalls).toBe(1);
+
+    act(() => emitOpen());
+    await flushPromises();
+    // The reconnect catch-up waits for the old physical request to settle.
+    expect(eventCalls).toBe(1);
+    resolveOldPoll({
+      events: [],
+      cursor: 10,
+      streamId: "stream-a",
+      requiresReset: false,
+      hasMore: false,
+      turnCount: 1,
+      lastTurnId: "turn-live",
+      lastTurnStatus: "inProgress",
+    });
+    await flushPromises();
+    expect(eventCalls).toBe(2);
+    expect(maxEventRequestsInFlight).toBe(1);
+    rendered.unmount();
+    act(() => vi.advanceTimersByTime(5_000));
+    expect(eventCalls).toBe(2);
+  });
+
+  it("starts durable confirmation before the live-only id ledger can grow without bound", async () => {
+    let emitNotification!: (n: {
+      method: string;
+      params: Record<string, unknown>;
+    }) => void;
+    let eventCalls = 0;
+    const factory = (deps: {
+      onNotification: (n: {
+        method: string;
+        params: Record<string, unknown>;
+      }) => void;
+      onOpen?: () => void;
+    }) => {
+      emitNotification = deps.onNotification;
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string) => {
+          if (method === "thread/resume") {
+            return Promise.resolve({
+              thread: { id: "th" },
+              turns: [],
+              hasMore: false,
+              incremental: false,
+              nextEventSequence: 10,
+              eventStreamId: "stream-a",
+            });
+          }
+          if (method === "thread/events") {
+            eventCalls += 1;
+            return Promise.resolve({
+              events: [],
+              cursor: 10,
+              streamId: "stream-a",
+              requiresReset: false,
+              hasMore: false,
+              turnCount: 1,
+              lastTurnId: "turn-live",
+              lastTurnStatus: "inProgress",
+            });
+          }
+          return Promise.resolve({});
+        },
+      };
+    };
+    const replayCache = cacheThatSkipsBackgroundBackfill();
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: replayCache as never,
+      }),
+    );
+    await flushPromises();
+    act(() => {
+      emitNotification({
+        method: "turn/started",
+        params: {
+          threadId: "th",
+          turn: activeTurn(),
+          eventId: "live-0",
+        },
+      });
+      for (let index = 1; index < 512; index += 1) {
+        emitNotification({
+          method: "turn/heartbeat",
+          params: {
+            threadId: "th",
+            turnId: "turn-live",
+            eventId: `live-${index}`,
+          },
+        });
+      }
+      vi.advanceTimersByTime(0);
+    });
+    expect(eventCalls).toBe(1);
+    rendered.unmount();
+  });
+});
+
 describe("useRealtimeThread detached active turn", () => {
   it("keeps the socket alive across route unmount until the turn finishes", async () => {
     let emitNotification!: (note: {
@@ -702,8 +1135,7 @@ describe("useRealtimeThread detached active turn", () => {
         connect: () => deps.onOpen?.(),
         close,
         notify: () => {},
-        request: () =>
-          Promise.resolve({ thread: { id: "th" }, turns: [] }),
+        request: () => Promise.resolve({ thread: { id: "th" }, turns: [] }),
       };
     };
     const rendered = renderHook(() =>
@@ -1051,6 +1483,106 @@ describe("useRealtimeThread interrupt approvals", () => {
     );
     expect(decision).toEqual({ action: "decline", reason: "turn interrupted" });
     expect(methods).toContain("turn/interrupt");
+    // The acknowledgement only confirms that cancellation was accepted.
+    // UI terminal state must still arrive from the durable event stream.
+    expect(rendered.result.current.state.turns.at(-1)?.status).toBe(
+      "inProgress",
+    );
+  });
+
+  it("reconciles and rejects a false interrupt acknowledgement without inventing a terminal", async () => {
+    let emitNotification!: (n: {
+      method: string;
+      params: Record<string, unknown>;
+    }) => void;
+    let resumeCalls = 0;
+    const methods: string[] = [];
+    const factory = (deps: {
+      onNotification: (n: {
+        method: string;
+        params: Record<string, unknown>;
+      }) => void;
+      onOpen?: () => void;
+    }) => {
+      emitNotification = deps.onNotification;
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string) => {
+          methods.push(method);
+          if (method === "turn/interrupt") {
+            return Promise.resolve({ interrupted: false });
+          }
+          if (method === "thread/resume") {
+            resumeCalls += 1;
+            return Promise.resolve({
+              thread: { id: "th" },
+              turns:
+                resumeCalls === 1
+                  ? []
+                  : [
+                      {
+                        id: "turn-live",
+                        threadId: "th",
+                        status: "completed",
+                        items: [],
+                        startedAt: "2026-01-01T00:00:00.000Z",
+                        completedAt: "2026-01-01T00:00:01.000Z",
+                        error: null,
+                      },
+                    ],
+              hasMore: false,
+              incremental: false,
+            });
+          }
+          return Promise.resolve({});
+        },
+      };
+    };
+    const rendered = renderHook(() =>
+      useRealtimeThread({ threadId: "th", clientFactory: factory as never }),
+    );
+    await waitFor(() =>
+      expect(rendered.result.current.state.resumeState).toBe("resumed"),
+    );
+    act(() => {
+      emitNotification({
+        method: "turn/started",
+        params: {
+          threadId: "th",
+          turn: {
+            id: "turn-live",
+            threadId: "th",
+            status: "inProgress",
+            items: [],
+            startedAt: "2026-01-01T00:00:00.000Z",
+            completedAt: null,
+            error: null,
+          },
+        },
+      });
+    });
+
+    let interruptError: unknown;
+    await act(async () => {
+      try {
+        await rendered.result.current.interrupt();
+      } catch (error) {
+        interruptError = error;
+      }
+    });
+
+    expect(interruptError).toBeInstanceOf(Error);
+    expect(methods.filter((method) => method === "thread/resume")).toHaveLength(
+      2,
+    );
+    expect(rendered.result.current.state.turns.at(-1)?.status).toBe(
+      "completed",
+    );
+    expect(rendered.result.current.state.turns.at(-1)?.status).not.toBe(
+      "interrupted",
+    );
   });
 });
 
@@ -1195,8 +1727,7 @@ describe("useRealtimeThread cold-start replay cache", () => {
     await cache.append("th", cachedLog(), { streamId: "s-cache", cursor: 4 });
 
     const handles: FakeClientHandles[] = [];
-    const requests: { method: string; params?: Record<string, unknown> }[] =
-      [];
+    const requests: { method: string; params?: Record<string, unknown> }[] = [];
     const factory = (deps: {
       onIncomingRequest: IncomingRequestFn;
       onNotification: (n: {

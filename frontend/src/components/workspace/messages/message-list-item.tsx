@@ -1,4 +1,5 @@
 import type { Message } from "@/core/api/types";
+import type { CoworkRoomMessage } from "@/core/cowork";
 import {
   FileIcon,
   GitForkIcon,
@@ -46,6 +47,10 @@ import { useHumanMessagePlugins } from "@/core/streamdown";
 import { cn } from "@/lib/utils";
 
 import { CopyButton } from "../copy-button";
+import {
+  CoworkRoomMessageActions,
+  type CoworkRoomMessageActionsProps,
+} from "../collab";
 import { emitOpenAgentWorkbench } from "../agent-workbench-events";
 import {
   ExecutionPlanReview,
@@ -66,6 +71,37 @@ import { ClarificationChoiceCard } from "./clarification-choice-card";
 import { GroundingChip } from "./grounding-chip";
 import { useConversationDetailLevel } from "./use-conversation-detail-level";
 import { extractClarificationQuestionnaire } from "../clarification-questionnaire";
+
+export interface MessageListProjectActions extends Omit<
+  CoworkRoomMessageActionsProps,
+  "message"
+> {
+  /** Metadata from the hidden room mirror, keyed by source_message_id. */
+  messageMetadataBySourceId?: Record<string, CoworkRoomMessage["metadata"]>;
+}
+
+/** Build the hidden Team Room copy that gives a canonical thread message a
+ * stable Project OS action anchor without rendering the text twice. */
+export function threadMessageToCoworkRoomMessage(
+  message: Message,
+  threadId: string | null,
+  messageIndex: number | undefined,
+  metadataBySourceId: MessageListProjectActions["messageMetadataBySourceId"],
+): CoworkRoomMessage {
+  const stableMessageId = message.id
+    ? String(message.id)
+    : `${threadId ?? "thread"}:${messageIndex ?? "message"}`;
+  const sourceMessageId = `thread:${stableMessageId}`;
+  return {
+    seq: -1,
+    participant_id: "human",
+    display_name: "我",
+    text: extractTextFromMessage(message),
+    metadata: metadataBySourceId?.[sourceMessageId] ?? {
+      source_message_id: sourceMessageId,
+    },
+  };
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -287,6 +323,7 @@ export const MessageListItem = memo(function MessageListItem({
   isLastMessage = true,
   messageIndex,
   afterContent,
+  projectMessageActions,
 }: {
   className?: string;
   message: Message;
@@ -297,6 +334,8 @@ export const MessageListItem = memo(function MessageListItem({
   isLastMessage?: boolean;
   messageIndex?: number;
   afterContent?: ReactNode;
+  /** Project actions exposed on human bubbles in a bound project group. */
+  projectMessageActions?: MessageListProjectActions;
 }) {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -320,6 +359,24 @@ export const MessageListItem = memo(function MessageListItem({
       (assistantIsSettledAnswer && clipboardText.length > 0 && isLastMessage));
   const params = useParams();
   const threadIdForFeedback = params.threadId ?? params.thread_id ?? null;
+  const { messageMetadataBySourceId, ...coworkProjectMessageActions } =
+    projectMessageActions ?? {};
+  const roomMessageForProjectActions = useMemo<CoworkRoomMessage | null>(() => {
+    if (!isHuman || !projectMessageActions) return null;
+    return threadMessageToCoworkRoomMessage(
+      message,
+      threadIdForFeedback,
+      messageIndex,
+      messageMetadataBySourceId,
+    );
+  }, [
+    isHuman,
+    message,
+    messageIndex,
+    messageMetadataBySourceId,
+    projectMessageActions,
+    threadIdForFeedback,
+  ]);
   const { level } = useConversationDetailLevel();
   const createdAt = (
     message.additional_kwargs as { created_at?: string } | undefined
@@ -419,6 +476,13 @@ export const MessageListItem = memo(function MessageListItem({
             size="icon-sm"
             className="size-7 rounded-lg border-0 bg-transparent p-0 text-foreground/60 shadow-none transition-colors duration-base hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/45"
           />
+          {roomMessageForProjectActions && projectMessageActions ? (
+            <CoworkRoomMessageActions
+              {...coworkProjectMessageActions}
+              message={roomMessageForProjectActions}
+              className={cn("min-h-0", projectMessageActions.className)}
+            />
+          ) : null}
           {threadIdForFeedback != null && messageIndex != null ? (
             <button
               onClick={() => {

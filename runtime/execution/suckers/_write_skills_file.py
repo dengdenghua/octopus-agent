@@ -220,11 +220,11 @@ def _edit_file(
                 "error": "edit_already_applied",
                 "occurrences": 0,
                 "hint": (
-                    f"old_string wasn't found, but new_string is already "
-                    f"present in the file — the edit appears to have been "
-                    f"applied already. No further action needed; if you "
-                    f"meant a different edit, re-read the file with "
-                    f"read_file(path) to see the current content."
+                    "old_string wasn't found, but new_string is already "
+                    "present in the file — the edit appears to have been "
+                    "applied already. No further action needed; if you "
+                    "meant a different edit, re-read the file with "
+                    "read_file(path) to see the current content."
                 ),
                 "new_string_present": True,
                 "preview": preview,

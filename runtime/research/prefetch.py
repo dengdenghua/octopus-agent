@@ -110,10 +110,7 @@ class ResearchPrefetcher:
             return [self._search(source, topic, query) for source, query in pending]
 
         with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="prefetch-search") as pool:
-            futures = [
-                pool.submit(self._search, source, topic, query)
-                for source, query in pending
-            ]
+            futures = [pool.submit(self._search, source, topic, query) for source, query in pending]
             results: list[PrefetchResult | None] = []
             for idx, fut in enumerate(futures):
                 source, query = pending[idx]

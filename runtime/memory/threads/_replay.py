@@ -162,12 +162,21 @@ def _apply_event(
         _upsert_replayed_item(turn, new_item, completed=True)
         return
     if evt.event == "turn_compacted":
-        # Compaction replaces a contiguous range of prior turns with a
-        # single summary turn. Replay drops the superseded turns and
-        # inserts the summary in their place, preserving the original
-        # ordering (summary slots where the oldest superseded turn was).
+        # Compaction is a compare-and-replace checkpoint over the current
+        # visible history, not an arbitrary splice. ``compact()`` always
+        # folds one ordered prefix. Requiring that exact prefix here makes
+        # replay deterministic when two processes compact the same (or
+        # overlapping) stale snapshot: the first persisted replacement wins
+        # and later stale events become no-ops instead of appending duplicate
+        # summaries out of chronological order.
         superseded_ids = evt.payload.get("supersededTurnIds") or []
-        if not isinstance(superseded_ids, list):
+        if (
+            not isinstance(superseded_ids, list)
+            or not superseded_ids
+            or any(not isinstance(turn_id, str) or not turn_id for turn_id in superseded_ids)
+            or len(set(superseded_ids)) != len(superseded_ids)
+            or [turn.id for turn in turns[: len(superseded_ids)]] != superseded_ids
+        ):
             return
         summary_raw = evt.payload.get("summaryTurn")
         if not isinstance(summary_raw, dict):
@@ -176,17 +185,7 @@ def _apply_event(
             summary_turn = Turn.model_validate(summary_raw)
         except (TypeError, ValueError):  # noqa: BLE001
             return
-        first_idx: int | None = None
-        for idx, t in enumerate(turns):
-            if t.id in superseded_ids and first_idx is None:
-                first_idx = idx
-                break
-        keep = [t for t in turns if t.id not in superseded_ids]
-        insert_at = first_idx if first_idx is not None else len(keep)
-        if insert_at > len(keep):
-            insert_at = len(keep)
-        keep.insert(insert_at, summary_turn)
-        turns[:] = keep
+        turns[:] = [summary_turn, *turns[len(superseded_ids) :]]
         for sid in superseded_ids:
             by_id.pop(sid, None)
         by_id[summary_turn.id] = summary_turn

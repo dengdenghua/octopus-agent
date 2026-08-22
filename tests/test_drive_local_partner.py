@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from types import SimpleNamespace
 
 from runtime.execution.agents.local_partner_bridge import LocalPartnerResult
@@ -36,10 +37,11 @@ def _agent(partner_id="claude-code", command="claude", name="Claude Code 伙伴"
 
 def _drive(rt, agent, *, result=None, monkeypatch=None):
     turn = SimpleNamespace(items=[], status="inProgress")
+    intent = SimpleNamespace(user_context={"cwd": str(Path.cwd())})
     if result is not None and monkeypatch is not None:
         monkeypatch.setattr(mod, "run_local_partner", lambda **kw: result)
     asyncio.run(
-        mod.drive_local_partner(rt, turn, object(), object(), object(), agent, object(), text="go")
+        mod.drive_local_partner(rt, turn, object(), object(), intent, agent, object(), text="go")
     )
     return turn
 
@@ -176,7 +178,7 @@ def test_envelope_briefs_prompt_passes_env_and_harvests(monkeypatch) -> None:
 
     monkeypatch.setattr(mod, "run_local_partner", fake_run)
     turn = SimpleNamespace(id="turn-1", thread_id="th", items=[], status="inProgress")
-    intent = SimpleNamespace(user_context={})
+    intent = SimpleNamespace(user_context={"cwd": str(Path.cwd())})
     asyncio.run(
         mod.drive_local_partner(
             rt, turn, object(), object(), intent, _agent(), object(), text="do X"
@@ -191,3 +193,65 @@ def test_envelope_briefs_prompt_passes_env_and_harvests(monkeypatch) -> None:
     assert harvested["out"] == "did the work"
     assert harvested["tid"] == "turn-1"
     assert rt.messages == ["did the work"]
+
+
+def test_passes_only_the_server_resolved_workspace_to_cli(monkeypatch) -> None:
+    rt = _FakeRuntime()
+    seen: dict = {}
+
+    def fake_run(**kw):
+        seen.update(kw)
+        return LocalPartnerResult(ok=True, output="done", exit_code=0)
+
+    monkeypatch.setattr(mod, "run_local_partner", fake_run)
+    turn = SimpleNamespace(id="turn-1", thread_id="th", items=[], status="inProgress")
+    intent = SimpleNamespace(
+        user_context={
+            "cwd": "/srv/octopus/data/workspaces/tenant/alice/th",
+            # This field may have originated in client metadata. The driver
+            # deliberately ignores it in favour of _build_intent's cwd.
+            "workspace_path": "/attacker/chosen/path",
+        }
+    )
+
+    asyncio.run(
+        mod.drive_local_partner(
+            rt,
+            turn,
+            object(),
+            object(),
+            intent,
+            _agent(),
+            object(),
+            text="do X",
+        )
+    )
+
+    assert seen["cwd"] == "/srv/octopus/data/workspaces/tenant/alice/th"
+
+
+def test_missing_server_workspace_fails_closed_without_spawning(monkeypatch) -> None:
+    rt = _FakeRuntime()
+    monkeypatch.setattr(
+        mod,
+        "run_local_partner",
+        lambda **kw: (_ for _ in ()).throw(AssertionError("spawned without workspace")),
+    )
+    turn = SimpleNamespace(id="turn-1", thread_id="th", items=[], status="inProgress")
+    intent = SimpleNamespace(user_context={"workspace_path": "/attacker/chosen/path"})
+
+    asyncio.run(
+        mod.drive_local_partner(
+            rt,
+            turn,
+            object(),
+            object(),
+            intent,
+            _agent(),
+            object(),
+            text="do X",
+        )
+    )
+
+    assert turn.status == TurnStatus.FAILED
+    assert "server-managed workspace" in rt.messages[0]

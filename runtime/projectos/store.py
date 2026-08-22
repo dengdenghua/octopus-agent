@@ -10,31 +10,35 @@ dataclasses.
 from __future__ import annotations
 
 import json
-import re
 import sqlite3
 import threading
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from runtime.projectos._store_helpers import (
+    _MAX_NAME_LENGTH,
+    _available_milestone_id,
+    _json_dict,
+    _milestone_from_doc,
+    _normalize_milestone,
+    _normalize_project,
+    _normalize_task,
+    _optional_id,
+    _project_from_doc,
+    _require_id,
+    _require_kind,
+    _task_from_doc,
+    _text,
+)
 from runtime.projectos.model import Milestone, Project, Task
 from runtime.safety.auth.scope import TenantScope
 
 _TERMINAL_PROJECT_STATUSES = frozenset({"done", "failed"})
 _TERMINAL_MILESTONE_STATUSES = frozenset({"done", "failed"})
 _TERMINAL_TASK_STATUSES = frozenset({"done", "failed", "rejected"})
-_TASK_TYPES = frozenset({"design", "code", "research", "analysis", "review"})
-_TASK_STATUSES = frozenset({"pending", "ready", "running", "blocked", "done", "failed", "rejected"})
-_MILESTONE_STATUSES = frozenset({"pending", "active", "in_progress", "blocked", "done", "failed"})
-_PROJECT_STATUSES = frozenset({"planning", "running", "blocked", "done", "failed"})
-_SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@-]{0,239}$")
-_SAFE_KIND_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
-_MAX_TEXT_LENGTH = 65_536
-_MAX_NAME_LENGTH = 512
-_MAX_LIST_ITEMS = 512
-_MAX_JSON_BYTES = 1024 * 1024
-
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, doc TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS milestones (
@@ -59,177 +63,6 @@ CREATE INDEX IF NOT EXISTS idx_task_ms ON tasks(milestone_id);
 CREATE INDEX IF NOT EXISTS idx_project_events_project
     ON project_events(project_id, created_at);
 """
-
-
-def _require_id(value: object, *, label: str) -> str:
-    text = str(value or "").strip()
-    if not _SAFE_ID_RE.fullmatch(text):
-        raise ValueError(
-            f"invalid {label}: use 1-240 letters, numbers, dot, underscore, colon, @, or hyphen"
-        )
-    return text
-
-
-def _optional_id(value: object, *, label: str) -> str | None:
-    text = str(value or "").strip()
-    return _require_id(text, label=label) if text else None
-
-
-def _require_kind(value: object) -> str:
-    text = str(value or "").strip()
-    if not _SAFE_KIND_RE.fullmatch(text):
-        raise ValueError("invalid event kind")
-    return text
-
-
-def _text(
-    value: object,
-    *,
-    label: str,
-    max_length: int = _MAX_TEXT_LENGTH,
-    default: str = "",
-) -> str:
-    text = str(value if value is not None else default).strip()
-    if not text:
-        text = default
-    if len(text) > max_length or any(ord(ch) < 32 and ch not in "\n\r\t" for ch in text):
-        raise ValueError(f"invalid {label}: too long or contains unsupported control characters")
-    if any(ord(ch) == 127 for ch in text):
-        raise ValueError(f"invalid {label}: contains unsupported control characters")
-    return text
-
-
-def _id_list(values: object, *, label: str) -> list[str]:
-    if not isinstance(values, list):
-        return []
-    out: list[str] = []
-    for value in values:
-        if len(out) >= _MAX_LIST_ITEMS:
-            break
-        safe = _optional_id(value, label=label)
-        if safe:
-            out.append(safe)
-    return out
-
-
-def _text_list(values: object, *, label: str) -> list[str]:
-    if not isinstance(values, list):
-        return []
-    out: list[str] = []
-    for value in values:
-        if len(out) >= _MAX_LIST_ITEMS:
-            break
-        text = _text(value, label=label, max_length=4096)
-        if text:
-            out.append(text)
-    return out
-
-
-def _json_value(value: Any, *, label: str) -> Any:
-    try:
-        blob = json.dumps(value, ensure_ascii=False, default=str)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"invalid {label}: not JSON serializable") from exc
-    if len(blob.encode("utf-8")) > _MAX_JSON_BYTES:
-        raise ValueError(f"invalid {label}: JSON payload exceeds {_MAX_JSON_BYTES} bytes")
-    try:
-        return json.loads(blob)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"invalid {label}: JSON round-trip failed") from exc
-
-
-def _json_dict(value: Any, *, label: str) -> dict[str, Any]:
-    normalized = _json_value(value or {}, label=label)
-    return normalized if isinstance(normalized, dict) else {}
-
-
-def _normalize_project(project: Project) -> Project:
-    project_id = _require_id(project.id, label="project_id")
-    return Project(
-        id=project_id,
-        name=_text(
-            project.name, label="project name", max_length=_MAX_NAME_LENGTH, default=project_id
-        ),
-        goal=_text(project.goal, label="project goal"),
-        milestone_ids=_id_list(project.milestone_ids, label="milestone_id"),
-        current_ms=_optional_id(project.current_ms, label="milestone_id"),
-        status=project.status if project.status in _PROJECT_STATUSES else "planning",
-        owner_id=_text(project.owner_id, label="owner_id", max_length=256),
-        tenant_id=_text(project.tenant_id, label="tenant_id", max_length=256),
-        execution_thread_id=(
-            _optional_id(project.execution_thread_id, label="execution_thread_id") or ""
-        ),
-        owner=_text(project.owner, label="project owner", max_length=256),
-        created_at=_text(project.created_at, label="created_at", max_length=64),
-        started_at=_text(project.started_at, label="started_at", max_length=64),
-        finished_at=_text(project.finished_at, label="finished_at", max_length=64),
-    )
-
-
-def _normalize_milestone(ms: Milestone) -> Milestone:
-    ms_id = _require_id(ms.id, label="milestone_id")
-    return Milestone(
-        id=ms_id,
-        name=_text(ms.name, label="milestone name", max_length=_MAX_NAME_LENGTH, default=ms_id),
-        goal=_text(ms.goal, label="milestone goal"),
-        spec=_json_dict(ms.spec, label="milestone spec"),
-        success_criteria=_text_list(ms.success_criteria, label="success criterion"),
-        priority=ms.priority if ms.priority in ("P0", "P1", "P2", "P3") else "P2",
-        planned_start=_text(ms.planned_start, label="planned_start", max_length=64),
-        due_at=_text(ms.due_at, label="due_at", max_length=64),
-        status=ms.status if ms.status in _MILESTONE_STATUSES else "pending",
-        dependencies=_id_list(ms.dependencies, label="milestone dependency"),
-        task_ids=_id_list(ms.task_ids, label="task_id"),
-    )
-
-
-def _normalize_task(task: Task) -> Task:
-    task_id = _require_id(task.id, label="task_id")
-    milestone_id = _require_id(task.milestone_id, label="milestone_id")
-    return Task(
-        id=task_id,
-        milestone_id=milestone_id,
-        type=task.type if task.type in _TASK_TYPES else "code",
-        goal=_text(task.goal, label="task goal"),
-        assigned_role=_optional_id(task.assigned_role, label="assigned_role") or "engineer",
-        assigned_agent=_optional_id(task.assigned_agent, label="assigned_agent") or "",
-        team_mode=task.team_mode if task.team_mode in ("single", "swarm", "cluster") else "single",
-        priority=task.priority if task.priority in ("P0", "P1", "P2", "P3") else "P2",
-        estimate=max(0.0, float(task.estimate or 0)),
-        due_at=_text(task.due_at, label="due_at", max_length=64),
-        acceptance_criteria=_text_list(task.acceptance_criteria, label="acceptance criterion"),
-        status=task.status if task.status in _TASK_STATUSES else "pending",
-        depends_on=_id_list(task.depends_on, label="task dependency"),
-        input=_json_dict(task.input, label="task input"),
-        output=_json_value(task.output, label="task output"),
-        qa_verdict=(
-            _json_dict(task.qa_verdict, label="task qa_verdict")
-            if task.qa_verdict is not None
-            else None
-        ),
-        attempts=max(0, min(int(task.attempts or 0), 100)),
-    )
-
-
-def _project_from_doc(raw: str) -> Project | None:
-    try:
-        return _normalize_project(Project.from_dict(json.loads(raw)))
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
-        return None
-
-
-def _milestone_from_doc(raw: str) -> Milestone | None:
-    try:
-        return _normalize_milestone(Milestone.from_dict(json.loads(raw)))
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
-        return None
-
-
-def _task_from_doc(raw: str) -> Task | None:
-    try:
-        return _normalize_task(Task.from_dict(json.loads(raw)))
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
-        return None
 
 
 def _default_dir() -> Path:
@@ -348,6 +181,108 @@ class ProjectStore:
             )
         return project
 
+    def create_project_plan(
+        self,
+        project: Project,
+        milestones: list[Milestone],
+        *,
+        scope: TenantScope | None = None,
+    ) -> tuple[Project, list[Milestone]]:
+        """Atomically persist a new project, its milestones, and plan event.
+
+        Planner milestone ids are project-local in practice but global keys in
+        the legacy schema. The first unused id is preserved for compatibility;
+        collisions are namespaced and every dependency is rewritten to the
+        resolved id before the transaction starts writing.
+        """
+
+        candidate_project = self._prepare_project(_normalize_project(project), scope)
+        candidates = [_normalize_milestone(milestone) for milestone in milestones]
+        if not candidates:
+            raise ValueError("project plan requires at least one milestone")
+        event_id = f"EV-{uuid4().hex[:12]}"
+        created_at = time.time()
+
+        with self._lock, self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if conn.execute(
+                "SELECT 1 FROM projects WHERE id=?",
+                (candidate_project.id,),
+            ).fetchone():
+                raise ValueError("project already exists")
+
+            used_ids = {str(row[0]) for row in conn.execute("SELECT id FROM milestones").fetchall()}
+            resolved_ids: list[str] = []
+            id_map: dict[str, str] = {}
+            for milestone in candidates:
+                resolved_id = _available_milestone_id(
+                    candidate_project.id,
+                    milestone.id,
+                    used_ids=used_ids,
+                )
+                used_ids.add(resolved_id)
+                resolved_ids.append(resolved_id)
+                # Duplicate planner ids are ambiguous; dependencies retain the
+                # first occurrence, matching the legacy planner interpretation.
+                id_map.setdefault(milestone.id, resolved_id)
+
+            resolved: list[Milestone] = []
+            for milestone, resolved_id in zip(candidates, resolved_ids, strict=True):
+                raw = milestone.to_dict()
+                raw["id"] = resolved_id
+                raw["dependencies"] = [
+                    id_map.get(dependency, dependency) for dependency in milestone.dependencies
+                ]
+                resolved.append(_normalize_milestone(Milestone.from_dict(raw)))
+
+            candidate_project.milestone_ids = resolved_ids
+            if candidate_project.current_ms:
+                candidate_project.current_ms = id_map.get(
+                    candidate_project.current_ms,
+                    candidate_project.current_ms,
+                )
+            candidate_project = self._prepare_project(
+                _normalize_project(candidate_project),
+                scope,
+            )
+            event_payload = _json_dict(
+                {
+                    "name": candidate_project.name,
+                    "goal": candidate_project.goal,
+                    "milestone_ids": resolved_ids,
+                    "milestone_count": len(resolved),
+                },
+                label="event payload",
+            )
+
+            conn.execute(
+                "INSERT INTO projects(id, doc) VALUES (?, ?)",
+                (
+                    candidate_project.id,
+                    json.dumps(candidate_project.to_dict(), ensure_ascii=False),
+                ),
+            )
+            for milestone in resolved:
+                conn.execute(
+                    "INSERT INTO milestones(id, project_id, doc) VALUES (?, ?, ?)",
+                    (
+                        milestone.id,
+                        candidate_project.id,
+                        json.dumps(milestone.to_dict(), ensure_ascii=False),
+                    ),
+                )
+            conn.execute(
+                "INSERT INTO project_events(id, project_id, kind, payload, created_at) "
+                "VALUES (?, ?, 'project.planned', ?, ?)",
+                (
+                    event_id,
+                    candidate_project.id,
+                    json.dumps(event_payload, ensure_ascii=False),
+                    created_at,
+                ),
+            )
+        return candidate_project, resolved
+
     def get_project(self, project_id: str, *, scope: TenantScope | None = None) -> Project | None:
         project_id = _require_id(project_id, label="project_id")
         with self._lock, self._conn() as conn:
@@ -465,6 +400,217 @@ class ProjectStore:
         events.reverse()
         return events
 
+    def artifacts_for_project(
+        self,
+        project_id: str,
+        *,
+        scope: TenantScope | None = None,
+    ) -> list[dict[str, Any]]:
+        """Build the durable artifact read model from published events.
+
+        Artifact events are the source of truth, so this projection survives
+        process restarts without introducing a second writable artifact store.
+        Newest events win when an artifact id is published more than once.
+        """
+
+        project = _require_id(project_id, label="project_id")
+        with self._lock, self._conn() as conn:
+            if (
+                self._effective_scope(scope) is not None
+                and self._project_doc_for_scope(conn, project, scope) is None
+            ):
+                return []
+            rows = conn.execute(
+                "SELECT id, payload FROM project_events "
+                "WHERE project_id=? AND kind='project.artifact_published' "
+                "ORDER BY created_at DESC, id DESC",
+                (project,),
+            ).fetchall()
+
+        artifacts: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for event_id, raw_payload in rows:
+            try:
+                payload = _json_dict(json.loads(raw_payload), label="event payload")
+                raw_artifact = payload.get("artifact")
+                if not isinstance(raw_artifact, dict):
+                    continue
+                artifact_id = _optional_id(raw_artifact.get("id"), label="artifact id")
+                if artifact_id is None:
+                    # Older hand-authored events did not always include an
+                    # artifact id.  The immutable event id is a stable fallback.
+                    artifact_id = _require_id(event_id, label="event_id")
+                if artifact_id in seen_ids:
+                    continue
+                name = _text(
+                    raw_artifact.get("name")
+                    or raw_artifact.get("title")
+                    or raw_artifact.get("path")
+                    or raw_artifact.get("url")
+                    or artifact_id,
+                    label="artifact name",
+                    max_length=_MAX_NAME_LENGTH,
+                    default=artifact_id,
+                )
+                artifact: dict[str, Any] = {"id": artifact_id, "name": name}
+                for key, max_length in (
+                    ("kind", 128),
+                    ("path", 4096),
+                    ("url", 4096),
+                    ("summary", 4096),
+                    ("task_id", 240),
+                    ("milestone_id", 240),
+                ):
+                    value = raw_artifact.get(key)
+                    if value in (None, "") or isinstance(value, (dict, list)):
+                        continue
+                    normalized = _text(
+                        value,
+                        label=f"artifact {key}",
+                        max_length=max_length,
+                    )
+                    if normalized:
+                        artifact[key] = normalized
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+            seen_ids.add(artifact_id)
+            artifacts.append(artifact)
+        return artifacts
+
+    def decisions_for_project(
+        self,
+        project_id: str,
+        *,
+        scope: TenantScope | None = None,
+    ) -> list[dict[str, Any]]:
+        """Build the durable project-decision read model from audit events.
+
+        Existing message actions store ``decision`` as a string. Structured
+        payloads are also accepted for forward compatibility. Newest events
+        win when multiple events identify the same logical decision.
+        """
+
+        project = _require_id(project_id, label="project_id")
+        with self._lock, self._conn() as conn:
+            if (
+                self._effective_scope(scope) is not None
+                and self._project_doc_for_scope(conn, project, scope) is None
+            ):
+                return []
+            rows = conn.execute(
+                "SELECT id, payload, created_at FROM project_events "
+                "WHERE project_id=? AND kind='project.decision_recorded' "
+                "ORDER BY created_at DESC, id DESC",
+                (project,),
+            ).fetchall()
+
+        decisions: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for event_id, raw_payload, raw_created_at in rows:
+            try:
+                safe_event_id = _require_id(event_id, label="event_id")
+                payload = _json_dict(json.loads(raw_payload), label="event payload")
+                raw_decision = payload.get("decision")
+                detail = raw_decision if isinstance(raw_decision, dict) else {}
+                try:
+                    decision_id = _optional_id(
+                        detail.get("id") or payload.get("decision_id"),
+                        label="decision id",
+                    )
+                except ValueError:
+                    decision_id = None
+                decision_id = decision_id or safe_event_id
+                if decision_id in seen_ids:
+                    continue
+
+                decision_text = _text(
+                    detail.get("decision")
+                    or detail.get("text")
+                    or detail.get("value")
+                    or (raw_decision if not isinstance(raw_decision, dict) else ""),
+                    label="decision",
+                )
+                if not decision_text:
+                    continue
+                title = _text(
+                    detail.get("title") or payload.get("title") or decision_text.splitlines()[0],
+                    label="decision title",
+                )[:_MAX_NAME_LENGTH]
+                summary = _text(
+                    detail.get("summary")
+                    or payload.get("summary")
+                    or payload.get("rationale")
+                    or decision_text,
+                    label="decision summary",
+                )[:4096]
+                actor = _text(
+                    detail.get("actor") or payload.get("actor"),
+                    label="decision actor",
+                    max_length=256,
+                )
+                created_at = datetime.fromtimestamp(float(raw_created_at), UTC).isoformat()
+                decision: dict[str, Any] = {
+                    "id": decision_id,
+                    "title": title,
+                    "summary": summary,
+                    "decision": decision_text,
+                    "actor": actor,
+                    "created_at": created_at,
+                }
+                raw_source = detail.get("source_message") or payload.get("source_message")
+                source = raw_source if isinstance(raw_source, dict) else {}
+                source_message_id = _text(
+                    source.get("source_message_id"),
+                    label="source_message_id",
+                    max_length=240,
+                )
+                if source_message_id:
+                    decision["source_message_id"] = source_message_id
+                try:
+                    milestone_id = _optional_id(
+                        detail.get("milestone_id") or payload.get("milestone_id"),
+                        label="milestone_id",
+                    )
+                except ValueError:
+                    milestone_id = None
+                if milestone_id:
+                    decision["milestone_id"] = milestone_id
+            except (OSError, OverflowError, TypeError, ValueError, json.JSONDecodeError):
+                continue
+            seen_ids.add(decision_id)
+            decisions.append(decision)
+        return decisions
+
+    def get_event(
+        self,
+        event_id: str,
+        *,
+        scope: TenantScope | None = None,
+    ) -> dict | None:
+        """Fetch one audit event by id for idempotent external actions."""
+
+        safe_event_id = _require_id(event_id, label="event_id")
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                "SELECT id, project_id, kind, payload, created_at FROM project_events WHERE id=?",
+                (safe_event_id,),
+            ).fetchone()
+            if not row or (
+                self._effective_scope(scope) is not None
+                and self._project_doc_for_scope(conn, str(row[1]), scope) is None
+            ):
+                return None
+        try:
+            return {
+                "id": _require_id(row[0], label="event_id"),
+                "project_id": _require_id(row[1], label="project_id"),
+                "kind": _require_kind(row[2]),
+                "payload": _json_dict(json.loads(row[3]), label="event payload"),
+                "created_at": float(row[4]),
+            }
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None
+
     # ── thread bindings ─────────────────────────────────────────────────────
     def bind_thread(
         self,
@@ -581,6 +727,8 @@ class ProjectStore:
                 existing = _milestone_from_doc(existing_row[0])
                 if existing is None:
                     raise ValueError(f"corrupt existing milestone row: {ms.id}")
+                if str(existing_row[1]) != project_id:
+                    raise ValueError("milestone is already attached to another project")
                 if existing.status in _TERMINAL_MILESTONE_STATUSES:
                     return existing
             if existing_row and str(existing_row[1]) != project_id:
@@ -667,6 +815,69 @@ class ProjectStore:
                 (task.id, task.milestone_id, json.dumps(task.to_dict(), ensure_ascii=False)),
             )
         return task
+
+    def add_task_to_milestone(
+        self,
+        project_id: str,
+        task: Task,
+        *,
+        scope: TenantScope | None = None,
+    ) -> tuple[Task, bool]:
+        """Atomically create a task and attach it to its milestone.
+
+        Message-to-project actions use this instead of creating a Team Task and
+        syncing it backwards.  Project OS remains authoritative, while the
+        collaboration task row is populated afterwards as a read projection.
+        Reusing the same task id is idempotent when it already belongs to the
+        requested milestone.
+        """
+
+        safe_project_id = _require_id(project_id, label="project_id")
+        task = _normalize_task(task)
+        with self._lock, self._conn() as conn:
+            project = self._project_doc_for_scope(conn, safe_project_id, scope)
+            if project is None:
+                raise PermissionError("project belongs to another tenant or does not exist")
+            if project.status in _TERMINAL_PROJECT_STATUSES:
+                raise ValueError("cannot add a task to a terminal project")
+            milestone_row = conn.execute(
+                "SELECT doc, project_id FROM milestones WHERE id=?",
+                (task.milestone_id,),
+            ).fetchone()
+            if not milestone_row or str(milestone_row[1]) != safe_project_id:
+                raise ValueError("milestone does not belong to project")
+            milestone = _milestone_from_doc(str(milestone_row[0]))
+            if milestone is None:
+                raise ValueError(f"corrupt existing milestone row: {task.milestone_id}")
+            if milestone.status in _TERMINAL_MILESTONE_STATUSES:
+                raise ValueError("cannot add a task to a terminal milestone")
+
+            existing_row = conn.execute(
+                "SELECT doc, milestone_id FROM tasks WHERE id=?",
+                (task.id,),
+            ).fetchone()
+            created = existing_row is None
+            if existing_row:
+                if str(existing_row[1]) != task.milestone_id:
+                    raise ValueError("task is already attached to another milestone")
+                existing = _task_from_doc(str(existing_row[0]))
+                if existing is None:
+                    raise ValueError(f"corrupt existing task row: {task.id}")
+                task = existing
+            else:
+                conn.execute(
+                    "INSERT INTO tasks(id, milestone_id, doc) VALUES (?, ?, ?)",
+                    (task.id, task.milestone_id, json.dumps(task.to_dict(), ensure_ascii=False)),
+                )
+
+            if task.id not in milestone.task_ids:
+                milestone.task_ids.append(task.id)
+                milestone = _normalize_milestone(milestone)
+                conn.execute(
+                    "UPDATE milestones SET doc=? WHERE id=?",
+                    (json.dumps(milestone.to_dict(), ensure_ascii=False), milestone.id),
+                )
+        return task, created
 
     def get_task(self, task_id: str, *, scope: TenantScope | None = None) -> Task | None:
         task_id = _require_id(task_id, label="task_id")

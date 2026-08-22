@@ -6,6 +6,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/harness";
@@ -14,6 +15,7 @@ import { queueComposerImageEntry } from "@/core/composer-image-inbox";
 import type * as UploadsApiModule from "@/core/uploads/api";
 
 import { ChatInputBox } from "./chat-input-box";
+import type { GroupTaskStrategy } from "./group-task-strategy";
 
 const uploadFilesMock = vi.fn();
 const uploadWithProgressMock = vi.fn();
@@ -82,7 +84,7 @@ async function openAgentSettings() {
 }
 
 async function openToolsMenu() {
-  const trigger = screen.getByLabelText("Insert into input");
+  const trigger = screen.getByTestId("chat-tools-trigger");
   fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
   fireEvent.click(trigger);
   return screen.findByRole("menu");
@@ -125,6 +127,156 @@ beforeEach(() => {
 });
 
 describe("<ChatInputBox /> cowork materials", () => {
+  it("replaces Inspiration with the response strategy in collaboration", () => {
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-response-mode"
+        showInspirationToggle
+        responseModeControl={
+          <div data-testid="response-mode-control">Conversation type</div>
+        }
+      />,
+    );
+
+    const control = screen.getByTestId("response-mode-control");
+    expect(control.closest(".composer-footer")).toBeInTheDocument();
+    expect(screen.queryByTestId("chat-mode-toggle")).toBeNull();
+    expect(screen.getByTestId("chat-send-button")).toBeInTheDocument();
+  });
+
+  it("moves group task strategy into the + menu and keeps the active choice visible", async () => {
+    const onStrategyChange = vi.fn();
+    const onSubmit = vi.fn();
+
+    function ControlledGroupComposer() {
+      const [strategy, setStrategy] = useState<GroupTaskStrategy>("auto");
+      return (
+        <ChatInputBox
+          mode="react"
+          threadId="thread-group-strategy"
+          isGroupConversation
+          groupTaskStrategy={strategy}
+          onGroupTaskStrategyChange={(next) => {
+            onStrategyChange(next);
+            setStrategy(next);
+          }}
+          onSubmit={onSubmit}
+        />
+      );
+    }
+
+    renderWithProviders(<ControlledGroupComposer />);
+
+    expect(
+      screen.getByRole("button", { name: "Start a task or add content" }),
+    ).toBeInTheDocument();
+    const menu = await openToolsMenu();
+    const research = within(menu).getByTestId("group-task-strategy-research");
+    expect(
+      within(menu).getByTestId("group-task-strategy-auto"),
+    ).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.click(research);
+
+    expect(onStrategyChange).toHaveBeenLastCalledWith("research");
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByTestId("group-task-strategy-chip")).toHaveTextContent(
+      "Task · Deep research",
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Return to automatic handling" }),
+    );
+
+    expect(onStrategyChange).toHaveBeenLastCalledWith("auto");
+    expect(screen.queryByTestId("group-task-strategy-chip")).toBeNull();
+  });
+
+  it("offers create-deliverable without a folder and develop with a folder", async () => {
+    const first = renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-group-personal"
+        isGroupConversation
+        groupTaskStrategy="auto"
+        onGroupTaskStrategyChange={vi.fn()}
+      />,
+    );
+
+    let menu = await openToolsMenu();
+    expect(within(menu).getByText("Create deliverable")).toBeInTheDocument();
+    expect(within(menu).queryByText("Develop")).toBeNull();
+    first.unmount();
+
+    renderWithProviders(
+      <ChatInputBox
+        mode="code"
+        threadId="thread-group-project"
+        workDir="/workspace/project"
+        isGroupConversation
+        groupTaskStrategy="auto"
+        onGroupTaskStrategyChange={vi.fn()}
+      />,
+    );
+
+    menu = await openToolsMenu();
+    expect(within(menu).getByText("Develop")).toBeInTheDocument();
+    expect(within(menu).queryByText("Create deliverable")).toBeNull();
+  });
+
+  it("hides personal/project status and default permission chrome in groups", () => {
+    const group = renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-group-clean-footer"
+        isGroupConversation
+        showWorkDirSelector
+        permissionMode="default"
+      />,
+    );
+
+    expect(screen.queryByTestId("chat-status-strip")).toBeNull();
+    expect(screen.queryByTestId("permission-mode-trigger")).toBeNull();
+    group.unmount();
+
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-group-risk-warning"
+        isGroupConversation
+        permissionMode="bypassPermissions"
+      />,
+    );
+
+    expect(screen.getByTestId("permission-mode-trigger")).toHaveAccessibleName(
+      "Permissions: Full access",
+    );
+  });
+
+  it("keeps the existing private composer controls unchanged", async () => {
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-private-controls"
+        showWorkDirSelector
+        permissionMode="default"
+      />,
+    );
+
+    expect(screen.getByTestId("chat-status-strip")).toBeInTheDocument();
+    expect(screen.getByTestId("permission-mode-trigger")).toHaveAccessibleName(
+      "Permissions: Default",
+    );
+    expect(
+      screen.getByRole("button", { name: "Insert into input" }),
+    ).toBeInTheDocument();
+
+    const menu = await openToolsMenu();
+    expect(within(menu).queryByText("Start a task")).toBeNull();
+    expect(within(menu).queryByTestId("group-task-strategy-auto")).toBeNull();
+  });
+
   it("returns the selected row id when two endpoints share one wire model", async () => {
     modelCatalog.current = [
       {

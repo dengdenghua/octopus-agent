@@ -1,9 +1,15 @@
 import {
+  CodeIcon,
+  FlaskConicalIcon,
   GlobeIcon,
+  HammerIcon,
   ImageIcon,
   LightbulbIcon,
   Loader2Icon,
+  PaletteIcon,
   SendHorizontalIcon,
+  ShieldCheckIcon,
+  SparklesIcon,
   ZapIcon,
   MapIcon,
   MonitorIcon,
@@ -13,6 +19,7 @@ import {
   SlidersHorizontalIcon,
   SquareIcon,
   TargetIcon,
+  XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -43,6 +50,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -57,6 +66,7 @@ import {
 } from "@/core/threads/codex-composer-mode";
 
 import type { ChatInputBoxProps } from "../chat-input-box";
+import type { GroupTaskStrategy } from "../group-task-strategy";
 import {
   DEFAULT_RESEARCH_SOURCES,
   appendReferencedFiles,
@@ -87,6 +97,11 @@ export function ChatComposer({
   modelName,
   mode = "react",
   threadId,
+  mentionMembers,
+  responseModeControl,
+  isGroupConversation = false,
+  groupTaskStrategy = "auto",
+  onGroupTaskStrategyChange,
   workDir,
   placeholder,
   autoFocus,
@@ -196,6 +211,7 @@ export function ChatComposer({
     workDir,
     threadId,
     actor: currentActorId(),
+    members: mentionMembers,
   });
 
   const pickerModels: PickerModel[] = useMemo(
@@ -259,6 +275,59 @@ export function ChatComposer({
     maxContextTokens > 0 &&
     (isCompressingContext || contextTokens / maxContextTokens >= 0.5);
   const sendableDraftText = parseCodexComposerModeMarker(draft).text.trim();
+  const hasBoundWorkDir = Boolean(workDir?.trim());
+  const groupTaskOptions: Array<{
+    value: GroupTaskStrategy;
+    label: string;
+    icon: typeof SparklesIcon;
+  }> = [
+    {
+      value: "auto",
+      label: t.chatInputBox.groupTaskAuto,
+      icon: SparklesIcon,
+    },
+    {
+      value: hasBoundWorkDir ? "develop" : "build",
+      label: hasBoundWorkDir
+        ? t.chatInputBox.groupTaskDevelop
+        : t.chatInputBox.groupTaskBuild,
+      icon: hasBoundWorkDir ? CodeIcon : HammerIcon,
+    },
+    {
+      value: "research",
+      label: t.chatInputBox.groupTaskResearch,
+      icon: FlaskConicalIcon,
+    },
+    {
+      value: "audit",
+      label: t.chatInputBox.groupTaskAudit,
+      icon: ShieldCheckIcon,
+    },
+    {
+      value: "uxui",
+      label: t.chatInputBox.groupTaskUxui,
+      icon: PaletteIcon,
+    },
+  ];
+  const selectedGroupTaskOption = groupTaskOptions.find(
+    (option) => option.value === groupTaskStrategy,
+  );
+  const toolsMenuLabel = isGroupConversation
+    ? t.chatInputBox.groupTaskTools
+    : t.chatInputBox.composerInsertions;
+
+  useEffect(() => {
+    if (!isGroupConversation) return;
+    const contextChanged =
+      (groupTaskStrategy === "build" && hasBoundWorkDir) ||
+      (groupTaskStrategy === "develop" && !hasBoundWorkDir);
+    if (contextChanged) onGroupTaskStrategyChange?.("auto");
+  }, [
+    groupTaskStrategy,
+    hasBoundWorkDir,
+    isGroupConversation,
+    onGroupTaskStrategyChange,
+  ]);
 
   useEffect(() => {
     if (!canUseDeepResearch) setResearchConfigOpen(false);
@@ -1020,8 +1089,8 @@ export function ChatComposer({
           }
         }}
       />
-      <div className="composer-footer flex flex-col items-stretch gap-1 border-t border-transparent px-2 py-1 transition-colors group-hover:border-border-subtle sm:flex-row sm:items-center sm:justify-between sm:gap-2">
-        <div className="flex min-w-0 items-center gap-0.5">
+      <div className="composer-footer flex flex-wrap items-center justify-between gap-1 border-t border-transparent px-2 py-1 transition-colors group-hover:border-border-subtle sm:gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-0.5">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -1029,8 +1098,8 @@ export function ChatComposer({
                 data-testid="chat-tools-trigger"
                 disabled={isBusy || status === "streaming"}
                 className="flex size-[42px] items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-base hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45 sm:size-8 active:scale-95"
-                title={t.chatInputBox.composerInsertions}
-                aria-label={t.chatInputBox.composerInsertions}
+                title={toolsMenuLabel}
+                aria-label={toolsMenuLabel}
               >
                 <PlusIcon className="size-4" />
               </button>
@@ -1040,11 +1109,48 @@ export function ChatComposer({
               align="start"
               side="top"
               sideOffset={8}
+              aria-label={toolsMenuLabel}
               className="w-60 rounded-lg border-border-default p-1.5 shadow-[var(--shadow-xs)]"
             >
-              <DropdownMenuLabel className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                {t.chatInputBox.composerInsertions}
-              </DropdownMenuLabel>
+              {isGroupConversation ? (
+                <>
+                  <DropdownMenuLabel className="px-2 py-1.5 text-sm font-semibold text-foreground">
+                    {t.chatInputBox.groupTaskTools}
+                  </DropdownMenuLabel>
+                  <DropdownMenuLabel className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                    {t.chatInputBox.groupTaskStart}
+                  </DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={groupTaskStrategy}
+                    onValueChange={(value) =>
+                      onGroupTaskStrategyChange?.(value as GroupTaskStrategy)
+                    }
+                  >
+                    {groupTaskOptions.map((option) => {
+                      const Icon = option.icon;
+                      return (
+                        <DropdownMenuRadioItem
+                          key={option.value}
+                          value={option.value}
+                          data-testid={`group-task-strategy-${option.value}`}
+                          className="gap-2 rounded-lg text-sm data-[state=checked]:bg-muted/70"
+                        >
+                          <Icon className="size-4" />
+                          {option.label}
+                        </DropdownMenuRadioItem>
+                      );
+                    })}
+                  </DropdownMenuRadioGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                    {t.chatInputBox.groupTaskAddContent}
+                  </DropdownMenuLabel>
+                </>
+              ) : (
+                <DropdownMenuLabel className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                  {t.chatInputBox.composerInsertions}
+                </DropdownMenuLabel>
+              )}
               <DropdownMenuItem
                 data-testid="chat-insert-codex-plan"
                 onSelect={() => insertCodexModeMarker("plan")}
@@ -1123,12 +1229,32 @@ export function ChatComposer({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {isGroupConversation &&
+          groupTaskStrategy !== "auto" &&
+          selectedGroupTaskOption ? (
+            <button
+              type="button"
+              data-testid="group-task-strategy-chip"
+              onClick={() => onGroupTaskStrategyChange?.("auto")}
+              className="inline-flex h-7 max-w-44 items-center gap-1 rounded-md border border-primary/15 bg-primary/8 px-2 text-xs font-medium text-primary transition-colors hover:bg-primary/12"
+              title={t.chatInputBox.groupTaskClear}
+              aria-label={t.chatInputBox.groupTaskClear}
+            >
+              <span className="truncate">
+                {t.chatInputBox.groupTaskActive} ·{" "}
+                {selectedGroupTaskOption.label}
+              </span>
+              <XIcon className="size-3 shrink-0" />
+            </button>
+          ) : null}
           <PreviewRefreshIndicator />
-          <PermissionIndicator
-            mode={resolvedPermissionMode}
-            onModeChange={(nextMode) => onPermissionModeChange?.(nextMode)}
-            compact
-          />
+          {(!isGroupConversation || resolvedPermissionMode !== "default") && (
+            <PermissionIndicator
+              mode={resolvedPermissionMode}
+              onModeChange={(nextMode) => onPermissionModeChange?.(nextMode)}
+              compact
+            />
+          )}
           {/* 上下文压缩指示器 */}
           {showContextCompressor && (
             <ContextCompressor
@@ -1140,8 +1266,10 @@ export function ChatComposer({
             />
           )}
         </div>
-        <div className="flex min-w-0 items-center justify-end gap-1">
-          {showInspirationToggle && (
+        <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1">
+          {responseModeControl ? (
+            responseModeControl
+          ) : showInspirationToggle ? (
             <button
               type="button"
               data-testid="chat-mode-toggle"
@@ -1171,7 +1299,7 @@ export function ChatComposer({
                 />
               </span>
             </button>
-          )}
+          ) : null}
           <EvolutionIndicator compact quiet />
           {partnerId ? (
             // Local CLI partner: its model comes from the CLI's own config,

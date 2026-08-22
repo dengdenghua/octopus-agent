@@ -281,7 +281,17 @@ def _compute_resume_state(
                 thought=s.get("thought", ""),
                 public_update=s.get("public_update", ""),
                 action=s.get("action", ""),
+                actions=[str(action) for action in s.get("actions", []) if isinstance(action, str)]
+                if isinstance(s.get("actions", []), list)
+                else [],
                 observation=s.get("observation", ""),
+                action_results=[
+                    dict(result)
+                    for result in s.get("action_results", [])
+                    if isinstance(result, dict)
+                ]
+                if isinstance(s.get("action_results", []), list)
+                else [],
             )
             for s in last["steps_snapshot"]
             if isinstance(s, dict)

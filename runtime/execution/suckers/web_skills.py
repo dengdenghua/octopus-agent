@@ -280,8 +280,7 @@ def _relaxed_query(query: str, max_words: int = 6) -> str:
         flags=_re.IGNORECASE,
     )
     tokens = [t for t in stripped.split() if t]
-    kept = " ".join(tokens[:max_words]).strip()
-    return kept
+    return " ".join(tokens[:max_words]).strip()
 
 
 def _doubao_search(client: Any, api_key: str, query: str, max_results: int) -> dict[str, Any]:

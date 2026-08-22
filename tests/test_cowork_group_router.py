@@ -68,6 +68,66 @@ def test_invalid_mode_rejected(tmp_path) -> None:
     assert c.post("/api/cowork/t/mode", json={"mode": "bogus"}).status_code == 400
 
 
+def test_atomic_roster_replace_preserves_humans_and_is_idempotent(tmp_path) -> None:
+    c = _client(tmp_path)
+    thread_id = "thread-roster"
+    c.post(
+        f"/api/cowork/{thread_id}/members",
+        json={"target_id": "human-owner", "kind": "human"},
+    )
+    c.post(
+        f"/api/cowork/{thread_id}/members",
+        json={"target_id": "old-agent", "kind": "agent"},
+    )
+
+    replaced = c.put(
+        f"/api/cowork/{thread_id}/roster",
+        json={"agent_ids": ["new-agent", "critic", "new-agent"], "mode": "swarm"},
+    )
+    assert replaced.status_code == 200, replaced.json()
+    body = replaced.json()
+    assert [(item["action"], item["target_id"]) for item in body["events"]] == [
+        ("leave", "old-agent"),
+        ("invite", "new-agent"),
+        ("invite", "critic"),
+        ("mode", ""),
+    ]
+    assert body["state"]["mode"] == "swarm"
+    assert {member["id"] for member in body["state"]["roster"]} == {
+        "human-owner",
+        "new-agent",
+        "critic",
+    }
+    version = body["state"]["event_count"]
+
+    unchanged = c.put(
+        f"/api/cowork/{thread_id}/roster",
+        json={"agent_ids": ["new-agent", "critic"], "mode": "swarm"},
+    )
+    assert unchanged.status_code == 200, unchanged.json()
+    assert unchanged.json()["events"] == []
+    assert unchanged.json()["state"]["event_count"] == version
+
+
+def test_atomic_roster_replace_rolls_back_the_whole_diff_on_validation_error(tmp_path) -> None:
+    c = _client(tmp_path)
+    thread_id = "thread-roster-rollback"
+    for member_id, kind in (("human-owner", "human"), ("old-agent", "agent")):
+        c.post(
+            f"/api/cowork/{thread_id}/members",
+            json={"target_id": member_id, "kind": kind},
+        )
+    before = c.get(f"/api/cowork/{thread_id}").json()["state"]
+
+    rejected = c.put(
+        f"/api/cowork/{thread_id}/roster",
+        json={"agent_ids": ["human-owner"], "mode": "swarm"},
+    )
+    assert rejected.status_code == 400
+    after = c.get(f"/api/cowork/{thread_id}").json()["state"]
+    assert after == before
+
+
 def test_search_endpoint_spans_surfaces_and_filters(tmp_path) -> None:
     c = _client(tmp_path)
     t = "thread-search"

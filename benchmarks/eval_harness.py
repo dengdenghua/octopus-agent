@@ -590,6 +590,7 @@ def run_case(
                 case.setup()
             except Exception as exc:
                 traj.error = f"setup failed: {exc}"
+                traj.failure_category = "infrastructure"
                 traj.ended_at = time.time()
                 if case.teardown:
                     try:
@@ -622,12 +623,14 @@ def run_case(
                             traj.failure_category = "infrastructure"
         except Exception as exc:
             traj.error = f"runner raised: {exc}"
+            traj.failure_category = "infrastructure"
         traj.ended_at = time.time()
         try:
             verdict = _coerce_verdict(case.grader(traj))
         except Exception as exc:
             grader_error = f"grader raised: {exc}"
             traj.error = f"{traj.error}; {grader_error}" if traj.error else grader_error
+            traj.failure_category = "infrastructure"
             verdict = Verdict(passed=False, reason=grader_error)
         if traj.error:
             verdict = Verdict(
@@ -643,6 +646,7 @@ def run_case(
                 teardown_error = f"teardown failed: {exc}"
                 traj.append("teardown_error", message=str(exc))
                 traj.error = f"{traj.error}; {teardown_error}" if traj.error else teardown_error
+                traj.failure_category = "infrastructure"
                 verdict = Verdict(
                     passed=False,
                     score=0.0,
@@ -690,24 +694,25 @@ def run_suite_by_case(
 
     initial_by_id: dict[str, CaseResult] = {}
     if initial_report is not None:
-        for result in initial_report.cases:
-            if result.case_id in initial_by_id:
-                raise ValueError(f"duplicate checkpoint case: {result.case_id}")
+        for checkpoint_result in initial_report.cases:
+            if checkpoint_result.case_id in initial_by_id:
+                raise ValueError(f"duplicate checkpoint case: {checkpoint_result.case_id}")
             if (
-                result.k != k
-                or not 0 < len(result.trajectories) <= k
-                or len(result.trajectories) != len(result.verdicts)
-                or not 0 <= result.passes <= k
-                or result.passes != sum(verdict.passed for verdict in result.verdicts)
-                or result.has_infrastructure_failure
+                checkpoint_result.k != k
+                or not 0 < len(checkpoint_result.trajectories) <= k
+                or len(checkpoint_result.trajectories) != len(checkpoint_result.verdicts)
+                or not 0 <= checkpoint_result.passes <= k
+                or checkpoint_result.passes
+                != sum(verdict.passed for verdict in checkpoint_result.verdicts)
+                or checkpoint_result.has_infrastructure_failure
             ):
-                raise ValueError(f"non-resumable checkpoint case: {result.case_id}")
-            initial_by_id[result.case_id] = result
+                raise ValueError(f"non-resumable checkpoint case: {checkpoint_result.case_id}")
+            initial_by_id[checkpoint_result.case_id] = checkpoint_result
     report = SuiteReport(
         started_at=initial_report.started_at if initial_report is not None else time.time()
     )
     for case in cases:
-        result = initial_by_id.pop(case.id, None)
+        result: CaseResult | None = initial_by_id.pop(case.id, None)
         if result is None or len(result.trajectories) < k:
             result = result or CaseResult(case_id=case.id, k=k, passes=0)
             report.add(result)

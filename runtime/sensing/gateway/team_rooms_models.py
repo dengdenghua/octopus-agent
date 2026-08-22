@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -50,12 +52,17 @@ class TeamRoomWire(BaseModel):
     members: list[TeamMemberWire] = Field(default_factory=list)
     leaderId: str | None = None  # noqa: N815 — frontend wire field uses camelCase
     owner_id: str | None = None
+    tenant_id: str = "local"
+    thread_id: str | None = None
+    # ``None`` means "use the server default": ordinary rooms join directly,
+    # while rooms whose canonical thread is bound in ProjectStore require an
+    # owner/admin approval.  Keeping the override nullable is important: it
+    # lets a room become a project room later without freezing the old
+    # ordinary-room default into its persisted snapshot.
+    join_policy_override: Literal["direct_join", "apply_then_join"] | None = None
     created_at: str
     updated_at: str
     participants: list[TeamParticipantWire] = Field(default_factory=list)
-    invite_token: str | None = None
-    invite_role: str = "member"
-    invite_created_at: str | None = None
     # Governance: who may speak in the room. ``free`` = anyone not
     # individually muted; ``admin_only`` = only the owner/admins (a
     # whole-room mute); ``round_robin`` / ``roll_call`` / ``moderated`` are
@@ -78,6 +85,7 @@ class CreateTeamRoomRequest(BaseModel):
     name: str
     members: list[TeamMemberWire] = Field(default_factory=list)
     leaderId: str | None = None  # noqa: N815 — frontend wire field uses camelCase
+    thread_id: str | None = None
 
 
 class JoinInviteRequest(BaseModel):
@@ -90,7 +98,21 @@ class JoinInviteRequest(BaseModel):
 class CreateTeamInviteRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    role: str = "member"
+    role: Literal["member", "viewer"] = "member"
+    expires_in_seconds: int = Field(default=7 * 24 * 60 * 60, ge=1, le=30 * 24 * 60 * 60)
+    max_uses: int = Field(default=100, ge=1, le=1000)
+
+
+class UpdateTeamJoinPolicyRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    join_policy: Literal["direct_join", "apply_then_join"]
+
+
+class RejectTeamJoinRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    reason: str = Field(default="", max_length=1000)
 
 
 class UpdateTeamParticipantRequest(BaseModel):
@@ -120,10 +142,12 @@ __all__ = [
     "CreateTeamInviteRequest",
     "CreateTeamRoomRequest",
     "JoinInviteRequest",
+    "RejectTeamJoinRequest",
     "TeamMemberWire",
     "TeamParticipantWire",
     "TeamRoomWire",
     "UpdateDelegationRequest",
+    "UpdateTeamJoinPolicyRequest",
     "UpdateSpeakerPolicyRequest",
     "UpdateTeamParticipantRequest",
 ]

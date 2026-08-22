@@ -108,6 +108,10 @@ class _LoopState:
     throughput_chars: int = 0
     final_stream_started: bool = False
     force_convergence_next: bool = False
+    # Sticky once repeated trusted verifier environment gaps require a
+    # terminal, tools-disabled synthesis. Unlike the one-shot recovery flag,
+    # this survives guard repair retries so tools cannot reappear.
+    terminal_convergence_active: bool = False
     streamed_final_chars: int = 0
     progress_summary: str = ""
     public_progress_summary: str = ""

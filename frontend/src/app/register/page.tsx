@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowRightIcon,
   KeyRoundIcon,
@@ -22,6 +22,10 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  authReturnToFromSearch,
+  loginPathWithReturnTo,
+} from "@/core/auth/return-to";
 import { useI18n } from "@/core/i18n/hooks";
 import { useAuth } from "@/providers/AuthProvider";
 import { toast } from "sonner";
@@ -53,6 +57,8 @@ function FloatingOrb({
 
 export default function RegisterPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = authReturnToFromSearch(location.search);
   const { t } = useI18n();
   const { register, authStatus, isLoading } = useAuth();
   const [username, setUsername] = useState("");
@@ -68,8 +74,8 @@ export default function RegisterPage() {
     authStatus && (!authStatus.enabled || !authStatus.allow_registration);
 
   useEffect(() => {
-    if (redirectToWorkspace) navigate("/workspace", { replace: true });
-  }, [redirectToWorkspace, navigate]);
+    if (redirectToWorkspace) navigate(returnTo, { replace: true });
+  }, [redirectToWorkspace, navigate, returnTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,7 +100,7 @@ export default function RegisterPage() {
     try {
       await register({ username, password, email: email || undefined });
       toast.success(t.registerPage.toastSuccess);
-      navigate("/login");
+      navigate(loginPathWithReturnTo(returnTo), { replace: true });
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : t.registerPage.toastFailed,
@@ -198,7 +204,10 @@ export default function RegisterPage() {
               return (
                 <li key={feature.title} className="flex items-start gap-4">
                   <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-card/60 backdrop-blur-sm">
-                    <Icon className="size-5 text-primary/80" strokeWidth={1.8} />
+                    <Icon
+                      className="size-5 text-primary/80"
+                      strokeWidth={1.8}
+                    />
                   </div>
                   <div className="space-y-1">
                     <p className="text-[15px] font-semibold">{feature.title}</p>
@@ -285,7 +294,10 @@ export default function RegisterPage() {
                   </div>
                 </div>
                 <div className="space-y-2.5">
-                  <Label htmlFor="confirmPassword" className="text-sm font-medium">
+                  <Label
+                    htmlFor="confirmPassword"
+                    className="text-sm font-medium"
+                  >
                     {t.registerPage.confirmPasswordLabel}
                   </Label>
                   <div className="relative">
@@ -315,7 +327,7 @@ export default function RegisterPage() {
               <div className="mt-6 text-center text-sm text-muted-foreground/80">
                 已有账户？{" "}
                 <Link
-                  to="/login"
+                  to={loginPathWithReturnTo(returnTo)}
                   className="font-medium text-primary transition-colors hover:text-primary/80"
                 >
                   立即登录

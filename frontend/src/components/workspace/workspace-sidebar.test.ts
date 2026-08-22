@@ -170,9 +170,9 @@ describe("workspace sidebar project grouping", () => {
   });
 
   test("derives transient thread mode from the route prefix", () => {
-    expect(__testing.transientThreadModeFromHref("/workspace/team/room-1")).toBe(
-      "team",
-    );
+    expect(
+      __testing.transientThreadModeFromHref("/workspace/team/room-1"),
+    ).toBe("team");
     expect(
       __testing.transientThreadModeFromHref("/workspace/realtime/thread-1"),
     ).toBe("chat");
@@ -207,9 +207,9 @@ describe("workspace sidebar project grouping", () => {
     }));
 
     expect(
-      __testing.projectThreadsForPreview(threads, false).map(
-        (thread) => thread.id,
-      ),
+      __testing
+        .projectThreadsForPreview(threads, false)
+        .map((thread) => thread.id),
     ).toEqual([
       "thread-1",
       "thread-2",
@@ -219,6 +219,70 @@ describe("workspace sidebar project grouping", () => {
       "thread-6",
     ]);
     expect(__testing.projectThreadsForPreview(threads, true)).toHaveLength(9);
+  });
+
+  test("restores a durable project-group entry from thread-map after reload", () => {
+    const index = __testing.buildProjectOsSidebarIndex(
+      [
+        {
+          id: "P-legacy",
+          name: "PM 演示",
+          execution_thread_id: "",
+          created_at: "2026-08-20T12:56:43Z",
+        },
+        {
+          id: "P-empty",
+          name: "刚创建的项目",
+        },
+      ],
+      { "thread-home": "P-legacy" },
+      [],
+    );
+
+    expect(index.projectNames).toEqual(["PM 演示", "刚创建的项目"]);
+    expect(index.projectNameByThreadId.get("thread-home")).toBe("PM 演示");
+    expect(index.threads).toEqual([
+      {
+        id: "thread-home",
+        title: "PM 演示",
+        updatedAt: "2026-08-20T12:56:43Z",
+        mode: "code",
+        href: "/workspace/realtime/thread-home",
+        agents: [],
+      },
+    ]);
+  });
+
+  test("pins the canonical project group ahead of the compact thread preview", () => {
+    const existingThreads = Array.from({ length: 7 }, (_, index) => ({
+      id: index === 6 ? "thread-home" : `thread-${index}`,
+      title: index === 6 ? "首轮消息覆盖的标题" : `任务 ${index}`,
+      updatedAt: "2026-08-20T12:56:43Z",
+      mode: "code",
+      href: `/workspace/realtime/${index === 6 ? "thread-home" : `thread-${index}`}`,
+      agents: [],
+    }));
+
+    const index = __testing.buildProjectOsSidebarIndex(
+      [
+        {
+          id: "P1",
+          name: "增长实验",
+          execution_thread_id: "thread-home",
+        },
+      ],
+      { "thread-home": "P1" },
+      existingThreads,
+    );
+
+    expect(index.threads).toHaveLength(existingThreads.length);
+    expect(index.threads[0]).toMatchObject({
+      id: "thread-home",
+      title: "增长实验",
+    });
+    expect(
+      __testing.projectThreadsForPreview(index.threads, false)[0]?.id,
+    ).toBe("thread-home");
   });
 
   test("groups team history by workspace folder before generated team label", () => {

@@ -722,6 +722,7 @@ def stream_agentic_fallback(
     tool_specs, workspace_contract = _filter_tool_specs_for_workspace_contract(
         tool_specs,
         intent.normalized_goal,
+        user_context=_intent_user_context,
     )
     evidence_tool_specs = tool_specs
     if bool(_intent_user_context.get("realtime_public_orientation")):
@@ -769,17 +770,18 @@ def stream_agentic_fallback(
                 ),
             ),
         )
-    elif workspace_contract == "read_only":
+    elif workspace_contract in {"read_only", "audit_read_only"}:
         messages.insert(
             0,
             Message(
                 role="system",
                 content=(
                     "READ-ONLY WORKSPACE CONTRACT:\n"
-                    "The user permitted inspection but prohibited mutation. "
-                    "File-write, edit, shell, test, formatting, memory-write, "
-                    "and self-modification tools have been removed. Do not "
-                    "create or modify local files."
+                    "Inspection, search, and focused test/lint verification are "
+                    "permitted, but project mutation is prohibited. File-write, "
+                    "edit, general shell, formatting, memory-write, and "
+                    "self-modification tools have been removed. Do not create or "
+                    "modify local files; switch to develop before applying fixes."
                 ),
             ),
         )

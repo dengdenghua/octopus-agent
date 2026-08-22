@@ -1295,8 +1295,26 @@
       },
       "CreateTeamInviteRequest": {
         "properties": {
+          "expires_in_seconds": {
+            "default": 604800,
+            "maximum": 2592000.0,
+            "minimum": 1.0,
+            "title": "Expires In Seconds",
+            "type": "integer"
+          },
+          "max_uses": {
+            "default": 100,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Max Uses",
+            "type": "integer"
+          },
           "role": {
             "default": "member",
+            "enum": [
+              "member",
+              "viewer"
+            ],
             "title": "Role",
             "type": "string"
           }
@@ -1338,6 +1356,17 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
           }
         },
         "required": [
@@ -2391,7 +2420,7 @@
             "type": "string"
           },
           "run": {
-            "default": true,
+            "default": false,
             "title": "Run",
             "type": "boolean"
           }
@@ -4101,6 +4130,17 @@
             "title": "Path",
             "type": "string"
           },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
           "workspace": {
             "anyOf": [
               {
@@ -4128,6 +4168,17 @@
           "symbol": {
             "title": "Symbol",
             "type": "string"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
           },
           "workspace": {
             "anyOf": [
@@ -4157,6 +4208,109 @@
           }
         },
         "title": "MergeBody",
+        "type": "object"
+      },
+      "MessageProjectActionBody": {
+        "properties": {
+          "acceptance_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Acceptance Criteria",
+            "type": "array"
+          },
+          "action": {
+            "minLength": 1,
+            "title": "Action",
+            "type": "string"
+          },
+          "action_id": {
+            "default": "",
+            "title": "Action Id",
+            "type": "string"
+          },
+          "artifact": {
+            "additionalProperties": true,
+            "title": "Artifact",
+            "type": "object"
+          },
+          "assigned_agent": {
+            "default": "",
+            "title": "Assigned Agent",
+            "type": "string"
+          },
+          "assigned_role": {
+            "default": "",
+            "title": "Assigned Role",
+            "type": "string"
+          },
+          "decision": {
+            "default": "",
+            "title": "Decision",
+            "type": "string"
+          },
+          "depends_on": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Depends On",
+            "type": "array"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "due_at": {
+            "default": "",
+            "title": "Due At",
+            "type": "string"
+          },
+          "estimate": {
+            "default": 0.0,
+            "title": "Estimate",
+            "type": "number"
+          },
+          "item_id": {
+            "default": "",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "milestone_id": {
+            "default": "",
+            "title": "Milestone Id",
+            "type": "string"
+          },
+          "priority": {
+            "default": "P2",
+            "title": "Priority",
+            "type": "string"
+          },
+          "project_id": {
+            "default": "",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "rationale": {
+            "default": "",
+            "title": "Rationale",
+            "type": "string"
+          },
+          "task_type": {
+            "default": "analysis",
+            "title": "Task Type",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "MessageProjectActionBody",
         "type": "object"
       },
       "ModeBody": {
@@ -4284,6 +4438,90 @@
           "goal"
         ],
         "title": "PlanBody",
+        "type": "object"
+      },
+      "ProjectGroupAgentBody": {
+        "properties": {
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "ProjectGroupAgentBody",
+        "type": "object"
+      },
+      "ProjectGroupBody": {
+        "properties": {
+          "goal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal"
+          },
+          "initial_agents": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectGroupAgentBody"
+            },
+            "title": "Initial Agents",
+            "type": "array"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ProjectGroupBody",
         "type": "object"
       },
       "ProviderCapabilitiesWire": {
@@ -4464,6 +4702,18 @@
           }
         },
         "title": "RecoverBody",
+        "type": "object"
+      },
+      "RejectTeamJoinRequest": {
+        "properties": {
+          "reason": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "title": "RejectTeamJoinRequest",
         "type": "object"
       },
       "RenewLeaseBody": {
@@ -4709,10 +4959,45 @@
             "title": "Display Name",
             "type": "string"
           },
+          "entity_refs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Entity Refs",
+            "type": "array"
+          },
+          "message_type": {
+            "default": "",
+            "title": "Message Type",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
           "participant_id": {
             "default": "",
             "title": "Participant Id",
             "type": "string"
+          },
+          "source_message_id": {
+            "default": "",
+            "title": "Source Message Id",
+            "type": "string"
+          },
+          "system_card": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Card"
           },
           "text": {
             "minLength": 1,
@@ -4724,6 +5009,27 @@
           "text"
         ],
         "title": "RoomMessageBody",
+        "type": "object"
+      },
+      "RosterBody": {
+        "properties": {
+          "agent_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Agent Ids",
+            "type": "array"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "RosterBody",
         "type": "object"
       },
       "RunBody": {
@@ -5682,6 +5988,23 @@
           "speaker_policy"
         ],
         "title": "UpdateSpeakerPolicyRequest",
+        "type": "object"
+      },
+      "UpdateTeamJoinPolicyRequest": {
+        "properties": {
+          "join_policy": {
+            "enum": [
+              "direct_join",
+              "apply_then_join"
+            ],
+            "title": "Join Policy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "join_policy"
+        ],
+        "title": "UpdateTeamJoinPolicyRequest",
         "type": "object"
       },
       "UpdateTeamParticipantRequest": {
@@ -6824,6 +7147,218 @@
           }
         },
         "summary": "Index"
+      }
+    },
+    "/api/a2a/agents": {
+      "get": {
+        "operationId": "list_agents_api_a2a_agents_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Agents Api A2A Agents Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Agents",
+        "tags": [
+          "a2a"
+        ]
+      }
+    },
+    "/api/a2a/agents/register": {
+      "post": {
+        "operationId": "register_agent_api_a2a_agents_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Register Agent Api A2A Agents Register Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register Agent",
+        "tags": [
+          "a2a"
+        ]
+      }
+    },
+    "/api/a2a/agents/{agent_id}": {
+      "delete": {
+        "operationId": "unregister_agent_api_a2a_agents__agent_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Unregister Agent Api A2A Agents  Agent Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unregister Agent",
+        "tags": [
+          "a2a"
+        ]
+      }
+    },
+    "/api/a2a/agents/{agent_id}/health": {
+      "post": {
+        "operationId": "health_check_api_a2a_agents__agent_id__health_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Health Check Api A2A Agents  Agent Id  Health Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Health Check",
+        "tags": [
+          "a2a"
+        ]
+      }
+    },
+    "/api/a2a/agents/{agent_id}/send": {
+      "post": {
+        "operationId": "send_task_api_a2a_agents__agent_id__send_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Send Task Api A2A Agents  Agent Id  Send Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Send Task",
+        "tags": [
+          "a2a"
+        ]
       }
     },
     "/api/account/avatar": {
@@ -16990,6 +17525,70 @@
         ]
       }
     },
+    "/api/collab/{thread_id}/room-messages/{message_seq}/project-actions": {
+      "post": {
+        "description": "Promote a room message into Project OS without a second task truth.\n\nSupported actions are ``link_milestone``, ``create_item``,\n``record_decision``, and ``publish_artifact``.  The source message is\nenriched with entity references and an idempotent system-card message\nis appended to the room.  ``create_item`` writes Project OS first and\nonly then projects the task into collaboration storage.",
+        "operationId": "message_project_action_api_collab__thread_id__room_messages__message_seq__project_actions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "message_seq",
+            "required": true,
+            "schema": {
+              "title": "Message Seq",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageProjectActionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Message Project Action Api Collab  Thread Id  Room Messages  Message Seq  Project Actions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Message Project Action",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
     "/api/collab/{thread_id}/tasks": {
       "get": {
         "description": "List heavyweight room tasks through the canonical session path.",
@@ -20492,6 +21091,61 @@
           }
         },
         "summary": "Mark Read",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/cowork/{thread_id}/roster": {
+      "put": {
+        "description": "Replace the desired agent roster and mode as one atomic mutation.\n\nHuman participants are intentionally untouched. The store calculates\nthe diff against its own transactional snapshot, appends only the\nnecessary leave/invite/mode events, and returns the canonical fold.",
+        "operationId": "replace_roster_api_cowork__thread_id__roster_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RosterBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Replace Roster Api Cowork  Thread Id  Roster Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replace Roster",
         "tags": [
           "cowork"
         ]
@@ -34408,7 +35062,7 @@
     },
     "/api/projects/from-group/{thread_id}": {
       "post": {
-        "description": "Turn a custom cowork group into a project team: plan milestones and (by\ndefault) run them, routing each task to the group's ACTUAL members by\ncapability — not the fixed 4 roles. This is \"assemble a group → turn on\nproject mode\".",
+        "description": "Attach Project OS to a cowork group and optionally start execution.\n\nThe group remains a normal conversation surface. Its chat/cluster/swarm\nresponse strategy is independent from the persistent project binding.\nProject work starts only when the caller explicitly requests ``run``.",
         "operationId": "from_group_api_projects_from_group__thread_id__post",
         "parameters": [
           {
@@ -34456,6 +35110,50 @@
           }
         },
         "summary": "From Group",
+        "tags": [
+          "projectos"
+        ]
+      }
+    },
+    "/api/projects/group": {
+      "post": {
+        "description": "Create a project and its canonical collaboration group as one saga.\n\nThis is the preferred creation boundary.  The older project, thread,\ncowork and room endpoints remain available for clients that still\nmanage those surfaces independently.",
+        "operationId": "create_project_group_api_projects_group_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectGroupBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Project Group Api Projects Group Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Project Group",
         "tags": [
           "projectos"
         ]
@@ -39620,6 +40318,92 @@
         ]
       }
     },
+    "/api/team-invites/{token}/join-request": {
+      "delete": {
+        "operationId": "withdraw_own_join_request_api_team_invites__token__join_request_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Withdraw Own Join Request Api Team Invites  Token  Join Request Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Withdraw Own Join Request",
+        "tags": [
+          "team-rooms"
+        ]
+      },
+      "get": {
+        "operationId": "get_own_join_request_api_team_invites__token__join_request_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Own Join Request Api Team Invites  Token  Join Request Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Own Join Request",
+        "tags": [
+          "team-rooms"
+        ]
+      }
+    },
     "/api/team-tasks": {
       "get": {
         "description": "List tasks. ``room_id`` query param scopes to one room\n(omit to list all — useful for admin/debug, not the typical\nUI flow).",
@@ -40261,6 +41045,441 @@
           }
         },
         "summary": "Create Invite",
+        "tags": [
+          "team-rooms"
+        ]
+      }
+    },
+    "/api/teams/{team_id}/invites": {
+      "get": {
+        "operationId": "list_invites_api_teams__team_id__invites_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "team_id",
+            "required": true,
+            "schema": {
+              "title": "Team Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Invites Api Teams  Team Id  Invites Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Invites",
+        "tags": [
+          "team-rooms"
+        ]
+      },
+      "post": {
+        "operationId": "create_invite_api_teams__team_id__invites_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "team_id",
+            "required": true,
+            "schema": {
+              "title": "Team Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateTeamInviteRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Invite Api Teams  Team Id  Invites Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Invite",
+        "tags": [
+          "team-rooms"
+        ]
+      }
+    },
+    "/api/teams/{team_id}/invites/{invite_id}": {
+      "delete": {
+        "operationId": "revoke_invite_api_teams__team_id__invites__invite_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "team_id",
+            "required": true,
+            "schema": {
+              "title": "Team Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "invite_id",
+            "required": true,
+            "schema": {
+              "title": "Invite Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Revoke Invite Api Teams  Team Id  Invites  Invite Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Invite",
+        "tags": [
+          "team-rooms"
+        ]
+      }
+    },
+    "/api/teams/{team_id}/join-policy": {
+      "get": {
+        "operationId": "get_join_policy_api_teams__team_id__join_policy_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "team_id",
+            "required": true,
+            "schema": {
+              "title": "Team Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Join Policy Api Teams  Team Id  Join Policy Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Join Policy",
+        "tags": [
+          "team-rooms"
+        ]
+      },
+      "patch": {
+        "operationId": "update_join_policy_api_teams__team_id__join_policy_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "team_id",
+            "required": true,
+            "schema": {
+              "title": "Team Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTeamJoinPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Join Policy Api Teams  Team Id  Join Policy Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Join Policy",
+        "tags": [
+          "team-rooms"
+        ]
+      }
+    },
+    "/api/teams/{team_id}/join-requests": {
+      "get": {
+        "operationId": "list_join_requests_api_teams__team_id__join_requests_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "team_id",
+            "required": true,
+            "schema": {
+              "title": "Team Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Join Requests Api Teams  Team Id  Join Requests Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Join Requests",
+        "tags": [
+          "team-rooms"
+        ]
+      }
+    },
+    "/api/teams/{team_id}/join-requests/{request_id}/approve": {
+      "post": {
+        "operationId": "approve_join_request_api_teams__team_id__join_requests__request_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "team_id",
+            "required": true,
+            "schema": {
+              "title": "Team Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Approve Join Request Api Teams  Team Id  Join Requests  Request Id  Approve Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Join Request",
+        "tags": [
+          "team-rooms"
+        ]
+      }
+    },
+    "/api/teams/{team_id}/join-requests/{request_id}/reject": {
+      "post": {
+        "operationId": "reject_join_request_api_teams__team_id__join_requests__request_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "team_id",
+            "required": true,
+            "schema": {
+              "title": "Team Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RejectTeamJoinRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Reject Join Request Api Teams  Team Id  Join Requests  Request Id  Reject Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Join Request",
         "tags": [
           "team-rooms"
         ]

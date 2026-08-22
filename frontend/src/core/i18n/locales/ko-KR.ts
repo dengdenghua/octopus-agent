@@ -362,12 +362,26 @@ export const koKR: Translations = {
   chatInputBox: {
     quickCapabilities: "도구",
     collaborators: "협업",
-    collaboratorsSingle: "단독",
+    collaboratorsSingle: "필요할 때 응답",
     collaboratorsCountUnit: "명",
     collaboratorsHelp:
-      "기본은 단독 실행입니다. 협업자를 추가하면 프롬프트가 팀 작업으로 전환되며 클러스터 또는 스웜 대형을 선택할 수 있습니다.",
+      "기본적으로 필요한 AI만 응답합니다. AI 멤버를 추가하면 역할 분담 또는 병렬 공동 작업을 선택할 수 있습니다.",
     collaboratorsSearchPlaceholder: "에이전트 / 로컬 파트너 검색",
     collaboratorsTaskFallback: "팀 작업",
+    responseMode: "AI 참여 방식",
+    responseModeTeamRequired:
+      "역할 분담 또는 병렬 공동 작업을 사용하기 전에 AI 멤버를 추가하세요",
+    groupTaskTools: "작업 시작 및 콘텐츠 추가",
+    groupTaskStart: "작업 시작",
+    groupTaskAddContent: "콘텐츠 추가",
+    groupTaskAuto: "자동 처리",
+    groupTaskBuild: "산출물 만들기",
+    groupTaskResearch: "심층 리서치",
+    groupTaskDevelop: "개발 구현",
+    groupTaskAudit: "읽기 전용 감사",
+    groupTaskUxui: "UX/UI 검토",
+    groupTaskActive: "작업",
+    groupTaskClear: "자동 처리로 돌아가기",
     addResearchMaterial: "자료 추가",
     codexPlan: "Plan",
     codexSpec: "Spec",
@@ -478,9 +492,42 @@ export const koKR: Translations = {
     categoryHomework: "Homework",
     categoryWriting: "Writing",
     categoryTravel: "Travel",
-    hint: "프로젝트로 관련 대화를 정리할 수 있습니다. 생성 후 대화를 프로젝트로 옮기세요.",
+    aiMembersLabel: "초기 AI 협업 멤버",
+    aiMembersDescription:
+      "생성할 때 프로젝트 그룹에 바로 참여합니다. 한 명 이상 유지하고 나중에 변경할 수 있습니다.",
+    aiMembersSelected: (count) => `${count}명 선택됨`,
+    agentsLoading: "사용 가능한 AI를 불러오는 중…",
+    agentsUnavailable:
+      "목록을 불러올 수 없습니다. 기본 범용 도우미로 프로젝트를 생성합니다.",
+    humanMembersLabel: "사람 멤버",
+    humanMembersAfterCreate: "생성 후 초대",
+    humanMembersDescription:
+      "생성 후 프로젝트 그룹으로 이동하여 안전한 링크로 멤버 또는 뷰어를 초대할 수 있습니다.",
+    invitePeopleOnArrival: "프로젝트 그룹을 열면 바로 초대",
+    creatorRoleLabel: "내 프로젝트 역할",
+    creatorRole: "프로젝트 책임자 · 그룹 소유자",
+    creatorRoleDescription:
+      "프로젝트 관리, AI 편성, 사람 초대 권한을 가집니다.",
+    hint: "프로젝트, 프로젝트 그룹, 오른쪽 워크벤치를 한 번에 만들고 연결합니다.",
     cancel: "Cancel",
     create: "프로젝트 생성",
+  },
+
+  promoteProjectDialog: {
+    trigger: "프로젝트로 전환",
+    title: "현재 작업 그룹을 프로젝트로 전환",
+    description:
+      "현재 멤버와 전체 채팅 기록을 유지하면서 마일스톤, 항목, 자료, 프로젝트 워크벤치를 추가합니다.",
+    nameLabel: "프로젝트 이름",
+    namePlaceholder: "예: 가을 신제품 출시",
+    goalLabel: "프로젝트 목표",
+    goalPlaceholder:
+      "달성하려는 결과를 설명하세요. 이를 바탕으로 첫 마일스톤을 계획합니다.",
+    cancel: "취소",
+    submit: "생성하고 연결",
+    submitting: "생성 중…",
+    success: "작업 그룹을 프로젝트 그룹으로 전환했습니다",
+    failed: "프로젝트 전환에 실패했습니다. 다시 시도해 주세요.",
   },
 
   // Clarification Questionnaire
@@ -1198,9 +1245,11 @@ export const koKR: Translations = {
     statusDone: "완료",
     progress: "진행 상황",
     currentObjective: "현재 목표",
-    currentObjectiveHint: "Agent가 이 항목을 처리 중입니다. 완료되면 결과 영수증이 표시됩니다.",
+    currentObjectiveHint:
+      "Agent가 이 항목을 처리 중입니다. 완료되면 결과 영수증이 표시됩니다.",
     resultReceipt: "결과 영수증",
-    resultReceiptDescription: "완료된 작업, 산출물 및 미해결 문제를 한곳에서 확인합니다.",
+    resultReceiptDescription:
+      "완료된 작업, 산출물 및 미해결 문제를 한곳에서 확인합니다.",
     recoveredOperations: (count) => `${count}개 작업 복구됨`,
     verifiedSteps: (count) => `${count}개 완료됨`,
     unresolvedSteps: (count) => `${count}개 미해결`,
@@ -5499,6 +5548,61 @@ export const koKR: Translations = {
       inTeam: "팀 소속",
       add: "Add",
     },
+    humanInvite: {
+      trigger: "사람 초대",
+      dialogTitle: "작업 그룹에 사람 초대",
+      dialogDescription:
+        "역할과 만료 기간이 설정된 초대 링크를 만듭니다. AI 멤버는 협업 설정에서 관리합니다.",
+      roleLabel: "참여 후 역할",
+      expiresLabel: "링크 유효 기간",
+      expiresHour: "1시간",
+      expiresDay: "1일",
+      expiresWeek: "7일",
+      expiresMonth: "30일",
+      createLink: "초대 링크 만들기",
+      creatingLink: "만드는 중...",
+      currentLink: "새 초대 링크",
+      linkVisibleOnce: "보안을 위해 전체 링크는 생성 직후에만 표시됩니다.",
+      recordsTitle: "초대 기록",
+      refresh: "새로고침",
+      emptyRecords: "아직 초대가 없습니다",
+      loadingRecords: "초대 로딩 중...",
+      createFailed: "초대 링크 생성 실패",
+      loadFailed: "초대 로딩 실패",
+      revoke: "초대 취소",
+      revokeSuccess: "초대가 취소되었습니다",
+      revokeFailed: "초대 취소 실패",
+      statusActive: "활성",
+      statusExpired: "만료됨",
+      statusExhausted: "사용 완료",
+      statusRevoked: "취소됨",
+      neverExpires: "만료되지 않음",
+      expiresAt: (value: string) => `만료: ${value}`,
+      usage: (used: number, max: number | null) =>
+        max == null ? `${used}회 사용` : `${used}/${max}회 사용`,
+      roomRequired: "먼저 작업 그룹을 만들어 주세요",
+      joinPolicyLabel: "가입 방식",
+      joinPolicyApply: "승인 후 가입",
+      joinPolicyApplyDesc:
+        "프로젝트와 채팅을 열기 전에 그룹 관리자의 승인이 필요합니다.",
+      joinPolicyDirect: "바로 가입",
+      joinPolicyDirectDesc:
+        "유효한 링크가 있는 같은 테넌트 사용자는 즉시 가입합니다.",
+      directJoinConfirmTitle: "바로 가입을 허용할까요?",
+      directJoinConfirmDescription:
+        "전환하면 현재 유효한 모든 초대 링크로 소유자 승인 없이 프로젝트 그룹에 바로 가입할 수 있습니다.",
+      directJoinConfirmAction: "바로 가입 허용",
+      directJoinConfirmCancel: "승인 유지",
+      policySaveFailed: "가입 방식을 저장하지 못했습니다",
+      pendingRequestsTitle: "승인 대기 요청",
+      pendingRequestsEmpty: "대기 중인 요청이 없습니다",
+      requestsLoadFailed: "가입 요청을 불러오지 못했습니다",
+      approveRequest: "승인",
+      rejectRequest: "거절",
+      approveSuccess: "가입 요청을 승인했습니다",
+      rejectSuccess: "가입 요청을 거절했습니다",
+      requestActionFailed: "가입 요청을 처리하지 못했습니다",
+    },
     mobileJoin: {
       title: "휴대폰 연결",
       description:
@@ -5510,21 +5614,21 @@ export const koKR: Translations = {
     teamModes: [
       {
         id: "chat",
-        label: "Solo",
+        label: "필요할 때 응답",
         description:
-          "한 에이전트가 응답 · @멘션하면 해당 에이전트, 아니면 리더가 응답",
+          "@로 지정한 AI만 응답하며, @가 없으면 AI는 조용히 대기합니다.",
       },
       {
         id: "cluster",
-        label: "Cluster",
+        label: "역할 분담",
         description:
           "리더가 분해 → 분배 → 각 역할 수행 → 취합(조율형, 중앙 집중)",
       },
       {
         id: "swarm",
-        label: "Swarm",
+        label: "병렬 공동 작업",
         description:
-          "에이전트들이 공유 칠판에 반응, 병렬 & 무리더(분산형, 자가 조직)",
+          "여러 AI가 같은 목표를 병렬로 탐색하고 서로의 결과를 보완합니다.",
       },
       {
         id: "project",
@@ -8189,6 +8293,27 @@ export const koKR: Translations = {
     displayNamePlaceholder: "표시 이름",
     joining: "참여 중...",
     joinButton: "작업 참여",
+    applyButton: "가입 신청",
+    applying: "신청 중...",
+    approvalRequired: "그룹 관리자 승인이 필요합니다",
+    approvalRequiredDescription:
+      "승인 전에는 프로젝트 작업대와 그룹 대화를 볼 수 없습니다.",
+    requestPendingTitle: "신청을 제출했습니다",
+    requestPendingDescription:
+      "승인되면 이 페이지에서 프로젝트 그룹으로 이동합니다.",
+    requestSubmitted: "가입 신청을 제출했습니다",
+    requestRejected: "가입 신청이 거절되었습니다",
+    requestWithdrawn: "가입 신청을 철회했습니다",
+    requestExpired: "가입 신청이 만료되었습니다",
+    requestCancelled: "가입 신청이 취소되었습니다",
+    requestApprovedButUnavailable:
+      "신청은 승인되었지만 멤버 권한이 더 이상 유효하지 않습니다. 그룹 관리자에게 문의하세요.",
+    refreshStatus: "상태 새로고침",
+    withdrawRequest: "신청 철회",
+    withdrawFailed: "신청을 철회하지 못했습니다",
+    statusCheckFailed: "승인 상태를 확인하지 못했습니다",
+    missingDestination:
+      "그룹에는 가입했지만 채팅 위치가 연결되지 않았습니다. 그룹 관리자에게 문의하세요.",
   },
 
   evolutionIndicator: {

@@ -5,7 +5,7 @@ This is the bridge that turns collaboration *mode* into *behaviour* — the
 the incoming user message, it composes:
 
   1. @addressing  — parse ``@agent:<id>`` tokens (the existing input_mentions
-     parser, the same tokens the chat box's mention autocomplete inserts), and
+     parser) plus explicit chat broadcasts such as ``@所有人`` / ``@all``, and
   2. the mode policy (``responders``)
 
 into a small, side-effect-free ``TurnPlan`` the realtime driver can act on:
@@ -18,10 +18,37 @@ unit-tested; ``plan_turn_for_thread`` is the thin store-backed convenience.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, replace
+from typing import Literal
 
 from runtime.core.cerebrum.input_mentions import parse_input_mentions
 from runtime.memory.cowork.group import GroupState, responders
+
+ResponseMode = Literal["chat", "cluster", "swarm"]
+
+_CHAT_BROADCAST_MENTION_RE = re.compile(
+    r"(?<![\w@])@(?:所有人|全员|all|everyone)(?!\w)",
+    re.IGNORECASE,
+)
+
+
+def _chat_broadcast_addressed(state: GroupState, text: str) -> list[str] | None:
+    """Expand an explicit chat-room broadcast mention to active agents.
+
+    ``None`` means no broadcast token was present; an empty list means the user
+    did broadcast, but the room currently has no eligible agent participant.
+    The boundary checks keep email addresses and tokens such as ``@alliance``
+    from accidentally waking the whole group.
+    """
+
+    if state.mode != "chat" or not _CHAT_BROADCAST_MENTION_RE.search(text):
+        return None
+    return [
+        member.id
+        for member in state.roster
+        if member.kind == "agent" and member.role == "participant" and not member.muted
+    ]
 
 
 @dataclass
@@ -42,22 +69,50 @@ class TurnPlan:
         }
 
 
-def plan_turn(state: GroupState, text: str) -> TurnPlan:
+def plan_turn(
+    state: GroupState,
+    text: str,
+    *,
+    persistent_group: bool = False,
+    mode_override: ResponseMode | None = None,
+) -> TurnPlan:
     """Decide who acts this turn from the group state + the message's @mentions.
 
     Pure. The realtime driver reads ``responders``/``is_multi`` to choose between
     single-agent ReAct (1 responder) and parallel execution (N), and ``mode`` for
     the orchestration style."""
-    addressed = list(parse_input_mentions(text or "").agents)
+    if mode_override is not None:
+        state = replace(state, mode=mode_override)
+    text = text or ""
+    addressed = list(parse_input_mentions(text).agents)
+    broadcast_addressed = _chat_broadcast_addressed(state, text)
+    if broadcast_addressed is not None:
+        addressed = broadcast_addressed
     resp = responders(state, addressed)
+    # A linked room/project home is a real group surface even when its roster
+    # currently contains only one AI member.  Do not collapse that durable
+    # room into the 1:1 convenience rule: ordinary chat stays human-only until
+    # somebody explicitly @mentions an agent.  Cluster/swarm/project modes
+    # retain their existing dispatch policies.
+    durable_chat = state.mode == "chat" and bool(state.room_id or persistent_group)
+    if durable_chat and not addressed:
+        resp = []
     is_multi = len(resp) > 1
 
     if state.mode == "project":
         reason = "project mode — the milestone engine dispatches tasks"
+    elif broadcast_addressed is not None:
+        reason = (
+            f"@all — all {len(resp)} active participant agent(s)"
+            if resp
+            else "@all — no active participant agents"
+        )
     elif not resp:
         reason = (
             "addressed agents are not active members"
             if addressed
+            else "persistent group chat — waiting for an @mention"
+            if durable_chat
             else "group chat with multiple members — waiting for an @mention"
         )
     elif addressed and set(resp) & set(addressed):
@@ -78,6 +133,18 @@ def plan_turn(state: GroupState, text: str) -> TurnPlan:
     )
 
 
-def plan_turn_for_thread(store, thread_id: str, text: str) -> TurnPlan:
+def plan_turn_for_thread(
+    store,
+    thread_id: str,
+    text: str,
+    *,
+    persistent_group: bool = False,
+    mode_override: ResponseMode | None = None,
+) -> TurnPlan:
     """Store-backed convenience: fold the thread's group state, then plan."""
-    return plan_turn(store.state(thread_id), text)
+    return plan_turn(
+        store.state(thread_id),
+        text,
+        persistent_group=persistent_group,
+        mode_override=mode_override,
+    )

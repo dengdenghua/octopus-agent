@@ -115,6 +115,9 @@ def mount_routers_a(
 
     project_store = ProjectStore()
     app.state.project_store = project_store
+    bind_team_project_store = getattr(ctx.team_rooms_router, "bind_project_store", None)
+    if callable(bind_team_project_store):
+        bind_team_project_store(project_store)
     project_model_router = (
         getattr(getattr(stack, "planner", None), "router", None) if stack is not None else None
     )
@@ -170,6 +173,7 @@ def mount_routers_a(
                 if ctx.cowork_runtime is not None
                 else None
             ),
+            team_rooms_router=ctx.team_rooms_router,
             thread_store=ctx.thread_store,
             workspace_root=ctx.thread_workspace_root,
             model_router=project_model_router,

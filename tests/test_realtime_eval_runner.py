@@ -163,6 +163,34 @@ def test_provider_api_key_failure_is_infrastructure_not_agent_behavior() -> None
     assert events[0]["error"]["category"] == "provider_unavailable"
 
 
+def test_realtime_usage_notification_remains_measurable_evidence() -> None:
+    events = _notification_events(
+        "thread/tokenUsage/updated",
+        {
+            "tokenUsage": {
+                "total": {
+                    "inputTokens": 17,
+                    "outputTokens": 5,
+                    "totalTokens": 22,
+                }
+            }
+        },
+    )
+
+    assert events == [
+        {
+            "kind": "token_usage",
+            "usage": {
+                "total": {
+                    "inputTokens": 17,
+                    "outputTokens": 5,
+                    "totalTokens": 22,
+                }
+            },
+        }
+    ]
+
+
 @pytest.mark.asyncio
 async def test_realtime_trial_runner_captures_turn_and_approval(tmp_path) -> None:
     received: dict[str, object] = {}
@@ -318,6 +346,38 @@ async def test_realtime_trial_runner_applies_context_overrides_without_changing_
         "workspace_scope": "project",
         "workspace_path": str(tmp_path.resolve()),
     }
+
+
+@pytest.mark.asyncio
+async def test_realtime_trial_runner_agent_selection_cannot_be_overridden(tmp_path) -> None:
+    received: dict[str, object] = {}
+
+    async def handler(websocket) -> None:
+        start = json.loads(await websocket.recv())
+        received["start"] = start
+        await websocket.send(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": start["id"],
+                    "result": {"turn": {"status": "completed", "items": []}},
+                }
+            )
+        )
+
+    async with serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        await RealtimeTrialRunner(
+            url=f"ws://127.0.0.1:{port}/api/realtime",
+            agent_id="local_codex_cli",
+            workspace=tmp_path,
+            context_overrides={"agent_id": "coder"},
+            timeout_seconds=5,
+        ).run("run through Codex")
+
+    metadata = received["start"]["params"]["input"][0]["metadata"]
+    assert metadata["agent_id"] == "local_codex_cli"
+    assert metadata["context"]["agent_id"] == "local_codex_cli"
 
 
 @pytest.mark.asyncio

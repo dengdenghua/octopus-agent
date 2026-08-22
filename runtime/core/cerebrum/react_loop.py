@@ -32,6 +32,7 @@ from runtime.core.cerebrum.react_final_answer_guards import (
 )
 from runtime.core.cerebrum.react_in_flight_nudges import (
     _apply_in_flight_nudges,
+    _should_terminal_environment_convergence,
 )
 from runtime.core.cerebrum.react_loop_controls import (
     _cancel_pause_guard,
@@ -439,6 +440,13 @@ def _stream_react_loop_impl(
     _realtime_public_orientation = _realtime_public_orientation_requested
     _quiet_evidence_steps: list[ReActStep] = []
     _force_convergence_next = False
+    # Resume must preserve the tools-disabled terminal lane. Recompute it
+    # from restored server-owned receipts before the first model request;
+    # legacy checkpoints without provenance fail closed and keep tools on.
+    _terminal_convergence_active = _should_terminal_environment_convergence(
+        steps,
+        is_code_mode=_is_code_mode,
+    )
     _green_verification_convergence_active = False
     _green_convergence_todo_used = False
     _evidence_convergence_active: EvidenceConvergence | None = None
@@ -652,6 +660,7 @@ def _stream_react_loop_impl(
         current_phase=_current_phase,
         consecutive_same_failed_actions=_consecutive_same_failed_actions,
         last_failed_action_fingerprint=_last_failed_action_fingerprint,
+        terminal_convergence_active=_terminal_convergence_active,
         green_verification_convergence_active=_green_verification_convergence_active,
         green_convergence_todo_used=_green_convergence_todo_used,
         result_handoff_ready=_result_handoff_ready,
@@ -896,6 +905,7 @@ def _stream_react_loop_impl(
             _green_verification_convergence_active,
             _force_convergence_next,
             _env_degradation_signaled,
+            _terminal_convergence_active,
         ) = _apply_in_flight_nudges(
             steps=steps,
             step=step,
@@ -910,12 +920,14 @@ def _stream_react_loop_impl(
             green_verification_convergence_active=_green_verification_convergence_active,
             force_convergence_next=_force_convergence_next,
             env_degradation_signaled=_env_degradation_signaled,
+            terminal_convergence_active=_terminal_convergence_active,
         )
 
         # ── PHASE 6e · guards + step yield ────────────────────────────
         state.maybe_final = maybe_final
         state.final_stream_started = _final_stream_started
         state.force_convergence_next = _force_convergence_next
+        state.terminal_convergence_active = _terminal_convergence_active
         state.final_delta_emitted_this_iteration = _final_delta_emitted_this_iteration
         state.green_verification_convergence_active = _green_verification_convergence_active
         state.green_convergence_todo_used = _green_convergence_todo_used

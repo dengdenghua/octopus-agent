@@ -16,7 +16,13 @@ import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
-from runtime.memory.cowork.group import GroupState, MemberEvent, fold_state
+from runtime.memory.cowork.group import (
+    VALID_MODES,
+    ContextGrant,
+    GroupState,
+    MemberEvent,
+    fold_state,
+)
 from runtime.memory.cowork.ids import (
     normalize_actor_id,
     optional_cowork_id,
@@ -86,6 +92,88 @@ class GroupStore:
             event.seq = int(row[0]) if row else 0
         return event
 
+    def replace_agent_roster(
+        self,
+        thread_id: str,
+        *,
+        actor: str,
+        agent_ids: list[str],
+        mode: str,
+    ) -> tuple[list[MemberEvent], GroupState]:
+        """Atomically reconcile the agent roster and collaboration mode.
+
+        The current fold, diff calculation, and all resulting event inserts run
+        under one ``BEGIN IMMEDIATE`` transaction. Human members are preserved;
+        the supplied ids are the complete desired *agent* roster. Returning the
+        post-transaction fold lets callers replace optimistic UI state with the
+        canonical server state in one response.
+        """
+
+        thread_id = require_cowork_id(thread_id, label="thread_id")
+        actor = normalize_actor_id(actor)
+        if mode not in VALID_MODES:
+            raise ValueError(f"mode must be one of {sorted(VALID_MODES)}")
+
+        desired: list[str] = []
+        seen: set[str] = set()
+        for raw_id in agent_ids:
+            member_id = require_cowork_id(raw_id, label="agent_id")
+            if member_id in seen:
+                continue
+            seen.add(member_id)
+            desired.append(member_id)
+
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            rows = conn.execute(
+                "SELECT event_json, seq, ts FROM group_events WHERE thread_id = ? ORDER BY seq",
+                (thread_id,),
+            ).fetchall()
+            existing_events: list[MemberEvent] = []
+            for event_json, seq, ts in rows:
+                event = MemberEvent.from_dict(_load(event_json))
+                event.seq = int(seq)
+                event.ts = str(ts)
+                existing_events.append(event)
+            current = fold_state(existing_events)
+            current_by_id = {member.id: member for member in current.roster}
+
+            events: list[MemberEvent] = []
+            desired_set = set(desired)
+            for member in current.roster:
+                if member.kind == "agent" and member.id not in desired_set:
+                    events.append(MemberEvent(action="leave", actor=actor, target_id=member.id))
+            for member_id in desired:
+                current_member = current_by_id.get(member_id)
+                if current_member is not None and current_member.kind != "agent":
+                    raise ValueError(f"agent_id collides with human member: {member_id}")
+                if current_member is None or current_member.role != "participant":
+                    events.append(
+                        MemberEvent(
+                            action="invite",
+                            actor=actor,
+                            target_id=member_id,
+                            target_kind="agent",
+                            role="participant",
+                            grant=ContextGrant(),
+                        )
+                    )
+            if current.mode != mode:
+                events.append(
+                    MemberEvent(action="mode", actor=actor, mode=mode)  # type: ignore[arg-type]
+                )
+
+            next_seq = int(rows[-1][1]) + 1 if rows else 1
+            for offset, event in enumerate(events):
+                event.seq = next_seq + offset
+                event.ts = datetime.now(UTC).isoformat()
+                conn.execute(
+                    "INSERT INTO group_events(thread_id, seq, event_json, ts) VALUES (?, ?, ?, ?)",
+                    (thread_id, event.seq, _dump(event), event.ts),
+                )
+
+            return events, fold_state([*existing_events, *events])
+
     def events(self, thread_id: str) -> list[MemberEvent]:
         thread_id = require_cowork_id(thread_id, label="thread_id")
         with self._lock, self._connect() as conn:
@@ -105,6 +193,33 @@ class GroupStore:
         """The folded group (roster + mode). ``until_seq`` replays to a point."""
         thread_id = require_cowork_id(thread_id, label="thread_id")
         return fold_state(self.events(thread_id), until_seq=until_seq)
+
+    def delete_thread(self, thread_id: str) -> bool:
+        """Remove all state owned by a newly-created collaboration thread.
+
+        Normal membership changes remain append-only.  This narrow deletion
+        primitive exists for cross-store creation compensation: a project-group
+        saga can remove its private, not-yet-returned thread when a later room
+        or projection write fails.  The blackboard namespace is included so a
+        retry cannot recover half-created group state.
+        """
+
+        thread_id = require_cowork_id(thread_id, label="thread_id")
+        deleted = False
+        with self._lock, self._connect() as conn:
+            cur = conn.execute("DELETE FROM group_events WHERE thread_id = ?", (thread_id,))
+            deleted = cur.rowcount > 0
+        if self._board_db.exists():
+            with self._lock, sqlite3.connect(str(self._board_db), timeout=5.0) as conn:
+                # The board DB is lazily initialized, so tolerate a file that
+                # exists without the table (for example after interrupted setup).
+                table = conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='blackboard'"
+                ).fetchone()
+                if table is not None:
+                    cur = conn.execute("DELETE FROM blackboard WHERE turn_id = ?", (thread_id,))
+                    deleted = deleted or cur.rowcount > 0
+        return deleted
 
     # ── thread-scoped shared blackboard ──────────────────────────────────────
     def blackboard(self, thread_id: str):

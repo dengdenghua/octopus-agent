@@ -673,7 +673,7 @@ Suckers = skill pool.
 
 ## Who imports this
 
-**68** file(s) reference this package:
+**71** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
@@ -687,13 +687,13 @@ Suckers = skill pool.
   - `runtime/cli_reflect.py`
 - **`runtime/cli_run.py/`** · 1 file(s)
   - `runtime/cli_run.py`
-- **`runtime/core/`** · 7 file(s)
+- **`runtime/core/`** · 8 file(s)
   - `runtime/core/cerebrum/_react_context_helpers.py`
   - `runtime/core/cerebrum/_react_context_project.py`
   - `runtime/core/cerebrum/_react_execution_dispatch.py`
   - `runtime/core/cerebrum/_react_prompt_assembly_guidance.py`
   - `runtime/core/cerebrum/capability_router.py`
-  - _… and 2 more_
+  - _… and 3 more_
 - **`runtime/execution/`** · 11 file(s)
   - `runtime/execution/all_skills/__init__.py`
   - `runtime/execution/arms/base.py`
@@ -705,13 +705,13 @@ Suckers = skill pool.
   - `runtime/memory/cowork/runtime.py`
   - `runtime/memory/hemolymph/composer.py`
   - `runtime/memory/learning/deep_evolution.py`
-- **`runtime/platform/`** · 9 file(s)
+- **`runtime/platform/`** · 11 file(s)
   - `runtime/platform/config/builder.py`
   - `runtime/platform/lifecycle/demo.py`
+  - `runtime/platform/plugins/bundled/documents/__init__.py`
+  - `runtime/platform/plugins/bundled/github/__init__.py`
   - `runtime/platform/plugins/bundled/paper_trading/__init__.py`
-  - `runtime/platform/plugins/bundled/whale_eye/__init__.py`
-  - `runtime/platform/ui/_app_stack.py`
-  - _… and 4 more_
+  - _… and 6 more_
 - **`runtime/research/`** · 2 file(s)
   - `runtime/research/pipeline.py`
   - `runtime/research/prefetch.py`

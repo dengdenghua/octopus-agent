@@ -1,4 +1,4 @@
-import { Settings2Icon, XIcon } from "lucide-react";
+import { FolderKanbanIcon, Settings2Icon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { FinalArtifactCompletionNotice } from "@/components/workspace/realtime/final-artifact-completion-notice";
@@ -10,6 +10,8 @@ import {
 import { ChatHeaderRecButton } from "@/components/workspace/realtime/chat-header-rec-button";
 
 import { ChatHeaderAgentBadge } from "@/components/workspace/realtime/chat-header-agent-badge";
+import { ProjectGroupHeaderBadge } from "@/components/workspace/realtime/project-group-header-badge";
+import { PromoteGroupToProjectDialog } from "@/components/workspace/realtime/promote-group-to-project-dialog";
 
 import {
   TaskCollaboratorControl,
@@ -31,6 +33,15 @@ import {
   workspaceFocusTabFromEvents,
 } from "@/components/workspace/agent-workbench-panel";
 import {
+  useBoundProjectState,
+  type ProjectFullState,
+} from "@/components/workspace/agent-workbench-panel/project-os-tab";
+import {
+  CoworkRoomTimelineEntry,
+  dedupeCoworkRoomMessages,
+  GroupHumanInviteButton,
+} from "@/components/workspace/collab";
+import {
   AGENT_WORKBENCH_FOCUS_EVENT,
   AGENT_WORKBENCH_OPEN_EVENT,
   type AgentWorkbenchEventView,
@@ -48,6 +59,7 @@ import {
   ChatInputBox,
   type DeepResearchComposerOptions,
 } from "@/components/workspace/chat-input-box";
+import type { GroupTaskStrategy } from "@/components/workspace/group-task-strategy";
 import { ComposerStepProgress } from "@/components/workspace/composer-step-progress";
 import type {
   AgentModeName,
@@ -81,6 +93,8 @@ import { liveEventIsReportLike } from "@/core/threads/report-deliverable";
 import { ThreadTitle } from "@/components/workspace/thread-title";
 import { ShareMenu } from "@/components/workspace/share-menu";
 import {
+  TeamModePicker,
+  normalizeTeamResponseMode,
   serveMeshForMode,
   type TeamMode,
 } from "@/components/workspace/team-mode-picker";
@@ -155,16 +169,25 @@ import {
   hydrateCollaborationRoster,
 } from "@/core/collaboration/thread-collaboration";
 import {
+  groupTaskStrategyAfterSubmit,
+  groupTaskStrategyContext,
+} from "@/core/collaboration/group-task-strategy-context";
+import {
   buildCoworkSelectionSyncPlan,
   coworkGroupToCollaborationRoster,
   coworkSessionToCollaborationRoster,
+  coworkSessionToMentionMembers,
+  useApplyCollabRoomMessageProjectAction,
   useCollabSession,
   useCoworkGroup,
   useEnsureCollabRoom,
-  useInviteCoworkMember,
-  useRemoveCoworkMember,
-  useSetCoworkMode,
+  usePostCollabRoomMessage,
+  useReplaceCoworkRoster,
+  type CoworkMessageProjectActionInput,
+  type CoworkRoomEntityRef,
+  type CoworkRoomMessage,
 } from "@/core/cowork";
+import { currentActorId } from "@/core/auth/api";
 import { usePauseTask, useTasks } from "@/core/tasks/hooks";
 import { isAIMessage, isHumanMessage, type Message } from "@/core/api/types";
 import {
@@ -233,6 +256,13 @@ const MAX_RECENT_WORKDIRS = 6;
 type ThreadRouteState = {
   threadOwnerAgentId?: string;
   workspacePath?: string;
+  /** Navigation from a project entry requests the contextual project tab,
+   * while ordinary thread navigation keeps the user's workbench preference. */
+  openProjectWorkbench?: boolean;
+  /** A project was just created with the explicit "invite people next"
+   * choice. The destination consumes this once after its canonical room is
+   * ready, then removes it from history state. */
+  openHumanInviteAfterCreate?: boolean;
 };
 
 function normalizeWorkDirKey(path: string): string {
@@ -583,10 +613,12 @@ function RealtimePageContent({
   );
   const coworkGroupQuery = useCoworkGroup(isNewThread ? null : threadId);
   const collabSessionQuery = useCollabSession(isNewThread ? null : threadId);
-  const inviteCoworkMemberMutation = useInviteCoworkMember();
-  const removeCoworkMemberMutation = useRemoveCoworkMember();
-  const setCoworkModeMutation = useSetCoworkMode();
+  const boundProjectQuery = useBoundProjectState(isNewThread ? null : threadId);
+  const replaceCoworkRosterMutation = useReplaceCoworkRoster();
   const ensureCollabRoomMutation = useEnsureCollabRoom();
+  const postCollabRoomMessageMutation = usePostCollabRoomMessage();
+  const applyRoomMessageProjectActionMutation =
+    useApplyCollabRoomMessageProjectAction();
   const persistedThreadWorkspacePath = threadWorkspaceQuery.data ?? "";
 
   useEffect(() => {
@@ -639,12 +671,33 @@ function RealtimePageContent({
       ),
     [builtinAgents, cliAgents, mobileAgents],
   );
+  const collaborationMentionMembers = useMemo(
+    () =>
+      coworkSessionToMentionMembers(
+        collabSessionQuery.data,
+        allTaskCollaboratorAgents.map((agent) => ({
+          name: agent.name,
+          display_name: agent.display_name,
+          icon: agent.icon,
+          description: agent.description,
+          avatar_url: agent.avatar_url,
+        })),
+      ),
+    [allTaskCollaboratorAgents, collabSessionQuery.data],
+  );
   const [selectedCollaboratorIds, setSelectedCollaboratorIds] = useState<
     string[]
   >([]);
-  const [teamModeIntent, setTeamModeIntent] = useState<TeamMode>("cluster");
+  const [teamModeIntent, setTeamModeIntent] = useState<TeamMode>("chat");
+  const [groupTaskStrategy, setGroupTaskStrategy] =
+    useState<GroupTaskStrategy>("auto");
   const [collaboratorPickerOpen, setCollaboratorPickerOpen] = useState(false);
+  const [humanInviteDialogOpen, setHumanInviteDialogOpen] = useState(false);
+  const [humanInviteRoomId, setHumanInviteRoomId] = useState("");
+  const [promoteGroupDialogOpen, setPromoteGroupDialogOpen] = useState(false);
   const collaboratorSelectionTouchedRef = useRef(false);
+  const responseModeIntentTouchedRef = useRef(false);
+  const pendingRosterModeRef = useRef<TeamMode | null>(null);
   const lastCoworkSyncSignatureRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -664,9 +717,15 @@ function RealtimePageContent({
 
   useEffect(() => {
     collaboratorSelectionTouchedRef.current = false;
+    responseModeIntentTouchedRef.current = false;
+    pendingRosterModeRef.current = null;
     lastCoworkSyncSignatureRef.current = null;
     setSelectedCollaboratorIds([]);
-    setTeamModeIntent("cluster");
+    setTeamModeIntent("chat");
+    setGroupTaskStrategy("auto");
+    setHumanInviteDialogOpen(false);
+    setHumanInviteRoomId("");
+    setPromoteGroupDialogOpen(false);
   }, [threadId]);
 
   useEffect(() => {
@@ -689,6 +748,42 @@ function RealtimePageContent({
   const navigate = useNavigate();
   const location = useLocation();
   const routeState = (location.state as ThreadRouteState | null) ?? null;
+  const projectWorkbenchRouteOpenedRef = useRef<string | null>(null);
+  const humanInviteRouteOpenedRef = useRef<string | null>(null);
+  const isProjectHomeThread = Boolean(
+    threadIdentityQuery.data?.metadata?.["project_home"] ||
+    threadIdentityQuery.data?.values?.["project_home"],
+  );
+  useEffect(() => {
+    const shouldOpen =
+      routeState?.openProjectWorkbench ||
+      isProjectHomeThread ||
+      Boolean(boundProjectQuery.data);
+    if (
+      isNewThread ||
+      !shouldOpen ||
+      projectWorkbenchRouteOpenedRef.current === threadId
+    ) {
+      return;
+    }
+    projectWorkbenchRouteOpenedRef.current = threadId;
+    setArtifactsOpen(false);
+    setShowAgentPlan(false);
+    setShowResearchHistory(false);
+    setShowResearch(false);
+    setShowPreview(false);
+    setAgentWorkbenchDismissed(false);
+    setAgentWorkbenchManuallyOpened(true);
+    setAgentWorkbenchTab("project");
+    setAgentWorkbenchTabTouched(true);
+  }, [
+    isNewThread,
+    isProjectHomeThread,
+    boundProjectQuery.data,
+    routeState?.openProjectWorkbench,
+    setArtifactsOpen,
+    threadId,
+  ]);
   const params = useParams<{ agentName?: string }>();
   const qc = useQueryClient();
   const searchParams = useMemo(
@@ -879,7 +974,9 @@ function RealtimePageContent({
       collaboratorSelectionTouchedRef.current = true;
       setSelectedCollaboratorIds(nextIds);
       setTeamModeIntent(
-        nextIds.length > 0 ? (preset.mode ?? "cluster") : "cluster",
+        nextIds.length > 0
+          ? normalizeTeamResponseMode(preset.mode ?? "cluster")
+          : "chat",
       );
       if (preset.openPicker) {
         setCollaboratorPickerOpen(true);
@@ -918,8 +1015,11 @@ function RealtimePageContent({
         ? current
         : persistedCollaboratorIds,
     );
-    if (persistedCollaboratorIds.length > 0) {
-      setTeamModeIntent(savedCollaborationMode ?? "cluster");
+    if (
+      !responseModeIntentTouchedRef.current &&
+      persistedCollaboratorIds.length > 0
+    ) {
+      setTeamModeIntent(normalizeTeamResponseMode(savedCollaborationMode));
     }
   }, [
     isNewThread,
@@ -932,6 +1032,10 @@ function RealtimePageContent({
   const selectedCollaboratorKey = selectedCollaboratorIds.join("\u0000");
   useEffect(() => {
     if (isNewThread || !threadId || threadId === "new") return;
+    // Project membership decides whether the lead agent must remain in the
+    // durable roster. Never reconcile against the query's transient empty
+    // state during a hard refresh.
+    if (boundProjectQuery.isPending) return;
 
     const startedLocally = localStartedThreadIdRef.current === threadId;
     const userTouched = collaboratorSelectionTouchedRef.current;
@@ -965,60 +1069,60 @@ function RealtimePageContent({
     const plan = buildCoworkSelectionSyncPlan({
       leaderId: currentTaskAgentName,
       collaboratorIds: selectedCollaboratorIds,
-      mode: teamModeIntent,
+      mode:
+        pendingRosterModeRef.current ??
+        normalizeTeamResponseMode(savedCollaborationMode),
       current: currentCoworkState,
+      keepLeader: Boolean(boundProjectQuery.data),
     });
     if (!plan.hasWork) return;
 
     const signature = `${threadId}|${plan.signature}`;
     if (lastCoworkSyncSignatureRef.current === signature) return;
     lastCoworkSyncSignatureRef.current = signature;
-    const resetOnError = () => {
-      if (lastCoworkSyncSignatureRef.current === signature) {
-        lastCoworkSyncSignatureRef.current = null;
-      }
-    };
 
-    for (const id of plan.inviteAgentIds) {
-      inviteCoworkMemberMutation.mutate(
-        {
-          threadId,
-          input: {
-            target_id: id,
-            kind: "agent",
-            role: "participant",
-            grant: { scope: "all" },
-          },
+    replaceCoworkRosterMutation.mutate(
+      {
+        threadId,
+        input: { agent_ids: plan.desiredAgentIds, mode: plan.mode },
+      },
+      {
+        onSuccess: () => {
+          collaboratorSelectionTouchedRef.current = false;
+          pendingRosterModeRef.current = null;
         },
-        { onError: resetOnError },
-      );
-    }
-    for (const id of plan.removeAgentIds) {
-      removeCoworkMemberMutation.mutate(
-        { threadId, memberId: id },
-        { onError: resetOnError },
-      );
-    }
-    if (plan.shouldSetMode) {
-      setCoworkModeMutation.mutate(
-        { threadId, mode: plan.mode },
-        { onError: resetOnError },
-      );
-    }
+        onError: () => {
+          // The picker is a draft until the one atomic server write succeeds.
+          // Roll back visibly on failure instead of showing members that will
+          // disappear on refresh.
+          collaboratorSelectionTouchedRef.current = false;
+          pendingRosterModeRef.current = null;
+          setSelectedCollaboratorIds(persistedCollaboratorIds);
+          setTeamModeIntent(
+            persistedCollaboratorIds.length > 0
+              ? normalizeTeamResponseMode(savedCollaborationMode)
+              : "chat",
+          );
+          toast.error("AI 成员保存失败，请重试");
+        },
+      },
+    );
   }, [
     collabSessionQuery.data,
     collabSessionQuery.isPending,
     coworkGroupQuery.data?.state,
     coworkGroupQuery.data,
     coworkGroupQuery.isPending,
+    boundProjectQuery.data,
+    boundProjectQuery.isPending,
     currentTaskAgentName,
-    inviteCoworkMemberMutation,
     isNewThread,
     persistedCollaboratorKey,
-    removeCoworkMemberMutation,
+    persistedCollaboratorIds,
+    replaceCoworkRosterMutation,
+    savedCollaborationMode,
     selectedCollaboratorIds,
     selectedCollaboratorKey,
-    setCoworkModeMutation,
     teamModeIntent,
     threadId,
   ]);
@@ -1029,15 +1133,25 @@ function RealtimePageContent({
         new Set(ids.map((id) => id.trim()).filter((id) => id && id !== leader)),
       );
       collaboratorSelectionTouchedRef.current = true;
+      pendingRosterModeRef.current =
+        nextIds.length === 0
+          ? "chat"
+          : persistedCollaboratorIds.length === 0
+            ? "cluster"
+            : normalizeTeamResponseMode(savedCollaborationMode);
       setSelectedCollaboratorIds(nextIds);
       if (nextIds.length === 0) {
         setTeamModeIntent("chat");
       }
     },
-    [currentTaskAgentName],
+    [
+      currentTaskAgentName,
+      persistedCollaboratorIds.length,
+      savedCollaborationMode,
+    ],
   );
   const handleTeamModeIntentChange = useCallback((mode: TeamMode) => {
-    collaboratorSelectionTouchedRef.current = true;
+    responseModeIntentTouchedRef.current = true;
     setTeamModeIntent(mode);
   }, []);
   const collaborationRoster = useMemo<ChatCollaborationRosterEntry[]>(() => {
@@ -1097,20 +1211,103 @@ function RealtimePageContent({
     savedCollaborationRoster,
   ]);
   const visibleCollaborationEnabled = visibleCollaborationRoster.length > 1;
-  const collaborationRosterSeats = useMemo<WorkbenchRosterSeat[]>(
-    () =>
-      visibleCollaborationRoster.map((agent) => ({
+  const isGroupConversation =
+    !isOctopusAssistant &&
+    (visibleCollaborationEnabled ||
+      Boolean(collabSessionQuery.data?.room_id) ||
+      Boolean(boundProjectQuery.data));
+  const collaborationRosterSeats = useMemo<WorkbenchRosterSeat[]>(() => {
+    const seats = new Map<string, WorkbenchRosterSeat>();
+    for (const agent of visibleCollaborationRoster) {
+      seats.set(`agent:${agent.agent_id}`, {
         id: agent.agent_id,
         name: agent.display_name,
         avatarUrl: agent.avatar_url ?? null,
         icon: agent.icon ?? null,
         role: agent.role,
-      })),
-    [visibleCollaborationRoster],
-  );
+        kind: "agent",
+      });
+    }
+    for (const participant of collabSessionQuery.data?.room_participants ??
+      []) {
+      const rawId =
+        participant.id ?? participant.participant_id ?? participant.name;
+      const id = typeof rawId === "string" ? rawId.trim() : "";
+      if (!id) continue;
+      const rawName = participant.display_name ?? participant.name;
+      const name =
+        typeof rawName === "string" && rawName.trim() ? rawName.trim() : id;
+      const rawRole = participant.role;
+      const role =
+        rawRole === "owner"
+          ? "群主"
+          : rawRole === "viewer"
+            ? "访客"
+            : rawRole === "member"
+              ? "群成员"
+              : typeof rawRole === "string"
+                ? rawRole
+                : "群成员";
+      const rawAvatar = participant.avatar_url;
+      seats.set(`human:${id}`, {
+        id,
+        name,
+        avatarUrl: typeof rawAvatar === "string" ? rawAvatar : null,
+        role,
+        kind: participant.kind === "agent" ? "agent" : "human",
+      });
+    }
+    return Array.from(seats.values());
+  }, [collabSessionQuery.data?.room_participants, visibleCollaborationRoster]);
   const collaborationTeamName =
+    boundProjectQuery.data?.project.name ||
     firstString(threadIdentityQuery.data?.values?.title, initialPrompt) ||
     t.collab.defaultTeamName;
+  const currentInviteActor = currentActorId();
+  const currentRoomParticipant = useMemo(
+    () =>
+      (collabSessionQuery.data?.room_participants ?? []).find((participant) => {
+        const actorId =
+          typeof participant.actor_id === "string"
+            ? participant.actor_id.trim()
+            : "";
+        const participantId =
+          typeof participant.id === "string" ? participant.id.trim() : "";
+        return (
+          actorId === currentInviteActor ||
+          participantId === currentInviteActor ||
+          participantId === `actor-${currentInviteActor}`
+        );
+      }),
+    [collabSessionQuery.data?.room_participants, currentInviteActor],
+  );
+  const canManageHumanInvites = useMemo(() => {
+    const participantRole =
+      typeof currentRoomParticipant?.role === "string"
+        ? currentRoomParticipant.role.trim().toLowerCase()
+        : "";
+    if (participantRole) return participantRole === "owner";
+    const metadata = threadIdentityQuery.data?.metadata;
+    const ownerActorId =
+      metadata && typeof metadata["owner_actor_id"] === "string"
+        ? metadata["owner_actor_id"].trim()
+        : "";
+    return (
+      !ownerActorId ||
+      currentInviteActor === "anonymous" ||
+      ownerActorId === currentInviteActor
+    );
+  }, [currentInviteActor, currentRoomParticipant, threadIdentityQuery.data]);
+  const canPromoteGroupToProject =
+    !isNewThread &&
+    !boundProjectQuery.data &&
+    Boolean(collabSessionQuery.data?.room_id) &&
+    canManageHumanInvites;
+  const projectGroupMemberCount = Math.max(
+    1,
+    collaborationMentionMembers.length,
+    visibleCollaborationRoster.length,
+  );
   const collaborationContext = useMemo(() => {
     if (!collaborationEnabled) return {};
     const isCoworkMode = teamModeIntent !== "chat";
@@ -1119,6 +1316,7 @@ function RealtimePageContent({
       subagent_enabled: isCoworkMode,
       is_plan_mode: isCoworkMode,
       team_mode: isCoworkMode ? "cowork" : "chat",
+      response_mode_override: teamModeIntent,
       serve_mesh: serveMeshForMode(teamModeIntent),
       topology_id: teamModeIntent === "cluster" ? "cowork" : undefined,
       agent_roster: collaborationRoster,
@@ -1171,13 +1369,78 @@ function RealtimePageContent({
       threadId,
     ],
   );
+  const resolvedHumanInviteRoomId =
+    humanInviteRoomId || collabSessionQuery.data?.room_id || "";
+  const ensureHumanInviteRoom = useCallback(async () => {
+    if (isNewThread || !threadId || threadId === "new") {
+      throw new Error("请先发送一条消息，再邀请真人加入群聊");
+    }
+    const response = await ensureCollabRoomMutation.mutateAsync({
+      threadId,
+      input: {
+        id: `collab-${threadId}`,
+        name: collaborationTeamName,
+        members: collaborationRoomMemberPayload,
+        leaderId: collaborationRoomMemberPayload[0]?.name ?? effectiveAgentId,
+        mode: teamModeIntent,
+      },
+    });
+    const roomId =
+      response.session.room_id ||
+      (typeof response.room.id === "string" ? response.room.id : "");
+    if (!roomId) throw new Error("群聊房间创建失败，请重试");
+    setHumanInviteRoomId(roomId);
+    return roomId;
+  }, [
+    collaborationRoomMemberPayload,
+    collaborationTeamName,
+    effectiveAgentId,
+    ensureCollabRoomMutation,
+    isNewThread,
+    teamModeIntent,
+    threadId,
+  ]);
+  const handleOpenHumanInvite = useCallback(async () => {
+    try {
+      await ensureHumanInviteRoom();
+      setHumanInviteDialogOpen(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "无法创建邀请链接");
+    }
+  }, [ensureHumanInviteRoom]);
+  useEffect(() => {
+    if (
+      isNewThread ||
+      !routeState?.openHumanInviteAfterCreate ||
+      humanInviteRouteOpenedRef.current === threadId
+    ) {
+      return;
+    }
+    humanInviteRouteOpenedRef.current = threadId;
+    const nextState = { ...routeState };
+    delete nextState.openHumanInviteAfterCreate;
+    void handleOpenHumanInvite().finally(() => {
+      navigate(`${location.pathname}${location.search}`, {
+        replace: true,
+        state: nextState,
+      });
+    });
+  }, [
+    handleOpenHumanInvite,
+    isNewThread,
+    location.pathname,
+    location.search,
+    navigate,
+    routeState,
+    threadId,
+  ]);
   const lastEnsuredCollabRoomRef = useRef<string | null>(null);
   useEffect(() => {
     if (
       isNewThread ||
       !threadId ||
       threadId === "new" ||
-      !visibleCollaborationEnabled ||
+      (!visibleCollaborationEnabled && !boundProjectQuery.data) ||
       collabSessionQuery.isPending ||
       collabSessionQuery.data?.room_id ||
       ensureCollabRoomMutation.isPending
@@ -1210,6 +1473,7 @@ function RealtimePageContent({
   }, [
     collabSessionQuery.data?.room_id,
     collabSessionQuery.isPending,
+    boundProjectQuery.data,
     collaborationRoomMemberPayload,
     collaborationRoomSignature,
     collaborationTeamName,
@@ -1321,6 +1585,10 @@ function RealtimePageContent({
     () => modePresetForAgentMode(projectAgentMode),
     [projectAgentMode],
   );
+  const activeGroupTaskContext = useMemo(
+    () => groupTaskStrategyContext(groupTaskStrategy),
+    [groupTaskStrategy],
+  );
   const effectiveMode: ReasoningMode = isOctopusAssistant
     ? "chat"
     : isCodingWorkspaceMode
@@ -1429,6 +1697,263 @@ function RealtimePageContent({
   // Skip the navigate+invalidate on the FIRST observed value (page
   // mount) — only react to actual changes.
   const [composerSeed, setComposerSeed] = useState(initialPrompt);
+  const boundProjectState: ProjectFullState | null | undefined =
+    boundProjectQuery.data;
+  useEffect(() => {
+    if (!boundProjectState?.project.name) return;
+    document.title = `${boundProjectState.project.name} - ${t.pages.appName}`;
+  }, [boundProjectState?.project.name, t.pages.appName]);
+  const projectMilestoneOptions = useMemo(
+    () =>
+      (boundProjectState?.milestones ?? []).map((milestone) => ({
+        id: milestone.id,
+        name: milestone.name,
+        status: milestone.status,
+      })),
+    [boundProjectState?.milestones],
+  );
+  const defaultProjectMilestoneId = useMemo(() => {
+    if (!boundProjectState) return undefined;
+    return (
+      boundProjectState.project.current_ms ??
+      boundProjectState.milestones.find(
+        (milestone) => milestone.status !== "done",
+      )?.id ??
+      boundProjectState.milestones[0]?.id
+    );
+  }, [boundProjectState]);
+  const visibleRoomMessages = useMemo(
+    () =>
+      dedupeCoworkRoomMessages(collabSessionQuery.data?.room_messages ?? []),
+    [collabSessionQuery.data?.room_messages],
+  );
+  const roomMessageMetadataBySourceId = useMemo(() => {
+    const metadataById: Record<string, CoworkRoomMessage["metadata"]> = {};
+    for (const message of collabSessionQuery.data?.room_messages ?? []) {
+      const sourceId = message.metadata?.source_message_id;
+      if (sourceId) metadataById[sourceId] = message.metadata;
+    }
+    return metadataById;
+  }, [collabSessionQuery.data?.room_messages]);
+  const openProjectWorkbenchForEntity = useCallback(
+    (entity?: CoworkRoomEntityRef) => {
+      setArtifactsOpen(false);
+      setShowAgentPlan(false);
+      setShowResearchHistory(false);
+      setShowResearch(false);
+      setShowPreview(false);
+      setAgentWorkbenchDismissed(false);
+      setAgentWorkbenchManuallyOpened(true);
+      setAgentWorkbenchTab("project");
+      setAgentWorkbenchTabTouched(true);
+      if (entity && typeof window !== "undefined") {
+        window.setTimeout(() => {
+          window.dispatchEvent(
+            new CustomEvent("octopus:project-entity-focus", {
+              detail: {
+                ...entity,
+                project_id: entity.project_id ?? boundProjectState?.project.id,
+              },
+            }),
+          );
+        }, 0);
+      }
+    },
+    [boundProjectState?.project.id, setArtifactsOpen],
+  );
+  const handleThreadMessageProjectAction = useCallback(
+    async (
+      input: CoworkMessageProjectActionInput,
+      message: CoworkRoomMessage,
+    ) => {
+      const project = boundProjectState?.project;
+      if (!project) throw new Error("当前群聊尚未绑定项目");
+      if (isNewThread || !threadId || threadId === "new") {
+        throw new Error("请先创建项目群再执行此操作");
+      }
+
+      if (!collabSessionQuery.data?.room_id) {
+        await ensureCollabRoomMutation.mutateAsync({
+          threadId,
+          input: {
+            id: `collab-${threadId}`,
+            name: collaborationTeamName,
+            members: collaborationRoomMemberPayload,
+            leaderId:
+              collaborationRoomMemberPayload[0]?.name ?? effectiveAgentId,
+            mode: teamModeIntent,
+          },
+        });
+      }
+
+      const posted = await postCollabRoomMessageMutation.mutateAsync({
+        threadId,
+        input: {
+          text: message.text.trim() || "群聊消息",
+          participant_id: currentActorId(),
+          display_name: "我",
+          source_message_id:
+            message.metadata?.source_message_id ??
+            `thread:${threadId}:${message.seq}`,
+        },
+      });
+      const messageSeq = posted.message?.seq ?? posted.seq;
+      const normalizedInput: CoworkMessageProjectActionInput = {
+        ...input,
+        project_id: project.id,
+        ...(input.action === "publish_artifact"
+          ? {
+              artifact: {
+                ...(input.artifact ?? {}),
+                source_message_seq: messageSeq,
+              },
+            }
+          : {}),
+      };
+      const response = await applyRoomMessageProjectActionMutation.mutateAsync({
+        threadId,
+        messageSeq,
+        input: normalizedInput,
+      });
+      await boundProjectQuery.refetch();
+      openProjectWorkbenchForEntity(response.target);
+      const successLabel: Record<
+        CoworkMessageProjectActionInput["action"],
+        string
+      > = {
+        link_milestone: "已关联到里程碑",
+        create_item: "已创建项目事项",
+        record_decision: "已记录项目决策",
+        publish_artifact: "已发布到项目资料",
+      };
+      toast.success(
+        response.replayed ? "该项目记录已存在" : successLabel[input.action],
+      );
+    },
+    [
+      applyRoomMessageProjectActionMutation,
+      boundProjectQuery,
+      boundProjectState?.project,
+      collabSessionQuery.data?.room_id,
+      collaborationRoomMemberPayload,
+      collaborationTeamName,
+      effectiveAgentId,
+      ensureCollabRoomMutation,
+      isNewThread,
+      openProjectWorkbenchForEntity,
+      postCollabRoomMessageMutation,
+      teamModeIntent,
+      threadId,
+    ],
+  );
+  const projectMessageActions = useMemo(
+    () =>
+      boundProjectState
+        ? {
+            threadId,
+            projectId: boundProjectState.project.id,
+            milestones: projectMilestoneOptions,
+            defaultMilestoneId: defaultProjectMilestoneId,
+            messageMetadataBySourceId: roomMessageMetadataBySourceId,
+            onActionRequest: handleThreadMessageProjectAction,
+            onActionError: (error: Error) => {
+              toast.error(error.message || "项目操作失败");
+            },
+          }
+        : undefined,
+    [
+      boundProjectState,
+      defaultProjectMilestoneId,
+      handleThreadMessageProjectAction,
+      projectMilestoneOptions,
+      roomMessageMetadataBySourceId,
+      threadId,
+    ],
+  );
+  const roomTimelineMessageActions = useMemo(
+    () =>
+      boundProjectState
+        ? {
+            threadId,
+            projectId: boundProjectState.project.id,
+            milestones: projectMilestoneOptions,
+            defaultMilestoneId: defaultProjectMilestoneId,
+            onReply: (message: CoworkRoomMessage) => {
+              const quoted = message.text
+                .replace(/\s+/g, " ")
+                .trim()
+                .slice(0, 160);
+              setComposerSeed(`> ${quoted}\n\n`);
+            },
+            onMentionAuthor: (message: CoworkRoomMessage) => {
+              const member = collabSessionQuery.data?.roster.find(
+                (candidate) => candidate.id === message.participant_id,
+              );
+              const mention =
+                member?.kind === "agent" && message.participant_id
+                  ? `@agent:${message.participant_id}`
+                  : `@${message.display_name || message.participant_id || "成员"}`;
+              setComposerSeed(`${mention} `);
+            },
+            onActionApplied: (
+              response: { target?: CoworkRoomEntityRef } | undefined,
+              input: CoworkMessageProjectActionInput,
+            ) => {
+              void boundProjectQuery.refetch();
+              if (response?.target) {
+                openProjectWorkbenchForEntity(response.target);
+              }
+              const labels: Record<
+                CoworkMessageProjectActionInput["action"],
+                string
+              > = {
+                link_milestone: "已关联到里程碑",
+                create_item: "已创建项目事项",
+                record_decision: "已记录项目决策",
+                publish_artifact: "已发布到项目资料",
+              };
+              toast.success(labels[input.action]);
+            },
+            onActionError: (error: Error) => {
+              toast.error(error.message || "项目操作失败");
+            },
+          }
+        : false,
+    [
+      boundProjectQuery,
+      boundProjectState,
+      collabSessionQuery.data?.roster,
+      defaultProjectMilestoneId,
+      openProjectWorkbenchForEntity,
+      projectMilestoneOptions,
+      threadId,
+    ],
+  );
+  const roomTimelineEntries = useMemo(
+    () =>
+      visibleRoomMessages.map((message) => ({
+        id: `${message.room_id ?? collabSessionQuery.data?.room_id ?? "room"}:${message.seq}`,
+        createdAt: message.ts,
+        content: (
+          <CoworkRoomTimelineEntry
+            message={message}
+            participants={collabSessionQuery.data?.room_participants ?? []}
+            currentParticipantId={currentInviteActor}
+            messageActions={roomTimelineMessageActions}
+            onEntityClick={openProjectWorkbenchForEntity}
+            className="my-1"
+          />
+        ),
+      })),
+    [
+      collabSessionQuery.data?.room_id,
+      collabSessionQuery.data?.room_participants,
+      currentInviteActor,
+      openProjectWorkbenchForEntity,
+      roomTimelineMessageActions,
+      visibleRoomMessages,
+    ],
+  );
   const prevAgentRef = useRef<string | null>(null);
   const { stageRoute: stageThreadRoute, commitRoute: commitThreadRoute } =
     useDeferredRouteCommit();
@@ -1610,6 +2135,10 @@ function RealtimePageContent({
             ? "office"
             : undefined,
         ...collaborationContext,
+        // Group strategy owns the work contract for this turn. Spread it last
+        // so hidden personal/project selectors cannot leak stale constraints
+        // into a project group (including Project OS groups without workDir).
+        ...(isGroupConversation ? activeGroupTaskContext : {}),
       },
       onStart: (startedThreadId) => {
         if (startedThreadId !== threadId) {
@@ -1647,6 +2176,7 @@ function RealtimePageContent({
     }),
     [
       auditIntensity,
+      activeGroupTaskContext,
       clearSidebarThreadStatus,
       collaborationContext,
       commitThreadRoute,
@@ -1654,6 +2184,7 @@ function RealtimePageContent({
       effectiveMode,
       effectiveReasoningEffort,
       isCodingWorkspaceMode,
+      isGroupConversation,
       isProjectCodeMode,
       markSidebarThreadRunning,
       partnerId,
@@ -2156,10 +2687,12 @@ function RealtimePageContent({
     // live agent workstation and replay surface.
     isCodingWorkspaceMode ||
     isRealtimeRoute;
+  const durableCollaborationEnabled =
+    collaborationEnabled || Boolean(boundProjectQuery.data);
   const showAgentWorkbench =
     canOpenAgentWorkbench &&
     (agentWorkbenchManuallyOpened ||
-      (collaborationEnabled &&
+      (durableCollaborationEnabled &&
         !agentWorkbenchDismissed &&
         (!isNewThread || thread.isLoading || hasRenderableAgentWorkbench)) ||
       (!agentWorkbenchDismissed &&
@@ -2191,6 +2724,7 @@ function RealtimePageContent({
 
   useEffect(() => {
     if (
+      durableCollaborationEnabled ||
       !hasRenderableAgentWorkbench ||
       !shouldHideSettledProcessChrome ||
       artifactsOpen ||
@@ -2206,6 +2740,7 @@ function RealtimePageContent({
     setAgentWorkbenchTabTouched(false);
   }, [
     artifactsOpen,
+    durableCollaborationEnabled,
     hasRenderableAgentWorkbench,
     settledWorkbenchTurnKey,
     shouldHideSettledProcessChrome,
@@ -2214,7 +2749,7 @@ function RealtimePageContent({
 
   useEffect(() => {
     if (
-      collaborationEnabled ||
+      durableCollaborationEnabled ||
       !agentWorkbenchManuallyOpened ||
       thread.isLoading ||
       !agentRunSettled ||
@@ -2238,7 +2773,7 @@ function RealtimePageContent({
     agentRunSettled,
     agentWorkbenchManuallyOpened,
     artifactsOpen,
-    collaborationEnabled,
+    durableCollaborationEnabled,
     hasCurrentTurnAgentResponse,
     hasRenderableAgentWorkbench,
     previewBlocks,
@@ -2414,7 +2949,7 @@ function RealtimePageContent({
       // when the user has hand-picked a mode we only suggest, never silently
       // switch. High-confidence verdicts auto-switch + toast; medium ones
       // surface the lightweight suggestion bar above the composer.
-      if (isProjectCodeMode && !isOctopusAssistant) {
+      if (isProjectCodeMode && !isOctopusAssistant && !isGroupConversation) {
         const verdict = classifyModeIntent(
           recentHumanMessageTexts(thread.messages),
         );
@@ -2465,6 +3000,11 @@ function RealtimePageContent({
       markSidebarThreadRunning(threadId);
       if (browserFiles.length === 0) {
         void sendMessage(threadId, { text: message.text, files: [] });
+        if (isGroupConversation) {
+          // Task strategy is a one-turn intent. Returning to auto avoids a
+          // later conversational follow-up silently running a heavy workflow.
+          setGroupTaskStrategy(groupTaskStrategyAfterSubmit());
+        }
         return;
       }
       // Composer-side uploads already happened on attach; align them back onto
@@ -2514,6 +3054,9 @@ function RealtimePageContent({
       )
         .then((files) => {
           void sendMessage(threadId, { text: message.text, files });
+          if (isGroupConversation) {
+            setGroupTaskStrategy(groupTaskStrategyAfterSubmit());
+          }
         })
         .catch((err) => {
           swallow(err);
@@ -2522,6 +3065,7 @@ function RealtimePageContent({
     },
     [
       isOctopusAssistant,
+      isGroupConversation,
       isProjectCodeMode,
       markSidebarThreadRunning,
       modeManualOverride,
@@ -2895,6 +3439,7 @@ function RealtimePageContent({
             <ChatPageLayout
               isNewThread={isNewThread}
               pageTitle={
+                boundProjectState?.project.name ||
                 thread?.values?.title ||
                 initialPrompt ||
                 (isNewThread ? t.sidebar.actionNewTask : "Octopus")
@@ -2907,17 +3452,25 @@ function RealtimePageContent({
                       className="absolute left-3 top-1/2 -translate-y-1/2"
                     />
                   )}
-                  <ChatHeaderAgentBadge
-                    agent={displayAgent}
-                    agentId={effectiveAgentId}
-                    collaborators={
-                      visibleCollaborationEnabled
-                        ? visibleCollaborationRoster
-                        : undefined
-                    }
-                  />
+                  {boundProjectState ? (
+                    <ProjectGroupHeaderBadge
+                      name={boundProjectState.project.name}
+                      status={boundProjectState.project.status}
+                      memberCount={projectGroupMemberCount}
+                    />
+                  ) : (
+                    <ChatHeaderAgentBadge
+                      agent={displayAgent}
+                      agentId={effectiveAgentId}
+                      collaborators={
+                        visibleCollaborationEnabled
+                          ? visibleCollaborationRoster
+                          : undefined
+                      }
+                    />
+                  )}
                   <div className="min-w-0 flex-1 flex items-center gap-2">
-                    {!isOctopusAssistant && (
+                    {!isOctopusAssistant && !boundProjectState && (
                       <ThreadTitle
                         threadId={threadId}
                         thread={thread}
@@ -2946,7 +3499,7 @@ function RealtimePageContent({
                   </div>
                   <div className="ml-auto flex shrink-0 items-center gap-1">
                     {/* 助理是单聊：不提供加人/协作，也不录制，头部保持极简 */}
-                    {!isOctopusAssistant && (
+                    {!isOctopusAssistant && canManageHumanInvites && (
                       <TaskCollaboratorControl
                         agents={allTaskCollaboratorAgents}
                         selectedAgents={selectedCollaborators}
@@ -2961,9 +3514,52 @@ function RealtimePageContent({
                         onTeamModeChange={handleTeamModeIntentChange}
                         roster={visibleCollaborationRoster}
                         threadId={threadId}
-                        isNewThread={isNewThread}
+                        labelPrefix="AI"
+                        disabled={replaceCoworkRosterMutation.isPending}
                       />
                     )}
+                    {!isOctopusAssistant && canManageHumanInvites && (
+                      <GroupHumanInviteButton
+                        roomId={resolvedHumanInviteRoomId}
+                        threadId={threadId}
+                        onEnsureRoom={ensureHumanInviteRoom}
+                        onRoomResolved={setHumanInviteRoomId}
+                        open={humanInviteDialogOpen}
+                        onOpenChange={setHumanInviteDialogOpen}
+                        iconOnly
+                        size="icon-sm"
+                        variant="ghost"
+                        disabled={
+                          isNewThread || ensureCollabRoomMutation.isPending
+                        }
+                      />
+                    )}
+                    {!isOctopusAssistant && canPromoteGroupToProject ? (
+                      <>
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={t.promoteProjectDialog.trigger}
+                          title={t.promoteProjectDialog.trigger}
+                          onClick={() => setPromoteGroupDialogOpen(true)}
+                        >
+                          <FolderKanbanIcon className="size-4" />
+                        </Button>
+                        <PromoteGroupToProjectDialog
+                          open={promoteGroupDialogOpen}
+                          onOpenChange={setPromoteGroupDialogOpen}
+                          threadId={threadId}
+                          defaultName={
+                            headerThreadTitle || collaborationTeamName
+                          }
+                          onPromoted={async () => {
+                            await boundProjectQuery.refetch();
+                            openProjectWorkbenchForEntity();
+                          }}
+                        />
+                      </>
+                    ) : null}
                     {!isOctopusAssistant && (
                       <ChatHeaderRecButton
                         threadId={threadId}
@@ -2975,7 +3571,10 @@ function RealtimePageContent({
                       <ShareMenu
                         iconOnly
                         title={
-                          thread?.values?.title || initialPrompt || "Octopus"
+                          boundProjectState?.project.name ||
+                          thread?.values?.title ||
+                          initialPrompt ||
+                          "Octopus"
                         }
                         prompt={initialPrompt || undefined}
                         onExportReplay={
@@ -3035,10 +3634,13 @@ function RealtimePageContent({
                       <LoadOlderTurnsBanner
                         onLoad={realtimeApprovals.loadOlderTurns}
                       />
-                    ) : !isNewThread &&
-                      !thread.isThreadLoading &&
-                      !thread.isLoading &&
-                      thread.messages.length === 0 ? (
+                    ) : null
+                  }
+                  emptyState={
+                    !realtimeApprovals.hasMoreTurns &&
+                    !isNewThread &&
+                    !thread.isThreadLoading &&
+                    !thread.isLoading ? (
                       <div
                         className="mx-auto mt-10 flex max-w-sm flex-col items-center gap-2 text-center text-sm text-muted-foreground"
                         role="status"
@@ -3068,15 +3670,24 @@ function RealtimePageContent({
                       ? visibleCollaborationRoster
                       : undefined
                   }
+                  showSenderName={
+                    visibleCollaborationEnabled ||
+                    Boolean(collabSessionQuery.data?.room_id) ||
+                    isProjectHomeThread
+                  }
+                  projectMessageActions={projectMessageActions}
+                  timelineEntries={roomTimelineEntries}
                   footer={
-                    hasCompletedAgentOutput &&
-                    hasFinalArtifact &&
-                    !hasReportArtifact ? (
-                      <FinalArtifactCompletionNotice
-                        entries={finalArtifactEntries}
-                        onOpen={openFinalArtifactPanel}
-                      />
-                    ) : null
+                    <>
+                      {hasCompletedAgentOutput &&
+                      hasFinalArtifact &&
+                      !hasReportArtifact ? (
+                        <FinalArtifactCompletionNotice
+                          entries={finalArtifactEntries}
+                          onOpen={openFinalArtifactPanel}
+                        />
+                      ) : null}
+                    </>
                   }
                 />
               }
@@ -3130,6 +3741,32 @@ function RealtimePageContent({
                           mode={effectiveMode}
                           reasoningEffort={effectiveReasoningEffort}
                           threadId={threadId}
+                          mentionMembers={collaborationMentionMembers}
+                          isGroupConversation={isGroupConversation}
+                          groupTaskStrategy={groupTaskStrategy}
+                          onGroupTaskStrategyChange={setGroupTaskStrategy}
+                          responseModeControl={
+                            isGroupConversation ? (
+                              <TeamModePicker
+                                value={teamModeIntent}
+                                onChange={handleTeamModeIntentChange}
+                                ariaLabel={t.chatInputBox.responseMode}
+                                compact
+                                disabled={
+                                  thread.isLoading ||
+                                  replaceCoworkRosterMutation.isPending
+                                }
+                                disabledModes={
+                                  visibleCollaborationRoster.length <= 1
+                                    ? ["cluster", "swarm"]
+                                    : []
+                                }
+                                disabledReason={
+                                  t.chatInputBox.responseModeTeamRequired
+                                }
+                              />
+                            ) : undefined
+                          }
                           disabled={researchLoading}
                           workDir={effectiveWorkDir}
                           displayAgent={composerDisplayAgent}
@@ -3305,6 +3942,9 @@ function RealtimePageContent({
                     isCompressingContext={isCompressingContext}
                     onCompressContext={handleCompressContext}
                     rosterSeats={collaborationRosterSeats}
+                    onInvitePeople={
+                      canManageHumanInvites ? handleOpenHumanInvite : undefined
+                    }
                     onClose={closeAgentWorkbenchPanel}
                     onSelectTab={selectAgentWorkbenchTab}
                     onOpenArtifact={openWorkbenchArtifact}

@@ -20,7 +20,7 @@ import json
 import logging
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -35,12 +35,17 @@ _lock = threading.RLock()
 
 # ── Registry persistence ─────────────────────────────────────────
 
+
 def _load_registry() -> dict[str, Any]:
     if not _REGISTRY_FILE.exists():
         return {"agents": []}
     try:
         data = json.loads(_REGISTRY_FILE.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) and isinstance(data.get("agents"), list) else {"agents": []}
+        return (
+            data
+            if isinstance(data, dict) and isinstance(data.get("agents"), list)
+            else {"agents": []}
+        )
     except (OSError, json.JSONDecodeError):
         return {"agents": []}
 
@@ -60,6 +65,7 @@ def _find_agent(agents: list[dict[str, Any]], agent_id: str) -> dict[str, Any] |
 
 
 # ── A2A SDK helpers (lazy import — SDK is optional at runtime) ───
+
 
 async def _resolve_agent_card(url: str) -> dict[str, Any]:
     """Fetch a remote agent's A2A card and normalize it for our wire shape."""
@@ -139,6 +145,7 @@ async def _probe_agent(url: str) -> dict[str, Any]:
 
 # ── Router ───────────────────────────────────────────────────────
 
+
 def create_a2a_router(
     *,
     identity_store: Any = None,
@@ -182,7 +189,7 @@ def create_a2a_router(
             raise HTTPException(400, "url must be http(s)")
 
         card = await _resolve_agent_card(url)
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         with _lock:
             registry = _load_registry()
             # Re-registering the same URL refreshes in place.
@@ -219,9 +226,7 @@ def create_a2a_router(
         with _lock:
             registry = _load_registry()
             before = len(registry["agents"])
-            registry["agents"] = [
-                e for e in registry["agents"] if e.get("agent_id") != agent_id
-            ]
+            registry["agents"] = [e for e in registry["agents"] if e.get("agent_id") != agent_id]
             if len(registry["agents"]) == before:
                 raise HTTPException(404, f"agent not found: {agent_id}")
             _save_registry(registry["agents"])
@@ -235,7 +240,7 @@ def create_a2a_router(
         if entry is None:
             raise HTTPException(404, f"agent not found: {agent_id}")
         result = await _probe_agent(str(entry["base_url"]))
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         with _lock:
             registry = _load_registry()
             current = _find_agent(registry["agents"], agent_id)

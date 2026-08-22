@@ -70,7 +70,10 @@ import { ClarificationChoiceCard } from "./clarification-choice-card";
 import { MarkdownContent } from "./markdown-content";
 import { extractClarificationQuestionnaire } from "../clarification-questionnaire";
 import { hasVisibleMessageGroupContent, MessageGroup } from "./message-group";
-import { MessageListItem } from "./message-list-item";
+import {
+  MessageListItem,
+  type MessageListProjectActions,
+} from "./message-list-item";
 import {
   type FailurePresentation,
   hasMessageOutputSummary,
@@ -141,6 +144,69 @@ export interface MessageTurnSlice {
   groupIndexes: number[];
   /** Human group key when present; leading system content uses a prelude key. */
   key: string;
+}
+
+/** A non-thread event rendered inside the conversation's single scroll/log. */
+export interface MessageListTimelineEntry {
+  id: string;
+  createdAt?: string | null;
+  content: ReactNode;
+}
+
+function timestampMs(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * Place external room events before the first thread group at or after their
+ * timestamp. Groups remain atomic, so tool/reasoning/streaming renderers are
+ * never split. Entries without a usable timestamp stay at the tail.
+ */
+export function placeTimelineEntries(
+  groupCreatedAt: readonly (string | null | undefined)[],
+  entries: readonly MessageListTimelineEntry[],
+): MessageListTimelineEntry[][] {
+  const slots = Array.from(
+    { length: groupCreatedAt.length + 1 },
+    () => [] as MessageListTimelineEntry[],
+  );
+  const ordered = entries
+    .map((entry, index) => ({ entry, index, at: timestampMs(entry.createdAt) }))
+    .sort((left, right) => {
+      if (left.at === null && right.at === null)
+        return left.index - right.index;
+      if (left.at === null) return 1;
+      if (right.at === null) return -1;
+      return left.at - right.at || left.index - right.index;
+    });
+  const anchors = groupCreatedAt.map(timestampMs);
+
+  for (const item of ordered) {
+    if (item.at === null) {
+      slots[groupCreatedAt.length]!.push(item.entry);
+      continue;
+    }
+    const groupIndex = anchors.findIndex(
+      (anchor) => anchor !== null && anchor >= item.at!,
+    );
+    slots[groupIndex < 0 ? groupCreatedAt.length : groupIndex]!.push(
+      item.entry,
+    );
+  }
+  return slots;
+}
+
+function messageCreatedAt(message: Message): string | null {
+  for (const metadata of [
+    message.additional_kwargs,
+    message.response_metadata,
+  ]) {
+    const value = metadata?.created_at;
+    if (typeof value === "string" && timestampMs(value) !== null) return value;
+  }
+  return null;
 }
 
 /** Per-group render inputs derived once per turn instead of per group. */
@@ -784,6 +850,7 @@ export function MessageList({
   thread,
   paddingBottom = MESSAGE_LIST_DEFAULT_PADDING_BOTTOM,
   header,
+  emptyState,
   footer,
   onOpenArtifact,
   lastTurnToolEvents,
@@ -797,6 +864,8 @@ export function MessageList({
   project,
   onSendFollowUp,
   onAuthorizeNetwork,
+  projectMessageActions,
+  timelineEntries = [],
 }: {
   className?: string;
   threadId: string;
@@ -810,6 +879,8 @@ export function MessageList({
   /** Rendered above the first message — e.g. a "load older turns"
    * banner when the thread resumed with a paginated window. */
   header?: ReactNode;
+  /** Rendered only when neither thread nor external timeline has content. */
+  emptyState?: ReactNode;
   footer?: ReactNode;
   onOpenArtifact?: (path: string) => void;
   lastTurnToolEvents?: LiveToolEvent[];
@@ -830,6 +901,10 @@ export function MessageList({
   /** Callback when the user authorizes network access from the
    *  environment-blocked banner ("common domains" or "full"). */
   onAuthorizeNetwork?: (tier: "common" | "full") => void;
+  /** Quick actions shown on human bubbles in a bound project group. */
+  projectMessageActions?: MessageListProjectActions;
+  /** Room-only messages/cards to merge at thread-group time boundaries. */
+  timelineEntries?: readonly MessageListTimelineEntry[];
 }) {
   const { t } = useI18n();
   const [settings] = useLocalSettings();
@@ -860,6 +935,7 @@ export function MessageList({
     combinedAgentRoster.length === 1 ? combinedAgentRoster[0] : undefined;
 
   const messages = thread.messages;
+  const hasTimelineContent = messages.length > 0 || timelineEntries.length > 0;
 
   // Structural fingerprint: changes when the message list topology changes
   // (new messages, new/removed tool events). Used to gate scroll-listener
@@ -1168,6 +1244,20 @@ export function MessageList({
   const messageTurns = useMemo(
     () => partitionMessageGroupsIntoTurns(groupedMessages),
     [groupedMessages],
+  );
+  const timelineEntrySlots = useMemo(
+    () =>
+      placeTimelineEntries(
+        groupedMessages.map((group) => {
+          for (const message of group.messages) {
+            const createdAt = messageCreatedAt(message);
+            if (createdAt) return createdAt;
+          }
+          return null;
+        }),
+        timelineEntries,
+      ),
+    [groupedMessages, timelineEntries],
   );
   // Must mirror the exact mount predicate of `groupFailure` below (latest
   // group is a plain assistant group and the thread is idle). Anything looser
@@ -1582,6 +1672,7 @@ export function MessageList({
           isLastMessage={messages[messages.length - 1] === msg}
           messageIndex={messages.indexOf(msg)}
           afterContent={afterContent}
+          projectMessageActions={projectMessageActions}
         />
       </div>
     );
@@ -1611,6 +1702,7 @@ export function MessageList({
           isLastMessage={messages[messages.length - 1] === msg}
           messageIndex={messages.indexOf(msg)}
           afterContent={afterContent}
+          projectMessageActions={projectMessageActions}
         />
       </>
     );
@@ -2098,6 +2190,7 @@ export function MessageList({
         className="mx-auto w-full max-w-(--container-width-md) gap-7 px-4 pt-2"
       >
         {header}
+        {!hasTimelineContent ? emptyState : null}
         {showEmptyPendingAssistantFrame &&
           renderAssistantFrame({
             key: "pending-agent-frame/empty-turn",
@@ -2223,6 +2316,11 @@ export function MessageList({
 
                 return (
                   <Fragment key={groupKey}>
+                    {timelineEntrySlots[index]?.map((entry) => (
+                      <Fragment key={`timeline:${entry.id}`}>
+                        {entry.content}
+                      </Fragment>
+                    ))}
                     <MemoizedGroup
                       group={group}
                       index={index}
@@ -2286,6 +2384,10 @@ export function MessageList({
             </div>
           );
         })}
+
+        {timelineEntrySlots[groupedMessages.length]?.map((entry) => (
+          <Fragment key={`timeline:${entry.id}`}>{entry.content}</Fragment>
+        ))}
 
         {/* Follow-up suggestions: show after the last turn when conversation is idle */}
         {onSendFollowUp &&

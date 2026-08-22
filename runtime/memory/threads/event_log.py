@@ -23,6 +23,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import threading
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -58,6 +59,7 @@ EventKind = Literal[
     "thread_archived",
     "turn_started",
     "turn_updated",
+    "turn_interrupt_requested",
     "turn_completed",
     "turn_diff_updated",
     "item_started",
@@ -147,12 +149,23 @@ class EventLog:
 
     # ── Writer side ──────────────────────────────────────────
 
-    def append(self, event: LoggedEvent) -> LoggedEvent:
+    def append(
+        self,
+        event: LoggedEvent,
+        *,
+        durable: bool = False,
+    ) -> LoggedEvent:
         """Append one event and return the stored copy (with its ``eventId``).
 
         Callers that fan the event out to live subscribers stamp the returned
         id onto the notification so clients can deduplicate live delivery
         against a later log replay (at-least-once on both paths).
+
+        ``durable=True`` is reserved for execution/terminal boundaries where
+        returning before the kernel has accepted the write for persistence
+        could make an externally visible side effect outrun its audit record.
+        High-frequency text deltas deliberately keep the cheaper flush-only
+        path.
         """
         if not event.event_id:
             event = event.model_copy(update={"event_id": f"evt_{new_id().hex}"})
@@ -165,6 +178,8 @@ class EventLog:
             stream.seek(0, 2)
             stream.write(line)
             stream.flush()
+            if durable:
+                os.fsync(stream.fileno())
         return event
 
     def reserve_timeline_sequence(self, turn_id: str) -> int:
@@ -250,7 +265,44 @@ class EventLog:
                 threadId=thread_id,
                 turnId=turn_id,
                 payload={"status": status.value, "error": error},
-            )
+            ),
+            durable=True,
+        )
+
+    def turn_interrupt_requested(
+        self,
+        thread_id: str,
+        turn_id: str,
+        *,
+        claim_epoch: str,
+        requested_by_actor: str | None,
+        tenant_id: str | None,
+        request_id: str | None = None,
+    ) -> LoggedEvent:
+        """Durably address one cancellation request to one claim epoch.
+
+        ``claim_epoch`` is minted by the OS-lock owner, never accepted from
+        the client.  A later turn on the same thread therefore ignores a
+        delayed request for an older owner (the classic validate/append ABA
+        race).  Replay intentionally treats this control record as a no-op;
+        it is an auditable signal consumed only by the resident claim owner.
+        """
+
+        payload: dict[str, Any] = {"claimEpoch": claim_epoch}
+        if requested_by_actor is not None:
+            payload["requestedByActor"] = requested_by_actor
+        if tenant_id is not None:
+            payload["tenantId"] = tenant_id
+        if request_id is not None:
+            payload["requestId"] = request_id
+        return self.append(
+            LoggedEvent(
+                event="turn_interrupt_requested",
+                threadId=thread_id,
+                turnId=turn_id,
+                payload=payload,
+            ),
+            durable=True,
         )
 
     def turn_updated(
@@ -321,14 +373,22 @@ class EventLog:
             )
         )
 
-    def item_started(self, thread_id: str, turn_id: str, item: Item) -> LoggedEvent:
+    def item_started(
+        self,
+        thread_id: str,
+        turn_id: str,
+        item: Item,
+        *,
+        durable: bool = False,
+    ) -> LoggedEvent:
         return self.append(
             LoggedEvent(
                 event="item_started",
                 threadId=thread_id,
                 turnId=turn_id,
                 payload={"item": item.model_dump(by_alias=True, mode="json")},
-            )
+            ),
+            durable=durable,
         )
 
     def item_delta(

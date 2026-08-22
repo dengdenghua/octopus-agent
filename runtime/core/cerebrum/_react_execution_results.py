@@ -15,6 +15,7 @@ import json
 from typing import Any
 
 from runtime.core.cerebrum.completion_receipt import build_completion_receipt
+from runtime.execution.tool_engine.tool_protocol import output_signals_error
 from runtime.platform.models import Step
 
 _VERIFICATION_TOOL_KINDS: dict[str, str] = {
@@ -272,6 +273,8 @@ def _beak_step_effective_success(step: Any) -> bool:
     output = getattr(result, "output", None)
     if not isinstance(output, dict):
         return True
+    if output_signals_error(output):
+        return False
 
     success = output.get("success")
     if isinstance(success, bool):

@@ -69,6 +69,38 @@ def test_authenticated_plan_stamps_principal_owner_and_tenant(tmp_path) -> None:
     assert project["tenant_id"] == "tenant-a"
 
 
+def test_consecutive_tenant_plans_keep_ownership_and_milestones_isolated(tmp_path) -> None:
+    client, _ = _client(tmp_path)
+    alice = client.post(
+        "/api/projects",
+        headers={"Authorization": "Bearer sk-alice"},
+        json={"name": "Alice project", "goal": "Alice goal"},
+    )
+    bob = client.post(
+        "/api/projects",
+        headers={"Authorization": "Bearer sk-bob"},
+        json={"name": "Bob project", "goal": "Bob goal"},
+    )
+
+    assert alice.status_code == bob.status_code == 200
+    alice_state = alice.json()
+    bob_state = bob.json()
+    assert alice_state["project"]["tenant_id"] == "tenant-a"
+    assert alice_state["project"]["owner_id"] == "alice"
+    assert bob_state["project"]["tenant_id"] == "tenant-b"
+    assert bob_state["project"]["owner_id"] == "bob"
+    assert {item["id"] for item in alice_state["milestones"]}.isdisjoint(
+        {item["id"] for item in bob_state["milestones"]}
+    )
+    assert (
+        client.get(
+            f"/api/projects/{bob_state['project']['id']}",
+            headers={"Authorization": "Bearer sk-alice"},
+        ).status_code
+        == 404
+    )
+
+
 def test_authenticated_run_requires_managed_thread_workspace(tmp_path) -> None:
     client, _ = _client(tmp_path)
     headers = {"Authorization": "Bearer sk-alice"}
@@ -162,9 +194,17 @@ def test_scoped_store_blocks_cross_tenant_reads_writes_and_bindings(tmp_path) ->
 
     project = alice.save_project(Project(id="P-scope", name="private", goal="g"))
     alice.save_milestone(project.id, Milestone(id="M-scope", name="phase", goal="g"))
+    alice.append_event(
+        project.id,
+        kind="project.decision_recorded",
+        payload={"decision": "Keep this private", "actor": "alice"},
+        created_at=1.0,
+    )
+    assert alice.decisions_for_project(project.id)[0]["decision"] == "Keep this private"
     assert bob.get_project(project.id) is None
     assert bob.list_projects() == []
     assert bob.milestones_for(project.id) == []
+    assert bob.decisions_for_project(project.id) == []
     assert bob.delete_project(project.id) is False
     try:
         bob.bind_thread("thread-bob", project.id)

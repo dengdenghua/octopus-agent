@@ -62,14 +62,15 @@ def test_list_and_plugin_dir_resolution(tmp_path: Path) -> None:
 
 # ── WebSocket route mounting (voice / realtime stream plugins) ──
 
+
 def _make_ws_plugin(root: Path, name: str = "voiceplug") -> Path:
     d = root / name
     d.mkdir(parents=True)
     (d / "plugin.yaml").write_text(
         f"name: {name}\nversion: 1.0.0\ndescription: voice\n"
         "websockets:\n"
-        '  - path: /ws/voice\n'
-        '    handler: handle_voice_ws\n',
+        "  - path: /ws/voice\n"
+        "    handler: handle_voice_ws\n",
         encoding="utf-8",
     )
     (d / "__init__.py").write_text(
@@ -104,9 +105,7 @@ def test_websocket_route_mounts_and_echoes(tmp_path: Path) -> None:
 
     with TestClient(app) as client:
         try:
-            with client.websocket_connect(
-                "/api/plugins/webhooks/voiceplug/ws/voice"
-            ) as ws:
+            with client.websocket_connect("/api/plugins/webhooks/voiceplug/ws/voice") as ws:
                 ws.send_text("ping")
                 assert ws.receive_text() == "pong"
         except WebSocketDisconnect:
@@ -122,6 +121,7 @@ def test_websocket_missing_handler_closes_4404(tmp_path: Path) -> None:
     """A websockets entry pointing at a missing handler closes cleanly."""
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+    from starlette.websockets import WebSocketDisconnect
 
     app = FastAPI()
     hub = PluginHub(plugin_dir=tmp_path, fastapi_app=app)
@@ -142,11 +142,11 @@ def test_websocket_missing_handler_closes_4404(tmp_path: Path) -> None:
     )
     assert hub.load("wsbroken") is not None
 
-    with TestClient(app) as client:
-        with pytest.raises(Exception):
-            with client.websocket_connect(
-                "/api/plugins/webhooks/wsbroken/ws/none"
-            ) as ws:
-                ws.receive_text()
+    with (
+        TestClient(app) as client,
+        pytest.raises(WebSocketDisconnect),
+        client.websocket_connect("/api/plugins/webhooks/wsbroken/ws/none") as ws,
+    ):
+        ws.receive_text()
 
     hub.unload("wsbroken")

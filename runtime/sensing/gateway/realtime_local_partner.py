@@ -95,13 +95,33 @@ async def drive_local_partner(
     # and would be an invalid ``-m`` for codex/claude). Empty / "auto" → the CLI
     # keeps its configured default. See agents_local_partner.partner_model().
     partner_model = str((getattr(intent, "user_context", None) or {}).get("partner_model") or "")
+    # ``_build_intent`` is the server-side authority for this value. In
+    # authenticated mode it has already replaced every client-supplied path
+    # with the tenant/thread managed workspace; in local mode it has applied
+    # the WorkspaceManager boundary. Never fall back to the server process cwd
+    # for a coding CLI, because that could expose the repository or another
+    # thread's files.
+    authoritative_cwd = (getattr(intent, "user_context", None) or {}).get("cwd")
+    cwd = authoritative_cwd.strip() if isinstance(authoritative_cwd, str) else None
+    if not cwd or not os.path.isabs(cwd):
+        await runtime._emit_agent_message(
+            turn,
+            log,
+            emitter,
+            (
+                f'Local partner "{label}" was not started because this task has no '
+                "server-managed workspace. Open the task from a workspace and try again."
+            ),
+        )
+        turn.status = TurnStatus.FAILED
+        return
 
     result = await asyncio.to_thread(
         run_local_partner,
         partner_id=partner_id,
         command=command,
         prompt=prompt,
-        cwd=None,
+        cwd=cwd,
         timeout=timeout,
         env=env,
         model=partner_model or None,

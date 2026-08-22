@@ -1,22 +1,21 @@
 from __future__ import annotations
 
-import json
 import shutil
-import subprocess
-import sys
 from pathlib import Path
+
+from benchmarks.trusted_verifier_controller import UnsafeLocalWorkerLauncher
+from benchmarks.verifiers import verify_concurrent_cache, verify_path_boundary
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _verify(script: str, workspace: Path) -> dict[str, object]:
-    completed = subprocess.run(
-        [sys.executable, str(REPO_ROOT / "benchmarks" / "verifiers" / script), str(workspace)],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return json.loads(completed.stdout)
+    launcher = UnsafeLocalWorkerLauncher()
+    if script == "verify_concurrent_cache.py":
+        return verify_concurrent_cache._run(workspace, launcher=launcher)
+    if script == "verify_path_boundary.py":
+        return verify_path_boundary._run(workspace, launcher=launcher)
+    raise AssertionError(f"unexpected verifier: {script}")
 
 
 def test_concurrent_cache_fixture_has_a_satisfiable_hidden_verifier(tmp_path) -> None:
@@ -189,7 +188,9 @@ class FileService:
 """.lstrip(),
         encoding="utf-8",
     )
-    (workspace / "tests" / "test_paths.py").write_text("def test_regression(): assert True\n")
+    (workspace / "tests" / "test_file_service.py").write_text(
+        "def test_regression(): assert True\n"
+    )
 
     result = _verify("verify_path_boundary.py", workspace)
 

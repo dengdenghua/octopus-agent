@@ -10,27 +10,42 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 import logging
-import re
-import secrets
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from threading import Lock
 from typing import Any
-from uuid import uuid4
 
+from runtime.memory.cowork.team_invitation_store import TeamInvitationStore
 from runtime.platform.process.paths import app_paths
+from runtime.safety.auth.principal import CurrentPrincipal, resolve_principal
 
+from ._team_rooms_access import TeamRoomAccess
+from ._team_rooms_state import (
+    _load_state,
+    _room_payload,
+    _save_state,
+    _slug_id,
+    _unique_team_id,
+)
+from ._team_rooms_state import (
+    _room_storage_payload as _room_storage_payload,
+)
+from .team_invitations_router import (
+    register_team_invitation_routes,
+    scrub_legacy_room_invites,
+)
 from .team_rooms_models import (
     CreateTeamInviteRequest,
     CreateTeamRoomRequest,
     JoinInviteRequest,
+    RejectTeamJoinRequest,
     TeamMemberWire,
     TeamParticipantWire,
     TeamRoomWire,
     UpdateDelegationRequest,
     UpdateSpeakerPolicyRequest,
+    UpdateTeamJoinPolicyRequest,
     UpdateTeamParticipantRequest,
 )
 from .team_rooms_ws import TeamRoomWsContext, team_room_ws
@@ -78,6 +93,8 @@ def create_team_rooms_router(
     room_delete_projection: Callable[[str], None] | None = None,
     room_message_projection: Callable[[str, dict[str, Any]], None] | None = None,
     room_message_provider: Callable[[str, int, int, str], list[dict[str, Any]]] | None = None,
+    invitation_store: TeamInvitationStore | None = None,
+    project_store: Any = None,
     twin_responder: (
         Callable[
             [TeamRoomWire, TeamParticipantWire, list[dict[str, Any]]],
@@ -100,14 +117,79 @@ def create_team_rooms_router(
     router: Any = APIRouter(tags=["team-rooms"])
     path = state_path or (app_paths().data_dir / "team_rooms.json")
     lock = Lock()
-    teams: dict[str, TeamRoomWire] = _load_state(path)
+    scrub_legacy_room_invites(path)
+
+    def _legacy_tenant_for_owner(owner_id: str | None) -> str:
+        owner = str(owner_id or "").strip()
+        if not require_auth:
+            return "local"
+        identity = identity_store.get(owner) if identity_store is not None and owner else None
+        tenant = str((getattr(identity, "metadata", None) or {}).get("tenant_id") or "").strip()
+        return tenant or (f"legacy:{owner}" if owner else "local")
+
+    teams: dict[str, TeamRoomWire] = _load_state(
+        path,
+        legacy_tenant_for_owner=_legacy_tenant_for_owner,
+    )
+    invite_store = invitation_store or TeamInvitationStore(
+        path.parent / "team_invitations.db" if state_path is not None else None
+    )
+    project_store_holder: dict[str, Any] = {"store": project_store}
     live_sockets: dict[str, dict[str, WebSocket]] = {}
     socket_loops: dict[str, dict[str, asyncio.AbstractEventLoop]] = {}
 
-    def _auth(request: Any) -> str | None:
-        from .openai_gateway_router import _resolve_actor
+    def _project_binding_for_room(team: TeamRoomWire) -> tuple[str | None, bool]:
+        bound_store = project_store_holder.get("store")
+        thread_id = str(team.thread_id or "").strip()
+        resolver = getattr(bound_store, "project_for_thread", None)
+        if not thread_id or not callable(resolver):
+            return None, False
+        try:
+            project = resolver(thread_id)
+        except Exception:  # noqa: BLE001 - policy resolution must fail closed
+            _LOG.warning("project binding lookup failed for team %s", team.id, exc_info=True)
+            return None, True
+        if project is None:
+            return None, False
+        project_tenant = str(getattr(project, "tenant_id", "") or "").strip()
+        if require_auth and project_tenant != team.tenant_id:
+            return None, False
+        if not require_auth and project_tenant and project_tenant not in {"local", team.tenant_id}:
+            return None, False
+        project_id = str(getattr(project, "id", "") or "").strip()
+        return project_id or None, False
 
-        return _resolve_actor(
+    def _project_id_for_room(team: TeamRoomWire) -> str | None:
+        project_id, _lookup_failed = _project_binding_for_room(team)
+        return project_id
+
+    def _join_policy_for_room(team: TeamRoomWire) -> str:
+        override = str(team.join_policy_override or "").strip()
+        if override in {"direct_join", "apply_then_join"}:
+            return override
+        project_id, lookup_failed = _project_binding_for_room(team)
+        return "apply_then_join" if project_id is not None or lookup_failed else "direct_join"
+
+    def _public_room_payload(team: TeamRoomWire) -> dict[str, Any]:
+        project_id, lookup_failed = _project_binding_for_room(team)
+        override = str(team.join_policy_override or "").strip()
+        join_policy = (
+            override
+            if override in {"direct_join", "apply_then_join"}
+            else ("apply_then_join" if project_id is not None or lookup_failed else "direct_join")
+        )
+        return _room_payload(
+            team,
+            join_policy=join_policy,
+            project_id=project_id,
+        )
+
+    def _principal(request: Any) -> CurrentPrincipal | None:
+        state = getattr(request, "state", None)
+        cached = getattr(state, "principal", None) if state is not None else None
+        if isinstance(cached, CurrentPrincipal):
+            return cached
+        return resolve_principal(
             request,
             identity_store,
             require_auth,
@@ -116,12 +198,36 @@ def create_team_rooms_router(
             jwt_audience=jwt_audience,
         )
 
+    def _auth(request: Any) -> str | None:
+        principal = _principal(request)
+        return principal.actor_id if principal is not None else None
+
+    def _tenant(request: Any) -> str:
+        principal = _principal(request)
+        return principal.tenant_id if principal is not None else "local"
+
+    room_access = TeamRoomAccess(
+        teams=teams,
+        lock=lock,
+        require_auth=require_auth,
+        principal=_principal,
+        tenant=_tenant,
+        http_exception=HTTPException,
+    )
+    _list_room_members = room_access.list_room_members
+    _get_room_participant = room_access.get_room_participant
+    _can_access_room = room_access.can_access_room
+    _require_member = room_access.require_member
+    _require_owner = room_access.require_owner
+    _require_invite_admin = room_access.require_invite_admin
+    _require_room_editor = room_access.require_room_editor
+
     def _save() -> None:
         _save_state(path, teams)
         if room_projection is not None:
             for team in list(teams.values()):
                 try:
-                    room_projection(team.model_dump())
+                    room_projection(_public_room_payload(team))
                 except Exception:  # noqa: BLE001 - projection must not block room writes
                     _LOG.warning("team room projection failed for %s", team.id, exc_info=True)
 
@@ -137,11 +243,13 @@ def create_team_rooms_router(
         with lock:
             teams.clear()
             live_sockets.clear()
+            invite_store.clear()
         if callable(reset_callback):
             reset_callback()
 
     def _create_team_for_actor(
         actor: str | None,
+        tenant_id: str,
         body: CreateTeamRoomRequest,
     ) -> TeamRoomWire:
         name = body.name.strip()
@@ -162,6 +270,8 @@ def create_team_rooms_router(
             members=members,
             leaderId=leader_id,
             owner_id=owner,
+            tenant_id=tenant_id,
+            thread_id=(body.thread_id or "").strip() or None,
             created_at=now,
             updated_at=now,
             participants=[
@@ -177,7 +287,15 @@ def create_team_rooms_router(
         )
         with lock:
             teams[team.id] = team
-            _save()
+            try:
+                _save()
+            except Exception:
+                # Creation is an all-or-nothing boundary for callers such as
+                # the project-group orchestrator.  Do not leave an in-memory
+                # room that the durable snapshot rejected.
+                if teams.get(team.id) is team:
+                    teams.pop(team.id, None)
+                raise
         return team
 
     def _create_team_from_payload(
@@ -185,14 +303,81 @@ def create_team_rooms_router(
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         body = CreateTeamRoomRequest.model_validate(payload)
-        return _create_team_for_actor(_auth(request), body).model_dump()
+        principal = _principal(request)
+        actor = principal.actor_id if principal is not None else None
+        tenant_id = principal.tenant_id if principal is not None else "local"
+        return _public_room_payload(_create_team_for_actor(actor, tenant_id, body))
+
+    def _bind_team_thread(
+        request: Request,
+        team_id: str,
+        thread_id: str,
+    ) -> dict[str, Any]:
+        """Attach a legacy room to its canonical cowork thread exactly once.
+
+        The public Team Room API deliberately cannot choose ``thread_id``.
+        This internal bridge is called only by the owner-gated cowork ensure
+        route, so invite links can recover the canonical destination for rooms
+        created before server-owned thread bindings were persisted.
+        """
+
+        _require_invite_admin(request, team_id)
+        canonical_thread_id = str(thread_id or "").strip()
+        if not canonical_thread_id:
+            raise HTTPException(400, "thread_id is required")
+        with lock:
+            current = teams.get(team_id)
+            if current is None:
+                raise HTTPException(404, f"team not found: {team_id}")
+            existing_thread_id = str(current.thread_id or "").strip()
+            if existing_thread_id and existing_thread_id != canonical_thread_id:
+                raise HTTPException(409, "team room is already bound to another thread")
+            if existing_thread_id == canonical_thread_id:
+                return _public_room_payload(current)
+            updated = current.model_copy(
+                update={
+                    "thread_id": canonical_thread_id,
+                    "updated_at": _now(),
+                }
+            )
+            teams[team_id] = updated
+            try:
+                _save()
+            except Exception:
+                teams[team_id] = current
+                raise
+            return _public_room_payload(updated)
+
+    def _unbind_team_thread(
+        request: Request,
+        team_id: str,
+        thread_id: str,
+    ) -> dict[str, Any]:
+        """Compensate a binding only while it still points at ``thread_id``."""
+
+        _require_invite_admin(request, team_id)
+        expected_thread_id = str(thread_id or "").strip()
+        with lock:
+            current = teams.get(team_id)
+            if current is None:
+                raise HTTPException(404, f"team not found: {team_id}")
+            if str(current.thread_id or "").strip() != expected_thread_id:
+                return _public_room_payload(current)
+            updated = current.model_copy(update={"thread_id": None, "updated_at": _now()})
+            teams[team_id] = updated
+            try:
+                _save()
+            except Exception:
+                teams[team_id] = current
+                raise
+            return _public_room_payload(updated)
 
     async def _update_team_from_payload(
         request: Request,
         team_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        _require_member(request, team_id)
+        _require_room_editor(request, team_id)
         body = CreateTeamRoomRequest.model_validate(payload)
         with lock:
             current = teams.get(team_id)
@@ -214,7 +399,7 @@ def create_team_rooms_router(
             teams[team_id] = updated
             _save()
         await _broadcast_team_update(team_id, updated)
-        return updated.model_dump()
+        return _public_room_payload(updated)
 
     def _presence_payload(team_id: str) -> dict[str, Any]:
         team = teams.get(team_id)
@@ -281,7 +466,7 @@ def create_team_rooms_router(
             {
                 "type": "team:update",
                 "team_id": team_id,
-                "team": team.model_dump(),
+                "team": _public_room_payload(team),
                 "server_time": _now(),
             },
         )
@@ -313,7 +498,8 @@ def create_team_rooms_router(
 
     @router.get("/api/teams")
     def list_teams(request: Request) -> dict[str, Any]:
-        actor = _auth(request)
+        principal = _principal(request)
+        actor = principal.actor_id if principal is not None else None
         with lock:
             all_teams = sorted(
                 teams.values(),
@@ -326,20 +512,23 @@ def create_team_rooms_router(
             # When require_auth=True AND we resolved an actor, filter
             # to only teams where the caller is a member/owner. This
             # prevents cross-tenant team enumeration.
-            if require_auth and actor:
+            if require_auth and principal is not None and actor:
                 visible = [
                     team
                     for team in all_teams
-                    if actor == getattr(team, "owner_id", None)
-                    or any(
-                        getattr(p, "actor_id", None) == actor and p.status == "active"
-                        for p in team.participants
+                    if team.tenant_id == principal.tenant_id
+                    and (
+                        actor == getattr(team, "owner_id", None)
+                        or any(
+                            getattr(p, "actor_id", None) == actor and p.status != "removed"
+                            for p in team.participants
+                        )
                     )
                 ]
             else:
                 visible = list(all_teams)
             return {
-                "teams": [team.model_dump() for team in visible],
+                "teams": [_public_room_payload(team) for team in visible],
                 "count": len(visible),
             }
 
@@ -348,8 +537,13 @@ def create_team_rooms_router(
         request: Request,
         body: CreateTeamRoomRequest,
     ) -> dict[str, Any]:
-        team = _create_team_for_actor(_auth(request), body)
-        return team.model_dump()
+        principal = _principal(request)
+        actor = principal.actor_id if principal is not None else None
+        tenant_id = principal.tenant_id if principal is not None else "local"
+        # Canonical thread binding is an internal cowork bridge concern. A
+        # public room-create body must not point an invite at an arbitrary task.
+        team = _create_team_for_actor(actor, tenant_id, body.model_copy(update={"thread_id": None}))
+        return _public_room_payload(team)
 
     @router.get("/api/teams/{team_id}")
     def get_team(request: Request, team_id: str) -> dict[str, Any]:
@@ -358,7 +552,7 @@ def create_team_rooms_router(
             team = teams.get(team_id)
             if team is None:
                 raise HTTPException(404, f"team not found: {team_id}")
-            return team.model_dump()
+            return _public_room_payload(team)
 
     @router.put("/api/teams/{team_id}")
     def update_team(
@@ -366,7 +560,7 @@ def create_team_rooms_router(
         team_id: str,
         body: CreateTeamRoomRequest,
     ) -> dict[str, Any]:
-        _require_member(request, team_id)
+        _require_room_editor(request, team_id)
         with lock:
             current = teams.get(team_id)
             if current is None:
@@ -386,85 +580,94 @@ def create_team_rooms_router(
             )
             teams[team_id] = updated
             _save()
-            return updated.model_dump()
+            return _public_room_payload(updated)
 
     @router.delete("/api/teams/{team_id}")
     def delete_team(request: Request, team_id: str) -> dict[str, Any]:
-        _require_owner(request, team_id)
+        actor = _require_owner(request, team_id)
         with lock:
-            existed = teams.pop(team_id, None)
+            existed = teams.get(team_id)
             if existed is not None:
+                invite_store.revoke_room(
+                    tenant_id=existed.tenant_id,
+                    room_id=existed.id,
+                    revoked_by=actor or "local",
+                )
+                teams.pop(team_id, None)
                 _save()
                 _project_room_delete(existed.id)
             return {"ok": True, "deleted": existed is not None, "team_id": team_id}
 
-    def _list_room_members(team_id: str) -> list[str]:
-        """Return actor ids allowed to operate on ``team_id``. Used by
-        sibling routers (e.g. team_tasks) to enforce membership."""
-        with lock:
-            team = teams.get(team_id)
-            if team is None:
-                return []
-            actors: list[str] = []
-            owner = getattr(team, "owner_id", None)
-            if owner:
-                actors.append(owner)
-            for participant in team.participants:
-                if participant.status != "active":
-                    continue
-                actor_id = getattr(participant, "actor_id", None)
-                if not actor_id and not require_auth:
-                    # Legacy/local rooms historically used participant ids as
-                    # their only identity. In shared mode that id is supplied
-                    # by the client, so it is never proof of membership.
-                    actor_id = participant.id
-                if actor_id and actor_id not in actors:
-                    actors.append(actor_id)
-            return actors
+    def _bind_project_store(bound_store: Any) -> None:
+        """Late-bind the ProjectStore created after this router at app boot."""
 
-    def _require_member(request: Any, team_id: str) -> str | None:
-        """Enforce team membership. Returns actor_id if authorized.
+        project_store_holder["store"] = bound_store
 
-        No-op when ``require_auth`` is off (single-user dev mode):
-        ``_auth`` returns None, the room may have no actor binding, and
-        we don't want to break local dev. When ``require_auth=True``
-        AND we have an actor, the membership check is enforced.
+    def _replace_team_agent_members(
+        request: Any,
+        team_id: str,
+        members: list[Any],
+        leader_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Project a canonical GroupStore AI roster into a linked TeamRoom.
 
-        Safe to call from both inside and outside lock contexts —
-        ``_list_room_members`` takes the lock internally.
+        Human participants, the canonical thread binding, governance fields,
+        and join-policy override are untouched.  The owner/admin gate keeps
+        this internal seam from becoming a roster privilege escalation.
         """
-        actor = _auth(request)
-        if not require_auth:
-            return actor
-        if not actor:
-            raise HTTPException(401, "authentication required")
-        allowed = _list_room_members(team_id)
-        if actor not in allowed:
-            raise HTTPException(403, f"not a member of team {team_id}")
-        return actor
 
-    def _require_owner(request: Any, team_id: str) -> str | None:
-        """Enforce ownership (stricter than membership).
-        Used for destructive operations like DELETE.
-        """
-        actor = _auth(request)
-        if not require_auth:
-            return actor
-        if not actor:
-            raise HTTPException(401, "authentication required")
+        _actor, tenant_id = _require_invite_admin(request, team_id)
+        normalized: list[TeamMemberWire] = []
+        seen: set[str] = set()
+        for raw in members:
+            try:
+                item = (
+                    raw if isinstance(raw, TeamMemberWire) else TeamMemberWire.model_validate(raw)
+                )
+            except (TypeError, ValueError) as exc:
+                raise HTTPException(400, "invalid team agent member") from exc
+            name = item.name.strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            normalized.append(item.model_copy(update={"name": name}))
         with lock:
-            team = teams.get(team_id)
-            if team is None:
+            current = teams.get(team_id)
+            if current is None:
                 raise HTTPException(404, f"team not found: {team_id}")
-            owner = getattr(team, "owner_id", None)
-            if actor != owner:
-                raise HTTPException(403, "only the team owner can delete the team")
-        return actor
+            if current.tenant_id != tenant_id:
+                raise HTTPException(403, f"not a member of team {team_id}")
+            candidate_leader: str | None = str(leader_id or current.leaderId or "").strip() or None
+            names = {item.name for item in normalized}
+            if candidate_leader not in names:
+                candidate_leader = normalized[0].name if normalized else None
+            updated = current.model_copy(
+                update={
+                    "members": normalized,
+                    "leaderId": candidate_leader,
+                    "updated_at": _now(),
+                }
+            )
+            teams[team_id] = updated
+            try:
+                _save()
+            except Exception:
+                teams[team_id] = current
+                raise
+            return _public_room_payload(updated)
 
     router.broadcast = _broadcast
     router.create_team_from_payload = _create_team_from_payload
+    router.delete_team_from_payload = delete_team
+    router.bind_team_thread = _bind_team_thread
+    router.unbind_team_thread = _unbind_team_thread
     router.update_team_from_payload = _update_team_from_payload
     router.list_room_members = _list_room_members
+    router.get_room_participant = _get_room_participant
+    router.can_access_room = _can_access_room
+    router.bind_project_store = _bind_project_store
+    router.replace_team_agent_members = _replace_team_agent_members
+    router.join_policy_for_room = _join_policy_for_room
     router.reset_state = _reset_state
 
     @router.patch("/api/teams/{team_id}/participants/{participant_id}")
@@ -548,7 +751,7 @@ def create_team_rooms_router(
             _save()
         await _broadcast_team_update(team_id, team)
         await _broadcast_presence(team_id)
-        return {"team": team.model_dump(), "participant": updated_participant.model_dump()}
+        return {"team": _public_room_payload(team), "participant": updated_participant.model_dump()}
 
     @router.patch("/api/teams/{team_id}/speaker-policy")
     async def update_speaker_policy(
@@ -574,7 +777,7 @@ def create_team_rooms_router(
             teams[team_id] = team
             _save()
         await _broadcast_team_update(team_id, team)
-        return {"team": team.model_dump(), "speaker_policy": policy}
+        return {"team": _public_room_payload(team), "speaker_policy": policy}
 
     @router.patch("/api/teams/{team_id}/participants/{participant_id}/delegation")
     async def update_delegation(
@@ -619,7 +822,7 @@ def create_team_rooms_router(
             teams[team_id] = team
             _save()
         await _broadcast_team_update(team_id, team)
-        return {"team": team.model_dump(), "participant": updated.model_dump()}
+        return {"team": _public_room_payload(team), "participant": updated.model_dump()}
 
     @router.delete("/api/teams/{team_id}/participants/{participant_id}")
     async def remove_participant(
@@ -684,112 +887,23 @@ def create_team_rooms_router(
                     await asyncio.wrap_future(closed)
         await _broadcast_team_update(team_id, team)
         await _broadcast_presence(team_id)
-        return {"ok": True, "team": team.model_dump(), "participant_id": participant_id}
+        return {"ok": True, "team": _public_room_payload(team), "participant_id": participant_id}
 
-    @router.post("/api/teams/{team_id}/invite")
-    def create_invite(
-        request: Request,
-        team_id: str,
-        body: CreateTeamInviteRequest | None = None,
-    ) -> dict[str, Any]:
-        actor = _require_member(request, team_id)
-        with lock:
-            team = teams.get(team_id)
-            if team is None:
-                raise HTTPException(404, f"team not found: {team_id}")
-            token = team.invite_token or secrets.token_urlsafe(24)
-            invite_role = _normalize_participant_role(body.role if body else None)
-            if require_auth and invite_role == "owner" and not _caller_is_team_admin(team, actor):
-                raise HTTPException(403, "only a team owner can issue an owner invite")
-            team = team.model_copy(
-                update={
-                    "invite_token": token,
-                    "invite_role": invite_role,
-                    "invite_created_at": team.invite_created_at or _now(),
-                    "updated_at": _now(),
-                }
-            )
-            teams[team_id] = team
-            _save()
-            return {
-                "team_id": team_id,
-                "invite_token": token,
-                "invite_role": invite_role,
-                "invite_path": f"/workspace/team/join?token={token}",
-                "invite_hash_path": f"/#/workspace/team/join?token={token}",
-            }
-
-    @router.get("/api/team-invites/{token}")
-    def inspect_invite(request: Request, token: str) -> dict[str, Any]:
-        _auth(request)  # AUTH-OK: actor-agnostic — anyone with an invite token may preview
-        with lock:
-            team = _team_by_invite(teams, token)
-            if team is None:
-                raise HTTPException(404, "invite not found")
-            return {"team": team.model_dump()}
-
-    @router.post("/api/team-invites/{token}/join")
-    def join_invite(
-        request: Request,
-        token: str,
-        body: JoinInviteRequest,
-    ) -> dict[str, Any]:
-        actor = _auth(request)
-        with lock:
-            team = _team_by_invite(teams, token)
-            if team is None:
-                raise HTTPException(404, "invite not found")
-            now = _now()
-            existing_actor = (
-                next((p for p in team.participants if p.actor_id == actor), None)
-                if require_auth and actor
-                else None
-            )
-            if existing_actor is not None and existing_actor.status == "removed":
-                # Removal is an authorization revocation. A still-valid room
-                # invite must not silently reactivate the same principal.
-                raise HTTPException(403, "participant was removed from this team")
-            if require_auth:
-                # The authenticated principal, never a client-selected seat id,
-                # determines the participant record. This prevents one invitee
-                # from replacing/rebinding another participant by guessing its id.
-                participant_id = (
-                    existing_actor.id if existing_actor is not None else f"actor-{actor}"
-                )
-            else:
-                participant_id = body.participant_id or f"guest-{uuid4().hex[:10]}"
-            display_name = body.display_name or actor or "Guest"
-            participants = [p for p in team.participants if p.id != participant_id]
-            participant = TeamParticipantWire(
-                id=participant_id,
-                display_name=display_name,
-                role=_normalize_participant_role(
-                    existing_actor.role if existing_actor is not None else team.invite_role
-                ),
-                actor_id=actor,
-                joined_at=(existing_actor.joined_at if existing_actor is not None else now),
-                last_seen_at=now,
-                muted=bool(existing_actor.muted) if existing_actor is not None else False,
-                speak_mode=existing_actor.speak_mode if existing_actor is not None else "manual",
-                twin_agent_id=(
-                    existing_actor.twin_agent_id if existing_actor is not None else None
-                ),
-                host_id=existing_actor.host_id if existing_actor is not None else None,
-            )
-            participants.append(participant)
-            team = team.model_copy(
-                update={
-                    "participants": participants,
-                    "updated_at": now,
-                }
-            )
-            teams[team.id] = team
-            _save()
-            return {
-                "team": team.model_dump(),
-                "participant": participant.model_dump(),
-            }
-
+    register_team_invitation_routes(
+        router=router,
+        teams=teams,
+        lock=lock,
+        store=invite_store,
+        require_auth=require_auth,
+        principal_for=_principal,
+        tenant_for=_tenant,
+        require_admin=_require_invite_admin,
+        require_member=_require_member,
+        save_rooms=_save,
+        room_payload=_public_room_payload,
+        join_policy_for=_join_policy_for_room,
+        project_id_for=_project_id_for_room,
+    )
     if room_message_store is None:
         from runtime.memory.cowork.room_messages import RoomMessageStore
 
@@ -848,73 +962,16 @@ def create_team_rooms_router(
     return router
 
 
-def _slug_id(name: str) -> str:
-    slug = re.sub(r"[^a-zA-Z0-9_-]+", "-", name.strip().lower()).strip("-")
-    return f"team-{slug or uuid4().hex[:8]}"
-
-
-def _unique_team_id(candidate: str, teams: dict[str, TeamRoomWire]) -> str:
-    clean = re.sub(r"[^a-zA-Z0-9_-]+", "-", candidate.strip()).strip("-")
-    clean = clean or f"team-{uuid4().hex[:8]}"
-    if clean not in teams:
-        return clean
-    return f"{clean}-{uuid4().hex[:6]}"
-
-
-def _team_by_invite(
-    teams: dict[str, TeamRoomWire],
-    token: str,
-) -> TeamRoomWire | None:
-    for team in teams.values():
-        if team.invite_token == token:
-            return team
-    return None
-
-
-def _load_state(path: Path) -> dict[str, TeamRoomWire]:
-    if not path.exists():
-        return {}
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    items = raw.get("teams") if isinstance(raw, dict) else raw
-    if not isinstance(items, list):
-        return {}
-    out: dict[str, TeamRoomWire] = {}
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        try:
-            team = TeamRoomWire.model_validate(item)
-        except (ValueError, TypeError):
-            continue
-        out[team.id] = team
-    return out
-
-
-def _save_state(path: Path, teams: dict[str, TeamRoomWire]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "teams": [team.model_dump() for team in teams.values()],
-        "updated_at": _now(),
-    }
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    tmp.replace(path)
-
-
 __all__ = [
     "CreateTeamInviteRequest",
     "CreateTeamRoomRequest",
     "JoinInviteRequest",
+    "RejectTeamJoinRequest",
     "TeamMemberWire",
     "TeamParticipantWire",
     "TeamRoomWire",
     "UpdateDelegationRequest",
+    "UpdateTeamJoinPolicyRequest",
     "UpdateSpeakerPolicyRequest",
     "UpdateTeamParticipantRequest",
     "create_team_rooms_router",

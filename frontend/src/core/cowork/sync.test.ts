@@ -62,4 +62,20 @@ describe("buildCoworkSelectionSyncPlan", () => {
     expect(plan.shouldSetMode).toBe(false);
     expect(plan.hasWork).toBe(false);
   });
+
+  test("keeps a sole leader in a durable project group", () => {
+    const plan = buildCoworkSelectionSyncPlan({
+      leaderId: "general",
+      collaboratorIds: [],
+      mode: "cluster",
+      current: state(["general"], "chat"),
+      keepLeader: true,
+    });
+
+    expect(plan.desiredAgentIds).toEqual(["general"]);
+    expect(plan.removeAgentIds).toEqual([]);
+    expect(plan.mode).toBe("chat");
+    expect(plan.shouldSetMode).toBe(false);
+    expect(plan.hasWork).toBe(false);
+  });
 });

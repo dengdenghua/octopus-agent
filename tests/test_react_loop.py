@@ -7215,6 +7215,8 @@ def test_react_default_checkpoint_captures_each_iteration_and_final_state(
     final = stack.journal.checkpoints[1]["kwargs"]
     assert periodic["iteration_completed"] == 1
     assert periodic["has_final_answer"] is False
+    assert "actions" in periodic["steps_snapshot"][0]
+    assert "action_results" in periodic["steps_snapshot"][0]
     assert final["iteration_completed"] == 2
     assert final["has_final_answer"] is True
 
@@ -7287,6 +7289,127 @@ def test_react_resume_rehydrates_observation_history(
     )
     assert 'Action: echo({"text": "first evidence"})' in resumed_messages
     assert "Observation: echoed: first evidence" in resumed_messages
+
+
+def test_react_resume_restores_receipts_and_starts_in_sticky_terminal_lane(
+    monkeypatch,
+) -> None:
+    from runtime.core.cerebrum import react_native
+    from runtime.platform.models.llm import ToolSpec
+
+    monkeypatch.delenv("OCTOPUS_CHECKPOINT_EVERY_N", raising=False)
+    monkeypatch.setattr(react_native, "native_tool_use_active", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        react_native,
+        "build_loop_tool_specs",
+        lambda *_args, **_kwargs: [ToolSpec(name="exec_shell", description="Execute")],
+    )
+    task_id = TaskId(uuid4())
+    stack = _build_stack_with_journal()
+    durable_steps = [
+        {
+            "iteration": 1,
+            "action": 'write_text_file({"path":"runtime/foo.py","content":"x = 1"})',
+            "actions": ['write_text_file({"path":"runtime/foo.py","content":"x = 1"})'],
+            "observation": "bytes_written=5",
+            "action_results": [
+                {
+                    "tool_name": "write_text_file",
+                    "ok": True,
+                    "observation": "bytes_written=5",
+                    "trusted_execution": False,
+                    "execution_source": "registered_noncanonical",
+                }
+            ],
+        },
+        {
+            "iteration": 2,
+            "action": 'exec_shell({"command":"pytest-octopus-missing --version"})',
+            "actions": ['exec_shell({"command":"pytest-octopus-missing --version"})'],
+            "observation": "command not found: pytest-octopus-missing",
+            "action_results": [
+                {
+                    "tool_name": "exec_shell",
+                    "ok": False,
+                    "observation": "command not found: pytest-octopus-missing",
+                    "trusted_execution": True,
+                    "execution_source": "canonical_builtin",
+                }
+            ],
+        },
+        {
+            "iteration": 3,
+            "action": 'exec_shell({"command":"ruff-octopus-missing check runtime/foo.py"})',
+            "actions": ['exec_shell({"command":"ruff-octopus-missing check runtime/foo.py"})'],
+            "observation": "command not found: ruff-octopus-missing",
+            "action_results": [
+                {
+                    "tool_name": "exec_shell",
+                    "ok": False,
+                    "observation": "command not found: ruff-octopus-missing",
+                    "trusted_execution": True,
+                    "execution_source": "canonical_builtin",
+                }
+            ],
+        },
+    ]
+    stack.journal.write_react_checkpoint(
+        task_id=task_id,
+        iteration_completed=3,
+        max_iterations=6,
+        messages_snapshot=[
+            {"role": "system", "content": "ReAct system"},
+            {"role": "user", "content": "continue implementation"},
+        ],
+        steps_snapshot=durable_steps,
+        has_final_answer=False,
+    )
+    router = _CapturingRouter(["Final Answer: 代码已写入；pytest 与 ruff 因命令缺失未能运行。"])
+    stack.planner.router = router
+    intent = _intent("修改 runtime/foo.py 并验证")
+    intent.user_context["mode"] = "code"
+
+    _events, result = _drain(
+        stream_react_loop(
+            stack,
+            intent,
+            agent=None,
+            max_iterations=6,
+            resume_task_id=task_id,
+        )
+    )
+
+    assert result is not None and result.success
+    assert router.requests[0].tools == []
+    assert router.requests[0].require_tool_use is False
+    assert result.steps[:3][1].actions == durable_steps[1]["actions"]
+    assert result.steps[:3][1].action_results == durable_steps[1]["action_results"]
+
+
+def test_legacy_checkpoint_without_receipts_fails_closed_for_terminal_convergence() -> None:
+    from runtime.core.cerebrum.react_in_flight_nudges import (
+        _should_terminal_environment_convergence,
+    )
+
+    legacy_steps = [
+        ReActStep(
+            iteration=1,
+            action='write_text_file({"path":"runtime/foo.py","content":"x"})',
+            observation="bytes_written=1",
+        ),
+        ReActStep(
+            iteration=2,
+            action='exec_shell({"command":"pytest"})',
+            observation="command not found: pytest",
+        ),
+        ReActStep(
+            iteration=3,
+            action='exec_shell({"command":"ruff"})',
+            observation="command not found: ruff",
+        ),
+    ]
+
+    assert not _should_terminal_environment_convergence(legacy_steps, is_code_mode=True)
 
 
 def test_react_resume_falls_back_to_trace_store_checkpoint(
@@ -7387,6 +7510,10 @@ def test_react_resume_from_generated_periodic_checkpoint(
     assert len(stack.journal.checkpoints) == 1
     checkpoint = stack.journal.checkpoints[0]["kwargs"]
     assert checkpoint["has_final_answer"] is False
+    saved_step = checkpoint["steps_snapshot"][0]
+    assert saved_step["actions"] == ['echo({"text": "first evidence"})']
+    assert len(saved_step["action_results"]) == 1
+    assert saved_step["action_results"][0]["tool_name"] == "echo"
     task_id = checkpoint["task_id"]
 
     resumed_router = _CapturingRouter(["Final Answer: resumed with evidence"])
@@ -7410,6 +7537,8 @@ def test_react_resume_from_generated_periodic_checkpoint(
     resume_event = next(event for event in _events if event["type"] == "react_resumed")
     assert resume_event["resume_from_iteration"] == 1
     assert resume_event["restored_step_count"] == 1
+    assert resumed.steps[0].actions == saved_step["actions"]
+    assert resumed.steps[0].action_results == saved_step["action_results"]
     assert 'Action: echo({"text": "first evidence"})' in request_text
     assert "Observation: (real tool execution succeeded) echo" in request_text
 
@@ -8000,9 +8129,36 @@ def test_parallel_react_reads_keep_selected_workspace_scope(tmp_path) -> None:
 
     observation, results = dispatched
     assert len(results) == 2
+    assert all(result["ok"] is True for result in results)
     assert str((tmp_path / "a.txt").resolve()) in observation
     assert str((tmp_path / "b.txt").resolve()) in observation
     assert "not found" not in observation
+    # ``react`` describes the model protocol, not the filesystem permission
+    # tier. Tool dispatch must neither mutate nor demote the bound code scope.
+    assert intent.user_context["mode"] == "react"
+    assert session.metadata["mode"] == "code"
+    assert session.metadata["workspace_path"] == str(tmp_path)
+
+    # The compatibility rule belongs to the shared execution path, so retain
+    # the same selected-workspace behavior when dispatch falls back to its
+    # one-action serial lane.
+    with session_scope(session):
+        _serial_events, serial_dispatched = _drain(
+            _dispatch_parallel_actions(
+                ['read_file({"path": "a.txt"})'],
+                stack=stack,
+                executor=stack.executor,
+                iteration=2,
+                react_task_id=TaskId(uuid4()),
+                agent=None,
+                intent=intent,
+            )
+        )
+    serial_observation, serial_results = serial_dispatched
+    assert len(serial_results) == 1
+    assert serial_results[0]["ok"] is True
+    assert str((tmp_path / "a.txt").resolve()) in serial_observation
+    assert session.metadata["mode"] == "code"
 
 
 def test_write_tool_in_parallel_block_forces_serial_dispatch(tmp_path) -> None:

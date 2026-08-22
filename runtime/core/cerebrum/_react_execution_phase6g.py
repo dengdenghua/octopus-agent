@@ -220,7 +220,9 @@ def _phase_6g_housekeeping(state: _LoopState, *, i: int, max_iterations: int) ->
                                 "thought": s.thought,
                                 "public_update": s.public_update,
                                 "action": s.action,
+                                "actions": list(s.actions),
                                 "observation": s.observation,
+                                "action_results": [dict(result) for result in s.action_results],
                             }
                             for s in steps
                         ],
@@ -378,10 +380,12 @@ def _phase_6g_housekeeping(state: _LoopState, *, i: int, max_iterations: int) ->
                 )
 
         _assistant_content = text
-        if _native_mode and not _assistant_content and step.action:
-            # Native tool-use turns often carry no prose — record the
-            # synthesised action so the history isn't an (API-invalid) empty
-            # assistant message and the model can see what it just called.
+        if _native_mode and step.action and getattr(resp, "tool_calls", None):
+            # A native tool round is one atomic assistant action. Providers
+            # sometimes attach answer-like prose to that same response; it is
+            # neither a terminal answer nor safe history. Record only the
+            # synthesised structured action so later rounds cannot reinforce
+            # an unsupported pre-tool completion claim.
             _assistant_content = step.action
         messages.append(Message(role="assistant", content=_assistant_content))
         # Length-limit continuation. When the upstream model truncated

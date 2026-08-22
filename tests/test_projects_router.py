@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -23,6 +25,21 @@ def _client_with_store(tmp_path) -> tuple[TestClient, ProjectStore]:
     return TestClient(app), store
 
 
+class _UnavailableModelRouter:
+    def call(self, _request):
+        raise RuntimeError("no LLM model configured")
+
+
+class _StaticMilestoneModelRouter:
+    def call(self, _request):
+        return SimpleNamespace(
+            text=(
+                '[{"name":"Scope","goal":"Define scope"},'
+                '{"name":"Deliver","goal":"Ship it","dependencies":["Scope"]}]'
+            )
+        )
+
+
 def test_plan_run_report_flow(tmp_path) -> None:
     c = _client(tmp_path)
 
@@ -42,6 +59,59 @@ def test_plan_run_report_flow(tmp_path) -> None:
 
     # appears in the list
     assert pid in [p["id"] for p in c.get("/api/projects").json()["projects"]]
+
+
+def test_plan_without_configured_model_can_create_consecutive_projects(tmp_path) -> None:
+    store = ProjectStore(base_dir=tmp_path)
+    app = FastAPI()
+    app.include_router(create_projects_router(store=store, model_router=_UnavailableModelRouter()))
+    client = TestClient(app)
+
+    first = client.post(
+        "/api/projects",
+        json={"name": "First project group", "goal": "Ship first"},
+    )
+    second = client.post(
+        "/api/projects",
+        json={"name": "Second project group", "goal": "Ship second"},
+    )
+
+    assert first.status_code == second.status_code == 200
+    first_state = first.json()
+    second_state = second.json()
+    assert first_state["milestones"][0]["id"] == "MS1"
+    assert first_state["milestones"][0]["name"] == "deliver"
+    assert second_state["milestones"][0]["id"] == (f"{second_state['project']['id']}:MS1")
+    assert second_state["milestones"][0]["goal"] == "Ship second"
+    assert len(store.list_projects()) == 2
+    assert all(
+        [event["kind"] for event in store.events_for_project(project_id)] == ["project.planned"]
+        for project_id in (
+            first_state["project"]["id"],
+            second_state["project"]["id"],
+        )
+    )
+
+
+def test_normal_llm_plan_rewrites_dependencies_across_consecutive_projects(tmp_path) -> None:
+    store = ProjectStore(base_dir=tmp_path)
+    app = FastAPI()
+    app.include_router(
+        create_projects_router(store=store, model_router=_StaticMilestoneModelRouter())
+    )
+    client = TestClient(app)
+
+    first = client.post("/api/projects", json={"name": "First", "goal": "First goal"})
+    second = client.post("/api/projects", json={"name": "Second", "goal": "Second goal"})
+
+    assert first.status_code == second.status_code == 200
+    first_milestones = first.json()["milestones"]
+    second_milestones = second.json()["milestones"]
+    assert [item["id"] for item in first_milestones] == ["MS1", "MS2"]
+    assert second_milestones[1]["dependencies"] == [second_milestones[0]["id"]]
+    assert {item["id"] for item in first_milestones}.isdisjoint(
+        {item["id"] for item in second_milestones}
+    )
 
 
 def test_sidebar_project_endpoints_list_move_and_delete(tmp_path) -> None:

@@ -364,12 +364,26 @@ export const jaJP: Translations = {
   chatInputBox: {
     quickCapabilities: "ツール",
     collaborators: "コラボレーション",
-    collaboratorsSingle: "ソロ",
+    collaboratorsSingle: "必要時に応答",
     collaboratorsCountUnit: "members",
     collaboratorsHelp:
-      "デフォルトではソロで開始します。コラボレーターを追加すると、プロンプトがクラスターまたはスウォーム編成のチームタスクにルーティングされます。",
+      "通常は必要な AI だけが応答します。AI メンバーを追加すると、分担協働または並列共創を選べます。",
     collaboratorsSearchPlaceholder: "エージェント / ローカルパートナーを検索",
     collaboratorsTaskFallback: "チームタスク",
+    responseMode: "AI の参加方法",
+    responseModeTeamRequired:
+      "分担協働または並列共創を使う前に AI メンバーを追加してください",
+    groupTaskTools: "タスクを開始・コンテンツを追加",
+    groupTaskStart: "タスクを開始",
+    groupTaskAddContent: "コンテンツを追加",
+    groupTaskAuto: "自動処理",
+    groupTaskBuild: "成果物を作成",
+    groupTaskResearch: "ディープリサーチ",
+    groupTaskDevelop: "開発・実装",
+    groupTaskAudit: "読み取り専用監査",
+    groupTaskUxui: "UX/UI レビュー",
+    groupTaskActive: "タスク",
+    groupTaskClear: "自動処理に戻す",
     addResearchMaterial: "資料を追加",
     codexPlan: "プラン",
     codexSpec: "仕様",
@@ -482,9 +496,42 @@ export const jaJP: Translations = {
     categoryHomework: "Homework",
     categoryWriting: "Writing",
     categoryTravel: "Travel",
-    hint: "プロジェクトは関連する会話を整理するのに役立ちます。作成後にスレッドを移動できます。",
+    aiMembersLabel: "初期 AI コラボレーター",
+    aiMembersDescription:
+      "作成時にプロジェクトグループへ参加します。最低 1 名を残し、後から変更できます。",
+    aiMembersSelected: (count) => `${count} 名選択済み`,
+    agentsLoading: "利用可能な AI を読み込み中…",
+    agentsUnavailable:
+      "一覧を読み込めません。既定の汎用アシスタントで作成します。",
+    humanMembersLabel: "人間のメンバー",
+    humanMembersAfterCreate: "作成後に招待",
+    humanMembersDescription:
+      "作成後にプロジェクトグループへ移動し、安全なリンクでメンバーまたは閲覧者を招待できます。",
+    invitePeopleOnArrival: "グループを開いたらすぐに招待",
+    creatorRoleLabel: "あなたのプロジェクトロール",
+    creatorRole: "プロジェクト責任者 · グループオーナー",
+    creatorRoleDescription:
+      "プロジェクト管理、AI 編成、メンバー招待の権限があります。",
+    hint: "プロジェクト、グループ、右側のワークベンチをまとめて作成し連携します。",
     cancel: "Cancel",
     create: "プロジェクトを作成",
+  },
+
+  promoteProjectDialog: {
+    trigger: "プロジェクト化",
+    title: "このワークグループをプロジェクトに変換",
+    description:
+      "現在のメンバーとチャット履歴を保持したまま、マイルストーン、項目、資料、プロジェクトワークベンチを追加します。",
+    nameLabel: "プロジェクト名",
+    namePlaceholder: "例：秋の新製品リリース",
+    goalLabel: "プロジェクト目標",
+    goalPlaceholder:
+      "達成したい結果を入力してください。最初のマイルストーンを自動で計画します。",
+    cancel: "キャンセル",
+    submit: "作成して関連付ける",
+    submitting: "作成中…",
+    success: "ワークグループをプロジェクトグループに変換しました",
+    failed: "プロジェクトへの変換に失敗しました。もう一度お試しください。",
   },
 
   // Clarification Questionnaire
@@ -1210,9 +1257,11 @@ export const jaJP: Translations = {
     statusDone: "完了",
     progress: "進捗",
     currentObjective: "現在の目標",
-    currentObjectiveHint: "Agent はこの項目を処理中です。完了すると結果レシートが表示されます。",
+    currentObjectiveHint:
+      "Agent はこの項目を処理中です。完了すると結果レシートが表示されます。",
     resultReceipt: "結果レシート",
-    resultReceiptDescription: "完了項目、成果物、未解決事項をまとめて確認できます。",
+    resultReceiptDescription:
+      "完了項目、成果物、未解決事項をまとめて確認できます。",
     recoveredOperations: (count) => `${count} 件の操作を復旧`,
     verifiedSteps: (count) => `${count} 件完了`,
     unresolvedSteps: (count) => `${count} 件未解決`,
@@ -1741,7 +1790,8 @@ export const jaJP: Translations = {
     navIntelligence: "自動化",
     navAssistant: "アシスタント",
     navPaperTrading: "株式シミュレーション",
-    navPaperTradingDesc: "プラットフォーム配資盤 · 模擬取引(ページ付きプラグイン)",
+    navPaperTradingDesc:
+      "プラットフォーム配資盤 · 模擬取引(ページ付きプラグイン)",
     navCommunity: "コミュニティ",
     navMcp: "MCP",
     navEvolution: "自己進化",
@@ -5585,6 +5635,62 @@ export const jaJP: Translations = {
       inTeam: "チームに所属",
       add: "Add",
     },
+    humanInvite: {
+      trigger: "メンバーを招待",
+      dialogTitle: "ワークグループにメンバーを招待",
+      dialogDescription:
+        "ロールと有効期限を設定した招待リンクを作成します。AI メンバーはコラボレーション設定で管理します。",
+      roleLabel: "参加後のロール",
+      expiresLabel: "リンクの有効期限",
+      expiresHour: "1 時間",
+      expiresDay: "1 日",
+      expiresWeek: "7 日",
+      expiresMonth: "30 日",
+      createLink: "招待リンクを作成",
+      creatingLink: "作成中...",
+      currentLink: "新しい招待リンク",
+      linkVisibleOnce:
+        "セキュリティ上、完全なリンクは作成直後にのみ表示されます。",
+      recordsTitle: "招待履歴",
+      refresh: "更新",
+      emptyRecords: "招待はまだありません",
+      loadingRecords: "招待を読み込み中...",
+      createFailed: "招待リンクを作成できませんでした",
+      loadFailed: "招待を読み込めませんでした",
+      revoke: "招待を取り消す",
+      revokeSuccess: "招待を取り消しました",
+      revokeFailed: "招待を取り消せませんでした",
+      statusActive: "有効",
+      statusExpired: "期限切れ",
+      statusExhausted: "使用済み",
+      statusRevoked: "取消済み",
+      neverExpires: "無期限",
+      expiresAt: (value: string) => `有効期限：${value}`,
+      usage: (used: number, max: number | null) =>
+        max == null ? `${used} 回使用` : `${used}/${max} 回使用`,
+      roomRequired: "先にワークグループを作成してください",
+      joinPolicyLabel: "参加方法",
+      joinPolicyApply: "承認後に参加",
+      joinPolicyApplyDesc:
+        "プロジェクトとチャットを開く前に、グループ管理者の承認が必要です。",
+      joinPolicyDirect: "直接参加",
+      joinPolicyDirectDesc:
+        "有効なリンクを持つ同じテナントのメンバーはすぐ参加できます。",
+      directJoinConfirmTitle: "直接参加を許可しますか？",
+      directJoinConfirmDescription:
+        "切り替えると、現在有効なすべての招待リンクから、オーナーの承認なしでこのプロジェクトグループに参加できます。",
+      directJoinConfirmAction: "直接参加を許可",
+      directJoinConfirmCancel: "承認制を維持",
+      policySaveFailed: "参加方法を保存できませんでした",
+      pendingRequestsTitle: "承認待ち",
+      pendingRequestsEmpty: "承認待ちの申請はありません",
+      requestsLoadFailed: "参加申請を読み込めませんでした",
+      approveRequest: "承認",
+      rejectRequest: "拒否",
+      approveSuccess: "参加申請を承認しました",
+      rejectSuccess: "参加申請を拒否しました",
+      requestActionFailed: "参加申請を処理できませんでした",
+    },
     mobileJoin: {
       title: "モバイルを接続",
       description:
@@ -5596,21 +5702,20 @@ export const jaJP: Translations = {
     teamModes: [
       {
         id: "chat",
-        label: "Solo",
+        label: "必要時に応答",
         description:
-          "マイルストーン駆動 · Project OS に委ねてタスク分解 → 実行 → 検収。",
+          "@で指定された AI だけが応答し、@がなければ静かに待機します。",
       },
       {
         id: "cluster",
-        label: "Cluster",
-        description:
-          "マイルストーン駆動 · Project OS に委ねてタスク分解 → 実行 → 検収。",
+        label: "分担協働",
+        description: "リーダーが分解・分担し、各担当の結果をまとめます。",
       },
       {
         id: "swarm",
-        label: "Swarm",
+        label: "並列共創",
         description:
-          "マイルストーン駆動 · Project OS に委ねてタスク分解 → 実行 → 検収。",
+          "複数の AI が同じ目標を並列に探索し、互いの発見を補完します。",
       },
       {
         id: "project",
@@ -7993,7 +8098,8 @@ export const jaJP: Translations = {
     phaseDownload: "バンドルをダウンロード中…",
     phaseUnpack: "解凍・検証中…",
     phaseImport: "ローカル Agent としてインポート中…",
-    installSuccess: (name: string) => `エキスパート「${name}」をインストールしました`,
+    installSuccess: (name: string) =>
+      `エキスパート「${name}」をインストールしました`,
     installFailed: (name: string, reason: string) =>
       `エキスパート「${name}」のインストールに失敗:${reason}`,
     detailTitle: (name: string) => `エキスパート詳細 · ${name}`,
@@ -8301,6 +8407,27 @@ export const jaJP: Translations = {
     displayNamePlaceholder: "あなたの表示名",
     joining: "Joining...",
     joinButton: "タスクに参加",
+    applyButton: "参加を申請",
+    applying: "申請中...",
+    approvalRequired: "管理者の承認が必要です",
+    approvalRequiredDescription:
+      "承認されるまでプロジェクトとグループチャットは表示されません。",
+    requestPendingTitle: "申請を送信しました",
+    requestPendingDescription:
+      "承認後、このページからプロジェクトグループに入れます。",
+    requestSubmitted: "参加申請を送信しました",
+    requestRejected: "参加申請は拒否されました",
+    requestWithdrawn: "参加申請を取り下げました",
+    requestExpired: "参加申請の有効期限が切れました",
+    requestCancelled: "参加申請はキャンセルされました",
+    requestApprovedButUnavailable:
+      "申請は承認されましたが、メンバー権限が無効です。管理者に連絡してください。",
+    refreshStatus: "状態を更新",
+    withdrawRequest: "申請を取り下げる",
+    withdrawFailed: "申請を取り下げられませんでした",
+    statusCheckFailed: "承認状態を確認できませんでした",
+    missingDestination:
+      "グループには参加しましたが、チャット先が未連携です。管理者に連絡してください。",
   },
 
   evolutionIndicator: {

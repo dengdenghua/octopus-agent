@@ -74,6 +74,7 @@ tier: "core"
 | `react_context.py` | ReAct context assembly: token budget, compression, prompt building. |
 | `react_convergence.py` | Deterministic evidence-to-answer convergence for bounded ReAct turns. |
 | `react_execution.py` | Execution / tool-dispatch helpers for the ReAct loop. |
+| `react_execution_receipts.py` | Server-owned provenance for ReAct execution receipts. |
 | `react_explicit_reads.py` | Explicit-read goal predicates and bounded read recovery. |
 | `react_final_answer_content_guards.py` | Final-answer content guards (post-step / pre-Final-Answer gates). |
 | `react_final_answer_guards.py` | Final-answer guard plumbing for the ReAct loop. |
@@ -506,7 +507,7 @@ tier: "core"
 
 ## Who imports this
 
-**57** file(s) reference this package:
+**58** file(s) reference this package:
 
 - **`runtime/cli_code.py/`** · 1 file(s)
   - `runtime/cli_code.py`
@@ -546,13 +547,13 @@ tier: "core"
   - `runtime/safety/recovery/gepa_bridge.py`
   - `runtime/safety/recovery/workflow_applier.py`
   - `runtime/safety/validation/trust_signal.py`
-- **`runtime/sensing/`** · 25 file(s)
+- **`runtime/sensing/`** · 26 file(s)
   - `runtime/sensing/gateway/_agents_endpoints.py`
   - `runtime/sensing/gateway/_agents_endpoints_conversations.py`
   - `runtime/sensing/gateway/_agents_endpoints_tasks.py`
   - `runtime/sensing/gateway/_config_endpoints_system.py`
   - `runtime/sensing/gateway/_observability_journal.py`
-  - _… and 20 more_
+  - _… and 21 more_
 - **`runtime/tentacle/`** · 2 file(s)
   - `runtime/tentacle/coordinator.py`
   - `runtime/tentacle/mobile/cerebrum_adapter.py`

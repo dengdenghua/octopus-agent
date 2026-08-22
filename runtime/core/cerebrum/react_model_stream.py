@@ -43,6 +43,7 @@ from runtime.core.cerebrum.react_parsing import (
 )
 from runtime.core.cerebrum.react_types import _safe_react_error_message
 from runtime.platform.models.llm import (
+    LLMResponseFormatError,
     Message,
     ModelRequest,
     thinking_budget_for_effort,
@@ -237,6 +238,7 @@ def _phase_6b_model_stream(
     _native_mode = state.native_mode
     _evidence_convergence_active = state.evidence_convergence_active
     _force_convergence_next = state.force_convergence_next
+    _terminal_convergence_active = state.terminal_convergence_active
     _last_public_update_key = state.last_public_update_key
     _throughput_chars = state.throughput_chars
     _final_stream_started = state.final_stream_started
@@ -286,7 +288,12 @@ def _phase_6b_model_stream(
                         if _request_has_tool_evidence
                         else _native_public_update_tool_specs
                     )
-                    if _native_mode and _evidence_convergence_active is None
+                    if (
+                        _native_mode
+                        and _evidence_convergence_active is None
+                        and not _iteration_recovery_mode
+                        and not _terminal_convergence_active
+                    )
                     else []
                 ),
                 # Action-deficit forcing. A model that answered the previous
@@ -303,6 +310,7 @@ def _phase_6b_model_stream(
                     _native_mode
                     and _evidence_convergence_active is None
                     and not _iteration_recovery_mode
+                    and not _terminal_convergence_active
                     and _zero_action_rounds > 0
                 ),
             )
@@ -403,9 +411,23 @@ def _phase_6b_model_stream(
                 except (ImportError, AttributeError, TypeError, UnboundLocalError):  # noqa: BLE001 — cancellation subsystem unavailable; mid-stream cancel check skipped
                     pass
                 if _ct_inner is not None and _ct_inner.is_cancelled:
-                    break
+                    # A provider may have streamed answer-like prose before
+                    # its terminal done/tool-call envelope. Cancellation is
+                    # atomic: discard that pending lane and let PHASE 7 emit
+                    # the explicit cancellation outcome.
+                    terminated_reason = "cancelled"
+                    return _LoopControl.BREAK
                 if evt.type == "text_delta":
                     text_parts.append(evt.delta)
+                    # A native provider may stream polished-looking answer prose and
+                    # only reveal its structured tool calls in the terminal ``done``
+                    # event. Hold the complete answer lane atomically whenever this
+                    # request advertised native tools. PHASE 6c publishes it after
+                    # ``done`` only when the final response has no tool calls.
+                    # Thinking, structured commentary, and tool lifecycle events keep
+                    # their existing live paths.
+                    if _native_mode and bool(req.tools):
+                        continue
                     joined = "".join(text_parts)
                     if _final_stream_started:
                         # Already past the anchor.  Re-evaluate the complete
@@ -696,6 +718,36 @@ def _phase_6b_model_stream(
                                 yield _tp
                     resp = evt.final
             if resp is None:
+                # The provider iterator may end immediately after arranging
+                # cancellation, leaving no next event on which the in-loop
+                # check can run. Re-check before synthesizing a response from
+                # pending prose; an EOF without ``done`` is not permission to
+                # publish a cancelled answer lane.
+                try:
+                    from runtime.safety.approval.cancellation import (
+                        current_cancellation_token,
+                    )
+
+                    _ct_after_stream = current_cancellation_token()
+                except (ImportError, AttributeError, TypeError, UnboundLocalError):  # noqa: BLE001
+                    _ct_after_stream = None
+                if _ct_after_stream is not None and _ct_after_stream.is_cancelled:
+                    terminated_reason = "cancelled"
+                    return _LoopControl.BREAK
+                if _native_mode and bool(req.tools):
+                    # Native providers are allowed to stream answer-looking
+                    # prose before revealing structured tool calls in the
+                    # terminal envelope.  An EOF without ``done``, or a
+                    # ``done`` event without its final response, is a
+                    # protocol/transport failure, never evidence that the
+                    # buffered prose is the final answer. Phrase this as an
+                    # upstream EOF/reset so the existing model failover and
+                    # transient-recovery policy can retry safely: no answer
+                    # delta from this request has been exposed.
+                    raise LLMResponseFormatError(
+                        "terminal done event was missing or lacked its final response "
+                        "(connection reset / protocol EOF)"
+                    )
                 from runtime.platform.models.llm import ModelResponse
 
                 resp = ModelResponse(

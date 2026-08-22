@@ -140,7 +140,7 @@ tier: "core"
 
 ## Who imports this
 
-**17** file(s) reference this package:
+**18** file(s) reference this package:
 
 - **`runtime/adapters/`** · 1 file(s)
   - `runtime/adapters/channels/base.py`
@@ -158,6 +158,8 @@ tier: "core"
   - `runtime/execution/subagents/bridge.py`
   - `runtime/execution/suckers/ephemeral_injection_gate.py`
   - `runtime/execution/tool_engine/executor.py`
+- **`runtime/memory/`** · 1 file(s)
+  - `runtime/memory/threads/llm_summariser.py`
 - **`runtime/safety/`** · 4 file(s)
   - `runtime/safety/approval/approval_gate.py`
   - `runtime/safety/evolution/weekly_report.py`

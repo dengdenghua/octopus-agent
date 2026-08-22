@@ -257,6 +257,68 @@ class SandboxPolicy:
       still apply).
     """
 
+    additional_write_roots: tuple[Path, ...] = ()
+    """Exact non-workspace directories a persistent sandboxed service may write.
+
+    Most command executions need only ``workspace`` and must leave this empty.
+    Long-lived sidecars can require private state outside the checked-out tree;
+    each such directory is validated and mounted/rule-scoped independently so
+    callers never widen authority to a common parent merely for convenience.
+    """
+
+    def __post_init__(self) -> None:
+        workspace = self.workspace.expanduser().resolve(strict=False)
+        protected_roots = tuple(
+            path.resolve(strict=False)
+            for path in (
+                Path("/usr"),
+                Path("/bin"),
+                Path("/sbin"),
+                Path("/lib"),
+                Path("/lib64"),
+                Path("/etc"),
+                Path("/dev"),
+                Path("/proc"),
+                Path("/sys"),
+            )
+            if path.exists()
+        )
+        normalized: list[Path] = []
+        for raw_root in self.additional_write_roots:
+            candidate = Path(raw_root).expanduser()
+            if not candidate.is_absolute():
+                raise SandboxViolation("additional write roots must be absolute")
+            if candidate.is_symlink():
+                raise SandboxViolation(f"additional write root cannot be a symlink: {candidate}")
+            try:
+                root = candidate.resolve(strict=True)
+            except OSError as exc:
+                raise SandboxViolation(
+                    f"additional write root does not exist: {candidate}"
+                ) from exc
+            if not root.is_dir():
+                raise SandboxViolation(f"additional write root is not a directory: {root}")
+            if root.parent == root:
+                raise SandboxViolation("filesystem root cannot be an additional write root")
+            if root == workspace or root in workspace.parents or workspace in root.parents:
+                raise SandboxViolation(
+                    f"additional write roots must not overlap the workspace: {root}"
+                )
+            if any(
+                root == protected or root in protected.parents or protected in root.parents
+                for protected in protected_roots
+            ):
+                raise SandboxViolation(
+                    f"additional write root must not overlap a system directory: {root}"
+                )
+            if any(root in existing.parents or existing in root.parents for existing in normalized):
+                raise SandboxViolation(
+                    f"additional write roots must be exact non-overlapping directories: {root}"
+                )
+            if root not in normalized:
+                normalized.append(root)
+        object.__setattr__(self, "additional_write_roots", tuple(normalized))
+
     def env_for(self) -> dict[str, str]:
         env = {k: os.environ[k] for k in self.allowed_env if k in os.environ}
         allowed = set(self.allowed_env)
@@ -481,22 +543,43 @@ class BubblewrapBackend:
         if not policy.allow_network:
             wrapped.append("--unshare-net")
 
+        system_mounts: list[Path] = []
         for path in ("/usr", "/bin", "/sbin", "/lib", "/lib64", "/etc"):
             if Path(path).exists():
                 wrapped.extend(["--ro-bind", path, path])
+                system_mounts.append(Path(path).resolve(strict=False))
         if Path("/dev").exists():
             wrapped.extend(["--dev", "/dev"])
         if Path("/proc").exists():
             wrapped.extend(["--proc", "/proc"])
         wrapped.extend(["--tmpfs", "/tmp"])  # nosec B108 — bwrap tmpfs mount arg, not a temp file
 
-        parents = list(workspace.parents)
-        parents.reverse()
-        for parent in parents:
-            if str(parent) != "/":
+        mount_roots = _unique_paths([workspace, *policy.additional_write_roots])
+        namespace_parents: list[Path] = []
+        for mount_root in mount_roots:
+            for parent in reversed(mount_root.parents):
+                if parent.parent == parent:
+                    continue
+                if any(parent == system or system in parent.parents for system in system_mounts):
+                    continue
+                if parent not in namespace_parents:
+                    namespace_parents.append(parent)
+        for parent in namespace_parents:
+            # /tmp already exists as the private tmpfs mounted above; its
+            # descendants still need explicit namespace directories.
+            if parent != Path("/tmp"):
                 wrapped.extend(["--dir", str(parent)])
+
         workspace_flag = "--ro-bind" if policy.mode == "read-only" else "--bind"
-        wrapped.extend([workspace_flag, str(workspace), str(workspace)])
+        mount_specs = [
+            (workspace, workspace_flag),
+            *[(root, "--bind") for root in policy.additional_write_roots],
+        ]
+        # A deeper exact root must be mounted after its parent so it cannot be
+        # hidden by a later broad bind.  This is especially relevant to a
+        # thread state root plus its task-scoped child.
+        for source, flag in sorted(mount_specs, key=lambda item: len(item[0].parts)):
+            wrapped.extend([flag, str(source), str(source)])
         wrapped.extend(["--chdir", str(run_cwd), "--"])
         wrapped.extend(argv)
         return wrapped, env, run_cwd
@@ -544,7 +627,7 @@ class SeatbeltBackend:
             raise SandboxViolation("seatbelt sandbox requested but sandbox-exec is not installed")
 
         if policy.mode == "read-only":
-            write_subpaths = [Path("/dev/null")]
+            write_subpaths = [Path("/dev/null"), *policy.additional_write_roots]
         else:
             write_subpaths = [
                 workspace,
@@ -553,6 +636,7 @@ class SeatbeltBackend:
                 Path("/private/tmp"),  # nosec B108 — sandbox write-allow rule target, not a temp file
                 Path("/var/tmp"),  # nosec B108 — sandbox write-allow rule target, not a temp file
                 Path(os.environ.get("TMPDIR", "/tmp")).expanduser().resolve(strict=False),  # nosec B108 — sandbox write-allow rule target
+                *policy.additional_write_roots,
             ]
         write_rules = "\n".join(
             f'  (subpath "{_sbpl_escape(str(path))}")' for path in _unique_paths(write_subpaths)
@@ -741,7 +825,7 @@ class LandlockBackend:
                 "landlock sandbox requested but the kernel does not expose Landlock (>= 5.13)"
             )
 
-        write_paths: list[str] = []
+        write_paths: list[str] = [str(path) for path in policy.additional_write_roots]
         if policy.mode != "read-only":
             write_paths.append(str(workspace))
             for key in (

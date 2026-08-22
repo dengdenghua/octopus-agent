@@ -21,6 +21,7 @@ import logging
 import os
 import threading
 import time
+from collections import deque
 from pathlib import Path
 from queue import Empty, SimpleQueue
 from typing import TYPE_CHECKING, Any
@@ -61,6 +62,16 @@ def _max_turn_steering_injections() -> int:
 # injected into the running turn's next step (dsh ``inject``).
 _THREAD_TURN_REGISTRY: dict[str, tuple[Any, str]] = {}
 _THREAD_TURN_REGISTRY_LOCK = threading.Lock()
+
+
+def _restored_steering(runtime: CerebrumRuntime) -> dict[str, deque[str]]:
+    """Lazily support embedders/test runtimes created before this buffer."""
+
+    restored = getattr(runtime, "_turn_steering_restored", None)
+    if not isinstance(restored, dict):
+        restored = {}
+        runtime._turn_steering_restored = restored
+    return restored
 
 
 def _register_thread_turn(thread_id: str, runtime: CerebrumRuntime, turn_id: str) -> None:
@@ -195,6 +206,7 @@ def _unregister_turn_injector(thread_id: str) -> None:
 def _register_active_turn(runtime: CerebrumRuntime, turn: Turn, log: EventLog) -> None:
     runtime._active_turns[turn.id] = (turn, log)
     runtime._turn_steering[turn.id] = SimpleQueue()
+    _restored_steering(runtime)[turn.id] = deque()
     runtime._turn_steering_seen[turn.id] = {
         item.id for item in turn.items if isinstance(item, SteeringUserMessageItem)
     }
@@ -239,6 +251,7 @@ def _unregister_active_turn(runtime: CerebrumRuntime, turn_id: str) -> None:
         _unregister_thread_turn(active[0].thread_id, runtime, turn_id)
         _unregister_turn_injector(active[0].thread_id)
     runtime._turn_steering.pop(turn_id, None)
+    _restored_steering(runtime).pop(turn_id, None)
     runtime._turn_steering_seen.pop(turn_id, None)
     runtime._turn_steering_notified.pop(turn_id, None)
     runtime._turn_steering_last_sync.pop(turn_id, None)
@@ -478,10 +491,35 @@ def _drain_turn_steering(runtime: CerebrumRuntime, turn_id: str) -> list[str]:
     if pending is None:
         return []
     messages: list[str] = []
-    while True:
-        try:
-            _, text = pending.get_nowait()
-        except Empty:
-            break
-        messages.append(text)
+    with runtime._turn_steering_lock:
+        restored = _restored_steering(runtime).setdefault(turn_id, deque())
+        while restored:
+            messages.append(restored.popleft())
+        while True:
+            try:
+                _, text = pending.get_nowait()
+            except Empty:
+                break
+            messages.append(text)
     return messages
+
+
+def _restore_turn_steering(
+    runtime: CerebrumRuntime,
+    turn_id: str,
+    messages: list[str],
+) -> None:
+    """Restore steering that an external backend proved it did not accept.
+
+    The original ``SteeringUserMessageItem`` is already durable and visible;
+    only the execution queue payload is restored, so the lifecycle can run it
+    as a same-thread continuation without duplicating the UI item.
+    """
+
+    if turn_id not in runtime._turn_steering:
+        return
+    with runtime._turn_steering_lock:
+        restored = _restored_steering(runtime).setdefault(turn_id, deque())
+        restored.extend(
+            message for message in messages if isinstance(message, str) and message.strip()
+        )

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import types
+from pathlib import Path
 
 import pytest
 
@@ -27,10 +28,13 @@ from runtime.protocol.envelope import JsonRpcErrorCode
 pytestmark = pytest.mark.skipif(not _FASTAPI, reason="fastapi extras required")
 
 
-def _gateway(**kw):
+def _gateway(*, logs_root: Path | None = None, **kw):
     from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
 
-    return RealtimeGateway(runtime=object(), **kw)
+    runtime = types.SimpleNamespace()
+    if logs_root is not None:
+        runtime._logs_root = logs_root
+    return RealtimeGateway(runtime=runtime, **kw)
 
 
 # ── connection cap ────────────────────────────────────────────
@@ -89,11 +93,11 @@ def test_websocket_subprotocol_acceptance(offered: str, expected: str | None):
 # ── turn-start rate ───────────────────────────────────────────
 
 
-def test_turn_rate_limit_raises_server_busy_when_exhausted():
+def test_turn_rate_limit_raises_server_busy_when_exhausted(tmp_path: Path):
     from runtime.sensing.gateway.realtime_gateway import _RpcError
 
-    gw = _gateway(max_turns_per_minute_per_actor=1)
-    conn = types.SimpleNamespace(actor_id="alice")
+    gw = _gateway(logs_root=tmp_path, max_turns_per_minute_per_actor=1)
+    conn = types.SimpleNamespace(actor_id="alice", tenant_id=None)
     # Spend alice's single-turn budget, so the next start is over the line.
     assert gw._turn_rate_limiter.allow("alice") is True
     with pytest.raises(_RpcError) as ei:

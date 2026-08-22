@@ -32,6 +32,7 @@ _VERIFY_SKILLS = frozenset(
         "run_command",
     }
 )
+_MODEL_PROTOCOL_MODES = frozenset({"react", "flash", "conversation", "discuss"})
 TOOL_OBSERVATION_MAX_CHARS = 16000
 
 # Argument-validation rejections ("old_string must be non-empty", "missing
@@ -227,6 +228,19 @@ def _execute_action_via_beak(
                 "chrome_operation_mode",
                 "browser_regression_enabled",
                 "browser_regression_preview_url",
+                # Work strategy is chosen per turn. A prior audit preset must
+                # never remain in Session metadata after the user switches the
+                # next task to develop (or vice versa).
+                "mode",
+                "capability_mode",
+                "agent_mode",
+                "personal_mode",
+                "workflow_mode",
+                "completion_policy",
+                "mode_preset",
+                "workflow_preset",
+                "verification_policy",
+                "mode_contract",
             }
             for key in (
                 "workspace_path",
@@ -264,6 +278,23 @@ def _execute_action_via_beak(
                 "team_id",
                 "agent_name",
             ):
+                # Some legacy callers use ``mode`` for the model-driving
+                # protocol (react/flash/etc.), while Session.metadata["mode"]
+                # is the authoritative filesystem permission tier
+                # (chat/team/code/browser/plan).  Treating a protocol label as
+                # a per-turn scope override silently demotes an already-bound
+                # code workspace to chat scope, so relative parallel reads
+                # land under ``output/final``.  Preserve an already-bound
+                # permission scope. When none exists, remain fail-closed in
+                # chat scope; a protocol label must never grant code access.
+                if (
+                    key == "mode"
+                    and str(user_context.get(key) or "").strip().lower() in _MODEL_PROTOCOL_MODES
+                ):
+                    existing_mode = str(metadata.get("mode") or "").strip().lower()
+                    if not existing_mode or existing_mode in _MODEL_PROTOCOL_MODES:
+                        metadata["mode"] = "chat"
+                    continue
                 if key in user_context and (key not in metadata or key in surface_overrides):
                     metadata[key] = user_context[key]
             session_agent = agent or getattr(active_session, "agent", None)

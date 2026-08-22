@@ -198,19 +198,7 @@ class ProjectEngine:
             owner=self.owner_id or "",
             created_at=datetime.now(UTC).isoformat(timespec="seconds"),
         )
-        self.store.save_project(project)
-        for ms in milestones:
-            self.store.save_milestone(pid, ms)
-        self._audit(
-            project.id,
-            "project.planned",
-            {
-                "name": name,
-                "goal": goal,
-                "milestone_ids": [m.id for m in milestones],
-                "milestone_count": len(milestones),
-            },
-        )
+        project, _resolved_milestones = self.store.create_project_plan(project, milestones)
         return project
 
     # ── the loop ─────────────────────────────────────────────────────────────

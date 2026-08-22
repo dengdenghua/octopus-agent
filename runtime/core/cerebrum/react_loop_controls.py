@@ -497,7 +497,9 @@ def _cancel_pause_guard(
                             "thought": s.thought,
                             "public_update": s.public_update,
                             "action": s.action,
+                            "actions": list(s.actions),
                             "observation": s.observation,
+                            "action_results": [dict(result) for result in s.action_results],
                         }
                         for s in steps
                     ],

@@ -38,6 +38,7 @@ from runtime.core.cerebrum.react_convergence import (
     build_direct_answer_directive,
     read_only_evidence_convergence,
 )
+from runtime.core.cerebrum.react_execution_receipts import _execution_receipt_trust
 from runtime.core.cerebrum.react_explicit_reads import (
     _narrow_command_direct_answer,
 )
@@ -932,6 +933,18 @@ def _phase_6d_dispatch_and_observe(
                                     _pi_scan.severity,
                                     ",".join(_pi_scan.labels),
                                 )
+                    _trusted_execution, _execution_source = _execution_receipt_trust(beak_step)
+                    step.action_results = [
+                        {
+                            "tool_name": resolved_name,
+                            "ok": tool_ok,
+                            "observation": observation or "",
+                            "duration_ms": int((time.monotonic() - _tool_started_at) * 1000),
+                            "call_id": call_id,
+                            "trusted_execution": _trusted_execution,
+                            "execution_source": _execution_source,
+                        }
+                    ]
                 else:
                     observation, beak_step = _execute_action_via_beak(
                         stack,

@@ -4,5 +4,10 @@ include skills.lock.json
 # keeps the registry-managed skills/public catalog out of git, so excluding this
 # package data makes an offline wheel silently register zero market skills.
 recursive-include runtime/execution/all_skills *
+# Bundled plugins are discovered from plugin.yaml at runtime.  Their prompts,
+# licences, pages, and static assets are therefore executable package data,
+# not repository-only documentation.
+recursive-include runtime/platform/plugins/bundled *
 recursive-exclude runtime/sensing/gateway/agent_market_sources __pycache__ *.py[cod]
 recursive-exclude runtime/execution/all_skills __pycache__ *.py[cod]
+recursive-exclude runtime/platform/plugins/bundled __pycache__ *.py[cod]

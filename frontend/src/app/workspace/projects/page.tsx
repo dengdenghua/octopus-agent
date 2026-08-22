@@ -15,7 +15,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   ActivityIcon,
   AlertTriangleIcon,
@@ -26,6 +26,7 @@ import {
   ClipboardListIcon,
   FlagIcon,
   ListChecksIcon,
+  MessageSquareIcon,
   PlayIcon,
   PlusIcon,
   RefreshCwIcon,
@@ -48,6 +49,7 @@ import {
 } from "@/components/workspace/workspace-container";
 import { useI18n } from "@/core/i18n/hooks";
 import { CreateProjectDialog } from "@/components/workspace/create-project-dialog";
+import { type Project, useEnsureProjectHome } from "@/core/projects/hooks";
 
 // ─── types（与 runtime/projectos/pm.py 的返回结构对应）───────────────
 
@@ -165,6 +167,7 @@ interface ProjectFull {
     created_at: string;
     started_at: string;
     finished_at: string;
+    execution_thread_id?: string;
   };
   milestones: Array<Record<string, unknown> & { id: string; name: string }>;
   tasks: Record<string, TaskReadModel[]>;
@@ -180,6 +183,7 @@ interface ProjectSummary {
   goal?: string;
   status?: string;
   created_at?: string;
+  execution_thread_id?: string;
 }
 
 const BASE = () => `${getBackendBaseURL()}/api/projects`;
@@ -381,6 +385,8 @@ function MetricCard({
 
 export default function ProjectsPage() {
   const { t } = useI18n();
+  const navigate = useNavigate();
+  const ensureProjectHome = useEnsureProjectHome();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -460,6 +466,16 @@ export default function ProjectsPage() {
   const refresh = () => {
     void detailQuery.refetch();
     void projectsQuery.refetch();
+  };
+
+  const openProjectGroup = (project: Project) => {
+    ensureProjectHome.mutate(project, {
+      onSuccess: ({ threadId }) =>
+        navigate(`/workspace/realtime/${encodeURIComponent(threadId)}`, {
+          state: { openProjectWorkbench: true },
+        }),
+      onError: () => toast.error("项目工作群打开失败，请重试"),
+    });
   };
 
   return (
@@ -607,6 +623,16 @@ export default function ProjectsPage() {
                             )}
                           </div>
                           <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5 text-xs"
+                              disabled={ensureProjectHome.isPending}
+                              onClick={() => openProjectGroup(detail.project)}
+                            >
+                              <MessageSquareIcon className="size-3.5" />
+                              进入项目群
+                            </Button>
                             {detail.action_specs.map((spec) => (
                               <Button
                                 key={spec.action}

@@ -326,6 +326,23 @@ def mount_routers_b(
         _allow_approval_bypass = bool(
             getattr(_safety_cfg, "allow_client_approval_bypass", None) or False
         )
+        from runtime.sensing.gateway.thread_access import ThreadAccessResolver
+
+        _realtime_thread_access = ThreadAccessResolver(
+            thread_store=ctx.thread_store,
+            group_store=(
+                getattr(ctx.cowork_runtime, "group_store", None)
+                if ctx.cowork_runtime is not None
+                else None
+            ),
+            collaboration_store=(
+                getattr(ctx.cowork_runtime, "collaboration_store", None)
+                if ctx.cowork_runtime is not None
+                else None
+            ),
+            team_rooms_router=ctx.team_rooms_router,
+            identity_store=ctx.identity_store,
+        )
 
         if stack is not None:
             from runtime.memory.threads.compaction import (
@@ -413,6 +430,11 @@ def mount_routers_b(
                     if ctx.cowork_runtime is not None
                     else None
                 ),
+                collaboration_store=(
+                    getattr(ctx.cowork_runtime, "collaboration_store", None)
+                    if ctx.cowork_runtime is not None
+                    else None
+                ),
                 project_store=ctx.project_store,
                 project_os_hooks=_project_os_hooks,
                 subagent_runner=ctx.subagent_runner,
@@ -423,6 +445,11 @@ def mount_routers_b(
 
             _realtime_runtime = EchoRuntime(logs_root=str(_realtime_logs_root))
 
+        # Runtime request handlers perform their own thread checks after the
+        # gateway handshake. Share the same dynamic resolver so resume/list,
+        # steering and turn execution observe room removal immediately.
+        _realtime_runtime._thread_access_resolver = _realtime_thread_access  # noqa: SLF001
+
         _realtime_gateway = RealtimeGateway(
             runtime=_realtime_runtime,
             identity_store=ctx.identity_store,
@@ -431,6 +458,7 @@ def mount_routers_b(
             jwt_issuer=ctx.jwt_issuer,
             jwt_audience=ctx.jwt_audience,
             allow_client_approval_bypass=_allow_approval_bypass,
+            thread_access_resolver=_realtime_thread_access,
         )
         app.include_router(_realtime_gateway.router)
         # Exposed for introspection/tests (e.g. asserting the secure

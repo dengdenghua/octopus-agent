@@ -52,6 +52,68 @@ _DEFAULT_TIMEOUT_S = 240.0
 # Trim runaway CLI output so one run can't flood a chat turn / the journal.
 _MAX_OUTPUT_CHARS = 20_000
 
+# Local-partner CLIs need a small amount of process context to locate their
+# executable and the subscription/login state stored below the user's home.
+# Everything else is default-denied: in particular API keys, proxy settings,
+# language-runtime injection hooks (PYTHONPATH/NODE_OPTIONS), and tool-specific
+# credentials must never leak from the Octopus server into a coding-agent
+# subprocess.
+_INHERITED_ENV_ALLOWLIST = frozenset(
+    {
+        # Executable and user-home discovery (including Windows equivalents).
+        "PATH",
+        "HOME",
+        "USERPROFILE",
+        "USER",
+        "LOGNAME",
+        "SHELL",
+        "SYSTEMROOT",
+        "WINDIR",
+        "COMSPEC",
+        "PATHEXT",
+        # Locale.
+        "LANG",
+        "LANGUAGE",
+        "LC_ALL",
+        "LC_COLLATE",
+        "LC_CTYPE",
+        "LC_MESSAGES",
+        "LC_MONETARY",
+        "LC_NUMERIC",
+        "LC_TIME",
+        "LC_PAPER",
+        "LC_NAME",
+        "LC_ADDRESS",
+        "LC_TELEPHONE",
+        "LC_MEASUREMENT",
+        "LC_IDENTIFICATION",
+        # Temporary/runtime directories and standard XDG locations.
+        "TMPDIR",
+        "TMP",
+        "TEMP",
+        "XDG_CONFIG_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_DATA_HOME",
+        "XDG_STATE_HOME",
+        "XDG_RUNTIME_DIR",
+        # Harmless terminal presentation controls.
+        "TERM",
+        "COLORTERM",
+        "NO_COLOR",
+    }
+)
+
+# These are the only variables an individual turn may add or override.  The
+# durable blackboard path is included so a CLI can collaborate through
+# ``octopus bb`` without receiving the rest of the server environment.
+_PARTNER_CONTEXT_ENV_ALLOWLIST = frozenset(
+    {
+        "OCTOPUS_TURN_ID",
+        "OCTOPUS_AGENT_ID",
+        "OCTOPUS_BLACKBOARD_DB",
+    }
+)
+
 _SLASH_COMMAND_RE = re.compile(r"^/([A-Za-z][A-Za-z0-9_-]*)(?:\s+(.*))?$")
 _MODEL_FLAG_PARTNERS = frozenset({"claude-code", "codex-cli", "codebuddy-cli", "opencode-cli"})
 _CONTROL_ONLY_SLASH_COMMANDS = frozenset(
@@ -708,14 +770,17 @@ def _default_runner(
     timeout: float,
     env: dict[str, str] | None = None,
 ) -> tuple[int, str, str]:
-    """Spawn ``argv`` with no shell, capturing stdout/stderr. ``env`` (when given)
-    is layered OVER the inherited environment, so extra vars like
-    ``OCTOPUS_BLACKBOARD_DB`` / ``OCTOPUS_TURN_ID`` reach the CLI (letting a
-    shell-capable agent read/write the shared blackboard via ``octopus bb``)
-    without dropping PATH etc. Raises ``subprocess.TimeoutExpired`` on timeout."""
+    """Spawn ``argv`` with no shell and a deliberately minimal environment.
+
+    Only process-discovery, home, locale, temporary-directory, and XDG values
+    are inherited. ``env`` may add the three explicit Octopus turn/blackboard
+    values, but cannot replace PATH/HOME or smuggle credentials, proxy settings,
+    or runtime injection hooks into the child. Raises
+    :class:`subprocess.TimeoutExpired` on timeout.
+    """
     from runtime.platform.process.tree import run_capture
 
-    layered_env = {**os.environ, **env} if env else None
+    layered_env = _partner_subprocess_env(env)
     # Preserve the long-standing injectable ``subprocess.run`` seam used by
     # embedders and tests.  Real execution goes through run_capture below;
     # this branch is only active when that seam has explicitly been replaced.
@@ -740,6 +805,21 @@ def _default_runner(
     return proc.returncode, proc.stdout or "", proc.stderr or ""
 
 
+def _partner_subprocess_env(extra: dict[str, str] | None = None) -> dict[str, str]:
+    """Build the default-deny environment for a local-partner subprocess."""
+
+    child_env = {
+        key: value
+        for key, value in os.environ.items()
+        if key.upper() in _INHERITED_ENV_ALLOWLIST | _PARTNER_CONTEXT_ENV_ALLOWLIST
+    }
+    for key, value in (extra or {}).items():
+        normalized = key.upper()
+        if normalized in _PARTNER_CONTEXT_ENV_ALLOWLIST:
+            child_env[normalized] = value
+    return child_env
+
+
 def run_local_partner(
     *,
     partner_id: str,
@@ -754,8 +834,9 @@ def run_local_partner(
 ) -> LocalPartnerResult:
     """Drive the partner CLI once. Best-effort and total — never raises; every
     failure mode (unsupported tool, missing binary, non-zero exit, timeout) is
-    reflected in the returned :class:`LocalPartnerResult`. ``env`` is layered over
-    the inherited environment for the default runner (custom runners ignore it).
+    reflected in the returned :class:`LocalPartnerResult`. For the default
+    runner, ``env`` may supply only ``OCTOPUS_TURN_ID``, ``OCTOPUS_AGENT_ID``,
+    and ``OCTOPUS_BLACKBOARD_DB`` (custom runners ignore it).
     ``model`` (a CLI-valid name) overrides the CLI's configured default.
     ``capabilities`` (the agent's profile capabilities dict) enables declarative
     ``args_template`` expansion."""
@@ -774,10 +855,13 @@ def run_local_partner(
     if argv is None:
         return LocalPartnerResult(ok=False, unsupported=True)
 
+    run: Runner
     if runner is None:
 
-        def run(a: list[str], c: str | None, t: float) -> tuple[int, str, str]:
+        def default_run(a: list[str], c: str | None, t: float) -> tuple[int, str, str]:
             return _default_runner(a, c, t, env=env)
+
+        run = default_run
     else:
         run = runner
     try:

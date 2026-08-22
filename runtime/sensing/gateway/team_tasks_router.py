@@ -40,11 +40,13 @@ from uuid import uuid4
 
 from runtime.platform.process.paths import app_paths
 from runtime.safety.approval.cancellation import CancellationSource, scoped_cancellation
+from runtime.sensing.gateway._team_tasks_access import TeamTaskAccess
 from runtime.sensing.gateway._team_tasks_helpers import (
     _LOG,
     _MAX_CONCURRENT_RUNS,
     _SOP_TEMPLATE_PATTERN,
     RoomMembershipResolver,
+    RoomParticipantResolver,
     RunnerFactory,
     TaskProjection,
     TeamEventBroadcaster,
@@ -101,12 +103,13 @@ def create_team_tasks_router(
     task_delete_projection: Callable[[str], None] | None = None,
     runner_factory: RunnerFactory | None = None,
     room_membership_resolver: RoomMembershipResolver | None = None,
+    room_participant_resolver: RoomParticipantResolver | None = None,
     max_concurrent_runs: int = _MAX_CONCURRENT_RUNS,
 ) -> Any:
     """Create ``/api/team-tasks/*`` routes.
 
     ╔════════════════════════════════════════════════════════════════════╗
-    ║ team_tasks_router.py · navigation map (1074 lines).                ║
+    ║ team_tasks_router.py · navigation map (with private helpers).      ║
     ║                                                                    ║
     ║   §1 Pydantic wires + state schemas              ~L1-138           ║
     ║   §2 create_team_tasks_router(...) factory       ~L139             ║
@@ -123,11 +126,14 @@ def create_team_tasks_router(
     Mirrors the signature of ``create_team_rooms_router`` so the host
     app can wire both with the same identity / auth knobs.
 
-    ``room_membership_resolver`` returns the list of actor ids allowed
-    to act on a given room. When ``require_auth`` is true and the
-    resolver is provided, every per-task endpoint enforces membership.
+    ``room_participant_resolver`` returns the current participant record and
+    is authoritative when present: viewers may read tasks, while owners and
+    members may create, run, update, or delete them. The legacy
+    ``room_membership_resolver`` only proves membership and remains supported
+    for older embedders that do not expose room roles yet. When
+    ``require_auth`` is true, every per-task endpoint enforces membership.
     When ``require_auth`` is false (single-user dev mode) the check is
-    skipped — matching the existing _auth() bypass behavior.
+    skipped — matching the existing single-user bypass behavior.
     """
     require_fastapi(__name__)
 
@@ -164,48 +170,19 @@ def create_team_tasks_router(
         _save_state(path, tasks)
         _LOG.warning("team task startup reconciliation marked orphaned running tasks failed")
 
-    def _auth(request: Any) -> str | None:
-        from .openai_gateway_router import _resolve_actor
-
-        return _resolve_actor(
-            request,
-            identity_store,
-            require_auth,
-            jwt_secret=jwt_secret,
-            jwt_issuer=jwt_issuer,
-            jwt_audience=jwt_audience,
-        )
-
-    def _require_member(actor: str | None, room_id: str) -> None:
-        """Reject requests where the authenticated actor is not a
-        member of ``room_id``. No-op when auth is disabled or no
-        resolver is wired (legacy / single-user mode).
-        """
-        if not require_auth:
-            return
-        if room_membership_resolver is None:
-            raise HTTPException(503, "room membership resolver unavailable")
-        if not actor:
-            raise HTTPException(401, "authentication required")
-        try:
-            members = room_membership_resolver(room_id) or []
-        except (KeyError, ValueError, RuntimeError):
-            members = []
-        if actor not in members:
-            raise HTTPException(403, "actor is not a member of this room")
-
-    def _is_member(actor: str | None, room_id: str) -> bool:
-        if not require_auth:
-            return True
-        if room_membership_resolver is None:
-            raise HTTPException(503, "room membership resolver unavailable")
-        if not actor:
-            raise HTTPException(401, "authentication required")
-        try:
-            members = room_membership_resolver(room_id) or []
-        except (KeyError, ValueError, RuntimeError):
-            return False
-        return actor in members
+    access = TeamTaskAccess(
+        identity_store=identity_store,
+        require_auth=require_auth,
+        jwt_secret=jwt_secret,
+        jwt_issuer=jwt_issuer,
+        jwt_audience=jwt_audience,
+        room_membership_resolver=room_membership_resolver,
+        room_participant_resolver=room_participant_resolver,
+        http_exception=HTTPException,
+    )
+    _identity = access.identity
+    _require_member = access.require_member
+    _is_member = access.is_member
 
     def _validate_sop_template(value: str) -> str:
         """Normalize and reject sop_template values that could escape
@@ -714,6 +691,7 @@ def create_team_tasks_router(
 
     async def _create_task_for_actor(
         actor: str | None,
+        tenant_id: str,
         body: CreateTeamTaskRequest,
     ) -> TeamTaskWire:
         title = body.title.strip()
@@ -722,7 +700,7 @@ def create_team_tasks_router(
         room_id = body.room_id.strip()
         if not room_id:
             raise HTTPException(400, "room_id is required")
-        _require_member(actor, room_id)
+        _require_member(actor, room_id, tenant_id, write=True)
         sop_template = _validate_sop_template(body.sop_template)
         now = _now()
         task = TeamTaskWire(
@@ -750,16 +728,17 @@ def create_team_tasks_router(
 
     async def _run_task_for_actor(
         actor: str | None,
+        tenant_id: str,
         task_id: str,
     ) -> TeamTaskWire:
         with lock:
             current = tasks.get(task_id)
             if current is None:
                 raise HTTPException(404, f"task not found: {task_id}")
-            if current.status == "running":
-                return current
             room_id = current.room_id
-        _require_member(actor, room_id)
+        _require_member(actor, room_id, tenant_id, write=True)
+        if current.status == "running":
+            return current
         try:
             prepared = _prepare_team_run(current)
         except ValueError as exc:
@@ -836,32 +815,34 @@ def create_team_tasks_router(
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         body = CreateTeamTaskRequest.model_validate(payload)
-        return (await _create_task_for_actor(_auth(request), body)).model_dump()
+        actor, tenant_id = _identity(request)
+        return (await _create_task_for_actor(actor, tenant_id, body)).model_dump()
 
     async def _run_task_from_request(
         request: Request,
         task_id: str,
     ) -> dict[str, Any]:
-        return (await _run_task_for_actor(_auth(request), task_id)).model_dump()
+        actor, tenant_id = _identity(request)
+        return (await _run_task_for_actor(actor, tenant_id, task_id)).model_dump()
 
     @router.get("/api/team-tasks")
     def list_tasks(request: Request, room_id: str | None = None) -> dict[str, Any]:
         """List tasks. ``room_id`` query param scopes to one room
         (omit to list all — useful for admin/debug, not the typical
         UI flow)."""
-        actor = _auth(request)
+        actor, tenant_id = _identity(request)
         with lock:
             items = list(tasks.values())
         if room_id:
-            _require_member(actor, room_id)
+            _require_member(actor, room_id, tenant_id)
             items = [t for t in items if t.room_id == room_id]
         elif require_auth:
             # An omitted room filter is a convenience query, not an
             # authorization bypass. Return the union of rooms the caller can
             # actually enter instead of every persisted team's task list.
-            if room_membership_resolver is None:
+            if room_participant_resolver is None and room_membership_resolver is None:
                 raise HTTPException(503, "room membership resolver unavailable")
-            items = [task for task in items if _is_member(actor, task.room_id)]
+            items = [task for task in items if _is_member(actor, task.room_id, tenant_id)]
         items.sort(key=lambda t: t.updated_at, reverse=True)
         return {
             "tasks": [t.model_dump() for t in items],
@@ -873,36 +854,38 @@ def create_team_tasks_router(
         request: Request,
         body: CreateTeamTaskRequest,
     ) -> dict[str, Any]:
-        task = await _create_task_for_actor(_auth(request), body)
+        actor, tenant_id = _identity(request)
+        task = await _create_task_for_actor(actor, tenant_id, body)
         return task.model_dump()
 
     @router.get("/api/team-tasks/{task_id}")
     def get_task(request: Request, task_id: str) -> dict[str, Any]:
-        actor = _auth(request)
+        actor, tenant_id = _identity(request)
         with lock:
             task = tasks.get(task_id)
             if task is None:
                 raise HTTPException(404, f"task not found: {task_id}")
             payload = task.model_dump()
             room_id = task.room_id
-        _require_member(actor, room_id)
+        _require_member(actor, room_id, tenant_id)
         return payload
 
     @router.get("/api/team-tasks/{task_id}/process-timeline")
     def get_task_process_timeline(request: Request, task_id: str) -> dict[str, Any]:
-        actor = _auth(request)
+        actor, tenant_id = _identity(request)
         with lock:
             task = tasks.get(task_id)
             if task is None:
                 raise HTTPException(404, f"task not found: {task_id}")
             room_id = task.room_id
             payload = task.model_dump()
-        _require_member(actor, room_id)
+        _require_member(actor, room_id, tenant_id)
         return {"timeline": _team_task_process_timeline(payload)}
 
     @router.post("/api/team-tasks/{task_id}/run")
     async def run_task(request: Request, task_id: str) -> dict[str, Any]:
-        updated = await _run_task_for_actor(_auth(request), task_id)
+        actor, tenant_id = _identity(request)
+        updated = await _run_task_for_actor(actor, tenant_id, task_id)
         return updated.model_dump()
 
     @router.patch("/api/team-tasks/{task_id}")
@@ -911,12 +894,12 @@ def create_team_tasks_router(
         task_id: str,
         body: UpdateTeamTaskRequest,
     ) -> dict[str, Any]:
-        actor = _auth(request)
+        actor, tenant_id = _identity(request)
         with lock:
             current = tasks.get(task_id)
             if current is None:
                 raise HTTPException(404, f"task not found: {task_id}")
-            _require_member(actor, current.room_id)
+            _require_member(actor, current.room_id, tenant_id, write=True)
             updates: dict[str, Any] = {"updated_at": _now()}
             if body.title is not None:
                 title = body.title.strip()
@@ -956,12 +939,12 @@ def create_team_tasks_router(
 
     @router.delete("/api/team-tasks/{task_id}")
     async def delete_task(request: Request, task_id: str) -> dict[str, Any]:
-        actor = _auth(request)
+        actor, tenant_id = _identity(request)
         with lock:
             existing = tasks.get(task_id)
             if existing is None:
                 raise HTTPException(404, f"task not found: {task_id}")
-            _require_member(actor, existing.room_id)
+            _require_member(actor, existing.room_id, tenant_id, write=True)
             existed = tasks.pop(task_id, None)
             source = running.pop(task_id, None)
             if source is not None:
@@ -996,4 +979,5 @@ __all__ = [
     "TaskProjection",
     "RunnerFactory",
     "RoomMembershipResolver",
+    "RoomParticipantResolver",
 ]

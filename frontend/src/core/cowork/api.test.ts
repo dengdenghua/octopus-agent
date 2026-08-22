@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
+  applyCollabRoomMessageProjectAction,
   getCollabSession,
   getCoworkGroup,
   inviteCoworkMember,
   linkCoworkRoom,
   postCollabRoomMessage,
   removeCoworkMember,
+  replaceCoworkRoster,
   setCoworkMode,
 } from "./api";
 
@@ -91,6 +93,27 @@ describe("cowork api", () => {
     ]);
   });
 
+  test("replaces the agent roster and mode atomically", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, state, events: [] }),
+    );
+
+    await replaceCoworkRoster("thread/1", {
+      agent_ids: ["general", "codex-cli"],
+      mode: "cluster",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/cowork/thread%2F1/roster", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        agent_ids: ["general", "codex-cli"],
+        mode: "cluster",
+      }),
+      keepalive: true,
+    });
+  });
+
   test("throws response details on failure", async () => {
     fetchMock.mockResolvedValueOnce(new Response("nope", { status: 401 }));
 
@@ -161,6 +184,80 @@ describe("cowork api", () => {
           text: "summary",
           participant_id: "",
           display_name: "Planner",
+        }),
+      },
+    ]);
+  });
+
+  test("posts typed timeline metadata and promotes a message into Project OS", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ok: true,
+          room_id: "room-9",
+          seq: 8,
+          message: { seq: 8, text: "release", metadata: {} },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ok: true,
+          replayed: false,
+          created: true,
+          action_id: "MA-1",
+          action: "record_decision",
+          project_id: "project-1",
+          target: { kind: "decision", id: "EV-1" },
+          receipt: {
+            id: "MA-1",
+            action: "record_decision",
+            project_id: "project-1",
+            target: { kind: "decision", id: "EV-1" },
+          },
+          source_message: { seq: 8, text: "release", metadata: {} },
+          system_card_message: { seq: 9, text: "已记录", metadata: {} },
+        }),
+      );
+
+    await postCollabRoomMessage("thread/1", {
+      text: "release",
+      source_message_id: "ui-message-8",
+      message_type: "message",
+      entity_refs: [{ kind: "project", id: "project-1" }],
+      metadata: { origin: "timeline" },
+    });
+    const response = await applyCollabRoomMessageProjectAction("thread/1", 8, {
+      action: "record_decision",
+      project_id: "project-1",
+      decision: "release",
+    });
+
+    expect(response.action).toBe("record_decision");
+    expect(fetchMock.mock.calls[0]).toEqual([
+      "/api/collab/thread%2F1/room-message",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: "release",
+          participant_id: "",
+          display_name: "",
+          source_message_id: "ui-message-8",
+          message_type: "message",
+          entity_refs: [{ kind: "project", id: "project-1" }],
+          metadata: { origin: "timeline" },
+        }),
+      },
+    ]);
+    expect(fetchMock.mock.calls[1]).toEqual([
+      "/api/collab/thread%2F1/room-messages/8/project-actions",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "record_decision",
+          project_id: "project-1",
+          decision: "release",
         }),
       },
     ]);

@@ -263,8 +263,20 @@ class _ReactBridgeState:
         log: EventLog,
         emitter: EventEmitter,
         item: Any,
+        *,
+        durable: bool = False,
     ) -> None:
-        log.item_started(turn.thread_id, turn.id, item)
+        if durable:
+            log.item_started(
+                turn.thread_id,
+                turn.id,
+                item,
+                durable=True,
+            )
+        else:
+            # Preserve the long-standing three-argument protocol for
+            # lightweight EventLog-compatible sinks used by other drivers.
+            log.item_started(turn.thread_id, turn.id, item)
         await emitter.notify(
             ServerMethod.ITEM_STARTED,
             self._item_payload(turn, item),
@@ -644,7 +656,11 @@ class _ReactBridgeState:
         self._bind_timeline(item)
         self.tools[call_key] = item
         turn.items.append(item)
-        await self._emit_started(turn, log, emitter, item)
+        # ``tool_start`` is an execution intent, not decorative UI. The
+        # realtime producer waits for this reducer to finish before resuming
+        # the generator that performs the call, so make the journal record
+        # durable before releasing that execution barrier.
+        await self._emit_started(turn, log, emitter, item, durable=True)
         phases = _phases_from_todo_preview(item.input_preview, active_item_id=item.id)
         if phases is None:
             phases = _phases_from_plan_md(item.input_preview, active_item_id=item.id)

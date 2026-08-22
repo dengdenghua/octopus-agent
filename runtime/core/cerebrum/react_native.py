@@ -147,6 +147,14 @@ def build_loop_tool_specs(
             )
             or []
         )
+        from runtime.execution.misc.skill_policy import (
+            filter_audit_read_only_tool_specs,
+        )
+
+        specs = filter_audit_read_only_tool_specs(
+            specs,
+            context=user_context,
+        )
         if strict_explicit_reads:
             specs = [
                 spec

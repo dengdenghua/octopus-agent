@@ -13,14 +13,15 @@ import contextvars
 import logging
 import time
 import uuid
-from collections.abc import Generator
-from typing import Any
+from collections.abc import Callable, Generator
+from typing import Any, Literal
 
 from runtime.core.cerebrum.react_execution import (
     _beak_step_effective_success,
     _execute_action_via_beak,
     _tool_event_extras_from_beak_step,
 )
+from runtime.core.cerebrum.react_execution_receipts import _execution_receipt_trust
 from runtime.core.cerebrum.react_parsing import _parse_action, _summarize_observation
 from runtime.execution.tool_engine import (
     normalize_tool_lifecycle_event,
@@ -63,6 +64,8 @@ _MAX_PARALLEL_ACTIONS = 4
 # tool must not pin the turn forever; beyond this the whole batch is
 # drained (completed lanes keep their results, the rest are timed out).
 _DEFAULT_PARALLEL_BATCH_TIMEOUT_S = 600.0
+_PARALLEL_CANCEL_POLL_S = 0.05
+_ParallelCollectOutcome = Literal["timeout", "cancelled"]
 
 
 def _absorb_lane_result(
@@ -88,35 +91,115 @@ def _collect_parallel_lane_results(
     beak_steps: list[Any],
     *,
     timeout_s: float,
-) -> None:
+    on_timeout: Callable[[], None] | None = None,
+    is_cancelled: Callable[[], bool] | None = None,
+    cancellation_reason: Callable[[], str] | None = None,
+) -> _ParallelCollectOutcome | None:
     """Drain a parallel batch under a wall-clock ceiling (audit T-07).
 
     ``timeout_s <= 0`` waits indefinitely (old behaviour). On timeout,
-    completed lanes keep their results; lanes still running are cancelled
-    and marked with an explicit timeout observation so the batch returns a
-    merged answer instead of hanging the whole turn.
+    completed lanes keep their results; ``on_timeout`` is invoked before
+    pending futures are cancelled so cooperative handlers observe the batch
+    cancellation signal first.  Lanes still running are marked with an
+    explicit timeout observation.  An independently cancelled parent/batch
+    is polled while futures are pending and returns immediately with those
+    lanes marked cancelled rather than waiting for the deadline.  The caller
+    owns executor shutdown policy.
     """
     import concurrent.futures as _cf
 
-    if timeout_s is None or timeout_s <= 0:
+    if (timeout_s is None or timeout_s <= 0) and is_cancelled is None:
         for fut in _cf.as_completed(futures):
             _absorb_lane_result(fut, futures[fut], observations, beak_steps)
-        return
+        return None
 
-    try:
-        for fut in _cf.as_completed(futures, timeout=timeout_s):
+    deadline = time.monotonic() + timeout_s if timeout_s is not None and timeout_s > 0 else None
+    pending = set(futures)
+    while pending:
+        if is_cancelled is not None and is_cancelled():
+            reason = cancellation_reason() if cancellation_reason is not None else "cancelled"
+            for fut, idx in futures.items():
+                if observations[idx] is not None:
+                    continue
+                if fut.done():
+                    # Preserve work that completed before cancellation was
+                    # observed; only still-pending lanes are cancelled.
+                    _absorb_lane_result(fut, idx, observations, beak_steps)
+                else:
+                    fut.cancel()
+                    observations[idx] = f"(工具执行已取消 · {reason or 'cancelled'})"
+                    beak_steps[idx] = None
+            return "cancelled"
+
+        remaining = None if deadline is None else deadline - time.monotonic()
+        if remaining is not None and remaining <= 0:
+            if on_timeout is not None:
+                on_timeout()
+            for fut, idx in futures.items():
+                if observations[idx] is not None:
+                    continue
+                if fut.done():
+                    # Completed between the deadline and this sweep — keep its result.
+                    _absorb_lane_result(fut, idx, observations, beak_steps)
+                else:
+                    fut.cancel()
+                    observations[idx] = f"(工具执行超时 · 超过并行批级上限 {timeout_s:g}s)"
+                    beak_steps[idx] = None
+            return "timeout"
+
+        wait_s = remaining
+        if is_cancelled is not None:
+            wait_s = (
+                _PARALLEL_CANCEL_POLL_S if wait_s is None else min(wait_s, _PARALLEL_CANCEL_POLL_S)
+            )
+        done, pending = _cf.wait(
+            pending,
+            timeout=wait_s,
+            return_when=_cf.FIRST_COMPLETED,
+        )
+        for fut in done:
             _absorb_lane_result(fut, futures[fut], observations, beak_steps)
-    except _cf.TimeoutError:
-        for fut, idx in futures.items():
-            if observations[idx] is not None:
-                continue
-            if fut.done():
-                # Completed between the timeout and this sweep — keep its result.
-                _absorb_lane_result(fut, idx, observations, beak_steps)
-            else:
-                fut.cancel()
-                observations[idx] = f"(工具执行超时 · 超过并行批级上限 {timeout_s:g}s)"
-                beak_steps[idx] = None
+    return None
+
+
+def _consume_late_lane_result(
+    future: Any,
+    *,
+    lane_index: int,
+    outcome: _ParallelCollectOutcome,
+) -> None:
+    """Observe a detached worker's terminal exception.
+
+    Python cannot safely kill a running thread.  The dispatcher therefore
+    returns after its deadline while a non-cooperative *read-only/low-risk*
+    lane unwinds in the background after a timeout or parent cancellation.
+    Reading ``future.exception()`` prevents a late failure from becoming an
+    unobserved Future exception; failures are logged because their public
+    ``tool_end`` has already been emitted and cannot be amended safely.
+    """
+    import concurrent.futures as _cf
+
+    if future.cancelled():
+        return
+    try:
+        exception = future.exception()
+    except _cf.CancelledError:
+        return
+    except BaseException:  # noqa: BLE001 - callback must never escape its worker
+        _logger.warning(
+            "parallel tool lane %d could not expose its late result",
+            lane_index + 1,
+            exc_info=True,
+        )
+        return
+    if exception is not None:
+        _logger.warning(
+            "parallel tool lane %d failed after its batch detached (%s): %s",
+            lane_index + 1,
+            outcome,
+            exception,
+            exc_info=(type(exception), exception, exception.__traceback__),
+        )
 
 
 def _dispatch_parallel_actions(
@@ -327,18 +410,97 @@ def _dispatch_parallel_actions(
         # parallel path never saw it. Give each worker its own copy of the
         # dispatcher's context (a Context cannot be entered concurrently,
         # hence one copy per task) so cancellation reaches every lane.
+        from runtime.safety.approval.cancellation import (
+            CancellationSource,
+            current_cancellation_token,
+            scoped_cancellation,
+        )
+
+        _batch_source = CancellationSource()
+        _parent_token = current_cancellation_token()
+
+        def _cancel_from_parent(reason: str) -> None:
+            _batch_source.cancel(reason=reason or "parent turn cancelled")
+
+        _unlink_parent = _parent_token.on_cancelled(_cancel_from_parent)
+
+        def _cancel_for_timeout() -> None:
+            _batch_source.cancel(
+                reason=f"parallel tool batch exceeded {parallel_batch_timeout_s:g}s"
+            )
+
+        def _run_one_in_batch(idx: int) -> tuple[str | None, Any]:
+            with scoped_cancellation(_batch_source.token):
+                if _batch_source.is_cancelled:
+                    return (
+                        "(工具执行异常) OperationCancelled: "
+                        f"{_batch_source.token.reason or 'parallel batch cancelled'}",
+                        None,
+                    )
+                return _run_one(idx)
+
         _parent_context = contextvars.copy_context()
-        with _cf.ThreadPoolExecutor(max_workers=max_workers) as pool:
+        pool = _cf.ThreadPoolExecutor(
+            max_workers=max_workers,
+            thread_name_prefix="react-tool-parallel",
+        )
+        futures: dict[Any, int] = {}
+        collection_outcome: _ParallelCollectOutcome | None = None
+        try:
             futures = {
-                pool.submit(_parent_context.copy().run, _run_one, idx): idx
+                pool.submit(_parent_context.copy().run, _run_one_in_batch, idx): idx
                 for idx in range(len(actions))
             }
-            _collect_parallel_lane_results(
+            collection_outcome = _collect_parallel_lane_results(
                 futures,
                 observations,
                 beak_steps,
                 timeout_s=parallel_batch_timeout_s,
+                on_timeout=_cancel_for_timeout,
+                is_cancelled=lambda: _batch_source.is_cancelled,
+                cancellation_reason=lambda: _batch_source.token.reason,
             )
+            if collection_outcome is not None:
+                # ``Future.cancel`` cannot stop a lane whose thread already
+                # started.  Observe every such Future when it eventually
+                # exits so a late exception is not silently discarded.
+                for future, lane_index in futures.items():
+                    if str(observations[lane_index] or "").startswith(
+                        ("(工具执行超时", "(工具执行已取消")
+                    ):
+                        future.add_done_callback(
+                            lambda completed, idx=lane_index, outcome=collection_outcome: (
+                                _consume_late_lane_result(
+                                    completed,
+                                    lane_index=idx,
+                                    outcome=outcome,
+                                )
+                            )
+                        )
+        except BaseException:
+            # Generator cancellation / an unexpected collector failure must
+            # not reintroduce the same implicit wait we avoid on timeout.
+            _batch_source.cancel(reason="parallel tool batch aborted")
+            for future in futures:
+                future.cancel()
+            for future, lane_index in futures.items():
+                future.add_done_callback(
+                    lambda completed, idx=lane_index: _consume_late_lane_result(
+                        completed,
+                        lane_index=idx,
+                        outcome="cancelled",
+                    )
+                )
+            pool.shutdown(wait=False, cancel_futures=True)
+            raise
+        else:
+            # Never use ThreadPoolExecutor as a context manager here: its
+            # __exit__ always waits for running threads, defeating the batch
+            # deadline.  Only timeout/abort may detach, and only this branch
+            # is reachable for the pre-screened low-risk parallel lanes.
+            pool.shutdown(wait=collection_outcome is None, cancel_futures=True)
+        finally:
+            _unlink_parent()
 
     # Emit tool_end events in declared (action) order so the UI
     # transcript matches the model's intent.
@@ -359,7 +521,15 @@ def _dispatch_parallel_actions(
         _ok = not (
             obs is not None
             and isinstance(obs, str)
-            and obs.startswith(("(工具失败)", "(工具执行异常)", "(工具未注册"))
+            and obs.startswith(
+                (
+                    "(工具失败)",
+                    "(工具执行异常)",
+                    "(工具执行超时",
+                    "(工具执行已取消",
+                    "(工具未注册",
+                )
+            )
         )
         if bk is not None:
             _ok = _beak_step_effective_success(bk)
@@ -421,6 +591,7 @@ def _dispatch_parallel_actions(
                 origin="react_compat",
             )
         )
+        _trusted_execution, _execution_source = _execution_receipt_trust(bk)
         results.append(
             {
                 "tool_name": name,
@@ -428,6 +599,8 @@ def _dispatch_parallel_actions(
                 "observation": model_obs or "",
                 "duration_ms": _duration_ms,
                 "call_id": call_ids[idx],
+                "trusted_execution": _trusted_execution,
+                "execution_source": _execution_source,
             }
         )
         # Per-call header keeps the model from confusing which

@@ -129,9 +129,12 @@ def _build_app(
     """
     store = IdentityStore()
     keys: dict[str, str] = {}
-    for actor in ("alice", "bob"):
+    for actor in ("alice", "bob", "carol"):
         api_key = f"sk-test-{actor}"
-        store.add(Identity(actor_id=actor), api_key_plaintext=api_key)
+        store.add(
+            Identity(actor_id=actor, metadata={"tenant_id": "tenant-acme"}),
+            api_key_plaintext=api_key,
+        )
         keys[actor] = api_key
 
     app = FastAPI()
@@ -152,6 +155,7 @@ def _build_app(
         runner_factory=runner_factory,
         team_event_broadcaster=_broadcaster,
         room_membership_resolver=rooms_router.list_room_members,
+        room_participant_resolver=rooms_router.get_room_participant,
         max_concurrent_runs=max_concurrent_runs,
     )
     app.include_router(tasks_router)
@@ -182,6 +186,29 @@ def _create_room(
     )
     assert resp.status_code == 200, resp.json()
     return resp.json()
+
+
+def _join_room(
+    client: TestClient,
+    keys: dict[str, str],
+    room_id: str,
+    actor: str,
+    *,
+    role: str,
+) -> dict[str, Any]:
+    invite = client.post(
+        f"/api/teams/{room_id}/invites",
+        json={"role": role, "expires_in_seconds": 3600},
+        headers=_auth_header(keys["alice"]),
+    )
+    assert invite.status_code == 200, invite.json()
+    joined = client.post(
+        f"/api/team-invites/{invite.json()['invite_token']}/join",
+        json={"display_name": actor},
+        headers=_auth_header(keys[actor]),
+    )
+    assert joined.status_code == 200, joined.json()
+    return joined.json()["participant"]
 
 
 def test_membership_blocks_non_member_create(tmp_path: Path) -> None:
@@ -274,6 +301,146 @@ def test_membership_blocks_non_member_delete(tmp_path: Path) -> None:
     )
 
     assert resp.status_code == 403
+
+
+def test_viewer_reads_tasks_but_cannot_mutate_or_run(tmp_path: Path) -> None:
+    client, _, keys = _build_app(tmp_path, _SlowRunner)
+    _create_room(client, keys, "room-alpha", owner="alice")
+    participant = _join_room(
+        client,
+        keys,
+        "room-alpha",
+        "carol",
+        role="viewer",
+    )
+    created = client.post(
+        "/api/team-tasks",
+        json={"room_id": "room-alpha", "title": "owner task"},
+        headers=_auth_header(keys["alice"]),
+    )
+    assert created.status_code == 200, created.json()
+    task_id = created.json()["id"]
+
+    assert (
+        client.get(
+            "/api/team-tasks?room_id=room-alpha",
+            headers=_auth_header(keys["carol"]),
+        ).status_code
+        == 200
+    )
+    assert (
+        client.get(
+            f"/api/team-tasks/{task_id}",
+            headers=_auth_header(keys["carol"]),
+        ).status_code
+        == 200
+    )
+    assert (
+        client.get(
+            f"/api/team-tasks/{task_id}/process-timeline",
+            headers=_auth_header(keys["carol"]),
+        ).status_code
+        == 200
+    )
+
+    denied = [
+        client.post(
+            "/api/team-tasks",
+            json={"room_id": "room-alpha", "title": "viewer task"},
+            headers=_auth_header(keys["carol"]),
+        ),
+        client.post(
+            f"/api/team-tasks/{task_id}/run",
+            headers=_auth_header(keys["carol"]),
+        ),
+        client.patch(
+            f"/api/team-tasks/{task_id}",
+            json={"title": "viewer edit"},
+            headers=_auth_header(keys["carol"]),
+        ),
+        client.delete(
+            f"/api/team-tasks/{task_id}",
+            headers=_auth_header(keys["carol"]),
+        ),
+    ]
+    assert [response.status_code for response in denied] == [403, 403, 403, 403]
+    assert all("viewers" in response.json()["detail"] for response in denied)
+
+    # Presence changes are not membership changes: offline viewers still read.
+    offline = client.patch(
+        f"/api/teams/room-alpha/participants/{participant['id']}",
+        json={"status": "offline"},
+        headers=_auth_header(keys["alice"]),
+    )
+    assert offline.status_code == 200, offline.json()
+    assert (
+        client.get(
+            f"/api/team-tasks/{task_id}",
+            headers=_auth_header(keys["carol"]),
+        ).status_code
+        == 200
+    )
+
+    removed = client.patch(
+        f"/api/teams/room-alpha/participants/{participant['id']}",
+        json={"status": "removed"},
+        headers=_auth_header(keys["alice"]),
+    )
+    assert removed.status_code == 200, removed.json()
+    assert (
+        client.get(
+            f"/api/team-tasks/{task_id}",
+            headers=_auth_header(keys["carol"]),
+        ).status_code
+        == 403
+    )
+
+
+def test_plain_member_can_create_and_update_tasks(tmp_path: Path) -> None:
+    client, _, keys = _build_app(tmp_path)
+    _create_room(client, keys, "room-alpha", owner="alice")
+    _join_room(client, keys, "room-alpha", "bob", role="member")
+
+    created = client.post(
+        "/api/team-tasks",
+        json={"room_id": "room-alpha", "title": "member task"},
+        headers=_auth_header(keys["bob"]),
+    )
+    assert created.status_code == 200, created.json()
+    updated = client.patch(
+        f"/api/team-tasks/{created.json()['id']}",
+        json={"title": "member update"},
+        headers=_auth_header(keys["bob"]),
+    )
+    assert updated.status_code == 200, updated.json()
+    assert updated.json()["title"] == "member update"
+
+
+def test_viewer_cannot_use_run_endpoint_when_task_is_already_running(tmp_path: Path) -> None:
+    _BlockingRunner.reset()
+    try:
+        client, _, keys = _build_app(tmp_path, _BlockingRunner)
+        _create_room(client, keys, "room-alpha", owner="alice")
+        _join_room(client, keys, "room-alpha", "carol", role="viewer")
+        created = client.post(
+            "/api/team-tasks",
+            json={"room_id": "room-alpha", "title": "running task"},
+            headers=_auth_header(keys["alice"]),
+        )
+        task_id = created.json()["id"]
+        started = client.post(
+            f"/api/team-tasks/{task_id}/run",
+            headers=_auth_header(keys["alice"]),
+        )
+        assert started.status_code == 200, started.json()
+        denied = client.post(
+            f"/api/team-tasks/{task_id}/run",
+            headers=_auth_header(keys["carol"]),
+        )
+        assert denied.status_code == 403
+        assert "viewers" in denied.json()["detail"]
+    finally:
+        _BlockingRunner.release()
 
 
 def test_sop_template_rejects_path_traversal(tmp_path: Path) -> None:

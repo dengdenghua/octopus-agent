@@ -521,7 +521,7 @@ def test_startup_banner_does_not_forge_a_permission_failure() -> None:
 # ── shared-blackboard envelope + env pass-through ────────────────────
 
 
-def test_run_layers_env_over_inherited(monkeypatch) -> None:
+def test_run_uses_minimal_env_and_allows_partner_context(monkeypatch) -> None:
     from runtime.execution.agents import local_partner_bridge as b
 
     captured: dict = {}
@@ -537,15 +537,82 @@ def test_run_layers_env_over_inherited(monkeypatch) -> None:
 
     monkeypatch.setattr(b.subprocess, "run", fake_run)
     monkeypatch.setenv("PATH", "/usr/bin")
+    monkeypatch.setenv("HOME", "/Users/tester")
+    monkeypatch.setenv("LANG", "zh_CN.UTF-8")
+    monkeypatch.setenv("XDG_CONFIG_HOME", "/Users/tester/.config")
+    monkeypatch.setenv("OPENAI_API_KEY", "must-not-leak")
+    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "must-not-leak")
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid")
+    monkeypatch.setenv("PYTHONPATH", "/tmp/injected-python")
+    monkeypatch.setenv("NODE_OPTIONS", "--require=/tmp/injected-node.js")
     res = b.run_local_partner(
         partner_id="claude-code",
         command="claude",
         prompt="go",
-        env={"OCTOPUS_TURN_ID": "t1"},
+        env={
+            "OCTOPUS_TURN_ID": "t1",
+            "OCTOPUS_AGENT_ID": "a1",
+            "OCTOPUS_BLACKBOARD_DB": "/tmp/board.db",
+        },
     )
     assert res.ok is True
-    assert captured["env"]["OCTOPUS_TURN_ID"] == "t1"  # extra layered in
-    assert "PATH" in captured["env"]  # inherited env not dropped
+    assert set(captured["env"]) <= (b._INHERITED_ENV_ALLOWLIST | b._PARTNER_CONTEXT_ENV_ALLOWLIST)
+    assert {
+        "OPENAI_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "HTTPS_PROXY",
+        "PYTHONPATH",
+        "NODE_OPTIONS",
+    }.isdisjoint(captured["env"])
+    assert captured["env"]["PATH"] == "/usr/bin"
+    assert captured["env"]["HOME"] == "/Users/tester"
+    assert captured["env"]["LANG"] == "zh_CN.UTF-8"
+    assert captured["env"]["XDG_CONFIG_HOME"] == "/Users/tester/.config"
+    assert captured["env"]["OCTOPUS_TURN_ID"] == "t1"
+    assert captured["env"]["OCTOPUS_AGENT_ID"] == "a1"
+    assert captured["env"]["OCTOPUS_BLACKBOARD_DB"] == "/tmp/board.db"
+
+
+def test_run_extra_env_cannot_override_process_context_or_inject_secrets(monkeypatch) -> None:
+    from runtime.execution.agents import local_partner_bridge as b
+
+    captured: dict = {}
+
+    class _CP:
+        returncode = 0
+        stdout = "done"
+        stderr = ""
+
+    def fake_run(argv, **kw):
+        captured["env"] = kw.get("env")
+        return _CP()
+
+    monkeypatch.setattr(b.subprocess, "run", fake_run)
+    monkeypatch.setenv("PATH", "/trusted/bin")
+    monkeypatch.setenv("HOME", "/trusted/home")
+    res = b.run_local_partner(
+        partner_id="claude-code",
+        command="claude",
+        prompt="go",
+        env={
+            "PATH": "/attacker/bin",
+            "HOME": "/attacker/home",
+            "OPENAI_API_KEY": "caller-secret",
+            "HTTP_PROXY": "http://caller-proxy.invalid",
+            "PYTHONPATH": "/tmp/caller-python",
+            "NODE_OPTIONS": "--require=/tmp/caller-node.js",
+            "OCTOPUS_TURN_ID": "safe-turn",
+        },
+    )
+
+    assert res.ok is True
+    assert captured["env"]["PATH"] == "/trusted/bin"
+    assert captured["env"]["HOME"] == "/trusted/home"
+    assert captured["env"]["OCTOPUS_TURN_ID"] == "safe-turn"
+    assert "OPENAI_API_KEY" not in captured["env"]
+    assert "HTTP_PROXY" not in captured["env"]
+    assert "PYTHONPATH" not in captured["env"]
+    assert "NODE_OPTIONS" not in captured["env"]
 
 
 def test_brief_empty_without_turn_or_board() -> None:

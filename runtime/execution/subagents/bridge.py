@@ -44,6 +44,56 @@ SubAgentRunner = Callable[..., str]
 _RUNNER: SubAgentRunner | None = None
 _REGISTRY: SubagentRegistry | None = None
 
+_INHERITED_WORK_CONTEXT_KEYS: tuple[str, ...] = (
+    "mode",
+    "capability_mode",
+    "code_mode",
+    "agent_mode",
+    "personal_mode",
+    "personal_instructions",
+    "workflow_mode",
+    "workflow_preset",
+    "completion_policy",
+    "mode_preset",
+    "mode_contract",
+    "workspace_path",
+    "workspace_scope",
+    "personal_workspace_path",
+    "personal_workspace_enabled",
+    "project_signals",
+    "skill_pack_profile",
+    "verification_policy",
+    "default_skill_packs",
+    "default_plugins",
+)
+
+
+def _inherit_parent_work_context(
+    context: dict[str, Any] | None,
+    session: Any,
+) -> dict[str, Any]:
+    """Carry trusted per-turn work policy into every delegated child."""
+
+    merged: dict[str, Any] = dict(context or {})
+    metadata = getattr(session, "metadata", None) if session is not None else None
+    if isinstance(metadata, dict):
+        for key in _INHERITED_WORK_CONTEXT_KEYS:
+            if key in metadata:
+                # Parent Session metadata is the trusted per-turn contract.
+                # A model-authored child ``context`` must not be able to turn
+                # audit into develop (or otherwise change the selected task
+                # strategy) while spawning a worker.
+                merged[key] = metadata[key]
+
+    from runtime.execution.misc.skill_policy import is_audit_read_only_context
+
+    if is_audit_read_only_context(merged):
+        # Trusted parent policy may narrow a child but the child/model must not
+        # be able to widen it.  The mini-loop intersects its tool catalog with
+        # the established read-only verifier surface when this flag is set.
+        merged["tool_allowlist_read_only"] = True
+    return merged
+
 
 # Each child holds one global slot for its lifetime, so the same cap bounds
 # both width and recursive depth. The deployment can override the generous
@@ -316,6 +366,8 @@ def call_subagent(
             _parent_tool_use_id = str(
                 _resolved_session_meta.get("_active_parent_tool_use_id") or ""
             ).strip()
+
+    context = _inherit_parent_work_context(context, session)
 
     # Capture the parent turn's react stack (ambient ContextVar set around
     # the main conversation's ``stream_react_loop``) so the runner can drive

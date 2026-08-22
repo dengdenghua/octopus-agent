@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 
 from runtime.projectos.engine import (
@@ -156,6 +158,135 @@ def test_store_project_events_roundtrip_and_limit(tmp_path) -> None:
     assert [event["kind"] for event in events] == ["project.recover", "task.intervention"]
     assert [event["payload"]["n"] for event in events] == [1, 2]
     assert [event["payload"]["n"] for event in s.events_for_project("P1", limit=1)] == [2]
+
+
+def test_store_does_not_reuse_terminal_milestone_for_another_project(tmp_path) -> None:
+    s = ProjectStore(base_dir=tmp_path)
+    s.save_project(Project(id="P1", name="one", goal="g"))
+    s.save_project(Project(id="P2", name="two", goal="g"))
+    s.save_milestone(
+        "P1",
+        Milestone(id="MS1", name="done", goal="done", status="done"),
+    )
+
+    with pytest.raises(ValueError, match="another project"):
+        s.save_milestone("P2", Milestone(id="MS1", name="new", goal="new"))
+
+    assert s.milestones_for("P2") == []
+
+
+def test_store_projects_latest_artifact_event_by_id(tmp_path) -> None:
+    s = ProjectStore(base_dir=tmp_path)
+    s.save_project(Project(id="P1", name="x", goal="g"))
+    s.append_event(
+        "P1",
+        event_id="EV-old",
+        kind="project.artifact_published",
+        payload={"artifact": {"id": "ART-1", "title": "Old title", "path": "old.md"}},
+        created_at=1.0,
+    )
+    s.append_event(
+        "P1",
+        event_id="EV-new",
+        kind="project.artifact_published",
+        payload={
+            "artifact": {
+                "id": "ART-1",
+                "name": "Current title",
+                "kind": "document",
+                "path": "current.md",
+                "summary": "Current published version",
+            }
+        },
+        created_at=2.0,
+    )
+    s.append_event(
+        "P1",
+        event_id="EV-legacy",
+        kind="project.artifact_published",
+        payload={"artifact": {"title": "Legacy artifact", "url": "https://example.test/a"}},
+        created_at=0.5,
+    )
+
+    assert s.artifacts_for_project("P1") == [
+        {
+            "id": "ART-1",
+            "name": "Current title",
+            "kind": "document",
+            "path": "current.md",
+            "summary": "Current published version",
+        },
+        {
+            "id": "EV-legacy",
+            "name": "Legacy artifact",
+            "url": "https://example.test/a",
+        },
+    ]
+
+
+def test_store_projects_latest_durable_decision_event_by_id(tmp_path) -> None:
+    s = ProjectStore(base_dir=tmp_path)
+    s.save_project(Project(id="P1", name="x", goal="g"))
+    s.append_event(
+        "P1",
+        event_id="EV-decision-old",
+        kind="project.decision_recorded",
+        payload={
+            "decision_id": "DEC-1",
+            "decision": "Use option A",
+            "actor": "alice",
+        },
+        created_at=1.0,
+    )
+    s.append_event(
+        "P1",
+        event_id="EV-decision-new",
+        kind="project.decision_recorded",
+        payload={
+            "decision": {
+                "id": "DEC-1",
+                "title": "Adopt option B",
+                "decision": "Use option B",
+                "summary": "Lower operational risk",
+                "milestone_id": "MS2",
+            },
+            "actor": "alice",
+            "source_message": {"source_message_id": "chat-2"},
+        },
+        created_at=2.0,
+    )
+    s.append_event(
+        "P1",
+        event_id="EV-decision-legacy",
+        kind="project.decision_recorded",
+        payload={
+            "decision": "Release on Friday",
+            "rationale": "Support coverage is highest",
+            "actor": "bob",
+        },
+        created_at=0.5,
+    )
+
+    assert s.decisions_for_project("P1") == [
+        {
+            "id": "DEC-1",
+            "title": "Adopt option B",
+            "summary": "Lower operational risk",
+            "decision": "Use option B",
+            "actor": "alice",
+            "created_at": "1970-01-01T00:00:02+00:00",
+            "source_message_id": "chat-2",
+            "milestone_id": "MS2",
+        },
+        {
+            "id": "EV-decision-legacy",
+            "title": "Release on Friday",
+            "summary": "Support coverage is highest",
+            "decision": "Release on Friday",
+            "actor": "bob",
+            "created_at": "1970-01-01T00:00:00.500000+00:00",
+        },
+    ]
 
 
 def test_store_rejects_unsafe_ids_and_oversized_payloads(tmp_path) -> None:
@@ -344,6 +475,58 @@ def test_plan_falls_back_when_milestone_generation_fails(tmp_path) -> None:
 
     assert p.status == "running"
     assert [m.id for m in eng.store.milestones_for(p.id)] == ["MS1", "MS2", "MS3"]
+
+
+def test_consecutive_plans_resolve_global_milestone_ids_and_dependencies(tmp_path) -> None:
+    eng = _engine(tmp_path)
+
+    first = eng.plan("first", "ship the first project")
+    second = eng.plan("second", "ship the second project")
+
+    assert first.milestone_ids == ["MS1", "MS2", "MS3"]
+    assert second.milestone_ids == [
+        f"{second.id}:MS1",
+        f"{second.id}:MS2",
+        f"{second.id}:MS3",
+    ]
+    second_milestones = {item.id: item for item in eng.store.milestones_for(second.id)}
+    assert second_milestones[second.milestone_ids[1]].dependencies == [second.milestone_ids[0]]
+    assert second_milestones[second.milestone_ids[2]].dependencies == [second.milestone_ids[1]]
+
+
+@pytest.mark.parametrize(
+    "trigger_sql",
+    [
+        """
+        CREATE TRIGGER fail_project_plan_milestone
+        BEFORE INSERT ON milestones WHEN NEW.id = 'MS2'
+        BEGIN SELECT RAISE(ABORT, 'milestone write failed'); END;
+        """,
+        """
+        CREATE TRIGGER fail_project_plan_event
+        BEFORE INSERT ON project_events WHEN NEW.kind = 'project.planned'
+        BEGIN SELECT RAISE(ABORT, 'event write failed'); END;
+        """,
+    ],
+)
+def test_plan_rolls_back_every_row_when_persistence_fails(tmp_path, trigger_sql) -> None:
+    store = ProjectStore(base_dir=tmp_path)
+    with sqlite3.connect(str(tmp_path / "projectos.db")) as conn:
+        conn.executescript(trigger_sql)
+    eng = ProjectEngine(
+        store,
+        generate_milestones=stub_generate_milestones,
+        decompose_tasks=_stub_decompose,
+    )
+
+    with pytest.raises(sqlite3.DatabaseError):
+        eng.plan("atomic", "leave no partial project")
+
+    assert store.list_projects() == []
+    with sqlite3.connect(str(tmp_path / "projectos.db")) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM milestones").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM project_events").fetchone()[0] == 0
 
 
 def test_full_run_drives_project_to_done(tmp_path) -> None:

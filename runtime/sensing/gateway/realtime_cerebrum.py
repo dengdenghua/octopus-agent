@@ -38,6 +38,7 @@ import asyncio
 import logging
 import os
 import threading
+from collections import deque
 from pathlib import Path
 from queue import SimpleQueue
 from typing import Any
@@ -78,6 +79,7 @@ from runtime.sensing.gateway._realtime_cerebrum_steering import (
     _publish_discovered_steering,
     _register_active_turn,
     _remove_active_turn_lease,
+    _restore_turn_steering,
     _set_turn_steering_accepting,
     _sync_persisted_turn_steering,
     _unregister_active_turn,
@@ -211,6 +213,7 @@ class CerebrumRuntime:
         reflex_router: Any = None,
         trace_store: Any = None,
         cowork_group_store: Any = None,
+        collaboration_store: Any = None,
         project_store: Any = None,
         project_os_hooks: dict[str, Any] | None = None,
         subagent_runner: Any = None,
@@ -270,6 +273,7 @@ class CerebrumRuntime:
         self._trace_store = trace_store
         self._task_supervisor = task_supervisor
         self._cowork_group_store = cowork_group_store
+        self._collaboration_store = collaboration_store
         self._project_store = project_store
         self._project_os_hooks = dict(project_os_hooks or {})
         self._subagent_runner = subagent_runner
@@ -302,6 +306,7 @@ class CerebrumRuntime:
         # boundary between them.
         self._active_turns: dict[str, tuple[Turn, EventLog]] = {}
         self._turn_steering: dict[str, SimpleQueue[tuple[str, str]]] = {}
+        self._turn_steering_restored: dict[str, deque[str]] = {}
         self._turn_steering_seen: dict[str, set[str]] = {}
         self._turn_steering_notified: dict[str, set[str]] = {}
         self._turn_steering_last_sync: dict[str, float] = {}
@@ -407,6 +412,9 @@ class CerebrumRuntime:
 
     def _drain_turn_steering(self, turn_id: str) -> list[str]:
         return _drain_turn_steering(self, turn_id)
+
+    def _restore_turn_steering(self, turn_id: str, messages: list[str]) -> None:
+        _restore_turn_steering(self, turn_id, messages)
 
     # ── Turn telemetry records (bodies in realtime_turn_outcome) ──
 
@@ -517,8 +525,9 @@ class CerebrumRuntime:
         actor_id: str | None,
         *,
         turns: list[Turn] | None = None,
+        access: str = "owner",
     ) -> None:
-        _require_thread_owner(self, log, actor_id, turns=turns)
+        _require_thread_owner(self, log, actor_id, turns=turns, access=access)
 
     def _resume_turns(
         self,
@@ -819,6 +828,53 @@ class CerebrumRuntime:
         from runtime.sensing.gateway.realtime_local_partner import agent_is_local_partner
 
         return agent_is_local_partner(agent)
+
+    def _is_codex_app_server_partner(self, agent: Any) -> bool:
+        """Return whether a Codex local partner should use App Server.
+
+        This is intentionally a narrower decision than ``_is_local_partner``:
+        other installed coding CLIs keep their existing one-shot adapters,
+        while Codex can opt out and fall back to the hardened ``codex exec``
+        path during rollout.
+        """
+        from runtime.sensing.gateway.realtime_codex_backend import (
+            agent_is_codex_app_server_partner,
+        )
+
+        return agent_is_codex_app_server_partner(agent)
+
+    async def _drive_codex_app_server(
+        self,
+        turn: Turn,
+        log: EventLog,
+        emitter: EventEmitter,
+        intent: ParsedIntent,
+        agent: Any,
+        provider: ApprovalProvider,
+        *,
+        text: str,
+    ) -> bool:
+        """Drive one outer turn through an isolated Codex App Server.
+
+        Returns ``True`` when App Server owned the inner turn. ``False`` is
+        reserved for a pre-turn compatibility fallback to hardened
+        ``codex exec``; the lifecycle uses it to keep later steering on the
+        same execution engine.
+        """
+        from runtime.sensing.gateway.realtime_codex_backend import (
+            drive_codex_app_server,
+        )
+
+        return await drive_codex_app_server(
+            self,
+            turn,
+            log,
+            emitter,
+            intent,
+            agent,
+            provider,
+            text=text,
+        )
 
     async def _drive_local_partner(
         self,

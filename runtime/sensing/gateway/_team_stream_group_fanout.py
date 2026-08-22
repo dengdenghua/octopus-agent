@@ -94,6 +94,71 @@ def _friendly_member_error(error: Any) -> str:
     return "未知异常(详见审计日志)"
 
 
+def _fanout_member_context(ctx: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    """Clone the parent turn contract for every fan-out member.
+
+    Group fan-out previously forwarded only the generated chat prompt.  That
+    made a member silently fall back to its default mode even when the user had
+    selected research/build/audit for this turn.  Keep the structured context
+    for runtimes that consume it and a compact prompt addendum for lightweight
+    persona/local-partner lanes that only consume text.
+    """
+
+    member_context = dict(ctx)
+    # These are group-driver implementation details, not child work policy.
+    member_context.pop("agent_roster", None)
+    member_context.pop("conversation_messages", None)
+
+    from runtime.core.cerebrum._react_context_code import (
+        _build_code_agent_mode_prompt,
+        _build_personal_agent_mode_prompt,
+        _build_workflow_preset_prompt,
+    )
+    from runtime.execution.misc.skill_policy import is_audit_read_only_context
+
+    sections: list[str] = []
+    workflow_preset = str(member_context.get("workflow_preset") or "").strip()
+    if workflow_preset:
+        rendered = _build_workflow_preset_prompt(workflow_preset)
+        if rendered:
+            sections.append(rendered)
+    agent_mode = str(member_context.get("agent_mode") or "").strip()
+    if agent_mode:
+        sections.append(_build_code_agent_mode_prompt(agent_mode))
+    personal_mode = str(member_context.get("personal_mode") or "").strip().lower()
+    if personal_mode:
+        rendered = _build_personal_agent_mode_prompt(personal_mode)
+        if rendered:
+            sections.append(rendered)
+        elif personal_mode == "research":
+            sections.append(
+                "<personal-mode>当前任务类型: research。先搜索、读取并交叉核对证据;"
+                "优先一手来源,不要把未经验证的印象写成结论。</personal-mode>"
+            )
+    personal_instructions = str(member_context.get("personal_instructions") or "").strip()
+    if personal_instructions:
+        sections.append(
+            "<inherited-personal-instructions>"
+            + personal_instructions[:2000]
+            + "</inherited-personal-instructions>"
+        )
+    mode_contract = str(member_context.get("mode_contract") or "").strip()
+    if mode_contract:
+        sections.append(
+            "<inherited-mode-contract>" + mode_contract[:2000] + "</inherited-mode-contract>"
+        )
+
+    if is_audit_read_only_context(member_context):
+        member_context["tool_allowlist_read_only"] = True
+    policy_prompt = "\n".join(sections)
+    existing_addendum = str(member_context.get("system_addendum") or "").strip()
+    if policy_prompt:
+        member_context["system_addendum"] = "\n\n".join(
+            part for part in (existing_addendum, policy_prompt) if part
+        )
+    return member_context, policy_prompt
+
+
 async def _drive_group_fanout(
     runtime: Any,
     turn: Turn,
@@ -109,6 +174,13 @@ async def _drive_group_fanout(
     room has <2 member agents or nobody answers, so the turn never stalls.
     """
     ctx = getattr(intent, "user_context", None) or {}
+    try:
+        from runtime.platform.process.session import current_session
+
+        parent_session = current_session()
+    except (ImportError, LookupError):
+        parent_session = None
+    member_context, member_policy_prompt = _fanout_member_context(ctx)
     roster = ctx.get("agent_roster") or []
     members = [
         {
@@ -525,11 +597,17 @@ async def _drive_group_fanout(
 
         # Split: local partners @-mentioned WITH a task → real worktree run;
         # everyone else (persona agents + partners just chatting) → group bubble.
-        work_members = [
-            m
-            for m in members
-            if m["name"] in detected and _mentioned(m["display_name"]) and _looks_like_task(text)
-        ]
+        work_members = (
+            []
+            if member_context.get("tool_allowlist_read_only") is True
+            else [
+                m
+                for m in members
+                if m["name"] in detected
+                and _mentioned(m["display_name"])
+                and _looks_like_task(text)
+            ]
+        )
         work_ids = {m["name"] for m in work_members}
         chat_members = [m for m in members if m["name"] not in work_ids]
         # @-mentioned chat members first so a small fan-out cap never drops them.
@@ -538,12 +616,28 @@ async def _drive_group_fanout(
         def _member_caller(agent_id: str, prompt: str, timeout_s: int = 90) -> dict[str, Any]:
             """Persona agents run in-process; local CLI partners bridge to their
             real CLI for a short, conversational group-chat bubble."""
+            effective_prompt = (
+                member_policy_prompt + "\n\n" + prompt if member_policy_prompt else prompt
+            )
             info = detected.get(agent_id)
             if info is not None:
+                if member_context.get("tool_allowlist_read_only") is True:
+                    # The local-partner bridge has no enforceable read-only
+                    # filesystem sandbox. Prompt guidance is not a security
+                    # boundary, so audit fails closed instead of launching an
+                    # external CLI that could mutate the checkout.
+                    return {
+                        "success": False,
+                        "output": "",
+                        "error": (
+                            "audit read-only policy blocked the external local partner; "
+                            "use an in-process read-only member or switch to develop"
+                        ),
+                    }
                 r = run_local_partner(
                     partner_id=info["partner_id"],
                     command=info["command"],
-                    prompt=prompt,
+                    prompt=effective_prompt,
                     timeout=min(int(timeout_s), 60),
                 )
                 return {
@@ -551,7 +645,13 @@ async def _drive_group_fanout(
                     "output": r.output or "",
                     "error": r.error,
                 }
-            return _call_agent(agent_id=agent_id, prompt=prompt, timeout_s=timeout_s)
+            return _call_agent(
+                agent_id=agent_id,
+                prompt=effective_prompt,
+                timeout_s=timeout_s,
+                context=member_context,
+                session=parent_session,
+            )
 
         spoke = 0
         if chat_members:

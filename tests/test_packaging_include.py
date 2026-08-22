@@ -23,29 +23,160 @@ _REPO = Path(__file__).resolve().parent.parent
 # miss lazy router/plugin imports, which previously allowed a developer Docker
 # build to pass while the tag build from a clean checkout was incomplete.
 _REQUIRED_RUNTIME_WHEEL_FILES = {
+    "runtime/core/cerebrum/react_execution_receipts.py",
+    "runtime/execution/codex_backend/__init__.py",
+    "runtime/execution/codex_backend/_security_support.py",
+    "runtime/execution/codex_backend/_transport.py",
+    "runtime/execution/codex_backend/approvals.py",
+    "runtime/execution/codex_backend/backend.py",
+    "runtime/execution/codex_backend/client.py",
+    "runtime/execution/codex_backend/events.py",
+    "runtime/execution/codex_backend/security.py",
+    "runtime/execution/codex_backend/types.py",
+    "runtime/memory/cowork/_team_invitation_support.py",
+    "runtime/memory/cowork/team_invitation_store.py",
+    "runtime/platform/process/thread_turn_claim.py",
     "runtime/platform/models/custom_model_selection.py",
     "runtime/platform/plugins/_secure_fetch.py",
+    "runtime/platform/plugins/bundled/documents/__init__.py",
+    "runtime/platform/plugins/bundled/github/__init__.py",
     "runtime/platform/plugins/bundled/paper_trading/_http_support.py",
     "runtime/platform/plugins/bundled/paper_trading/live_push.py",
     "runtime/platform/plugins/bundled/paper_trading/upstream_url.py",
+    "runtime/projectos/_store_helpers.py",
+    "runtime/projectos/group_service.py",
+    "runtime/projectos/message_actions.py",
+    "runtime/sensing/gateway/_cowork_group_access.py",
+    "runtime/sensing/gateway/_cowork_group_models.py",
+    "runtime/sensing/gateway/_cowork_group_session.py",
     "runtime/sensing/gateway/_evolution_ops_insights.py",
+    "runtime/sensing/gateway/_realtime_gateway_session.py",
     "runtime/sensing/gateway/_realtime_subagent_journal_items.py",
+    "runtime/sensing/gateway/_thread_state_auto_title.py",
+    "runtime/sensing/gateway/_team_rooms_access.py",
+    "runtime/sensing/gateway/_team_rooms_state.py",
+    "runtime/sensing/gateway/_team_tasks_access.py",
+    "runtime/sensing/gateway/realtime_codex_backend.py",
+    "runtime/sensing/gateway/realtime_interrupt_control.py",
+    "runtime/sensing/gateway/team_invitations_router.py",
     "runtime/sensing/gateway/team_rooms_models.py",
+    "runtime/sensing/gateway/thread_access.py",
     "runtime/sensing/gateway/thread_workspace.py",
 }
 
-_REQUIRED_TRACKED_RELEASE_FILES = _REQUIRED_RUNTIME_WHEEL_FILES | {
-    ".github/workflows/behavioral-evidence.yml",
-    "deploy/k8s/networkpolicy.yaml",
-    "deploy/systemd-config.yaml",
-    "deploy/systemd.env.example",
-    "frontend/config/public-asset-dedup.ts",
-    "frontend/electron/desktop-config.cjs",
-    "frontend/electron/desktop-protocol.cjs",
-    "frontend/src/components/workspace/community/community-assets.ts",
-    "frontend/src/components/workspace/workspace-route-outlet.tsx",
-    "tests/test_desktop_config_packaging.py",
+_REQUIRED_BUNDLED_WHEEL_FILES = {
+    "runtime/platform/plugins/bundled/documents/LICENSE.txt",
+    "runtime/platform/plugins/bundled/documents/SKILL.md",
+    "runtime/platform/plugins/bundled/documents/plugin.yaml",
+    "runtime/platform/plugins/bundled/github/LICENSE.txt",
+    "runtime/platform/plugins/bundled/github/SKILL.md",
+    "runtime/platform/plugins/bundled/github/plugin.yaml",
+    "runtime/platform/plugins/bundled/mx2025_viewer/page/index.html",
+    "runtime/platform/plugins/bundled/mx2025_viewer/plugin.yaml",
+    "runtime/platform/plugins/bundled/paper_trading/README.md",
+    "runtime/platform/plugins/bundled/paper_trading/page/index.html",
+    "runtime/platform/plugins/bundled/paper_trading/page/watch.html",
+    "runtime/platform/plugins/bundled/paper_trading/plugin.yaml",
+    "runtime/platform/plugins/bundled/paper_trading_replica/README.md",
+    "runtime/platform/plugins/bundled/paper_trading_replica/page/index.html",
+    "runtime/platform/plugins/bundled/paper_trading_replica/plugin.yaml",
+    "runtime/platform/plugins/bundled/project_wiki/plugin.yaml",
+    "runtime/platform/plugins/bundled/whale_eye/plugin.yaml",
 }
+
+_EXPECTED_BUNDLED_PLUGIN_IDS = {
+    "documents",
+    "github",
+    "mx2025_viewer",
+    "paper_trading",
+    "paper_trading_replica",
+    "project_wiki",
+    "whale_eye",
+}
+
+_REQUIRED_TRACKED_RELEASE_FILES = (
+    _REQUIRED_RUNTIME_WHEEL_FILES
+    | _REQUIRED_BUNDLED_WHEEL_FILES
+    | {
+        ".github/workflows/behavioral-evidence.yml",
+        ".github/workflows/engine-comparison-evidence.yml",
+        "benchmarks/execution_metrics.py",
+        "benchmarks/hardened_verifier_attestation.py",
+        "benchmarks/hardened_verifier_smoke.py",
+        "benchmarks/linux_hardened_verifier.py",
+        "benchmarks/run_engine_comparison.py",
+        "benchmarks/source_provenance.py",
+        "benchmarks/trusted_verifier_contract.py",
+        "benchmarks/trusted_verifier_controller.py",
+        "benchmarks/trusted_verifier_worker.py",
+        "benchmarks/verifier_sandbox.py",
+        "deploy/k8s/networkpolicy.yaml",
+        "deploy/systemd-config.yaml",
+        "deploy/systemd.env.example",
+        "frontend/config/public-asset-dedup.ts",
+        "frontend/electron/desktop-config.cjs",
+        "frontend/electron/desktop-protocol.cjs",
+        "frontend/src/app/workspace/team/join/page.test.tsx",
+        "frontend/src/components/workspace/collab/cowork-room-message-actions.tsx",
+        "frontend/src/components/workspace/collab/cowork-room-system-card.tsx",
+        "frontend/src/components/workspace/collab/cowork-room-timeline.test.tsx",
+        "frontend/src/components/workspace/collab/cowork-room-timeline.tsx",
+        "frontend/src/components/workspace/collab/group-human-invite-button.test.tsx",
+        "frontend/src/components/workspace/collab/group-human-invite-button.tsx",
+        "frontend/src/components/workspace/collab/invite-dialog.test.tsx",
+        "frontend/src/components/workspace/community/community-assets.ts",
+        "frontend/src/components/workspace/group-task-strategy.ts",
+        "frontend/src/components/workspace/messages/message-list-timeline.test.tsx",
+        "frontend/src/components/workspace/realtime/project-group-header-badge.test.tsx",
+        "frontend/src/components/workspace/realtime/project-group-header-badge.tsx",
+        "frontend/src/components/workspace/realtime/promote-group-to-project-dialog.test.tsx",
+        "frontend/src/components/workspace/realtime/promote-group-to-project-dialog.tsx",
+        "frontend/src/components/workspace/team-mode-picker.test.tsx",
+        "frontend/src/components/workspace/workspace-route-outlet.tsx",
+        "frontend/src/core/auth/return-to.test.ts",
+        "frontend/src/core/auth/return-to.ts",
+        "frontend/src/core/collaboration/group-task-strategy-context.test.ts",
+        "frontend/src/core/collaboration/group-task-strategy-context.ts",
+        "frontend/src/core/cowork/hooks.test.ts",
+        "frontend/src/core/cowork/mentions.test.ts",
+        "frontend/src/core/cowork/mentions.ts",
+        "frontend/src/core/projects/hooks.test.ts",
+        "frontend/src/core/teams/api.invites.test.ts",
+        "tests/runtime/execution/codex_backend/test_security.py",
+        "tests/test_audit_workflow_tool_policy.py",
+        "tests/test_codex_appserver_client.py",
+        "tests/test_codex_backend_approvals.py",
+        "tests/test_codex_backend_events.py",
+        "tests/test_codex_execution_backend.py",
+        "tests/test_codex_execution_backend_live.py",
+        "tests/test_desktop_config_packaging.py",
+        "tests/test_documents_plugin.py",
+        "tests/test_drive_codex_app_server.py",
+        "tests/test_engine_comparison_evidence_workflow.py",
+        "tests/test_event_log_durability.py",
+        "tests/test_execution_metrics.py",
+        "tests/test_github_plugin.py",
+        "tests/test_hardened_verifier_smoke.py",
+        "tests/test_linked_team_room_acl.py",
+        "tests/test_linux_hardened_verifier.py",
+        "tests/test_linux_hardened_verifier_attacks.py",
+        "tests/test_project_group_creation.py",
+        "tests/test_project_group_join_approval.py",
+        "tests/test_project_group_message_actions.py",
+        "tests/test_react_parallel_dispatch.py",
+        "tests/test_realtime_cross_worker_interrupt.py",
+        "tests/test_realtime_recovery_subscriptions.py",
+        "tests/test_realtime_send_timeout.py",
+        "tests/test_realtime_tool_audit_barrier.py",
+        "tests/test_run_engine_comparison.py",
+        "tests/test_source_provenance.py",
+        "tests/test_team_invitation_security.py",
+        "tests/test_thread_turn_claim.py",
+        "tests/test_trusted_verifier_controller.py",
+        "tests/test_trusted_verifier_worker.py",
+        "tests/test_verifier_sandbox.py",
+    }
+)
 
 
 def _find_include_patterns() -> list[str]:
@@ -106,7 +237,15 @@ def test_release_critical_new_files_are_tracked() -> None:
 
     tracked = set(
         subprocess.run(
-            ["git", "ls-files", "--", *_REQUIRED_TRACKED_RELEASE_FILES],
+            [
+                "git",
+                "ls-tree",
+                "-r",
+                "--name-only",
+                "HEAD",
+                "--",
+                *_REQUIRED_TRACKED_RELEASE_FILES,
+            ],
             cwd=_REPO,
             check=True,
             capture_output=True,
@@ -196,10 +335,24 @@ def _clean_packaging_source(tmp_path: Path) -> Path:
     return source
 
 
-def test_clean_tracked_source_wheel_contains_bundled_market_skills(tmp_path: Path) -> None:
-    """A clean wheel must retain an offline prompt catalog without skills/public."""
+def _overlay_candidate_release_files(source: Path) -> None:
+    """Overlay declared additions without teaching the clean-source path about them.
 
-    source = _clean_packaging_source(tmp_path)
+    The tracked-source test must continue to fail until new files enter Git.
+    This candidate overlay gives developers a separate way to prove that the
+    exact files proposed for release form a complete wheel before staging.
+    """
+
+    required = _REQUIRED_RUNTIME_WHEEL_FILES | _REQUIRED_BUNDLED_WHEEL_FILES
+    for relative in sorted(required):
+        src = _REPO / relative
+        assert src.is_file(), f"declared release file does not exist: {relative}"
+        dest = source / relative
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+
+
+def _build_wheel(source: Path, tmp_path: Path) -> tuple[set[str], Path]:
     wheel_dir = tmp_path / "wheel"
     wheel_dir.mkdir()
     build = subprocess.run(
@@ -223,12 +376,66 @@ def test_clean_tracked_source_wheel_contains_bundled_market_skills(tmp_path: Pat
     installed = tmp_path / "installed-wheel"
     with zipfile.ZipFile(wheel) as package:
         packaged_names = set(package.namelist())
-        skill_files = {
-            name
-            for name in packaged_names
-            if re.fullmatch(r"runtime/execution/all_skills/[^/]+/SKILL\.md", name)
-        }
         package.extractall(installed)
+    return packaged_names, installed
+
+
+def _assert_bundled_plugins_in_wheel(
+    packaged_names: set[str],
+    installed: Path,
+    tmp_path: Path,
+) -> None:
+    missing = sorted(_REQUIRED_BUNDLED_WHEEL_FILES - packaged_names)
+    assert not missing, "wheel omitted bundled plugin resources: " + ", ".join(missing)
+
+    bundled_names = {
+        name for name in packaged_names if name.startswith("runtime/platform/plugins/bundled/")
+    }
+    generated = sorted(
+        name for name in bundled_names if "__pycache__" in name or name.endswith((".pyc", ".pyo"))
+    )
+    assert not generated, "wheel contains generated Python cache files: " + ", ".join(generated)
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(installed)
+    expected = repr(sorted(_EXPECTED_BUNDLED_PLUGIN_IDS))
+    plugin_smoke = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from runtime.platform.plugins.plugin_hub import PluginHub; "
+                "items = {item['id']: item for item in PluginHub().discover()}; "
+                f"expected = set({expected}); "
+                "assert expected <= set(items), (expected, set(items)); "
+                "assert all(items[name]['bundled'] is True for name in expected); "
+                "assert 'documents' in items['documents']['tags']; "
+                "assert items['documents']['version'] == '0.1.0'; "
+                "assert items['documents']['author'] == 'Octopus'; "
+                "assert 'github' in items['github']['tags']; "
+                "assert items['github']['version'] == '0.1.0'; "
+                "assert items['github']['author'].startswith('Octopus')"
+            ),
+        ],
+        cwd=tmp_path,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert plugin_smoke.returncode == 0, f"{plugin_smoke.stdout}\n{plugin_smoke.stderr}"
+
+
+def test_clean_tracked_source_wheel_contains_bundled_market_skills(tmp_path: Path) -> None:
+    """A clean wheel must retain an offline prompt catalog without skills/public."""
+
+    source = _clean_packaging_source(tmp_path)
+    packaged_names, installed = _build_wheel(source, tmp_path)
+    skill_files = {
+        name
+        for name in packaged_names
+        if re.fullmatch(r"runtime/execution/all_skills/[^/]+/SKILL\.md", name)
+    }
 
     missing_runtime_files = sorted(_REQUIRED_RUNTIME_WHEEL_FILES - packaged_names)
     assert not missing_runtime_files, (
@@ -237,6 +444,7 @@ def test_clean_tracked_source_wheel_contains_bundled_market_skills(tmp_path: Pat
     assert len(skill_files) >= 3
     assert "runtime/execution/all_skills/database-inspector/SKILL.md" in skill_files
     assert "runtime/execution/all_skills/repo-audit/SKILL.md" in skill_files
+    _assert_bundled_plugins_in_wheel(packaged_names, installed, tmp_path)
 
     empty_resources = tmp_path / "empty-resources"
     empty_resources.mkdir()
@@ -263,6 +471,20 @@ def test_clean_tracked_source_wheel_contains_bundled_market_skills(tmp_path: Pat
         text=True,
     )
     assert installed_smoke.returncode == 0, f"{installed_smoke.stdout}\n{installed_smoke.stderr}"
+
+
+def test_candidate_wheel_contains_declared_runtime_and_bundled_plugins(tmp_path: Path) -> None:
+    """A not-yet-staged candidate can be complete without weakening the Git gate."""
+
+    source = _clean_packaging_source(tmp_path)
+    _overlay_candidate_release_files(source)
+    packaged_names, installed = _build_wheel(source, tmp_path)
+
+    missing_runtime_files = sorted(_REQUIRED_RUNTIME_WHEEL_FILES - packaged_names)
+    assert not missing_runtime_files, "candidate wheel omitted production modules: " + ", ".join(
+        missing_runtime_files
+    )
+    _assert_bundled_plugins_in_wheel(packaged_names, installed, tmp_path)
 
 
 def test_docker_distribution_copies_bootstrap_code_and_lockfile() -> None:

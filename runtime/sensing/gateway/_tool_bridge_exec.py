@@ -71,6 +71,21 @@ def _execute_tool_call(
     except (AttributeError, TypeError, KeyError) as exc:
         return (f"(registry error: {exc})", True)
 
+    # Defence in depth for lightweight embedders whose executor does not
+    # implement ``execute_step``. Production reaches the same policy again at
+    # the ToolExecutor chokepoint.
+    from runtime.execution.misc.skill_policy import audit_read_only_tool_denial
+    from runtime.platform.process.session import current_session
+
+    _policy_session = current_session()
+    _audit_denial = audit_read_only_tool_denial(
+        normalized.name,
+        normalized.arguments,
+        context=getattr(_policy_session, "metadata", None) or {},
+    )
+    if _audit_denial is not None:
+        return (_audit_denial, True)
+
     if hasattr(executor, "execute_step"):
         try:
             from runtime.platform.models import (

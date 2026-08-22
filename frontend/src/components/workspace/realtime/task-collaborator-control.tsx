@@ -5,13 +5,11 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   CheckIcon,
-  CopyIcon,
   SearchIcon,
   UserIcon,
   UsersRoundIcon,
   XIcon,
 } from "lucide-react";
-import { toast } from "sonner";
 
 import {
   DropdownMenu,
@@ -20,14 +18,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { AgentAvatar } from "@/components/workspace/sidebar-footer";
-import {
-  TEAM_MODES,
-  useTeamModeMeta,
-  type TeamMode,
-} from "@/components/workspace/team-mode-picker";
+import { type TeamMode } from "@/components/workspace/team-mode-picker";
 import { type Agent } from "@/core/agents";
-import { copyTextToClipboard } from "@/core/clipboard";
-import { threadCollaborationLink } from "@/core/collaboration/thread-collaboration-link";
 import { useCollabSession } from "@/core/cowork";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -57,7 +49,8 @@ export function TaskCollaboratorControl({
   onTeamModeChange,
   roster,
   threadId,
-  isNewThread,
+  labelPrefix,
+  disabled = false,
 }: {
   agents: Agent[];
   selectedAgents: Agent[];
@@ -70,7 +63,10 @@ export function TaskCollaboratorControl({
   onTeamModeChange: (mode: TeamMode) => void;
   roster: ChatCollaborationRosterEntry[];
   threadId: string;
-  isNewThread: boolean;
+  /** Distinguish the AI execution roster from the people in a project group. */
+  labelPrefix?: string;
+  /** The canonical roster is being persisted; prevent overlapping drafts. */
+  disabled?: boolean;
 }) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
@@ -89,8 +85,6 @@ export function TaskCollaboratorControl({
   const teamSize = isTeamDraft
     ? selectedAgents.length + (currentAgentName ? 1 : 0)
     : 1;
-  const teamModeMeta = useTeamModeMeta();
-  const activeMeta = isTeamDraft ? teamModeMeta[teamMode] : null;
   const totalCount = Math.max(teamSize, roster.length || 1);
   const countLabel = formatCollaboratorCount(
     totalCount,
@@ -102,6 +96,12 @@ export function TaskCollaboratorControl({
     return presence.filter((m) => m.online).length;
   }, [collabSession.data]);
   const hasOnlineMembers = onlineCount > 0;
+  const controlLabel = labelPrefix
+    ? `${labelPrefix} 成员`
+    : t.chatInputBox.collaborators;
+  const controlTitle = labelPrefix
+    ? `${labelPrefix} 成员`
+    : t.chatInputBox.collaborators;
   const q = query.trim().toLowerCase();
   const availableAgents = useMemo(
     () =>
@@ -120,6 +120,7 @@ export function TaskCollaboratorControl({
 
   const toggleAgent = useCallback(
     (agent: Agent) => {
+      if (disabled) return;
       if (selectedSet.has(agent.name)) {
         onSelectedAgentIdsChange(
           selectedAgentIds.filter((id) => id !== agent.name),
@@ -134,31 +135,12 @@ export function TaskCollaboratorControl({
     [
       onSelectedAgentIdsChange,
       onTeamModeChange,
+      disabled,
       selectedAgentIds,
       selectedSet,
       teamMode,
     ],
   );
-  const handleCopyLink = async () => {
-    try {
-      await copyTextToClipboard(
-        threadCollaborationLink({
-          threadId,
-          isNewThread,
-          origin:
-            typeof window === "undefined" ? undefined : window.location.origin,
-          pathname:
-            typeof window === "undefined"
-              ? undefined
-              : window.location.pathname,
-        }),
-      );
-      toast.success(t.collab.linkCopied);
-    } catch {
-      toast.error(t.collab.copyFailed);
-    }
-  };
-
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
@@ -171,7 +153,10 @@ export function TaskCollaboratorControl({
               ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
               : "border-transparent bg-transparent text-muted-foreground hover:border-border-default hover:bg-muted/50 hover:text-foreground",
           )}
-          title={t.chatInputBox.collaborators}
+          title={controlTitle}
+          aria-label={controlTitle}
+          aria-busy={disabled}
+          disabled={disabled}
         >
           {totalCount > 1 ? (
             <UsersRoundIcon className="size-4 shrink-0" />
@@ -179,7 +164,7 @@ export function TaskCollaboratorControl({
             <UserIcon className="size-4 shrink-0" />
           )}
           <span className="hidden min-w-0 truncate sm:inline">
-            {activeMeta?.label ?? t.chatInputBox.collaboratorsSingle}
+            {controlLabel}
           </span>
           <span
             className={cn(
@@ -208,42 +193,16 @@ export function TaskCollaboratorControl({
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2 text-xs font-medium">
               <UsersRoundIcon className="size-4 text-primary" />
-              <span className="truncate">{t.chatInputBox.collaborators}</span>
+              <span className="truncate">{controlTitle}</span>
             </div>
             <button
               type="button"
               onClick={() => onSelectedAgentIdsChange([])}
+              disabled={disabled}
               className="rounded-lg px-2 py-1 text-xs text-muted-foreground transition-all duration-base hover:bg-muted/70 hover:text-foreground"
             >
               {t.chatInputBox.collaboratorsSingle}
             </button>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            {TEAM_MODES.map((mode) => {
-              const meta = teamModeMeta[mode];
-              const Icon = meta.icon;
-              const active = isTeamDraft && teamMode === mode;
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  disabled={!isTeamDraft}
-                  onClick={() => onTeamModeChange(mode)}
-                  title={meta.description}
-                  className={cn(
-                    "inline-flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-all duration-base",
-                    active
-                      ? "border-primary/30 bg-primary/10 text-primary"
-                      : "border-border-default text-muted-foreground hover:bg-muted/55 hover:text-foreground",
-                    !isTeamDraft &&
-                      "cursor-not-allowed opacity-45 hover:bg-transparent",
-                  )}
-                >
-                  <Icon className="size-3.5" />
-                  {meta.label}
-                </button>
-              );
-            })}
           </div>
           {roster.length > 0 && (
             <div className="mt-2 grid grid-cols-1 gap-1">
@@ -305,6 +264,7 @@ export function TaskCollaboratorControl({
                     key={entry.agent_id}
                     type="button"
                     onClick={handleRemove}
+                    disabled={disabled}
                     className="group flex min-w-0 w-full items-center gap-2 rounded-lg bg-muted/35 px-2 py-1.5 text-left transition-all duration-base hover:bg-destructive/10 hover:text-destructive"
                     title="点击移除"
                   >
@@ -334,6 +294,7 @@ export function TaskCollaboratorControl({
                   key={agent.name}
                   type="button"
                   onClick={() => toggleAgent(agent)}
+                  disabled={disabled}
                   className="group inline-flex max-w-full items-center gap-1 rounded-lg border border-primary/20 bg-primary/8 px-1.5 py-0.5 text-xs text-primary transition-all duration-base hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive"
                 >
                   <AgentAvatar
@@ -358,6 +319,7 @@ export function TaskCollaboratorControl({
                     key={agent.name}
                     type="button"
                     onClick={() => toggleAgent(agent)}
+                    disabled={disabled}
                     className={cn(
                       "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-all duration-base",
                       selected ? "bg-primary/8" : "hover:bg-muted/55",
@@ -390,16 +352,6 @@ export function TaskCollaboratorControl({
               })}
             </div>
           </div>
-        </div>
-        <div className="flex items-center justify-end border-t border-border-subtle p-2">
-          <button
-            type="button"
-            onClick={() => void handleCopyLink()}
-            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-muted-foreground transition-all duration-base hover:bg-muted/60 hover:text-foreground"
-          >
-            <CopyIcon className="size-3.5" />
-            {t.collab.copyLink}
-          </button>
         </div>
       </DropdownMenuContent>
     </DropdownMenu>

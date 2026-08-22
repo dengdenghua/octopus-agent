@@ -3,9 +3,15 @@ members become the team and tasks route to them by capability."""
 
 from __future__ import annotations
 
+import sqlite3
+
+import pytest
+
 from runtime.memory.cowork import service
 from runtime.memory.cowork.group import MemberEvent
 from runtime.memory.cowork.group_store import GroupStore
+from runtime.memory.cowork.session import link_room
+from runtime.projectos import cowork_bridge
 from runtime.projectos.cowork_bridge import (
     engine_for_group,
     nominate_assigner,
@@ -17,6 +23,44 @@ from runtime.projectos.engine import stub_decompose_tasks, stub_generate_milesto
 from runtime.projectos.model import Milestone, Task
 from runtime.projectos.store import ProjectStore
 from runtime.projectos.timeline import project_process_timeline
+
+
+def _attached_group(tmp_path):
+    group_store = GroupStore(base_dir=tmp_path / "cowork")
+    service.invite_member(
+        group_store,
+        "thread-attach-failure",
+        actor="owner",
+        target_id="planner",
+        kind="agent",
+    )
+    service.set_mode(
+        group_store,
+        "thread-attach-failure",
+        actor="owner",
+        mode="swarm",
+    )
+    link_room(
+        group_store,
+        "thread-attach-failure",
+        "room-existing",
+        actor="owner",
+    )
+    return group_store
+
+
+def _project_table_counts(store: ProjectStore) -> dict[str, int]:
+    with sqlite3.connect(str(store._db)) as conn:
+        return {
+            table: int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+            for table in (
+                "projects",
+                "milestones",
+                "tasks",
+                "thread_projects",
+                "project_events",
+            )
+        }
 
 
 def test_roster_excludes_humans_observers_muted(tmp_path) -> None:
@@ -172,7 +216,10 @@ def test_from_group_endpoint_turns_a_group_into_a_project_team(tmp_path) -> None
     )
     client = TestClient(app)
 
-    resp = client.post("/api/projects/from-group/team-1", json={"name": "x", "goal": "ship it"})
+    resp = client.post(
+        "/api/projects/from-group/team-1",
+        json={"name": "x", "goal": "ship it", "run": True},
+    )
     assert resp.status_code == 200
     body = resp.json()
     assert set(body["roster"]) == {"research-agent", "build-agent"}
@@ -191,6 +238,147 @@ def test_from_group_endpoint_turns_a_group_into_a_project_team(tmp_path) -> None
         ).status_code
         == 400
     )
+
+
+def test_from_group_default_attaches_without_execution_or_changing_response_mode(
+    tmp_path,
+) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from runtime.sensing.gateway.projects_router import create_projects_router
+
+    gs = GroupStore(base_dir=tmp_path / "cowork")
+    for agent_id in ("research-agent", "build-agent"):
+        service.invite_member(
+            gs,
+            "team-attach",
+            actor="u",
+            target_id=agent_id,
+            kind="agent",
+        )
+    service.set_mode(gs, "team-attach", actor="u", mode="swarm")
+    store = ProjectStore(base_dir=tmp_path / "projectos")
+    app = FastAPI()
+    app.include_router(create_projects_router(store=store, group_store=gs))
+
+    response = TestClient(app).post(
+        "/api/projects/from-group/team-attach",
+        json={"name": "Attached", "goal": "Plan without starting"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"]["final_status"] == body["project"]["status"]
+    assert all(
+        task["status"] == "pending" and task["attempts"] == 0
+        for tasks in body["tasks"].values()
+        for task in tasks
+    )
+    assert gs.state("team-attach").mode == "swarm"
+    events = store.events_for_project(body["project"]["id"])
+    attached = [event for event in events if event["kind"] == "project.attached_from_group"]
+    assert len(attached) == 1
+    assert attached[0]["payload"]["response_mode"] == "swarm"
+    assert attached[0]["payload"]["run"] is False
+
+
+@pytest.mark.parametrize("failure_stage", ["bind", "state", "event"])
+def test_new_project_attach_failure_removes_shell_and_preserves_group(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_stage: str,
+) -> None:
+    group_store = _attached_group(tmp_path)
+    project_store = ProjectStore(base_dir=tmp_path / "projectos")
+    thread_id = "thread-attach-failure"
+    before_state = group_store.state(thread_id).to_dict()
+    before_events = [event.to_dict() for event in group_store.events(thread_id)]
+    planned_ids: list[str] = []
+    real_bind = project_store.bind_thread
+
+    def capture_bind(inner_thread_id: str, project_id: str, **kwargs) -> None:
+        planned_ids.append(project_id)
+        real_bind(inner_thread_id, project_id, **kwargs)
+        if failure_stage == "bind":
+            raise RuntimeError("injected bind failure after commit")
+
+    monkeypatch.setattr(project_store, "bind_thread", capture_bind)
+    if failure_stage == "state":
+        monkeypatch.setattr(
+            cowork_bridge,
+            "full_project_state",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                RuntimeError("injected attach state failure")
+            ),
+        )
+    elif failure_stage == "event":
+        monkeypatch.setattr(
+            project_store,
+            "append_event",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                RuntimeError("injected attach event failure")
+            ),
+        )
+
+    with pytest.raises(RuntimeError, match="injected"):
+        run_project_from_group(
+            project_store,
+            group_store,
+            thread_id,
+            name="Attach failure",
+            goal="Leave no project shell",
+            run=False,
+        )
+
+    assert len(planned_ids) == 1
+    project_id = planned_ids[0]
+    assert project_store.get_project(project_id) is None
+    assert project_store.milestones_for(project_id) == []
+    assert project_store.events_for_project(project_id) == []
+    assert project_store.project_for_thread(thread_id) is None
+    assert _project_table_counts(project_store) == {
+        "projects": 0,
+        "milestones": 0,
+        "tasks": 0,
+        "thread_projects": 0,
+        "project_events": 0,
+    }
+    assert group_store.state(thread_id).to_dict() == before_state
+    assert [event.to_dict() for event in group_store.events(thread_id)] == before_events
+
+
+def test_run_failure_after_attach_keeps_recoverable_project(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    group_store = _attached_group(tmp_path)
+    project_store = ProjectStore(base_dir=tmp_path / "projectos")
+    thread_id = "thread-attach-failure"
+    before_state = group_store.state(thread_id).to_dict()
+
+    def fail_run(*_args, **_kwargs):
+        raise RuntimeError("injected execution failure")
+
+    monkeypatch.setattr("runtime.projectos.engine.ProjectEngine.run", fail_run)
+
+    with pytest.raises(RuntimeError, match="injected execution failure"):
+        run_project_from_group(
+            project_store,
+            group_store,
+            thread_id,
+            name="Recoverable run",
+            goal="Keep state after execution starts",
+            run=True,
+        )
+
+    projects = project_store.list_projects()
+    assert len(projects) == 1
+    project = projects[0]
+    assert project_store.project_for_thread(thread_id).id == project.id
+    assert project_store.milestones_for(project.id)
+    assert project_store.events_for_project(project.id)
+    assert group_store.state(thread_id).to_dict() == before_state
 
 
 # ── 项目模式 × 蜂群/集群（任务级 team_mode）──────────────────────

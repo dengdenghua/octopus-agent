@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import concurrent.futures.thread as _cf_thread
 import logging
 import threading
 import time
+from typing import Any
 
-from runtime.adapters.scheduler.runner import BackgroundRunner
+from runtime.adapters.scheduler.runner import BackgroundRunner, _DaemonThreadPoolExecutor
 
 
 def test_stop_returns_while_callback_stuck(caplog) -> None:
@@ -68,3 +70,55 @@ def test_daemon_pool_does_not_block_interpreter() -> None:
     assert workers, "pool should have spawned at least one worker thread"
     assert all(t.daemon for t in workers)
     runner.stop(timeout=2.0)
+
+
+def test_daemon_pool_runs_without_legacy_initializer_attributes() -> None:
+    """Python 3.14 no longer creates ``_initializer`` or ``_initargs``."""
+    pool = _DaemonThreadPoolExecutor(max_workers=1)
+    try:
+        # Exercise the exact failure mode on Python <= 3.13; on 3.14 these
+        # attributes are already absent and the deletion is a no-op.
+        for attribute in ("_initializer", "_initargs"):
+            if hasattr(pool, attribute):
+                delattr(pool, attribute)
+
+        future = pool.submit(lambda: "scheduler-ok")
+        assert future.result(timeout=2.0) == "scheduler-ok"
+        assert pool._threads
+        assert all(worker.daemon for worker in pool._threads)
+    finally:
+        pool.shutdown(wait=True, cancel_futures=True)
+
+
+def test_daemon_pool_uses_worker_context_protocol_when_available(monkeypatch) -> None:
+    """The 3.14 worker receives ``(executor_ref, context, queue)``."""
+    pool = _DaemonThreadPoolExecutor(max_workers=1)
+    expected_context = object()
+    received: list[tuple[Any, object, object]] = []
+    worker_ran = threading.Event()
+
+    def create_worker_context() -> object:
+        return expected_context
+
+    def context_worker(executor_reference, context, work_queue) -> None:
+        received.append((executor_reference, context, work_queue))
+        worker_ran.set()
+
+    monkeypatch.setattr(pool, "_create_worker_context", create_worker_context, raising=False)
+    monkeypatch.setattr(_cf_thread, "_worker", context_worker)
+
+    try:
+        pool._adjust_thread_count()
+        assert worker_ran.wait(timeout=2.0)
+        assert len(received) == 1
+        executor_reference, context, work_queue = received[0]
+        assert executor_reference() is pool
+        assert context is expected_context
+        assert work_queue is pool._work_queue
+
+        workers = list(pool._threads)
+        assert len(workers) == 1
+        assert workers[0].daemon
+        assert _cf_thread._threads_queues[workers[0]] is pool._work_queue
+    finally:
+        pool.shutdown(wait=True, cancel_futures=True)

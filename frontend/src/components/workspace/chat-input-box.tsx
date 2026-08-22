@@ -1,5 +1,5 @@
 import type { ChatStatus } from "ai";
-import { memo, useMemo } from "react";
+import { memo, useMemo, type ReactNode } from "react";
 
 import { getBackendBaseURL } from "@/core/config";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
@@ -33,6 +33,8 @@ import { WorkDirSelector } from "./workdir-selector";
 
 import { ChatComposer } from "./chat-input-box/ChatComposer";
 import { ModeIntentSuggestion } from "./chat-input-box/mode-intent-suggestion";
+import type { GroupTaskStrategy } from "./group-task-strategy";
+import type { MentionMemberInput } from "./mention-autocomplete";
 
 /**
  * Simplified chat composer for the /workspace/realtime route. Same visual
@@ -47,6 +49,15 @@ export interface ChatInputBoxProps {
   modelName?: string;
   mode?: ReasoningMode;
   threadId?: string;
+  /** Members shown first in the @ picker for a project/group conversation. */
+  mentionMembers?: MentionMemberInput[];
+  /** Optional per-turn response strategy rendered inside the composer footer. */
+  responseModeControl?: ReactNode;
+  /** Group conversations keep task execution strategy in the + menu instead
+   * of exposing personal/project work modes as persistent footer state. */
+  isGroupConversation?: boolean;
+  groupTaskStrategy?: GroupTaskStrategy;
+  onGroupTaskStrategyChange?: (strategy: GroupTaskStrategy) => void;
   workDir?: string;
   displayAgent?: Pick<
     Agent,
@@ -157,6 +168,7 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
     modeIntentSuggestion,
     onAcceptModeIntent,
     onDismissModeIntent,
+    isGroupConversation = false,
   } = props;
 
   const { t } = useI18n();
@@ -218,8 +230,11 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
         />
       ) : null}
       <ChatComposer {...props} />
-      {showWorkDirSelector && showStatusStrip && (
-        <div className="flex min-h-7 flex-wrap items-center gap-2 border-t border-border-subtle/60 px-2 pt-1.5 text-xs text-muted-foreground">
+      {!isGroupConversation && showWorkDirSelector && showStatusStrip && (
+        <div
+          data-testid="chat-status-strip"
+          className="flex min-h-7 flex-wrap items-center gap-2 border-t border-border-subtle/60 px-2 pt-1.5 text-xs text-muted-foreground"
+        >
           <div
             className={cn(
               "inline-flex max-w-full items-center gap-1.5",

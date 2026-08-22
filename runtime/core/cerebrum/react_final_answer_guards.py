@@ -32,7 +32,10 @@ from runtime.core.cerebrum.react_parsing import (
     _detect_secrets_in_payload,
     _detect_shell_injection_in_payload,
     _detect_unsafe_deser_in_payload,
+    _final_answer_claims_verification,
+    _has_code_verification,
     _looks_like_unfinished_work,
+    _parse_action,
     _strip_react_protocol_blocks,
 )
 
@@ -189,6 +192,11 @@ def _final_answer_needs_pre_emit_guard(
     # the same response contains a concrete conclusion this predicate clears
     # and normal token streaming resumes.
     if _incomplete_final_answer_guard(body) is not None:
+        return True
+    # Verification-success prose is evidence-sensitive even in a tools=[]
+    # terminal synthesis round. Buffer it until the hard false-verification
+    # guard sees the complete candidate and trusted trajectory receipts.
+    if is_code_mode and _final_answer_claims_verification(body):
         return True
     lower = body.lower()
     # In code mode the answer *is* the deliverable: the model is presenting
@@ -439,17 +447,73 @@ _ENVIRONMENTAL_FAILURE_MARKERS: tuple[str, ...] = (
 )
 
 
+def _trusted_execution_failure(
+    action: str,
+    observation: str,
+    *,
+    trusted_execution: bool,
+) -> bool:
+    """Classify only trusted execution receipts, never arbitrary tool text."""
+
+    if trusted_execution is not True:
+        return False
+    parsed = _parse_action(action or "")
+    if parsed is None:
+        return False
+    lowered = (observation or "").lower()
+    if any(marker in lowered for marker in _ENVIRONMENTAL_FAILURE_MARKERS):
+        return True
+
+    # Missing modules/binaries only imply an environment gap when the
+    # trusted action is itself a verifier. A file, webpage, or MCP result may
+    # quote the same words but cannot flip runtime state through this path.
+    verifier_step = ReActStep(iteration=0, action=action, actions=[action])
+    if not _has_code_verification([verifier_step]):
+        return False
+    from runtime.execution.suckers.verify_skills import classify_environment_gap
+
+    if classify_environment_gap(observation):
+        return True
+    return bool(
+        ("error_type=file_not_found" in lowered or '"error_type": "file_not_found"' in lowered)
+        and ("no such file or directory" in lowered or "[errno 2]" in lowered)
+    )
+
+
+def _step_environmental_failure_count(step) -> int:
+    """Count failed actions without letting a successful sibling erase one."""
+
+    actions = list(getattr(step, "actions", None) or [])
+    if not actions:
+        action = str(getattr(step, "action", "") or "")
+        actions = [action] if action else []
+    results = list(getattr(step, "action_results", None) or [])
+    if results:
+        count = 0
+        for index, result in enumerate(results):
+            if result.get("ok") is not False or index >= len(actions):
+                continue
+            if _trusted_execution_failure(
+                actions[index],
+                str(result.get("observation") or ""),
+                trusted_execution=result.get("trusted_execution") is True,
+            ):
+                count += 1
+        return count
+    # Legacy/replayed steps without server-owned receipt provenance cannot
+    # establish execution trust. Fail closed instead of inferring it from a
+    # model-controlled tool name or arbitrary observation text.
+    return 0
+
+
 def _step_is_environmental_failure(step) -> bool:
     """Whether a failed step's cause is environmental rather than a logic
     error the model could fix by retrying. Successful receipts win."""
-    if step.action_results:
-        if any(result.get("ok") is True for result in step.action_results):
-            return False
-        text = " ".join(str(result.get("observation") or "") for result in step.action_results)
-    else:
-        text = str(getattr(step, "observation", "") or "")
-    lowered = (text or "").lower()
-    return any(marker in lowered for marker in _ENVIRONMENTAL_FAILURE_MARKERS)
+    return _step_environmental_failure_count(step) > 0
+
+
+def _environmental_failure_count(steps: list) -> int:
+    return sum(_step_environmental_failure_count(step) for step in steps or [])
 
 
 # How many environmental failures mark the environment itself as degraded.
@@ -477,7 +541,7 @@ def _trajectory_execution_degraded(steps: list) -> bool:
 
     if execution_canary_degraded():
         return True
-    count = sum(1 for s in steps or [] if _step_is_environmental_failure(s))
+    count = _environmental_failure_count(steps)
     return count >= _EXECUTION_DEGRADED_THRESHOLD
 
 

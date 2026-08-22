@@ -139,8 +139,11 @@ class ReActStep:
     actions: list[str] = field(default_factory=list)
     # Per-action execution receipts captured by the dispatcher: each
     # entry is ``{"tool_name": str, "ok": bool, "observation": str,
-    # "duration_ms": int, "call_id": str}``. Empty when no tools ran
-    # this step (e.g. ``Action: none``).
+    # "duration_ms": int, "call_id": str, "trusted_execution": bool,
+    # "execution_source": str}``. The final two fields are computed by the
+    # server from canonical handler identity; model text, tool output, names,
+    # affinity, and ``trusted_source`` strings cannot set them. Empty when no
+    # tools ran this step (e.g. ``Action: none``).
     action_results: list[dict[str, object]] = field(default_factory=list)
 
 

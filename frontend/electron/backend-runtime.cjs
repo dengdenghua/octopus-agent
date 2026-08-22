@@ -105,7 +105,7 @@ const OPTIONAL_GROUPS = {
   ],
   extract: ["trafilatura>=2.0", "pypdf>=6.15.0"],
   mcp: [
-    "mcp>=1.28.1,<2.0",
+    "mcp>=2.0.0,<3.0",
     "pydantic-settings>=2.14.2",
     "pyjwt[crypto]>=2.13.0",
   ],

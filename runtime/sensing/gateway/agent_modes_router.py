@@ -83,6 +83,20 @@ ARCHITECTURE_DIR_HINTS = {
     "rfcs",
 }
 
+# Detection keeps the original project-kind vocabulary; the interactive
+# selector uses task strategies.  The current-mode endpoint accepts both so a
+# frontend choice never fails merely because it came from the newer UX.
+CURRENT_AGENT_MODES = frozenset(
+    {
+        "builder",
+        "coder",
+        "architect",
+        "develop",
+        "audit",
+        "uxui",
+    }
+)
+
 
 if FASTAPI_AVAILABLE:
 
@@ -255,8 +269,13 @@ def create_agent_modes_router(
     @router.put("/api/agent-modes/current", response_model=CurrentModeResponse)
     def set_current_mode(body: CurrentModeBody) -> CurrentModeResponse:
         mode = body.mode.strip().lower()
-        if mode not in {"builder", "coder", "architect"}:
-            raise HTTPException(status_code=400, detail="unknown agent mode")
+        if mode not in CURRENT_AGENT_MODES:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "unknown agent mode; expected develop/audit/uxui or builder/coder/architect"
+                ),
+            )
         return CurrentModeResponse(ok=True, mode=mode, session_id=body.session_id)
 
     return router

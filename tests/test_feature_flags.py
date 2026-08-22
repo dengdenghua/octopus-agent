@@ -211,6 +211,29 @@ def test_describe_source_reflects_winner(
     assert entry["source"] == "env"
 
 
+def test_resolution_keeps_value_and_source_on_one_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    replacement = ff._Snapshot(
+        values={"test.atomic": False},
+        sources={"test.atomic": "default"},
+    )
+
+    class _ReloadingValues(dict[str, object]):
+        def get(self, key: str, default: object = None) -> object:
+            ff._SNAPSHOT = replacement
+            return super().get(key, default)
+
+    original = ff._Snapshot(
+        values=_ReloadingValues({"test.atomic": True}),
+        sources={"test.atomic": "file"},
+    )
+    monkeypatch.setattr(ff, "_SNAPSHOT", original)
+
+    assert ff.resolution("test.atomic") == (True, "file")
+    assert ff.resolution("test.atomic") == (False, "default")
+
+
 # ─── unknown names ─────────────────────────────────────────
 
 

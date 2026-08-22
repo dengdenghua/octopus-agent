@@ -52,8 +52,8 @@ if TYPE_CHECKING:
     from .team_rooms_router import TeamParticipantWire, TeamRoomWire
 
 # How many recent spoken lines a room keeps so a twin responder has
-# conversational context. The room is otherwise a pure relay (it doesn't
-# persist messages), so this is a small in-memory transcript window.
+# conversational context. Durable history is projected to CollaborationStore
+# (with RoomMessageStore retained as the legacy fallback).
 _RING_SIZE = 20
 
 # Anti-flood ceilings on the inbound WS. cursor/ping/message frames are
@@ -204,6 +204,7 @@ async def _twin_speak(
     text = (str(line).strip() if line else "")[:4000]
     if not text:
         return False
+    _remember_line(ctx, team_id, participant.id, participant.display_name, text)
     await ctx.broadcast(
         team_id,
         {
@@ -219,7 +220,6 @@ async def _twin_speak(
             "created_at": _now(),
         },
     )
-    _remember_line(ctx, team_id, participant.id, participant.display_name, text)
     return True
 
 
@@ -519,12 +519,11 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                     "text": text[:4000],
                     "created_at": _now(),
                 }
+                # Persist every accepted line before fan-out. The transcript is
+                # canonical room state even when no twin responder is wired;
+                # the in-memory ring is merely the responder's bounded view.
+                _remember_line(ctx, team_id, speaker.id, speaker.display_name, text[:4000])
                 await _emit_to_peers_or_self(payload)
-                # Keep the spoken line in the room's transcript window so a
-                # twin asked to speak next has context. Only when twins are
-                # wired — otherwise the message path is unchanged (no buffer).
-                if ctx.twin_responder is not None:
-                    _remember_line(ctx, team_id, speaker.id, speaker.display_name, text[:4000])
                 # round_robin hands the floor to the next eligible speaker
                 # once a message lands. The other turn modes hold the floor
                 # until the speaker yields or the moderator moves it.

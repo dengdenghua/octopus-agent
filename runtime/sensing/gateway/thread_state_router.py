@@ -22,6 +22,7 @@ except ImportError:  # pragma: no cover
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
+from ._thread_state_auto_title import build_auto_title_service
 from .thread_workspace import (
     MANAGED_WORKSPACE_DELETION_KEY,
     MANAGED_WORKSPACE_DELETION_MARKER,
@@ -119,10 +120,23 @@ def create_thread_state_router(
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
     workspace_root: Path | str | None = None,
+    group_store: Any = None,
+    collaboration_store: Any = None,
+    team_rooms_router: Any = None,
 ) -> Any:
     require_fastapi(__name__)
 
     router = APIRouter(tags=["threads"])
+
+    from .thread_access import ThreadAccessResolver
+
+    access_resolver = ThreadAccessResolver(
+        thread_store=store,
+        group_store=group_store,
+        collaboration_store=collaboration_store,
+        team_rooms_router=team_rooms_router,
+        identity_store=identity_store,
+    )
 
     def _auth(request: Any) -> str | None:
         from runtime.safety.auth.principal import resolve_principal
@@ -275,7 +289,7 @@ def create_thread_state_router(
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
 
-    def _can_access(
+    def _can_manage(
         thread: dict[str, Any] | None,
         actor_id: str | None,
         tenant_id: str | None = None,
@@ -292,13 +306,37 @@ def create_thread_state_router(
         owner = metadata.get("owner_actor_id") or metadata.get("actor_id")
         return not isinstance(owner, str) or not owner.strip() or owner.strip() == actor_id
 
+    def _can_read(
+        thread: dict[str, Any] | None,
+        actor_id: str | None,
+        tenant_id: str | None = None,
+    ) -> bool:
+        if _can_manage(thread, actor_id, tenant_id):
+            return True
+        if not require_auth or not isinstance(thread, dict):
+            return False
+        thread_id = thread.get("thread_id")
+        if not isinstance(thread_id, str) or not thread_id:
+            return False
+        return access_resolver.resolve(thread_id, actor_id, tenant_id).can_read
+
     def _get_owned_thread(
         thread_id: str,
         actor_id: str | None,
         tenant_id: str | None = None,
     ) -> dict[str, Any] | None:
         thread = store.get(thread_id)
-        if not _can_access(thread, actor_id, tenant_id):
+        if not _can_manage(thread, actor_id, tenant_id):
+            return None
+        return thread
+
+    def _get_accessible_thread(
+        thread_id: str,
+        actor_id: str | None,
+        tenant_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        thread = store.get(thread_id)
+        if not _can_read(thread, actor_id, tenant_id):
             return None
         return thread
 
@@ -356,7 +394,7 @@ def create_thread_state_router(
         needle = (q or "").strip().lower()
         results: list[dict[str, Any]] = []
         for thread in store.search(limit=500, offset=0):
-            if not _can_access(thread, actor_id, tenant_id):
+            if not _can_read(thread, actor_id, tenant_id):
                 continue
             thread_id = thread.get("thread_id")
             if isinstance(thread_id, str) and _is_archived(thread_id):
@@ -437,7 +475,7 @@ def create_thread_state_router(
                 "updated_at": r.updated_at,
             }
             for r in results
-            if _can_access(store.get(r.thread_id), actor_id, tenant_id)
+            if _can_read(store.get(r.thread_id), actor_id, tenant_id)
         ]
         return {"results": filtered, "count": len(filtered)}
 
@@ -453,7 +491,7 @@ def create_thread_state_router(
         thread_id = _require_thread_id(thread_id)
         if _is_archived(thread_id):
             raise HTTPException(404, f"thread not found: {thread_id}")
-        if _get_owned_thread(thread_id, actor_id, tenant_id) is None:
+        if _get_accessible_thread(thread_id, actor_id, tenant_id) is None:
             raise HTTPException(404, f"thread not found: {thread_id}")
         if not hasattr(store, "export_thread_markdown"):
             raise HTTPException(501, "markdown export not enabled")
@@ -534,7 +572,7 @@ def create_thread_state_router(
         thread_id = _require_thread_id(thread_id)
         if _is_archived(thread_id):
             raise HTTPException(404, f"thread not found: {thread_id}")
-        if _get_owned_thread(thread_id, actor_id, tenant_id) is None:
+        if _get_accessible_thread(thread_id, actor_id, tenant_id) is None:
             raise HTTPException(404, f"thread not found: {thread_id}")
         if not hasattr(store, "get_feedback_stats"):
             raise HTTPException(501, "feedback system not enabled")
@@ -559,7 +597,7 @@ def create_thread_state_router(
         thread_id = _require_thread_id(thread_id)
         if _is_archived(thread_id):
             raise HTTPException(404, f"thread not found: {thread_id}")
-        if _get_owned_thread(thread_id, actor_id, tenant_id) is None:
+        if _get_accessible_thread(thread_id, actor_id, tenant_id) is None:
             raise HTTPException(404, f"thread not found: {thread_id}")
         if not hasattr(store, "get_message_feedback"):
             raise HTTPException(501, "feedback system not enabled")
@@ -596,7 +634,7 @@ def create_thread_state_router(
         thread_id = _require_thread_id(thread_id)
         if _is_archived(thread_id):
             raise HTTPException(404, f"thread not found: {thread_id}")
-        thread = _get_owned_thread(thread_id, actor_id, tenant_id)
+        thread = _get_accessible_thread(thread_id, actor_id, tenant_id)
         if thread is None:
             raise HTTPException(404, f"thread not found: {thread_id}")
         return thread
@@ -610,7 +648,7 @@ def create_thread_state_router(
         _require_store()
         thread_id = _require_thread_id(thread_id)
         existing = store.get(thread_id)
-        if existing is not None and not _can_access(existing, actor_id, tenant_id):
+        if existing is not None and not _can_manage(existing, actor_id, tenant_id):
             raise HTTPException(404, f"thread not found: {thread_id}")
 
         if require_auth:
@@ -755,25 +793,32 @@ def create_thread_state_router(
         metadata = dict(metadata) if metadata is not None else None
         if actor_id is not None:
             metadata = metadata or {}
-            metadata["owner_actor_id"] = actor_id
+            metadata.pop("owner_actor_id", None)
+            metadata.pop("actor_id", None)
             metadata["tenant_id"] = tenant_id or ""
         limit = int(payload.get("limit", 50) or 50)
         offset = int(payload.get("offset", 0) or 0)
         sort_by = str(payload.get("sortBy") or "updated_at")
         sort_order = str(payload.get("sortOrder") or "desc")
+        # A tenant can contain both owned and joined-room threads. Fetch a
+        # bounded tenant slice first, apply the dynamic room ACL, then paginate
+        # the visible result so same-tenant private threads cannot starve joined
+        # conversations from the sidebar.
+        fetch_limit = max(500, min(2000, offset + limit * 5)) if require_auth else limit
         results = store.search(
-            limit=limit,
-            offset=offset,
+            limit=fetch_limit,
+            offset=0 if require_auth else offset,
             metadata=metadata,
             sort_by=sort_by,
             sort_order=sort_order,
         )
-        return [
+        visible = [
             thread
             for thread in results
-            if _can_access(thread, actor_id, tenant_id)
+            if _can_read(thread, actor_id, tenant_id)
             if not (isinstance(thread.get("thread_id"), str) and _is_archived(thread["thread_id"]))
         ]
+        return visible[offset : offset + limit] if require_auth else visible
 
     @router.get("/api/threads/{thread_id}/state")
     def get_thread_state(request: Request, thread_id: str) -> dict[str, Any]:
@@ -783,7 +828,7 @@ def create_thread_state_router(
         thread_id = _require_thread_id(thread_id)
         if _is_archived(thread_id):
             raise HTTPException(404, f"thread not found: {thread_id}")
-        if _get_owned_thread(thread_id, actor_id, tenant_id) is None:
+        if _get_accessible_thread(thread_id, actor_id, tenant_id) is None:
             raise HTTPException(404, f"thread not found: {thread_id}")
         state = store.get_state(thread_id)
         if state is None:
@@ -834,7 +879,7 @@ def create_thread_state_router(
         thread_id = _require_thread_id(thread_id)
         if _is_archived(thread_id):
             return []
-        if _get_owned_thread(thread_id, actor_id, tenant_id) is None:
+        if _get_accessible_thread(thread_id, actor_id, tenant_id) is None:
             return []
         payload = body or {}
         limit = int(payload.get("limit", 50) or 50)
@@ -942,65 +987,6 @@ def create_thread_state_router(
         return snapshot.to_wire()
 
     return router
-
-
-def build_auto_title_service(store: Any, *, model_router: Any = None) -> Any:
-    """Wire a ``SessionTitleService`` for first-turn auto-title (dsh auto-title).
-
-    ``store`` ``None`` → ``None`` (auto-title disabled). With a model router a
-    named ``llm`` provider is registered so the first completed turn upgrades
-    the fallback title to a short LLM summary; without one the service still
-    works (fallback titles) but nothing is regenerated. Provider registration
-    failures degrade to a provider-less service and never raise.
-    """
-    if store is None:
-        return None
-    from runtime.memory.threads.session_title import SessionTitleService
-
-    service = SessionTitleService(store)
-    if model_router is None:
-        return service
-    try:
-        from runtime.projectos.llm_hooks import DEFAULT_MODEL as _TITLE_MODEL
-        from runtime.sensing.model_router import Message, ModelRequest
-
-        def _llm_title_provider(thread: dict[str, Any]) -> str | None:
-            values = thread.get("values") or {}
-            messages = values.get("messages") or []
-            first_human = next(
-                (
-                    m
-                    for m in messages
-                    if isinstance(m, dict)
-                    and m.get("type") == "human"
-                    and isinstance(m.get("content"), str)
-                    and m["content"].strip()
-                ),
-                None,
-            )
-            if first_human is None:
-                return None
-            prompt = (
-                "You are a session-title assistant. Write a concise "
-                "conversation title (under 60 characters, plain text, "
-                "no quotes or punctuation at the end) for a thread that "
-                "starts with this user message:\n\n"
-                f"{first_human['content'].strip()[:400]}"
-            )
-            resp = model_router.call(
-                ModelRequest(
-                    model=_TITLE_MODEL,
-                    messages=[Message(role="user", content=prompt)],
-                    max_tokens=60,
-                    temperature=0.2,
-                )
-            )
-            return resp.text or None
-
-        service.register_provider("llm", _llm_title_provider, model=_TITLE_MODEL)
-    except Exception as exc:  # noqa: BLE001 — auto-title is best-effort
-        _logger.warning("session title provider unavailable: %s", exc)
-    return service
 
 
 __all__ = ["build_auto_title_service", "create_thread_state_router"]

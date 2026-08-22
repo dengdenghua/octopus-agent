@@ -54,6 +54,17 @@ def mount_reflex(
         jwt_issuer=ctx.jwt_issuer,
         jwt_audience=ctx.jwt_audience,
         workspace_root=ctx.thread_workspace_root,
+        group_store=(
+            getattr(ctx.cowork_runtime, "group_store", None)
+            if ctx.cowork_runtime is not None
+            else None
+        ),
+        collaboration_store=(
+            getattr(ctx.cowork_runtime, "collaboration_store", None)
+            if ctx.cowork_runtime is not None
+            else None
+        ),
+        team_rooms_router=ctx.team_rooms_router,
     )
 
     if stack is not None:

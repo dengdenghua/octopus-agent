@@ -76,6 +76,130 @@ slash-command hints.
 - `native_launch_command` enters `native_launch_cwd` before launching the CLI,
   so users can paste one command and land in the current project root.
 
+## Codex App Server backend
+
+When a registered `codex-cli` partner is selected, Octopus can keep the public
+task, journal, approvals, cancellation, and UI lifecycle in Octopus while an
+isolated Codex App Server owns the inner coding turn. The integration uses the
+local stdio JSONL transport with `--strict-config`; App Server protocol objects
+are translated into Octopus events and are never exposed as the public API.
+
+### Enablement and fail-closed rules
+
+- Single-user/local deployments use App Server by default. Set
+  `OCTOPUS_CODEX_APP_SERVER_ENABLED=false` and restart Octopus to opt out, or
+  set the selected partner capability `codex_app_server` to `false`.
+- `commercial`, `production`, `server`, and `shared` deployment modes always
+  enter the App Server security boundary for a Codex partner. They require an
+  explicit, non-default `execution.codex_app_server=true` setting (the legacy
+  environment source is `OCTOPUS_CODEX_APP_SERVER_ENABLED=true`). A missing or
+  false setting is rejected and cannot silently select the legacy CLI path.
+- Production-like modes also require a verified, **full-enforcement** outer
+  process sandbox and a successful launch transformation. This preview accepts
+  Bubblewrap (`bwrap`) for that boundary; the current Seatbelt and Landlock
+  backends report partial enforcement and are rejected for production Codex
+  sidecars. Use `OCTOPUS_PROCESS_SANDBOX=strict` (or `bwrap`) and install the
+  Codex executable below `/usr` (for example `/usr/local/bin/codex`) so it is
+  present in Bubblewrap's read-only system mounts. A missing backend, partial
+  backend, transform failure, or inaccessible executable rejects the turn.
+  See [the sandbox risk boundary](../security/sandbox-risk-boundary.md).
+- On macOS, Seatbelt cannot be nested: an App Server already wrapped by
+  `sandbox-exec` cannot apply the second Seatbelt profile required by Codex's
+  built-in shell and patch tools. In local/development mode, when a hard outer
+  sandbox is not required and auto-selection returns Seatbelt, Octopus leaves
+  only the App Server process unwrapped and records
+  `outer_sandbox=none_due_to_nested_incompatibility`; the validated standalone
+  `octopus-sidecar` permission profile grants only Codex's minimal platform
+  runtime, the authoritative workspace, and turn scratch. It does not inherit
+  Codex's built-in `:workspace`/`:read-only` profiles because both make the host
+  filesystem readable. The `on-request` broker still constrains every generated
+  tool. Production/shared and explicit strict postures reject
+  this combination before process start instead of taking that compatibility
+  path. Octopus does not select Codex's `external-sandbox` mode because the
+  outer App Server needs inference network access while generated tools must
+  remain network-denied.
+- Production credentials must be provisioned for the correct tenant/principal
+  before enabling the feature. This preview accepts one explicit source home
+  per Octopus process, so multi-tenant operators must use tenant-dedicated
+  instances or keep the feature disabled; never share a personal Codex login.
+
+### Runtime settings
+
+| Setting | Operational contract |
+| --- | --- |
+| `OCTOPUS_DEPLOYMENT_MODE` | `local` by default. `commercial`, `production`, `server`, and `shared` activate production-like fail-closed rules. |
+| `OCTOPUS_CODEX_APP_SERVER_ENABLED` | Local opt-out with `false`; production-like deployments require an explicit `true`. The runtime feature name is `execution.codex_app_server`. |
+| `OCTOPUS_CODEX_STATE_DIR` | Optional absolute state root. It must not overlap the workspace. The default is the Octopus data directory under `codex_backend`, with `~/.octopus/codex_backend` as a non-overlapping fallback. |
+| `OCTOPUS_CODEX_SOURCE_HOME` | Optional absolute source Codex home. Local mode defaults to `~/.codex`; production-like modes have no default and require explicit credential provisioning. Only a validated `auth.json` is copied—host Codex config is not inherited. |
+| `OCTOPUS_CODEX_APP_SERVER_TIMEOUT` | Turn deadline in seconds. Default `1800`; values are clamped to `30..14400`; invalid values use the default and emit a warning. |
+| `OCTOPUS_CODEX_REALM` | Optional stable realm partition for persisted inner-thread bindings. Changing it creates a different resume namespace. |
+
+The state root is private and partitioned by opaque realm, tenant/principal,
+and outer-thread identifiers. The isolated `CODEX_HOME` and thread binding are
+kept so later outer turns can resume the same inner thread; task HOME, temp,
+and scratch trees are fresh per turn and removed when the sidecar closes.
+`OCTOPUS_CODEX_SOURCE_HOME/auth.json` must be a current-owner, private, regular
+non-symlink file, no larger than 1 MiB, containing a JSON object. Missing local
+credentials are not borrowed from ambient environment variables.
+
+### Approval and isolation boundary
+
+- The server-resolved absolute `cwd` is the only workspace authority. Client
+  `workspace_path` values are ignored, and requested full access is capped at
+  `workspace-write` (or `read-only` when the outer task is read-only).
+- App Server receives an allow-listed environment and isolated HOME/temp/XDG
+  paths. Network access, MCP servers, plugins, apps, hooks, memories,
+  multi-agent features, and other ambient extensions are disabled. Generated
+  commands receive Codex's `:minimal` platform-runtime reads plus exact access
+  to the workspace and the turn's marked scratch root; arbitrary host-home,
+  neighboring workspace, and tenant-state reads are not granted. The workspace
+  is writable only for workspace-write tasks, while private turn scratch remains
+  writable so built-in tools can operate. Global temp aliases and the sidecar
+  state parent remain explicitly denied.
+- The outer App Server process itself retains network access only so it can
+  call the model service. The independently validated inner named-permission
+  profile still denies network to model-generated tools. When an outer hard
+  sandbox is active, it mounts only the exact isolated Codex home, task root,
+  and scratch root; it does not make their state-root parent or a neighboring
+  tenant directory writable. The macOS local compatibility path above relies
+  on the same validated inner profile for those generated-tool boundaries.
+- Octopus is the approval broker. Codex runs with `on-request` approval and a
+  user reviewer; command and file-change requests are scoped to the exact
+  outer and inner turn. Approval timeouts, broker errors, or interruption
+  decline the request. Permission-expansion requests are always declined, and
+  any granted root must remain inside the authoritative workspace.
+- Closing or cancelling the task interrupts the inner turn and then terminates
+  the complete App Server process tree after a short grace period.
+
+### Compatibility fallback
+
+In local/single-user mode, the hardened one-shot `codex exec` adapter is used
+only when App Server cannot start or a required versioned API is unsupported
+**before** `turn/start` is attempted. Production-like modes never downgrade to
+the legacy adapter. Security, credential, effective-config, workspace,
+approval, and thread-binding failures never downgrade to `exec`. Once the
+`turn/start` boundary is crossed, a lost response or protocol failure is
+terminal and is never retried through another executor; this prevents
+duplicate model/tool execution.
+
+### Versioning and verification
+
+OpenAI documents Codex App Server as an experimental interface and currently
+does not support it for production workloads. Treat Octopus production-like
+enablement as a controlled preview: pin the exact Codex binary version, do not
+auto-upgrade it independently of Octopus, and regenerate/diff the versioned
+App Server schemas before an upgrade. See the
+[official Codex App Server documentation](https://developers.openai.com/codex/app-server/).
+
+For an upgrade, record `codex --version`, generate both schema forms, review
+the diff, then run the focused contract suite and a tenant-isolated canary:
+
+```bash
+codex app-server generate-ts --out ./schemas
+codex app-server generate-json-schema --out ./schemas
+.venv/bin/pytest -q tests/test_codex_appserver_client.py tests/test_codex_execution_backend.py tests/test_codex_backend_approvals.py tests/test_codex_backend_events.py tests/runtime/execution/codex_backend/test_security.py tests/test_drive_codex_app_server.py
+```
+
 ## Failure recovery
 
 Health checks and CLI-team runs surface structured failures:

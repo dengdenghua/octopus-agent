@@ -62,6 +62,8 @@ import { BrowserTabPage } from "./agent-workbench-panel/browser-tab-page";
 import { AgentKanbanView } from "./agent-workbench-panel/agent-kanban-view";
 import {
   ProjectOsTab,
+  ProjectOsTabError,
+  ProjectOsTabLoading,
   useBoundProjectState,
 } from "./agent-workbench-panel/project-os-tab";
 import type { WorkbenchRosterSeat } from "./agent-workbench-panel/helpers";
@@ -95,6 +97,7 @@ function AgentWorkbenchPanelImpl({
   onSelectTab,
   onClose,
   onOpenArtifact,
+  onInvitePeople,
   runSettled,
   runFailed,
   runInterrupted,
@@ -154,6 +157,8 @@ function AgentWorkbenchPanelImpl({
   /** Opens a generated artifact in the artifacts side panel (path comes from
    * the summary page's artifact rows). */
   onOpenArtifact?: (path: string) => void;
+  /** Opens the human-member invitation flow for the linked group room. */
+  onInvitePeople?: () => void | Promise<void>;
   runSettled?: boolean;
   runFailed?: boolean;
   runInterrupted?: boolean;
@@ -427,7 +432,7 @@ function AgentWorkbenchPanelImpl({
   // workbench can surface a "项目" tab with live milestones / PM console.
   const projectOsQuery = useBoundProjectState(threadId);
   const boundProject = projectOsQuery.data;
-  const hasBoundProject = !projectOsQuery.isLoading && !!boundProject;
+  const hasBoundProject = !!boundProject;
 
   const emptyShell =
     blocks.length === 0 &&
@@ -468,6 +473,14 @@ function AgentWorkbenchPanelImpl({
   );
   const requestedActiveTab: AgentWorkbenchTabId =
     activeTab ?? (focusedAgentId ? "agent" : focusedTab) ?? "agent";
+  // Keep an explicitly requested project surface mounted while its binding is
+  // loading (or temporarily failed) so users see a truthful state instead of
+  // being silently bounced to the agent tab. Background lookups still avoid a
+  // transient project-tab flash for ordinary, unbound conversations.
+  const projectTabVisible =
+    hasBoundProject ||
+    (requestedActiveTab === "project" &&
+      (projectOsQuery.isLoading || projectOsQuery.isError));
   const effectiveActiveTab:
     | "agent"
     | "diff"
@@ -477,7 +490,7 @@ function AgentWorkbenchPanelImpl({
     | "project" =
     requestedActiveTab === "subagents" || requestedActiveTab === "plan"
       ? "agent"
-      : requestedActiveTab === "project" && !hasBoundProject
+      : requestedActiveTab === "project" && !projectTabVisible
         ? "agent"
         : requestedActiveTab;
   const workbenchTabs: WorkbenchTab[] = useMemo(
@@ -502,7 +515,7 @@ function AgentWorkbenchPanelImpl({
         label: t.conversation.artifactsTitle,
         Icon: PackageIcon,
       },
-      ...(hasBoundProject
+      ...(projectTabVisible
         ? [
             {
               id: "project" as const,
@@ -512,7 +525,7 @@ function AgentWorkbenchPanelImpl({
           ]
         : []),
     ],
-    [t.agentWorkbenchPages, t.conversation, hasBoundProject],
+    [t.agentWorkbenchPages, t.conversation, projectTabVisible],
   );
 
   // Auto-open a tab if it becomes the effective active tab
@@ -714,13 +727,26 @@ function AgentWorkbenchPanelImpl({
         runSettled={runSettled}
         isLoading={isLoading}
       />
-    ) : effectiveActiveTab === "project" && boundProject ? (
-      <ProjectOsTab
-        state={boundProject}
-        onRefetch={() => {
-          void projectOsQuery.refetch();
-        }}
-      />
+    ) : effectiveActiveTab === "project" ? (
+      boundProject ? (
+        <ProjectOsTab
+          state={boundProject}
+          rosterSeats={rosterSeats}
+          onOpenArtifact={onOpenArtifact}
+          onInvitePeople={onInvitePeople}
+          onRefetch={() => {
+            void projectOsQuery.refetch();
+          }}
+        />
+      ) : projectOsQuery.isError ? (
+        <ProjectOsTabError
+          onRetry={() => {
+            void projectOsQuery.refetch();
+          }}
+        />
+      ) : (
+        <ProjectOsTabLoading />
+      )
     ) : (
       agentKanbanPage
     );
@@ -755,15 +781,15 @@ function AgentWorkbenchPanelImpl({
         mainRunStatusLabel={mainRunStatus.label}
       />
 
-      {threadId ? (
-        <CoworkCollabBar threadId={threadId} rosterSeats={rosterSeats} />
-      ) : null}
-      {threadId ? (
-        <CollaborationSessionPanel
-          threadId={threadId}
-          onlyWhenRoomLinked
-          className="px-3 pb-2"
-        />
+      {threadId && effectiveActiveTab !== "project" ? (
+        <>
+          <CoworkCollabBar threadId={threadId} rosterSeats={rosterSeats} />
+          <CollaborationSessionPanel
+            threadId={threadId}
+            onlyWhenRoomLinked
+            className="px-3 pb-2"
+          />
+        </>
       ) : null}
 
       <section

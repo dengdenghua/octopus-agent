@@ -237,8 +237,23 @@ def _native_tool_round_budget(
 def _filter_tool_specs_for_workspace_contract(
     tool_specs: list[Any],
     goal: str,
+    *,
+    user_context: dict[str, Any] | None = None,
 ) -> tuple[list[Any], str | None]:
     """Enforce user local-workspace restrictions at the capability boundary."""
+    from runtime.execution.misc.skill_policy import (
+        filter_audit_read_only_tool_specs,
+        is_audit_read_only_context,
+    )
+
+    if is_audit_read_only_context(user_context):
+        return (
+            filter_audit_read_only_tool_specs(
+                tool_specs,
+                context=user_context,
+            ),
+            "audit_read_only",
+        )
     if _goal_forbids_local_workspace_access(goal):
         allowed = [
             spec

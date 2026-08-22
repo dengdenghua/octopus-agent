@@ -70,6 +70,24 @@ def gateway(tmp_path: Path) -> Any:
         yield client
 
 
+@pytest.fixture()
+def gateway_with_instance(tmp_path: Path) -> Any:
+    """Expose the gateway for watcher membership/refcount assertions."""
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "threads"),
+    )
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+    with TestClient(app) as client:
+        yield client, gateway
+
+
 def _set_script(events: list[dict[str, Any]]) -> None:
     _SCRIPT.clear()
     _SCRIPT.extend(events)
@@ -206,6 +224,40 @@ def test_incremental_fetch_returns_only_missed_events(gateway: Any) -> None:
     assert "turn_started" in kinds and kinds[-1] == "turn_completed"
     assert incremental["turnCount"] == 2
     assert incremental["cursor"] > first["cursor"]
+
+
+def test_event_recovery_keeps_connection_live_for_every_watched_thread(
+    gateway_with_instance: Any,
+) -> None:
+    """A thread/events-only reconnect remains a live terminal subscriber.
+
+    Recovering a second thread changes the legacy last-resumed hint, so this
+    also proves fan-out is driven by watched-thread membership. Repeating the
+    first recovery must not inflate its wake-handler refcount.
+    """
+    client, gateway = gateway_with_instance
+    _drive_scripted_turn(client, "th-events-live")
+    _drive_scripted_turn(client, "th-events-other")
+
+    with client.websocket_connect("/api/realtime") as watcher:
+        _fetch_events(watcher, "th-events-live", request_id=51)
+        _fetch_events(watcher, "th-events-live", request_id=52)
+        _fetch_events(watcher, "th-events-other", request_id=53)
+        assert gateway._wake_watch_refs == {  # noqa: SLF001
+            "th-events-live": 1,
+            "th-events-other": 1,
+        }
+
+        _drive_scripted_turn(client, "th-events-live")
+        while True:
+            message = decode_message(watcher.receive_text())
+            if isinstance(message, Notification) and message.method == "turn/completed":
+                break
+
+        assert message.params["threadId"] == "th-events-live"
+        assert message.params["turn"]["status"] == "completed"
+
+    assert gateway._wake_watch_refs == {}  # noqa: SLF001
 
 
 def test_foreign_stream_id_forces_full_reset(gateway: Any) -> None:

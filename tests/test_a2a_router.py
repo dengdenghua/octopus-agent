@@ -43,7 +43,7 @@ class _FakeTask:
     status = None
 
     def __init__(self) -> None:
-        from a2a.types import Task, TaskState, Message, Part, Role
+        from a2a.types import Role, Task, TaskState
 
         self._t = Task()
         self._t.id = "task-123"
@@ -88,8 +88,7 @@ def _install_sdk_mock(monkeypatch, *, card=None, fail=False):
         async def create_from_url(self, url):
             if fail:
                 raise RuntimeError("boom: card unreachable")
-            client = _FakeClient(card or _make_card())
-            return client
+            return _FakeClient(card or _make_card())
 
     monkeypatch.setattr(
         "a2a.client.ClientFactory",

@@ -12,12 +12,16 @@ const toastMocks = vi.hoisted(() => ({
 vi.mock("sonner", () => ({ toast: toastMocks }));
 vi.mock("@/core/auth/api", () => ({
   authHeaders: () => ({ Authorization: "Bearer test-token" }),
+  getToken: () => "test-token",
   jsonAuthHeaders: () => ({
     Authorization: "Bearer test-token",
     "Content-Type": "application/json",
   }),
 }));
-vi.mock("@/core/config", () => ({ getBackendBaseURL: () => "" }));
+vi.mock("@/core/config", () => ({
+  getBackendBaseURL: () => "",
+  getOctopusBaseURL: () => "",
+}));
 vi.mock("@/components/workspace/create-project-dialog", () => ({
   CreateProjectDialog: () => null,
 }));

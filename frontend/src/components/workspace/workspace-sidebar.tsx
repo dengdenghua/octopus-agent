@@ -94,6 +94,7 @@ import {
 import { getAPIClient } from "@/core/api";
 import { pickLocalDirectory } from "@/core/workspace/pick-local-directory";
 import { useI18n } from "@/core/i18n/hooks";
+import { type Project, useProjects, useThreadMap } from "@/core/projects/hooks";
 import {
   useDeleteThread,
   useRenameThread,
@@ -110,7 +111,6 @@ import {
   projectNameForThread,
   summarizeThreadForSidebar,
   syncThreadAgentSelection,
-  threadHref,
   activeTeamTaskRoomId,
   activeWorkspaceThreadIdFromPathname,
   withThreadSidebarMode,
@@ -312,6 +312,90 @@ function projectThreadsForPreview<T>(
   return showAll ? threads : threads.slice(0, limit);
 }
 
+type ProjectOsSidebarIndex = {
+  projectNames: string[];
+  projectNameByThreadId: Map<string, string>;
+  threads: ThreadSummary[];
+};
+
+/**
+ * Reconcile the agent-scoped thread search with Project OS' durable indexes.
+ *
+ * Project homes are shared work groups, so their discoverability must not
+ * depend on the currently-selected agent or on optional thread metadata. The
+ * projects endpoint keeps empty projects visible, while thread-map recovers
+ * legacy bindings whose project record does not yet carry execution_thread_id.
+ */
+function buildProjectOsSidebarIndex(
+  projects: Project[],
+  threadProjectMap: Record<string, string>,
+  existingThreads: ThreadSummary[],
+): ProjectOsSidebarIndex {
+  const existingById = new Map(
+    existingThreads.map((thread) => [thread.id, thread]),
+  );
+  const durableThreads: ThreadSummary[] = [];
+  const durableThreadIds = new Set<string>();
+  const projectNameByThreadId = new Map<string, string>();
+  const projectNames: string[] = [];
+  const seenProjectNames = new Set<string>();
+
+  for (const project of projects) {
+    const projectName = project.name.trim();
+    if (!projectName) continue;
+    if (!seenProjectNames.has(projectName)) {
+      seenProjectNames.add(projectName);
+      projectNames.push(projectName);
+    }
+
+    const mappedThreadIds = Object.entries(threadProjectMap)
+      .filter(([, projectId]) => projectId === project.id)
+      .map(([threadId]) => threadId.trim())
+      .filter(Boolean);
+    const canonicalThreadId =
+      project.execution_thread_id?.trim() || mappedThreadIds[0] || "";
+    const threadIds = Array.from(
+      new Set([canonicalThreadId, ...mappedThreadIds].filter(Boolean)),
+    );
+
+    for (const threadId of threadIds) {
+      // A corrupt cross-project duplicate should not render twice. Prefer the
+      // first project returned by the authoritative project list.
+      if (durableThreadIds.has(threadId)) continue;
+      durableThreadIds.add(threadId);
+      projectNameByThreadId.set(threadId, projectName);
+
+      const existing = existingById.get(threadId);
+      durableThreads.push({
+        ...(existing ?? {
+          id: threadId,
+          updatedAt: project.created_at ?? "",
+          mode: "code",
+          href: `/workspace/realtime/${encodeURIComponent(threadId)}`,
+          agents: [],
+        }),
+        // The canonical child is the stable project-group entry. Its label
+        // must survive values.title being replaced by the first user message.
+        title:
+          threadId === canonicalThreadId
+            ? projectName
+            : existing?.title || projectName,
+      });
+    }
+  }
+
+  return {
+    projectNames,
+    projectNameByThreadId,
+    // Put durable entries first so the project home cannot fall behind the
+    // compact six-thread preview after a reload.
+    threads: [
+      ...durableThreads,
+      ...existingThreads.filter((thread) => !durableThreadIds.has(thread.id)),
+    ],
+  };
+}
+
 export function syncedSidebarPathname(
   pathname: string,
   pendingThreadPath: string | null,
@@ -497,6 +581,8 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     "team",
     null,
   );
+  const { data: projectOsProjects = [] } = useProjects();
+  const { data: threadProjectMap = {} } = useThreadMap();
 
   const mergedConversationRaw = (() => {
     const m = new Map<string, AgentThread>();
@@ -522,12 +608,16 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     );
   })();
 
+  const queriedProjectThreads = buildProjectThreadSummaries(mergedProjectRaw);
+  const projectOsSidebar = buildProjectOsSidebarIndex(
+    projectOsProjects,
+    threadProjectMap,
+    queriedProjectThreads,
+  );
+  const projectThreads = projectOsSidebar.threads;
   const conversationThreads: ThreadSummary[] = buildConversationThreadSummaries(
     mergedConversationRaw,
-  );
-
-  const projectThreads: ThreadSummary[] =
-    buildProjectThreadSummaries(mergedProjectRaw);
+  ).filter((thread) => !projectOsSidebar.projectNameByThreadId.has(thread.id));
 
   // User-defined projects (localStorage) — so an empty project still
   // shows in the sidebar before any threads are tagged with it.
@@ -693,11 +783,10 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     [activeTeamTasksQuery.data],
   );
   const backgroundTasksQuery = useTasks("all");
-  const threadHrefById = useMemo(() => {
-    return new Map(
-      mergedProjectRaw.map((thread) => [thread.thread_id, threadHref(thread)]),
-    );
-  }, [mergedProjectRaw]);
+  const threadHrefById = useMemo(
+    () => new Map(projectThreads.map((thread) => [thread.id, thread.href])),
+    [projectThreads],
+  );
   // Live run status with a last-touch timestamp. Bare statuses never
   // expire: a turn that terminated without a clearing event (crashed tab,
   // abnormal stream end) left its light stuck on "running" forever. The
@@ -766,16 +855,15 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const byProject: Record<string, ThreadSummary[]> = {};
   const threadIdsByProject: Record<string, string[]> = {};
   const ungroupedProjectThreads: ThreadSummary[] = [];
+  for (const name of projectOsSidebar.projectNames) byProject[name] = [];
   for (const name of userProjects) byProject[name] = [];
   const rawThreadMap = new Map(mergedProjectRaw.map((r) => [r.thread_id, r]));
   for (const thread of projectThreads) {
     const raw = rawThreadMap.get(thread.id);
     const meta = (raw?.metadata ?? {}) as Record<string, unknown>;
-    const project = projectNameForThread(
-      thread,
-      meta,
-      t.codeMode.personalSpace,
-    );
+    const project =
+      projectOsSidebar.projectNameByThreadId.get(thread.id) ??
+      projectNameForThread(thread, meta, t.codeMode.personalSpace);
     if (!project) {
       ungroupedProjectThreads.push(thread);
       continue;
@@ -784,11 +872,17 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     (byProject[project] ??= []).push(thread);
   }
   const projectOrder = Object.keys(byProject).filter(
-    (p) => (byProject[p]?.length ?? 0) > 0 || userProjects.includes(p),
+    (p) =>
+      (byProject[p]?.length ?? 0) > 0 ||
+      userProjects.includes(p) ||
+      projectOsSidebar.projectNames.includes(p),
   );
-  // Every visible project group can be removed. Deleting a group means
-  // unclassifying its conversations; local folders and thread history stay.
-  const deletableProjects = new Set(projectOrder);
+  // Local workspace folders keep the existing "unclassify" action. A Project
+  // OS record is server-owned and must not be silently treated as local-only.
+  const projectOsNames = new Set(projectOsSidebar.projectNames);
+  const deletableProjects = new Set(
+    projectOrder.filter((project) => !projectOsNames.has(project)),
+  );
   const [deletingProject, setDeletingProject] = useState<string | null>(null);
 
   const deleteProject = async (project: string) => {
@@ -1299,6 +1393,7 @@ export const __testing = {
   transientThreadModeFromHref,
   prioritizeActiveThread,
   projectThreadsForPreview,
+  buildProjectOsSidebarIndex,
   syncedSidebarPathname,
   activeTeamTaskRoomId,
   ProjectGroupTrigger,

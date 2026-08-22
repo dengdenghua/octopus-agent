@@ -44,9 +44,9 @@ vi.mock("sonner", () => ({
 
 import RegisterPage from "./page";
 
-function renderPage() {
+function renderPage(initialRoute = "/register") {
   return renderWithProviders(<RegisterPage />, {
-    initialRoute: "/register",
+    initialRoute,
     locale: "zh-CN",
   });
 }
@@ -131,11 +131,13 @@ describe("RegisterPage", () => {
     expect(registerMock).not.toHaveBeenCalled();
   });
 
-  it("submits successfully and navigates to login", async () => {
+  it("submits successfully and keeps returnTo on the login handoff", async () => {
     const { toast } = await import("sonner");
     registerMock.mockResolvedValue(undefined);
     const user = userEvent.setup();
-    renderPage();
+    renderPage(
+      "/register?returnTo=%2Fworkspace%2Fteam%2Fjoin%3Ftoken%3Dsecret",
+    );
 
     await user.type(screen.getByRole("textbox", { name: "用户名" }), "alice");
     await user.type(
@@ -155,7 +157,10 @@ describe("RegisterPage", () => {
     });
     await waitFor(() => {
       expect(toast.success).toHaveBeenCalledWith("注册成功，请登录");
-      expect(navigateMock).toHaveBeenCalledWith("/login");
+      expect(navigateMock).toHaveBeenCalledWith(
+        "/login?returnTo=%2Fworkspace%2Fteam%2Fjoin%3Ftoken%3Dsecret",
+        { replace: true },
+      );
     });
   });
 

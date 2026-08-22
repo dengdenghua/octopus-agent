@@ -64,20 +64,20 @@ vi.mock("sonner", () => ({
 
 import LoginPage from "./page";
 
-function renderPage() {
+function renderPage(initialRoute = "/login") {
   // Test strings reference zh-CN copy, so prime the I18nProvider with
   // zh-CN. The harness also pre-seeds the `locale` cookie so the
   // mount effect in `useI18n()` doesn't race back to the jsdom default.
   return renderWithProviders(<LoginPage />, {
-    initialRoute: "/login",
+    initialRoute,
     locale: "zh-CN",
   });
 }
 
 /* Implementation note. */
-async function renderPageAtLoginForm() {
+async function renderPageAtLoginForm(initialRoute?: string) {
   const user = userEvent.setup();
-  renderPage();
+  renderPage(initialRoute);
 
   // The login form is the landing surface · no onboarding stepper
   // to advance through. We just wait for the auth provider probe to resolve.
@@ -116,7 +116,9 @@ describe("LoginPage", () => {
     renderPage();
 
     // Redesigned login surface: email-first copy, no phone form at all.
-    expect(await screen.findByText("输入邮箱，一键登录开始使用")).toBeInTheDocument();
+    expect(
+      await screen.findByText("输入邮箱，一键登录开始使用"),
+    ).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "邮箱" })).toBeInTheDocument();
     expect(screen.queryByText("登录你的 Octopus 账户")).not.toBeInTheDocument();
     // No local account provider → no tab strip.
@@ -182,9 +184,11 @@ describe("LoginPage", () => {
     });
   });
 
-  it("calls emailLogin and navigates on successful verify", async () => {
+  it("calls emailLogin and restores the complete returnTo after verify", async () => {
     emailLoginMock.mockResolvedValue(undefined);
-    const user = await renderPageAtLoginForm();
+    const user = await renderPageAtLoginForm(
+      "/login?returnTo=%2Fworkspace%2Fteam%2Fjoin%3Ftoken%3Dsecret%23details",
+    );
 
     await user.type(
       screen.getByRole("textbox", { name: "邮箱" }),
@@ -197,10 +201,16 @@ describe("LoginPage", () => {
     await user.click(screen.getByRole("button", { name: "登录" }));
 
     await waitFor(() => {
-      expect(emailLoginMock).toHaveBeenCalledWith("alice@example.com", "123456");
+      expect(emailLoginMock).toHaveBeenCalledWith(
+        "alice@example.com",
+        "123456",
+      );
     });
     await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith("/workspace");
+      expect(navigateMock).toHaveBeenCalledWith(
+        "/workspace/team/join?token=secret#details",
+        { replace: true },
+      );
     });
   });
 

@@ -36,7 +36,10 @@ def _build_app(
     keys: dict[str, str] = {}
     for actor in ("alice", "bob", "carol"):
         api_key = f"sk-test-{actor}"
-        store.add(Identity(actor_id=actor), api_key_plaintext=api_key)
+        store.add(
+            Identity(actor_id=actor, metadata={"tenant_id": "tenant-acme"}),
+            api_key_plaintext=api_key,
+        )
         keys[actor] = api_key
 
     app = FastAPI()
@@ -173,25 +176,24 @@ def test_create_invite_blocks_non_member(tmp_path: Path) -> None:
     assert resp.status_code == 403
 
 
-def test_plain_member_cannot_issue_owner_invite(tmp_path: Path) -> None:
+def test_plain_member_cannot_manage_invites_and_owner_role_is_rejected(tmp_path: Path) -> None:
     client, keys = _build_app(tmp_path)
     _create_team(client, keys, "alice-team", owner="alice")
     _invite_and_join(client, keys, "alice-team", "alice", "bob")
 
     denied = client.post(
         "/api/teams/alice-team/invite",
-        json={"role": "owner"},
+        json={"role": "member"},
         headers=_bearer(keys["bob"]),
     )
-    allowed = client.post(
+    invalid_role = client.post(
         "/api/teams/alice-team/invite",
         json={"role": "owner"},
         headers=_bearer(keys["alice"]),
     )
 
     assert denied.status_code == 403
-    assert allowed.status_code == 200
-    assert allowed.json()["invite_role"] == "owner"
+    assert invalid_role.status_code == 422
 
 
 # ── unauthenticated callers are blocked at the auth layer ──────────
@@ -205,14 +207,11 @@ def test_no_auth_token_returns_401(tmp_path: Path) -> None:
     assert resp.status_code == 401
 
 
-# ── invite preview is intentionally actor-agnostic ─────────────────
+# ── invite preview is actor-agnostic inside the bound tenant ────────
 
 
 def test_invite_preview_works_for_non_member(tmp_path: Path) -> None:
-    """``GET /api/team-invites/{token}`` is intentionally actor-agnostic
-    — anyone with a valid invite token may preview the target team
-    before joining. Pinned here so a future hardening doesn't
-    accidentally lock it down without an explicit decision."""
+    """A same-tenant non-member may see only the minimal join preview."""
     client, keys = _build_app(tmp_path)
     _create_team(client, keys, "alice-team", owner="alice")
 
@@ -231,6 +230,13 @@ def test_invite_preview_works_for_non_member(tmp_path: Path) -> None:
     )
     assert resp.status_code == 200
     assert resp.json()["team"]["id"] == "alice-team"
+    assert set(resp.json()["team"]) == {
+        "id",
+        "name",
+        "member_count",
+        "participant_count",
+    }
+    assert "invite_token" not in json.dumps(resp.json())
 
 
 # ── single-user dev mode: require_auth=False bypasses checks ───────

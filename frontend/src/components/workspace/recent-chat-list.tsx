@@ -54,7 +54,9 @@ import { copyTextToClipboard } from "@/core/clipboard";
 import { emitAgentChanged } from "@/core/events";
 import { useI18n } from "@/core/i18n/hooks";
 import {
+  type Project,
   useDeleteProject,
+  useEnsureProjectHome,
   useMoveThreadToProject,
   useProjects,
   useThreadMap,
@@ -74,8 +76,6 @@ import { env } from "@/env";
 import { isIMEComposing } from "@/lib/ime";
 
 import { CreateProjectDialog } from "./create-project-dialog";
-
-type Project = { id: string; name: string; icon?: string };
 
 type ThreadGroup = {
   key: string;
@@ -137,6 +137,7 @@ export function RecentChatList() {
   const { mutate: deleteThread } = useDeleteThread();
   const { mutate: renameThread } = useRenameThread();
   const { mutate: moveThreadToProject } = useMoveThreadToProject();
+  const ensureProjectHome = useEnsureProjectHome();
   const { mutate: deleteProject, isPending: isDeletingProject } =
     useDeleteProject();
 
@@ -147,6 +148,19 @@ export function RecentChatList() {
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [threadToDelete, setThreadToDelete] = useState<AgentThread | null>(
     null,
+  );
+
+  const handleOpenProject = useCallback(
+    (project: Project) => {
+      ensureProjectHome.mutate(project, {
+        onSuccess: ({ threadId }) =>
+          navigate(`/workspace/realtime/${encodeURIComponent(threadId)}`, {
+            state: { openProjectWorkbench: true },
+          }),
+        onError: () => toast.error("项目工作群打开失败，请重试"),
+      });
+    },
+    [ensureProjectHome, navigate],
   );
 
   const handleDelete = useCallback(
@@ -422,8 +436,11 @@ export function RecentChatList() {
             className={group.project ? "group/project-group" : "group/recent"}
           >
             <SidebarGroup className="pt-0">
-              <SidebarGroupLabel className="flex h-6 items-center justify-between px-1.5 text-xs">
-                <CollapsibleTrigger className="flex items-center gap-1">
+              <SidebarGroupLabel className="flex h-6 items-center gap-1 px-1.5 text-xs">
+                <CollapsibleTrigger
+                  className="flex size-5 shrink-0 items-center justify-center rounded hover:bg-muted"
+                  aria-label={`${group.label} 展开或收起`}
+                >
                   <ChevronDownIcon
                     className={
                       group.project
@@ -431,11 +448,24 @@ export function RecentChatList() {
                         : "size-3 transition-transform group-data-[state=closed]/recent:-rotate-90"
                     }
                   />
-                  <span className="flex items-center gap-1">
+                </CollapsibleTrigger>
+                {group.project ? (
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-1 text-left hover:text-foreground disabled:opacity-60"
+                    onClick={() => handleOpenProject(group.project!)}
+                    disabled={
+                      ensureProjectHome.isPending &&
+                      ensureProjectHome.variables?.id === group.project.id
+                    }
+                    title={`打开项目工作群：${group.label}`}
+                  >
                     {group.icon && <span>{group.icon}</span>}
                     <span className="truncate">{group.label}</span>
-                  </span>
-                </CollapsibleTrigger>
+                  </button>
+                ) : (
+                  <span className="min-w-0 flex-1 truncate">{group.label}</span>
+                )}
                 {showNewProjectButton && (
                   <button
                     type="button"

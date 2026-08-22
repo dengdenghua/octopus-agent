@@ -214,15 +214,16 @@ tier: "core"
 
 ## Who imports this
 
-**18** file(s) reference this package:
+**19** file(s) reference this package:
 
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
 - **`runtime/cli_run.py/`** · 1 file(s)
   - `runtime/cli_run.py`
-- **`runtime/core/`** · 4 file(s)
+- **`runtime/core/`** · 5 file(s)
   - `runtime/core/cerebrum/_react_execution_dispatch.py`
   - `runtime/core/cerebrum/_react_execution_phase6d.py`
+  - `runtime/core/cerebrum/_react_execution_results.py`
   - `runtime/core/cerebrum/react_parallel_dispatch.py`
   - `runtime/core/graph_runtime/runtime.py`
 - **`runtime/execution/`** · 5 file(s)

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowRightIcon,
   KeyRoundIcon,
@@ -23,17 +23,18 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { type AuthProviderInfo, getAuthProviderInfo } from "@/core/auth/api";
 import {
-  type AuthProviderInfo,
-  getAuthProviderInfo,
-} from "@/core/auth/api";
+  authReturnToFromSearch,
+  registerPathWithReturnTo,
+} from "@/core/auth/return-to";
 import { octAuthApi, OctApiError } from "@/core/oct/api";
 import { useI18n } from "@/core/i18n/hooks";
 import { useAuth } from "@/providers/AuthProvider";
 import { toast } from "sonner";
 
 const SMS_COOLDOWN_SECONDS = 60;
-const AUTH_PROVIDER_RETRY_COUNT = 5;  // 24 → 5
+const AUTH_PROVIDER_RETRY_COUNT = 5; // 24 → 5
 const AUTH_PROVIDER_BASE_DELAY_MS = 500;
 
 function delay(ms: number) {
@@ -44,7 +45,7 @@ function isValidEmail(raw: string): boolean {
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(raw.trim());
 }
 
-function EmailLoginForm() {
+function EmailLoginForm({ returnTo }: { returnTo: string }) {
   const navigate = useNavigate();
   const { emailLogin } = useAuth();
   const { t } = useI18n();
@@ -103,7 +104,7 @@ function EmailLoginForm() {
     try {
       await emailLogin(addr, code.trim());
       toast.success(t.auth.success.loginSuccess);
-      navigate("/workspace");
+      navigate(returnTo, { replace: true });
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : t.auth.errors.loginFailed,
@@ -181,10 +182,8 @@ function EmailLoginForm() {
           className="text-primary/80 underline-offset-2 transition-colors hover:text-primary hover:underline"
         >
           {t.auth.terms.userAgreement}
-        </Link>
-        {" "}
-        {t.auth.terms.and}
-        {" "}
+        </Link>{" "}
+        {t.auth.terms.and}{" "}
         <Link
           to="/privacy"
           className="text-primary/80 underline-offset-2 transition-colors hover:text-primary hover:underline"
@@ -198,8 +197,10 @@ function EmailLoginForm() {
 
 function LocalLoginForm({
   passwordRequired,
+  returnTo,
 }: {
   passwordRequired: boolean;
+  returnTo: string;
 }) {
   const navigate = useNavigate();
   const { login } = useAuth();
@@ -222,7 +223,7 @@ function LocalLoginForm({
         ...(password ? { password } : {}),
       });
       toast.success(t.auth.success.loginSuccess);
-      navigate("/workspace", { replace: true });
+      navigate(returnTo, { replace: true });
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : t.auth.errors.loginFailed,
@@ -311,10 +312,13 @@ function FloatingOrb({
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = authReturnToFromSearch(location.search);
   const { authStatus, isLoading, isAuthenticated } = useAuth();
   const { t } = useI18n();
-  const [authProviders, setAuthProviders] =
-    useState<AuthProviderInfo[] | null>(null);
+  const [authProviders, setAuthProviders] = useState<AuthProviderInfo[] | null>(
+    null,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -329,7 +333,8 @@ export default function LoginPage() {
         }
         if (attempt < AUTH_PROVIDER_RETRY_COUNT - 1) {
           // 指数退避：500ms, 1s, 2s, 4s
-          const backoffDelay = AUTH_PROVIDER_BASE_DELAY_MS * Math.pow(2, attempt);
+          const backoffDelay =
+            AUTH_PROVIDER_BASE_DELAY_MS * Math.pow(2, attempt);
           await delay(backoffDelay);
         }
       }
@@ -350,13 +355,13 @@ export default function LoginPage() {
   useEffect(() => {
     if (isLoading) return;
     if (isAuthenticated) {
-      navigate("/workspace", { replace: true });
+      navigate(returnTo, { replace: true });
       return;
     }
     if (authStatus && !authStatus.enabled) {
-      navigate("/workspace", { replace: true });
+      navigate(returnTo, { replace: true });
     }
-  }, [isLoading, isAuthenticated, authStatus, navigate]);
+  }, [isLoading, isAuthenticated, authStatus, navigate, returnTo]);
 
   if (isLoading) {
     return (
@@ -447,7 +452,8 @@ export default function LoginPage() {
               </span>
             </h1>
             <p className="max-w-md text-lg leading-relaxed text-muted-foreground">
-              一个输入框，解决所有问题。委派任务、管理项目、连接万物，Octopus 为你代劳。
+              一个输入框，解决所有问题。委派任务、管理项目、连接万物，Octopus
+              为你代劳。
             </p>
           </div>
 
@@ -458,7 +464,10 @@ export default function LoginPage() {
               return (
                 <li key={feature.title} className="flex items-start gap-4">
                   <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-card/60 backdrop-blur-sm transition-colors group-hover:border-primary/20 group-hover:bg-primary/5">
-                    <Icon className="size-5 text-primary/80" strokeWidth={1.8} />
+                    <Icon
+                      className="size-5 text-primary/80"
+                      strokeWidth={1.8}
+                    />
                   </div>
                   <div className="space-y-1">
                     <p className="text-[15px] font-semibold">{feature.title}</p>
@@ -515,19 +524,23 @@ export default function LoginPage() {
                     </TabsTrigger>
                   </TabsList>
                   <TabsContent value="email" className="mt-0">
-                    <EmailLoginForm />
+                    <EmailLoginForm returnTo={returnTo} />
                   </TabsContent>
                   <TabsContent value="local" className="mt-0">
                     <LocalLoginForm
-                      passwordRequired={localProvider.password_required === true}
+                      passwordRequired={
+                        localProvider.password_required === true
+                      }
+                      returnTo={returnTo}
                     />
                   </TabsContent>
                 </Tabs>
               ) : hasOct ? (
-                <EmailLoginForm />
+                <EmailLoginForm returnTo={returnTo} />
               ) : localProvider ? (
                 <LocalLoginForm
                   passwordRequired={localProvider.password_required === true}
+                  returnTo={returnTo}
                 />
               ) : (
                 <div className="rounded-xl border border-border/50 bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
@@ -539,7 +552,7 @@ export default function LoginPage() {
                 <div className="mt-6 text-center text-sm text-muted-foreground/80">
                   还没有账户？{" "}
                   <Link
-                    to="/register"
+                    to={registerPathWithReturnTo(returnTo)}
                     className="font-medium text-primary transition-colors hover:text-primary/80"
                   >
                     立即注册

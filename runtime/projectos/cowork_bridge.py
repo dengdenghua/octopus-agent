@@ -1,10 +1,11 @@
-"""Run a Project OS project on a custom cowork group.
+"""Attach and run a Project OS project on a custom cowork group.
 
 The 4 roles (PM/Engineer/Research/QA) are only the *default* routing. When you
 freely pull members into a cowork thread, those members become the project team:
 this bridge turns the thread's roster into the agent pool and routes each task to
 the best-fit member (nominate: relevance × past competence) instead of a fixed
-role. So "assemble a group, then turn on project mode" just works — any roster.
+role. Project membership is a persistent capability of the group; chat/cluster/
+swarm remains an independent response strategy for conversation turns.
 """
 
 from __future__ import annotations
@@ -352,7 +353,9 @@ def full_project_state(project_store: ProjectStore, project_id: str) -> dict[str
 
     Includes the derived PM console (``pm``) — milestone health, burndown,
     risks/blockers, next actions, assignments — plus a ``retro`` once the
-    project reaches a terminal state.
+    project reaches a terminal state. Published artifacts and recorded
+    decisions are projected from the durable Project OS event stream rather
+    than collaboration metadata.
     """
     project = project_store.get_project(project_id)
     if project is None:
@@ -373,6 +376,8 @@ def full_project_state(project_store: ProjectStore, project_id: str) -> dict[str
         "project": project.to_dict(),
         "milestones": [milestone.to_dict() for milestone in milestones],
         "tasks": tasks_by_ms,
+        "artifacts": project_store.artifacts_for_project(project_id),
+        "decisions": project_store.decisions_for_project(project_id),
         "pm": pm,
         "retro": retro,
         "available_actions": _project_available_actions(project.status),
@@ -445,6 +450,73 @@ def _task_read_model(project_id: str, task: Task) -> dict[str, Any]:
     raw["available_actions"] = _task_available_actions(task.status)
     raw["action_specs"] = _task_action_specs(project_id, task)
     return raw
+
+
+def project_task_to_collaboration(
+    collaboration_store: Any,
+    *,
+    session_id: str,
+    room_id: str,
+    project_id: str,
+    milestone_id: str,
+    task: Task | dict[str, Any],
+    tenant_id: str = "",
+) -> dict[str, Any] | None:
+    """Project one authoritative Project OS task into collaboration storage.
+
+    This bridge is deliberately one-way.  Callers must persist the Project OS
+    task first; this function only builds the room/workbench read model and
+    never invokes the Team Task write path.
+    """
+
+    upsert = getattr(collaboration_store, "upsert_project_task", None)
+    if not callable(upsert):
+        return None
+    raw = task.to_dict() if isinstance(task, Task) else dict(task or {})
+    assigned_agent = str(raw.get("assigned_agent") or "")
+    assigned_role = str(raw.get("assigned_role") or "")
+    return upsert(
+        session_id=session_id,
+        room_id=room_id,
+        project_id=project_id,
+        milestone_id=milestone_id,
+        task={
+            "id": raw.get("id"),
+            "kind": "project",
+            "title": raw.get("goal") or raw.get("id"),
+            "description": raw.get("goal") or "",
+            "status": raw.get("status") or "pending",
+            "assignees": [
+                item
+                for item in (
+                    {"name": assigned_agent, "role": "agent"},
+                    {"name": assigned_role, "role": "role"},
+                )
+                if item["name"]
+            ],
+            "artifacts": (
+                [{"kind": "project_task_output", "output": raw.get("output")}]
+                if raw.get("output") not in (None, "", {}, [])
+                else []
+            ),
+            "metadata": {
+                "source": "projectos",
+                "project_id": project_id,
+                "tenant_id": tenant_id,
+                "milestone_id": milestone_id,
+                "task_type": raw.get("type"),
+                "assigned_agent": assigned_agent,
+                "assigned_role": assigned_role,
+                "attempts": raw.get("attempts"),
+                **(
+                    {"source_message": raw.get("input", {}).get("source_message")}
+                    if isinstance(raw.get("input"), dict)
+                    and raw.get("input", {}).get("source_message")
+                    else {}
+                ),
+            },
+        },
+    )
 
 
 def _task_available_actions(status: str) -> list[str]:
@@ -591,7 +663,7 @@ def run_project_from_group(
     name: str,
     goal: str,
     hooks: dict[str, Any] | None = None,
-    run: bool = True,
+    run: bool = False,
     max_ticks: int = DEFAULT_RUN_MAX_TICKS,
     competence: CompetenceStore | None = None,
     actor: str = "project-os",
@@ -600,22 +672,17 @@ def run_project_from_group(
     tenant_id: str = "",
     subagent_runner: Callable[..., str] | None = None,
 ) -> dict[str, Any]:
-    """Create a Project OS project from a cowork group and optionally run it.
+    """Attach a Project OS project to a cowork group and optionally run it.
 
     This is the shared contract for the HTTP `/api/projects/from-group/*` route
-    and the realtime project-mode turn. Keeping both surfaces on one helper
-    prevents the product from having two subtly different meanings of
-    "project mode".
+    and the legacy realtime project-mode turn. Binding the project does not
+    mutate the group's response strategy; callers must opt into execution.
     """
-    from runtime.memory.cowork.service import set_mode
-
     roster = [agent_id for agent_id, _ in roster_from_group(group_store, thread_id)]
     if not roster:
         raise ValueError("group has no participant agents to staff the project")
 
-    # Project execution is a collaboration mode of the group; reflect the
-    # state transition before planning so subsequent realtime turns see it.
-    set_mode(group_store, thread_id, actor=actor, mode="project")
+    response_mode = group_store.state(thread_id).mode
     engine = engine_for_group(
         project_store,
         group_store,
@@ -626,43 +693,98 @@ def run_project_from_group(
         tenant_id=tenant_id,
         subagent_runner=subagent_runner,
     )
-    project = project_store.project_for_thread(thread_id) if reuse_active else None
+    previously_bound_project = project_store.project_for_thread(thread_id)
+    project = previously_bound_project if reuse_active else None
     reused = bool(project is not None and project.status not in {"done", "failed"})
+
+    def _finish(
+        *,
+        result: dict[str, Any],
+        state: dict[str, Any],
+        event_kind: str,
+    ) -> dict[str, Any]:
+        trace = project_run_trace(
+            thread_id=thread_id,
+            roster=roster,
+            reused=reused,
+            result=result,
+            state=state,
+        )
+        project_store.append_event(
+            project.id,
+            kind=event_kind,
+            payload={
+                "thread_id": thread_id,
+                "actor": actor,
+                "response_mode": response_mode,
+                "roster": roster,
+                "reused": reused,
+                "run": run,
+                "max_ticks": normalize_run_ticks(max_ticks),
+                "trace": trace,
+            },
+        )
+        return {
+            "ok": True,
+            "roster": roster,
+            "result": result,
+            "reused": reused,
+            "trace": trace,
+            **state,
+        }
+
     if not reused:
         project = engine.plan(name, goal)
-        project_store.bind_thread(thread_id, project.id)
-    result = (
-        engine.run(project.id, max_ticks=normalize_run_ticks(max_ticks))
-        if run
-        else {"final_status": project.status}
-    )
+        try:
+            project_store.bind_thread(thread_id, project.id)
+            attached_state = full_project_state(project_store, project.id)
+            if attached_state is None:
+                raise RuntimeError(f"project disappeared after planning: {project.id}")
+            if not run:
+                return _finish(
+                    result={"final_status": project.status},
+                    state=attached_state,
+                    event_kind="project.attached_from_group",
+                )
+        except Exception as attach_error:
+            # Until execution starts, this project is an implementation detail
+            # of one attach request. ProjectStore.delete_project removes its
+            # binding, milestones, tasks and audit events transactionally; the
+            # source group/thread/room lives in GroupStore and is untouched.
+            try:
+                deleted = project_store.delete_project(project.id)
+                if (
+                    deleted
+                    and previously_bound_project is not None
+                    and previously_bound_project.id != project.id
+                ):
+                    project_store.bind_thread(thread_id, previously_bound_project.id)
+            except Exception as cleanup_error:  # noqa: BLE001
+                raise RuntimeError("project attach and compensation failed") from cleanup_error
+            if not deleted:
+                raise RuntimeError("project attach compensation failed") from attach_error
+            raise
+    else:
+        attached_state = full_project_state(project_store, project.id)
+        if attached_state is None:
+            raise RuntimeError(f"project disappeared before attach: {project.id}")
+
+    if not run:
+        return _finish(
+            result={"final_status": project.status},
+            state=attached_state,
+            event_kind="project.attached_from_group",
+        )
+
+    # Crossing this line starts execution.  Any later failure intentionally
+    # leaves the bound project in place so its persisted state can be inspected
+    # and recovered rather than being mistaken for an attach-only shell.
+    result = engine.run(project.id, max_ticks=normalize_run_ticks(max_ticks))
     state = full_project_state(project_store, project.id)
     if state is None:
         raise RuntimeError(f"project disappeared after planning: {project.id}")
-    trace = project_run_trace(
-        thread_id=thread_id,
-        roster=roster,
-        reused=reused,
+    return _finish(
         result=result,
         state=state,
+        event_kind="project.run_from_group",
     )
-    project_store.append_event(
-        project.id,
-        kind="project.run_from_group",
-        payload={
-            "thread_id": thread_id,
-            "roster": roster,
-            "reused": reused,
-            "run": run,
-            "max_ticks": normalize_run_ticks(max_ticks),
-            "trace": trace,
-        },
-    )
-    return {
-        "ok": True,
-        "roster": roster,
-        "result": result,
-        "reused": reused,
-        "trace": trace,
-        **state,
-    }

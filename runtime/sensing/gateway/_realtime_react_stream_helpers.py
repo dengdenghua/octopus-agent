@@ -13,6 +13,8 @@ import contextlib
 import logging
 import os
 import time
+from concurrent.futures import Future
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from runtime.execution.tool_engine import (
@@ -43,6 +45,50 @@ _logger = logging.getLogger(__name__)
 # pays for it. Kept well under the frontend's ~10s stall threshold so a
 # live-but-quiet turn always gets a keepalive before it's flagged "slow".
 _SINGLE_AGENT_HEARTBEAT_INTERVAL_S = 5.0
+_CRITICAL_STRUCTURAL_EVENT_TYPES = frozenset(
+    {
+        "react_started",
+        "tool_start",
+        "tool_background",
+        "tool_end",
+        "react_completed",
+        "react_error",
+        "react_paused",
+        "react_cancelled",
+        "react_resumed",
+    }
+)
+_TERMINAL_REACT_EVENT_TYPES = frozenset(
+    {"react_completed", "react_error", "react_paused", "react_cancelled"}
+)
+_REACT_QUEUE_PUT_TIMEOUT_S = 10.0
+_COALESCABLE_DELTA_TYPES = frozenset({"throughput", "visibility"})
+
+
+@dataclass(slots=True)
+class _QueuedReactEvent:
+    """Internal event envelope with an optional reducer-apply receipt."""
+
+    event: dict[str, Any]
+    applied: Future[None] | None = None
+
+
+class _ReactStructuralDeliveryError(RuntimeError):
+    """A critical lifecycle event could not reach the durable reducer."""
+
+
+class _ToolStartAuditError(_ReactStructuralDeliveryError):
+    """The durable tool-start audit boundary could not be established."""
+
+
+def _is_coalescable_delta(event: dict[str, Any] | None) -> bool:
+    """True for decorative deltas that may be dropped under queue pressure."""
+    return isinstance(event, dict) and event.get("type") in _COALESCABLE_DELTA_TYPES
+
+
+def _lease_renewal_interval_s(lease_ttl_seconds: float) -> float:
+    """Return the bounded supervisor renewal cadence."""
+    return max(0.1, min(float(lease_ttl_seconds) / 3.0, 30.0))
 
 
 def _safe_stream_error_message(exc: BaseException, *, limit: int = 1200) -> str:

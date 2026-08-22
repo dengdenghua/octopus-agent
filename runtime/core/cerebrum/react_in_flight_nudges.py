@@ -18,10 +18,15 @@ from runtime.core.cerebrum.react_execution import (
     _background_task_info_from_observation,
     _format_background_task_heartbeat,
 )
-from runtime.core.cerebrum.react_final_answer_guards import _step_is_environmental_failure
+from runtime.core.cerebrum.react_final_answer_guards import (
+    _EXECUTION_DEGRADED_THRESHOLD,
+    _environmental_failure_count,
+    _step_is_environmental_failure,
+)
 from runtime.core.cerebrum.react_guards import (
     _code_semantic_followup_guard,
     _failed_verification_followup_guard,
+    _has_successful_code_write,
     _redundant_green_verification_guard,
     _unverified_write_followup_guard,
 )
@@ -41,6 +46,7 @@ class _InFlightNudgeFlags(NamedTuple):
     green_verification_convergence_active: bool
     force_convergence_next: bool
     env_degradation_signaled: bool
+    terminal_convergence_active: bool
 
 
 # Fires ONCE per turn, right after the first environmental tool failure
@@ -63,6 +69,44 @@ _ENV_DEGRADATION_NUDGE = (
 )
 
 
+def _trajectory_has_successful_code_write(steps: list[ReActStep]) -> bool:
+    """Require success for the write action itself in mixed-action batches."""
+
+    for step in steps:
+        actions = list(step.actions or ([step.action] if step.action else []))
+        if step.action_results:
+            for index, result in enumerate(step.action_results):
+                if result.get("ok") is not True or index >= len(actions):
+                    continue
+                action_step = ReActStep(
+                    iteration=step.iteration,
+                    action=actions[index],
+                    actions=[actions[index]],
+                    observation=str(result.get("observation") or ""),
+                    action_results=[result],
+                )
+                if _has_successful_code_write([action_step]):
+                    return True
+            continue
+        if _has_successful_code_write([step]):
+            return True
+    return False
+
+
+def _should_terminal_environment_convergence(
+    steps: list[ReActStep],
+    *,
+    is_code_mode: bool,
+) -> bool:
+    """Recompute sticky convergence from durable, trusted action receipts."""
+
+    return bool(
+        is_code_mode
+        and _trajectory_has_successful_code_write(steps)
+        and _environmental_failure_count(steps) >= _EXECUTION_DEGRADED_THRESHOLD
+    )
+
+
 def _apply_in_flight_nudges(
     *,
     steps: list,
@@ -78,6 +122,7 @@ def _apply_in_flight_nudges(
     green_verification_convergence_active: bool,
     force_convergence_next: bool,
     env_degradation_signaled: bool,
+    terminal_convergence_active: bool = False,
 ) -> _InFlightNudgeFlags:
     """Append any due in-flight nudges to ``step.observation``.
 
@@ -154,6 +199,22 @@ def _apply_in_flight_nudges(
     ):
         _midflight_nudges.append(_ENV_DEGRADATION_NUDGE)
         env_degradation_signaled = True
+    if (
+        _should_terminal_environment_convergence(
+            _steps_with_current,
+            is_code_mode=is_code_mode,
+        )
+        and not terminal_convergence_active
+    ):
+        _midflight_nudges.append(
+            "[environment-verification-convergence]\n"
+            "The runtime recorded repeated trusted verifier environment gaps after a "
+            "successful code write. The next round is terminal synthesis with tools "
+            "disabled. Preserve the failed verifier facts and state that dynamic "
+            "verification could not run. Never claim tests, lint, typecheck, or build passed."
+        )
+        force_convergence_next = True
+        terminal_convergence_active = True
     if _midflight_nudges:
         step.observation = (
             ((step.observation or "") + "\n\n") if step.observation else ""
@@ -163,4 +224,5 @@ def _apply_in_flight_nudges(
         green_verification_convergence_active=green_verification_convergence_active,
         force_convergence_next=force_convergence_next,
         env_degradation_signaled=env_degradation_signaled,
+        terminal_convergence_active=terminal_convergence_active,
     )

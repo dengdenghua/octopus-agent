@@ -21,6 +21,8 @@ from runtime.safety.approval.approval_gate import ApprovalProvider
 from runtime.sensing.gateway._realtime_turn_lifecycle_helpers import (
     _background_task_is_verification,
     _inject_cowork_turn_plan,
+    _persist_cowork_user_message,
+    _resolve_cowork_responder_agent,
     _turn_has_observable_output,
 )
 from runtime.sensing.gateway._realtime_turn_lifecycle_resume import (
@@ -385,6 +387,7 @@ async def _start_turn(
     runtime._require_thread_owner(
         log,
         getattr(emitter, "actor_id", None),
+        access="write",
     )
 
     turn = Turn(thread_id=thread_id, params=validated)
@@ -501,6 +504,7 @@ async def _start_turn(
         # both see a HumanMessage anchor. Without this the sidebar
         # title falls back to empty and the chat history starts
         # with the AI's reply only.
+        user_item = None
         try:
             from runtime.protocol import UserMessageItem
 
@@ -544,6 +548,33 @@ async def _start_turn(
             text=text,
             intent=intent,
         )
+        if user_item is not None:
+            _persist_cowork_user_message(
+                runtime,
+                thread_id=thread_id,
+                text=text,
+                item_id=user_item.id,
+                actor_id=getattr(emitter, "actor_id", None),
+                intent=intent,
+            )
+        if (intent.user_context or {}).get("cowork_waiting_for_mention"):
+            # A durable chat room accepts ordinary human conversation without
+            # manufacturing an assistant response.  Close this as a successful
+            # user-only turn before approval/model routing; the canonical room
+            # mirror above keeps Project actions and reconnect replay available.
+            runtime._set_turn_steering_accepting(turn, False)
+            turn.status = TurnStatus.COMPLETED
+            turn.outcome_reason = "cowork_waiting_for_mention"
+            log.turn_updated(
+                thread_id,
+                turn.id,
+                objective_id=turn.objective_id,
+                task_id=turn.task_id,
+                outcome_reason=turn.outcome_reason,
+            )
+            _close_turn(log, thread_id, turn)
+            runtime._snapshot_to_thread_store(thread_id, log, intent)
+            return turn
         confirmed_resume_intent = await runtime._consume_confirmed_resume_intent(thread_id, text)
         if confirmed_resume_intent is None:
             confirmed_resume_intent = await runtime._consume_paused_task_resume_intent(
@@ -614,6 +645,11 @@ async def _start_turn(
         )
         provider: ApprovalProvider = runtime._wrap_with_policy(gateway_provider)
         agent = runtime._resolve_agent(validated)
+        agent = _resolve_cowork_responder_agent(
+            runtime,
+            intent=intent,
+            fallback=agent,
+        )
         turn_driver = "react"
 
         try:
@@ -668,7 +704,25 @@ async def _start_turn(
                     },
                 )
 
-            if runtime._is_local_partner(agent):
+            if runtime._is_codex_app_server_partner(agent):
+                # Codex keeps Octopus as the public turn/control plane while
+                # delegating the inner coding loop to the formally supported
+                # App Server protocol.  This must precede the generic local
+                # partner branch so Codex does not fall back to one-shot exec
+                # unless the App Server driver explicitly declares itself
+                # unavailable before an inner turn starts.
+                turn_driver = "codex_app_server"
+                used_app_server = await runtime._drive_codex_app_server(
+                    turn,
+                    log,
+                    emitter,
+                    intent,
+                    agent,
+                    provider,
+                    text=text,
+                )
+                turn_driver = "codex_app_server" if used_app_server else "local_partner"
+            elif runtime._is_local_partner(agent):
                 # LocalPartner agent: the user picked a registered external
                 # coding-agent CLI (Claude Code / Codex / Trae / Qoder). Drive that CLI
                 # directly with their own login instead of the LLM loop. The
@@ -822,16 +876,31 @@ async def _start_turn(
                     "user_context": steering_context,
                 }
             )
-            turn_driver = "react"
-            await runtime._drive_react(
-                turn,
-                log,
-                emitter,
-                steering_intent,
-                provider,
-                agent,
-                model=validated.model,
-            )
+            if turn_driver == "codex_app_server":
+                # The App Server driver consumes most steering live.  A
+                # message that races its terminal event is still continued on
+                # the same durable inner Codex thread, never switched to a
+                # second planner against the same workspace.
+                await runtime._drive_codex_app_server(
+                    turn,
+                    log,
+                    emitter,
+                    steering_intent,
+                    agent,
+                    provider,
+                    text=correction,
+                )
+            else:
+                turn_driver = "react"
+                await runtime._drive_react(
+                    turn,
+                    log,
+                    emitter,
+                    steering_intent,
+                    provider,
+                    agent,
+                    model=validated.model,
+                )
 
         # ── PHASE 6 · status finalization + snapshot ───────────────
         if turn.status in {
