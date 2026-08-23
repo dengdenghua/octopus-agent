@@ -342,6 +342,10 @@ def mount_routers_b(
             ),
             team_rooms_router=ctx.team_rooms_router,
             identity_store=ctx.identity_store,
+            # Auth-off is the local single-user compatibility surface. Older
+            # and benchmark-created ThreadState rows have no owner/tenant; the
+            # resolver grants those rows only when they are also unlinked.
+            allow_anonymous_ownerless=not ctx.require_auth,
         )
 
         if stack is not None:
@@ -449,6 +453,11 @@ def mount_routers_b(
         # gateway handshake. Share the same dynamic resolver so resume/list,
         # steering and turn execution observe room removal immediately.
         _realtime_runtime._thread_access_resolver = _realtime_thread_access  # noqa: SLF001
+        # Echo/custom runtimes do not receive these stores in their
+        # constructors, but the claimed gateway boundary and late background
+        # writer guard must still consult the same durable deletion fences.
+        _realtime_runtime._thread_store = ctx.thread_store  # noqa: SLF001
+        _realtime_runtime._project_store = ctx.project_store  # noqa: SLF001
 
         _realtime_gateway = RealtimeGateway(
             runtime=_realtime_runtime,
@@ -510,6 +519,9 @@ def mount_routers_b(
 
         app.include_router(
             create_evolution_router(
+                stack=stack,
+                agent_registry=ctx.agent_registry,
+                project_root=ctx.project_root,
                 identity_store=ctx.identity_store,
                 require_auth=ctx.require_auth,
                 jwt_secret=ctx.jwt_secret,
@@ -592,6 +604,28 @@ def mount_routers_b(
         logging.getLogger(__name__).warning(
             "PluginHub failed to initialize: %s",
             _hub_exc,
+        )
+
+    # ─── Design Studio / local ComfyUI bridge ──────────────────
+    try:
+        from runtime.sensing.gateway.design_studio_router import (
+            create_design_studio_router,
+        )
+
+        app.include_router(
+            create_design_studio_router(
+                project_store=ctx.project_store,
+                identity_store=ctx.identity_store,
+                require_auth=ctx.require_auth,
+                jwt_secret=ctx.jwt_secret,
+                jwt_issuer=ctx.jwt_issuer,
+                jwt_audience=ctx.jwt_audience,
+            )
+        )
+    except Exception as _design_exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning(
+            "design studio router failed to mount: %s",
+            _design_exc,
         )
 
     from runtime.sensing.gateway.stub_router import create_stub_router

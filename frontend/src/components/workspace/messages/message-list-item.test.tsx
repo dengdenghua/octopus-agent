@@ -1,13 +1,24 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { Message } from "@/core/api/types";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   containsProtocolMarkers,
   messageClipboardText,
   MessageTimestamp,
+  ShadowReviewAction,
   threadMessageToCoworkRoomMessage,
 } from "./message-list-item";
+
+const evolutionMocks = vi.hoisted(() => ({
+  getStatus: vi.fn(),
+  queueRun: vi.fn(),
+}));
+
+vi.mock("@/core/evolution/api", () => ({
+  getDualHelixShadowStatus: evolutionMocks.getStatus,
+  queueDualHelixShadowRun: evolutionMocks.queueRun,
+}));
 
 describe("MessageTimestamp", () => {
   it("renders nothing when no timestamp is provided", () => {
@@ -115,5 +126,57 @@ describe("project group message mirror", () => {
         "thread:human-42": metadata,
       }).metadata,
     ).toBe(metadata);
+  });
+});
+
+describe("ShadowReviewAction", () => {
+  it("queues the opposite-engine review only after an explicit click", async () => {
+    evolutionMocks.getStatus.mockResolvedValue({
+      ok: true,
+      enabled: true,
+      runs: [],
+    });
+    evolutionMocks.queueRun.mockResolvedValue({
+      run_id: "shadow-1",
+      goal: "修复问题",
+      primary_engine: "octopus",
+      shadow_engine: "codex",
+      status: "queued",
+      created_at: "2026-08-23T00:00:00Z",
+      source_thread_id: "thread-1",
+      source_message_id: "answer-1",
+    });
+
+    render(
+      <ShadowReviewAction
+        context={{
+          goal: "修复问题",
+          primaryEngine: "octopus",
+          primaryOutput: "已经修复",
+          threadId: "thread-1",
+          messageId: "answer-1",
+          workspacePath: "/workspace/project",
+        }}
+      />,
+    );
+
+    expect(evolutionMocks.queueRun).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "让另一引擎复核本次任务" }),
+    );
+
+    await waitFor(() =>
+      expect(evolutionMocks.queueRun).toHaveBeenCalledWith({
+        goal: "修复问题",
+        primary_engine: "octopus",
+        primary_output: "已经修复",
+        workspace_path: "/workspace/project",
+        source_thread_id: "thread-1",
+        source_message_id: "answer-1",
+      }),
+    );
+    expect(
+      screen.getByRole("button", { name: "另一引擎正在影子复核" }),
+    ).toBeDisabled();
   });
 });

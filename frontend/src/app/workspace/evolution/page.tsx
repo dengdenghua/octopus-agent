@@ -1,135 +1,103 @@
-import { ActivityIcon, GaugeIcon, SparklesIcon, GamepadIcon } from "lucide-react";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { ActivityIcon, DnaIcon, ShieldCheckIcon } from "lucide-react";
+import { lazy, Suspense } from "react";
+import { useSearchParams } from "react-router-dom";
 
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { EvolutionControlPanel } from "@/components/workspace/evolution-control-panel";
-import EvolutionDashboard from "@/components/workspace/evolution-dashboard";
-import GameifiedEvolutionDashboard from "@/components/workspace/evolution-dashboard/gamified-evolution-dashboard";
-import EvolutionSettingsPage from "@/components/workspace/settings/evolution-settings-page";
+import { DualHelixEvolutionPanel } from "@/components/workspace/dual-helix-evolution-panel";
 import {
   WorkspaceBody,
   WorkspaceContainer,
 } from "@/components/workspace/workspace-container";
 import { useI18n } from "@/core/i18n/hooks";
 
+const EvolutionGovernancePanel = lazy(() =>
+  import("@/components/workspace/evolution-governance-panel").then(
+    (module) => ({
+      default: module.EvolutionGovernancePanel,
+    }),
+  ),
+);
+
+function SectionLoading() {
+  return (
+    <div className="space-y-3" role="status" aria-label="加载自进化模块">
+      <div className="h-24 animate-pulse rounded-xl border bg-muted/30" />
+      <div className="h-72 animate-pulse rounded-xl border bg-muted/20" />
+    </div>
+  );
+}
+
+type EvolutionSection = "overview" | "evidence" | "governance";
+
+function normalizeSection(value: string | null): EvolutionSection {
+  return value === "evidence" || value === "governance" ? value : "overview";
+}
+
 export default function EvolutionPage() {
   const { t } = useI18n();
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [viewMode, setViewMode] = useState<"gamified" | "classic">("gamified");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const section = normalizeSection(searchParams.get("section"));
+  const changeSection = (next: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === "overview") params.delete("section");
+    else params.set("section", next);
+    setSearchParams(params, { replace: true });
+  };
 
   return (
     <WorkspaceContainer>
       <WorkspaceBody className="pt-0">
         <div className="flex h-full min-h-0 w-full flex-col bg-card">
-          <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-muted px-3">
+          <header className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-muted px-3 py-2">
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold">
                 {t.evolutionDashboard.title}
               </div>
               <div className="truncate text-xs text-muted-foreground">
-                {t.evolutionDashboard.pageDescription}
+                从真实任务中学习，并在验证、安全和可回退的前提下应用改进。
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              {/* View Mode Toggle */}
-              <div className="flex gap-1 rounded-md border border-border p-0.5">
-                <Button
-                  type="button"
-                  variant={viewMode === "gamified" ? "secondary" : "ghost"}
-                  size="sm"
-                  className="h-6 px-2 text-xs"
-                  onClick={() => setViewMode("gamified")}
+            <Tabs value={section} onValueChange={changeSection}>
+              <TabsList className="h-9 rounded-lg border border-border bg-background/70 p-0.5">
+                <TabsTrigger
+                  value="overview"
+                  className="h-8 gap-1.5 px-3 text-xs"
                 >
-                  <GamepadIcon className="mr-1 size-3" />
-                  游戏化
-                </Button>
-                <Button
-                  type="button"
-                  variant={viewMode === "classic" ? "secondary" : "ghost"}
-                  size="sm"
-                  className="h-6 px-2 text-xs"
-                  onClick={() => setViewMode("classic")}
+                  <DnaIcon className="size-3.5" />
+                  进化总览
+                </TabsTrigger>
+                <TabsTrigger
+                  value="evidence"
+                  className="h-8 gap-1.5 px-3 text-xs"
                 >
-                  经典视图
-                </Button>
-              </div>
-
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                className="h-7 whitespace-nowrap px-2.5 text-xs"
-              >
-                <Link to="/workspace/reflex">
-                  <ActivityIcon className="mr-1.5 size-3.5" />
-                  {t.evolutionDashboard.reflexRules}
-                </Link>
-              </Button>
-              <Button
-                type="button"
-                variant={showAdvanced ? "secondary" : "outline"}
-                size="sm"
-                className="h-7 whitespace-nowrap px-2.5 text-xs"
-                onClick={() => setShowAdvanced((value) => !value)}
-                aria-expanded={showAdvanced}
-                aria-controls="evolution-runtime-monitor"
-              >
-                <GaugeIcon className="mr-1.5 size-3.5" />
-                {showAdvanced
-                  ? t.evolutionDashboard.hideRuntimeMonitor
-                  : t.evolutionDashboard.showRuntimeMonitor}
-              </Button>
-            </div>
+                  <ActivityIcon className="size-3.5" />
+                  实验证据
+                </TabsTrigger>
+                <TabsTrigger
+                  value="governance"
+                  className="h-8 gap-1.5 px-3 text-xs"
+                >
+                  <ShieldCheckIcon className="size-3.5" />
+                  安全治理
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           </header>
 
           <div className="min-h-0 flex-1 overflow-auto bg-card p-3">
-            {viewMode === "gamified" ? (
-              <GameifiedEvolutionDashboard />
-            ) : (
-              <EvolutionDashboard />
-            )}
-
-            {showAdvanced && (
-              <section
-                id="evolution-runtime-monitor"
-                className="mt-3 scroll-mt-4 rounded-md border border-border bg-card p-3"
-              >
-                <div className="mb-3 flex flex-col gap-1">
-                  <h2 className="text-sm font-semibold">
-                    {t.evolutionDashboard.showRuntimeMonitor}
-                  </h2>
-                  <p className="text-xs text-muted-foreground">
-                    {t.evolutionDashboard.runtimeMonitorDescription}
-                  </p>
-                </div>
-                <Tabs defaultValue="control" className="flex flex-col gap-3">
-                  <TabsList className="h-8 w-fit rounded-md">
-                    <TabsTrigger
-                      value="control"
-                      className="h-7 gap-1.5 px-2.5 text-xs"
-                    >
-                      <GaugeIcon className="size-3.5" />
-                      {t.evolutionControl.panelTitle}
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="status"
-                      className="h-7 gap-1.5 px-2.5 text-xs"
-                    >
-                      <SparklesIcon className="size-3.5" />
-                      {t.settings.sections.evolution}
-                    </TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="control" className="mt-0">
-                    <EvolutionControlPanel />
-                  </TabsContent>
-                  <TabsContent value="status" className="mt-0">
-                    <EvolutionSettingsPage />
-                  </TabsContent>
-                </Tabs>
-              </section>
-            )}
+            <Tabs value={section} onValueChange={changeSection}>
+              <TabsContent value="overview" className="mt-0">
+                <DualHelixEvolutionPanel view="overview" />
+              </TabsContent>
+              <TabsContent value="evidence" className="mt-0">
+                <DualHelixEvolutionPanel view="evidence" />
+              </TabsContent>
+              <TabsContent value="governance" className="mt-0">
+                <Suspense fallback={<SectionLoading />}>
+                  <EvolutionGovernancePanel />
+                </Suspense>
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
       </WorkspaceBody>

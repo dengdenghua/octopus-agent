@@ -521,6 +521,18 @@ class TurnParams(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     thread_id: str = Field(alias="threadId")
+    # Client-stable id for the one first-class userMessage item created by a
+    # new turn.  Keeping the optimistic UI row and durable server item on the
+    # same coordinate makes replay/reconnect reduction idempotent.  The
+    # namespace is deliberately narrower than arbitrary Item ids because this
+    # value crosses a trust boundary.
+    user_item_id: str | None = Field(
+        default=None,
+        alias="userItemId",
+        min_length=8,
+        max_length=96,
+        pattern=r"^itm_[A-Za-z0-9][A-Za-z0-9_-]*$",
+    )
     input: list[dict[str, Any]] = Field(default_factory=list)
     cwd: str | None = None
     approval_policy: Literal["never", "on-request", "untrusted"] = Field(
@@ -594,6 +606,9 @@ class Turn(BaseModel):
     # and taskId.
     objective_id: str | None = Field(default=None, alias="objectiveId")
     task_id: str | None = Field(default=None, alias="taskId")
+    # Trusted runtime-only execution strand used by the evolution ledger.
+    # It is never accepted from or serialized back to the client.
+    execution_engine: str | None = Field(default=None, exclude=True)
     checkpoint_id: int | None = Field(default=None, alias="checkpointId")
     outcome_reason: str | None = Field(default=None, alias="outcomeReason")
     # Canonical semantic result emitted by the agent loop. ``status`` remains

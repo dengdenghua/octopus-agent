@@ -31,6 +31,8 @@ from runtime.sensing.gateway._evolution_models import (
     BrowserDesktopRepairRecipeRerunBatchBody,
     BrowserDesktopRepairRecipeRerunBody,
     BrowserDesktopStaleArtifactRejectionBody,
+    DualHelixShadowRunBody,
+    DualHelixShadowSettingsBody,
     KimiSwarmLoadTestBody,
     KimiSwarmQuotaProbeBody,
     RepairRoutePromotionQueueBody,
@@ -46,6 +48,8 @@ __all__ = [
     "BrowserDesktopRepairRecipeRerunBatchBody",
     "BrowserDesktopRepairRecipeRerunBody",
     "BrowserDesktopStaleArtifactRejectionBody",
+    "DualHelixShadowRunBody",
+    "DualHelixShadowSettingsBody",
     "FASTAPI_AVAILABLE",
     "KimiSwarmLoadTestBody",
     "KimiSwarmQuotaProbeBody",
@@ -62,6 +66,9 @@ _LOG = logging.getLogger("octopus.siphon.evolution_router")
 
 def create_evolution_router(
     *,
+    stack: Any = None,
+    agent_registry: Any = None,
+    project_root: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
     jwt_secret: str | None = None,
@@ -91,6 +98,25 @@ def create_evolution_router(
         tags=["evolution"],
         dependencies=[Depends(_operator_dep)],
     )
+    shadow_service = None
+    if stack is not None and project_root is not None:
+        try:
+            from runtime.platform.process.paths import app_paths
+            from runtime.safety.evolution.dual_helix_shadow import (
+                DualHelixShadowService,
+                build_codex_shadow_runner,
+                build_native_shadow_runner,
+            )
+
+            shadow_service = DualHelixShadowService(
+                app_paths().data_dir / "dual_helix_shadow.json",
+                app_paths().data_dir / "dual_helix_shadows",
+                allowed_workspace_root=project_root,
+                codex_runner=build_codex_shadow_runner(stack, agent_registry),
+                native_runner=build_native_shadow_runner(stack),
+            )
+        except Exception:  # noqa: BLE001 - status endpoint reports unavailable
+            _LOG.exception("dual-helix shadow service failed to initialize")
 
     @router.get("/codex-gap")
     def get_codex_gap() -> dict[str, Any]:
@@ -100,6 +126,61 @@ def create_evolution_router(
             return {"ok": True, **compute_codex_gap_report()}
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
+
+    @router.get("/dual-helix/evidence")
+    def get_dual_helix_evidence(
+        limit: int = Query(default=20, ge=1, le=100),
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.dual_helix import build_dual_helix_evidence
+            from runtime.safety.evolution.proposal_ledger import ProposalLedger
+
+            records = ProposalLedger().query(limit=10_000)
+            return build_dual_helix_evidence(records, limit=limit)
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.get("/dual-helix/shadow/status")
+    def get_dual_helix_shadow_status() -> dict[str, Any]:
+        if shadow_service is None:
+            return {
+                "ok": False,
+                "enabled": False,
+                "error": "dual-helix shadow service is unavailable",
+                "runs": [],
+            }
+        return shadow_service.status()
+
+    @router.post("/dual-helix/shadow/settings")
+    def set_dual_helix_shadow_settings(
+        body: DualHelixShadowSettingsBody,
+    ) -> dict[str, Any]:
+        if shadow_service is None:
+            raise HTTPException(503, "dual-helix shadow service is unavailable")
+        return shadow_service.set_enabled(body.enabled)
+
+    @router.post("/dual-helix/shadow/run")
+    async def run_dual_helix_shadow(
+        body: DualHelixShadowRunBody,
+    ) -> dict[str, Any]:
+        if shadow_service is None:
+            raise HTTPException(503, "dual-helix shadow service is unavailable")
+        try:
+            return {
+                "ok": True,
+                **shadow_service.queue(
+                    goal=body.goal,
+                    primary_engine=body.primary_engine,
+                    primary_output=body.primary_output,
+                    workspace_path=body.workspace_path or None,
+                    source_thread_id=body.source_thread_id or None,
+                    source_message_id=body.source_message_id or None,
+                ),
+            }
+        except PermissionError as exc:
+            raise HTTPException(409, str(exc)) from None
+        except (OSError, ValueError) as exc:
+            raise HTTPException(400, str(exc)) from None
 
     @router.get("/agent-scorecard")
     def get_agent_scorecard(
@@ -839,6 +920,9 @@ def create_evolution_router(
                         "ts": r.ts,
                         "fitness_before": r.fitness_before,
                         "fitness_after": r.fitness_after,
+                        "model": r.model,
+                        "engine": r.metadata.get("engine"),
+                        "goal_fingerprint": r.metadata.get("goal_fingerprint"),
                     }
                     for r in records
                 ],

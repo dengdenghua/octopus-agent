@@ -7,16 +7,14 @@ import { renderWithProviders } from "@/test/harness";
 
 import EvolutionPage from "./page";
 
-vi.mock("@/components/workspace/evolution-dashboard", () => ({
-  default: () => <div>dashboard-stub</div>,
+vi.mock("@/components/workspace/dual-helix-evolution-panel", () => ({
+  DualHelixEvolutionPanel: ({ view }: { view: string }) => (
+    <div>helix-{view}</div>
+  ),
 }));
 
-vi.mock("@/components/workspace/evolution-control-panel", () => ({
-  EvolutionControlPanel: () => <div>control-panel-stub</div>,
-}));
-
-vi.mock("@/components/workspace/settings/evolution-settings-page", () => ({
-  default: () => <div>settings-stub</div>,
+vi.mock("@/components/workspace/evolution-governance-panel", () => ({
+  EvolutionGovernancePanel: () => <div>governance-panel</div>,
 }));
 
 vi.mock("@/components/workspace/workspace-container", () => ({
@@ -29,33 +27,21 @@ vi.mock("@/components/workspace/workspace-container", () => ({
 }));
 
 describe("EvolutionPage", () => {
-  it("uses localized page actions and exposes monitor expansion state", async () => {
+  it("consolidates evolution into overview, evidence, and governance", async () => {
     const user = userEvent.setup();
     renderWithProviders(<EvolutionPage />, {
-      locale: "en-US",
+      locale: "zh-CN",
       initialRoute: "/workspace/evolution",
     });
 
-    expect(
-      screen.getByRole("link", { name: "Reflection rules" }),
-    ).toHaveAttribute("href", "/workspace/reflex");
+    expect(screen.getByText("helix-overview")).toBeInTheDocument();
+    expect(screen.queryByText("游戏化")).not.toBeInTheDocument();
+    expect(screen.queryByText("经典视图")).not.toBeInTheDocument();
 
-    const toggle = screen.getByRole("button", {
-      name: "Show runtime monitor",
-    });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(toggle).toHaveAttribute(
-      "aria-controls",
-      "evolution-runtime-monitor",
-    );
+    await user.click(screen.getByRole("tab", { name: "实验证据" }));
+    expect(screen.getByText("helix-evidence")).toBeInTheDocument();
 
-    await user.click(toggle);
-    expect(
-      screen.getByRole("button", { name: "Hide runtime monitor" }),
-    ).toHaveAttribute("aria-expanded", "true");
-    expect(
-      screen.getByRole("heading", { name: "Show runtime monitor", level: 2 }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("control-panel-stub")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "安全治理" }));
+    expect(await screen.findByText("governance-panel")).toBeInTheDocument();
   });
 });

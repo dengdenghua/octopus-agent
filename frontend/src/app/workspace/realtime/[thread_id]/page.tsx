@@ -3452,6 +3452,10 @@ function RealtimePageContent({
         displayAgent?.avatar_url ||
         `/api/agents/${encodeURIComponent(effectiveAgentId)}/avatar`,
       icon: displayAgent?.icon || null,
+      execution_engine:
+        displayAgent?.capabilities?.execution_backend === "codex_app_server"
+          ? ("codex" as const)
+          : ("octopus" as const),
     }),
     [displayAgent, effectiveAgentId],
   );

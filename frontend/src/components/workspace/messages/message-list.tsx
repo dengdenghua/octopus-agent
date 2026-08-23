@@ -73,6 +73,7 @@ import { hasVisibleMessageGroupContent, MessageGroup } from "./message-group";
 import {
   MessageListItem,
   type MessageListProjectActions,
+  type ShadowReviewContext,
 } from "./message-list-item";
 import {
   type FailurePresentation,
@@ -893,6 +894,7 @@ export function MessageList({
     display_name?: string | null;
     avatar_url?: string | null;
     icon?: string | null;
+    execution_engine?: "octopus" | "codex";
   } | null;
   agentRoster?: MessageListAgentRosterEntry[];
   /** Project path for ambient suggestions */
@@ -938,6 +940,40 @@ export function MessageList({
     combinedAgentRoster.length === 1 ? combinedAgentRoster[0] : undefined;
 
   const messages = thread.messages;
+
+  const shadowReviewForMessage = useCallback(
+    (message: Message): ShadowReviewContext | undefined => {
+      if (message.type !== "ai") return undefined;
+      const index = messages.indexOf(message);
+      let goal = "";
+      for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+        const candidate = messages[cursor];
+        if (candidate?.type === "human") {
+          goal = extractTextFromMessage(candidate).trim();
+          break;
+        }
+      }
+      const primaryOutput = extractTextFromMessage(message).trim();
+      if (!goal || !primaryOutput) return undefined;
+      const metadata = message.additional_kwargs as
+        | Record<string, unknown>
+        | undefined;
+      const metadataEngine = metadata?.execution_engine;
+      const primaryEngine =
+        metadataEngine === "codex" || metadataEngine === "octopus"
+          ? metadataEngine
+          : currentAgent?.execution_engine || "octopus";
+      return {
+        goal,
+        primaryEngine,
+        primaryOutput,
+        threadId,
+        messageId: String(message.id ?? `${threadId}:${index}`),
+        workspacePath: project,
+      };
+    },
+    [currentAgent?.execution_engine, messages, project, threadId],
+  );
   const hasTimelineContent = messages.length > 0 || timelineEntries.length > 0;
 
   // Structural fingerprint: changes when the message list topology changes
@@ -1676,6 +1712,7 @@ export function MessageList({
           messageIndex={messages.indexOf(msg)}
           afterContent={afterContent}
           projectMessageActions={projectMessageActions}
+          shadowReview={shadowReviewForMessage(msg)}
           allowThreadFork={allowThreadFork}
         />
       </div>
@@ -1707,6 +1744,7 @@ export function MessageList({
           messageIndex={messages.indexOf(msg)}
           afterContent={afterContent}
           projectMessageActions={projectMessageActions}
+          shadowReview={shadowReviewForMessage(msg)}
           allowThreadFork={allowThreadFork}
         />
       </>

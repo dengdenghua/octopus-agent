@@ -163,6 +163,94 @@ export interface CanaryState {
   entered_ts: string;
 }
 
+export interface CodexGapCapability {
+  id: string;
+  area: "codex_parity" | "octopus_advantage";
+  title: string;
+  why: string;
+  score: number;
+  target_score: number;
+  status: string;
+  next_actions: string[];
+}
+
+export interface CodexGapReport {
+  ok: boolean;
+  schema: string;
+  parity_score: number;
+  advantage_score: number;
+  combined_score: number;
+  verdict: string;
+  capabilities: CodexGapCapability[];
+  top_gaps?: CodexGapCapability[];
+  error?: string;
+}
+
+export interface AgentBenchmarkReport {
+  ok: boolean;
+  schema: string;
+  score: number;
+  passed: number;
+  total: number;
+  ready: boolean;
+  cases: Array<{
+    id: string;
+    title: string;
+    dimension: string;
+    passed: boolean;
+    next_action: string;
+  }>;
+  error?: string;
+}
+
+export interface DualHelixEvidence {
+  ok: boolean;
+  schema: string;
+  paired_count: number;
+  unpaired_count: number;
+  octopus_wins: number;
+  codex_wins: number;
+  ties: number;
+  octopus_win_rate: number | null;
+  strands: Record<
+    "octopus" | "codex",
+    { samples: number; successes: number; success_rate: number | null }
+  >;
+  pairs: Array<{
+    goal_fingerprint: string;
+    goal: string;
+    winner: "octopus" | "codex" | "tie";
+    octopus: {
+      outcome: "success" | "failure";
+      model: string | null;
+      ts: string;
+    };
+    codex: { outcome: "success" | "failure"; model: string | null; ts: string };
+  }>;
+  error?: string;
+}
+
+export interface DualHelixShadowStatus {
+  ok: boolean;
+  schema?: string;
+  enabled: boolean;
+  isolation?: string;
+  runs: Array<{
+    run_id: string;
+    goal: string;
+    primary_engine: "octopus" | "codex";
+    shadow_engine: "octopus" | "codex";
+    status: string;
+    created_at: string;
+    updated_at?: string;
+    source_thread_id?: string | null;
+    source_message_id?: string | null;
+    result?: string | null;
+    error?: string | null;
+  }>;
+  error?: string;
+}
+
 export async function getEvolutionOverview(): Promise<EvolutionOverview> {
   const res = await evolutionFetch("/api/evolution/overview", {
     headers: authHeaders(),
@@ -170,6 +258,89 @@ export async function getEvolutionOverview(): Promise<EvolutionOverview> {
   if (!res.ok)
     throw new Error(`Failed to load evolution overview: ${res.statusText}`);
   return (await res.json()) as EvolutionOverview;
+}
+
+export async function getCodexGapReport(): Promise<CodexGapReport> {
+  const res = await evolutionFetch("/api/evolution/codex-gap", {
+    headers: authHeaders(),
+  });
+  if (!res.ok)
+    throw new Error(`Failed to load Codex gap report: ${res.statusText}`);
+  return (await res.json()) as CodexGapReport;
+}
+
+export async function getAgentBenchmarkReport(): Promise<AgentBenchmarkReport> {
+  const res = await evolutionFetch("/api/evolution/agent-benchmark", {
+    headers: authHeaders(),
+  });
+  if (!res.ok)
+    throw new Error(`Failed to load agent benchmark: ${res.statusText}`);
+  return (await res.json()) as AgentBenchmarkReport;
+}
+
+export async function getDualHelixEvidence(): Promise<DualHelixEvidence> {
+  const res = await evolutionFetch("/api/evolution/dual-helix/evidence", {
+    headers: authHeaders(),
+  });
+  if (!res.ok)
+    throw new Error(`Failed to load dual-helix evidence: ${res.statusText}`);
+  return (await res.json()) as DualHelixEvidence;
+}
+
+export async function getDualHelixShadowStatus(): Promise<DualHelixShadowStatus> {
+  const res = await evolutionFetch("/api/evolution/dual-helix/shadow/status", {
+    headers: authHeaders(),
+  });
+  if (!res.ok)
+    throw new Error(`Failed to load shadow status: ${res.statusText}`);
+  return (await res.json()) as DualHelixShadowStatus;
+}
+
+export async function setDualHelixShadowEnabled(
+  enabled: boolean,
+): Promise<DualHelixShadowStatus> {
+  const res = await evolutionFetch(
+    "/api/evolution/dual-helix/shadow/settings",
+    {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify({ enabled }),
+    },
+  );
+  if (!res.ok)
+    throw new Error(`Failed to update shadow status: ${res.statusText}`);
+  return (await res.json()) as DualHelixShadowStatus;
+}
+
+export interface DualHelixShadowRunRequest {
+  goal: string;
+  primary_engine: "octopus" | "codex";
+  primary_output: string;
+  workspace_path?: string;
+  source_thread_id?: string;
+  source_message_id?: string;
+}
+
+export async function queueDualHelixShadowRun(
+  body: DualHelixShadowRunRequest,
+): Promise<DualHelixShadowStatus["runs"][number]> {
+  const res = await evolutionFetch("/api/evolution/dual-helix/shadow/run", {
+    method: "POST",
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = (await res.json().catch(() => null)) as {
+      detail?: string;
+    } | null;
+    throw new Error(
+      detail?.detail || `Failed to queue shadow review: ${res.statusText}`,
+    );
+  }
+  const value = (await res.json()) as DualHelixShadowStatus["runs"][number] & {
+    ok?: boolean;
+  };
+  return value;
 }
 
 export async function getEvolutionStory(): Promise<EvolutionStory> {

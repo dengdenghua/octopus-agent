@@ -93,6 +93,17 @@ if FASTAPI_AVAILABLE:
         confirm_real_provider: bool = False
         max_tokens: int = Field(default=16, ge=1, le=512)
 
+    class DualHelixShadowSettingsBody(BaseModel):
+        enabled: bool = False
+
+    class DualHelixShadowRunBody(BaseModel):
+        goal: str = Field(..., min_length=1, max_length=20_000)
+        primary_engine: str = Field(..., pattern="^(octopus|codex)$")
+        primary_output: str = Field(default="", max_length=50_000)
+        workspace_path: str = Field(default="", max_length=4_096)
+        source_thread_id: str = Field(default="", max_length=512)
+        source_message_id: str = Field(default="", max_length=512)
+
 
 __all__ = [
     "AutomationPolicyRuleInstallBody",
@@ -101,6 +112,8 @@ __all__ = [
     "BrowserDesktopRepairRecipeRerunBatchBody",
     "BrowserDesktopRepairRecipeRerunBody",
     "BrowserDesktopStaleArtifactRejectionBody",
+    "DualHelixShadowRunBody",
+    "DualHelixShadowSettingsBody",
     "FASTAPI_AVAILABLE",
     "KimiSwarmLoadTestBody",
     "KimiSwarmQuotaProbeBody",

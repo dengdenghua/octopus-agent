@@ -1,6 +1,8 @@
 import type { Message } from "@/core/api/types";
 import type { CoworkRoomMessage } from "@/core/cowork";
 import {
+  CheckCircle2Icon,
+  DnaIcon,
   FileIcon,
   GitForkIcon,
   Loader2Icon,
@@ -8,12 +10,16 @@ import {
   RefreshCwIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
+  XCircleIcon,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   memo,
   useCallback,
+  useEffect,
   useMemo,
+  useRef,
+  useState,
   type ComponentProps,
   type ImgHTMLAttributes,
   type ReactNode,
@@ -28,10 +34,22 @@ import {
 } from "@/components/ai-elements/message";
 import { Task, TaskTrigger } from "@/components/ai-elements/task";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { resolveArtifactURL } from "@/core/artifacts/utils";
 import { jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
+import {
+  getDualHelixShadowStatus,
+  queueDualHelixShadowRun,
+  type DualHelixShadowStatus,
+} from "@/core/evolution/api";
 import { useForkThread } from "@/core/threads/hooks";
 import {
   extractContentFromMessage,
@@ -78,6 +96,165 @@ export interface MessageListProjectActions extends Omit<
 > {
   /** Metadata from the hidden room mirror, keyed by source_message_id. */
   messageMetadataBySourceId?: Record<string, CoworkRoomMessage["metadata"]>;
+}
+
+export interface ShadowReviewContext {
+  goal: string;
+  primaryEngine: "octopus" | "codex";
+  primaryOutput: string;
+  threadId: string;
+  messageId: string;
+  workspacePath?: string | null;
+}
+
+type ShadowRun = DualHelixShadowStatus["runs"][number];
+
+function isShadowRunActive(run: ShadowRun | null): boolean {
+  return Boolean(
+    run && ["queued", "snapshotting", "running"].includes(run.status),
+  );
+}
+
+export function ShadowReviewAction({
+  context,
+}: {
+  context: ShadowReviewContext;
+}) {
+  const [run, setRun] = useState<ShadowRun | null>(null);
+  const [queueing, setQueueing] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const terminalNotified = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+    void getDualHelixShadowStatus()
+      .then((status) => {
+        if (!active) return;
+        const previous = status.runs.find(
+          (item) =>
+            item.source_thread_id === context.threadId &&
+            item.source_message_id === context.messageId,
+        );
+        if (previous) {
+          terminalNotified.current = ["completed", "failed"].includes(
+            previous.status,
+          );
+          setRun(previous);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [context.messageId, context.threadId]);
+
+  useEffect(() => {
+    if (!isShadowRunActive(run)) return;
+    const timer = window.setInterval(() => {
+      void getDualHelixShadowStatus()
+        .then((status) => {
+          const current = status.runs.find(
+            (item) => item.run_id === run?.run_id,
+          );
+          if (!current) return;
+          setRun(current);
+          if (
+            !terminalNotified.current &&
+            ["completed", "failed"].includes(current.status)
+          ) {
+            terminalNotified.current = true;
+            if (current.status === "completed") {
+              toast.success("另一引擎已完成影子复核");
+            } else {
+              toast.error("影子复核未完成，可点击查看原因");
+            }
+          }
+        })
+        .catch(() => undefined);
+    }, 2_000);
+    return () => window.clearInterval(timer);
+  }, [run]);
+
+  const queueReview = async () => {
+    if (run && ["completed", "failed"].includes(run.status)) {
+      setDialogOpen(true);
+      return;
+    }
+    if (queueing || isShadowRunActive(run)) return;
+    setQueueing(true);
+    try {
+      const status = await getDualHelixShadowStatus();
+      if (!status.enabled) {
+        toast.error("请先到“自进化”页面开启影子模式");
+        return;
+      }
+      terminalNotified.current = false;
+      const queued = await queueDualHelixShadowRun({
+        goal: context.goal.slice(0, 20_000),
+        primary_engine: context.primaryEngine,
+        primary_output: context.primaryOutput.slice(0, 50_000),
+        workspace_path: context.workspacePath || undefined,
+        source_thread_id: context.threadId,
+        source_message_id: context.messageId,
+      });
+      setRun(queued);
+      toast.success(
+        `已交给${queued.shadow_engine === "codex" ? " Codex" : " Octopus"} 影子复核`,
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "影子复核提交失败");
+    } finally {
+      setQueueing(false);
+    }
+  };
+
+  const active = queueing || isShadowRunActive(run);
+  const completed = run?.status === "completed";
+  const failed = run?.status === "failed";
+  const label = completed
+    ? "影子复核已完成，点击查看"
+    : failed
+      ? "影子复核失败，点击查看"
+      : active
+        ? "另一引擎正在影子复核"
+        : "让另一引擎复核本次任务";
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => void queueReview()}
+        disabled={active}
+        className="inline-flex size-7 items-center justify-center rounded-lg text-foreground/60 transition-all duration-base hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 disabled:cursor-wait disabled:opacity-60"
+        title={label}
+        aria-label={label}
+      >
+        {active ? (
+          <Loader2Icon className="size-4 animate-spin" />
+        ) : completed ? (
+          <CheckCircle2Icon className="size-4 text-success" />
+        ) : failed ? (
+          <XCircleIcon className="size-4 text-destructive" />
+        ) : (
+          <DnaIcon className="size-4" />
+        )}
+      </button>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-h-[80dvh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>双引擎影子复核</DialogTitle>
+            <DialogDescription>
+              {run?.shadow_engine === "codex" ? "Codex" : "Octopus"}
+              在隔离的只读副本中给出的复核结果。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-xl border border-border bg-muted/25 p-4 text-sm leading-6 whitespace-pre-wrap">
+            {run?.result || run?.error || "暂时没有可显示的结果。"}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 /** Build the hidden Team Room copy that gives a canonical thread message a
@@ -324,6 +501,7 @@ export const MessageListItem = memo(function MessageListItem({
   messageIndex,
   afterContent,
   projectMessageActions,
+  shadowReview,
   allowThreadFork = true,
 }: {
   className?: string;
@@ -337,6 +515,8 @@ export const MessageListItem = memo(function MessageListItem({
   afterContent?: ReactNode;
   /** Project actions exposed on human bubbles in a bound project group. */
   projectMessageActions?: MessageListProjectActions;
+  /** Explicit, opt-in review by the engine opposite to this answer's engine. */
+  shadowReview?: ShadowReviewContext;
   /** Legacy on-demand-owned threads are readable but cannot clone that owner. */
   allowThreadFork?: boolean;
 }) {
@@ -513,6 +693,9 @@ export const MessageListItem = memo(function MessageListItem({
             >
               <GitForkIcon className="size-4" />
             </button>
+          ) : null}
+          {message.type === "ai" && shadowReview ? (
+            <ShadowReviewAction context={shadowReview} />
           ) : null}
           {message.type === "ai" ? (
             <button

@@ -823,6 +823,9 @@ async def _start_turn(
                 )
         except Exception as exc:
             _logger.exception("CerebrumRuntime: turn driver crashed: %s", turn_driver)
+            turn.execution_engine = (
+                "codex" if turn_driver == "codex_app_server" else "octopus"
+            )
             context = intent.user_context if isinstance(intent.user_context, dict) else {}
             err = ErrorItem(
                 message=str(exc) or exc.__class__.__name__,
@@ -846,6 +849,10 @@ async def _start_turn(
             )
             runtime._snapshot_to_thread_store(thread_id, log, intent)
             return turn
+
+        turn.execution_engine = (
+            "codex" if turn_driver == "codex_app_server" else "octopus"
+        )
 
         # Native tool turns consume steering between model rounds. Other
         # drivers (reflection, topology, Project OS) may finish one atomic
@@ -892,6 +899,7 @@ async def _start_turn(
                 )
             else:
                 turn_driver = "react"
+                turn.execution_engine = "octopus"
                 await runtime._drive_react(
                     turn,
                     log,

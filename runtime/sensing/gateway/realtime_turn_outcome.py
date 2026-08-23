@@ -8,6 +8,7 @@ turns contribute to the evolution proposal ledger.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 from typing import TYPE_CHECKING, Any, Literal, cast
@@ -403,6 +404,16 @@ def _turn_model(turn: Turn) -> str | None:
     return model if isinstance(model, str) and model.strip() else None
 
 
+def _turn_execution_engine(turn: Turn) -> str:
+    value = str(getattr(turn, "execution_engine", None) or "").strip().lower()
+    return value if value in {"codex", "octopus"} else "octopus"
+
+
+def _goal_fingerprint(goal: str) -> str:
+    normalized = " ".join(goal.strip().lower().split())
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
+
+
 def _turn_goal_text(turn: Turn, intent: ParsedIntent | None) -> str:
     if intent is not None:
         goal = getattr(intent, "normalized_goal", None)
@@ -663,11 +674,15 @@ def _failed_turn_metadata(
     repair_routes = _repair_routes_from_failed_verifications(failed_verifications)
     code_change_paths = _code_change_paths(turn)
     verification_plan = _verification_plan_for_code_paths(code_change_paths, intent)
+    goal = _turn_goal_text(turn, intent)
     return {
         "turn_id": turn.id,
         "thread_id": turn.thread_id,
+        "objective_id": turn.objective_id or turn.id,
+        "engine": _turn_execution_engine(turn),
+        "goal_fingerprint": _goal_fingerprint(goal),
         "failure_source": failure_source,
-        "goal": _turn_goal_text(turn, intent),
+        "goal": goal,
         "error": _turn_failure_text(turn),
         "status": str(turn.status.value if hasattr(turn.status, "value") else turn.status),
         "item_counts": _turn_item_counts(turn),
@@ -695,10 +710,14 @@ def _successful_turn_metadata(
     *,
     intent: ParsedIntent | None,
 ) -> dict[str, Any]:
+    goal = _turn_goal_text(turn, intent)
     return {
         "turn_id": turn.id,
         "thread_id": turn.thread_id,
-        "goal": _turn_goal_text(turn, intent),
+        "objective_id": turn.objective_id or turn.id,
+        "engine": _turn_execution_engine(turn),
+        "goal_fingerprint": _goal_fingerprint(goal),
+        "goal": goal,
         "status": str(turn.status.value if hasattr(turn.status, "value") else turn.status),
         "item_counts": _turn_item_counts(turn),
         "code_change_paths": _code_change_paths(turn),
