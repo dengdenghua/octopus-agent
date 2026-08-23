@@ -13,6 +13,7 @@
  */
 import { test, expect, _electron as electron } from "@playwright/test";
 import { mkdtemp, rm } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -93,6 +94,45 @@ test("desktop shell boots: window, preload bridge, workbench root", async () => 
     );
     expect(listing.ok).toBe(true);
     expect(Array.isArray(listing.items)).toBe(true);
+
+    // Site permissions are persisted by the main process, not renderer
+    // localStorage. Verify the preload bridge can remember and revoke an
+    // exact-origin decision inside this isolated temporary profile.
+    const permissionRoundTrip = await win.evaluate(async () => {
+      const browser = window.octopus?.browser;
+      const saved = await browser?.setSitePermission(
+        "https://example.com/path",
+        "camera",
+        "allow",
+      );
+      const listed = await browser?.listSitePermissions();
+      const reset = await browser?.setSitePermission(
+        "https://example.com",
+        "camera",
+        "ask",
+      );
+      const afterReset = await browser?.listSitePermissions();
+      return { saved, listed, reset, afterReset };
+    });
+    expect(permissionRoundTrip.saved).toEqual({ ok: true });
+    expect(permissionRoundTrip.listed).toMatchObject({
+      ok: true,
+      entries: [
+        {
+          origin: "https://example.com",
+          permission: "camera",
+          decision: "allow",
+        },
+      ],
+    });
+    expect(permissionRoundTrip.reset).toEqual({ ok: true });
+    expect(permissionRoundTrip.afterReset).toEqual({ ok: true, entries: [] });
+
+    const passwordMetadata = await win.evaluate(() =>
+      window.octopus?.browser?.listPasswords(),
+    );
+    expect(passwordMetadata.ok).toBe(true);
+    expect(Array.isArray(passwordMetadata.entries)).toBe(true);
 
     // The browser bridge must refuse to drive the MAIN window's webContents:
     // browser:executeJS is for embedded <webview> tabs only. This proves the
@@ -207,10 +247,10 @@ test("desktop backend spawns and the renderer reaches it", async () => {
       const backend = window.octopus?.backendBaseURL ?? "";
       const websocketBase = backend.replace(/^http/, "ws");
       const websocket = await new Promise<string>((resolve) => {
-        const socket = new WebSocket(
-          `${websocketBase}/api/realtime`,
-          ["bearer", body.access_token!],
-        );
+        const socket = new WebSocket(`${websocketBase}/api/realtime`, [
+          "bearer",
+          body.access_token!,
+        ]);
         const timer = window.setTimeout(() => {
           socket.close();
           resolve("timeout");
@@ -230,6 +270,116 @@ test("desktop backend spawns and the renderer reaches it", async () => {
     expect(websocketContract).toEqual({ loginStatus: 200, websocket: "open" });
   } finally {
     await app.close();
+    await rm(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("browser profile downloads can pause, resume, and cancel", async () => {
+  const userDataDir = await mkdtemp(
+    path.join(tmpdir(), "octopus-electron-download-"),
+  );
+  const downloadPath = path.join(userDataDir, "controlled-download.bin");
+  const server = createServer((request, response) => {
+    if (request.url === "/") {
+      response.writeHead(200, { "content-type": "text/html" });
+      response.end(
+        '<a id="download" href="/controlled-download.bin" download>download</a>',
+      );
+      return;
+    }
+    response.writeHead(200, {
+      "content-type": "application/octet-stream",
+      "content-length": String(8 * 1024 * 1024),
+      "content-disposition": 'attachment; filename="controlled-download.bin"',
+    });
+    let sent = 0;
+    const timer = setInterval(() => {
+      if (response.destroyed) {
+        clearInterval(timer);
+        return;
+      }
+      const chunk = Buffer.alloc(64 * 1024, 1);
+      response.write(chunk);
+      sent += chunk.length;
+      if (sent >= 8 * 1024 * 1024) {
+        clearInterval(timer);
+        response.end();
+      }
+    }, 35);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("no port");
+
+  const app = await electron.launch({
+    args: [
+      path.join(ELECTRON_DIR, "main.cjs"),
+      "--smoke-test",
+      `--user-data-dir=${userDataDir}`,
+    ],
+    cwd: REPO_ROOT,
+    env: { ...process.env, OCTOPUS_PET_DISABLED: "1" },
+  });
+
+  try {
+    const win = await app.firstWindow();
+    await win.waitForLoadState("domcontentloaded");
+    await app.evaluate(({ session }, targetPath) => {
+      session
+        .fromPartition("persist:octopus-browser")
+        .on("will-download", (_event, item) => item.setSavePath(targetPath));
+    }, downloadPath);
+
+    const downloadId = await win.evaluate(
+      ({ pageUrl }) =>
+        new Promise<string>((resolve, reject) => {
+          const timeout = window.setTimeout(
+            () => reject(new Error("download event timeout")),
+            10_000,
+          );
+          const off = window.octopus!.on(
+            "browser:download-event",
+            (...args) => {
+              const payload = args[0] as { id?: string; state?: string };
+              if (!payload?.id || payload.state !== "progressing") return;
+              window.clearTimeout(timeout);
+              off();
+              resolve(payload.id);
+            },
+          );
+          const webview = document.createElement("webview");
+          webview.setAttribute("partition", "persist:octopus-browser");
+          webview.setAttribute("src", pageUrl);
+          webview.addEventListener("dom-ready", () => {
+            void webview.executeJavaScript(
+              'document.querySelector("#download").click()',
+            );
+          });
+          document.body.appendChild(webview);
+        }),
+      { pageUrl: `http://127.0.0.1:${address.port}/` },
+    );
+
+    const paused = await win.evaluate(
+      (id) => window.octopus!.browser.pauseDownload(id),
+      downloadId,
+    );
+    expect(paused).toEqual({ ok: true });
+
+    const resumed = await win.evaluate(
+      (id) => window.octopus!.browser.resumeDownload(id),
+      downloadId,
+    );
+    expect(resumed).toEqual({ ok: true });
+
+    const cancelled = await win.evaluate(
+      (id) => window.octopus!.browser.cancelDownload(id),
+      downloadId,
+    );
+    expect(cancelled).toEqual({ ok: true });
+  } finally {
+    await app.close();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
     await rm(userDataDir, { recursive: true, force: true });
   }
 });

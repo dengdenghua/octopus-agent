@@ -31,6 +31,13 @@ import { useAgents } from "@/core/agents/hooks";
 import { isPrimaryPersonaAgentId } from "@/core/agents/persona-policy";
 import { copyTextToClipboard } from "@/core/clipboard";
 import { emitAgentChanged } from "@/core/events";
+import {
+  BROWSER_AGENT_POLICY_EVENT,
+  browserHttpOrigin,
+  getBrowserAgentPermission,
+  recordBrowserAgentAudit,
+  setBrowserAgentPermission,
+} from "@/core/browser/agent-permissions";
 import { cn } from "@/lib/utils";
 
 import {
@@ -61,6 +68,11 @@ interface PendingConfirmation {
   createdAt: number;
 }
 
+interface PendingSiteAccess {
+  origin: string;
+  aiMessageId: string;
+}
+
 interface ResearchPlatform {
   name: string;
   url: string;
@@ -86,6 +98,9 @@ export function AssistantPanel({ webviewHandle }: Props) {
   const [pendingConfirmations, setPendingConfirmations] = useState<
     PendingConfirmation[]
   >([]);
+  const [pendingSiteAccess, setPendingSiteAccess] =
+    useState<PendingSiteAccess | null>(null);
+  const [policyVersion, setPolicyVersion] = useState(0);
   const [recorderMode, setRecorderMode] = useState(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("octopus:browser-recorder-mode") === "1";
@@ -144,6 +159,24 @@ export function AssistantPanel({ webviewHandle }: Props) {
     () => primaryAgents.find((a) => a.name === agentName) ?? null,
     [agentName, primaryAgents],
   );
+  const activeOrigin = useMemo(
+    () => browserHttpOrigin(activeTab?.url),
+    [activeTab?.url],
+  );
+  const [activeSitePermission, setActiveSitePermission] = useState(() =>
+    getBrowserAgentPermission(activeTab?.url),
+  );
+
+  useEffect(() => {
+    setActiveSitePermission(getBrowserAgentPermission(activeTab?.url));
+  }, [activeTab?.url, policyVersion]);
+
+  useEffect(() => {
+    const refresh = () => setPolicyVersion((value) => value + 1);
+    window.addEventListener(BROWSER_AGENT_POLICY_EVENT, refresh);
+    return () =>
+      window.removeEventListener(BROWSER_AGENT_POLICY_EVENT, refresh);
+  }, []);
 
   // Implementation note.
   // Implementation note.
@@ -313,6 +346,27 @@ export function AssistantPanel({ webviewHandle }: Props) {
       setAgentLoopActive(false);
       return;
     }
+    if (!activeOrigin || activeSitePermission === "block") {
+      lastProcessedAiIdRef.current = aiId;
+      const origin = activeOrigin ?? activeTab?.url ?? "internal-page";
+      recordBrowserAgentAudit({
+        origin,
+        action: "site-access",
+        outcome: "blocked",
+        detail: "Agent access is blocked for this site",
+      });
+      void sendMessage(threadId, {
+        text: `[浏览器权限] 已阻止 Agent 操作 ${origin}。可在浏览器数据与隐私中修改站点权限。`,
+        files: [],
+      });
+      setAgentLoopActive(false);
+      return;
+    }
+    if (activeSitePermission === "ask") {
+      setPendingSiteAccess({ origin: activeOrigin, aiMessageId: aiId });
+      setAgentLoopActive(false);
+      return;
+    }
     lastProcessedAiIdRef.current = aiId;
 
     if (webviewHandle && !window.octopus) {
@@ -357,6 +411,12 @@ export function AssistantPanel({ webviewHandle }: Props) {
               action.type,
             );
             results.push(r);
+            recordBrowserAgentAudit({
+              origin: activeOrigin,
+              action: actionIdentity(action),
+              outcome: r.ok ? "allowed" : "failed",
+              detail: r.error,
+            });
             if (needsUserConfirmation(r)) {
               addPendingConfirmation(action, r);
               stopRequestedRef.current = true;
@@ -449,6 +509,12 @@ export function AssistantPanel({ webviewHandle }: Props) {
             action.type,
           );
           results.push(r);
+          recordBrowserAgentAudit({
+            origin: activeOrigin,
+            action: actionIdentity(action),
+            outcome: r.ok ? "allowed" : "failed",
+            detail: r.error,
+          });
           // Implementation note.
           if (action.type === "wait" || action.type === "navigate") {
             await new Promise((res) => setTimeout(res, 300));
@@ -487,7 +553,29 @@ export function AssistantPanel({ webviewHandle }: Props) {
     webviewHandle,
     addPendingConfirmation,
     buildBrowserControl,
+    activeOrigin,
+    activeSitePermission,
+    activeTab?.url,
   ]);
+
+  const resolveSiteAccess = useCallback(
+    (permission: "allow" | "block") => {
+      if (!pendingSiteAccess) return;
+      setBrowserAgentPermission(pendingSiteAccess.origin, permission);
+      recordBrowserAgentAudit({
+        origin: pendingSiteAccess.origin,
+        action: "site-access",
+        outcome: permission === "allow" ? "confirmed" : "blocked",
+      });
+      if (permission === "block") {
+        lastProcessedAiIdRef.current = pendingSiteAccess.aiMessageId;
+        stopRequestedRef.current = true;
+      }
+      setPendingSiteAccess(null);
+      setPolicyVersion((value) => value + 1);
+    },
+    [pendingSiteAccess],
+  );
 
   const confirmPendingAction = useCallback(
     async (pending: PendingConfirmation) => {
@@ -503,6 +591,12 @@ export function AssistantPanel({ webviewHandle }: Props) {
           }),
           pending.action.type,
         );
+        recordBrowserAgentAudit({
+          origin: activeOrigin ?? activeTab?.url ?? "internal-page",
+          action: actionIdentity(pending.action),
+          outcome: result.ok ? "confirmed" : "failed",
+          detail: result.error,
+        });
         setPendingConfirmations((prev) =>
           prev.filter((item) => item.id !== pending.id),
         );
@@ -527,7 +621,15 @@ export function AssistantPanel({ webviewHandle }: Props) {
         setBusy(false);
       }
     },
-    [sendMessage, threadId, webviewHandle, t, buildBrowserControl],
+    [
+      sendMessage,
+      threadId,
+      webviewHandle,
+      t,
+      buildBrowserControl,
+      activeOrigin,
+      activeTab?.url,
+    ],
   );
 
   const dismissPendingAction = useCallback((id: string) => {
@@ -744,7 +846,7 @@ export function AssistantPanel({ webviewHandle }: Props) {
       dragRef.current = { startX: e.clientX, startW: state.copilotWidth };
       const onMove = (ev: MouseEvent) => {
         if (!dragRef.current) return;
-        const delta = ev.clientX - dragRef.current.startX;
+        const delta = dragRef.current.startX - ev.clientX;
         setCopilotWidth(dragRef.current.startW + delta);
       };
       const onUp = () => {
@@ -766,13 +868,13 @@ export function AssistantPanel({ webviewHandle }: Props) {
       // Implementation note.
       // Implementation note.
       className={cn(
-        "relative flex h-full w-full min-w-[280px] flex-1 flex-col border-r border-white/24 bg-transparent",
+        "relative flex h-full w-full min-w-[280px] flex-1 flex-col bg-transparent",
       )}
     >
       {/* Implementation note. */}
       <div
         onMouseDown={onResizeStart}
-        className="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/30"
+        className="absolute left-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/30"
       />
 
       {/* Implementation note. */}
@@ -981,6 +1083,37 @@ export function AssistantPanel({ webviewHandle }: Props) {
       {errorMsg && (
         <div className="shrink-0 border-b border-white/20 bg-destructive/10 px-3 py-1.5 text-mini text-destructive">
           {errorMsg}
+        </div>
+      )}
+
+      {pendingSiteAccess && (
+        <div className="shrink-0 border-b border-white/20 bg-primary/8 px-3 py-2">
+          <div className="rounded-md border border-primary/25 bg-white/10 p-2 text-mini">
+            <div className="font-medium text-foreground">
+              允许 Agent 操作此网站？
+            </div>
+            <div className="mt-1 break-all text-muted-foreground">
+              {pendingSiteAccess.origin}
+            </div>
+            <div className="mt-1 text-muted-foreground">
+              允许后，Agent
+              可以读取页面并点击、输入和滚动；提交、支付、删除等敏感操作仍需单独确认。
+            </div>
+            <div className="mt-2 flex gap-2">
+              <button
+                onClick={() => resolveSiteAccess("allow")}
+                className="rounded bg-primary px-2 py-1 font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                允许此网站
+              </button>
+              <button
+                onClick={() => resolveSiteAccess("block")}
+                className="rounded border border-white/28 px-2 py-1 text-muted-foreground hover:bg-white/18"
+              >
+                阻止
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

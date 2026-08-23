@@ -32,6 +32,9 @@ export interface BrowserConfig {
   headless: boolean;
   viewport_width: number;
   viewport_height: number;
+  relay_allowed_hosts?: string[];
+  relay_blocked_hosts?: string[];
+  relay_require_allowlist?: boolean;
 }
 
 export interface BrowserSession {
@@ -79,8 +82,23 @@ export interface OctopusBrowserSessionIdentity {
 
 export interface RelayStatus {
   connected: boolean;
+  connection_state?: "online" | "offline" | "reconnecting" | string;
   extension_version: string;
   pending_commands: number;
+  push_connected?: boolean;
+  last_seen?: number;
+  active_tab?: {
+    id?: string | number | null;
+    url?: string;
+    title?: string;
+  } | null;
+  control?: {
+    mode?: string;
+    blocked?: boolean;
+    lease?: Record<string, unknown> | null;
+    human_interrupt?: Record<string, unknown> | null;
+    [key: string]: unknown;
+  } | null;
 }
 
 function stableBrowserHash(value: string): string {

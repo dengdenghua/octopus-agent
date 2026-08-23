@@ -23,6 +23,9 @@ import {
   ChevronDownIcon,
   FileTextIcon,
   Clock3Icon,
+  Loader2Icon,
+  RefreshCwIcon,
+  ServerIcon,
   LayoutGridIcon,
   SparklesIcon,
   BookOpenIcon,
@@ -38,19 +41,33 @@ import {
   Minimize2,
   Maximize2,
   CompassIcon,
+  SquareKanbanIcon,
+  CandlestickChartIcon,
+  RssIcon,
   type LucideIcon,
 } from "lucide-react";
-
-import { useNavigate } from "react-router-dom";
 
 import { swallow } from "@/core/utils/log";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { usePromptDialog } from "@/components/ui/prompt-dialog";
+import {
+  detectLocalServices,
+  type DetectedLocalService,
+} from "@/core/browser/local-services";
+import {
+  WORKBENCH_BUILTIN_APPS,
+  setWorkspaceWebShortcut,
+  useWorkspaceWebShortcuts,
+  type WorkbenchBuiltinIcon,
+} from "@/core/workbench/apps";
 
-
-import { useBrowserStore, type BrowserTab } from "./browser-store";
+import {
+  BROWSER_EDIT_HOME_EVENT,
+  useBrowserStore,
+  type BrowserTab,
+} from "./browser-store";
 
 type DesktopPanelId =
   | "home"
@@ -60,16 +77,22 @@ type DesktopPanelId =
   | "games"
   | "add"
   | "settings";
-type DesktopAppCategory = "ai" | "video" | "dev" | "knowledge";
+type DesktopAppCategory =
+  | "workspace"
+  | "ai"
+  | "video"
+  | "dev"
+  | "knowledge";
 
 interface BrowserDesktopApp {
   name: string;
   url: string;
   icon: LucideIcon;
-  logoUrl: string;
+  logoUrl?: string;
   color: string;
   description: string;
   category: DesktopAppCategory;
+  workspaceRoute?: string;
 }
 
 interface QuickLink {
@@ -128,7 +151,27 @@ interface EditWidgetState {
   size: Widget["size"];
 }
 
+const BUILTIN_ICON_MAP: Record<WorkbenchBuiltinIcon, LucideIcon> = {
+  projects: SquareKanbanIcon,
+  trading: CandlestickChartIcon,
+  intelligence: RssIcon,
+  community: CompassIcon,
+};
+
+const WORKSPACE_DESKTOP_APPS: BrowserDesktopApp[] = WORKBENCH_BUILTIN_APPS.map(
+  (app) => ({
+    name: app.name,
+    url: app.launchUrl,
+    icon: BUILTIN_ICON_MAP[app.icon],
+    color: "from-primary to-primary/70",
+    description: app.description,
+    category: "workspace",
+    workspaceRoute: app.workspaceRoute,
+  }),
+);
+
 const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
+  ...WORKSPACE_DESKTOP_APPS,
   {
     name: "Gemini",
     url: "https://gemini.google.com/app",
@@ -309,6 +352,10 @@ const DESKTOP_APP_GROUPS: Array<{
   appUrls: string[];
 }> = [
   {
+    id: "workspace",
+    appUrls: WORKBENCH_BUILTIN_APPS.map((app) => app.launchUrl),
+  },
+  {
     id: "ai",
     appUrls: [
       "https://gemini.google.com/app",
@@ -399,11 +446,11 @@ function DesktopAppLogo({
       className={cn(
         "grid place-items-center overflow-hidden rounded-md text-foreground transition",
         className,
-        failed && "bg-gradient-to-br text-white",
-        failed && app.color,
+        (failed || !app.logoUrl) && "bg-gradient-to-br text-white",
+        (failed || !app.logoUrl) && app.color,
       )}
     >
-      {failed ? (
+      {failed || !app.logoUrl ? (
         <FallbackIcon className={cn("size-1/2", iconClassName)} />
       ) : (
         <img
@@ -461,17 +508,26 @@ const FOLDERS_KEY = "octopus:browser:folders";
 const WIDGETS_KEY = "octopus:browser:widgets";
 const DESKTOP_BACKDROP_KEY = "octopus:browser:desktop-backdrop";
 const DEFAULT_DOCK_APP_URLS = [
+  "octopus://workspace/projects",
+  "octopus://workspace/paper-trading",
+  "octopus://workspace/intelligence",
+  "octopus://workspace/community",
   "https://gemini.google.com/app",
   "https://chat.deepseek.com/",
   "https://chat.qwen.ai/",
   "https://www.doubao.com/chat/",
   "https://chatgpt.com/",
+  "https://github.com/",
+];
+const INTERNAL_DOCK_APP_URLS = WORKBENCH_BUILTIN_APPS.map(
+  (app) => app.launchUrl,
+);
+const LEGACY_DOCK_REPLACEMENTS = new Set([
   "https://notebooklm.google.com/",
   "https://www.youtube.com/",
   "https://www.bilibili.com/",
-  "https://github.com/",
   "https://www.perplexity.ai/",
-];
+]);
 const DEFAULT_DESKTOP_BACKDROP: DesktopBackdropId = "palette";
 interface DesktopBackdropConfig {
   className: string;
@@ -479,10 +535,7 @@ interface DesktopBackdropConfig {
   imageUrl?: string;
 }
 
-const DESKTOP_BACKDROPS: Record<
-  DesktopBackdropId,
-  DesktopBackdropConfig
-> = {
+const DESKTOP_BACKDROPS: Record<DesktopBackdropId, DesktopBackdropConfig> = {
   palette: {
     className: "browser-backdrop-palette",
     swatchClassName: "browser-backdrop-palette-swatch",
@@ -500,7 +553,8 @@ const DESKTOP_BACKDROPS: Record<
       "https://images.unsplash.com/photo-1444703686981-a3abbc4d4fe3?auto=format&fit=crop&w=1920&q=80",
     className:
       "bg-[radial-gradient(circle_at_18%_10%,rgba(59,130,246,0.34),transparent_28%),radial-gradient(circle_at_82%_14%,rgba(168,85,247,0.24),transparent_30%),radial-gradient(circle_at_76%_82%,rgba(14,165,233,0.18),transparent_32%),linear-gradient(145deg,#0f172a_0%,#1e293b_42%,#111827_100%)]",
-    swatchClassName: "bg-gradient-to-br from-background via-muted-foreground/30 to-primary",
+    swatchClassName:
+      "bg-gradient-to-br from-background via-muted-foreground/30 to-primary",
   },
   "theme-clear": {
     imageUrl:
@@ -535,7 +589,8 @@ const DESKTOP_BACKDROPS: Record<
       "https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=1920&q=80",
     className:
       "bg-[radial-gradient(circle_at_20%_16%,rgba(254,215,170,0.66),transparent_30%),radial-gradient(circle_at_84%_76%,rgba(251,113,133,0.36),transparent_32%),linear-gradient(145deg,#44403c_0%,#a16207_50%,#fed7aa_100%)]",
-    swatchClassName: "bg-gradient-to-br from-stone-600 via-warning to-orange-200",
+    swatchClassName:
+      "bg-gradient-to-br from-stone-600 via-warning to-orange-200",
   },
 };
 
@@ -605,9 +660,14 @@ function loadDockAppUrls(): string[] {
     const parsed = JSON.parse(localStorage.getItem(DOCK_APP_URLS_KEY) || "[]");
     if (!Array.isArray(parsed) || parsed.length === 0)
       return DEFAULT_DOCK_APP_URLS;
-    return parsed.filter(
+    const saved = parsed.filter(
       (item): item is string => typeof item === "string" && known.has(item),
     );
+    if (saved.some((url) => INTERNAL_DOCK_APP_URLS.includes(url))) return saved;
+    return [
+      ...INTERNAL_DOCK_APP_URLS,
+      ...saved.filter((url) => !LEGACY_DOCK_REPLACEMENTS.has(url)),
+    ].slice(0, DEFAULT_DOCK_APP_URLS.length);
   } catch (e) {
     swallow(e);
     return DEFAULT_DOCK_APP_URLS;
@@ -675,7 +735,9 @@ function MenuItem({
     >
       <Icon className="w-4 h-4 flex-shrink-0" />
       <span className="flex-1 text-left">{label}</span>
-      {shortcut && <span className="text-xs text-muted-foreground/70">{shortcut}</span>}
+      {shortcut && (
+        <span className="text-xs text-muted-foreground/70">{shortcut}</span>
+      )}
     </button>
   );
 }
@@ -714,7 +776,11 @@ function ContextMenu({
 
   return (
     <>
-      <div className="fixed inset-0 z-40" onClick={onClose} aria-hidden="true" />
+      <div
+        className="fixed inset-0 z-40"
+        onClick={onClose}
+        aria-hidden="true"
+      />
       <div
         className="fixed z-50 bg-popover text-popover-foreground border border-border-subtle rounded-lg py-2 min-w-[160px] shadow-[var(--shadow-md)]"
         style={{ left: state.x, top: state.y }}
@@ -864,8 +930,29 @@ export function BrowserHome({
   const { t } = useI18n();
   const wt = t.browser.webviewTab;
   const bt = t.browserHome;
+  const bp = t.browserPreviewPanel;
   const { history } = useBrowserStore();
-  const navigate = useNavigate();
+  const workspaceWebShortcuts = useWorkspaceWebShortcuts();
+  const [localServices, setLocalServices] = useState<DetectedLocalService[]>(
+    [],
+  );
+  const [scanningLocalServices, setScanningLocalServices] = useState(false);
+
+  const scanLocalServices = useCallback(() => {
+    const ownPort = Number(window.location.port);
+    const excludePorts =
+      Number.isFinite(ownPort) && ownPort > 0 ? [ownPort] : [];
+    setScanningLocalServices(true);
+    void detectLocalServices({ excludePorts })
+      .then(setLocalServices)
+      .catch(() => setLocalServices([]))
+      .finally(() => setScanningLocalServices(false));
+  }, []);
+
+  useEffect(() => {
+    if (!active) return;
+    scanLocalServices();
+  }, [active, scanLocalServices]);
 
   const appNameMap = useMemo<Record<string, string>>(
     () => ({
@@ -921,6 +1008,12 @@ export function BrowserHome({
     useState<DesktopAppCategory | null>(null);
   const [activePanel, setActivePanel] = useState<DesktopPanelId>("home");
   const [editMode, setEditMode] = useState(false);
+  useEffect(() => {
+    const enterEditMode = () => setEditMode(true);
+    window.addEventListener(BROWSER_EDIT_HOME_EVENT, enterEditMode);
+    return () =>
+      window.removeEventListener(BROWSER_EDIT_HOME_EVENT, enterEditMode);
+  }, []);
   const [appOrder, setAppOrder] = useState<string[]>(() =>
     loadDesktopAppOrder(),
   );
@@ -1001,6 +1094,31 @@ export function BrowserHome({
     (desc: string) => appDescMap[desc] ?? desc,
     [appDescMap],
   );
+  const openDesktopApp = useCallback(
+    (url: string) => {
+      onOpen(url);
+    },
+    [onOpen],
+  );
+  const workspaceShortcutUrls = useMemo(
+    () => workspaceWebShortcuts.map((shortcut) => shortcut.url),
+    [workspaceWebShortcuts],
+  );
+  const toggleWorkspaceShortcut = useCallback(
+    (url: string) => {
+      const app = appByUrl.get(url);
+      if (!app || app.workspaceRoute) return;
+      setWorkspaceWebShortcut(
+        {
+          name: getAppName(app.name),
+          url: app.url,
+          logoUrl: app.logoUrl,
+        },
+        !workspaceShortcutUrls.includes(url),
+      );
+    },
+    [appByUrl, getAppName, workspaceShortcutUrls],
+  );
   const recentPanelItems = useMemo(() => {
     return history
       .filter(
@@ -1067,6 +1185,7 @@ export function BrowserHome({
       DesktopAppCategory,
       { title: string; subtitle: string }
     > = {
+      workspace: { title: "EchoAI 工作台", subtitle: "原生能力，一键直达" },
       ai: { title: bt.groupAiTools, subtitle: bt.groupAiToolsSubtitle },
       video: { title: bt.groupVideo, subtitle: bt.groupVideoSubtitle },
       dev: { title: bt.groupDev, subtitle: bt.groupDevSubtitle },
@@ -1591,8 +1710,13 @@ export function BrowserHome({
       onContextMenu={handleBackgroundContext}
     >
       <div
+        data-testid="desktop-side-rail"
         className={cn(
-          "absolute left-3 top-5 z-10 flex h-[calc(100%-2.5rem)] w-10 flex-col items-center rounded-2xl py-2.5 liquid-glass",
+          "absolute left-3 top-5 z-10 flex h-[calc(100%-2.5rem)] w-10 flex-col items-center rounded-2xl py-2.5 liquid-glass transition-[transform,opacity] duration-200 ease-out",
+          !compactDesktop &&
+            activePanel === "home" &&
+            !editMode &&
+            "-translate-x-[42px] opacity-65 after:pointer-events-none after:absolute after:right-1 after:top-1/2 after:h-10 after:w-1 after:-translate-y-1/2 after:rounded-full after:bg-foreground/30 after:content-[''] hover:translate-x-0 hover:opacity-100 hover:after:opacity-0 focus-within:translate-x-0 focus-within:opacity-100 focus-within:after:opacity-0",
           compactDesktop && "left-2 top-4 h-[calc(100%-2rem)]",
           mobileDesktop && "left-1.5 w-9",
         )}
@@ -1610,7 +1734,7 @@ export function BrowserHome({
         </button>
         <button
           type="button"
-          onClick={() => navigate("/workspace/community")}
+          onClick={() => openDesktopApp("octopus://workspace/community")}
           className="mt-1 grid size-8 place-items-center rounded-xl text-foreground/60 transition-colors hover:bg-white/12 hover:text-foreground"
           title="发现社区"
         >
@@ -1744,9 +1868,7 @@ export function BrowserHome({
                     }}
                     className={cn(
                       "flex h-10 w-full items-center gap-2.5 rounded-xl px-2.5 text-left text-sm font-medium transition-colors",
-                      active
-                        ? "bg-white/15 text-primary"
-                        : "hover:bg-white/10",
+                      active ? "bg-white/15 text-primary" : "hover:bg-white/10",
                     )}
                   >
                     <SearchEngineLogo engine={engine} className="size-5" />
@@ -1804,18 +1926,15 @@ export function BrowserHome({
               </button>
             </>
           )}
-          <button
-            type="button"
-            onClick={() => setEditMode((value) => !value)}
-            className={cn(
-              "rounded-lg px-2 py-1 text-mini font-medium transition liquid-glass-subtle",
-              editMode
-                ? "bg-primary/90 text-primary-foreground hover:bg-primary"
-                : "text-foreground hover:bg-white/10",
-            )}
-          >
-            {editMode ? wt.finishEditing : wt.editDesktop}
-          </button>
+          {editMode && (
+            <button
+              type="button"
+              onClick={() => setEditMode(false)}
+              className="rounded-lg bg-primary/90 px-2 py-1 text-mini font-medium text-primary-foreground transition hover:bg-primary liquid-glass-subtle"
+            >
+              {wt.finishEditing}
+            </button>
+          )}
         </div>
 
         {editMode && (
@@ -1969,7 +2088,7 @@ export function BrowserHome({
                           type="button"
                           onClick={() => {
                             setOpenAppGroupId(null);
-                            onOpen(app.url);
+                            openDesktopApp(app.url);
                           }}
                           className="group flex items-center gap-2 rounded-lg p-2 text-left transition hover:bg-foreground/5"
                           title={`${getAppName(app.name)} · ${getAppDesc(app.description)}`}
@@ -1996,6 +2115,82 @@ export function BrowserHome({
           </div>
 
           <div className={cn("flex flex-col gap-7", compactDesktop && "gap-5")}>
+            <section
+              className={cn(
+                "w-[340px] max-w-[calc(100vw-1rem)] self-end rounded-2xl p-3.5 text-foreground liquid-glass",
+                compactDesktop && "w-full self-stretch",
+                mobileDesktop && "p-3",
+              )}
+            >
+              <div className="mb-2.5 flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="grid size-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                    <ServerIcon className="size-[15px]" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-semibold text-foreground">
+                      {bp.localServices}
+                    </div>
+                    <div className="text-mini text-muted-foreground">
+                      localhost
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={scanLocalServices}
+                  disabled={scanningLocalServices}
+                  className="grid size-7 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground disabled:opacity-50"
+                  title={bp.scanLocalServices}
+                  aria-label={bp.scanLocalServices}
+                >
+                  {scanningLocalServices ? (
+                    <Loader2Icon className="size-[15px] animate-spin" />
+                  ) : (
+                    <RefreshCwIcon className="size-[15px]" />
+                  )}
+                </button>
+              </div>
+              {localServices.length > 0 ? (
+                <div className="grid grid-cols-2 gap-1.5">
+                  {localServices.slice(0, 6).map((service) => (
+                    <button
+                      key={service.port}
+                      type="button"
+                      onClick={() => onOpen(service.url)}
+                      className="group flex min-w-0 items-center gap-2 rounded-lg border border-border-subtle/60 px-2 py-2 text-left transition-colors hover:border-primary/25 hover:bg-primary/5"
+                      title={`${service.name} · ${service.url}`}
+                    >
+                      <span
+                        className={cn(
+                          "size-2 shrink-0 rounded-full",
+                          service.type === "frontend"
+                            ? "bg-primary"
+                            : service.type === "backend"
+                              ? "bg-success"
+                              : "bg-muted-foreground",
+                        )}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-xs font-medium text-foreground">
+                          {service.name}
+                        </span>
+                        <span className="block truncate text-micro text-muted-foreground">
+                          localhost:{service.port}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-border-subtle/60 px-3 py-4 text-center text-mini text-muted-foreground/70">
+                  {scanningLocalServices
+                    ? bp.scanLocalServices
+                    : bp.noLocalServices}
+                </div>
+              )}
+            </section>
+
             <section
               className={cn(
                 "w-[340px] max-w-[calc(100vw-1rem)] self-end rounded-2xl p-3.5 text-foreground liquid-glass",
@@ -2085,7 +2280,9 @@ export function BrowserHome({
                         {widget.type === "weather" && (
                           <div className="flex items-center gap-2">
                             <span className="text-xl">☀️</span>
-                            <span className="text-lg text-muted-foreground">26°C</span>
+                            <span className="text-lg text-muted-foreground">
+                              26°C
+                            </span>
                           </div>
                         )}
                         {widget.type === "system" && (
@@ -2148,64 +2345,62 @@ export function BrowserHome({
                 )}
               >
                 {standaloneLinks.map((link) => {
-                    const isDragging = dragState.draggedId === link.id;
-                    const isDropTarget = dragState.dropTargetId === link.id;
-                    return (
-                      <div
-                        key={link.id}
+                  const isDragging = dragState.draggedId === link.id;
+                  const isDropTarget = dragState.dropTargetId === link.id;
+                  return (
+                    <div
+                      key={link.id}
+                      className={cn(
+                        "group relative",
+                        isDragging && "opacity-40 scale-95",
+                      )}
+                    >
+                      <button
+                        draggable
+                        onClick={() => onOpen(link.url)}
                         className={cn(
-                          "group relative",
-                          isDragging && "opacity-40 scale-95",
+                          "w-full flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all",
+                          editMode
+                            ? "hover:bg-card/70 cursor-move"
+                            : "hover:bg-card/70",
+                          isDropTarget && "ring-2 ring-primary",
                         )}
+                        onDragStart={() => handleIconDragStart(link.id)}
+                        onDragOver={(e) => handleIconDragOver(e, link.id)}
+                        onDrop={() => handleIconDrop(link.id)}
+                        onDragEnd={handleDragEnd}
+                        onContextMenu={(e) => handleContext(e, link.id, "icon")}
                       >
-                        <button
-                          draggable
-                          onClick={() => onOpen(link.url)}
-                          className={cn(
-                            "w-full flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all",
-                            editMode
-                              ? "hover:bg-card/70 cursor-move"
-                              : "hover:bg-card/70",
-                            isDropTarget && "ring-2 ring-primary",
-                          )}
-                          onDragStart={() => handleIconDragStart(link.id)}
-                          onDragOver={(e) => handleIconDragOver(e, link.id)}
-                          onDrop={() => handleIconDrop(link.id)}
-                          onDragEnd={handleDragEnd}
-                          onContextMenu={(e) =>
-                            handleContext(e, link.id, "icon")
-                          }
-                        >
-                          <div className="relative w-12 h-12 rounded-xl liquid-glass-icon flex items-center justify-center text-muted-foreground overflow-hidden">
-                            <span className="text-lg font-bold">
-                              {link.name[0]}
-                            </span>
-                            {faviconForUrl(link.url) && (
-                              <img
-                                src={faviconForUrl(link.url)}
-                                alt=""
-                                className="absolute inset-0 m-auto size-[60%] object-contain"
-                                onError={(event) => {
-                                  event.currentTarget.style.display = "none";
-                                }}
-                              />
-                            )}
-                          </div>
-                          <span className="text-mini text-muted-foreground/80 truncate w-full text-center">
-                            {link.name}
+                        <div className="relative w-12 h-12 rounded-xl liquid-glass-icon flex items-center justify-center text-muted-foreground overflow-hidden">
+                          <span className="text-lg font-bold">
+                            {link.name[0]}
                           </span>
+                          {faviconForUrl(link.url) && (
+                            <img
+                              src={faviconForUrl(link.url)}
+                              alt=""
+                              className="absolute inset-0 m-auto size-[60%] object-contain"
+                              onError={(event) => {
+                                event.currentTarget.style.display = "none";
+                              }}
+                            />
+                          )}
+                        </div>
+                        <span className="text-mini text-muted-foreground/80 truncate w-full text-center">
+                          {link.name}
+                        </span>
+                      </button>
+                      {editMode && (
+                        <button
+                          onClick={() => handleDelete(link.id)}
+                          className="absolute -top-1 -right-1 size-[18px] bg-destructive rounded-full flex items-center justify-center shadow-[var(--shadow-md)]"
+                        >
+                          <X className="size-2.5 text-white" />
                         </button>
-                        {editMode && (
-                          <button
-                            onClick={() => handleDelete(link.id)}
-                            className="absolute -top-1 -right-1 size-[18px] bg-destructive rounded-full flex items-center justify-center shadow-[var(--shadow-md)]"
-                          >
-                            <X className="size-2.5 text-white" />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
+                      )}
+                    </div>
+                  );
+                })}
 
                 {folderLinks.map(({ folder, links }) => {
                   const isOpen = folderOpenStates[folder.id];
@@ -2215,8 +2410,7 @@ export function BrowserHome({
                       <button
                         className={cn(
                           "w-full flex flex-col items-center gap-1.5 p-2 rounded-2xl transition-all hover:bg-white/5",
-                          isDropTarget &&
-                            "ring-2 ring-primary",
+                          isDropTarget && "ring-2 ring-primary",
                         )}
                         onContextMenu={(e) =>
                           handleContext(e, folder.id, "folder")
@@ -2261,7 +2455,9 @@ export function BrowserHome({
                             </span>
                             <button
                               type="button"
-                              aria-label={t.browser.closeFolderAria(folder.name)}
+                              aria-label={t.browser.closeFolderAria(
+                                folder.name,
+                              )}
                               onClick={() => toggleFolder(folder.id)}
                             >
                               <X className="w-3.5 h-3.5 text-muted-foreground/60 hover:text-muted-foreground" />
@@ -2323,7 +2519,7 @@ export function BrowserHome({
                 type="button"
                 draggable={editMode}
                 onClick={() => {
-                  if (!editMode) onOpen(app.url);
+                  if (!editMode) openDesktopApp(app.url);
                 }}
                 onDragStart={(event) => startAppDrag(event, app.url)}
                 onDragOver={(event) => {
@@ -2336,8 +2532,7 @@ export function BrowserHome({
                   compactDesktop && "size-11 shrink-0 rounded-xl",
                   tabletDesktop && "size-11",
                   mobileDesktop && "size-10 rounded-xl",
-                  editMode &&
-                    "cursor-move ring-2 ring-primary/50",
+                  editMode && "cursor-move ring-2 ring-primary/50",
                   draggingUrl === app.url && "scale-95 opacity-45",
                 )}
                 title={`${getAppName(app.name)} · ${getAppDesc(app.description)}`}
@@ -2499,9 +2694,11 @@ export function BrowserHome({
         <DesktopControlPanel
           panel={activePanel}
           onClose={() => setActivePanel("home")}
-          onOpen={onOpen}
+          onOpen={openDesktopApp}
           dockAppUrls={dockAppUrls}
           onAddToDock={addAppToDock}
+          workspaceShortcutUrls={workspaceShortcutUrls}
+          onToggleWorkspaceShortcut={toggleWorkspaceShortcut}
           selectedBackdrop={desktopBackdrop}
           onSelectBackdrop={setDesktopBackdrop}
           widgets={widgets}
@@ -2524,6 +2721,8 @@ function DesktopControlPanel({
   onOpen,
   dockAppUrls,
   onAddToDock,
+  workspaceShortcutUrls,
+  onToggleWorkspaceShortcut,
   selectedBackdrop,
   onSelectBackdrop,
   widgets,
@@ -2537,6 +2736,8 @@ function DesktopControlPanel({
   onOpen: (url: string) => void;
   dockAppUrls: string[];
   onAddToDock: (url: string) => void;
+  workspaceShortcutUrls: readonly string[];
+  onToggleWorkspaceShortcut: (url: string) => void;
   selectedBackdrop: DesktopBackdropId;
   onSelectBackdrop: (id: DesktopBackdropId) => void;
   widgets: Widget[];
@@ -2611,7 +2812,9 @@ function DesktopControlPanel({
       <div className="flex items-center justify-between border-b border-white/15 px-5 py-4">
         <div>
           <div className="text-base font-semibold">{title}</div>
-          <div className="text-xs text-muted-foreground">{wt.panelSubtitle}</div>
+          <div className="text-xs text-muted-foreground">
+            {wt.panelSubtitle}
+          </div>
         </div>
         <button
           type="button"
@@ -2635,9 +2838,7 @@ function DesktopControlPanel({
                   aria-pressed={active}
                   className={cn(
                     "flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-white/8",
-                    active
-                      ? "bg-white/12 ring-1 ring-primary/40"
-                      : "",
+                    active ? "bg-white/12 ring-1 ring-primary/40" : "",
                   )}
                 >
                   <span
@@ -2756,6 +2957,9 @@ function DesktopControlPanel({
           <div className="space-y-3">
             {AI_DESKTOP_APPS.map((app) => {
               const inDock = dockAppUrls.includes(app.url);
+              const inWorkspaceSidebar = workspaceShortcutUrls.includes(
+                app.url,
+              );
               return (
                 <div
                   key={app.url}
@@ -2776,19 +2980,34 @@ function DesktopControlPanel({
                       </span>
                     </span>
                   </button>
-                  <button
-                    type="button"
-                    disabled={inDock}
-                    onClick={() => onAddToDock(app.url)}
-                    className={cn(
-                      "shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold transition liquid-glass-subtle",
-                      inDock
-                        ? "opacity-50"
-                        : "bg-primary/90 text-primary-foreground hover:bg-primary",
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {!app.workspaceRoute && (
+                      <button
+                        type="button"
+                        onClick={() => onToggleWorkspaceShortcut(app.url)}
+                        className={cn(
+                          "rounded-xl px-3 py-1.5 text-xs font-semibold transition liquid-glass-subtle",
+                          inWorkspaceSidebar &&
+                            "bg-primary/12 text-primary ring-1 ring-primary/20",
+                        )}
+                      >
+                        {inWorkspaceSidebar ? "移出侧栏" : "加入侧栏"}
+                      </button>
                     )}
-                  >
-                    {inDock ? bt.alreadyInDock : bt.add}
-                  </button>
+                    <button
+                      type="button"
+                      disabled={inDock}
+                      onClick={() => onAddToDock(app.url)}
+                      className={cn(
+                        "rounded-xl px-3 py-1.5 text-xs font-semibold transition liquid-glass-subtle",
+                        inDock
+                          ? "opacity-50"
+                          : "bg-primary/90 text-primary-foreground hover:bg-primary",
+                      )}
+                    >
+                      {inDock ? bt.alreadyInDock : bt.add}
+                    </button>
+                  </div>
                 </div>
               );
             })}

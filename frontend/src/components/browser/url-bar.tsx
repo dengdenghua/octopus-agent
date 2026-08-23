@@ -5,6 +5,7 @@ import {
   ArrowRightIcon,
   MinusIcon,
   MoreHorizontalIcon,
+  PanelLeftIcon,
   PlusIcon,
   RefreshCwIcon,
   HouseIcon,
@@ -26,6 +27,12 @@ import {
   FileIcon,
   CheckCircleIcon,
   AlertCircleIcon,
+  CookieIcon,
+  KeyRoundIcon,
+  Settings2Icon,
+  PauseIcon,
+  PlayIcon,
+  XIcon,
 } from "lucide-react";
 import {
   useCallback,
@@ -46,6 +53,7 @@ import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -53,11 +61,23 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { swallow } from "@/core/utils/log";
+import { jsonAuthHeaders } from "@/core/auth/api";
+import { getBackendBaseURL } from "@/core/config";
+import {
+  BROWSER_AGENT_POLICY_EVENT,
+  clearBrowserAgentAudit,
+  listBrowserAgentAudit,
+  listBrowserAgentPermissions,
+  setBrowserAgentPermission,
+  type BrowserAgentAuditEntry,
+  type BrowserAgentSitePermission,
+} from "@/core/browser/agent-permissions";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
 import type { DevicePreset } from "../workspace/embedded-browser/browser-context";
 import {
+  BROWSER_EDIT_HOME_EVENT,
   BROWSER_HOME_URL,
   SEARCH_ENGINE_URLS,
   useBrowserStore,
@@ -86,8 +106,68 @@ interface BrowserDownload {
   state: BrowserDownloadState;
   receivedBytes: number;
   totalBytes: number;
-  savePath?: string;
   createdAt: number;
+  paused?: boolean;
+  canResume?: boolean;
+  risk?: "low" | "medium" | "high";
+  sourceOrigin?: string;
+}
+
+interface StoredBrowserPassword {
+  id: string;
+  origin: string;
+  username: string;
+  updatedAt: number;
+}
+
+interface StoredSitePermission {
+  origin: string;
+  permission:
+    | "camera"
+    | "microphone"
+    | "camera-microphone"
+    | "location"
+    | "notifications"
+    | "clipboard";
+  decision: "allow" | "block";
+  updatedAt: number;
+}
+
+const SITE_PERMISSION_LABELS: Record<
+  StoredSitePermission["permission"],
+  string
+> = {
+  camera: "摄像头",
+  microphone: "麦克风",
+  "camera-microphone": "摄像头和麦克风",
+  location: "位置信息",
+  notifications: "通知",
+  clipboard: "剪贴板读取",
+};
+
+const DOWNLOAD_HISTORY_KEY = "octopus:browser-download-history.v1";
+
+function loadDownloadHistory(): BrowserDownload[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(DOWNLOAD_HISTORY_KEY) || "[]",
+    );
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(
+        (item): item is BrowserDownload =>
+          Boolean(item) &&
+          typeof item.id === "string" &&
+          typeof item.filename === "string" &&
+          typeof item.url === "string" &&
+          typeof item.createdAt === "number",
+      )
+      .slice(0, 50);
+  } catch (error) {
+    swallow(error, "download-history");
+    return [];
+  }
 }
 
 function formatBytes(bytes: number): string {
@@ -148,7 +228,10 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [suggestionIndex, setSuggestionIndex] = useState(-1);
   const [downloadsOpen, setDownloadsOpen] = useState(false);
-  const [downloads, setDownloads] = useState<BrowserDownload[]>([]);
+  const [downloads, setDownloads] =
+    useState<BrowserDownload[]>(loadDownloadHistory);
+  const [dataCenterOpen, setDataCenterOpen] = useState(false);
+  const [clearingBrowsingData, setClearingBrowsingData] = useState(false);
   const [siteDataStatus, setSiteDataStatus] = useState<string | null>(null);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [zoomByTab, setZoomByTab] = useState<Record<string, number>>({});
@@ -243,6 +326,10 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
     });
     setDraft(BROWSER_HOME_URL);
   }, [activeTab, patchTab, t.browser.webviewTab.aiBrowserDesktop]);
+
+  const customizeHome = useCallback(() => {
+    window.dispatchEvent(new Event(BROWSER_EDIT_HOME_EVENT));
+  }, []);
 
   const attachScreenshotToNextComposer = useCallback(async () => {
     if (!webviewHandle) return;
@@ -361,6 +448,45 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
     }
   }, [confirm, ub, webviewHandle]);
 
+  const clearAllBrowsingData = useCallback(async () => {
+    const confirmed = await confirm({
+      title: "清除浏览数据",
+      description:
+        "将清除 Octopus 浏览器中的 Cookie、缓存、网站存储、浏览历史和下载记录。所有网站会退出登录，但不会删除已下载的文件。",
+      confirmLabel: "确认清除",
+    });
+    if (!confirmed) return;
+    setClearingBrowsingData(true);
+    try {
+      if (window.octopus?.browser?.clearBrowsingData) {
+        const result = await window.octopus.browser.clearBrowsingData();
+        if (!result.ok) throw new Error(result.error || "清除失败");
+      } else {
+        const response = await fetch(
+          `${getBackendBaseURL()}/api/browser/data/clear`,
+          { method: "POST", headers: jsonAuthHeaders() },
+        );
+        if (!response.ok) {
+          const detail = (await response.json().catch(() => null)) as {
+            detail?: string;
+          } | null;
+          throw new Error(detail?.detail || `HTTP ${response.status}`);
+        }
+      }
+      clearHistory();
+      setDownloads([]);
+      setSiteDataStatus(null);
+      setDataCenterOpen(false);
+      toast.success("浏览数据已清除");
+      webviewHandle?.reload();
+    } catch (error) {
+      swallow(error, "clear-browser-data");
+      toast.error(error instanceof Error ? error.message : "清除浏览数据失败");
+    } finally {
+      setClearingBrowsingData(false);
+    }
+  }, [clearHistory, confirm, webviewHandle]);
+
   const siteOrigin = useMemo(() => {
     if (!activeTab?.url) return null;
     try {
@@ -453,6 +579,17 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
   }, []);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        DOWNLOAD_HISTORY_KEY,
+        JSON.stringify(downloads.slice(0, 50)),
+      );
+    } catch (error) {
+      swallow(error, "download-history");
+    }
+  }, [downloads]);
+
+  useEffect(() => {
     if (!siteInfoOpen) return;
     const onDoc = (e: MouseEvent) => {
       const target = e.target as Node;
@@ -510,13 +647,13 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
 
   return (
     <div
-      className="flex h-14 min-w-0 items-center gap-1 rounded-none border-x-0 border-border-subtle px-2 sm:gap-2 sm:px-3"
+      className="flex h-12 min-w-0 items-center gap-1 rounded-none border-x-0 border-border-subtle px-2 sm:px-3"
       style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
     >
       <button
         onClick={() => webviewHandle?.goBack()}
         disabled={!canBack}
-        className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:size-9"
+        className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
         title={ub.back}
       >
         <ArrowLeftIcon className="size-4" />
@@ -524,7 +661,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
       <button
         onClick={() => webviewHandle?.goForward()}
         disabled={!canForward}
-        className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:size-9"
+        className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
         title={ub.forward}
       >
         <ArrowRightIcon className="size-4" />
@@ -532,30 +669,13 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
       <button
         onClick={() => webviewHandle?.reload()}
         disabled={activeTab?.url === BROWSER_HOME_URL}
-        className="hidden size-9 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:grid"
+        className="hidden size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:grid"
         title={ub.refresh}
       >
         <RefreshCwIcon className="size-4" />
       </button>
-      <button
-        type="button"
-        onClick={() => void attachScreenshotToNextComposer()}
-        disabled={!webviewHandle || activeTab?.url === BROWSER_HOME_URL}
-        className="hidden size-9 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:grid"
-        title={bp.attachScreenshotToComposer}
-      >
-        <ImageIcon className="size-4" />
-      </button>
-      <button
-        onClick={goHome}
-        disabled={!activeTab || activeTab.url === BROWSER_HOME_URL}
-        className="hidden size-9 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:grid"
-        title={ub.backToHome}
-      >
-        <HouseIcon className="size-4" />
-      </button>
       <div ref={addressBarRef} className="relative ml-1 min-w-0 flex-1">
-        <div className="flex h-10 items-center gap-1 rounded-lg border border-border-subtle bg-card/80 px-3 backdrop-blur-sm transition-colors focus-within:border-primary/25 focus-within:ring-2 focus-within:ring-primary/12">
+        <div className="flex h-9 items-center gap-1 rounded-xl border border-border-subtle bg-card/80 px-3 backdrop-blur-sm transition-colors focus-within:border-primary/30 focus-within:ring-2 focus-within:ring-primary/12">
           <input
             type="text"
             value={draft}
@@ -712,7 +832,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
           ref={downloadsBtnRef}
           onClick={() => setDownloadsOpen((v) => !v)}
           className={cn(
-            "ml-1 grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground sm:size-9",
+            "relative ml-1 grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground",
             activeDownloadCount > 0 && "text-primary",
           )}
           title={ub.downloads}
@@ -737,7 +857,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
         <button
           ref={historyBtnRef}
           onClick={() => setHistoryOpen((v) => !v)}
-          className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground sm:size-9"
+          className="hidden size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground lg:grid"
           title={ub.historyAndBookmarks}
         >
           <ClockIcon className="size-4" />
@@ -759,10 +879,10 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
       <button
         onClick={toggleCopilot}
         className={cn(
-          "ml-1 hidden h-8 items-center gap-1 rounded-md px-2 text-xs font-semibold transition-colors sm:flex",
+          "ml-1 flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-colors",
           state.copilotOpen
-            ? "bg-primary/10 text-primary"
-            : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
+            ? "border-primary/25 bg-primary/10 text-primary"
+            : "border-border-subtle bg-background/65 text-muted-foreground hover:border-primary/20 hover:bg-primary/5 hover:text-foreground",
         )}
         title={ub.aiAssistant}
       >
@@ -786,13 +906,25 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
             anchorRef={actionsBtnRef}
             canManageSiteData={canManageSiteData}
             canUsePageActions={canUsePageActions}
+            canAttachScreenshot={
+              Boolean(webviewHandle) && activeTab?.url !== BROWSER_HOME_URL
+            }
+            canGoHome={Boolean(activeTab && activeTab.url !== BROWSER_HOME_URL)}
+            canCustomizeHome={activeTab?.url === BROWSER_HOME_URL}
             device={device}
             deviceLabelMap={deviceLabelMap}
             onClearSiteData={clearCurrentSiteData}
             onClose={() => setActionsOpen(false)}
+            onAttachScreenshot={() => void attachScreenshotToNextComposer()}
             onDeviceChange={onDeviceChange}
             onFindInPage={findInPage}
+            onGoHome={goHome}
+            onCustomizeHome={customizeHome}
             onOpenExtensions={onOpenExtensions}
+            onOpenDataCenter={() => {
+              setActionsOpen(false);
+              setDataCenterOpen(true);
+            }}
             onReload={() => webviewHandle?.reload()}
             onZoomChange={applyZoom}
             siteDataStatus={siteDataStatus}
@@ -821,28 +953,548 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
             <Button variant="ghost" onClick={() => setFindDialogOpen(false)}>
               {t.common.cancel}
             </Button>
-            <Button onClick={executeFind}>
-              {t.common.confirm}
-            </Button>
+            <Button onClick={executeFind}>{t.common.confirm}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <BrowserDataCenterDialog
+        open={dataCenterOpen}
+        onOpenChange={setDataCenterOpen}
+        historyCount={history.length}
+        downloadCount={downloads.length}
+        currentOrigin={siteOrigin}
+        webContentsId={webviewHandle?.getWebContentsId() ?? null}
+        canClearCurrentSite={canManageSiteData}
+        clearing={clearingBrowsingData}
+        onClearCurrentSite={() => void clearCurrentSiteData()}
+        onClearHistory={() => {
+          clearHistory();
+          toast.success("浏览历史已清空");
+        }}
+        onClearDownloads={() => {
+          setDownloads([]);
+          toast.success("下载记录已清空，文件仍保留在磁盘中");
+        }}
+        onClearAll={() => void clearAllBrowsingData()}
+      />
     </div>
+  );
+}
+
+function BrowserDataCenterDialog({
+  open,
+  onOpenChange,
+  historyCount,
+  downloadCount,
+  currentOrigin,
+  webContentsId,
+  canClearCurrentSite,
+  clearing,
+  onClearCurrentSite,
+  onClearHistory,
+  onClearDownloads,
+  onClearAll,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  historyCount: number;
+  downloadCount: number;
+  currentOrigin: string | null;
+  webContentsId: number | null;
+  canClearCurrentSite: boolean;
+  clearing: boolean;
+  onClearCurrentSite: () => void;
+  onClearHistory: () => void;
+  onClearDownloads: () => void;
+  onClearAll: () => void;
+}) {
+  const rowClass =
+    "flex items-center gap-3 rounded-xl border border-border-subtle bg-muted/20 p-3";
+  const [passwordAvailable, setPasswordAvailable] = useState(false);
+  const [passwordEntries, setPasswordEntries] = useState<
+    StoredBrowserPassword[]
+  >([]);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [sitePermissions, setSitePermissions] = useState<
+    BrowserAgentSitePermission[]
+  >([]);
+  const [agentAudit, setAgentAudit] = useState<BrowserAgentAuditEntry[]>([]);
+  const [siteDevicePermissions, setSiteDevicePermissions] = useState<
+    StoredSitePermission[]
+  >([]);
+  const [sitePermissionsAvailable, setSitePermissionsAvailable] =
+    useState(false);
+
+  const refreshAgentPolicy = useCallback(() => {
+    setSitePermissions(listBrowserAgentPermissions());
+    setAgentAudit(listBrowserAgentAudit());
+  }, []);
+
+  const refreshPasswords = useCallback(async () => {
+    if (!window.octopus?.browser?.listPasswords) {
+      setPasswordAvailable(false);
+      setPasswordEntries([]);
+      return;
+    }
+    const result = await window.octopus.browser.listPasswords(
+      currentOrigin ?? undefined,
+    );
+    setPasswordAvailable(result.ok && result.available);
+    setPasswordEntries(result.ok ? result.entries : []);
+  }, [currentOrigin]);
+
+  const refreshSiteDevicePermissions = useCallback(async () => {
+    if (!window.octopus?.browser?.listSitePermissions) {
+      setSitePermissionsAvailable(false);
+      setSiteDevicePermissions([]);
+      return;
+    }
+    const result = await window.octopus.browser.listSitePermissions();
+    setSitePermissionsAvailable(result.ok);
+    setSiteDevicePermissions(result.ok ? result.entries : []);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    void refreshPasswords();
+    void refreshSiteDevicePermissions();
+    refreshAgentPolicy();
+  }, [
+    open,
+    refreshAgentPolicy,
+    refreshPasswords,
+    refreshSiteDevicePermissions,
+  ]);
+
+  useEffect(() => {
+    window.addEventListener(BROWSER_AGENT_POLICY_EVENT, refreshAgentPolicy);
+    return () =>
+      window.removeEventListener(
+        BROWSER_AGENT_POLICY_EVENT,
+        refreshAgentPolicy,
+      );
+  }, [refreshAgentPolicy]);
+
+  const savePassword = async () => {
+    if (!currentOrigin || !username.trim() || !password) return;
+    setPasswordBusy(true);
+    try {
+      const result = await window.octopus?.browser.savePassword({
+        origin: currentOrigin,
+        username: username.trim(),
+        password,
+      });
+      if (!result?.ok) throw new Error(result?.error || "保存失败");
+      setPassword("");
+      await refreshPasswords();
+      toast.success("密码已安全保存");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存密码失败");
+    } finally {
+      setPasswordBusy(false);
+    }
+  };
+
+  const fillPassword = async (id: string) => {
+    if (webContentsId == null) return;
+    const result = await window.octopus?.browser.fillPassword(
+      webContentsId,
+      id,
+    );
+    if (result?.ok) toast.success("已填充当前登录页面");
+    else toast.error(result?.error || "当前页面没有可填充的登录表单");
+  };
+
+  const deletePassword = async (id: string) => {
+    const result = await window.octopus?.browser.deletePassword(id);
+    if (!result?.ok) {
+      toast.error(result?.error || "删除失败");
+      return;
+    }
+    await refreshPasswords();
+    toast.success("已删除保存的密码");
+  };
+
+  const updateSiteDevicePermission = async (
+    entry: StoredSitePermission,
+    decision: "ask" | "allow" | "block",
+  ) => {
+    const result = await window.octopus?.browser.setSitePermission(
+      entry.origin,
+      entry.permission,
+      decision,
+    );
+    if (!result?.ok) {
+      toast.error(result?.error || "权限更新失败");
+      return;
+    }
+    await refreshSiteDevicePermissions();
+    toast.success(decision === "ask" ? "已恢复为每次询问" : "网站权限已更新");
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[82vh] overflow-y-auto sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>浏览器数据与隐私</DialogTitle>
+          <DialogDescription className="sr-only">
+            管理 Cookie、浏览历史、下载记录、Agent 网站权限与安全密码。
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <section className={rowClass}>
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+              <CookieIcon className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold">Cookie 与站点数据</div>
+              <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                登录状态保存在独立的 Octopus 浏览器配置中，不与系统浏览器混用。
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!canClearCurrentSite || clearing}
+              onClick={onClearCurrentSite}
+            >
+              清除当前网站
+            </Button>
+          </section>
+
+          <section className={rowClass}>
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+              <ClockIcon className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold">浏览历史</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">
+                当前保存 {historyCount} 条访问记录
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={historyCount === 0 || clearing}
+              onClick={onClearHistory}
+            >
+              清空记录
+            </Button>
+          </section>
+
+          <section className={rowClass}>
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+              <DownloadIcon className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold">下载记录</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">
+                当前保存 {downloadCount} 条记录；清空记录不会删除文件
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={downloadCount === 0 || clearing}
+              onClick={onClearDownloads}
+            >
+              清空记录
+            </Button>
+          </section>
+
+          <section className={cn(rowClass, "items-start")}>
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+              <ShieldCheckIcon className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                网页设备权限
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-micro font-medium",
+                    sitePermissionsAvailable
+                      ? "bg-success/12 text-success"
+                      : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {sitePermissionsAvailable ? "桌面防护已开启" : "仅桌面应用"}
+                </span>
+              </div>
+              <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                摄像头、麦克风、位置、通知和剪贴板默认询问；未支持的网页权限默认拒绝。
+              </div>
+              {sitePermissionsAvailable &&
+              siteDevicePermissions.length === 0 ? (
+                <div className="mt-2 rounded-lg bg-background/60 px-2.5 py-2 text-xs text-muted-foreground">
+                  尚未记住任何设备权限
+                </div>
+              ) : (
+                <div className="mt-2 space-y-1.5">
+                  {siteDevicePermissions.map((entry) => (
+                    <div
+                      key={`${entry.origin}:${entry.permission}`}
+                      className="flex items-center gap-2 rounded-lg bg-background/70 px-2.5 py-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs">{entry.origin}</div>
+                        <div className="text-micro text-muted-foreground">
+                          {SITE_PERMISSION_LABELS[entry.permission]}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void updateSiteDevicePermission(
+                            entry,
+                            entry.decision === "allow" ? "block" : "allow",
+                          )
+                        }
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-micro font-medium",
+                          entry.decision === "allow"
+                            ? "bg-success/12 text-success"
+                            : "bg-destructive/10 text-destructive",
+                        )}
+                      >
+                        {entry.decision === "allow" ? "允许" : "阻止"}
+                      </button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          void updateSiteDevicePermission(entry, "ask")
+                        }
+                      >
+                        每次询问
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className={cn(rowClass, "items-start")}>
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+              <ShieldCheckIcon className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold">Agent 网站权限</div>
+              <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                默认首次询问。网站权限只允许页面操作，提交、支付和删除等敏感动作仍会再次确认。
+              </div>
+              {sitePermissions.length === 0 ? (
+                <div className="mt-2 rounded-lg bg-background/60 px-2.5 py-2 text-xs text-muted-foreground">
+                  尚未记住任何网站权限
+                </div>
+              ) : (
+                <div className="mt-2 space-y-1.5">
+                  {sitePermissions.map((entry) => (
+                    <div
+                      key={entry.origin}
+                      className="flex items-center gap-2 rounded-lg bg-background/70 px-2.5 py-2"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-xs">
+                        {entry.origin}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setBrowserAgentPermission(
+                            entry.origin,
+                            entry.permission === "allow" ? "block" : "allow",
+                          )
+                        }
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-micro font-medium",
+                          entry.permission === "allow"
+                            ? "bg-success/12 text-success"
+                            : "bg-destructive/10 text-destructive",
+                        )}
+                      >
+                        {entry.permission === "allow" ? "允许" : "阻止"}
+                      </button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setBrowserAgentPermission(entry.origin, "ask")
+                        }
+                      >
+                        重置
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <div className="text-xs font-medium">
+                  最近操作记录 · {agentAudit.length}
+                </div>
+                {agentAudit.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => clearBrowserAgentAudit()}
+                  >
+                    清空
+                  </Button>
+                )}
+              </div>
+              {agentAudit.length > 0 && (
+                <div className="mt-1 max-h-32 space-y-1 overflow-y-auto rounded-lg bg-background/60 p-1.5">
+                  {agentAudit.slice(0, 20).map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="flex items-center gap-2 rounded-md px-1.5 py-1 text-micro"
+                    >
+                      <span
+                        className={cn(
+                          "size-1.5 shrink-0 rounded-full",
+                          entry.outcome === "blocked" ||
+                            entry.outcome === "failed"
+                            ? "bg-destructive"
+                            : "bg-success",
+                        )}
+                      />
+                      <span className="min-w-0 flex-1 truncate">
+                        {entry.origin} · {entry.action}
+                      </span>
+                      <span className="shrink-0 text-muted-foreground">
+                        {new Date(entry.createdAt).toLocaleTimeString()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className={cn(rowClass, "items-start")}>
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground">
+              <KeyRoundIcon className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                密码与自动填充
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-micro font-medium",
+                    passwordAvailable
+                      ? "bg-success/12 text-success"
+                      : "bg-warning/12 text-warning-foreground",
+                  )}
+                >
+                  {passwordAvailable ? "系统加密可用" : "当前环境不可用"}
+                </span>
+              </div>
+              <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                {passwordAvailable
+                  ? "密码由系统钥匙串加密，只能在域名完全匹配时主动填充。"
+                  : "网页版不保存密码；请在桌面应用中使用系统钥匙串。"}
+              </div>
+              {passwordAvailable && currentOrigin && (
+                <div className="mt-3 space-y-2">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Input
+                      value={username}
+                      onChange={(event) => setUsername(event.target.value)}
+                      placeholder="账号或邮箱"
+                      autoComplete="off"
+                    />
+                    <Input
+                      type="password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder="密码"
+                      autoComplete="new-password"
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    disabled={passwordBusy || !username.trim() || !password}
+                    onClick={() => void savePassword()}
+                  >
+                    保存到系统钥匙串
+                  </Button>
+                  {passwordEntries.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="flex items-center gap-2 rounded-lg bg-background/70 px-2.5 py-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-medium">
+                          {entry.username}
+                        </div>
+                        <div className="truncate text-micro text-muted-foreground">
+                          {entry.origin}
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={webContentsId == null}
+                        onClick={() => void fillPassword(entry.id)}
+                      >
+                        填充
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => void deletePassword(entry.id)}
+                      >
+                        删除
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3">
+            <div className="text-sm font-semibold">清除全部浏览数据</div>
+            <div className="mt-1 text-xs leading-5 text-muted-foreground">
+              清除
+              Cookie、缓存、网站存储、浏览历史和下载记录，并退出所有网站登录。
+            </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="mt-3"
+              disabled={clearing}
+              onClick={onClearAll}
+            >
+              {clearing ? "正在清除…" : "清除全部数据"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 interface BrowserActionsMenuProps {
   activeZoom: number;
   anchorRef: React.RefObject<HTMLButtonElement | null>;
+  canAttachScreenshot: boolean;
+  canCustomizeHome: boolean;
+  canGoHome: boolean;
   canManageSiteData: boolean;
   canUsePageActions: boolean;
   device: DevicePreset;
   deviceLabelMap: Record<DevicePreset, string>;
   onClearSiteData: () => void;
   onClose: () => void;
+  onAttachScreenshot: () => void;
   onDeviceChange: (device: DevicePreset) => void;
   onFindInPage: () => void;
+  onCustomizeHome: () => void;
+  onGoHome: () => void;
   onOpenExtensions?: () => void;
+  onOpenDataCenter: () => void;
   onReload: () => void;
   onZoomChange: (zoom: number) => void;
   siteDataStatus: string | null;
@@ -851,21 +1503,29 @@ interface BrowserActionsMenuProps {
 function BrowserActionsMenu({
   activeZoom,
   anchorRef,
+  canAttachScreenshot,
+  canCustomizeHome,
+  canGoHome,
   canManageSiteData,
   canUsePageActions,
   device,
   deviceLabelMap,
   onClearSiteData,
   onClose,
+  onAttachScreenshot,
   onDeviceChange,
   onFindInPage,
+  onCustomizeHome,
+  onGoHome,
   onOpenExtensions,
+  onOpenDataCenter,
   onReload,
   onZoomChange,
   siteDataStatus,
 }: BrowserActionsMenuProps) {
   const { t } = useI18n();
   const ub = t.browser.urlBar;
+  const bp = t.browserPreviewPanel;
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -910,6 +1570,43 @@ function BrowserActionsMenu({
       >
         <SearchIcon className="size-4" />
         {ub.findInPage}
+      </button>
+      <button
+        type="button"
+        disabled={!canGoHome}
+        onClick={() => {
+          onGoHome();
+          onClose();
+        }}
+        className={menuButtonClass}
+      >
+        <HouseIcon className="size-4" />
+        {ub.backToHome}
+      </button>
+      {canCustomizeHome && (
+        <button
+          type="button"
+          onClick={() => {
+            onCustomizeHome();
+            onClose();
+          }}
+          className={menuButtonClass}
+        >
+          <PanelLeftIcon className="size-4" />
+          {t.browser.webviewTab.editDesktop}
+        </button>
+      )}
+      <button
+        type="button"
+        disabled={!canAttachScreenshot}
+        onClick={() => {
+          onAttachScreenshot();
+          onClose();
+        }}
+        className={menuButtonClass}
+      >
+        <ImageIcon className="size-4" />
+        {bp.attachScreenshotToComposer}
       </button>
 
       <div className="my-2 h-px bg-border/55" />
@@ -998,6 +1695,14 @@ function BrowserActionsMenu({
       </button>
       <button
         type="button"
+        onClick={onOpenDataCenter}
+        className={menuButtonClass}
+      >
+        <Settings2Icon className="size-4" />
+        浏览器数据与隐私
+      </button>
+      <button
+        type="button"
         disabled={!canManageSiteData}
         onClick={onClearSiteData}
         className={cn(
@@ -1061,6 +1766,27 @@ function DownloadDropdown({
       ? ub.recentDownload
       : ub.downloads;
 
+  const controlDownload = async (
+    action: "pause" | "resume" | "cancel" | "retry",
+    id: string,
+  ) => {
+    const browser = window.octopus?.browser;
+    const handler =
+      action === "pause"
+        ? browser?.pauseDownload
+        : action === "resume"
+          ? browser?.resumeDownload
+          : action === "cancel"
+            ? browser?.cancelDownload
+            : browser?.retryDownload;
+    if (!handler) {
+      toast.error("下载控制仅在桌面应用中可用");
+      return;
+    }
+    const result = await handler(id);
+    if (!result.ok) toast.error(result.error || "下载操作失败");
+  };
+
   return (
     <div
       ref={ref}
@@ -1122,16 +1848,37 @@ function DownloadDropdown({
                     <div className="truncate text-xs font-medium">
                       {item.filename || ub.unnamedDownload}
                     </div>
+                    <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-micro text-muted-foreground">
+                      {item.risk && item.risk !== "low" && (
+                        <span
+                          className={cn(
+                            "shrink-0 rounded-full px-1.5 py-0.5 font-medium",
+                            item.risk === "high"
+                              ? "bg-destructive/10 text-destructive"
+                              : "bg-warning/12 text-warning-foreground",
+                          )}
+                        >
+                          {item.risk === "high" ? "高风险文件" : "压缩文件"}
+                        </span>
+                      )}
+                      {item.sourceOrigin && (
+                        <span className="truncate" title={item.sourceOrigin}>
+                          {item.sourceOrigin}
+                        </span>
+                      )}
+                    </div>
                     <div className="mt-0.5 truncate text-mini text-muted-foreground">
                       {completed
                         ? ub.downloadCompleted
                         : failed
                           ? ub.downloadIncomplete
-                          : `${formatBytes(item.receivedBytes)} / ${
-                              item.totalBytes > 0
-                                ? formatBytes(item.totalBytes)
-                                : ub.unknownSize
-                            }`}
+                          : item.paused
+                            ? `已暂停 · ${formatBytes(item.receivedBytes)}`
+                            : `${formatBytes(item.receivedBytes)} / ${
+                                item.totalBytes > 0
+                                  ? formatBytes(item.totalBytes)
+                                  : ub.unknownSize
+                              }`}
                     </div>
                     {!completed && !failed && (
                       <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted">
@@ -1143,6 +1890,48 @@ function DownloadDropdown({
                     )}
                   </div>
                 </div>
+                {!completed && !failed && (
+                  <div className="mt-2 flex justify-end gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void controlDownload(
+                          item.paused ? "resume" : "pause",
+                          item.id,
+                        )
+                      }
+                      disabled={item.paused && item.canResume === false}
+                      className="flex items-center gap-1 rounded-md px-2 py-1 text-mini text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:opacity-40"
+                    >
+                      {item.paused ? (
+                        <PlayIcon className="size-3" />
+                      ) : (
+                        <PauseIcon className="size-3" />
+                      )}
+                      {item.paused ? "继续" : "暂停"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void controlDownload("cancel", item.id)}
+                      className="flex items-center gap-1 rounded-md px-2 py-1 text-mini text-destructive transition-colors hover:bg-destructive/10"
+                    >
+                      <XIcon className="size-3" />
+                      取消
+                    </button>
+                  </div>
+                )}
+                {failed && (
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => void controlDownload("retry", item.id)}
+                      className="flex items-center gap-1 rounded-md px-2 py-1 text-mini text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                    >
+                      <RefreshCwIcon className="size-3" />
+                      重试
+                    </button>
+                  </div>
+                )}
                 {completed && (
                   <div className="mt-2 flex justify-end gap-1.5">
                     <button

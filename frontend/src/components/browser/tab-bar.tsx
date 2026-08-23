@@ -1,6 +1,12 @@
 /* Implementation note. */
 
-import { PlusIcon, XIcon, Loader2Icon, GlobeIcon } from "lucide-react";
+import {
+  PlusIcon,
+  XIcon,
+  Loader2Icon,
+  GlobeIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
 import { useState, type DragEvent, type MouseEvent } from "react";
 
 import { useI18n } from "@/core/i18n/hooks";
@@ -89,10 +95,10 @@ export function TabBar() {
             tabIndex={0}
             aria-label={tabLabel}
             className={cn(
-              "group relative flex h-7 min-w-[84px] max-w-[152px] cursor-pointer items-center gap-1 rounded-md px-1.5 text-mini transition-[background-color,border-color,box-shadow,color,transform]",
+              "group relative flex h-7 min-w-[84px] max-w-[160px] cursor-pointer items-center gap-1 overflow-hidden rounded-md px-2 text-mini transition-[background-color,border-color,box-shadow,color,transform] after:absolute after:inset-x-2 after:bottom-0 after:h-[2px] after:scale-x-0 after:rounded-full after:bg-primary after:transition-transform",
               isHomeTab && "min-w-[68px] max-w-[96px]",
               active
-                ? "bg-card/80 text-foreground"
+                ? "bg-card/85 text-foreground shadow-[var(--shadow-xs)] after:scale-x-100"
                 : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
               dragOver && "ring-2 ring-primary ring-offset-0",
             )}
@@ -106,7 +112,9 @@ export function TabBar() {
             }
             title={tab.title || tab.url}
           >
-            {tab.isLoading ? (
+            {tab.crash ? (
+              <TriangleAlertIcon className="size-3.5 shrink-0 text-warning" />
+            ) : tab.isLoading ? (
               <Loader2Icon className="size-3.5 shrink-0 animate-spin" />
             ) : tab.favicon ? (
               <img

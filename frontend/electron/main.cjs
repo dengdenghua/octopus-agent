@@ -12,8 +12,10 @@ const {
   ipcMain,
   net,
   protocol,
+  safeStorage,
   shell,
   session,
+  systemPreferences,
   webContents,
 } = require("electron");
 const fs = require("fs");
@@ -28,6 +30,7 @@ const {
 const petSidecar = require("./pet-sidecar.cjs");
 const desktopCore = require("./desktop-shell-core.cjs");
 const desktopProtocol = require("./desktop-protocol.cjs");
+const mcpOAuthDeepLink = require("./mcp-oauth-deep-link.cjs");
 const {
   ensureDesktopConfigFile,
   ensureDesktopResources,
@@ -118,6 +121,11 @@ function setupAutoUpdater() {
 }
 
 let mainWindow = null;
+const BROWSER_PARTITION = "persist:octopus-browser";
+
+function browserProfileSession() {
+  return session.fromPartition(BROWSER_PARTITION);
+}
 
 // ── backend URL ────────────────────────────────────────────────
 function resolveBackendBaseURL() {
@@ -397,24 +405,262 @@ async function getAriaTree(target, opts) {
 const downloads = new Map();
 let downloadSeq = 0;
 
+const passwordVaultFile = () =>
+  path.join(app.getPath("userData"), "browser-passwords.enc.json");
+
+function normalizeHttpOrigin(value) {
+  const parsed = new URL(String(value || ""));
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("only http(s) origins are supported");
+  }
+  return parsed.origin;
+}
+
+function passwordVaultAvailable() {
+  return safeStorage.isEncryptionAvailable();
+}
+
+function readPasswordVault() {
+  if (!passwordVaultAvailable()) return [];
+  try {
+    const envelope = JSON.parse(fs.readFileSync(passwordVaultFile(), "utf8"));
+    if (envelope?.version !== 1 || typeof envelope.payload !== "string") {
+      return [];
+    }
+    const clear = safeStorage.decryptString(
+      Buffer.from(envelope.payload, "base64"),
+    );
+    const entries = JSON.parse(clear);
+    return Array.isArray(entries) ? entries : [];
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      console.warn(
+        "[octopus] password vault could not be read:",
+        error.message,
+      );
+    }
+    return [];
+  }
+}
+
+function writePasswordVault(entries) {
+  if (!passwordVaultAvailable()) {
+    throw new Error("system encryption is unavailable");
+  }
+  const target = passwordVaultFile();
+  const temporary = `${target}.tmp`;
+  const payload = safeStorage
+    .encryptString(JSON.stringify(entries))
+    .toString("base64");
+  fs.writeFileSync(temporary, JSON.stringify({ version: 1, payload }), {
+    mode: 0o600,
+  });
+  fs.renameSync(temporary, target);
+}
+
+function publicPasswordEntry(entry) {
+  return {
+    id: entry.id,
+    origin: entry.origin,
+    username: entry.username,
+    updatedAt: entry.updatedAt,
+  };
+}
+
+const sitePermissionsFile = () =>
+  path.join(app.getPath("userData"), "browser-site-permissions.json");
+
+function readSitePermissions() {
+  try {
+    const entries = JSON.parse(fs.readFileSync(sitePermissionsFile(), "utf8"));
+    return Array.isArray(entries) ? entries : [];
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      console.warn(
+        "[octopus] site permissions could not be read:",
+        error.message,
+      );
+    }
+    return [];
+  }
+}
+
+function writeSitePermissions(entries) {
+  fs.writeFileSync(sitePermissionsFile(), JSON.stringify(entries, null, 2), {
+    mode: 0o600,
+  });
+}
+
+function permissionKey(permission, details = {}) {
+  if (permission === "geolocation") return "location";
+  if (permission === "notifications") return "notifications";
+  if (permission === "clipboard-read") return "clipboard";
+  if (permission !== "media") return null;
+  const mediaTypes = Array.isArray(details.mediaTypes)
+    ? details.mediaTypes
+    : [];
+  const audio = mediaTypes.includes("audio");
+  const video = mediaTypes.includes("video");
+  if (audio && video) return "camera-microphone";
+  if (video) return "camera";
+  if (audio) return "microphone";
+  return null;
+}
+
+const permissionLabels = {
+  camera: "摄像头",
+  microphone: "麦克风",
+  "camera-microphone": "摄像头和麦克风",
+  location: "位置信息",
+  notifications: "通知",
+  clipboard: "剪贴板读取",
+};
+
+function savedSitePermission(origin, permission) {
+  return readSitePermissions().find(
+    (entry) => entry.origin === origin && entry.permission === permission,
+  );
+}
+
+function saveSitePermission(origin, permission, decision) {
+  const entries = readSitePermissions().filter(
+    (entry) => !(entry.origin === origin && entry.permission === permission),
+  );
+  if (decision !== "ask") {
+    entries.unshift({ origin, permission, decision, updatedAt: Date.now() });
+  }
+  writeSitePermissions(entries);
+}
+
+function configureBrowserPermissionRequests(sess) {
+  sess.setPermissionRequestHandler(
+    (contents, permission, callback, details) => {
+      if (contents.getType() !== "webview") {
+        callback(false);
+        return;
+      }
+      const key = permissionKey(permission, details);
+      if (!key) {
+        callback(false);
+        return;
+      }
+      let origin;
+      try {
+        origin = normalizeHttpOrigin(
+          details?.requestingUrl ||
+            details?.securityOrigin ||
+            contents.getURL(),
+        );
+      } catch {
+        callback(false);
+        return;
+      }
+      const saved = savedSitePermission(origin, key);
+      if (saved) {
+        callback(saved.decision === "allow");
+        return;
+      }
+      void dialog
+        .showMessageBox(mainWindow, {
+          type: "question",
+          title: "网站权限请求",
+          message: `${origin} 想要使用${permissionLabels[key]}`,
+          detail:
+            "只在确认网站可信且当前功能确实需要时允许。你可以稍后在“浏览器数据与隐私”中撤销。",
+          buttons: ["允许", "阻止"],
+          defaultId: 1,
+          cancelId: 1,
+          checkboxLabel: "记住此网站的选择",
+          checkboxChecked: false,
+          noLink: true,
+        })
+        .then(({ response, checkboxChecked }) => {
+          const allow = response === 0;
+          if (checkboxChecked) {
+            saveSitePermission(origin, key, allow ? "allow" : "block");
+          }
+          callback(allow);
+        })
+        .catch(() => callback(false));
+    },
+  );
+}
+
+function downloadRisk(filename) {
+  const lower = String(filename || "").toLowerCase();
+  if (
+    /\.(exe|msi|msp|bat|cmd|com|scr|ps1|vbs|vbe|js|jse|wsf|wsh|reg|app|dmg|pkg|deb|rpm|apk)$/i.test(
+      lower,
+    )
+  ) {
+    return "high";
+  }
+  if (/\.(zip|rar|7z|tar|gz|bz2|xz|iso)$/i.test(lower)) return "medium";
+  return "low";
+}
+
 function trackDownloads(sess) {
-  sess.on("will-download", (_event, item) => {
+  sess.on("will-download", (_event, item, sourceContents) => {
     const id = `dl-${++downloadSeq}`;
+    const createdAt = Date.now();
+    const filename = item.getFilename();
+    const risk = downloadRisk(filename);
+    const url = item.getURL();
+    let sourceOrigin = "";
+    try {
+      sourceOrigin = normalizeHttpOrigin(sourceContents?.getURL() || url);
+    } catch {
+      sourceOrigin = "unknown";
+    }
     const send = (state) => {
-      downloads.set(id, { item, path: item.getSavePath() });
+      downloads.set(id, {
+        item,
+        path: item.getSavePath(),
+        url,
+        filename,
+        risk,
+        sourceOrigin,
+        createdAt,
+        send,
+        sourceContents,
+      });
       mainWindow?.webContents.send("browser:download-event", {
         id,
-        filename: item.getFilename(),
-        url: item.getURL(),
-        state,
+        filename,
+        url,
+        sourceOrigin,
+        risk,
+        state: state === "started" ? "progressing" : state,
+        paused: item.isPaused(),
+        canResume: item.canResume(),
         receivedBytes: item.getReceivedBytes(),
         totalBytes: item.getTotalBytes(),
-        path: item.getSavePath(),
+        createdAt,
       });
     };
     send("started");
     item.on("updated", (_e, state) => send(state));
     item.once("done", (_e, state) => send(state));
+    if (risk === "high") {
+      item.pause();
+      send("progressing");
+      void dialog
+        .showMessageBox(mainWindow, {
+          type: "warning",
+          title: "高风险下载",
+          message: `是否保留 ${filename}？`,
+          detail: `此文件可能运行程序或修改设备。来源：${sourceOrigin}`,
+          buttons: ["继续下载", "取消下载"],
+          defaultId: 1,
+          cancelId: 1,
+          noLink: true,
+        })
+        .then(({ response }) => {
+          if (response === 0) item.resume();
+          else item.cancel();
+        })
+        .catch(() => item.cancel());
+    }
   });
 }
 
@@ -565,6 +811,52 @@ function registerIpc() {
   });
 
   // desktop organizer
+  handle("desktop:getAutomationPermissions", () => {
+    if (process.platform !== "darwin") {
+      return {
+        supported: false,
+        platform: process.platform,
+        screenRecording: "unknown",
+        accessibility: "unknown",
+      };
+    }
+    const screenRecording = systemPreferences.getMediaAccessStatus("screen");
+    return {
+      supported: true,
+      platform: process.platform,
+      screenRecording: ["granted", "denied", "restricted"].includes(
+        screenRecording,
+      )
+        ? screenRecording
+        : "unknown",
+      accessibility: systemPreferences.isTrustedAccessibilityClient(false)
+        ? "granted"
+        : "denied",
+    };
+  });
+  handle("desktop:openAutomationPermission", async (permission) => {
+    if (process.platform !== "darwin") {
+      return { ok: false, error: "macOS only" };
+    }
+    const pane =
+      permission === "screen-recording"
+        ? "Privacy_ScreenCapture"
+        : permission === "accessibility"
+          ? "Privacy_Accessibility"
+          : "";
+    if (!pane) return { ok: false, error: "unknown permission" };
+    try {
+      await shell.openExternal(
+        `x-apple.systempreferences:com.apple.preference.security?${pane}`,
+      );
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
   handle("desktop:listItems", async () => {
     try {
       return {
@@ -637,7 +929,7 @@ function registerIpc() {
   });
   handle("desktop:getSystemInfo", () => sampleSystemInfo());
   handle("desktop:installContextMenu", () => {
-    // Windows-only shell integration: register "Open with Octopus" in the
+    // Windows-only shell integration: register "Open with EchoAI" in the
     // Explorer right-click menu (files + folders) via the current-user registry.
     // Non-Windows platforms keep an honest degradation — there is no equivalent
     // OS-level shell menu to hook into from this process.
@@ -652,10 +944,10 @@ function registerIpc() {
       const { spawnSync } = require("child_process");
       const exe = process.execPath; // path to the packaged Octopus.exe
       const entries = [
-        ["HKCU\\Software\\Classes\\*\\shell\\Octopus", "Open with Octopus"],
+        ["HKCU\\Software\\Classes\\*\\shell\\Octopus", "Open with EchoAI"],
         [
           "HKCU\\Software\\Classes\\Directory\\shell\\Octopus",
-          "Open with Octopus",
+          "Open with EchoAI",
         ],
       ];
       for (const [key, label] of entries) {
@@ -785,6 +1077,144 @@ function registerIpc() {
       return { ok: false, error: err.message };
     }
   });
+  handle("browser:clearBrowsingData", async () => {
+    try {
+      const sessions = [session.defaultSession, browserProfileSession()];
+      await Promise.all(
+        sessions.flatMap((browserSession) => [
+          browserSession.clearStorageData(),
+          browserSession.clearCache(),
+          browserSession.clearAuthCache(),
+        ]),
+      );
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+  handle("browser:listPasswords", (origin) => {
+    try {
+      const normalized = origin ? normalizeHttpOrigin(origin) : null;
+      const entries = readPasswordVault()
+        .filter((entry) => !normalized || entry.origin === normalized)
+        .map(publicPasswordEntry)
+        .sort((a, b) => b.updatedAt - a.updatedAt);
+      return { ok: true, available: passwordVaultAvailable(), entries };
+    } catch (err) {
+      return {
+        ok: false,
+        available: passwordVaultAvailable(),
+        entries: [],
+        error: err.message,
+      };
+    }
+  });
+  handle("browser:savePassword", (entry) => {
+    try {
+      const origin = normalizeHttpOrigin(entry?.origin);
+      const username = String(entry?.username || "").trim();
+      const password = String(entry?.password || "");
+      if (!username || !password)
+        throw new Error("username and password required");
+      const entries = readPasswordVault();
+      const existing = entries.find(
+        (item) => item.origin === origin && item.username === username,
+      );
+      const next = {
+        id:
+          existing?.id ||
+          `pwd-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`,
+        origin,
+        username,
+        password,
+        updatedAt: Date.now(),
+      };
+      writePasswordVault([
+        next,
+        ...entries.filter((item) => item.id !== next.id),
+      ]);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+  handle("browser:deletePassword", (id) => {
+    try {
+      const entries = readPasswordVault();
+      const next = entries.filter((entry) => entry.id !== id);
+      if (next.length === entries.length) {
+        return { ok: false, error: "password entry not found" };
+      }
+      writePasswordVault(next);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+  handle("browser:fillPassword", async (id, entryId) => {
+    try {
+      const target = wc(id);
+      const currentOrigin = normalizeHttpOrigin(target.getURL());
+      const entry = readPasswordVault().find((item) => item.id === entryId);
+      if (!entry) return { ok: false, error: "password entry not found" };
+      if (entry.origin !== currentOrigin) {
+        return {
+          ok: false,
+          error: "current site does not match password origin",
+        };
+      }
+      const result = await target.executeJavaScript(
+        `(() => {
+          const username = ${JSON.stringify(entry.username)};
+          const password = ${JSON.stringify(entry.password)};
+          const passwordInput = document.querySelector('input[type="password"]');
+          if (!(passwordInput instanceof HTMLInputElement)) {
+            return { ok: false, error: "password field not found" };
+          }
+          const form = passwordInput.form;
+          const scope = form || document;
+          const usernameInput = scope.querySelector(
+            'input[autocomplete="username"], input[type="email"], input[name*="user" i], input[name*="email" i], input[type="text"]'
+          );
+          const setValue = (input, value) => {
+            const setter = Object.getOwnPropertyDescriptor(
+              HTMLInputElement.prototype, "value"
+            )?.set;
+            if (setter) setter.call(input, value); else input.value = value;
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+          };
+          if (usernameInput instanceof HTMLInputElement) setValue(usernameInput, username);
+          setValue(passwordInput, password);
+          passwordInput.focus();
+          return { ok: true, usernameFilled: usernameInput instanceof HTMLInputElement };
+        })()`,
+        true,
+      );
+      return result?.ok ? { ok: true } : result;
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+  handle("browser:listSitePermissions", () => ({
+    ok: true,
+    entries: readSitePermissions().sort((a, b) => b.updatedAt - a.updatedAt),
+  }));
+  handle("browser:setSitePermission", (origin, permission, decision) => {
+    try {
+      const normalized = normalizeHttpOrigin(origin);
+      if (!Object.hasOwn(permissionLabels, permission)) {
+        throw new Error("unsupported site permission");
+      }
+      if (!["ask", "allow", "block"].includes(decision)) {
+        throw new Error("unsupported permission decision");
+      }
+      saveSitePermission(normalized, permission, decision);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
   handle("browser:showDownloadInFolder", (id) => {
     const dl = downloads.get(id);
     if (!dl?.path) return { ok: false, error: "download not found" };
@@ -796,6 +1226,56 @@ function registerIpc() {
     if (!dl?.path) return { ok: false, error: "download not found" };
     const error = await shell.openPath(dl.path);
     return error ? { ok: false, error } : { ok: true };
+  });
+  handle("browser:pauseDownload", (id) => {
+    const dl = downloads.get(id);
+    if (!dl?.item) return { ok: false, error: "download not found" };
+    try {
+      dl.item.pause();
+      dl.send?.("progressing");
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+  handle("browser:resumeDownload", (id) => {
+    const dl = downloads.get(id);
+    if (!dl?.item) return { ok: false, error: "download not found" };
+    try {
+      if (!dl.item.canResume()) {
+        return { ok: false, error: "download cannot be resumed" };
+      }
+      dl.item.resume();
+      dl.send?.("progressing");
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+  handle("browser:cancelDownload", (id) => {
+    const dl = downloads.get(id);
+    if (!dl?.item) return { ok: false, error: "download not found" };
+    try {
+      dl.item.cancel();
+      dl.send?.("cancelled");
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+  handle("browser:retryDownload", (id) => {
+    const dl = downloads.get(id);
+    if (!dl?.url) return { ok: false, error: "download not found" };
+    try {
+      const source =
+        dl.sourceContents && !dl.sourceContents.isDestroyed()
+          ? dl.sourceContents
+          : mainWindow.webContents;
+      source.downloadURL(dl.url);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
   });
 
   // extensions
@@ -883,6 +1363,36 @@ function openSafeExternalURL(rawURL) {
   });
 }
 
+function attachMcpOAuthDeepLinkBridge(contents) {
+  return mcpOAuthDeepLink.attachMcpOAuthDeepLinkBridge(contents, {
+    backendBaseURL: resolveBackendBaseURL,
+    // Never log the deep link or callback URL: both can contain a short-lived
+    // authorization code. The backend consumes state exactly once, then PKCE.
+    onNavigationError: (error) => {
+      console.warn(
+        "[octopus] unable to complete MCP OAuth callback:",
+        error?.message || "navigation failed",
+      );
+    },
+  });
+}
+
+function configureMcpOAuthPopup(popupWindow) {
+  const contents = popupWindow.webContents;
+  const oauthBridge = attachMcpOAuthDeepLinkBridge(contents);
+  contents.setWindowOpenHandler(({ url }) => {
+    if (!oauthBridge.handleWindowOpen(url)) openSafeExternalURL(url);
+    return { action: "deny" };
+  });
+  contents.on("render-process-gone", (_event, details) => {
+    console.warn(
+      "[octopus] MCP OAuth popup renderer stopped:",
+      details?.reason || "unknown",
+    );
+    if (!popupWindow.isDestroyed()) popupWindow.close();
+  });
+}
+
 function isTrustedMainWindowURL(rawURL, useBuiltRenderer) {
   if (useBuiltRenderer) {
     const parsed = desktopProtocol.parseDesktopAppURL(rawURL);
@@ -943,13 +1453,37 @@ function createMainWindow() {
   });
 
   win.once("ready-to-show", () => win.show());
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  win.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    if (
+      frameName === "octopus-mcp-oauth" &&
+      mcpOAuthDeepLink.isSafeOAuthAuthorizeURL(url)
+    ) {
+      return {
+        action: "allow",
+        overrideBrowserWindowOptions: {
+          width: 620,
+          height: 780,
+          parent: win,
+          autoHideMenuBar: true,
+          webPreferences: {
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true,
+            webviewTag: false,
+          },
+        },
+      };
+    }
     if (useBuiltRenderer && desktopProtocol.isDesktopAppURL(url)) {
       openDesktopAuxiliaryWindow(url);
     } else {
       openSafeExternalURL(url);
     }
     return { action: "deny" };
+  });
+  win.webContents.on("did-create-window", (childWindow, details) => {
+    if (details?.frameName !== "octopus-mcp-oauth") return;
+    configureMcpOAuthPopup(childWindow);
   });
   win.webContents.on("will-navigate", (event, url) => {
     if (isTrustedMainWindowURL(url, useBuiltRenderer)) return;
@@ -1004,8 +1538,14 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on("web-contents-created", (_event, contents) => {
     if (contents.getType() !== "webview") return;
+    const oauthBridge = attachMcpOAuthDeepLinkBridge(contents);
     contents.setWindowOpenHandler(({ url }) => {
-      mainWindow?.webContents.send("browser:open-tab", url);
+      if (oauthBridge.handleWindowOpen(url)) {
+        return { action: "deny" };
+      }
+      if (/^(https?:|view-source:)/i.test(url)) {
+        mainWindow?.webContents.send("browser:open-tab", url);
+      }
       return { action: "deny" };
     });
     contents.on("render-process-gone", (_e, details) => {
@@ -1027,13 +1567,16 @@ if (!app.requestSingleInstanceLock()) {
     } catch (err) {
       const message = `无法安全初始化桌面应用：${err.message}`;
       console.error("[octopus] desktop initialization failed:", err);
-      dialog.showErrorBox("Octopus 启动失败", message);
+      dialog.showErrorBox("EchoAI 启动失败", message);
       app.exit(1);
       return;
     }
     registerIpc();
     setupAutoUpdater();
+    configureBrowserPermissionRequests(session.defaultSession);
+    configureBrowserPermissionRequests(browserProfileSession());
     trackDownloads(session.defaultSession);
+    trackDownloads(browserProfileSession());
     mainWindow = createMainWindow();
     // Create the window before starting the bundled backend so the renderer
     // can show a bounded startup state while /readyz becomes available.
@@ -1043,7 +1586,7 @@ if (!app.requestSingleInstanceLock()) {
       } catch (err) {
         const message = `无法启动随应用安装的后端：${err.message}`;
         console.error("[octopus] bundled backend start failed:", err);
-        dialog.showErrorBox("Octopus 启动失败", message);
+        dialog.showErrorBox("EchoAI 启动失败", message);
         app.exit(1);
         return;
       }
