@@ -200,10 +200,19 @@ async def _handle_request(
             ),
             before_turn_id=before_turn_id,
         )
+        last_turn = turns[-1] if turns else None
         return {
             "thread": {"id": thread_id, "path": str(log.path)},
             "turns": [t.model_dump(by_alias=True, mode="json") for t in window],
             "totalTurns": len(turns),
+            # Keep the authoritative tail status beside the paginated
+            # window.  A reconnect can otherwise mistake a locally cached
+            # in-progress turn for live work after the server has already
+            # reaped it as stale.
+            "lastTurnId": last_turn.id if last_turn is not None else None,
+            "lastTurnStatus": (
+                last_turn.status.value if last_turn is not None else None
+            ),
             "hasMore": has_more,
             "incremental": False,
             "nextEventSequence": next_sequence,

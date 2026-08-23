@@ -166,6 +166,8 @@ interface ResumeResponse {
   turns: Conversation["turns"];
   hasMore?: boolean;
   totalTurns?: number;
+  lastTurnId?: string | null;
+  lastTurnStatus?: string | null;
   incremental?: boolean;
   nextEventSequence?: number;
   eventStreamId?: string | null;
@@ -698,10 +700,20 @@ export function useRealtimeThread(
           }
           const current = stateRef.current;
           const serverTurns = result.turns ?? [];
+          // A full snapshot is authoritative about the tail lifecycle. Do
+          // not preserve a locally hydrated in-progress turn when the
+          // server has already reaped it and reports a terminal tail; that
+          // combination leaves the UI stuck on “thinking” after a dropped
+          // socket or a stale replay-cache entry.
+          const authoritativeTerminal =
+            result.incremental !== true &&
+            typeof result.lastTurnStatus === "string" &&
+            result.lastTurnStatus !== "inProgress";
           const projectedTurns =
             result.incremental === true
               ? mergeTurnSnapshots(current.turns, serverTurns)
               : mode === "preserve-live" &&
+                  !authoritativeTerminal &&
                   current.turns.length > 0 &&
                   (!result.thread?.id || current.threadId === result.thread.id)
                 ? mergeTurnSnapshots(serverTurns, current.turns)
@@ -711,6 +723,7 @@ export function useRealtimeThread(
               result.incremental === true
                 ? mergeTurnSnapshots(prev.turns, serverTurns)
                 : mode === "preserve-live" &&
+                    !authoritativeTerminal &&
                     prev.turns.length > 0 &&
                     (!result.thread?.id || prev.threadId === result.thread.id)
                   ? mergeTurnSnapshots(serverTurns, prev.turns)

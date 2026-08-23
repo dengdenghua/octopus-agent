@@ -331,6 +331,7 @@ class EchoRuntime:
                     "eventStreamId": snapshot.stream_id,
                 }
         next_sequence = log.latest_sequence(snapshot=snapshot)
+        last_turn = turns[-1] if turns else None
         raw_limit = params.get("limit")
         window, has_more = EventLog.paginate_turns(
             turns,
@@ -345,6 +346,10 @@ class EchoRuntime:
             "thread": {"id": thread_id, "path": str(log.path)},
             "turns": [t.model_dump(by_alias=True, mode="json") for t in window],
             "totalTurns": len(turns),
+            "lastTurnId": last_turn.id if last_turn is not None else None,
+            "lastTurnStatus": (
+                last_turn.status.value if last_turn is not None else None
+            ),
             "hasMore": has_more,
             "incremental": False,
             "nextEventSequence": next_sequence,
