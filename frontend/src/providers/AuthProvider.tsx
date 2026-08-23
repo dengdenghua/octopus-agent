@@ -67,7 +67,7 @@ function userFromJwt(token: string | null): Partial<User> | null {
     return {
       user_id: actorId || mobile,
       actor_id: actorId,
-      username: mobile || actorId || "Octopus",
+      username: mobile || actorId || "EchoAI",
       mobile,
       provider: json.provider,
     };
@@ -154,24 +154,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setUser(null);
       }
-      const status = await getAuthStatus().catch(() => null);
+      // These checks are independent. Running them serially made a cold app
+      // start wait for two network timeouts before any protected UI appeared.
+      const statusRequest = getAuthStatus().catch(() => null);
+      const userRequest =
+        token && token !== GUEST_USER_ID
+          ? getMe()
+              .then((currentUser) => ({ currentUser, error: null }))
+              .catch((error: unknown) => ({ currentUser: null, error }))
+          : Promise.resolve({ currentUser: null, error: null });
+      const [status, current] = await Promise.all([statusRequest, userRequest]);
       if (status) setAuthStatus(status);
-      if (token && token !== GUEST_USER_ID) {
-        try {
-          const currentUser = await getMe();
-          setUser(
-            normalizeUserIdentity(
-              currentUser,
-              storedUser || tokenUser,
-            ),
-          );
-        } catch (err) {
-          swallow(err);
-          const msg = err instanceof Error ? err.message : "";
-          if (/401|Unauthorized/i.test(msg)) {
-            _clearTokens();
-            setUser(null);
-          }
+      if (current.currentUser) {
+        setUser(
+          normalizeUserIdentity(current.currentUser, storedUser || tokenUser),
+        );
+      } else if (current.error) {
+        swallow(current.error);
+        const msg = current.error instanceof Error ? current.error.message : "";
+        if (/401|Unauthorized/i.test(msg)) {
+          _clearTokens();
+          setUser(null);
         }
       }
     } catch (e) {

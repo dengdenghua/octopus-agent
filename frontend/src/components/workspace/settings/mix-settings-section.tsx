@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2Icon, SaveIcon } from "lucide-react";
 import { toast } from "sonner";
 
@@ -36,7 +36,18 @@ export function MixSettingsSection() {
 
   // Selectable models = everything the picker offers except Mix itself
   // (no recursion) and the "auto" sentinel.
-  const candidates = models.filter((m) => m.name !== MIX_ID && m.name !== "auto");
+  const candidates = useMemo(() => {
+    const seen = new Set<string>();
+    return models.filter((model) => {
+      if (model.name === MIX_ID || model.name === "auto") return false;
+      // Mix configuration persists routable model names, so context-profile
+      // aliases and duplicate catalog entries cannot be selected distinctly.
+      // Keep the first stable entry and avoid duplicate React keys/options.
+      if (seen.has(model.name)) return false;
+      seen.add(model.name);
+      return true;
+    });
+  }, [models]);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,7 +90,11 @@ export function MixSettingsSection() {
       if (!r.ok) throw new Error(t.settings.octopusMix.saveFailed(r.status));
       toast.success(t.settings.octopusMix.saveSuccess);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : t.settings.octopusMix.saveFailedFallback);
+      toast.error(
+        e instanceof Error
+          ? e.message
+          : t.settings.octopusMix.saveFailedFallback,
+      );
     } finally {
       setSaving(false);
     }
@@ -92,11 +107,15 @@ export function MixSettingsSection() {
     >
       <div className="space-y-4">
         <div>
-          <div className="mb-2 text-sm font-medium">{t.settings.octopusMix.proposersLabel}</div>
+          <div className="mb-2 text-sm font-medium">
+            {t.settings.octopusMix.proposersLabel}
+          </div>
           {loading ? (
             <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
           ) : candidates.length === 0 ? (
-            <div className="text-sm text-muted-foreground">{t.settings.octopusMix.noCandidates}</div>
+            <div className="text-sm text-muted-foreground">
+              {t.settings.octopusMix.noCandidates}
+            </div>
           ) : (
             <div className="flex flex-wrap gap-2">
               {candidates.map((m) => {
@@ -129,7 +148,9 @@ export function MixSettingsSection() {
               onChange={(e) => setAggregator(e.target.value)}
               className="rounded-md border border-border bg-background px-2 py-1 text-sm"
             >
-              <option value="">{t.settings.octopusMix.aggregatorDefault}</option>
+              <option value="">
+                {t.settings.octopusMix.aggregatorDefault}
+              </option>
               {candidates.map((m) => (
                 <option key={m.name} value={m.name}>
                   {m.display_name || m.name}
@@ -153,7 +174,12 @@ export function MixSettingsSection() {
           </label>
         </div>
 
-        <Button onClick={() => void save()} disabled={saving} size="sm" className="gap-1.5">
+        <Button
+          onClick={() => void save()}
+          disabled={saving}
+          size="sm"
+          className="gap-1.5"
+        >
           {saving ? (
             <Loader2Icon className="size-4 animate-spin" />
           ) : (

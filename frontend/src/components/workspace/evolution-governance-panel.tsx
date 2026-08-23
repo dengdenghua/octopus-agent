@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ActivityIcon,
+  ArrowRightIcon,
   GaugeIcon,
   Settings2Icon,
   ShieldCheckIcon,
 } from "lucide-react";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -42,6 +43,7 @@ function GovernancePanelLoading() {
 
 export function EvolutionGovernancePanel() {
   const queryClient = useQueryClient();
+  const [detailSection, setDetailSection] = useState("summary");
   const shadow = useQuery({
     queryKey: shadowQueryKey,
     queryFn: getDualHelixShadowStatus,
@@ -109,8 +111,15 @@ export function EvolutionGovernancePanel() {
         </article>
       </div>
 
-      <Tabs defaultValue="control" className="space-y-3">
+      <Tabs
+        value={detailSection}
+        onValueChange={setDetailSection}
+        className="space-y-3"
+      >
         <TabsList className="h-9 w-fit rounded-lg">
+          <TabsTrigger value="summary" className="h-8 px-3 text-xs">
+            治理摘要
+          </TabsTrigger>
           <TabsTrigger value="control" className="h-8 gap-1.5 px-3 text-xs">
             <GaugeIcon className="size-3.5" />
             策略与预算
@@ -124,6 +133,50 @@ export function EvolutionGovernancePanel() {
             运行与设置
           </TabsTrigger>
         </TabsList>
+        <TabsContent value="summary" className="mt-0">
+          <div className="grid gap-3 lg:grid-cols-3">
+            {[
+              {
+                value: "control",
+                title: "策略与预算",
+                description: "预算、技能提案、模型与 MCP 的晋升策略。",
+                Icon: GaugeIcon,
+              },
+              {
+                value: "reflex",
+                title: "规则与响应",
+                description: "查看反射规则、运行反馈与异常响应。",
+                Icon: ActivityIcon,
+              },
+              {
+                value: "runtime",
+                title: "运行与设置",
+                description: "调整进化运行参数与治理开关。",
+                Icon: Settings2Icon,
+              },
+            ].map(({ value, title, description, Icon }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setDetailSection(value)}
+                className="group flex h-auto items-start justify-start rounded-xl border bg-card p-4 text-left transition-colors hover:bg-muted/30"
+              >
+                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                  <Icon className="size-4" />
+                </span>
+                <span className="ml-3 min-w-0 flex-1 whitespace-normal">
+                  <span className="block text-sm font-semibold text-foreground">
+                    {title}
+                  </span>
+                  <span className="mt-1 block text-xs font-normal leading-5 text-muted-foreground">
+                    {description}
+                  </span>
+                </span>
+                <ArrowRightIcon className="ml-2 mt-1 size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+              </button>
+            ))}
+          </div>
+        </TabsContent>
         <TabsContent
           value="control"
           className="mt-0 rounded-xl border bg-card p-3"

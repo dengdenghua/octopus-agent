@@ -19,9 +19,15 @@ import {
   TabletIcon,
   XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-import { AssistantPanel } from "@/components/browser/assistant-panel";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { TabBar } from "@/components/browser/tab-bar";
 import { UrlBar } from "@/components/browser/url-bar";
@@ -36,10 +42,7 @@ import {
   type BrowserOpenUrlAck,
   BROWSER_OPEN_URL_REQUEST_EVENT,
 } from "@/components/browser/browser-store";
-import {
-  WebviewTab,
-  type WebviewTabHandle,
-} from "@/components/browser/webview-tab";
+import type { WebviewTabHandle } from "@/components/browser/webview-tab";
 import { WorkspaceSurfaceHeader } from "@/components/workspace/workspace-surface-header";
 import { useActiveAgentId } from "@/core/agents/active";
 import {
@@ -47,6 +50,17 @@ import {
   localPreviewPort,
 } from "@/core/browser/local-services";
 import { workspacePresetForAgent } from "@/core/workspace/workspace-presets";
+
+const AssistantPanel = lazy(() =>
+  import("@/components/browser/assistant-panel").then((module) => ({
+    default: module.AssistantPanel,
+  })),
+);
+const WebviewTab = lazy(() =>
+  import("@/components/browser/webview-tab").then((module) => ({
+    default: module.WebviewTab,
+  })),
+);
 
 const isWindows = (): boolean =>
   typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
@@ -630,28 +644,38 @@ function BrowserShell() {
                         }
                   }
                 >
-                  {state.tabs.map((tab) => (
-                    <WebviewTab
-                      key={tab.id}
-                      tab={tab}
-                      active={tab.id === state.activeId}
-                      renderDevice={
-                        tab.id === state.activeId ? renderDevice : tab.device
-                      }
-                      onPatch={(patch) => patchTab(tab.id, patch)}
-                      onClose={() => closeTab(tab.id)}
-                      ref={(handle) => {
-                        if (handle) {
-                          handlesRef.current.set(tab.id, handle);
-                          if (tab.id === state.activeId) {
-                            setActiveHandle((prev) => prev ?? handle);
-                          }
-                        } else {
-                          handlesRef.current.delete(tab.id);
+                  <Suspense
+                    fallback={
+                      <div
+                        className="size-full animate-pulse bg-muted/25"
+                        role="status"
+                        aria-label="加载网页内容"
+                      />
+                    }
+                  >
+                    {state.tabs.map((tab) => (
+                      <WebviewTab
+                        key={tab.id}
+                        tab={tab}
+                        active={tab.id === state.activeId}
+                        renderDevice={
+                          tab.id === state.activeId ? renderDevice : tab.device
                         }
-                      }}
-                    />
-                  ))}
+                        onPatch={(patch) => patchTab(tab.id, patch)}
+                        onClose={() => closeTab(tab.id)}
+                        ref={(handle) => {
+                          if (handle) {
+                            handlesRef.current.set(tab.id, handle);
+                            if (tab.id === state.activeId) {
+                              setActiveHandle((prev) => prev ?? handle);
+                            }
+                          } else {
+                            handlesRef.current.delete(tab.id);
+                          }
+                        }}
+                      />
+                    ))}
+                  </Suspense>
                 </div>
               </div>
             </div>
@@ -666,7 +690,17 @@ function BrowserShell() {
                   minWidth: renderDevice !== "desktop" ? 280 : undefined,
                 }}
               >
-                <AssistantPanel webviewHandle={activeHandle} />
+                <Suspense
+                  fallback={
+                    <div
+                      className="size-full min-w-72 animate-pulse bg-muted/25"
+                      role="status"
+                      aria-label="加载 AI 助手"
+                    />
+                  }
+                >
+                  <AssistantPanel webviewHandle={activeHandle} />
+                </Suspense>
               </div>
             )}
           </div>

@@ -48,6 +48,7 @@ import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 import {
   loadCommunityPage,
+  loadDesignPage,
   loadIntelligencePage,
   loadPaperTradingPage,
   loadProjectsPage,
@@ -65,11 +66,16 @@ import {
   BROWSER_HOME_URL,
   type BrowserTab,
 } from "./browser-store";
-import { BrowserHome } from "./browser-home";
 import {
   RELAY_STATUS_REFRESH_MS,
   getRelayStatusRetryDelay,
 } from "./relay-polling";
+
+const BrowserHome = lazy(() =>
+  import("./browser-home").then((module) => ({
+    default: module.BrowserHome,
+  })),
+);
 
 interface Props {
   tab: BrowserTab;
@@ -82,6 +88,7 @@ interface Props {
 const BROWSER_BUILTIN_COMPONENTS: Record<string, ComponentType> = {
   projects: lazy(loadProjectsPage),
   "paper-trading": lazy(loadPaperTradingPage),
+  design: lazy(loadDesignPage),
   intelligence: lazy(loadIntelligencePage),
   community: lazy(loadCommunityPage),
 };
@@ -1976,20 +1983,30 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
     const homeDevice = renderDevice ?? tab.device;
     if (tab.url === BROWSER_HOME_URL) {
       return (
-        <BrowserHome
-          active={active}
-          device={homeDevice}
-          onOpen={(url) => {
-            const builtinApp = WORKBENCH_BUILTIN_APPS.find(
-              (app) => app.launchUrl === url,
-            );
-            onPatch({
-              url,
-              title: builtinApp?.name ?? url,
-              isLoading: !builtinApp,
-            });
-          }}
-        />
+        <Suspense
+          fallback={
+            <div
+              className="size-full animate-pulse bg-muted/25"
+              role="status"
+              aria-label="加载浏览器桌面"
+            />
+          }
+        >
+          <BrowserHome
+            active={active}
+            device={homeDevice}
+            onOpen={(url) => {
+              const builtinApp = WORKBENCH_BUILTIN_APPS.find(
+                (app) => app.launchUrl === url,
+              );
+              onPatch({
+                url,
+                title: builtinApp?.name ?? url,
+                isLoading: !builtinApp,
+              });
+            }}
+          />
+        </Suspense>
       );
     }
 
