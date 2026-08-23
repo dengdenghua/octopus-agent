@@ -866,6 +866,7 @@ export function MessageList({
   onAuthorizeNetwork,
   projectMessageActions,
   timelineEntries = [],
+  allowThreadFork = true,
 }: {
   className?: string;
   threadId: string;
@@ -903,6 +904,8 @@ export function MessageList({
   onAuthorizeNetwork?: (tier: "common" | "full") => void;
   /** Quick actions shown on human bubbles in a bound project group. */
   projectMessageActions?: MessageListProjectActions;
+  /** Prevent a legacy non-persona owner from being copied into a new thread. */
+  allowThreadFork?: boolean;
   /** Room-only messages/cards to merge at thread-group time boundaries. */
   timelineEntries?: readonly MessageListTimelineEntry[];
 }) {
@@ -1673,6 +1676,7 @@ export function MessageList({
           messageIndex={messages.indexOf(msg)}
           afterContent={afterContent}
           projectMessageActions={projectMessageActions}
+          allowThreadFork={allowThreadFork}
         />
       </div>
     );
@@ -1703,6 +1707,7 @@ export function MessageList({
           messageIndex={messages.indexOf(msg)}
           afterContent={afterContent}
           projectMessageActions={projectMessageActions}
+          allowThreadFork={allowThreadFork}
         />
       </>
     );

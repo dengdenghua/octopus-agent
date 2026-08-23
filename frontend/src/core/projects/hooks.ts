@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getAPIClient } from "../api";
 import { authHeaders, jsonAuthHeaders } from "../auth/api";
 import { getBackendBaseURL } from "../config";
+import { isPrimaryPersonaAgentId } from "../agents/persona-policy";
 import {
   ensureCollabRoom,
   getCoworkGroup,
@@ -59,9 +60,22 @@ function normalizedInitialAgents(
     seen.add(id);
     normalized.push({ ...agent, id });
   }
-  return normalized.length > 0
-    ? normalized
-    : [{ id: DEFAULT_PROJECT_AGENT_ID, displayName: "通用助手" }];
+  if (normalized.length === 0) {
+    return [{ id: DEFAULT_PROJECT_AGENT_ID, displayName: "通用助手" }];
+  }
+  const leaderIndex = normalized.findIndex((agent) =>
+    isPrimaryPersonaAgentId(agent.id),
+  );
+  if (leaderIndex < 0) {
+    normalized.unshift({
+      id: DEFAULT_PROJECT_AGENT_ID,
+      displayName: "通用助手",
+    });
+  } else if (leaderIndex > 0) {
+    const [leader] = normalized.splice(leaderIndex, 1);
+    if (leader) normalized.unshift(leader);
+  }
+  return normalized;
 }
 
 function rosterMode(agentCount: number): CoworkMode {

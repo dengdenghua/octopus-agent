@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Agent } from "@/core/agents";
+import { ACTIVE_AGENT_KEY } from "@/core/agents/active";
+import { consumeTaskCollaboratorPreset } from "@/core/collaboration/task-collaborator-preset";
 import { renderWithProviders } from "@/test/harness";
 
 import { AgentCard } from "./agent-card";
@@ -29,6 +31,8 @@ describe("AgentCard", () => {
   beforeEach(() => {
     deleteAgentMock.mockReset();
     deleteAgentMock.mockResolvedValue(undefined);
+    window.sessionStorage.clear();
+    window.localStorage.setItem(ACTIVE_AGENT_KEY, "coder");
   });
 
   it("presents a concise talent profile with independent primary and detail actions", async () => {
@@ -43,8 +47,8 @@ describe("AgentCard", () => {
       name: "自定义角色 角色档案",
     });
     expect(
-      screen.getByRole("button", { name: "与 自定义角色 开聊" }),
-    ).toBeInTheDocument();
+      screen.getByRole("button", { name: "将 自定义角色 按需加入对话" }),
+    ).toHaveAttribute("data-agent-entry", "on-demand");
     expect(screen.getByText("已加入")).toBeInTheDocument();
     expect(screen.getByText("网页研究")).toBeInTheDocument();
     expect(screen.getByText("文档交付")).toBeInTheDocument();
@@ -58,6 +62,42 @@ describe("AgentCard", () => {
     profileAction.focus();
     await user.keyboard("{Enter}");
     expect(onSelect).toHaveBeenCalledWith(agent);
+  });
+
+  it("adds a non-squad talent to the active conversation without switching identity", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AgentCard agent={agent} isDefault={false} />, {
+      locale: "zh-CN",
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "将 自定义角色 按需加入对话" }),
+    );
+
+    expect(window.localStorage.getItem(ACTIVE_AGENT_KEY)).toBe("coder");
+    expect(consumeTaskCollaboratorPreset()).toEqual({
+      leaderId: "coder",
+      collaboratorIds: ["custom-role"],
+      mode: "cluster",
+      label: "自定义角色",
+      openPicker: true,
+    });
+  });
+
+  it("keeps a White Ghost member as a direct conversation identity", () => {
+    renderWithProviders(
+      <AgentCard
+        agent={{ ...agent, name: "coder", display_name: "Kane" }}
+        isDefault
+        isPrimaryIdentity
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(
+      screen.getByRole("button", { name: "与 Kane 开聊" }),
+    ).toHaveAttribute("data-agent-entry", "identity");
+    expect(consumeTaskCollaboratorPreset()).toBeNull();
   });
 
   it("names the destructive confirmation and deletes the selected role", async () => {

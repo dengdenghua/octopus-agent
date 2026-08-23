@@ -15,9 +15,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import {
-  ChatInputBox,
-} from "@/components/workspace/chat-input-box";
+import { ChatInputBox } from "@/components/workspace/chat-input-box";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,8 +31,13 @@ import { ThreadProviders } from "@/components/workspace/messages/context";
 import { swallow } from "@/core/utils/log";
 import type { Agent } from "@/core/agents";
 import { checkAgentName, getAgent } from "@/core/agents/api";
+import { useActiveAgentId } from "@/core/agents/active";
+import { primaryPersonaAgentIdOrDefault } from "@/core/agents/persona-policy";
+import {
+  taskCollaboratorRouteForLeader,
+  writeTaskCollaboratorPreset,
+} from "@/core/collaboration/task-collaborator-preset";
 import { useI18n } from "@/core/i18n/hooks";
-import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
 import { useThreadStream } from "@/core/threads/hooks";
 import { uuid } from "@/core/utils/uuid";
 import { isIMEComposing } from "@/lib/ime";
@@ -210,6 +213,8 @@ function buildGuidedConfigPrompt({
 export default function NewAgentPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const activeAgentId = useActiveAgentId();
+  const creationLeaderId = primaryPersonaAgentIdOrDefault(activeAgentId);
   const [searchParams] = useSearchParams();
   const requestedTemplateId = searchParams.get("template");
   const requestedRoleId = searchParams.get("roleId");
@@ -362,6 +367,7 @@ export default function NewAgentPage() {
   const [thread, sendMessage] = useThreadStream({
     threadId: step === "chat" ? threadId : undefined,
     context: {
+      agent_name: creationLeaderId,
       mode: "chat",
       is_bootstrap: true,
     },
@@ -542,10 +548,10 @@ export default function NewAgentPage() {
       await sendMessage(
         threadId,
         { text: trimmed, files: [] },
-        { agent_name: agentName },
+        { agent_name: creationLeaderId },
       );
     },
-    [agentName, sendMessage, thread.isLoading, threadId],
+    [creationLeaderId, sendMessage, thread.isLoading, threadId],
   );
 
   const handleSaveAgent = useCallback(async () => {
@@ -564,7 +570,7 @@ export default function NewAgentPage() {
       await sendMessage(
         threadId,
         { text: t.agents.saveCommandMessage, files: [] },
-        { agent_name: agentName },
+        { agent_name: creationLeaderId },
         { additionalKwargs: { hide_from_ui: true } },
       );
       toast.success(t.agents.saveRequested);
@@ -575,6 +581,7 @@ export default function NewAgentPage() {
   }, [
     agent,
     agentName,
+    creationLeaderId,
     sendMessage,
     setupAgentStatus,
     t.agents.saveCommandMessage,
@@ -729,7 +736,9 @@ export default function NewAgentPage() {
                         isCheckingName
                       }
                     >
-                      {isCheckingName ? agentNew.buttons.checking : agentNew.buttons.generate}
+                      {isCheckingName
+                        ? agentNew.buttons.checking
+                        : agentNew.buttons.generate}
                     </Button>
                     <Button
                       className="h-9 rounded-sm border border-white/14 bg-black/30 px-4 text-white/86 hover:border-white/24 hover:bg-white/8 hover:text-white"
@@ -954,11 +963,19 @@ export default function NewAgentPage() {
                     <p className="font-semibold">{t.agents.agentCreated}</p>
                     <div className="flex gap-2">
                       <Button
-                        onClick={() =>
-                          navigate(taskWorkspaceRoute({ agentId: agentName }))
-                        }
+                        onClick={() => {
+                          const leaderId = creationLeaderId;
+                          writeTaskCollaboratorPreset({
+                            leaderId,
+                            collaboratorIds: [agentName],
+                            mode: "cluster",
+                            label: agent.display_name || agent.name,
+                            openPicker: true,
+                          });
+                          navigate(taskCollaboratorRouteForLeader(leaderId));
+                        }}
                       >
-                        {t.agents.startChatting}
+                        {t.agentCard.addOnDemand}
                       </Button>
                       <Button
                         variant="outline"

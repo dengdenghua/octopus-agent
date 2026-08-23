@@ -20,6 +20,10 @@ import { swallow } from "@/core/utils/log";
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useEvent } from "../events";
+import {
+  DEFAULT_PRIMARY_AGENT_ID,
+  isPrimaryPersonaAgentId,
+} from "./persona-policy";
 
 export const ACTIVE_AGENT_KEY = "octopus.active-agent";
 // Kept for backward compatibility with external listeners
@@ -65,7 +69,14 @@ function readActive(): string | null {
   try {
     const raw = window.localStorage.getItem(ACTIVE_AGENT_KEY);
     const normalized = normalizeAgentId(raw);
-    if (normalized) return normalized;
+    if (normalized && isPrimaryPersonaAgentId(normalized)) return normalized;
+    if (normalized) {
+      // Experts used to be persisted as standalone identities. They now join
+      // a White Ghost-led conversation on demand, so migrate that old picker
+      // state without affecting the owner stored on historical threads.
+      window.localStorage.setItem(ACTIVE_AGENT_KEY, DEFAULT_PRIMARY_AGENT_ID);
+      return DEFAULT_PRIMARY_AGENT_ID;
+    }
     if (raw?.trim()) {
       // Stale legacy id (e.g. DID-xxx) — clean it so the UI doesn't
       // keep trying to route to a backend-unknown agent.
@@ -91,7 +102,12 @@ export function useActiveAgentId(): string | null {
 
   // Subscribe to EventBus agent changes
   useEvent("agent:changed", (payload) => {
-    setId(normalizeAgentId(payload.name));
+    const next = normalizeAgentId(payload.name);
+    if (next && isPrimaryPersonaAgentId(next)) {
+      setId(next);
+    } else if (payload.source !== "thread") {
+      setId(DEFAULT_PRIMARY_AGENT_ID);
+    }
   });
 
   // Handle tab-to-tab sync too — user opens Privacy in one tab,

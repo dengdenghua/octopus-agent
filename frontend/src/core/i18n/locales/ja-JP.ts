@@ -370,6 +370,11 @@ export const jaJP: Translations = {
       "通常は必要な AI だけが応答します。AI メンバーを追加すると、分担協働または並列共創を選べます。",
     collaboratorsSearchPlaceholder: "エージェント / ローカルパートナーを検索",
     collaboratorsTaskFallback: "チームタスク",
+    collaboratorsCoreGroup: "ホワイトゴースト分隊",
+    collaboratorsOnDemandGroup: "オンデマンド能力",
+    collaboratorsOnDemandBadge: "オンデマンド",
+    collaboratorsOnDemandHint:
+      "専門家、デジタルツイン、ローカルパートナーはこの会話にのみ参加し、メインの人格は切り替えません。",
     responseMode: "AI の参加方法",
     responseModeTeamRequired:
       "分担協働または並列共創を使う前に AI メンバーを追加してください",
@@ -974,6 +979,10 @@ export const jaJP: Translations = {
       footer: "自己完結型オフラインリプレイ",
     },
     composer: {
+      legacyOnDemandContinued:
+        "現在のホワイトゴーストをリーダーに新しいタスクを開始し、元の役割をオンデマンドで追加しました。",
+      legacyOnDemandAttachments:
+        "旧役割の会話では直接実行しません。新しいタスクで添付ファイルを追加し直して送信してください。",
       placeholderCode: "修正、デバッグ、検証するプロジェクトタスクを記述...",
       placeholderNew: "実装、生成、デバッグ、検証するタスクを記述...",
       placeholderOctopus: "そのまま話す：進捗確認、タスク委任、購読の要約...",
@@ -2943,6 +2952,8 @@ export const jaJP: Translations = {
   agentCard: {
     chat: "チャット",
     chatAriaLabel: (name) => `${name} とチャット`,
+    addOnDemand: "会話に追加",
+    addOnDemandAriaLabel: (name) => `${name} を必要に応じて会話に追加`,
     profile: "ロールプロフィール",
     profileAriaLabel: (name) => `${name} のロールプロフィール`,
     deleteAriaLabel: (name) => `ロール ${name} を削除`,

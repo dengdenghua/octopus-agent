@@ -117,8 +117,13 @@ class CoworkGroupSessionView:
         )
         return session.to_dict()
 
-    def room_members_from_group(self, thread_id: str) -> list[dict[str, Any]]:
-        state = self._group_store.state(thread_id)
+    def room_members_from_group(
+        self,
+        thread_id: str,
+        *,
+        state: Any = None,
+    ) -> list[dict[str, Any]]:
+        state = state or self._group_store.state(thread_id)
         return [
             {
                 "name": member.id,
@@ -135,6 +140,7 @@ class CoworkGroupSessionView:
         *,
         existing: list[Any] | None = None,
         preferred: list[Any] | None = None,
+        state: Any = None,
     ) -> list[dict[str, Any]]:
         """Project only canonical GroupStore agents while retaining display data."""
 
@@ -156,5 +162,5 @@ class CoworkGroupSessionView:
                 **details.get(str(base["name"]), {}),
                 "name": str(base["name"]),
             }
-            for base in self.room_members_from_group(thread_id)
+            for base in self.room_members_from_group(thread_id, state=state)
         ]

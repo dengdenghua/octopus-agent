@@ -7,7 +7,9 @@ import type { LocalSettings } from "../settings";
 import type { LiveToolEvent } from "@/components/workspace/live-tool-timeline";
 
 import type { AgentThread, AgentThreadState } from "./types";
+import { threadVisibleInPersonaHistory } from "./persona-history";
 import { useThreadStreamRealtime } from "./use-thread-stream-realtime";
+import { isPrimaryPersonaAgentId } from "@/core/agents/persona-policy";
 
 export type ToolEndEvent = {
   name: string;
@@ -304,6 +306,8 @@ export function useThreads(
   mode?: "chat" | "code" | "team",
   agent?: string | null,
 ) {
+  const personaHistoryAgent =
+    agent && isPrimaryPersonaAgentId(agent) ? agent : null;
   // Compose metadata filter from the optional mode + agent arguments.
   // The backend's ThreadStateStore.search() ANDs together every metadata
   // key-value pair we send, so `{mode:"chat", agent:"coder"}` yields
@@ -312,17 +316,17 @@ export function useThreads(
   // Skipping the `agent` clause entirely (null/undefined) shows all
   // threads; used by search dialogs and admin views that want the
   // full cross-agent history.
-  if (mode || agent) {
+  if (mode || (agent && !personaHistoryAgent)) {
     const metadata = {
       ...((params.metadata as Record<string, unknown>) || {}),
     } as Record<string, unknown>;
     if (mode) metadata.mode = mode;
-    if (agent) metadata.agent = agent;
+    if (agent && !personaHistoryAgent) metadata.agent = agent;
     params = { ...params, metadata };
   }
   const apiClient = getAPIClient();
   return useQuery<AgentThread[]>({
-    queryKey: ["threads", "search", params],
+    queryKey: ["threads", "search", params, personaHistoryAgent],
     queryFn: async () => {
       const maxResults = params.limit as number | undefined;
       const initialOffset = (params.offset ?? 0) as number;
@@ -332,7 +336,12 @@ export function useThreads(
       // delegate to a single search call with the original parameters.
       if (maxResults !== undefined && maxResults <= 0) {
         const response = await apiClient.threads.search(params);
-        return response as AgentThread[];
+        const result = response as AgentThread[];
+        return personaHistoryAgent
+          ? result.filter((thread) =>
+              threadVisibleInPersonaHistory(thread, personaHistoryAgent),
+            )
+          : result;
       }
 
       const pageSize =
@@ -366,7 +375,13 @@ export function useThreads(
           offset,
         })) as AgentThread[];
 
-        threads.push(...response);
+        threads.push(
+          ...(personaHistoryAgent
+            ? response.filter((thread) =>
+                threadVisibleInPersonaHistory(thread, personaHistoryAgent),
+              )
+            : response),
+        );
 
         if (response.length < currentLimit) {
           break;

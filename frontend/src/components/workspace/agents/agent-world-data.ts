@@ -25,18 +25,17 @@ import type {
   AgentWorldAgent,
   AgentWorldCategory,
 } from "@/core/agents/types";
+import {
+  WHITE_GHOST_AGENT_IDS,
+  WHITE_GHOST_AGENT_ORDER,
+} from "@/core/agents/persona-policy";
 
 export type AgentCategoryFilter = "all" | AgentWorldCategory;
 
-export const LOCAL_AGENT_ORDER = [
-  "general",
-  "coder",
-  "vibe_selling",
-  "ecommerce_mind",
-  "market_researcher",
-  "aoi",
-] as const;
-export const LOCAL_AGENT_IDS = new Set<string>(LOCAL_AGENT_ORDER);
+/** @deprecated Prefer the primary-persona names from core/agents. */
+export const LOCAL_AGENT_ORDER = WHITE_GHOST_AGENT_ORDER;
+/** @deprecated Prefer the primary-persona names from core/agents. */
+export const LOCAL_AGENT_IDS = WHITE_GHOST_AGENT_IDS;
 export const LOCAL_AGENT_RANK = new Map<string, number>(
   LOCAL_AGENT_ORDER.map((id, index) => [id, index]),
 );

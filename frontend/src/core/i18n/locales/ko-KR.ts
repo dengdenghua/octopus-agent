@@ -368,6 +368,11 @@ export const koKR: Translations = {
       "기본적으로 필요한 AI만 응답합니다. AI 멤버를 추가하면 역할 분담 또는 병렬 공동 작업을 선택할 수 있습니다.",
     collaboratorsSearchPlaceholder: "에이전트 / 로컬 파트너 검색",
     collaboratorsTaskFallback: "팀 작업",
+    collaboratorsCoreGroup: "화이트 고스트 분대",
+    collaboratorsOnDemandGroup: "온디맨드 기능",
+    collaboratorsOnDemandBadge: "온디맨드",
+    collaboratorsOnDemandHint:
+      "전문가, 디지털 트윈, 로컬 파트너는 현재 대화에만 참여하며 기본 정체성을 바꾸지 않습니다.",
     responseMode: "AI 참여 방식",
     responseModeTeamRequired:
       "역할 분담 또는 병렬 공동 작업을 사용하기 전에 AI 멤버를 추가하세요",
@@ -966,6 +971,10 @@ export const koKR: Translations = {
       footer: "자체 포함 오프라인 리플레이",
     },
     composer: {
+      legacyOnDemandContinued:
+        "현재 화이트 고스트를 리더로 새 작업을 시작하고 기존 역할을 온디맨드 멤버로 추가했습니다.",
+      legacyOnDemandAttachments:
+        "이전 역할 대화에서는 더 이상 직접 실행하지 않습니다. 새 작업에서 파일을 다시 첨부한 뒤 전송하세요.",
       placeholderCode: "수정, 디버그 또는 검증할 프로젝트 작업을 설명하세요...",
       placeholderNew: "구현, 생성, 디버그 또는 검증할 작업을 설명하세요...",
       placeholderOctopus: "그냥 말하세요: 진행 확인, 작업 위임, 구독 요약...",
@@ -2890,6 +2899,8 @@ export const koKR: Translations = {
   agentCard: {
     chat: "채팅",
     chatAriaLabel: (name) => `${name}와 채팅`,
+    addOnDemand: "대화에 추가",
+    addOnDemandAriaLabel: (name) => `${name}을 필요할 때 대화에 추가`,
     profile: "역할 프로필",
     profileAriaLabel: (name) => `${name} 역할 프로필`,
     deleteAriaLabel: (name) => `${name} 역할 삭제`,

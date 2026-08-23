@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { AgentAvatar } from "@/components/workspace/sidebar-footer";
 import { type TeamMode } from "@/components/workspace/team-mode-picker";
 import { type Agent } from "@/core/agents";
+import { isPrimaryPersonaAgentId } from "@/core/agents/persona-policy";
 import { useCollabSession } from "@/core/cowork";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -116,6 +117,16 @@ export function TaskCollaboratorControl({
         );
       }),
     [agents, currentAgentName, q],
+  );
+  const primaryAgents = useMemo(
+    () =>
+      availableAgents.filter((agent) => isPrimaryPersonaAgentId(agent.name)),
+    [availableAgents],
+  );
+  const onDemandAgents = useMemo(
+    () =>
+      availableAgents.filter((agent) => !isPrimaryPersonaAgentId(agent.name)),
+    [availableAgents],
   );
 
   const toggleAgent = useCallback(
@@ -276,6 +287,9 @@ export function TaskCollaboratorControl({
           )}
         </div>
         <div className="p-3">
+          <p className="mb-2 text-xs leading-5 text-muted-foreground">
+            {t.chatInputBox.collaboratorsOnDemandHint}
+          </p>
           <label className="flex h-9 items-center gap-2 rounded-lg border border-border-default bg-background/45 px-2.5 transition-all duration-base hover:border-border-strong hover:bg-background/60 focus-within:border-ring focus-within:bg-background focus-within:ring-2 focus-within:ring-ring/20">
             <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
             <Input
@@ -310,47 +324,88 @@ export function TaskCollaboratorControl({
             </div>
           )}
           <div className="mt-2 max-h-60 overflow-y-auto pr-1">
-            <div className="space-y-1">
-              {availableAgents.slice(0, 18).map((agent) => {
-                const selected = selectedSet.has(agent.name);
-                const label = agent.display_name ?? agent.name;
-                return (
-                  <button
-                    key={agent.name}
-                    type="button"
-                    onClick={() => toggleAgent(agent)}
-                    disabled={disabled}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-all duration-base",
-                      selected ? "bg-primary/8" : "hover:bg-muted/55",
-                    )}
-                  >
-                    <AgentAvatar
-                      agent={agent}
-                      className="size-7 rounded-md text-xs"
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs font-medium">
-                        {label}
-                      </span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {agent.description || agent.name}
-                      </span>
+            {[
+              {
+                key: "primary",
+                label: t.chatInputBox.collaboratorsCoreGroup,
+                agents: primaryAgents,
+                onDemand: false,
+              },
+              {
+                key: "on-demand",
+                label: t.chatInputBox.collaboratorsOnDemandGroup,
+                agents: onDemandAgents.slice(0, 18),
+                onDemand: true,
+              },
+            ].map((group) =>
+              group.agents.length > 0 ? (
+                <section
+                  key={group.key}
+                  className="mb-2 last:mb-0"
+                  aria-label={group.label}
+                >
+                  <div className="sticky top-0 z-10 flex items-center gap-2 bg-popover/95 px-2 py-1 text-xs font-semibold text-muted-foreground backdrop-blur">
+                    <span className="min-w-0 flex-1 truncate">
+                      {group.label}
                     </span>
-                    <span
-                      className={cn(
-                        "grid size-5 shrink-0 place-items-center rounded-md border transition-all duration-base",
-                        selected
-                          ? "border-primary/30 bg-primary/10 text-primary"
-                          : "border-border-default text-transparent",
-                      )}
-                    >
-                      <CheckIcon className="size-3.5" />
+                    <span className="font-normal tabular-nums opacity-70">
+                      {group.agents.length}
                     </span>
-                  </button>
-                );
-              })}
-            </div>
+                  </div>
+                  <div className="space-y-1">
+                    {group.agents.map((agent) => {
+                      const selected = selectedSet.has(agent.name);
+                      const label = agent.display_name ?? agent.name;
+                      return (
+                        <button
+                          key={agent.name}
+                          type="button"
+                          data-capability-kind={
+                            group.onDemand ? "on-demand" : "primary"
+                          }
+                          onClick={() => toggleAgent(agent)}
+                          disabled={disabled}
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-all duration-base",
+                            selected ? "bg-primary/8" : "hover:bg-muted/55",
+                          )}
+                        >
+                          <AgentAvatar
+                            agent={agent}
+                            className="size-7 rounded-md text-xs"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              <span className="min-w-0 flex-1 truncate text-xs font-medium">
+                                {label}
+                              </span>
+                              {group.onDemand ? (
+                                <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-2xs font-medium text-muted-foreground">
+                                  {t.chatInputBox.collaboratorsOnDemandBadge}
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {agent.description || agent.name}
+                            </span>
+                          </span>
+                          <span
+                            className={cn(
+                              "grid size-5 shrink-0 place-items-center rounded-md border transition-all duration-base",
+                              selected
+                                ? "border-primary/30 bg-primary/10 text-primary"
+                                : "border-border-default text-transparent",
+                            )}
+                          >
+                            <CheckIcon className="size-3.5" />
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ) : null,
+            )}
           </div>
         </div>
       </DropdownMenuContent>

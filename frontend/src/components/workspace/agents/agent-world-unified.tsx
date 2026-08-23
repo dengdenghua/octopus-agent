@@ -65,6 +65,7 @@ import {
   type AgentPackPreview,
 } from "@/core/agents/agent-world-api";
 import type { AgentWorldAgent } from "@/core/agents/types";
+import { isPrimaryPersonaAgentId } from "@/core/agents/persona-policy";
 
 import { AgentCard } from "./agent-card";
 import { AgentRoleProfileDialog } from "./agent-role-profile-dialog";
@@ -651,6 +652,7 @@ export function AgentsTab({
                 key={agent.id}
                 agent={worldAgentToAgent(agent)}
                 isDefault={agent.is_official || LOCAL_AGENT_IDS.has(agent.id)}
+                isPrimaryIdentity={isPrimaryPersonaAgentId(agent.id)}
                 onSelect={() => onSelectAgent(agent)}
               />
             ) : (
@@ -1317,7 +1319,9 @@ export function AgentWorldUnified() {
   }, []);
   const handleSwitchAgent = useCallback((agent: AgentWorldAgent) => {
     setSelectedAgent(agent);
-    emitAgentChanged(agent.name);
+    if (isPrimaryPersonaAgentId(agent.name)) {
+      emitAgentChanged(agent.name);
+    }
   }, []);
 
   const handleInstallChange = useCallback(() => {
@@ -1556,6 +1560,9 @@ export function AgentWorldUnified() {
                             isDefault={
                               agent.is_official || LOCAL_AGENT_IDS.has(agent.id)
                             }
+                            isPrimaryIdentity={isPrimaryPersonaAgentId(
+                              agent.id,
+                            )}
                             onSelect={() => handleSelectAgent(agent)}
                           />
                         ) : (

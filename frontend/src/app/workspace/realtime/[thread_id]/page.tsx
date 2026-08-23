@@ -151,6 +151,10 @@ import {
 import { startDeepResearch, type ResearchJob } from "@/core/research/api";
 import { ACTIVE_AGENT_EVENT, useActiveAgentId } from "@/core/agents/active";
 import {
+  isPrimaryPersonaAgentId,
+  primaryPersonaAgentIdOrDefault,
+} from "@/core/agents/persona-policy";
+import {
   dedupeAgentsByName,
   dedupePersonaAgentsByDisplayName,
   useAgent,
@@ -163,6 +167,7 @@ import {
   consumeTaskCollaboratorPreset,
   TASK_COLLABORATOR_PRESET_EVENT,
   type TaskCollaboratorPreset,
+  writeTaskCollaboratorPreset,
 } from "@/core/collaboration/task-collaborator-preset";
 import {
   collaborationRosterFromThread,
@@ -812,11 +817,13 @@ function RealtimePageContent({
 
   // Unified task routes carry the selected persona in ?agent= while every chat
   // thread stays on the /workspace/realtime/* surface.
-  const activeAgentId =
-    routeAgentName ||
-    (queryAgentName === "octopus" ? null : queryAgentName) ||
-    storedActiveAgentId ||
-    "general";
+  const requestedTaskAgentId =
+    routeAgentName || (queryAgentName === "octopus" ? "" : queryAgentName);
+  const activeAgentId = isNewThread
+    ? isPrimaryPersonaAgentId(requestedTaskAgentId)
+      ? requestedTaskAgentId
+      : primaryPersonaAgentIdOrDefault(storedActiveAgentId)
+    : requestedTaskAgentId || storedActiveAgentId || "general";
   const { agent: activeAgent } = useAgent(activeAgentId);
   const hintedThreadOwnerAgentId = routeState?.threadOwnerAgentId?.trim() || "";
   const hintedWorkspacePath =
@@ -836,6 +843,14 @@ function RealtimePageContent({
   );
   const resolvedThreadOwnerAgentId =
     threadOwnerAgentId || hintedThreadOwnerAgentId;
+  const legacyOnDemandThreadOwnerId =
+    !isNewThread &&
+    resolvedThreadOwnerAgentId &&
+    resolvedThreadOwnerAgentId !== "octopus" &&
+    !isPrimaryPersonaAgentId(resolvedThreadOwnerAgentId)
+      ? resolvedThreadOwnerAgentId
+      : "";
+  const allowThreadFork = !legacyOnDemandThreadOwnerId;
   // 「助手」侧栏入口使用固定的 octopus-assistant 持久会话（见
   // workspace-sidebar 的 OCTOPUS_THREAD_ID）。历史上该线程可能因
   // 创建时选中的 agent 而写入 general 等身份，这里在渲染层强制归位
@@ -1973,6 +1988,23 @@ function RealtimePageContent({
     // footer drifts to a random agent (e.g. the first local CLI partner)
     // because "octopus" is filtered out of switcherAgents.
     if (selectedAgent === "octopus") return;
+    if (!isPrimaryPersonaAgentId(selectedAgent)) {
+      const leaderId = primaryPersonaAgentIdOrDefault(activeAgentId);
+      const preset: TaskCollaboratorPreset = {
+        leaderId,
+        collaboratorIds: [selectedAgent],
+        mode: "cluster",
+        label: selectedAgent,
+        openPicker: true,
+      };
+      // Preserve old/deep links, but reinterpret the requested expert as a
+      // current-task member instead of reviving a standalone identity lane.
+      writeTaskCollaboratorPreset(preset);
+      applyTaskCollaboratorPreset(preset);
+      consumeTaskCollaboratorPreset();
+      navigate(taskWorkspaceRoute({ agentId: leaderId }), { replace: true });
+      return;
+    }
     // 统一走 emitAgentChanged：同时写 localStorage + 派发 eventBus 事件，
     // 保证左下角 AgentFooter（只订阅 eventBus agent:changed）能立即同步，
     // 不再出现仅写 localStorage/发 window CustomEvent 导致两边角色不一致。
@@ -1987,7 +2019,14 @@ function RealtimePageContent({
     } catch (e) {
       swallow(e, "storage");
     }
-  }, [isNewThread, queryAgentName, routeAgentName]);
+  }, [
+    activeAgentId,
+    applyTaskCollaboratorPreset,
+    isNewThread,
+    navigate,
+    queryAgentName,
+    routeAgentName,
+  ]);
   useEffect(() => {
     // 使用 effectiveAgentId 而非 resolvedThreadOwnerAgentId：octopus-assistant
     // 的存量 metadata 可能写的是 general，若据此派发会把 footer 的 active
@@ -2944,6 +2983,30 @@ function RealtimePageContent({
       files?: File[];
       uploaded?: UploadedFileInfo[];
     }) => {
+      const images = message.images ?? [];
+      const attachedFiles = message.files ?? [];
+      const browserFiles = [...attachedFiles, ...images];
+      if (legacyOnDemandThreadOwnerId) {
+        const leaderId = primaryPersonaAgentIdOrDefault(activeAgentId);
+        writeTaskCollaboratorPreset({
+          leaderId,
+          collaboratorIds: [legacyOnDemandThreadOwnerId],
+          mode: "cluster",
+          label: legacyOnDemandThreadOwnerId,
+          openPicker: true,
+        });
+        if (browserFiles.length === 0 && message.text.trim()) {
+          writePendingNewSession(message.text);
+          toast.info(t.realtime.composer.legacyOnDemandContinued);
+          navigate(taskWorkspaceRoute({ agentId: leaderId }));
+        } else {
+          toast.info(t.realtime.composer.legacyOnDemandAttachments);
+          navigate(
+            taskWorkspaceRoute({ agentId: leaderId, prompt: message.text }),
+          );
+        }
+        return;
+      }
       // Intent-based mode auto-switch: only in project/code mode, and never
       // for the octopus assistant (fixed chat persona). Manual override wins —
       // when the user has hand-picked a mode we only suggest, never silently
@@ -2969,10 +3032,6 @@ function RealtimePageContent({
           }
         }
       }
-      const images = message.images ?? [];
-      const attachedFiles = message.files ?? [];
-      const browserFiles = [...attachedFiles, ...images];
-
       // The auto-new-session preference belongs only to the fixed Assistant
       // window. Project threads and role/personal-space threads keep their
       // own continuity regardless of this setting.
@@ -3067,6 +3126,7 @@ function RealtimePageContent({
       isOctopusAssistant,
       isGroupConversation,
       isProjectCodeMode,
+      legacyOnDemandThreadOwnerId,
       markSidebarThreadRunning,
       modeManualOverride,
       projectAgentMode,
@@ -3080,9 +3140,9 @@ function RealtimePageContent({
       threadIdentityQuery,
     ],
   );
-  // Auto-send the hand-off message when a fresh thread is opened by the
-  // auto-new-session flow. The pending text lives in sessionStorage and is
-  // consumed once, so a refresh can never duplicate the send.
+  // Auto-send a one-shot hand-off when a fresh thread is opened by the
+  // Assistant timeout or a legacy on-demand-owned conversation migration.
+  // Session storage is consumed once, so refresh cannot duplicate the send.
   const pendingNewSessionSentRef = useRef(false);
   useEffect(() => {
     if (!isNewThread || pendingNewSessionSentRef.current) return;
@@ -3676,6 +3736,7 @@ function RealtimePageContent({
                     isProjectHomeThread
                   }
                   projectMessageActions={projectMessageActions}
+                  allowThreadFork={allowThreadFork}
                   timelineEntries={roomTimelineEntries}
                   footer={
                     <>

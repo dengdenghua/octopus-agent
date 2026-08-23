@@ -360,6 +360,11 @@ export const zhCN: Translations = {
       "默认只由被 @ 的 AI 回复；加入协作者后可选择分工协作或并行共创。",
     collaboratorsSearchPlaceholder: "搜索 Agent / 本地伙伴",
     collaboratorsTaskFallback: "团队任务",
+    collaboratorsCoreGroup: "白幽灵小队",
+    collaboratorsOnDemandGroup: "按需能力",
+    collaboratorsOnDemandBadge: "按需",
+    collaboratorsOnDemandHint:
+      "专家、数位分身和本地伙伴只加入当前对话，不会切换你的主身份。",
     responseMode: "AI 参与方式",
     responseModeTeamRequired: "请先添加 AI 成员，再选择分工协作或并行共创",
     groupTaskTools: "发起任务与添加内容",
@@ -939,6 +944,10 @@ export const zhCN: Translations = {
       footer: "自包含离线回放",
     },
     composer: {
+      legacyOnDemandContinued:
+        "已用当前白幽灵成员开启新任务，并把原角色作为按需成员加入。",
+      legacyOnDemandAttachments:
+        "历史角色会话不再直接执行；已打开新任务，请重新添加附件后发送。",
       placeholderCode: "描述要修改、排查、重构或验证的代码任务...",
       placeholderNew:
         "直接说需求：@ 引用文件，/ 调用技能，支持多 Agent 协作...",
@@ -2740,6 +2749,8 @@ export const zhCN: Translations = {
   agentCard: {
     chat: "开聊",
     chatAriaLabel: (name) => `与 ${name} 开聊`,
+    addOnDemand: "加入对话",
+    addOnDemandAriaLabel: (name) => `将 ${name} 按需加入对话`,
     profile: "角色档案",
     profileAriaLabel: (name) => `${name} 角色档案`,
     deleteAriaLabel: (name) => `删除角色 ${name}`,

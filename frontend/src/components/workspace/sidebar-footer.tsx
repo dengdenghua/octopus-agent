@@ -2,7 +2,6 @@ import {
   CheckIcon,
   CoinsIcon,
   LogOutIcon,
-  RefreshCwIcon,
   SettingsIcon,
   UsersRoundIcon,
   UserCircleIcon,
@@ -20,20 +19,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useAgents, dedupePersonaAgentsByDisplayName } from "@/core/agents";
+import type { Agent } from "@/core/agents";
 import {
-  useAgents,
-  useLocalCliAgents,
-  useLocalCliPartnerAgents,
-  dedupeAgentsByName,
-  dedupePersonaAgentsByDisplayName,
-  localCliPartnerVisualStatus,
-} from "@/core/agents";
-import type { Agent, LocalCliPartnerAgent } from "@/core/agents";
+  DEFAULT_PRIMARY_AGENT_ID,
+  isPrimaryPersonaAgentId,
+} from "@/core/agents/persona-policy";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
-import {
-  LOCAL_AGENT_IDS,
-  LOCAL_AGENT_RANK,
-} from "@/components/workspace/agents/agent-world-data";
+import { LOCAL_AGENT_RANK } from "@/components/workspace/agents/agent-world-data";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
@@ -52,7 +45,10 @@ import {
 
 function readActiveAgentName(): string | null {
   try {
-    return window.localStorage.getItem(ACTIVE_AGENT_KEY);
+    const stored = window.localStorage.getItem(ACTIVE_AGENT_KEY)?.trim() || "";
+    if (!stored || isPrimaryPersonaAgentId(stored)) return stored || null;
+    window.localStorage.setItem(ACTIVE_AGENT_KEY, DEFAULT_PRIMARY_AGENT_ID);
+    return DEFAULT_PRIMARY_AGENT_ID;
   } catch (e) {
     swallow(e);
     return null;
@@ -77,10 +73,6 @@ function getAccountDisplayName(user: {
     user.actor_id ||
     ""
   );
-}
-
-function isHubDefaultAgent(agent: Agent): boolean {
-  return LOCAL_AGENT_IDS.has(agent.name);
 }
 
 function sortHubDefaultAgents(left: Agent, right: Agent): number {
@@ -157,18 +149,6 @@ export function AgentAvatar({
 
 export function AgentFooter() {
   const { agents } = useAgents();
-  const {
-    cliAgents,
-    isFetching: isFetchingCliAgents,
-    isError: cliAgentsFailed,
-    refresh: refreshCliAgents,
-  } = useLocalCliAgents();
-  const {
-    partners: allCliPartners,
-    isFetching: isFetchingAllCliPartners,
-    isError: cliPartnersFailed,
-    refresh: refreshAllCliPartners,
-  } = useLocalCliPartnerAgents();
   const { user, logout } = useAuth();
   const _navigate = useNavigate();
   const { pathname, search } = useLocation();
@@ -183,8 +163,12 @@ export function AgentFooter() {
   // Fetch evolution data for the active agent (no agent filter, gets current user's data)
   const { data: evolutionData } = useEvolutionOverview();
   useEffect(() => {
-    return eventBus.on("agent:changed", ({ name }) => {
-      setActiveName(name);
+    return eventBus.on("agent:changed", ({ name, source }) => {
+      if (isPrimaryPersonaAgentId(name)) {
+        setActiveName(name);
+      } else if (source !== "thread") {
+        setActiveName(DEFAULT_PRIMARY_AGENT_ID);
+      }
     });
   }, []);
   // 兜底：监听 localStorage 变化（多标签页同步 + 页面初始化时序补偿）。
@@ -206,62 +190,16 @@ export function AgentFooter() {
   const agentLibrarySurface = surfaceParam === "company" ? "company" : "chat";
   const agentLibraryHref = (tab?: string, agentName?: string) =>
     agentHudHref({ surface: agentLibrarySurface, tab, agentName });
-  // Prefer the live detector for local CLIs so stale on-disk profiles cannot
-  // leak an old alias, avatar, model, or capability identity into the picker.
-  // Non-CLI profiles still come from the regular agent registry.
-  const footerAgents = useMemo(
-    () => dedupeAgentsByName([...cliAgents, ...agents]),
-    [agents, cliAgents],
-  );
-  // A local-partner CLI is either a synthetic `local_*` entry, a registry
-  // scaffolded `registry_local_*` entry, or an on-disk agent carrying the
-  // `local_partner` capability flag. `registry_local_*` was previously missed,
-  // leaking the same CLI partner into both the persona list and the "本地 CLI
-  // 伙伴" group (duplicate role rows in the bottom-left switcher).
-  const isLocalCliAgent = (a: Agent) =>
-    /^(?:local_|registry_local_)/.test(a.name) ||
-    Boolean(a.capabilities?.local_partner);
   const personaAgents = useMemo(() => {
-    // Show ALL persona agents (restored — the "minimal" snapshot had narrowed
-    // this to hub-defaults + the active one, hiding the user's custom agents):
-    // hub-default agents first in their canonical order, then custom agents.
-    const nonCli = footerAgents.filter((a) => !isLocalCliAgent(a));
-    const hubAgents = nonCli
-      .filter(isHubDefaultAgent)
-      .sort(sortHubDefaultAgents);
-    const customAgents = nonCli.filter((a) => !isHubDefaultAgent(a));
-    // Dedupe by base display name: "Eve / Siren" and "Eve" share the base
-    // "Eve". Hub-defaults win, so the echo_* variants of the same character
-    // don't show up as duplicates next to the general agent.
-    // The assistant (octopus) is a global fixed persona — it lives in the
-    // sidebar nav as its own entry and must NOT appear here as a switchable
-    // role; it coexists with every other agent instead of replacing one.
+    // Only the fixed White Ghost squad owns personal conversation identities.
+    // Installed experts, digital twins and local CLI partners are selected in
+    // the task's member control and join that task on demand.
     return dedupePersonaAgentsByDisplayName(
-      [...hubAgents, ...customAgents].filter((a) => a.name !== "octopus"),
+      agents
+        .filter((agent) => isPrimaryPersonaAgentId(agent.name))
+        .sort(sortHubDefaultAgents),
     );
-  }, [footerAgents]);
-  const cliPartnerAgents = useMemo(
-    () => footerAgents.filter(isLocalCliAgent),
-    [footerAgents],
-  );
-  const cliPartnerRows = useMemo<LocalCliPartnerAgent[]>(() => {
-    // Only render partners that are already registered (hide unregistered ones)
-    const source =
-      allCliPartners.length > 0
-        ? allCliPartners.filter((row) => row.registered)
-        : cliPartnerAgents.map((agent) => ({
-            agent,
-            partnerId:
-              String(agent.capabilities?.local_partner_id || "") ||
-              agent.name.replace(/^local_/, "").replaceAll("_", "-"),
-            detected: true,
-            ready: true,
-            registered: true,
-            status: "detected",
-            fixHint: null,
-          }));
-    return source;
-  }, [allCliPartners, cliPartnerAgents]);
+  }, [agents]);
   // 解析优先级与 page.tsx activeAgentId 保持一致：
   // 1) route lock（如 /workspace/agents/:id/chats 锁定到该 agent）
   // 2) URL ?agent= 参数 — 但 "octopus" 是全局助理入口，位于角色选择器
@@ -277,10 +215,7 @@ export function AgentFooter() {
   // The assistant (octopus) is a global fixed persona, not a switchable role.
   // It coexists with every other agent but must never surface in the bottom-left
   // persona trigger — even when the current thread belongs to the assistant.
-  const switcherAgents = useMemo(
-    () => footerAgents.filter((a) => a.name !== "octopus"),
-    [footerAgents],
-  );
+  const switcherAgents = useMemo(() => personaAgents, [personaAgents]);
 
   const active: Agent | undefined =
     (effectiveName && switcherAgents.find((a) => a.name === effectiveName)) ||
@@ -363,77 +298,13 @@ export function AgentFooter() {
     );
   };
 
-  const renderCliPartnerItem = (row: LocalCliPartnerAgent) => {
-    const a = row.agent;
-    const isUsable = row.detected && row.ready && row.registered;
-    const isConnectable = row.detected && row.ready && !row.registered;
-    const isActionable = isUsable || isConnectable;
-    const isActive = a.name === active?.name;
-    const command =
-      typeof a.capabilities?.local_partner_command === "string"
-        ? a.capabilities.local_partner_command
-        : "";
-    const status = localCliPartnerVisualStatus(row, {
-      connected: t.localAgentConnect.statusConnected,
-      detected: t.localAgentConnect.statusDetected,
-      notDetected: t.localAgentConnect.statusNotDetected,
-    });
-    return (
-      <DropdownMenuItem
-        key={a.name}
-        disabled={!isActionable}
-        onSelect={() => {
-          if (isUsable) {
-            selectAgent(a.name);
-          } else if (isConnectable) {
-            _navigate(`${agentLibraryHref()}&connect=local`);
-          }
-        }}
-        className={cn(
-          "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs",
-          "opacity-85 transition-colors focus:bg-muted/60 focus:text-foreground focus:opacity-100",
-          isActive && "bg-muted/35 opacity-100",
-          !isActionable && "opacity-45 focus:bg-transparent",
-        )}
-      >
-        <AgentAvatar agent={a} className="size-8 rounded-lg text-xs" />
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate font-medium leading-none">
-            {a.display_name || a.name}
-          </span>
-          <span className="truncate text-xs font-normal leading-tight text-muted-foreground">
-            {row.detected
-              ? command || a.description || status.label
-              : row.fixHint || t.localAgentConnect.noPartnersAvailable}
-          </span>
-        </span>
-        <span
-          className={cn(
-            "shrink-0 rounded-md px-1.5 py-0.5 text-2xs font-medium",
-            status.tone === "primary" && "bg-primary/10 text-primary",
-            status.tone === "warning" && "bg-warning/10 text-warning",
-            status.tone === "muted" && "bg-muted text-muted-foreground",
-          )}
-        >
-          {status.label}
-        </span>
-        {/* No HUD button for CLI partners — the HUD roster filters out
-            `local_*` / `registry_local_*` agents by design, so they have no
-            character file and the button would open someone else's. */}
-        {isActive && (
-          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <CheckIcon className="size-3" />
-          </span>
-        )}
-      </DropdownMenuItem>
-    );
-  };
-
   const displayAgent = lockedAgent ?? active;
   const accountName = user ? getAccountDisplayName(user) : "";
 
   // Calculate evolution level and stars
-  const level = evolutionData ? calculateLevel(evolutionData.learning_events) : null;
+  const level = evolutionData
+    ? calculateLevel(evolutionData.learning_events)
+    : null;
   const stars = level !== null ? calculateStars(level) : null;
 
   return (
@@ -469,7 +340,9 @@ export function AgentFooter() {
                 <span className="ml-1.5 text-2xs font-normal text-muted-foreground/80">
                   Lv.{level}
                   {stars !== null && stars > 0 && (
-                    <span className="ml-0.5">{"⭐".repeat(Math.min(stars, 5))}</span>
+                    <span className="ml-0.5">
+                      {"⭐".repeat(Math.min(stars, 5))}
+                    </span>
                   )}
                 </span>
               )}
@@ -517,49 +390,6 @@ export function AgentFooter() {
             </div>
           )}
           <DropdownMenuSeparator />
-          <DropdownMenuLabel className="flex items-center gap-2 px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
-            <span className="min-w-0 flex-1 truncate">
-              {t.sidebar.localCliPartners}
-            </span>
-            <button
-              type="button"
-              disabled={isFetchingCliAgents || isFetchingAllCliPartners}
-              title={t.localAgentConnect.retryDetect}
-              aria-label={t.localAgentConnect.retryDetect}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                void Promise.all([refreshCliAgents(), refreshAllCliPartners()]);
-              }}
-              className="-mr-1 flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-wait disabled:opacity-50"
-            >
-              <RefreshCwIcon
-                className={cn(
-                  "size-3.5",
-                  (isFetchingCliAgents || isFetchingAllCliPartners) &&
-                    "animate-spin",
-                )}
-              />
-            </button>
-          </DropdownMenuLabel>
-          <div aria-live="polite">
-            {cliAgentsFailed && cliPartnersFailed ? (
-              <div className="px-2.5 py-2 text-xs text-destructive">
-                {t.localAgentConnect.detectFailed}
-              </div>
-            ) : (isFetchingCliAgents || isFetchingAllCliPartners) &&
-              cliPartnerRows.length === 0 ? (
-              <div className="px-2.5 py-2 text-xs text-muted-foreground">
-                {t.localAgentConnect.detecting}
-              </div>
-            ) : cliPartnerRows.length === 0 ? (
-              <div className="px-2.5 py-2 text-xs leading-relaxed text-muted-foreground">
-                {t.localAgentConnect.noPartnersAvailable}
-              </div>
-            ) : null}
-          </div>
-          {cliPartnerRows.map(renderCliPartnerItem)}
-          <DropdownMenuSeparator />
           {displayAgent ? (
             <>
               <DropdownMenuItem
@@ -577,7 +407,9 @@ export function AgentFooter() {
             className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs focus:bg-muted/60"
           >
             <UserCircleIcon className="size-4 shrink-0 opacity-70" />
-            <span className="min-w-0 flex-1 truncate text-muted-foreground">{accountName}</span>
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">
+              {accountName}
+            </span>
             <CoinsIcon className="size-3.5 shrink-0 opacity-70" />
             <span className="shrink-0 text-xs font-mono text-foreground/80">
               {typeof credits === "number" ? credits.toLocaleString() : "—"}

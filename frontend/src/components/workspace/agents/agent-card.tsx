@@ -4,6 +4,7 @@ import {
   MessageSquareIcon,
   MoreHorizontalIcon,
   Trash2Icon,
+  UserPlusIcon,
 } from "lucide-react";
 
 import { useNavigate } from "react-router-dom";
@@ -31,11 +32,22 @@ import { useDeleteAgent } from "@/core/agents";
 import type { Agent } from "@/core/agents";
 import { useI18n } from "@/core/i18n/hooks";
 import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
+import {
+  DEFAULT_PRIMARY_AGENT_ID,
+  isPrimaryPersonaAgentId,
+} from "@/core/agents/persona-policy";
+import { useActiveAgentId } from "@/core/agents/active";
+import {
+  taskCollaboratorRouteForLeader,
+  writeTaskCollaboratorPreset,
+} from "@/core/collaboration/task-collaborator-preset";
 
 interface AgentCardProps {
   agent: Agent;
   /** When true the card is a built-in default and cannot be deleted. */
   isDefault?: boolean;
+  /** Fixed squad identities can own chats; all other roles join on demand. */
+  isPrimaryIdentity?: boolean;
   onSelect?: (agent: Agent) => void;
 }
 
@@ -49,14 +61,34 @@ const ZH_TALENT_CAPABILITY_LABELS: Record<string, string> = {
   computer: "桌面操作",
 };
 
-export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
+export function AgentCard({
+  agent,
+  isDefault,
+  isPrimaryIdentity = isPrimaryPersonaAgentId(agent.name),
+  onSelect,
+}: AgentCardProps) {
   const { locale, t } = useI18n();
   const navigate = useNavigate();
+  const activeAgentId = useActiveAgentId();
   const deleteAgent = useDeleteAgent();
   const { confirm, confirmDialog } = useConfirmDialog();
 
   function handleChat() {
-    navigate(taskWorkspaceRoute({ agentId: agent.name }));
+    if (isPrimaryIdentity) {
+      navigate(taskWorkspaceRoute({ agentId: agent.name }));
+      return;
+    }
+    const leaderId = isPrimaryPersonaAgentId(activeAgentId)
+      ? activeAgentId
+      : DEFAULT_PRIMARY_AGENT_ID;
+    writeTaskCollaboratorPreset({
+      leaderId,
+      collaboratorIds: [agent.name],
+      mode: "cluster",
+      label: agent.display_name || agent.name,
+      openPicker: true,
+    });
+    navigate(taskCollaboratorRouteForLeader(leaderId));
   }
 
   async function handleDelete() {
@@ -175,10 +207,19 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
               event.stopPropagation();
               handleChat();
             }}
-            aria-label={t.agentCard.chatAriaLabel(displayName)}
+            aria-label={
+              isPrimaryIdentity
+                ? t.agentCard.chatAriaLabel(displayName)
+                : t.agentCard.addOnDemandAriaLabel(displayName)
+            }
+            data-agent-entry={isPrimaryIdentity ? "identity" : "on-demand"}
           >
-            <MessageSquareIcon className="mr-1.5 h-3.5 w-3.5" />
-            {t.agentCard.chat}
+            {isPrimaryIdentity ? (
+              <MessageSquareIcon className="mr-1.5 h-3.5 w-3.5" />
+            ) : (
+              <UserPlusIcon className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            {isPrimaryIdentity ? t.agentCard.chat : t.agentCard.addOnDemand}
           </Button>
           {!isDefault && (
             <DropdownMenu>

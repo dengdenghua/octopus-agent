@@ -380,6 +380,11 @@ export const enUS: Translations = {
       "Only @mentioned AI members reply by default; add collaborators for coordinated or parallel work.",
     collaboratorsSearchPlaceholder: "Search agents / local partners",
     collaboratorsTaskFallback: "Team task",
+    collaboratorsCoreGroup: "White Ghost Squad",
+    collaboratorsOnDemandGroup: "On-demand capabilities",
+    collaboratorsOnDemandBadge: "On demand",
+    collaboratorsOnDemandHint:
+      "Experts, digital twins, and local partners join only this conversation; they do not replace your primary identity.",
     responseMode: "AI participation",
     responseModeTeamRequired:
       "Add an AI member before using Coordinated or Parallel collaboration",
@@ -989,6 +994,10 @@ export const enUS: Translations = {
       footer: "Self-contained offline replay",
     },
     composer: {
+      legacyOnDemandContinued:
+        "Started a new task with your current White Ghost lead and added the former role on demand.",
+      legacyOnDemandAttachments:
+        "Legacy role chats no longer execute directly. A new task is open; reattach the files before sending.",
       placeholderCode:
         "Describe the project task to modify, debug, or verify...",
       placeholderNew:
@@ -2962,6 +2971,8 @@ export const enUS: Translations = {
   agentCard: {
     chat: "Chat",
     chatAriaLabel: (name) => `Chat with ${name}`,
+    addOnDemand: "Add to conversation",
+    addOnDemandAriaLabel: (name) => `Add ${name} to a conversation on demand`,
     profile: "Profile",
     profileAriaLabel: (name) => `${name} profile`,
     deleteAriaLabel: (name) => `Delete role ${name}`,

@@ -16,6 +16,11 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { AgentAvatar } from "@/components/workspace/sidebar-footer";
 import { useAgents } from "@/core/agents";
+import { useActiveAgentId } from "@/core/agents/active";
+import {
+  isPrimaryPersonaAgentId,
+  primaryPersonaAgentIdOrDefault,
+} from "@/core/agents/persona-policy";
 import {
   DEFAULT_PROJECT_AGENT_ID,
   type ProjectInitialAgent,
@@ -69,13 +74,19 @@ export function CreateProjectDialog({
   );
   const [invitePeopleAfterCreate, setInvitePeopleAfterCreate] = useState(false);
   const { agents, isLoading: agentsLoading } = useAgents();
+  const activeAgentId = useActiveAgentId();
   const { mutate: createProject, isPending } = useCreateProject();
+  const requestedLeaderId = primaryPersonaAgentIdOrDefault(activeAgentId);
   const defaultAgentId =
+    agents.find((agent) => agent.name === requestedLeaderId)?.name ??
     agents.find((agent) => agent.name === DEFAULT_PROJECT_AGENT_ID)?.name ??
-    agents[0]?.name ??
+    agents.find((agent) => isPrimaryPersonaAgentId(agent.name))?.name ??
     DEFAULT_PROJECT_AGENT_ID;
   const effectiveSelectedAgentIds = useMemo(
-    () => selectedAgentIds ?? [defaultAgentId],
+    () => [
+      defaultAgentId,
+      ...(selectedAgentIds ?? []).filter((id) => id !== defaultAgentId),
+    ],
     [defaultAgentId, selectedAgentIds],
   );
   const selectedAgentSet = useMemo(
@@ -149,9 +160,8 @@ export function CreateProjectDialog({
   };
 
   const toggleAgent = (agentId: string) => {
-    if (isPending) return;
+    if (isPending || agentId === defaultAgentId) return;
     if (selectedAgentSet.has(agentId)) {
-      if (effectiveSelectedAgentIds.length === 1) return;
       setSelectedAgentIds(
         effectiveSelectedAgentIds.filter((id) => id !== agentId),
       );
@@ -236,8 +246,7 @@ export function CreateProjectDialog({
               <div className="grid max-h-44 grid-cols-1 gap-1 overflow-y-auto p-2 sm:grid-cols-2">
                 {agents.map((agent) => {
                   const selected = selectedAgentSet.has(agent.name);
-                  const isOnlySelected =
-                    selected && effectiveSelectedAgentIds.length === 1;
+                  const isLeader = agent.name === defaultAgentId;
                   const label = agent.display_name ?? agent.name;
                   return (
                     <button
@@ -245,14 +254,14 @@ export function CreateProjectDialog({
                       type="button"
                       aria-label={label}
                       aria-pressed={selected}
-                      disabled={isPending || isOnlySelected}
+                      disabled={isPending || isLeader}
                       onClick={() => toggleAgent(agent.name)}
                       className={cn(
                         "flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors",
                         selected
                           ? "border-primary/30 bg-primary/8"
                           : "border-transparent hover:border-border-default hover:bg-background/70",
-                        isOnlySelected && "cursor-default opacity-100",
+                        isLeader && "cursor-default opacity-100",
                       )}
                     >
                       <AgentAvatar

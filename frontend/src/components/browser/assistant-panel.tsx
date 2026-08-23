@@ -26,13 +26,11 @@ import { swallow } from "@/core/utils/log";
 import { useThreadStream } from "@/core/threads/hooks";
 import { isAIMessage, isHumanMessage } from "@/core/api/types";
 import { useI18n } from "@/core/i18n/hooks";
-import {
-  ACTIVE_AGENT_EVENT,
-  ACTIVE_AGENT_KEY,
-  useActiveAgentId,
-} from "@/core/agents/active";
+import { useActiveAgentId } from "@/core/agents/active";
 import { useAgents } from "@/core/agents/hooks";
+import { isPrimaryPersonaAgentId } from "@/core/agents/persona-policy";
 import { copyTextToClipboard } from "@/core/clipboard";
+import { emitAgentChanged } from "@/core/events";
 import { cn } from "@/lib/utils";
 
 import {
@@ -138,9 +136,13 @@ export function AssistantPanel({ webviewHandle }: Props) {
   const activeAgentId = useActiveAgentId();
   const agentName = activeAgentId ?? "general";
   const { agents } = useAgents();
+  const primaryAgents = useMemo(
+    () => agents.filter((agent) => isPrimaryPersonaAgentId(agent.name)),
+    [agents],
+  );
   const activeAgent = useMemo(
-    () => agents.find((a) => a.name === agentName) ?? null,
-    [agents, agentName],
+    () => primaryAgents.find((a) => a.name === agentName) ?? null,
+    [agentName, primaryAgents],
   );
 
   // Implementation note.
@@ -777,7 +779,7 @@ export function AssistantPanel({ webviewHandle }: Props) {
       <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-white/24 bg-white/[0.06] px-3">
         <AgentPicker
           activeAgent={activeAgent}
-          agents={agents}
+          agents={primaryAgents}
           activeAgentId={agentName}
         />
         {activeTab?.title && (
@@ -848,7 +850,9 @@ export function AssistantPanel({ webviewHandle }: Props) {
         <QuickAction
           icon={ListIcon}
           label={t.browser.assistant.extractKeyPoints}
-          onClick={() => askWithPage(t.browser.assistant.extractKeyPointsPrompt)}
+          onClick={() =>
+            askWithPage(t.browser.assistant.extractKeyPointsPrompt)
+          }
           disabled={busy}
         />
         <QuickAction
@@ -1327,14 +1331,8 @@ function AgentPicker({
   }, [open]);
 
   const select = (name: string) => {
-    try {
-      window.localStorage.setItem(ACTIVE_AGENT_KEY, name);
-    } catch (e) {
-      swallow(e);
-    }
-    window.dispatchEvent(
-      new CustomEvent(ACTIVE_AGENT_EVENT, { detail: { name } }),
-    );
+    if (!isPrimaryPersonaAgentId(name)) return;
+    emitAgentChanged(name);
     setOpen(false);
   };
 
@@ -1392,9 +1390,7 @@ function AgentPicker({
                   <span className="min-w-0 flex-1 truncate">
                     {a.display_name || a.name}
                   </span>
-                  {active && (
-                    <span className="text-micro text-primary">●</span>
-                  )}
+                  {active && <span className="text-micro text-primary">●</span>}
                 </button>
               );
             })

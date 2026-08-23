@@ -179,7 +179,7 @@ describe("project home work group", () => {
     expect(mocks.ensureRoom).not.toHaveBeenCalled();
   });
 
-  test("writes the selected initial AI roster atomically and uses its first member as lead", async () => {
+  test("keeps a fixed persona as lead and adds selected roles to the roster", async () => {
     mocks.createThread.mockResolvedValue({ thread_id: "thread-team" });
 
     await ensureProjectHome(
@@ -204,27 +204,31 @@ describe("project home work group", () => {
     expect(mocks.createThread).toHaveBeenCalledWith({
       metadata: {
         mode: "code",
-        agent_name: "planner",
+        agent_name: "general",
         project_home: true,
         project_id: "P-team",
         title: "联合发布",
       },
       values: {
         title: "联合发布",
-        agent_name: "planner",
+        agent_name: "general",
         project_id: "P-team",
         project_home: true,
       },
     });
     expect(mocks.replaceRoster).toHaveBeenCalledTimes(1);
     expect(mocks.replaceRoster).toHaveBeenCalledWith("thread-team", {
-      agent_ids: ["planner", "writer"],
+      agent_ids: ["general", "planner", "writer"],
       mode: "cluster",
     });
     expect(mocks.ensureRoom).toHaveBeenCalledWith("thread-team", {
       id: "collab-thread-team",
       name: "联合发布",
       members: [
+        {
+          name: "general",
+          display_name: "通用助手",
+        },
         {
           name: "planner",
           display_name: "规划师",
@@ -237,7 +241,7 @@ describe("project home work group", () => {
           avatar_url: "/api/agents/writer/avatar",
         },
       ],
-      leaderId: "planner",
+      leaderId: "general",
       mode: "cluster",
     });
   });
@@ -314,6 +318,10 @@ describe("project home work group", () => {
           goal: "产品发布",
           initial_agents: [
             {
+              id: "general",
+              display_name: "通用助手",
+            },
+            {
               id: "planner",
               display_name: "规划师",
               description: "拆解里程碑",
@@ -363,7 +371,10 @@ describe("project home work group", () => {
         body: JSON.stringify({
           name: "失败项目",
           goal: "失败项目",
-          initial_agents: [{ id: "planner" }],
+          initial_agents: [
+            { id: "general", display_name: "通用助手" },
+            { id: "planner" },
+          ],
         }),
       },
     );

@@ -109,6 +109,66 @@ def test_atomic_roster_replace_preserves_humans_and_is_idempotent(tmp_path) -> N
     assert unchanged.json()["state"]["event_count"] == version
 
 
+def test_on_demand_agent_reference_add_remove_is_idempotent(tmp_path) -> None:
+    store = GroupStore(base_dir=tmp_path)
+    app = FastAPI()
+    app.include_router(create_cowork_group_router(store=store))
+    client = TestClient(app)
+
+    added = client.post(
+        "/api/cowork/thread-members/members",
+        json={"target_id": "local_codex_cli", "kind": "agent"},
+    )
+    assert added.status_code == 200, added.json()
+    assert added.json()["added"] is True
+    assert added.json()["state"]["event_count"] == 1
+    # Membership is only a dispatchable id reference; no clone or per-thread
+    # owner/home record is introduced into the group schema. Synthetic local
+    # CLI and mobile ids intentionally live outside the built-in AgentRegistry.
+    assert store.events("thread-members")[0].target_id == "local_codex_cli"
+
+    retried = client.post(
+        "/api/cowork/thread-members/members",
+        json={"target_id": "local_codex_cli", "kind": "agent"},
+    )
+    assert retried.status_code == 200, retried.json()
+    assert retried.json()["added"] is False
+    assert retried.json()["state"]["event_count"] == 1
+
+    removed = client.delete("/api/cowork/thread-members/members/local_codex_cli")
+    assert removed.status_code == 200, removed.json()
+    assert removed.json()["removed"] is True
+    assert removed.json()["state"]["event_count"] == 2
+
+    remove_retry = client.delete("/api/cowork/thread-members/members/local_codex_cli")
+    assert remove_retry.status_code == 200, remove_retry.json()
+    assert remove_retry.json()["removed"] is False
+    assert remove_retry.json()["state"]["event_count"] == 2
+
+
+def test_on_demand_roster_accepts_registry_cli_and_mobile_ids_atomically(tmp_path) -> None:
+    store = GroupStore(base_dir=tmp_path)
+    app = FastAPI()
+    app.include_router(create_cowork_group_router(store=store))
+    client = TestClient(app)
+
+    replaced = client.put(
+        "/api/cowork/thread-roster-registry/roster",
+        json={
+            "agent_ids": ["advisor", "local_codex_cli", "mobile_phone1"],
+            "mode": "swarm",
+        },
+    )
+
+    assert replaced.status_code == 200, replaced.json()
+    assert replaced.json()["state"]["mode"] == "swarm"
+    assert {member["id"] for member in replaced.json()["state"]["roster"]} == {
+        "advisor",
+        "local_codex_cli",
+        "mobile_phone1",
+    }
+
+
 def test_atomic_roster_replace_rolls_back_the_whole_diff_on_validation_error(tmp_path) -> None:
     c = _client(tmp_path)
     thread_id = "thread-roster-rollback"

@@ -324,6 +324,7 @@ export const MessageListItem = memo(function MessageListItem({
   messageIndex,
   afterContent,
   projectMessageActions,
+  allowThreadFork = true,
 }: {
   className?: string;
   message: Message;
@@ -336,6 +337,8 @@ export const MessageListItem = memo(function MessageListItem({
   afterContent?: ReactNode;
   /** Project actions exposed on human bubbles in a bound project group. */
   projectMessageActions?: MessageListProjectActions;
+  /** Legacy on-demand-owned threads are readable but cannot clone that owner. */
+  allowThreadFork?: boolean;
 }) {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -483,7 +486,9 @@ export const MessageListItem = memo(function MessageListItem({
               className={cn("min-h-0", projectMessageActions.className)}
             />
           ) : null}
-          {threadIdForFeedback != null && messageIndex != null ? (
+          {allowThreadFork &&
+          threadIdForFeedback != null &&
+          messageIndex != null ? (
             <button
               onClick={() => {
                 forkThread.mutate(

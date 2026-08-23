@@ -48,6 +48,10 @@ vi.mock("@/core/agents", () => ({
   useAgents: () => mocks.agentState,
 }));
 
+vi.mock("@/core/agents/active", () => ({
+  useActiveAgentId: () => "general",
+}));
+
 vi.mock("@/components/workspace/sidebar-footer", () => ({
   AgentAvatar: ({ agent }: { agent?: { display_name?: string } }) => (
     <span aria-hidden="true">{agent?.display_name?.slice(0, 1)}</span>
@@ -144,7 +148,7 @@ describe("CreateProjectDialog", () => {
     );
   });
 
-  it("passes the explicitly selected AI roster to project creation", async () => {
+  it("keeps the White Ghost leader first and adds other roles as members", async () => {
     const user = userEvent.setup();
     renderWithProviders(<CreateProjectDialog open onOpenChange={vi.fn()} />, {
       locale: "zh-CN",
@@ -155,13 +159,20 @@ describe("CreateProjectDialog", () => {
       "true",
     );
     await user.click(screen.getByRole("button", { name: "规划师" }));
-    await user.click(screen.getByRole("button", { name: "通用助手" }));
+    expect(screen.getByRole("button", { name: "通用助手" })).toBeDisabled();
     await user.type(screen.getByPlaceholderText("项目名称"), "增长实验");
     await user.click(screen.getByRole("button", { name: "创建项目" }));
 
     expect(mocks.createProject).toHaveBeenCalledWith(
       expect.objectContaining({
         initialAgents: [
+          {
+            id: "general",
+            displayName: "通用助手",
+            description: "处理通用项目工作",
+            avatarUrl: null,
+            icon: "🐙",
+          },
           {
             id: "planner",
             displayName: "规划师",

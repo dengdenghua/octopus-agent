@@ -195,9 +195,8 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
     }
   }, [renameThread, threadToRename, renameValue]);
 
-  // Conversation history belongs to the active role. Switching roles from
-  // the bottom-left picker opens a separate lane instead of exposing or
-  // continuing another role's conversations.
+  // White Ghost members keep their own lanes. Historical expert/CLI/device
+  // tasks are shared because those actors now join conversations on demand.
   const { data: threads = [] } = useThreads(
     {
       limit: 50,

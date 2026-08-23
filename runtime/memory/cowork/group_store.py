@@ -92,6 +92,98 @@ class GroupStore:
             event.seq = int(row[0]) if row else 0
         return event
 
+    def ensure_member(
+        self,
+        thread_id: str,
+        event: MemberEvent,
+    ) -> tuple[MemberEvent | None, GroupState]:
+        """Add one session member exactly once and return the canonical fold.
+
+        Membership is a reference to an existing actor/agent id, not a cloned
+        identity.  The folded read and conditional append share one SQLite
+        write transaction so retries (including retries from another process)
+        cannot create duplicate timeline events.
+        """
+
+        if event.action != "invite":
+            raise ValueError("ensure_member requires an invite event")
+        thread_id = require_cowork_id(thread_id, label="thread_id")
+        event.actor = normalize_actor_id(event.actor)
+        event.target_id = require_cowork_id(event.target_id, label="target_id")
+        event.ts = datetime.now(UTC).isoformat()
+
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            rows = conn.execute(
+                "SELECT event_json, seq, ts FROM group_events WHERE thread_id = ? ORDER BY seq",
+                (thread_id,),
+            ).fetchall()
+            existing_events: list[MemberEvent] = []
+            for event_json, seq, ts in rows:
+                existing = MemberEvent.from_dict(_load(event_json))
+                existing.seq = int(seq)
+                existing.ts = str(ts)
+                existing_events.append(existing)
+            current = fold_state(existing_events)
+            member = current.member(event.target_id)
+            if member is not None:
+                if member.kind != event.target_kind:
+                    raise ValueError(
+                        f"member kind collision for {event.target_id}: "
+                        f"{member.kind} != {event.target_kind}"
+                    )
+                return None, current
+
+            event.seq = int(rows[-1][1]) + 1 if rows else 1
+            conn.execute(
+                "INSERT INTO group_events(thread_id, seq, event_json, ts) VALUES (?, ?, ?, ?)",
+                (thread_id, event.seq, _dump(event), event.ts),
+            )
+            return event, fold_state([*existing_events, event])
+
+    def remove_member_if_present(
+        self,
+        thread_id: str,
+        *,
+        actor: str,
+        member_id: str,
+    ) -> tuple[MemberEvent | None, GroupState]:
+        """Remove one session member exactly once.
+
+        A retry after the member has already left is a successful no-op and
+        does not grow the event log.  ACL is intentionally outside this store;
+        callers must authorize against the owning thread/room before invoking
+        the mutation.
+        """
+
+        thread_id = require_cowork_id(thread_id, label="thread_id")
+        actor = normalize_actor_id(actor)
+        member_id = require_cowork_id(member_id, label="member_id")
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            rows = conn.execute(
+                "SELECT event_json, seq, ts FROM group_events WHERE thread_id = ? ORDER BY seq",
+                (thread_id,),
+            ).fetchall()
+            existing_events: list[MemberEvent] = []
+            for event_json, seq, ts in rows:
+                existing = MemberEvent.from_dict(_load(event_json))
+                existing.seq = int(seq)
+                existing.ts = str(ts)
+                existing_events.append(existing)
+            current = fold_state(existing_events)
+            if current.member(member_id) is None:
+                return None, current
+
+            event = MemberEvent(action="leave", actor=actor, target_id=member_id)
+            event.seq = int(rows[-1][1]) + 1 if rows else 1
+            event.ts = datetime.now(UTC).isoformat()
+            conn.execute(
+                "INSERT INTO group_events(thread_id, seq, event_json, ts) VALUES (?, ?, ?, ?)",
+                (thread_id, event.seq, _dump(event), event.ts),
+            )
+            return event, fold_state([*existing_events, event])
+
     def replace_agent_roster(
         self,
         thread_id: str,

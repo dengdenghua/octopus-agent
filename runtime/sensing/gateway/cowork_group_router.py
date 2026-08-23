@@ -287,6 +287,50 @@ def create_cowork_group_router(
 
     _actor = access.actor
 
+    def _project_linked_room_roster(
+        thread_id: str,
+        request: Request,
+        state: Any,
+    ) -> dict[str, Any] | None:
+        """Keep the optional Team Room read model aligned with GroupStore."""
+
+        room_id = state.room_id
+        if not room_id:
+            return None
+        roster_projector = getattr(team_rooms_router, "replace_team_agent_members", None)
+        if not callable(roster_projector):
+            return {"ok": False, "room_id": room_id}
+        try:
+            projection_state = state
+            for _attempt in range(5):
+                current_room = _room_snapshot(room_id) or {}
+                projected_room = roster_projector(
+                    request,
+                    room_id,
+                    _room_members_for_projection(
+                        thread_id,
+                        existing=current_room.get("members") or [],
+                        state=projection_state,
+                    ),
+                    current_room.get("leaderId"),
+                )
+                _collaboration_store().upsert_room(thread_id, dict(projected_room))
+                latest_state = group_store.state(thread_id)
+                if latest_state.event_count == projection_state.event_count:
+                    return {"ok": True, "room_id": room_id}
+                # Another membership transaction committed while this
+                # projection was writing. Re-project the newer generation so
+                # a delayed response cannot overwrite the canonical roster.
+                projection_state = latest_state
+            return {"ok": False, "room_id": room_id, "stale": True}
+        except Exception as exc:  # noqa: BLE001 - canonical GroupStore mutation already committed
+            __import__("logging").getLogger("octopus.cowork").warning(
+                "linked room roster projection failed for %s: %s",
+                thread_id,
+                exc,
+            )
+            return {"ok": False, "room_id": room_id}
+
     def _auth_dep(request: Request) -> None:
         thread_id = str(getattr(request, "path_params", {}).get("thread_id") or "")
         _require_collaborative_thread(thread_id, request, write=True)
@@ -863,19 +907,42 @@ def create_cowork_group_router(
             grant=ContextGrant.from_dict(body.grant.model_dump()),
             at_message=body.at_message,
         )
-        group_store.append(thread_id, ev)
-        return {"ok": True, "state": group_store.state(thread_id).to_dict()}
+        try:
+            changed, state = group_store.ensure_member(thread_id, ev)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        result: dict[str, Any] = {
+            "ok": True,
+            "added": changed is not None,
+            "state": state.to_dict(),
+        }
+        projection = _project_linked_room_roster(thread_id, request, state)
+        if projection is not None:
+            result["room_projection"] = projection
+        return result
 
     @router.delete(
         "/api/cowork/{thread_id}/members/{member_id}", dependencies=[Depends(_owner_dep)]
     )
     def remove_member(thread_id: str, member_id: str, request: Request) -> dict[str, Any]:
-        """Remove a member. Their past blackboard writes stay (attributed)."""
-        group_store.append(
-            thread_id,
-            MemberEvent(action="leave", actor=_actor(request), target_id=member_id),
-        )
-        return {"ok": True, "state": group_store.state(thread_id).to_dict()}
+        """Remove a session reference idempotently; attributed history stays."""
+        try:
+            changed, state = group_store.remove_member_if_present(
+                thread_id,
+                actor=_actor(request),
+                member_id=member_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        result: dict[str, Any] = {
+            "ok": True,
+            "removed": changed is not None,
+            "state": state.to_dict(),
+        }
+        projection = _project_linked_room_roster(thread_id, request, state)
+        if projection is not None:
+            result["room_projection"] = projection
+        return result
 
     @router.post("/api/cowork/{thread_id}/mode", dependencies=[Depends(_owner_dep)])
     def set_mode(thread_id: str, body: ModeBody, request: Request) -> dict[str, Any]:
@@ -920,30 +987,7 @@ def create_cowork_group_router(
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         payload = state.to_dict()
-        room_projection: dict[str, Any] | None = None
-        if state.room_id:
-            roster_projector = getattr(team_rooms_router, "replace_team_agent_members", None)
-            if callable(roster_projector):
-                try:
-                    current_room = _room_snapshot(state.room_id) or {}
-                    projected_room = roster_projector(
-                        request,
-                        state.room_id,
-                        _room_members_for_projection(
-                            thread_id,
-                            existing=current_room.get("members") or [],
-                        ),
-                        current_room.get("leaderId"),
-                    )
-                    _collaboration_store().upsert_room(thread_id, dict(projected_room))
-                    room_projection = {"ok": True, "room_id": state.room_id}
-                except Exception as exc:  # noqa: BLE001 - GroupStore already committed
-                    __import__("logging").getLogger("octopus.cowork").warning(
-                        "linked room roster projection failed for %s: %s",
-                        thread_id,
-                        exc,
-                    )
-                    room_projection = {"ok": False, "room_id": state.room_id}
+        room_projection = _project_linked_room_roster(thread_id, request, state)
         if body.mode == "project":
             bound_project_id = _ensure_project_for_thread(thread_id, request)
             if bound_project_id is not None:

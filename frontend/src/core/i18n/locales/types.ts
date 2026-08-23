@@ -303,6 +303,10 @@ export interface Translations {
     collaboratorsHelp: string;
     collaboratorsSearchPlaceholder: string;
     collaboratorsTaskFallback: string;
+    collaboratorsCoreGroup: string;
+    collaboratorsOnDemandGroup: string;
+    collaboratorsOnDemandBadge: string;
+    collaboratorsOnDemandHint: string;
     responseMode: string;
     responseModeTeamRequired: string;
     groupTaskTools: string;
@@ -861,6 +865,8 @@ export interface Translations {
       footer: string;
     };
     composer: {
+      legacyOnDemandContinued: string;
+      legacyOnDemandAttachments: string;
       placeholderCode: string;
       placeholderNew: string;
       placeholderOctopus: string;
@@ -2346,6 +2352,8 @@ export interface Translations {
   agentCard: {
     chat: string;
     chatAriaLabel: (name: string) => string;
+    addOnDemand: string;
+    addOnDemandAriaLabel: (name: string) => string;
     profile: string;
     profileAriaLabel: (name: string) => string;
     deleteAriaLabel: (name: string) => string;
