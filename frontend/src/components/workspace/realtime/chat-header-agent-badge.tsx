@@ -53,7 +53,7 @@ export function ChatHeaderAgentBadge({
         : `${collaborators[0]?.display_name || label} 等${collaborators.length}人`;
     return (
       <div
-        className="inline-flex h-8 max-w-[220px] shrink-0 items-center gap-1.5 px-1.5 text-xs text-foreground/88 transition-colors hover:bg-muted/45"
+        className="inline-flex h-8 max-w-[220px] shrink-0 items-center gap-1.5 px-1.5 text-xs text-foreground/88"
         title={collaborators.map((a) => a.display_name).join("、")}
       >
         <span className="flex items-center -space-x-1.5">
@@ -102,7 +102,7 @@ export function ChatHeaderAgentBadge({
   if (!label || label === "general") return null;
   return (
     <div
-      className="inline-flex h-8 max-w-[180px] shrink-0 items-center gap-1.5 px-1.5 text-xs text-foreground/88 transition-colors hover:bg-muted/45"
+      className="inline-flex h-8 max-w-[180px] shrink-0 items-center gap-1.5 px-1.5 text-xs text-foreground/88"
       title={label}
     >
       <span className="flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-xs font-semibold text-muted-foreground">

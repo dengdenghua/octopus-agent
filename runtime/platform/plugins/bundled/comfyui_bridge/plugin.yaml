@@ -1,0 +1,21 @@
+name: comfyui_bridge
+display_name: ComfyUI 工作流桥接
+version: 0.4.0
+description: 将本机 ComfyUI 节点编辑、模型与扩展盘点、版本化持久化、队列与状态接入 Octopus 创作画布，并向 Agent 暴露受控调用技能。
+author: Octopus
+tags:
+  - design
+  - comfyui
+  - workflow
+provides:
+  - comfyui_bridge.api
+  - comfyui_bridge.status
+  - comfyui_bridge.dependencies
+  - comfyui_bridge.node_catalog
+  - comfyui_bridge.workflows
+  - comfyui_bridge.workflow_get
+  - comfyui_bridge.workflow_save
+  - comfyui_bridge.queue
+  - comfyui_bridge.result
+config:
+  base_url: http://127.0.0.1:8188

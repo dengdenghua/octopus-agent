@@ -211,6 +211,37 @@ describe("ProjectOsTab", () => {
     expect(screen.getByText("需求说明.md")).toBeInTheDocument();
   });
 
+  it("collapses a project heading that repeats the group or conversation title", () => {
+    const { rerender } = renderWithProviders(
+      <ProjectOsTab state={projectState} groupTitle="  PM   演示  " />,
+      { locale: "zh-CN" },
+    );
+
+    expect(screen.getByTestId("project-workbench-context")).toHaveAttribute(
+      "data-project-title-collapsed",
+      "true",
+    );
+    expect(
+      screen.getByRole("heading", { name: "项目工作台" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "PM 演示" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("进行中")).toBeInTheDocument();
+    expect(screen.getByText("管理页")).toBeInTheDocument();
+
+    rerender(
+      <ProjectOsTab state={projectState} currentThreadTitle="另一个群聊" />,
+    );
+    expect(screen.getByTestId("project-workbench-context")).toHaveAttribute(
+      "data-project-title-collapsed",
+      "false",
+    );
+    expect(
+      screen.getByRole("heading", { name: "PM 演示" }),
+    ).toBeInTheDocument();
+  });
+
   it("renders the latest projected decisions with optional metadata", () => {
     renderWithProviders(
       <ProjectOsTab
@@ -385,7 +416,18 @@ describe("ProjectOsTab", () => {
       { locale: "zh-CN" },
     );
 
-    expect(screen.getByText("项目正在等待拆解")).toBeInTheDocument();
+    expect(screen.getByTestId("project-empty-launch-card")).toHaveTextContent(
+      "从第一个里程碑开始",
+    );
+    expect(screen.getByRole("link", { name: /打开项目管理/ })).toHaveAttribute(
+      "href",
+      "/workspace/projects",
+    );
+    expect(screen.queryByText("整体进度")).not.toBeInTheDocument();
+    expect(screen.queryByText("待推进事项")).not.toBeInTheDocument();
+    expect(screen.queryByText("风险与阻塞")).not.toBeInTheDocument();
+    expect(screen.queryByText("项目资料")).not.toBeInTheDocument();
+    expect(screen.queryByText("下一步")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "里程碑" }));
     expect(screen.getByText("还没有里程碑")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "事项" }));
@@ -394,6 +436,31 @@ describe("ProjectOsTab", () => {
     expect(screen.getByText("还没有项目资料")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "成员" }));
     expect(screen.getByText("还没有项目成员")).toBeInTheDocument();
+  });
+
+  it("keeps the data overview when a project has assets but no plan yet", () => {
+    renderWithProviders(
+      <ProjectOsTab
+        state={{
+          ...projectState,
+          milestones: [],
+          tasks: {},
+          pm: null,
+          artifacts: [
+            {
+              id: "brief",
+              name: "项目简报.md",
+              path: "/workspace/项目简报.md",
+            },
+          ],
+        }}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(screen.queryByTestId("project-empty-launch-card")).toBeNull();
+    expect(screen.getByText("整体进度")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /项目资料\s*1/ })).toBeVisible();
   });
 
   it("focuses the matching internal tab from project timeline entity events", () => {
@@ -525,6 +592,28 @@ describe("AgentWorkbenchPanel project tab", () => {
       expect.stringContaining("/api/projects/by-thread/thread-1"),
       expect.anything(),
     );
+  });
+
+  it("forwards the current group title to the project surface", async () => {
+    renderWithProviders(
+      <AgentWorkbenchPanel
+        activeTab="project"
+        events={[]}
+        threadId="thread-1"
+        groupTitle="PM 演示"
+      />,
+      { locale: "zh-CN" },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-workbench-context")).toHaveAttribute(
+        "data-project-title-collapsed",
+        "true",
+      );
+    });
+    expect(
+      screen.getByRole("heading", { name: "项目工作台" }),
+    ).toBeInTheDocument();
   });
 
   it("falls back to the agent surface when no project is bound", async () => {

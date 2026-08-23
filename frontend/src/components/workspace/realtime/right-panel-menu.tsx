@@ -89,12 +89,14 @@ export function RightPanelMenu({
     <Button
       type="button"
       aria-label={panelToggleLabel}
+      aria-pressed={Boolean(activePage)}
+      data-state={activePage ? "open" : "closed"}
       title={panelToggleLabel}
       onClick={handleTogglePanel}
       className={cn(
         "flex size-[42px] items-center justify-center rounded-lg border shadow-none transition-all duration-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 sm:size-8",
         activePage
-          ? "border-transparent bg-transparent text-foreground/82 hover:border-border-default hover:bg-muted/55 hover:text-foreground"
+          ? "border-border-default bg-muted/60 text-foreground hover:bg-muted/75 hover:text-foreground"
           : "border-transparent bg-transparent text-muted-foreground hover:border-border-default hover:bg-muted/55 hover:text-foreground",
       )}
     >

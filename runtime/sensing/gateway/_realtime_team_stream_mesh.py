@@ -130,12 +130,19 @@ async def _drive_swarm_mesh(
         from runtime.memory.journal.journal_context import journal_context
         from runtime.platform.process.session import Session, session_scope
 
+        session_metadata = dict(intent.user_context or {})
+        params = getattr(turn, "params", None)
+        actor = str(getattr(params, "owner_actor_id", None) or "").strip() or None
+        tenant = str(getattr(params, "tenant_id", None) or "").strip()
+        if tenant:
+            session_metadata["tenant_id"] = tenant
         turn_session = Session(
+            actor=actor,
             agent=None,
             thread_id=turn.thread_id,
             conversation_id=turn.thread_id,
             turn_id=turn.id,
-            metadata=dict(intent.user_context or {}),
+            metadata=session_metadata,
         )
         return session_scope(turn_session), journal_context(
             conversation_id=turn.thread_id,

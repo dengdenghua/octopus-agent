@@ -1,9 +1,10 @@
-"""Project OS bridge for the realtime runtime.
+"""Explicit Project OS command bridge for the realtime runtime.
 
 Split out of ``realtime_cerebrum.py``: the Project OS control-command
 parser, the milestone/todo mapping helpers and the ``_drive_project_os``
-driver that runs Project OS directly from a cowork thread in project
-mode.
+driver that runs Project OS directly from a cowork thread after an explicit
+``/project`` command. Project binding is independent from the group's response
+mode; ordinary chat messages never enter this driver.
 
 Every function takes the owning ``CerebrumRuntime`` as its first
 argument; cross-method calls go through the runtime so subclass
@@ -27,8 +28,9 @@ if TYPE_CHECKING:
     from runtime.sensing.gateway.realtime_gateway import EventEmitter
 
 
-_PROJECT_OS_HELP = """Project OS 控制命令（项目模式对话内可用）：
+_PROJECT_OS_HELP = """Project OS 控制命令（在工作群中显式调用）：
 
+- /project run <目标>（或 /project start <目标>）—— 显式创建或继续推进项目
 - /project report（或 /project pm）—— PM 驾驶舱：里程碑健康度 / 风险 / 下一步动作 / 指派
 - /project retro —— 项目复盘：交付、失败、重试、耗时、建议
 - /project recover [tasks=T1,T2] [run] —— 恢复被阻塞的项目（可指定重跑任务）
@@ -38,7 +40,16 @@ _PROJECT_OS_HELP = """Project OS 控制命令（项目模式对话内可用）�
     - complete output="<结果>" —— 人工验收通过
     - skip reason="<原因>" —— 跳过该节点
 
-项目模式下直接发一句话目标，就会进入里程碑驱动的 Project OS 执行。"""
+只有显式输入 /project run <目标> 才会进入里程碑驱动的 Project OS 执行。"""
+
+
+def _is_project_os_command(text: str) -> bool:
+    """Return whether ``text`` explicitly addresses the Project OS command."""
+
+    raw = str(text or "").strip()
+    return raw == "/project" or (
+        raw.startswith("/project") and raw[len("/project") : len("/project") + 1].isspace()
+    )
 
 
 def _format_project_os_result(state: dict[str, Any]) -> str:
@@ -214,9 +225,9 @@ def _project_os_todo_item(state: dict[str, Any]) -> TodoListItem | None:
 
 
 def _parse_project_os_control(text: str) -> dict[str, Any] | None:
-    """Parse explicit Project OS control commands in project-mode chat."""
+    """Parse an explicit Project OS command independently of response mode."""
     raw = str(text or "").strip()
-    if not raw.startswith("/project"):
+    if not _is_project_os_command(raw):
         return None
     try:
         parts = shlex.split(raw)
@@ -226,6 +237,9 @@ def _parse_project_os_control(text: str) -> dict[str, Any] | None:
         return {"type": "help"}
     command = parts[1].lower()
     rest = parts[2:]
+
+    if command in {"run", "start"}:
+        return {"type": "run", "goal": " ".join(rest).strip()}
 
     def _kv(tokens: list[str]) -> dict[str, str]:
         out: dict[str, str] = {}
@@ -283,7 +297,7 @@ async def _drive_project_os(
     thread_id: str,
     text: str,
 ) -> None:
-    """Run Project OS directly from a cowork thread in project mode."""
+    """Handle an explicit Project OS command from a cowork thread."""
     if runtime._cowork_group_store is None:
         await runtime._emit_agent_message(
             turn,
@@ -292,10 +306,6 @@ async def _drive_project_os(
             "Project OS 需要先绑定协作组；当前线程还没有可用的 cowork group。",
         )
         return
-    if runtime._project_store is None:
-        from runtime.projectos.store import ProjectStore
-
-        runtime._project_store = ProjectStore()
 
     context = intent.user_context if isinstance(intent.user_context, dict) else {}
     emitter_actor = str(getattr(emitter, "actor_id", None) or "").strip()
@@ -311,6 +321,26 @@ async def _drive_project_os(
     if owner_id and not tenant_id:
         tenant_id = f"legacy:{owner_id}"
     authenticated_project = bool(owner_id and tenant_id)
+
+    if authenticated_project:
+        from runtime.sensing.gateway.thread_access import ThreadAccessResolver
+
+        if runtime._thread_store is None:
+            raise PermissionError("authenticated project thread state is unavailable")
+        access = ThreadAccessResolver(
+            thread_store=runtime._thread_store,
+            group_store=runtime._cowork_group_store,
+            collaboration_store=runtime._collaboration_store,
+        ).resolve(thread_id, owner_id, tenant_id)
+        if access.thread is None or not access.can_manage:
+            raise PermissionError("only the thread owner can control Project OS")
+        owner_id = access.owner_actor_id or owner_id
+        tenant_id = access.tenant_id or tenant_id
+
+    if runtime._project_store is None:
+        from runtime.projectos.store import ProjectStore
+
+        runtime._project_store = ProjectStore()
 
     project_store = runtime._project_store
     project_hooks = dict(runtime._project_os_hooks)
@@ -371,6 +401,11 @@ async def _drive_project_os(
     max_ticks = max(1, min(max_ticks, 200))
 
     control = _parse_project_os_control(text)
+    if control is not None and control.get("type") == "run":
+        explicit_goal = str(control.get("goal") or "").strip()
+        if explicit_goal:
+            goal = explicit_goal
+        control = None
     from runtime.projectos.cowork_bridge import full_project_state, run_project_from_group
 
     def _run() -> dict[str, Any]:
@@ -394,6 +429,7 @@ async def _drive_project_os(
                     owner_id=owner_id,
                     tenant_id=tenant_id,
                     subagent_runner=getattr(runtime, "_subagent_runner", None),
+                    require_execution_binding=True,
                 )
             if control.get("type") == "recover" and engine is not None:
                 intervention = engine.recover(
@@ -501,7 +537,7 @@ async def _drive_project_os(
             turn,
             log,
             emitter,
-            "Project OS 已进入项目模式，但当前协作组没有可执行的 agent 成员。"
+            "Project OS 已收到显式运行请求，但当前协作组没有可执行的 agent 成员。"
             "请先添加至少一个参与者后再运行项目。",
         )
         return

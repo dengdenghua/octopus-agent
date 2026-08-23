@@ -8,6 +8,7 @@ import logging
 import os
 import subprocess
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -24,11 +25,14 @@ from .types import (
 
 _logger = logging.getLogger(__name__)
 
+MCP_ELICITATION_APPROVAL_METHOD = "mcpServer/elicitation/request"
+TOOL_USER_INPUT_METHOD = "item/tool/requestUserInput"
 APPROVAL_METHODS = frozenset(
     {
         "item/commandExecution/requestApproval",
         "item/fileChange/requestApproval",
         "item/permissions/requestApproval",
+        MCP_ELICITATION_APPROVAL_METHOD,
     }
 )
 _COMMAND_DECISIONS = frozenset({"accept", "acceptForSession", "decline", "cancel"})
@@ -38,6 +42,48 @@ _STRUCTURED_COMMAND_DECISIONS = frozenset(
 _TOP_LEVEL_FIELDS = frozenset(
     {"jsonrpc", "id", "method", "params", "result", "error", "emittedAtMs"}
 )
+_MCP_ELICITATION_FORM_FIELDS = frozenset(
+    {"threadId", "turnId", "serverName", "mode", "_meta", "message", "requestedSchema"}
+)
+_MCP_APPROVAL_META_FIELDS = frozenset(
+    {
+        "codex_approval_kind",
+        "codex_request_type",
+        "codex_strict_auto_review",
+        "persist",
+        "source",
+        "connector_id",
+        "connector_name",
+        "connector_description",
+        "tool_name",
+        "tool_title",
+        "tool_description",
+        "tool_params",
+        "tool_params_display",
+        "_codex_apps",
+    }
+)
+_MCP_APPROVAL_META_TEXT_FIELDS = frozenset(
+    {
+        "connector_name",
+        "connector_description",
+        "tool_title",
+        "tool_description",
+    }
+)
+_MCP_APPROVAL_META_IDENTIFIER_FIELDS = frozenset({"connector_id", "tool_name"})
+_CODEX_APPS_META_FIELDS = frozenset({"call_id", "connected_account_email"})
+
+
+@dataclass(frozen=True, slots=True)
+class McpElicitationApproval:
+    """The only MCP elicitation shape Octopus may map to binary approval."""
+
+    message: str
+    connector_id: str
+    tool_name: str | None
+    tool_title: str | None
+    tool_params: JsonObject
 
 
 async def default_process_factory(launch: ProcessLaunch) -> AppServerProcess:
@@ -274,7 +320,139 @@ def require_entity_response(result: JsonValue, method: str, entity: str) -> Json
     return result
 
 
+def parse_mcp_elicitation_approval(
+    params: Mapping[str, Any],
+) -> McpElicitationApproval | None:
+    """Recognize the narrow Codex Apps binary-approval wire.
+
+    Codex 0.149 also forwards arbitrary MCP forms, OpenAI forms, plugin
+    suggestions, and URL/auth elicitations through the same JSON-RPC method.
+    None of those may reach Octopus' boolean ApprovalProvider.  Exact field
+    checks make future protocol variants fail closed until explicitly reviewed.
+    """
+
+    if set(params) != _MCP_ELICITATION_FORM_FIELDS:
+        return None
+    if params.get("serverName") != "codex_apps" or params.get("mode") != "form":
+        return None
+    if not _bounded_protocol_identifier(params.get("threadId"), 512):
+        return None
+    if not _bounded_protocol_identifier(params.get("turnId"), 512):
+        return None
+    message = params.get("message")
+    if not _bounded_protocol_text(message, 4_000):
+        return None
+
+    # An empty object schema is a confirmation. Any property, default, format,
+    # URI, required list, or extension turns it into user input that Octopus'
+    # binary ApprovalProvider cannot faithfully answer.
+    if params.get("requestedSchema") != {"type": "object", "properties": {}}:
+        return None
+
+    meta = params.get("_meta")
+    if not isinstance(meta, dict) or set(meta).difference(_MCP_APPROVAL_META_FIELDS):
+        return None
+    if meta.get("codex_approval_kind") != "mcp_tool_call":
+        return None
+    request_type = meta.get("codex_request_type")
+    if request_type is not None and request_type != "approval_request":
+        return None
+    strict_auto_review = meta.get("codex_strict_auto_review")
+    if strict_auto_review is not None and not isinstance(strict_auto_review, bool):
+        return None
+    source = meta.get("source")
+    if source is not None and source != "connector":
+        return None
+    if not _valid_persist_hint(meta.get("persist")):
+        return None
+
+    for field in _MCP_APPROVAL_META_TEXT_FIELDS:
+        value = meta.get(field)
+        if value is not None and not _bounded_protocol_text(value, 1_000):
+            return None
+    for field in _MCP_APPROVAL_META_IDENTIFIER_FIELDS:
+        value = meta.get(field)
+        if value is not None and not _bounded_protocol_identifier(value, 512):
+            return None
+    connector_id = meta.get("connector_id")
+    if not isinstance(connector_id, str):
+        return None
+
+    tool_params = meta.get("tool_params", {})
+    if not isinstance(tool_params, dict):
+        return None
+    display_params = meta.get("tool_params_display")
+    if display_params is not None and not _valid_tool_params_display(display_params):
+        return None
+    codex_apps_meta = meta.get("_codex_apps")
+    if codex_apps_meta is not None and not _valid_codex_apps_meta(codex_apps_meta):
+        return None
+
+    return McpElicitationApproval(
+        message=cast(str, message),
+        connector_id=connector_id,
+        tool_name=cast(str | None, meta.get("tool_name")),
+        tool_title=cast(str | None, meta.get("tool_title")),
+        tool_params=cast(JsonObject, dict(tool_params)),
+    )
+
+
+def _bounded_protocol_text(value: Any, max_chars: int) -> bool:
+    return (
+        isinstance(value, str)
+        and bool(value.strip())
+        and len(value) <= max_chars
+        and "\x00" not in value
+        and "\r" not in value
+    )
+
+
+def _bounded_protocol_identifier(value: Any, max_chars: int) -> bool:
+    return _bounded_protocol_text(value, max_chars) and value == value.strip() and "\n" not in value
+
+
+def _valid_tool_params_display(value: Any) -> bool:
+    if not isinstance(value, list) or len(value) > 100:
+        return False
+    for entry in value:
+        if not isinstance(entry, dict) or set(entry) != {"name", "value", "display_name"}:
+            return False
+        if not _bounded_protocol_identifier(entry.get("name"), 512):
+            return False
+        if not _bounded_protocol_text(entry.get("display_name"), 1_000):
+            return False
+    return True
+
+
+def _valid_persist_hint(value: Any) -> bool:
+    if value is None:
+        return True
+    allowed = {"session", "always"}
+    if isinstance(value, str):
+        return value in allowed
+    return (
+        isinstance(value, list)
+        and 1 <= len(value) <= len(allowed)
+        and all(isinstance(item, str) and item in allowed for item in value)
+        and len(set(value)) == len(value)
+    )
+
+
+def _valid_codex_apps_meta(value: Any) -> bool:
+    if not isinstance(value, dict) or set(value).difference(_CODEX_APPS_META_FIELDS):
+        return False
+    call_id = value.get("call_id")
+    if call_id is not None and not _bounded_protocol_identifier(call_id, 512):
+        return False
+    account_email = value.get("connected_account_email")
+    return account_email is None or _bounded_protocol_identifier(account_email, 1_000)
+
+
 def deny_approval(method: str) -> JsonObject:
+    if method == MCP_ELICITATION_APPROVAL_METHOD:
+        return {"action": "decline", "content": None}
+    if method == TOOL_USER_INPUT_METHOD:
+        return {"answers": {}}
     if method == "item/permissions/requestApproval":
         return {"permissions": {}, "scope": "turn"}
     return {"decision": "decline"}
@@ -286,6 +464,16 @@ def validate_approval_response(
     config: CodexAppServerConfig,
 ) -> JsonObject:
     normalized = normalize_object(response, config)
+    if method == MCP_ELICITATION_APPROVAL_METHOD:
+        if set(normalized) != {"action", "content"}:
+            raise ProtocolError("MCP elicitation approval must contain only action and content")
+        action = normalized.get("action")
+        content = normalized.get("content")
+        if action == "accept" and content == {}:
+            return normalized
+        if action in {"decline", "cancel"} and content is None:
+            return normalized
+        raise ProtocolError("unsupported MCP elicitation approval response")
     if method == "item/permissions/requestApproval":
         if set(normalized).difference({"permissions", "scope", "strictAutoReview"}):
             raise ProtocolError("permission approval response contains unknown fields")
@@ -348,6 +536,9 @@ async def taskkill_process_tree(pid: int) -> None:
 
 __all__ = [
     "APPROVAL_METHODS",
+    "MCP_ELICITATION_APPROVAL_METHOD",
+    "McpElicitationApproval",
+    "TOOL_USER_INPUT_METHOD",
     "build_environment",
     "decode_message",
     "default_process_factory",
@@ -356,6 +547,7 @@ __all__ = [
     "merge_extra_params",
     "normalize_input_items",
     "normalize_object",
+    "parse_mcp_elicitation_approval",
     "require_entity_response",
     "taskkill_process_tree",
     "validate_absolute_path",

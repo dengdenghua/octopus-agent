@@ -192,6 +192,18 @@ def _task_from_doc(raw: str) -> Task | None:
         return None
 
 
+def _milestone_has_unfinished_tasks(conn: Any, milestone_id: str) -> bool:
+    rows = conn.execute(
+        "SELECT doc FROM tasks WHERE milestone_id=?",
+        (milestone_id,),
+    ).fetchall()
+    for (raw,) in rows:
+        task = _task_from_doc(str(raw))
+        if task is None or task.status != "done":
+            return True
+    return False
+
+
 def _available_milestone_id(
     project_id: str,
     preferred_id: str,

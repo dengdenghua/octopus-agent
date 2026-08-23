@@ -33,6 +33,13 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Literal, cast
 
+from ._config_validation import validate_apps_config as _validate_apps_config
+from ._config_validation import (
+    validate_permission_profile as _validate_permission_profile_section,
+)
+from ._config_validation import (
+    validate_provider_profile as _validate_provider_profile,
+)
 from ._security_support import (
     _MARKER_FILE,
     CodexSecurityError,
@@ -50,6 +57,7 @@ from ._security_support import (
     _validate_workspace,
     _write_marker,
 )
+from .types import CodexProviderProfile
 
 CodexSandboxMode = Literal["read-only", "workspace-write"]
 ApprovalFailureDecision = Literal["decline"]
@@ -202,6 +210,8 @@ class CodexSidecarContext:
     thread_key: str
     task_key: str
     _launch_env: Mapping[str, str] = field(repr=False)
+    provider_profile: CodexProviderProfile | None = field(default=None, repr=False)
+    selected_app_ids: tuple[str, ...] = ()
 
     def launch_env(self) -> dict[str, str]:
         """Return a mutable copy suitable for ``subprocess.Popen(env=...)``."""
@@ -263,8 +273,10 @@ class CodexSidecarContext:
         _expect_value(config, "web_search", "disabled", errors)
         _expect_value(config, "allow_login_shell", False, errors)
         _expect_value(config, "check_for_update_on_startup", False, errors)
+        _expect_value(config, "cli_auth_credentials_store", "file", errors)
         _expect_value(config, "file_opener", "none", errors)
         _expect_value(config, "notify", [], errors)
+        _validate_provider_profile(config, self.provider_profile, errors)
 
         if config.get("sandbox_mode") is not None:
             errors.append("legacy sandbox_mode must be absent when permissions profiles are active")
@@ -295,7 +307,13 @@ class CodexSidecarContext:
         features = _mapping_at(config, "features", errors)
         if features is not None:
             for feature_name in _LOCKED_OFF_FEATURES:
-                _expect_value(features, feature_name, False, errors, prefix="features.")
+                _expect_value(
+                    features,
+                    feature_name,
+                    bool(self.selected_app_ids) if feature_name == "apps" else False,
+                    errors,
+                    prefix="features.",
+                )
             for feature_name, enabled in features.items():
                 if (
                     feature_name not in _LOCKED_OFF_FEATURES
@@ -308,25 +326,15 @@ class CodexSidecarContext:
         if agents is not None and _non_null_items(agents) != {"enabled": False}:
             errors.append("agents must be fully disabled")
 
-        apps = config.get("apps")
-        if apps is not None:
-            if not isinstance(apps, Mapping):
-                errors.append("apps must be an object when present")
-            elif set(apps) != {"_default"}:
-                errors.append("apps may contain only the disabled _default policy")
-            else:
-                default_app = apps.get("_default")
-                if default_app is not None:
-                    if not isinstance(default_app, Mapping):
-                        errors.append("apps._default must be an object")
-                    elif _non_null_items(cast(Mapping[str, object], default_app)) != {
-                        "enabled": False,
-                        "destructive_enabled": False,
-                        "open_world_enabled": False,
-                    }:
-                        errors.append("apps._default must be fully disabled")
+        _validate_apps_config(config, self.selected_app_ids, errors)
 
-        _validate_permission_profile(config, self, errors)
+        _validate_permission_profile_section(
+            config,
+            self,
+            errors,
+            profile_name=PERMISSION_PROFILE,
+            protected_workspace_subpaths=_PROTECTED_WORKSPACE_SUBPATHS,
+        )
 
         shell_env = _mapping_at(config, "shell_environment_policy", errors)
         if shell_env is not None:
@@ -484,6 +492,8 @@ class CodexSidecarSecurity:
         task_id: str,
         workspace: Path,
         sandbox_mode: CodexSandboxMode = "workspace-write",
+        provider_profile: CodexProviderProfile | None = None,
+        selected_app_ids: tuple[str, ...] = (),
         outer_hard_sandbox_active: bool = False,
         host_env: Mapping[str, str] | None = None,
     ) -> CodexSidecarContext:
@@ -493,6 +503,16 @@ class CodexSidecarSecurity:
             raise CodexSecurityError(
                 "Codex sidecars only allow 'read-only' or 'workspace-write' sandbox modes"
             )
+        if provider_profile is not None and not isinstance(provider_profile, CodexProviderProfile):
+            raise CodexSecurityError("provider_profile must be server-resolved")
+        if len(selected_app_ids) > 32 or any(
+            not isinstance(app_id, str)
+            or not app_id.strip()
+            or len(app_id) > 256
+            or any(char in app_id for char in "\x00\r\n")
+            for app_id in selected_app_ids
+        ):
+            raise CodexSecurityError("selected_app_ids must be server-resolved safe identifiers")
         if self._policy.outer_hard_sandbox_required and not outer_hard_sandbox_active:
             raise CodexSecurityError(
                 "this deployment requires an active outer hard sandbox for Codex sidecars"
@@ -582,6 +602,15 @@ class CodexSidecarSecurity:
             app_home=app_home,
             app_tmp=task_root / "tmp",
         )
+        if provider_profile is not None and provider_profile.scoped_bearer_token is not None:
+            # This fixed, turn-scoped credential is visible only to the App
+            # Server process.  `_tool_environment` below rebuilds command
+            # environments from an explicit non-secret allowlist, so model-
+            # controlled shell/tool subprocesses never inherit it.
+            auth_env_key = provider_profile.auth_env_key
+            if auth_env_key is None:  # guarded again at the security boundary
+                raise CodexSecurityError("scoped provider authentication is incomplete")
+            launch_env[auth_env_key] = provider_profile.scoped_bearer_token
         context = CodexSidecarContext(
             state_root=state_root,
             thread_root=thread_root,
@@ -600,6 +629,8 @@ class CodexSidecarSecurity:
             tenant_key=tenant_key,
             thread_key=thread_key,
             task_key=task_key,
+            provider_profile=provider_profile,
+            selected_app_ids=tuple(dict.fromkeys(selected_app_ids)),
             _launch_env=MappingProxyType(launch_env),
         )
         _read_binding_file(context)
@@ -706,6 +737,7 @@ def _render_codex_config(context: CodexSidecarContext) -> str:
         "allow_login_shell = false",
         'web_search = "disabled"',
         "check_for_update_on_startup = false",
+        'cli_auth_credentials_store = "file"',
         'file_opener = "none"',
         f"sqlite_home = {_toml_string(str(context.codex_home / 'sqlite'))}",
         "notify = []",
@@ -729,8 +761,29 @@ def _render_codex_config(context: CodexSidecarContext) -> str:
         "",
         "[shell_environment_policy.set]",
     ]
+    if context.provider_profile is not None:
+        profile = context.provider_profile
+        lines[1:1] = [
+            f"model = {_toml_string(profile.model)}",
+            f"model_provider = {_toml_string(profile.provider_id)}",
+        ]
     for name, value in sorted(tool_env.items(), key=lambda item: item[0].upper()):
         lines.append(f"{_toml_string(name)} = {_toml_string(value)}")
+
+    if context.provider_profile is not None:
+        profile = context.provider_profile
+        lines.extend(
+            [
+                "",
+                f"[model_providers.{profile.provider_id}]",
+                f"name = {_toml_string(profile.name)}",
+                f"base_url = {_toml_string(profile.base_url)}",
+                f"wire_api = {_toml_string(profile.wire_api)}",
+                f"requires_openai_auth = {str(profile.requires_openai_auth).lower()}",
+            ]
+        )
+        if profile.auth_env_key is not None:
+            lines.append(f"env_key = {_toml_string(profile.auth_env_key)}")
 
     lines.extend(
         [
@@ -739,9 +792,17 @@ def _render_codex_config(context: CodexSidecarContext) -> str:
             "enabled = false",
             "destructive_enabled = false",
             "open_world_enabled = false",
+            *(
+                ('approvals_reviewer = "user"', 'default_tools_approval_mode = "prompt"')
+                if context.selected_app_ids
+                else ()
+            ),
             "",
             "[features]",
-            *[f"{name} = false" for name in _LOCKED_OFF_FEATURES],
+            *[
+                f"{name} = {str(bool(context.selected_app_ids) if name == 'apps' else False).lower()}"
+                for name in _LOCKED_OFF_FEATURES
+            ],
             "",
             f"[permissions.{PERMISSION_PROFILE}]",
             'description = "Octopus brokered Codex sidecar permissions."',
@@ -753,6 +814,18 @@ def _render_codex_config(context: CodexSidecarContext) -> str:
         ]
     )
     workspace_access = "write" if context.sandbox_mode == "workspace-write" else "read"
+    for app_id in context.selected_app_ids:
+        lines.extend(
+            [
+                "",
+                f"[apps.{_toml_string(app_id)}]",
+                "enabled = true",
+                "destructive_enabled = false",
+                "open_world_enabled = false",
+                'approvals_reviewer = "user"',
+                'default_tools_approval_mode = "prompt"',
+            ]
+        )
     lines.extend(
         [
             f"[permissions.{PERMISSION_PROFILE}.filesystem]",
@@ -894,79 +967,6 @@ def _read_binding_file(context: CodexSidecarContext) -> CodexThreadBinding | Non
     if binding != expected:
         raise CodexSecurityError("Codex thread binding does not match realm/tenant/thread/cwd")
     return binding
-
-
-def _validate_permission_profile(
-    config: Mapping[str, object],
-    context: CodexSidecarContext,
-    errors: list[str],
-) -> None:
-    permissions = _mapping_at(config, "permissions", errors)
-    if permissions is None:
-        return
-    raw_profile = permissions.get(PERMISSION_PROFILE)
-    if not isinstance(raw_profile, Mapping):
-        errors.append(f"permissions.{PERMISSION_PROFILE} must be an object")
-        return
-    profile = cast(Mapping[str, object], raw_profile)
-    # The built-in :workspace and :read-only parents both grant :root=read.
-    # This sidecar is a workspace boundary, so inheriting either profile would
-    # let generated commands read the service user's home and neighboring
-    # tenant data.  A standalone :minimal profile retains only the platform
-    # runtime reads Codex needs to launch built-in tools.
-    if profile.get("extends") is not None:
-        errors.append(f"permissions.{PERMISSION_PROFILE}.extends must be absent")
-
-    # App Server's config/read schema materializes an empty workspace_roots
-    # object even when the read-only profile omitted the table in TOML.
-    allowed_profile_keys = {
-        "description",
-        "extends",
-        "filesystem",
-        "network",
-        "workspace_roots",
-    }
-    unexpected = sorted(str(key) for key in set(profile) - allowed_profile_keys)
-    if unexpected:
-        errors.append(
-            f"permissions.{PERMISSION_PROFILE} has unexpected keys: {', '.join(unexpected)}"
-        )
-
-    expected_roots = {
-        str(context.workspace): True,
-        str(context.scratch_root): True,
-    }
-    raw_roots = profile.get("workspace_roots")
-    effective_roots = (
-        {} if raw_roots is None else dict(raw_roots) if isinstance(raw_roots, Mapping) else None
-    )
-    if effective_roots != expected_roots:
-        errors.append(
-            f"permissions.{PERMISSION_PROFILE}.workspace_roots must contain only workspace "
-            "and task scratch"
-        )
-
-    expected_filesystem = {
-        ":minimal": "read",
-        str(context.workspace): ("write" if context.sandbox_mode == "workspace-write" else "read"),
-        str(context.scratch_root): "write",
-        **{str(context.workspace / subpath): "read" for subpath in _PROTECTED_WORKSPACE_SUBPATHS},
-        ":tmpdir": "deny",
-        ":slash_tmp": "deny",
-        str(context.state_root): "deny",
-    }
-    raw_filesystem = profile.get("filesystem")
-    effective_filesystem = _non_null_items(raw_filesystem)
-    if effective_filesystem != expected_filesystem:
-        errors.append(
-            f"permissions.{PERMISSION_PROFILE}.filesystem must allow only minimal runtime, "
-            "workspace, and task scratch access"
-        )
-
-    raw_network = profile.get("network")
-    effective_network = _non_null_items(raw_network)
-    if effective_network != {"enabled": False}:
-        errors.append(f"permissions.{PERMISSION_PROFILE}.network must be fully disabled")
 
 
 __all__ = [

@@ -1,9 +1,4 @@
-"""Durable, tenant-scoped invitations for human Team Room members.
-
-Invitation secrets are bearer credentials.  This store therefore persists
-only a SHA-256 digest of each high-entropy token and keeps invitation
-lifecycle state separate from the room snapshot that is projected to clients.
-"""
+"""Durable, tenant-scoped invitations for human Team Room members."""
 
 from __future__ import annotations
 
@@ -20,13 +15,25 @@ from ._team_invitation_support import (
     _INVITE_COLUMNS,
     _JOIN_REQUEST_COLUMNS,
     _SCHEMA,
+    InvitationError,
+    InvitationExhausted,
+    InvitationExpired,
+    InvitationNotFound,
+    InvitationRevoked,
+    JoinRequestConflict,
+    JoinRequestNotFound,
     _as_utc,
     _default_db_path,
     _from_row,
     _hash_token,
     _join_request_from_row,
+    _join_request_has_reservation,
     _optional_note,
+    _raise_unusable,
     _required_text,
+    _reservation_by_id,
+    _reservation_row,
+    _reserved_payload,
     _status,
     _utc_now,
     _without_secret,
@@ -35,51 +42,10 @@ from ._team_invitation_support import (
     _parse_time as _parse_time,
 )
 
-
-class InvitationError(ValueError):
-    """Base class for invitation lifecycle failures."""
-
-
-class InvitationNotFound(InvitationError):
-    """The token does not exist in the caller's tenant."""
-
-
-class InvitationExpired(InvitationError):
-    """The token is past its expiry time."""
-
-
-class InvitationRevoked(InvitationError):
-    """The token was explicitly revoked."""
-
-
-class InvitationExhausted(InvitationError):
-    """The token has reached its maximum number of uses."""
-
-
-class JoinRequestNotFound(InvitationError):
-    """A tenant/room-scoped join request does not exist."""
-
-
-class JoinRequestConflict(InvitationError):
-    """The requested join-request transition is not valid from its state."""
-
-
 _T = TypeVar("_T")
 
 
-def _raise_unusable(invitation: dict[str, Any]) -> None:
-    status = str(invitation.get("status") or "")
-    if status == "expired":
-        raise InvitationExpired("invitation expired")
-    if status == "revoked":
-        raise InvitationRevoked("invitation revoked")
-    if status == "exhausted":
-        raise InvitationExhausted("invitation has reached its maximum uses")
-
-
 class TeamInvitationStore:
-    """SQLite invitation ledger with atomic, bounded token consumption."""
-
     def __init__(
         self,
         db_path: Path | str | None = None,
@@ -107,18 +73,15 @@ class TeamInvitationStore:
 
     @staticmethod
     def _refresh_join_request_states(conn: sqlite3.Connection, now: datetime) -> None:
-        """Materialize terminal states inherited from the invitation.
-
-        Expiry is not merely a presentation-time calculation: persisting it
-        makes list/poll results stable across restarts and prevents a stale
-        pending row from being approved after its bearer credential died.
-        Revoked or exhausted invitations cancel their remaining queue.
-        """
+        """Persist terminal states inherited from invitation expiry/capacity."""
 
         timestamp = now.isoformat()
         conn.execute(
             "UPDATE team_join_requests SET status = 'expired', updated_at = ? "
-            "WHERE status = 'pending' AND expires_at <= ?",
+            "WHERE status = 'pending' AND expires_at <= ? AND NOT EXISTS ("
+            "SELECT 1 FROM team_invitation_reservations r "
+            "WHERE r.invite_id = team_join_requests.invite_id "
+            "AND r.actor_id = team_join_requests.actor_id)",
             (timestamp, timestamp),
         )
         conn.execute(
@@ -126,7 +89,9 @@ class TeamInvitationStore:
             "WHERE status = 'pending' AND invite_id IN ("
             "SELECT invite_id FROM team_invitations "
             "WHERE revoked_at IS NOT NULL OR use_count >= max_uses"
-            ")",
+            ") AND NOT EXISTS (SELECT 1 FROM team_invitation_reservations r "
+            "WHERE r.invite_id = team_join_requests.invite_id "
+            "AND r.actor_id = team_join_requests.actor_id)",
             (timestamp,),
         )
 
@@ -158,6 +123,189 @@ class TeamInvitationStore:
                 request_row["room_id"],
             ),
         ).fetchone()
+
+    @staticmethod
+    def _reserve_use(
+        conn: sqlite3.Connection,
+        invitation: dict[str, Any],
+        *,
+        actor_id: str,
+        participant_id: str | None,
+        audit_request_id: str,
+        join_request_id: str | None,
+        decided_by: str | None,
+        membership_already_applied: bool,
+        now: datetime,
+    ) -> tuple[dict[str, Any], sqlite3.Row]:
+        row = _reservation_row(
+            conn,
+            invite_id=str(invitation["id"]),
+            actor_id=actor_id,
+        )
+        if row is not None:
+            reserved_participant_id = str(row["participant_id"] or "") or None
+            if participant_id is not None and reserved_participant_id != participant_id:
+                raise JoinRequestConflict("reserved membership identity changed")
+            if not membership_already_applied and invitation["status"] in {"expired", "revoked"}:
+                _raise_unusable(invitation)
+            return invitation, row
+        _raise_unusable(invitation)
+        next_use = int(invitation["use_count"]) + 1
+        cursor = conn.execute(
+            "UPDATE team_invitations SET use_count = ?, last_used_at = ? "
+            "WHERE invite_id = ? AND revoked_at IS NULL AND use_count = ? "
+            "AND use_count < max_uses",
+            (
+                next_use,
+                now.isoformat(),
+                invitation["id"],
+                invitation["use_count"],
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise InvitationExhausted("invitation could not be reserved")
+        conn.execute(
+            "INSERT INTO team_invitation_reservations("
+            "reservation_id, invite_id, tenant_id, room_id, actor_id, use_number, "
+            "participant_id, audit_request_id, join_request_id, decided_by, created_at"
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                f"reservation-{uuid4().hex}",
+                invitation["id"],
+                invitation["tenant_id"],
+                invitation["room_id"],
+                actor_id,
+                next_use,
+                participant_id,
+                audit_request_id,
+                join_request_id,
+                decided_by,
+                now.isoformat(),
+            ),
+        )
+        invitation = {
+            **invitation,
+            "use_count": next_use,
+            "last_used_at": now.isoformat(),
+            "remaining_uses": max(0, int(invitation["max_uses"]) - next_use),
+        }
+        invitation["status"] = _status(invitation, now)
+        row = _reservation_row(
+            conn,
+            invite_id=str(invitation["id"]),
+            actor_id=actor_id,
+        )
+        if row is None:  # pragma: no cover - insert/select invariant
+            raise RuntimeError("invitation reservation did not return a row")
+        return invitation, row
+
+    def has_consumption_reservation(self, *, invite_id: str, actor_id: str) -> bool:
+        invite_id = _required_text(invite_id, label="invite_id")
+        actor_id = _required_text(actor_id, label="actor_id")
+        with self._lock, self._connect() as conn:
+            return _reservation_row(conn, invite_id=invite_id, actor_id=actor_id) is not None
+
+    def _finalize_reservation(
+        self,
+        reservation_id: str,
+    ) -> tuple[dict[str, Any], dict[str, Any] | None, bool]:
+        now = _as_utc(self._clock())
+        with self._lock, self._connect() as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                reservation = _reservation_by_id(conn, reservation_id)
+                if reservation is None:
+                    raise RuntimeError("invitation reservation not found")
+                changed = reservation["finalized_at"] is None
+                if changed:
+                    conn.execute(
+                        "INSERT INTO team_invitation_uses("
+                        "invite_id, use_number, tenant_id, room_id, actor_id, used_at, request_id"
+                        ") VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            reservation["invite_id"],
+                            reservation["use_number"],
+                            reservation["tenant_id"],
+                            reservation["room_id"],
+                            reservation["actor_id"],
+                            reservation["created_at"],
+                            reservation["audit_request_id"],
+                        ),
+                    )
+                    timestamp = now.isoformat()
+                    if reservation["join_request_id"] is not None:
+                        cursor = conn.execute(
+                            "UPDATE team_join_requests SET status = 'approved', updated_at = ?, "
+                            "decided_at = ?, decided_by = ?, decision_reason = '', "
+                            "participant_id = ? WHERE request_id = ? AND status = 'pending'",
+                            (
+                                timestamp,
+                                timestamp,
+                                reservation["decided_by"],
+                                reservation["participant_id"],
+                                reservation["join_request_id"],
+                            ),
+                        )
+                        if cursor.rowcount != 1:
+                            raise JoinRequestConflict("join request approval was superseded")
+                    elif reservation["participant_id"] is not None:
+                        conn.execute(
+                            "UPDATE team_join_requests SET status = 'approved', updated_at = ?, "
+                            "decided_at = ?, decided_by = ?, decision_reason = ?, "
+                            "participant_id = ? WHERE invite_id = ? AND actor_id = ? "
+                            "AND status = 'pending'",
+                            (
+                                timestamp,
+                                timestamp,
+                                reservation["actor_id"],
+                                "joined after direct-join policy",
+                                reservation["participant_id"],
+                                reservation["invite_id"],
+                                reservation["actor_id"],
+                            ),
+                        )
+                    conn.execute(
+                        "UPDATE team_invitation_reservations SET finalized_at = ? "
+                        "WHERE reservation_id = ? AND finalized_at IS NULL",
+                        (timestamp, reservation_id),
+                    )
+                    conn.execute(
+                        "UPDATE team_join_requests SET status = 'cancelled', updated_at = ?, "
+                        "decision_reason = ? WHERE invite_id = ? AND status = 'pending' "
+                        "AND invite_id IN (SELECT invite_id FROM team_invitations "
+                        "WHERE use_count >= max_uses) "
+                        "AND NOT EXISTS (SELECT 1 FROM team_invitation_reservations r "
+                        "WHERE r.invite_id = team_join_requests.invite_id "
+                        "AND r.actor_id = team_join_requests.actor_id)",
+                        (
+                            timestamp,
+                            "invitation exhausted",
+                            reservation["invite_id"],
+                        ),
+                    )
+                invite_row = conn.execute(
+                    f"SELECT {_INVITE_COLUMNS} FROM team_invitations WHERE invite_id = ?",  # noqa: S608
+                    (reservation["invite_id"],),
+                ).fetchone()
+                request_row = (
+                    self._request_row(
+                        conn,
+                        str(reservation["join_request_id"]),
+                        tenant_id=str(reservation["tenant_id"]),
+                        room_id=str(reservation["room_id"]),
+                    )
+                    if reservation["join_request_id"] is not None
+                    else None
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+        if invite_row is None:  # pragma: no cover - foreign-key invariant
+            raise RuntimeError("reserved invitation not found")
+        invitation = _without_secret(_from_row(invite_row, now=now))
+        application = _join_request_from_row(request_row) if request_row is not None else None
+        return invitation, application, changed
 
     def create(
         self,
@@ -279,7 +427,10 @@ class TeamInvitationStore:
                 conn.execute(
                     "UPDATE team_join_requests SET status = 'cancelled', updated_at = ?, "
                     "decided_at = ?, decided_by = ?, decision_reason = ? "
-                    "WHERE invite_id = ? AND status = 'pending'",
+                    "WHERE invite_id = ? AND status = 'pending' AND NOT EXISTS ("
+                    "SELECT 1 FROM team_invitation_reservations r "
+                    "WHERE r.invite_id = team_join_requests.invite_id "
+                    "AND r.actor_id = team_join_requests.actor_id)",
                     (
                         now.isoformat(),
                         now.isoformat(),
@@ -309,7 +460,10 @@ class TeamInvitationStore:
             conn.execute(
                 "UPDATE team_join_requests SET status = 'cancelled', updated_at = ?, "
                 "decided_at = ?, decided_by = ?, decision_reason = ? "
-                "WHERE tenant_id = ? AND room_id = ? AND status = 'pending'",
+                "WHERE tenant_id = ? AND room_id = ? AND status = 'pending' "
+                "AND NOT EXISTS (SELECT 1 FROM team_invitation_reservations r "
+                "WHERE r.invite_id = team_join_requests.invite_id "
+                "AND r.actor_id = team_join_requests.actor_id)",
                 (now, now, revoked_by, "team room revoked", tenant_id, room_id),
             )
         return int(cursor.rowcount)
@@ -324,15 +478,8 @@ class TeamInvitationStore:
         request_id: str,
         apply: Callable[[dict[str, Any]], _T],
         participant_id: str | None = None,
-    ) -> tuple[dict[str, Any], _T]:
-        """Consume one use and apply the room mutation before committing.
-
-        ``BEGIN IMMEDIATE`` serializes consumers across processes.  If the
-        supplied room mutation raises, the use counter and acceptance audit
-        roll back together.  This is the tightest atomic boundary available
-        while legacy room membership remains in its JSON snapshot.
-        """
-
+        membership_already_applied: bool = False,
+    ) -> tuple[dict[str, Any], _T | None]:
         tenant_id = _required_text(tenant_id, label="tenant_id")
         room_id = _required_text(room_id, label="room_id")
         actor_id = _required_text(actor_id, label="actor_id")
@@ -344,7 +491,6 @@ class TeamInvitationStore:
         )
         token_hash = _hash_token(_required_text(token, label="invite token"))
         now = _as_utc(self._clock())
-
         with self._lock, self._connect() as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
@@ -356,68 +502,29 @@ class TeamInvitationStore:
                 if row is None:
                     raise InvitationNotFound("invitation not found")
                 current = _from_row(row, now=now)
-                _raise_unusable(current)
-                next_use = int(current["use_count"]) + 1
-                cursor = conn.execute(
-                    "UPDATE team_invitations SET use_count = ?, last_used_at = ? "
-                    "WHERE invite_id = ? AND revoked_at IS NULL AND use_count = ?",
-                    (next_use, now.isoformat(), current["id"], current["use_count"]),
+                current, reservation = self._reserve_use(
+                    conn,
+                    current,
+                    actor_id=actor_id,
+                    participant_id=resolved_participant_id,
+                    audit_request_id=request_id,
+                    join_request_id=None,
+                    decided_by=None,
+                    membership_already_applied=membership_already_applied,
+                    now=now,
                 )
-                if cursor.rowcount != 1:  # pragma: no cover - BEGIN IMMEDIATE serializes this
-                    raise InvitationExhausted("invitation could not be consumed")
-                conn.execute(
-                    "INSERT INTO team_invitation_uses("
-                    "invite_id, use_number, tenant_id, room_id, actor_id, used_at, request_id"
-                    ") VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        current["id"],
-                        next_use,
-                        tenant_id,
-                        room_id,
-                        actor_id,
-                        now.isoformat(),
-                        request_id,
-                    ),
-                )
-                if resolved_participant_id is not None:
-                    conn.execute(
-                        "UPDATE team_join_requests SET status = 'approved', updated_at = ?, "
-                        "decided_at = ?, decided_by = ?, decision_reason = ?, "
-                        "participant_id = ? WHERE invite_id = ? AND actor_id = ? "
-                        "AND status = 'pending'",
-                        (
-                            now.isoformat(),
-                            now.isoformat(),
-                            actor_id,
-                            "joined after direct-join policy",
-                            resolved_participant_id,
-                            current["id"],
-                            actor_id,
-                        ),
-                    )
-                consumed = {
-                    **current,
-                    "use_count": next_use,
-                    "last_used_at": now.isoformat(),
-                    "remaining_uses": max(0, int(current["max_uses"]) - next_use),
-                }
-                consumed["status"] = _status(consumed, now)
-                result = apply(_without_secret(consumed))
-                if consumed["status"] == "exhausted":
-                    conn.execute(
-                        "UPDATE team_join_requests SET status = 'cancelled', updated_at = ?, "
-                        "decision_reason = ? WHERE invite_id = ? AND status = 'pending'",
-                        (
-                            now.isoformat(),
-                            "invitation exhausted",
-                            current["id"],
-                        ),
-                    )
                 conn.commit()
             except Exception:
                 conn.rollback()
                 raise
-        return _without_secret(consumed), result
+        consumed = _reserved_payload(current, reservation)
+        if reservation["finalized_at"] is not None:
+            return consumed, None
+        result = apply(consumed)
+        finalized, _application, _changed = self._finalize_reservation(
+            str(reservation["reservation_id"])
+        )
+        return {**consumed, **finalized}, result
 
     def create_join_request(
         self,
@@ -428,12 +535,7 @@ class TeamInvitationStore:
         actor_id: str,
         display_name: str,
     ) -> tuple[dict[str, Any], dict[str, Any], bool]:
-        """Create one durable application per invitation and actor.
-
-        Replays return the original row, including its terminal state.  This
-        prevents duplicate approval cards and makes browser retries safe even
-        when the first response was lost.
-        """
+        """Create one durable, replay-safe application per invitation and actor."""
 
         tenant_id = _required_text(tenant_id, label="tenant_id")
         room_id = _required_text(room_id, label="room_id")
@@ -601,6 +703,8 @@ class TeamInvitationStore:
                     return application
                 if application["status"] != "pending":
                     raise JoinRequestConflict(f"join request is already {application['status']}")
+                if _join_request_has_reservation(conn, application):
+                    raise JoinRequestConflict("join request approval is in progress")
                 timestamp = now.isoformat()
                 conn.execute(
                     "UPDATE team_join_requests SET status = 'withdrawn', updated_at = ?, "
@@ -661,6 +765,8 @@ class TeamInvitationStore:
                     return application, False
                 if application["status"] != "pending":
                     raise JoinRequestConflict(f"join request is already {application['status']}")
+                if _join_request_has_reservation(conn, application):
+                    raise JoinRequestConflict("join request approval is in progress")
                 timestamp = now.isoformat()
                 conn.execute(
                     "UPDATE team_join_requests SET status = 'rejected', updated_at = ?, "
@@ -717,6 +823,8 @@ class TeamInvitationStore:
                     return application, False
                 if application["status"] != "pending":
                     raise JoinRequestConflict(f"join request is already {application['status']}")
+                if _join_request_has_reservation(conn, application):
+                    raise JoinRequestConflict("join request approval is in progress")
                 timestamp = now.isoformat()
                 conn.execute(
                     "UPDATE team_join_requests SET status = 'approved', updated_at = ?, "
@@ -755,9 +863,8 @@ class TeamInvitationStore:
         participant_id: str,
         audit_request_id: str,
         apply: Callable[[dict[str, Any], dict[str, Any]], _T],
+        membership_already_applied: bool = False,
     ) -> tuple[dict[str, Any], dict[str, Any], _T | None, bool]:
-        """Approve, consume one invite use, and persist membership as one gate."""
-
         request_id = _required_text(request_id, label="request_id")
         tenant_id = _required_text(tenant_id, label="tenant_id")
         room_id = _required_text(room_id, label="room_id")
@@ -765,7 +872,6 @@ class TeamInvitationStore:
         participant_id = _required_text(participant_id, label="participant_id")
         audit_request_id = _required_text(audit_request_id, label="audit_request_id")
         now = _as_utc(self._clock())
-        result: _T | None = None
         with self._lock, self._connect() as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
@@ -791,71 +897,51 @@ class TeamInvitationStore:
                         None,
                         False,
                     )
-                if application["status"] != "pending":
-                    raise JoinRequestConflict(f"join request is already {application['status']}")
-                _raise_unusable(invitation)
-                next_use = int(invitation["use_count"]) + 1
-                cursor = conn.execute(
-                    "UPDATE team_invitations SET use_count = ?, last_used_at = ? "
-                    "WHERE invite_id = ? AND revoked_at IS NULL AND use_count = ?",
-                    (
-                        next_use,
-                        now.isoformat(),
-                        invitation["id"],
-                        invitation["use_count"],
-                    ),
-                )
-                if cursor.rowcount != 1:  # pragma: no cover - serialized transaction
-                    raise InvitationExhausted("invitation could not be consumed")
-                conn.execute(
-                    "INSERT INTO team_invitation_uses("
-                    "invite_id, use_number, tenant_id, room_id, actor_id, used_at, request_id"
-                    ") VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        invitation["id"],
-                        next_use,
-                        tenant_id,
-                        room_id,
-                        application["actor_id"],
-                        now.isoformat(),
-                        audit_request_id,
-                    ),
-                )
-                timestamp = now.isoformat()
-                conn.execute(
-                    "UPDATE team_join_requests SET status = 'approved', updated_at = ?, "
-                    "decided_at = ?, decided_by = ?, decision_reason = '', participant_id = ? "
-                    "WHERE request_id = ? AND status = 'pending'",
-                    (timestamp, timestamp, decided_by, participant_id, request_id),
-                )
-                consumed = {
-                    **invitation,
-                    "use_count": next_use,
-                    "last_used_at": timestamp,
-                    "remaining_uses": max(0, int(invitation["max_uses"]) - next_use),
-                }
-                consumed["status"] = _status(consumed, now)
-                if consumed["status"] == "exhausted":
-                    conn.execute(
-                        "UPDATE team_join_requests SET status = 'cancelled', updated_at = ?, "
-                        "decision_reason = ? WHERE invite_id = ? AND status = 'pending'",
-                        (timestamp, "invitation exhausted", invitation["id"]),
-                    )
-                approved_row = self._request_row(
+                reservation = _reservation_row(
                     conn,
-                    request_id,
-                    tenant_id=tenant_id,
-                    room_id=room_id,
+                    invite_id=str(invitation["id"]),
+                    actor_id=str(application["actor_id"]),
                 )
-                if approved_row is None:  # pragma: no cover - update/select invariant
-                    raise RuntimeError("join request approval did not return a row")
-                approved = _join_request_from_row(approved_row)
-                result = apply(_without_secret(consumed), approved)
+                if application["status"] != "pending" and reservation is None:
+                    raise JoinRequestConflict(f"join request is already {application['status']}")
+                invitation, reservation = self._reserve_use(
+                    conn,
+                    invitation,
+                    actor_id=str(application["actor_id"]),
+                    participant_id=participant_id,
+                    audit_request_id=audit_request_id,
+                    join_request_id=request_id,
+                    decided_by=decided_by,
+                    membership_already_applied=membership_already_applied,
+                    now=now,
+                )
                 conn.commit()
             except Exception:
                 conn.rollback()
                 raise
-        return _without_secret(consumed), approved, result, True
+        consumed = _reserved_payload(invitation, reservation)
+        if reservation["join_request_id"] != request_id:
+            raise JoinRequestConflict("actor already reserved this invitation")
+        if reservation["finalized_at"] is not None:
+            finalized, approved, _changed = self._finalize_reservation(
+                str(reservation["reservation_id"])
+            )
+            if approved is None:  # pragma: no cover - reservation invariant
+                raise RuntimeError("approved reservation has no join request")
+            return {**consumed, **finalized}, approved, None, False
+        pending_approval = {
+            **application,
+            "status": "approved",
+            "decided_by": str(reservation["decided_by"]),
+            "participant_id": str(reservation["participant_id"]),
+        }
+        result = apply(consumed, pending_approval)
+        finalized, approved, changed = self._finalize_reservation(
+            str(reservation["reservation_id"])
+        )
+        if approved is None:  # pragma: no cover - reservation invariant
+            raise RuntimeError("approved reservation has no join request")
+        return {**consumed, **finalized}, approved, result, changed
 
     def acceptances(self, *, invite_id: str) -> list[dict[str, Any]]:
         """Administrative audit records; never contains the bearer token."""
@@ -873,6 +959,7 @@ class TeamInvitationStore:
         with self._lock, self._connect() as conn:
             conn.execute("DELETE FROM team_join_requests")
             conn.execute("DELETE FROM team_invitation_uses")
+            conn.execute("DELETE FROM team_invitation_reservations")
             conn.execute("DELETE FROM team_invitations")
 
 

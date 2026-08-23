@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "backend:build:win": "node build-backend-win.cjs",
+    "codex:prepare:win": "node prepare-codex-win.cjs",
     "electron": "pnpm --dir ../../frontend electron",
     "electron:dev": "pnpm --dir ../../frontend electron:dev",
     "electron:build": "node -e \"console.error('Desktop release builds are Windows-only; use electron:build:win');process.exit(1)\"",

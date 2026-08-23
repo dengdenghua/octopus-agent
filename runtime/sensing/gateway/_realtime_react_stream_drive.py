@@ -38,7 +38,7 @@ from runtime.sensing.gateway._realtime_react_stream_helpers import (
     _SINGLE_AGENT_HEARTBEAT_INTERVAL_S,
     _TERMINAL_REACT_EVENT_TYPES,
     _agentic_stream_event_to_react_event,
-    _apply_orchestration_grant,
+    _apply_react_session_metadata,
     _emit_turn_heartbeat,
     _is_coalescable_delta,
     _lease_renewal_interval_s,
@@ -489,7 +489,7 @@ async def _drive_react(
         from runtime.platform.process.session import Session, session_scope
 
         session_metadata = dict(intent.user_context or {})
-        _apply_orchestration_grant(session_metadata)
+        _apply_react_session_metadata(session_metadata, runtime._stack, provider)
         # Sub-agents spawned inside the turn (run_orchestration fan-out,
         # call_agent_parallel, ...) mirror their lifecycle/tool events onto
         # the journal ONLY when the bound Session carries one
@@ -507,6 +507,7 @@ async def _drive_react(
             session_metadata["_trace_store"] = runtime._trace_store
         session_agent = agent if hasattr(agent, "agent_id") else None
         turn_session = Session(
+            actor=getattr(intent, "actor", None),
             agent=session_agent,
             thread_id=turn.thread_id,
             conversation_id=turn.thread_id,

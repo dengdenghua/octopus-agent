@@ -87,6 +87,10 @@ def _unregister_thread_turn(thread_id: str, runtime: CerebrumRuntime, turn_id: s
     with _THREAD_TURN_REGISTRY_LOCK:
         entry = _THREAD_TURN_REGISTRY.get(thread_id)
         if entry is not None and entry == (runtime, turn_id):
+            # This lock is the injection linearization barrier.  Close intake
+            # before removing the route so an injector either finishes before
+            # teardown or observes a closed/missing turn and returns False.
+            runtime._turn_steering_accepting[turn_id] = False
             del _THREAD_TURN_REGISTRY[thread_id]
 
 
@@ -128,9 +132,21 @@ def _inject_thread_steering(
             remaining = budget.get(turn_id, _max_turn_steering_injections())
         if remaining <= 0:
             return False
+        active = runtime._active_turns.get(turn_id)
+        if active is None:
+            # Teardown order is the reverse of what this guard once claimed:
+            # ``_unregister_thread_turn`` closes intake and drops the registry
+            # entry *under this same lock*, and only then does
+            # ``_unregister_active_turn`` pop the active snapshot. So a racing
+            # worker is already turned away by the accepting/registry guards
+            # above, and reaching here means a caller mutated ``_active_turns``
+            # out of band. Keep the guard as a belt-and-braces refusal — queuing
+            # into an orphaned buffer would ack a durable report that never
+            # landed — but decrement the budget only once the injection is
+            # actually going to happen, so a refused attempt cannot burn a slot.
+            return False
         if budget is not None:
             budget[turn_id] = remaining - 1
-        active = runtime._active_turns.get(turn_id)
         item = SteeringUserMessageItem(
             text=text,
             targetTurnId=turn_id,
@@ -246,10 +262,15 @@ def _register_active_turn(runtime: CerebrumRuntime, turn: Turn, log: EventLog) -
 
 
 def _unregister_active_turn(runtime: CerebrumRuntime, turn_id: str) -> None:
-    active = runtime._active_turns.pop(turn_id, None)
+    active = runtime._active_turns.get(turn_id)
     if active is not None:
+        # Retire the public injection route under its registry barrier before
+        # removing the active snapshot/queue.  Deferred report workers that
+        # arrive after this point fail injection and therefore leave their
+        # durable report unacknowledged.
         _unregister_thread_turn(active[0].thread_id, runtime, turn_id)
         _unregister_turn_injector(active[0].thread_id)
+        runtime._active_turns.pop(turn_id, None)
     runtime._turn_steering.pop(turn_id, None)
     _restored_steering(runtime).pop(turn_id, None)
     runtime._turn_steering_seen.pop(turn_id, None)
@@ -372,9 +393,15 @@ def _remove_active_turn_lease(runtime: CerebrumRuntime, turn_id: str) -> None:
 
 
 def _set_turn_steering_accepting(runtime: CerebrumRuntime, turn: Turn, accepting: bool) -> None:
-    if turn.id not in runtime._active_turns:
-        return
-    runtime._turn_steering_accepting[turn.id] = accepting
+    # Share the registry barrier with ``_inject_thread_steering``.  Closing
+    # intake and performing the lifecycle's final drain must be ordered with a
+    # worker-thread subagent injection: an injector that wins this lock queues
+    # before the drain, while one that loses observes ``False`` and leaves the
+    # durable report unacked for the next turn.
+    with _THREAD_TURN_REGISTRY_LOCK:
+        if turn.id not in runtime._active_turns:
+            return
+        runtime._turn_steering_accepting[turn.id] = accepting
     _write_active_turn_lease(runtime, turn)
 
 

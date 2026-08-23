@@ -30,6 +30,7 @@ function WorkbenchTabHeaderImpl({
   effectiveActiveTab,
   onTabClick,
   onTabClose,
+  onClose,
   workspaceLabel,
   showWorkspaceLabel,
   mainRunStatusLabel,
@@ -47,13 +48,14 @@ function WorkbenchTabHeaderImpl({
   effectiveActiveTab: AgentWorkbenchTabId;
   onTabClick: (tabId: AgentWorkbenchTabId) => void;
   onTabClose: (tabId: AgentWorkbenchTabId) => void;
+  onClose?: () => void;
   workspaceLabel?: string;
   showWorkspaceLabel?: boolean;
   mainRunStatusLabel?: string;
 }) {
   const { t } = useI18n();
   return (
-    <header className="relative shrink-0 border-b border-border-default px-3 py-2.5">
+    <header className="relative shrink-0 border-b border-border-default px-2.5 py-1.5">
       <div className="flex items-center gap-2.5">
         <MainComputerStatusButton
           active={mainButton.active}
@@ -93,7 +95,7 @@ function WorkbenchTabHeaderImpl({
               <div
                 key={id}
                 className={cn(
-                  "group inline-flex h-8 max-w-[11rem] shrink-0 items-center gap-1.5 rounded-lg border border-transparent text-sm font-medium shadow-none transition-colors",
+                  "inline-flex h-8 max-w-[11rem] shrink-0 items-center rounded-lg border border-transparent text-sm font-medium shadow-none transition-colors",
                   active
                     ? "border-border-subtle bg-background text-foreground"
                     : "text-muted-foreground hover:border-border-subtle hover:bg-background/45 hover:text-foreground",
@@ -105,29 +107,11 @@ function WorkbenchTabHeaderImpl({
                   aria-selected={active}
                   title={label}
                   onClick={() => onTabClick(id)}
-                  className="flex h-full min-w-0 items-center gap-1.5 pl-2.5"
+                  className="flex h-full min-w-0 items-center gap-1.5 px-2.5"
                 >
                   <Icon className="size-4 shrink-0" />
                   <span className="truncate">{label}</span>
                 </button>
-                <Tooltip content={t.editorTabs.closeTabAria(label)}>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onTabClose(id);
-                    }}
-                    className={cn(
-                      "mr-0.5 flex size-8 shrink-0 items-center justify-center rounded-md transition-colors",
-                      active
-                        ? "text-muted-foreground/70 hover:bg-muted hover:text-foreground focus-visible:bg-muted"
-                        : "text-muted-foreground/0 group-hover:text-muted-foreground/70 hover:!bg-muted hover:!text-foreground focus-visible:text-muted-foreground/70 focus-visible:bg-muted",
-                    )}
-                    aria-label={t.editorTabs.closeTabAria(label)}
-                  >
-                    <XIcon className="size-3" />
-                  </button>
-                </Tooltip>
               </div>
             );
           })}
@@ -161,6 +145,18 @@ function WorkbenchTabHeaderImpl({
             })}
           </DropdownMenuContent>
         </DropdownMenu>
+        {onClose ? (
+          <Tooltip content={t.collab.workbench.closeTitle}>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
+              aria-label={t.collab.workbench.closeTitle}
+            >
+              <XIcon className="size-4" />
+            </button>
+          </Tooltip>
+        ) : null}
       </div>
     </header>
   );

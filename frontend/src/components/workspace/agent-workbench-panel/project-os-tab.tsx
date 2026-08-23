@@ -51,6 +51,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { RoutedWebLink } from "@/components/ui/routed-web-link";
 import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 import { cn } from "@/lib/utils";
@@ -701,12 +702,18 @@ export function ProjectOsTab({
   onOpenArtifact,
   onInvitePeople,
   rosterSeats = [],
+  groupTitle,
+  currentThreadTitle,
 }: {
   state: ProjectFullState;
   onRefetch?: () => void | Promise<void>;
   onOpenArtifact?: (path: string) => void;
   onInvitePeople?: () => void | Promise<void>;
   rosterSeats?: WorkbenchRosterSeat[];
+  /** Visible room title. Used only to avoid repeating it in the workbench. */
+  groupTitle?: string | null;
+  /** Conversation title fallback for non-group project threads. */
+  currentThreadTitle?: string | null;
 }) {
   const { project, pm } = state;
   const [activeTab, setActiveTab] = useState<ProjectWorkbenchTabId>("overview");
@@ -880,6 +887,33 @@ export function ProjectOsTab({
   ).length;
   const projectGoal = project.goal?.trim();
   const projectName = project.name?.trim();
+  const normalizedProjectName = projectName?.replace(/\s+/g, " ").toLowerCase();
+  const titleRepeatsConversation = Boolean(
+    normalizedProjectName &&
+    [groupTitle, currentThreadTitle].some(
+      (title) =>
+        title?.trim().replace(/\s+/g, " ").toLowerCase() ===
+        normalizedProjectName,
+    ),
+  );
+  const hasPmOverviewData = Boolean(
+    pm &&
+    (normalizeProjectProgress(pm.overall_progress) > 0 ||
+      Number(pm.done_tasks) > 0 ||
+      Number(pm.total_tasks) > 0 ||
+      Number(pm.remaining_estimate) > 0 ||
+      pm.milestones?.length ||
+      pm.risks?.length ||
+      pm.blockers?.length ||
+      pm.next_actions?.length),
+  );
+  const isEmptyProject =
+    milestones.length === 0 &&
+    tasks.length === 0 &&
+    assets.length === 0 &&
+    projectDecisionViews(state.decisions).length === 0 &&
+    !state.retro &&
+    !hasPmOverviewData;
 
   const taskCounts = useMemo(
     () => ({
@@ -953,15 +987,38 @@ export function ProjectOsTab({
       data-testid="project-workbench"
       className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background/70"
     >
-      <header className="shrink-0 border-b border-border-subtle bg-gradient-to-br from-primary/[0.07] via-background to-background px-3 pb-3 pt-3">
+      <header
+        data-testid="project-workbench-context"
+        data-project-title-collapsed={titleRepeatsConversation}
+        className={cn(
+          "shrink-0 border-b border-border-subtle bg-gradient-to-br from-primary/[0.07] via-background to-background px-3",
+          titleRepeatsConversation ? "py-2" : "pb-3 pt-3",
+        )}
+      >
         <div className="flex min-w-0 items-start gap-2.5">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-primary/15 bg-primary/10 text-primary shadow-[var(--shadow-xs)]">
-            <FolderKanbanIcon className="size-4.5" />
+          <div
+            className={cn(
+              "flex shrink-0 items-center justify-center border border-primary/15 bg-primary/10 text-primary shadow-[var(--shadow-xs)]",
+              titleRepeatsConversation
+                ? "size-7 rounded-lg"
+                : "size-9 rounded-xl",
+            )}
+          >
+            <FolderKanbanIcon
+              className={titleRepeatsConversation ? "size-3.5" : "size-4.5"}
+            />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
-              <h3 className="min-w-0 flex-1 truncate text-sm font-semibold">
-                {project.name || project.id}
+              <h3
+                className={cn(
+                  "min-w-0 flex-1 truncate font-semibold",
+                  titleRepeatsConversation ? "text-xs" : "text-sm",
+                )}
+              >
+                {titleRepeatsConversation
+                  ? "项目工作台"
+                  : project.name || project.id}
               </h3>
               <Badge
                 variant="outline"
@@ -980,7 +1037,12 @@ export function ProjectOsTab({
             ) : null}
           </div>
         </div>
-        <div className="mt-2.5 flex items-center gap-2 text-[10px] text-muted-foreground">
+        <div
+          className={cn(
+            "flex items-center gap-2 text-[10px] text-muted-foreground",
+            titleRepeatsConversation ? "mt-1.5" : "mt-2.5",
+          )}
+        >
           {project.owner ? (
             <span className="inline-flex min-w-0 items-center gap-1">
               <UserRoundIcon className="size-3" />
@@ -1060,6 +1122,7 @@ export function ProjectOsTab({
             completedMilestones={completedMilestones}
             riskCount={riskCount}
             assetCount={assets.length}
+            isEmptyProject={isEmptyProject}
             pendingAction={pendingAction}
             onAction={(spec, key) => executeAction(spec, key)}
             onNavigate={setActiveTab}
@@ -1100,6 +1163,7 @@ function OverviewTab({
   completedMilestones,
   riskCount,
   assetCount,
+  isEmptyProject,
   pendingAction,
   onAction,
   onNavigate,
@@ -1112,6 +1176,7 @@ function OverviewTab({
   completedMilestones: number;
   riskCount: number;
   assetCount: number;
+  isEmptyProject: boolean;
   pendingAction: string | null;
   onAction: (spec: ProjectActionSpec, key: string) => void;
   onNavigate: (tab: ProjectWorkbenchTabId) => void;
@@ -1122,6 +1187,62 @@ function OverviewTab({
   const blockers = pm?.blockers ?? [];
   const decisions = projectDecisionViews(state.decisions);
   const hasRemainingEstimate = Number(pm?.remaining_estimate) > 0;
+
+  if (isEmptyProject) {
+    return (
+      <div className="p-3">
+        <section
+          data-testid="project-empty-launch-card"
+          className="overflow-hidden rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/[0.08] via-card to-card p-4 shadow-[var(--shadow-xs)]"
+        >
+          <div className="flex size-10 items-center justify-center rounded-xl border border-primary/15 bg-primary/10 text-primary">
+            <CircleDotDashedIcon className="size-5" />
+          </div>
+          <h4 className="mt-3 text-sm font-semibold text-foreground">
+            从第一个里程碑开始
+          </h4>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+            在群聊中明确项目计划，或打开管理页创建里程碑和事项；后续进展会自动汇总到这里。
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {actionSpecs.length > 0 ? (
+              actionSpecs.map((spec, index) => {
+                const key = `project:${spec.action}:${index}`;
+                const loading = pendingAction === key;
+                return (
+                  <Button
+                    key={key}
+                    type="button"
+                    size="sm"
+                    variant={index === 0 ? "default" : "outline"}
+                    className="h-8 rounded-lg px-2.5 text-[11px]"
+                    disabled={!!pendingAction}
+                    onClick={() => onAction(spec, key)}
+                  >
+                    {loading ? (
+                      <Loader2Icon className="size-3 animate-spin" />
+                    ) : spec.action.startsWith("recover") ? (
+                      <RotateCcwIcon className="size-3" />
+                    ) : (
+                      <PlayIcon className="size-3" />
+                    )}
+                    {displayActionLabel(spec)}
+                  </Button>
+                );
+              })
+            ) : (
+              <Button asChild size="sm" className="h-8 rounded-lg text-[11px]">
+                <Link to="/workspace/projects">
+                  打开项目管理
+                  <ArrowRightIcon className="size-3" />
+                </Link>
+              </Button>
+            )}
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3 p-3">
@@ -1817,15 +1938,14 @@ function AssetsTab({
 
         if (isExternalUrl(asset.url)) {
           return (
-            <a
+            <RoutedWebLink
               key={asset.id}
               href={asset.url}
-              target="_blank"
-              rel="noreferrer"
+              openTargetSource="project-asset"
               className="flex w-full items-start gap-2.5 rounded-xl border border-border-default bg-card/60 p-3 text-left shadow-[var(--shadow-xs)] transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {card}
-            </a>
+            </RoutedWebLink>
           );
         }
         return (
@@ -1887,7 +2007,7 @@ function MembersTab({
         <EmptyState
           icon={<UsersIcon className="size-5" />}
           title="还没有项目成员"
-          description="成员加入项目群或被加入项目后，会统一显示在这里。"
+          description="成员加入工作群或被加入项目后，会统一显示在这里。"
         />
       ) : null}
       {members.map((member) => {

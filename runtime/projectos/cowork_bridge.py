@@ -11,7 +11,9 @@ swarm remains an independent response strategy for conversation turns.
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import suppress
 from typing import Any
+from uuid import uuid4
 
 from runtime.memory.cowork.group_store import GroupStore
 from runtime.memory.cowork.nominate import CompetenceStore, suggest
@@ -62,7 +64,8 @@ def nominate_assigner(
 def _compose_swarm_output(result: dict[str, Any], prompt: str) -> str:
     """Turn a group_fanout result into a project-task deliverable: the primary
     reply + supporting angles, labeled so the QA gate sees who said what."""
-    synthesis = result.get("synthesis") if isinstance(result.get("synthesis"), dict) else {}
+    raw_synthesis = result.get("synthesis")
+    synthesis = dict(raw_synthesis) if isinstance(raw_synthesis, dict) else {}
     primary = str(synthesis.get("primary_reply") or "").strip()
     support = [
         r
@@ -162,8 +165,22 @@ def team_execute_for_group(
             dispatch_context["tenant_id"] = tenant_id
         if isinstance(workspace_path, str) and workspace_path:
             dispatch_context["workspace_path"] = workspace_path
+        # Group fan-out and TeamRunner execute members on worker threads where
+        # the parent ContextVar is intentionally absent.  Carry the authenticated
+        # Project OS principal as an explicit Session so a production Coder can
+        # pass the role runner's trusted-principal gate without treating ordinary
+        # context identity fields as authorization.
+        from runtime.platform.process.session import Session
+
+        project_session = Session(
+            actor=actor or None,
+            thread_id=thread_id or None,
+            conversation_id=thread_id or None,
+            metadata=dict(runtime_session_metadata),
+        )
         call_kwargs: dict[str, Any] = {
             "context": dispatch_context,
+            "session": project_session,
             "timeout_s": timeout_s,
             "timeout_seconds": float(timeout_s),
         }
@@ -285,6 +302,7 @@ def engine_for_group(
     owner_id: str = "",
     tenant_id: str = "",
     subagent_runner: Callable[..., str] | None = None,
+    require_execution_binding: bool = False,
 ) -> ProjectEngine:
     """A ProjectEngine whose task→agent routing uses the cowork thread's roster.
 
@@ -308,6 +326,7 @@ def engine_for_group(
         **kwargs,
         owner_id=owner_id,
         tenant_id=tenant_id,
+        required_execution_thread_id=thread_id if require_execution_binding else "",
     )
 
 
@@ -330,22 +349,27 @@ def ensure_project_for_thread(
     execution stays user-triggered via Run/Tick so a mere mode switch never
     auto-runs a project.
     """
-    roster = [a for a, _ in roster_from_group(group_store, thread_id)]
-    if not roster:
+    if not roster_from_group(group_store, thread_id):
         return None
-    existing = project_store.project_for_thread(thread_id)
-    if existing is not None:
-        return existing.id
-    engine = engine_for_group(
+    result = run_project_from_group(
         project_store,
         group_store,
         thread_id,
+        name=name or "当前项目",
+        goal=goal or name or "当前目标",
+        run=False,
+        reuse_active=True,
         owner_id=owner_id,
         tenant_id=tenant_id,
     )
-    project = engine.plan(name or "当前项目", goal or name or "当前目标")
-    project_store.bind_thread(thread_id, project.id)
-    return project.id
+    if not result.get("ok", True):
+        raise RuntimeError(str(result.get("message") or "project attach needs recovery"))
+    raw_project = result.get("project")
+    project = raw_project if isinstance(raw_project, dict) else {}
+    project_id = str(project.get("id") or "").strip()
+    if not project_id:
+        raise RuntimeError("project attach returned no project id")
+    return project_id
 
 
 def full_project_state(project_store: ProjectStore, project_id: str) -> dict[str, Any] | None:
@@ -461,6 +485,7 @@ def project_task_to_collaboration(
     milestone_id: str,
     task: Task | dict[str, Any],
     tenant_id: str = "",
+    binding_generation: int | None = None,
 ) -> dict[str, Any] | None:
     """Project one authoritative Project OS task into collaboration storage.
 
@@ -480,6 +505,7 @@ def project_task_to_collaboration(
         room_id=room_id,
         project_id=project_id,
         milestone_id=milestone_id,
+        binding_generation=binding_generation,
         task={
             "id": raw.get("id"),
             "kind": "project",
@@ -525,14 +551,14 @@ def _task_available_actions(status: str) -> list[str]:
     if status in {"pending", "ready"}:
         return ["reassign", "reset", "complete", "skip"]
     if status == "running":
-        return ["reassign", "reset"]
+        return ["inspect"]
     if status == "done":
         return ["reset"]
     return ["inspect"]
 
 
 def _task_action_specs(project_id: str, task: Task) -> list[dict[str, Any]]:
-    specs = {
+    specs: dict[str, dict[str, Any]] = {
         "reassign": {
             "action": "reassign",
             "label": "Reassign",
@@ -592,10 +618,14 @@ def project_run_trace(
     state: dict[str, Any],
 ) -> dict[str, Any]:
     """Compact audit trace for Project OS runs over a cowork group."""
-    project = state.get("project") if isinstance(state.get("project"), dict) else {}
-    milestones = state.get("milestones") if isinstance(state.get("milestones"), list) else []
-    tasks_by_ms = state.get("tasks") if isinstance(state.get("tasks"), dict) else {}
-    history = result.get("history") if isinstance(result.get("history"), list) else []
+    raw_project = state.get("project")
+    project = dict(raw_project) if isinstance(raw_project, dict) else {}
+    raw_milestones = state.get("milestones")
+    milestones = list(raw_milestones) if isinstance(raw_milestones, list) else []
+    raw_tasks = state.get("tasks")
+    tasks_by_ms = dict(raw_tasks) if isinstance(raw_tasks, dict) else {}
+    raw_history = result.get("history")
+    history = list(raw_history) if isinstance(raw_history, list) else []
     tick_events: list[dict[str, Any]] = []
     for index, tick in enumerate(history, start=1):
         if not isinstance(tick, dict):
@@ -692,10 +722,70 @@ def run_project_from_group(
         owner_id=owner_id,
         tenant_id=tenant_id,
         subagent_runner=subagent_runner,
+        require_execution_binding=run,
     )
-    previously_bound_project = project_store.project_for_thread(thread_id)
+    previously_bound_project, binding_generation = project_store.binding_snapshot(thread_id)
     project = previously_bound_project if reuse_active else None
-    reused = bool(project is not None and project.status not in {"done", "failed"})
+    # A thread owns at most one optional project capability.  Once attached,
+    # retries return that same project even after it reaches a terminal state;
+    # creating a new project requires an explicit detach first.
+    reused = project is not None
+
+    def _recovery_state(
+        project_id: str,
+        *,
+        phase: str,
+        error: Exception,
+        winner_project_id: str = "",
+    ) -> dict[str, Any]:
+        preserved = project_store.get_project(project_id)
+        if preserved is None:
+            raise error
+        recovery_recorded = False
+        try:
+            project_store.append_event(
+                project_id,
+                kind="project.group_attach_recovery_pending",
+                payload={
+                    "thread_id": thread_id,
+                    "phase": phase,
+                    "reason": type(error).__name__,
+                    "winner_project_id": winner_project_id,
+                },
+            )
+        except Exception:  # noqa: BLE001 - the preserved plan is still the recovery anchor
+            recovery_recorded = False
+        else:
+            recovery_recorded = True
+        try:
+            preserved_state = full_project_state(project_store, project_id)
+        except Exception:  # noqa: BLE001 - return the source row even if its read model is broken
+            preserved_state = None
+        canonical, current_generation = project_store.binding_snapshot(thread_id)
+        detail = {
+            "code": "PROJECT_ATTACH_RECOVERY_PENDING",
+            "message": "project plan was preserved and needs an attach-only retry",
+            "project_id": project_id,
+            "thread_id": thread_id,
+            "phase": phase,
+            "winner_project_id": winner_project_id or (canonical.id if canonical else ""),
+            "recovery_recorded": recovery_recorded,
+            "recovery": {
+                "method": "POST",
+                "path": f"/api/projects/from-group/{thread_id}",
+                "run": False,
+            },
+        }
+        return {
+            "ok": False,
+            "error": "project_attach_recovery_pending",
+            "message": detail["message"],
+            "recovery_pending": True,
+            "recovery": detail,
+            "reused": False,
+            "binding_generation": current_generation,
+            **(preserved_state or {"project": preserved.to_dict()}),
+        }
 
     def _finish(
         *,
@@ -703,6 +793,8 @@ def run_project_from_group(
         state: dict[str, Any],
         event_kind: str,
     ) -> dict[str, Any]:
+        if project is None:
+            raise RuntimeError("project disappeared before lifecycle audit")
         trace = project_run_trace(
             thread_id=thread_id,
             roster=roster,
@@ -710,33 +802,73 @@ def run_project_from_group(
             result=result,
             state=state,
         )
-        project_store.append_event(
-            project.id,
-            kind=event_kind,
-            payload={
-                "thread_id": thread_id,
-                "actor": actor,
-                "response_mode": response_mode,
-                "roster": roster,
-                "reused": reused,
-                "run": run,
-                "max_ticks": normalize_run_ticks(max_ticks),
-                "trace": trace,
-            },
-        )
+        # Idempotent attach reads must not manufacture duplicate lifecycle
+        # events. Explicit execution still records every run request.
+        if event_kind != "project.attached_from_group" or not reused:
+            project_store.append_event(
+                project.id,
+                kind=event_kind,
+                payload={
+                    "thread_id": thread_id,
+                    "actor": actor,
+                    "response_mode": response_mode,
+                    "roster": roster,
+                    "reused": reused,
+                    "run": run,
+                    "max_ticks": normalize_run_ticks(max_ticks),
+                    "trace": trace,
+                },
+            )
         return {
             "ok": True,
             "roster": roster,
             "result": result,
             "reused": reused,
+            "binding_generation": binding_generation,
             "trace": trace,
             **state,
         }
 
     if not reused:
-        project = engine.plan(name, goal)
+        candidate_id = f"P-{uuid4().hex[:8]}"
         try:
-            project_store.bind_thread(thread_id, project.id)
+            candidate = engine.plan(name, goal, project_id=candidate_id)
+        except Exception as plan_error:
+            return _recovery_state(
+                candidate_id,
+                phase="plan_commit",
+                error=plan_error,
+            )
+        attached_candidate = False
+        try:
+            if reuse_active:
+                project, attached_candidate, binding_generation = (
+                    project_store.bind_thread_if_absent_versioned(
+                        thread_id,
+                        candidate.id,
+                    )
+                )
+                if not attached_candidate:
+                    # The plan transaction is already public. Preserve the CAS
+                    # loser's source rows and mark them as an auditable orphan
+                    # instead of deleting concurrent external work.
+                    with suppress(Exception):
+                        project_store.append_event(
+                            candidate.id,
+                            kind="project.group_attach_orphaned",
+                            payload={
+                                "thread_id": thread_id,
+                                "winner_project_id": project.id,
+                                "reason": "binding_cas_lost",
+                            },
+                        )
+                    reused = True
+            else:
+                project, binding_generation = project_store.bind_thread_versioned(
+                    thread_id,
+                    candidate.id,
+                )
+                attached_candidate = True
             attached_state = full_project_state(project_store, project.id)
             if attached_state is None:
                 raise RuntimeError(f"project disappeared after planning: {project.id}")
@@ -747,28 +879,22 @@ def run_project_from_group(
                     event_kind="project.attached_from_group",
                 )
         except Exception as attach_error:
-            # Until execution starts, this project is an implementation detail
-            # of one attach request. ProjectStore.delete_project removes its
-            # binding, milestones, tasks and audit events transactionally; the
-            # source group/thread/room lives in GroupStore and is untouched.
-            try:
-                deleted = project_store.delete_project(project.id)
-                if (
-                    deleted
-                    and previously_bound_project is not None
-                    and previously_bound_project.id != project.id
-                ):
-                    project_store.bind_thread(thread_id, previously_bound_project.id)
-            except Exception as cleanup_error:  # noqa: BLE001
-                raise RuntimeError("project attach and compensation failed") from cleanup_error
-            if not deleted:
-                raise RuntimeError("project attach compensation failed") from attach_error
-            raise
+            canonical, _generation = project_store.binding_snapshot(thread_id)
+            return _recovery_state(
+                candidate.id,
+                phase="attach",
+                error=attach_error,
+                winner_project_id=canonical.id if canonical is not None else "",
+            )
     else:
+        if project is None:  # pragma: no cover - ``reused`` proves this invariant
+            raise RuntimeError("project disappeared before attach")
         attached_state = full_project_state(project_store, project.id)
         if attached_state is None:
             raise RuntimeError(f"project disappeared before attach: {project.id}")
 
+    if project is None:  # pragma: no cover - every successful attach assigns it
+        raise RuntimeError("project disappeared before attach")
     if not run:
         return _finish(
             result={"final_status": project.status},

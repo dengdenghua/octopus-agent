@@ -18,6 +18,9 @@ from runtime.protocol import (
     SteeringUserMessageItem,
     TurnStatus,
 )
+from runtime.sensing.gateway._realtime_thread_delete_probe import (
+    claimed_runtime_thread_write,
+)
 from runtime.sensing.gateway.realtime_gateway import EventEmitter, _RpcError
 
 if TYPE_CHECKING:
@@ -210,9 +213,7 @@ async def _handle_request(
             # in-progress turn for live work after the server has already
             # reaped it as stale.
             "lastTurnId": last_turn.id if last_turn is not None else None,
-            "lastTurnStatus": (
-                last_turn.status.value if last_turn is not None else None
-            ),
+            "lastTurnStatus": (last_turn.status.value if last_turn is not None else None),
             "hasMore": has_more,
             "incremental": False,
             "nextEventSequence": next_sequence,
@@ -310,10 +311,11 @@ async def _handle_request(
         }
     if method == "thread/compact":
         thread_id = runtime._require_thread_id(params.get("threadId"))
-        runtime._require_thread_owner(
-            runtime._log_for(thread_id), getattr(emitter, "actor_id", None)
-        )
-        return await runtime.compact_thread(thread_id, emitter)
+        async with claimed_runtime_thread_write(runtime, thread_id):
+            runtime._require_thread_owner(
+                runtime._log_for(thread_id), getattr(emitter, "actor_id", None)
+            )
+            return await runtime.compact_thread(thread_id, emitter)
     if method == "thread/list":
         from runtime.memory.threads.event_log import list_threads
 
@@ -335,11 +337,12 @@ async def _handle_request(
         from runtime.memory.threads.event_log import archive_thread
 
         thread_id = runtime._require_thread_id(params.get("threadId"))
-        runtime._require_thread_owner(
-            runtime._log_for(thread_id), getattr(emitter, "actor_id", None)
-        )
-        if not archive_thread(runtime._logs_root, thread_id):
-            raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
+        async with claimed_runtime_thread_write(runtime, thread_id):
+            runtime._require_thread_owner(
+                runtime._log_for(thread_id), getattr(emitter, "actor_id", None)
+            )
+            if not archive_thread(runtime._logs_root, thread_id):
+                raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
         return {"threadId": thread_id, "archived": True}
     if method == "item/fileChange/hunkDecide":
         return await runtime._handle_hunk_decide(params, emitter)

@@ -16,6 +16,7 @@ deterministic stubs. The engine itself is pure orchestration.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from contextlib import suppress
 from typing import Any
@@ -28,7 +29,7 @@ from runtime.projectos.model import (
     Task,
     ready_tasks,
 )
-from runtime.projectos.store import ProjectStore
+from runtime.projectos.store import ProjectClaimActiveError, ProjectStore
 from runtime.safety.auth.scope import TenantScope
 
 MilestoneGenerator = Callable[[str], list[Milestone]]  # (project_goal) -> milestones
@@ -41,6 +42,7 @@ MAX_TASK_ATTEMPTS = 2
 DEFAULT_RUN_MAX_TICKS = 50
 HARD_MAX_RUN_TICKS = 200
 MIN_RUN_TICKS = 1
+DEFAULT_TASK_CLAIM_TIMEOUT_SECONDS = 60 * 60
 
 
 def normalize_run_ticks(value: int | None) -> int:
@@ -159,6 +161,8 @@ class ProjectEngine:
         tenant_id: str = "",
         scope: TenantScope | None = None,
         resolve_thread_context: ThreadContextResolver | None = None,
+        task_claim_timeout_seconds: float = DEFAULT_TASK_CLAIM_TIMEOUT_SECONDS,
+        required_execution_thread_id: str = "",
     ) -> None:
         if scope is None and owner_id and tenant_id:
             scope = TenantScope(tenant_id=tenant_id, actor_id=owner_id)
@@ -174,11 +178,13 @@ class ProjectEngine:
         self.owner_id = owner_id
         self.tenant_id = tenant_id
         self._resolve_thread_context = resolve_thread_context
+        self._task_claim_timeout_seconds = max(1.0, float(task_claim_timeout_seconds))
+        self._required_execution_thread_id = required_execution_thread_id
 
     # ── planning ─────────────────────────────────────────────────────────────
-    def plan(self, name: str, goal: str) -> Project:
+    def plan(self, name: str, goal: str, *, project_id: str | None = None) -> Project:
         """Turn a one-line goal into a project with generated milestones."""
-        pid = f"P-{uuid4().hex[:8]}"
+        pid = project_id or f"P-{uuid4().hex[:8]}"
         try:
             milestones = self._generate(goal)
         except Exception:  # noqa: BLE001 — planning hooks are external intelligence adapters
@@ -207,7 +213,47 @@ class ProjectEngine:
         project = self.store.get_project(project_id)
         if project is None:
             return {"events": ["project_not_found"], "project_status": "failed"}
+        if project.status in {"blocked", "done", "failed"}:
+            return {
+                "events": [f"project_not_runnable:{project.status}"],
+                "project_status": project.status,
+                "current_ms": project.current_ms,
+            }
         events: list[str] = []
+
+        stale_before = time.time() - self._task_claim_timeout_seconds
+        orphaned_milestones = self.store.orphan_stale_milestone_claims(
+            project_id,
+            stale_before=stale_before,
+        )
+        orphaned = self.store.orphan_stale_task_claims(
+            project_id,
+            stale_before=stale_before,
+        )
+        if orphaned_milestones or orphaned:
+            events.extend(
+                f"milestone_decomposition_claim_orphaned:{milestone.id}"
+                for milestone in orphaned_milestones
+            )
+            events.extend(f"task_claim_orphaned:{task.id}" for task in orphaned)
+            reason = (
+                "orphaned_decomposition_claim" if orphaned_milestones else "orphaned_task_claim"
+            )
+            events.append(f"project_blocked:{reason}")
+            current = self.store.get_project(project_id)
+            return {
+                "events": events,
+                "project_status": current.status if current else "failed",
+                "current_ms": current.current_ms if current else None,
+            }
+
+        if not self._confirm_execution_binding(project, events):
+            current = self.store.get_project(project_id)
+            return {
+                "events": events,
+                "project_status": current.status if current else "failed",
+                "current_ms": current.current_ms if current else None,
+            }
 
         active = self._ensure_active_milestone(project, events)
         if active is None:
@@ -275,6 +321,9 @@ class ProjectEngine:
         project = self.store.get_project(project_id)
         if project is None:
             return {"events": ["project_not_found"], "project_status": "failed"}
+        project = self.store.assert_no_active_claims(project.id)
+        if project.status != "blocked":
+            raise ValueError("only a blocked project can be recovered")
 
         events: list[str] = []
         selected = {str(task_id) for task_id in (task_ids or []) if str(task_id).strip()}
@@ -287,6 +336,11 @@ class ProjectEngine:
         for ms in milestones:
             tasks = self.store.tasks_for_milestone(ms.id)
             explicit_here = {task.id for task in tasks if task.id in selected}
+            if any(
+                task.id in explicit_here and task.status not in {"failed", "rejected", "blocked"}
+                for task in tasks
+            ):
+                raise ValueError("recovery tasks must be failed, rejected, or blocked")
             should_consider = (
                 bool(explicit_here)
                 or ms.id in target_ms_ids
@@ -400,6 +454,21 @@ class ProjectEngine:
         action = str(action or "").strip().lower()
         events: list[str] = []
         tasks = self.store.tasks_for_milestone(ms.id)
+        affected_ids = {task.id}
+        if action == "reset" and cascade:
+            affected_ids = self._with_downstream_tasks(tasks, affected_ids)
+        if action in {"reassign", "reset", "complete", "skip"}:
+            running_ids = tuple(
+                current.id
+                for current in tasks
+                if current.id in affected_ids and current.status == "running"
+            )
+            if running_ids:
+                raise ProjectClaimActiveError(project, task_ids=running_ids)
+            self.store.assert_no_active_claims(
+                project.id,
+                task_ids=tuple(sorted(affected_ids)),
+            )
 
         if action == "reassign":
             if assigned_agent is not None:
@@ -409,9 +478,7 @@ class ProjectEngine:
             self._reset_task_for_rerun(task, reset_attempts=reset_attempts, clear_outputs=True)
             events.append(f"task_reassigned:{task.id}")
         elif action == "reset":
-            reset_ids = {task.id}
-            if cascade:
-                reset_ids = self._with_downstream_tasks(tasks, reset_ids)
+            reset_ids = affected_ids
             for current_task in tasks:
                 if current_task.id not in reset_ids:
                     continue
@@ -482,6 +549,46 @@ class ProjectEngine:
         return result
 
     # ── steps ────────────────────────────────────────────────────────────────
+    def _confirm_execution_binding(self, project: Project, events: list[str]) -> bool:
+        if project.status in {"done", "failed"}:
+            return True
+        thread_id = self._required_execution_thread_id or project.execution_thread_id
+        if not thread_id:
+            return True
+        started = self.store.start_project_if_bound(project.id, thread_id)
+        if started is not None:
+            project.started_at = started.started_at
+            project.execution_thread_id = started.execution_thread_id
+            return True
+
+        milestones = self.store.milestones_for(project.id)
+        by_id = {milestone.id: milestone for milestone in milestones}
+        blocked = by_id.get(project.current_ms or "")
+        if blocked is None:
+            blocked = next(
+                (by_id[mid] for mid in project.milestone_ids if mid in by_id),
+                None,
+            )
+        if blocked is not None and blocked.status not in {"done", "failed"}:
+            blocked.status = "blocked"
+            self.store.save_milestone(project.id, blocked)
+            events.append(f"milestone_blocked:{blocked.id}")
+        current = self.store.get_project(project.id)
+        if current is not None:
+            self._block_project(
+                current,
+                blocked.id if blocked is not None else current.current_ms,
+                events,
+                reason="execution_binding_lost",
+            )
+        events.append(f"project_execution_binding_lost:{thread_id}")
+        self._audit(
+            project.id,
+            "project.execution_binding_lost",
+            {"thread_id": thread_id, "recovery_required": True},
+        )
+        return False
+
     def _ensure_active_milestone(self, project: Project, events: list[str]) -> Milestone | None:
         mss = self.store.milestones_for(project.id)
         done = {m.id for m in mss if m.status == "done"}
@@ -537,15 +644,33 @@ class ProjectEngine:
     def _ensure_tasks(self, project_id: str, ms: Milestone, events: list[str]) -> None:
         if self.store.tasks_for_milestone(ms.id):
             return
+        claim = self.store.claim_milestone_decomposition(ms.id)
+        if claim is None:
+            canonical = self.store.get_milestone(ms.id)
+            if canonical is not None:
+                ms.status = canonical.status
+                ms.task_ids = list(canonical.task_ids)
+            self.store.tasks_for_milestone(ms.id)
+            events.append(f"milestone_decompose_claim_ignored:{ms.id}")
+            return
+        claimed_ms, claim_id = claim
         project = self.store.get_project(project_id)
         try:
-            new_tasks = self._decompose(ms)
+            new_tasks = self._decompose(claimed_ms)
         except Exception as exc:  # noqa: BLE001 — decompose hook failure should block, not crash tick
             events.append(f"tasks_decompose_failed:{ms.id}")
-            ms.status = "blocked"
-            self.store.save_milestone(project_id, ms)
-            if project is not None:
+            saved_ms, committed = self.store.finalize_milestone_decomposition(
+                project_id,
+                ms.id,
+                [],
+                claim_id,
+                blocked=True,
+            )
+            if committed and project is not None:
+                ms.status = saved_ms.status if saved_ms is not None else "blocked"
                 self._block_project(project, ms.id, events, reason="decompose_failed")
+            elif not committed:
+                events.append(f"milestone_stale_decompose_failure_ignored:{ms.id}")
             self._audit(
                 project_id,
                 "project.decompose_failed",
@@ -554,10 +679,18 @@ class ProjectEngine:
             return
         if not new_tasks:
             events.append(f"tasks_decompose_empty:{ms.id}")
-            ms.status = "blocked"
-            self.store.save_milestone(project_id, ms)
-            if project is not None:
+            saved_ms, committed = self.store.finalize_milestone_decomposition(
+                project_id,
+                ms.id,
+                [],
+                claim_id,
+                blocked=True,
+            )
+            if committed and project is not None:
+                ms.status = saved_ms.status if saved_ms is not None else "blocked"
                 self._block_project(project, ms.id, events, reason="decompose_empty")
+            elif not committed:
+                events.append(f"milestone_stale_decompose_empty_ignored:{ms.id}")
             self._audit(
                 project_id,
                 "project.decompose_empty",
@@ -567,42 +700,76 @@ class ProjectEngine:
         for t in new_tasks:
             t.milestone_id = ms.id
             t.assigned_role = t.assigned_role or ROLE_FOR_TASK.get(t.type, "engineer")
-            self.store.save_task(t)
-        ms.task_ids = [t.id for t in new_tasks]
-        ms.status = "in_progress"
-        saved_ms = self.store.save_milestone(project_id, ms)
-        if saved_ms.status != "in_progress":
+        try:
+            saved_ms, committed = self.store.finalize_milestone_decomposition(
+                project_id,
+                ms.id,
+                new_tasks,
+                claim_id,
+            )
+        except Exception as exc:  # noqa: BLE001 — invalid external decomposition is recoverable
+            events.append(f"tasks_decompose_failed:{ms.id}")
+            blocked_ms, blocked = self.store.finalize_milestone_decomposition(
+                project_id,
+                ms.id,
+                [],
+                claim_id,
+                blocked=True,
+            )
+            if blocked and project is not None:
+                ms.status = blocked_ms.status if blocked_ms is not None else "blocked"
+                self._block_project(project, ms.id, events, reason="decompose_failed")
+            self._audit(
+                project_id,
+                "project.decompose_failed",
+                {"milestone_id": ms.id, "error": _error_text(exc)},
+            )
+            return
+        if not committed or saved_ms is None:
             events.append(f"milestone_stale_tasks_ignored:{ms.id}")
             return
+        ms.task_ids = list(saved_ms.task_ids)
+        ms.status = saved_ms.status
         events.append(f"tasks_created:{ms.id}:{len(new_tasks)}")
 
     def _run_frontier(self, project: Project, ms: Milestone, events: list[str]) -> None:
         tasks = self.store.tasks_for_milestone(ms.id)
-        for task in ready_tasks(tasks):
-            task.assigned_role = ROLE_FOR_TASK.get(task.type, task.assigned_role or "engineer")
+        for ready_task in ready_tasks(tasks):
+            assigned_role = ROLE_FOR_TASK.get(
+                ready_task.type,
+                ready_task.assigned_role or "engineer",
+            )
+            claim = self.store.claim_task(
+                ready_task.id,
+                assigned_role=assigned_role,
+            )
+            if claim is None:
+                # Another worker or an operator changed the row after this
+                # frontier snapshot. Re-read before skipping so this tick never
+                # executes from stale pending/ready state.
+                self.store.get_task(ready_task.id)
+                events.append(f"task_stale_claim_ignored:{ready_task.id}")
+                continue
+            task, claim_id = claim
+
             # Operator reassignment wins; otherwise pick a concrete group member
-            # or fallback role for this execution.
+            # or fallback role for this execution. Assignment happens after the
+            # atomic claim so an injected assigner is also called only once.
             try:
                 task.assigned_agent = task.assigned_agent or self._assign(task)
             except Exception as exc:  # noqa: BLE001 — assignment is an injected hook
-                task.attempts += 1
                 task.output = f"assignment error: {_error_text(exc)}"
                 if task.attempts >= MAX_TASK_ATTEMPTS:
                     task.status = "failed"
-                    events.append(f"task_failed_assignment:{task.id}")
+                    event = f"task_failed_assignment:{task.id}"
                 else:
                     task.status = "pending"
-                    events.append(f"task_assignment_error_retry:{task.id}")
-                self.store.save_task(task)
-                continue
-            task.status = "running"
-            task.attempts += 1
-            claimed = self.store.save_task(task)
-            if claimed.status != "running":
-                events.append(f"task_stale_claim_ignored:{task.id}")
+                    event = f"task_assignment_error_retry:{task.id}"
+                self._commit_task_claim(task, claim_id, event, events)
                 continue
             try:
-                context = self._context(project, ms, tasks)
+                context_tasks = [task if item.id == task.id else item for item in tasks]
+                context = self._context(project, ms, context_tasks)
                 # 项目模式 × 集群/蜂群：任务节点声明了 team_mode（swarm/cluster）
                 # 且注入了 run_task_team 时，把它交给团队执行器（蜂群 fan-out /
                 # 集群角色流水线），否则退回单 agent 执行。这样项目 DAG 里可以
@@ -615,11 +782,11 @@ class ProjectEngine:
                 task.output = f"error: {type(exc).__name__}: {exc}"
                 if task.attempts >= MAX_TASK_ATTEMPTS:
                     task.status = "failed"
-                    events.append(f"task_failed:{task.id}")
+                    event = f"task_failed:{task.id}"
                 else:
                     task.status = "pending"
-                    events.append(f"task_error_retry:{task.id}")
-                self.store.save_task(task)
+                    event = f"task_error_retry:{task.id}"
+                self._commit_task_claim(task, claim_id, event, events)
                 continue
             try:
                 verdict = self._qa(task, ms)
@@ -630,23 +797,37 @@ class ProjectEngine:
                 }
                 if task.attempts >= MAX_TASK_ATTEMPTS:
                     task.status = "failed"
-                    events.append(f"task_failed_qa_error:{task.id}")
+                    event = f"task_failed_qa_error:{task.id}"
                 else:
                     task.status = "pending"
-                    events.append(f"task_qa_error_retry:{task.id}")
-                self.store.save_task(task)
+                    event = f"task_qa_error_retry:{task.id}"
+                self._commit_task_claim(task, claim_id, event, events)
                 continue
             task.qa_verdict = verdict
             if verdict.get("approved"):
                 task.status = "done"
-                events.append(f"task_done:{task.id}")
+                event = f"task_done:{task.id}"
             elif task.attempts >= MAX_TASK_ATTEMPTS:
                 task.status = "failed"
-                events.append(f"task_failed_qa:{task.id}")
+                event = f"task_failed_qa:{task.id}"
             else:
                 task.status = "pending"  # QA rejected → retry next tick
-                events.append(f"task_rejected:{task.id}")
-            self.store.save_task(task)
+                event = f"task_rejected:{task.id}"
+            self._commit_task_claim(task, claim_id, event, events)
+
+    def _commit_task_claim(
+        self,
+        task: Task,
+        claim_id: str,
+        event: str,
+        events: list[str],
+    ) -> bool:
+        _current, committed = self.store.finalize_task_claim(task, claim_id)
+        if committed:
+            events.append(event)
+        else:
+            events.append(f"task_stale_result_ignored:{task.id}")
+        return committed
 
     def _gate_milestone(self, project: Project, ms: Milestone, events: list[str]) -> None:
         tasks = self.store.tasks_for_milestone(ms.id)

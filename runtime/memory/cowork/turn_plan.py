@@ -23,7 +23,7 @@ from dataclasses import dataclass, replace
 from typing import Literal
 
 from runtime.core.cerebrum.input_mentions import parse_input_mentions
-from runtime.memory.cowork.group import GroupState, responders
+from runtime.memory.cowork.group import DEFAULT_MODE, GroupState, normalize_group_mode, responders
 
 ResponseMode = Literal["chat", "cluster", "swarm"]
 
@@ -53,7 +53,7 @@ def _chat_broadcast_addressed(state: GroupState, text: str) -> list[str] | None:
 
 @dataclass
 class TurnPlan:
-    mode: str
+    mode: ResponseMode
     responders: list[str]  # agent ids to run this turn (already mode-filtered)
     addressed: list[str]  # @-addressed agent ids parsed from the message
     is_multi: bool  # >1 responder → run them in parallel (swarm-style)
@@ -81,6 +81,12 @@ def plan_turn(
     Pure. The realtime driver reads ``responders``/``is_multi`` to choose between
     single-agent ReAct (1 responder) and parallel execution (N), and ``mode`` for
     the orchestration style."""
+    canonical_mode = normalize_group_mode(state.mode) or DEFAULT_MODE
+    if canonical_mode != state.mode:
+        # Old persisted ``project`` mode is a project-binding concern, not a
+        # response strategy.  Folding normally migrates it already; this guard
+        # also protects callers constructing a legacy GroupState directly.
+        state = replace(state, mode=canonical_mode)
     if mode_override is not None:
         state = replace(state, mode=mode_override)
     text = text or ""
@@ -92,16 +98,14 @@ def plan_turn(
     # A linked room/project home is a real group surface even when its roster
     # currently contains only one AI member.  Do not collapse that durable
     # room into the 1:1 convenience rule: ordinary chat stays human-only until
-    # somebody explicitly @mentions an agent.  Cluster/swarm/project modes
-    # retain their existing dispatch policies.
+    # somebody explicitly @mentions an agent. Cluster/swarm modes retain their
+    # existing dispatch policies.
     durable_chat = state.mode == "chat" and bool(state.room_id or persistent_group)
     if durable_chat and not addressed:
         resp = []
     is_multi = len(resp) > 1
 
-    if state.mode == "project":
-        reason = "project mode — the milestone engine dispatches tasks"
-    elif broadcast_addressed is not None:
+    if broadcast_addressed is not None:
         reason = (
             f"@all — all {len(resp)} active participant agent(s)"
             if resp

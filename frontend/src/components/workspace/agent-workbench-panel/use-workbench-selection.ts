@@ -348,7 +348,13 @@ export function useWorkbenchSelection({
     return rosterSeats.filter((seat) => {
       const id = seat.id.trim();
       if (!id) return false;
-      return !runningAgentIds.has(id) && seat.role !== "tl";
+      // Human room participants belong in the project/member surfaces, but
+      // they do not own an Agent process or machine screen. Rendering them in
+      // the machine rail created a phantom `local` workstation and made the
+      // AI member count appear inconsistent with the header.
+      return (
+        seat.kind !== "human" && !runningAgentIds.has(id) && seat.role !== "tl"
+      );
     });
   }, [agentTiles, rosterSeats]);
   const leaderRosterSeat =

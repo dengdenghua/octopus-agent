@@ -21,6 +21,8 @@ from typing import Any, cast
 
 from ._transport import (
     APPROVAL_METHODS,
+    MCP_ELICITATION_APPROVAL_METHOD,
+    TOOL_USER_INPUT_METHOD,
     build_environment,
     decode_message,
     default_process_factory,
@@ -29,6 +31,7 @@ from ._transport import (
     merge_extra_params,
     normalize_input_items,
     normalize_object,
+    parse_mcp_elicitation_approval,
     require_entity_response,
     taskkill_process_tree,
     validate_absolute_path,
@@ -37,6 +40,11 @@ from ._transport import (
     validate_method,
     validate_thread_security,
     wait_for_exit,
+)
+from .dynamic_tools import (
+    DYNAMIC_TOOL_CALL_METHOD,
+    dynamic_tool_failure,
+    validate_dynamic_tool_response,
 )
 from .types import (
     ApprovalHandler,
@@ -92,10 +100,12 @@ class CodexAppServerClient:
         config: CodexAppServerConfig | None = None,
         *,
         approval_handler: ApprovalHandler | None = None,
+        dynamic_tool_handler: ApprovalHandler | None = None,
         process_factory: ProcessFactory | None = None,
     ) -> None:
         self.config = config or CodexAppServerConfig()
         self._approval_handler = approval_handler
+        self._dynamic_tool_handler = dynamic_tool_handler
         self._process_factory = process_factory or default_process_factory
         self._owns_process_group = process_factory is None
         self._process: AppServerProcess | None = None
@@ -110,9 +120,13 @@ class CodexAppServerClient:
         self._approval_requests: asyncio.Queue[ApprovalRequest] = asyncio.Queue(
             maxsize=self.config.approval_queue_size
         )
+        self._dynamic_tool_requests: asyncio.Queue[ApprovalRequest] = asyncio.Queue(
+            maxsize=self.config.approval_queue_size
+        )
         self._reader_task: asyncio.Task[None] | None = None
         self._stderr_task: asyncio.Task[None] | None = None
         self._approval_task: asyncio.Task[None] | None = None
+        self._dynamic_tool_task: asyncio.Task[None] | None = None
         self._cleanup_task: asyncio.Task[None] | None = None
         self._stderr_tail = bytearray()
         self._terminal_error: BaseException | None = None
@@ -164,6 +178,9 @@ class CodexAppServerClient:
                 self._approval_task = asyncio.create_task(
                     self._approval_loop(), name="codex-app-server-approvals"
                 )
+                self._dynamic_tool_task = asyncio.create_task(
+                    self._dynamic_tool_loop(), name="codex-app-server-dynamic-tools"
+                )
                 if process.stderr is not None:
                     self._stderr_task = asyncio.create_task(
                         self._stderr_loop(), name="codex-app-server-stderr"
@@ -213,6 +230,174 @@ class CodexAppServerClient:
         if params is not None:
             message["params"] = normalize_object(params, self.config)
         await self._send_message(message)
+
+    async def account_read(
+        self,
+        *,
+        refresh_token: bool = False,
+        timeout_s: float | None = None,
+    ) -> JsonObject:
+        """Read App Server's current account without exposing stored tokens."""
+
+        result = await self.request(
+            "account/read",
+            {"refreshToken": bool(refresh_token)},
+            timeout_s=timeout_s,
+        )
+        return _require_object_result(result, "account/read")
+
+    async def login_api_key(
+        self,
+        api_key: str,
+        *,
+        timeout_s: float | None = None,
+    ) -> JsonObject:
+        """Hand an OpenAI API key directly to App Server's credential store."""
+
+        if not isinstance(api_key, str) or not api_key.strip() or "\x00" in api_key:
+            raise ConfigurationError("api_key must be a non-empty, NUL-free string")
+        result = await self.request(
+            "account/login/start",
+            {"type": "apiKey", "apiKey": api_key.strip()},
+            timeout_s=timeout_s,
+        )
+        return _require_object_result(result, "account/login/start")
+
+    async def login_chatgpt(
+        self,
+        *,
+        device_code: bool = False,
+        timeout_s: float | None = None,
+    ) -> JsonObject:
+        """Start a managed ChatGPT browser or device-code login flow."""
+
+        params: JsonObject
+        if device_code:
+            params = {"type": "chatgptDeviceCode"}
+        else:
+            params = {
+                "type": "chatgpt",
+                "useHostedLoginSuccessPage": True,
+                "appBrand": "chatgpt",
+            }
+        result = await self.request("account/login/start", params, timeout_s=timeout_s)
+        response = _require_object_result(result, "account/login/start")
+        expected_type = "chatgptDeviceCode" if device_code else "chatgpt"
+        if response.get("type") != expected_type:
+            raise ProtocolError("account/login/start returned an unexpected login type")
+        required = (
+            ("loginId", "verificationUrl", "userCode") if device_code else ("loginId", "authUrl")
+        )
+        if any(
+            not isinstance(response.get(name), str) or not response.get(name) for name in required
+        ):
+            raise ProtocolError("account/login/start returned an incomplete login response")
+        return response
+
+    async def cancel_login(
+        self,
+        login_id: str,
+        *,
+        timeout_s: float | None = None,
+    ) -> JsonObject:
+        """Cancel one managed ChatGPT login generation."""
+
+        validate_identifier(login_id, "login_id")
+        result = await self.request(
+            "account/login/cancel",
+            {"loginId": login_id},
+            timeout_s=timeout_s,
+        )
+        return _require_object_result(result, "account/login/cancel")
+
+    async def logout_account(self, *, timeout_s: float | None = None) -> JsonObject:
+        """Remove App Server's stored account for this isolated Codex home."""
+
+        result = await self.request("account/logout", {}, timeout_s=timeout_s)
+        return _require_object_result(result, "account/logout")
+
+    async def read_account_rate_limits(
+        self,
+        *,
+        timeout_s: float | None = None,
+    ) -> JsonObject:
+        """Read ChatGPT quota windows without exposing account credentials."""
+
+        result = await self.request(
+            "account/rateLimits/read",
+            {},
+            timeout_s=timeout_s,
+        )
+        return _require_object_result(result, "account/rateLimits/read")
+
+    async def read_account_usage(
+        self,
+        *,
+        timeout_s: float | None = None,
+    ) -> JsonObject:
+        """Read account-level ChatGPT token activity summaries."""
+
+        result = await self.request(
+            "account/usage/read",
+            {},
+            timeout_s=timeout_s,
+        )
+        return _require_object_result(result, "account/usage/read")
+
+    async def list_apps(
+        self,
+        *,
+        cursor: str | None = None,
+        limit: int = 100,
+        force_refetch: bool = False,
+        timeout_s: float | None = None,
+    ) -> JsonObject:
+        """Return one account-aware page from the App connector catalog."""
+
+        if cursor is not None:
+            validate_identifier(cursor, "cursor")
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ConfigurationError("app list limit must be an integer from 1 to 100")
+        params: JsonObject = {
+            "cursor": cursor,
+            "limit": limit,
+            "forceRefetch": bool(force_refetch),
+        }
+        result = await self.request("app/list", params, timeout_s=timeout_s)
+        response = _require_object_result(result, "app/list")
+        if not isinstance(response.get("data"), list):
+            raise ProtocolError("app/list response must contain a data array")
+        next_cursor = response.get("nextCursor")
+        if next_cursor is not None and not isinstance(next_cursor, str):
+            raise ProtocolError("app/list nextCursor must be a string or null")
+        return response
+
+    async def list_models(
+        self,
+        *,
+        include_hidden: bool = False,
+        cursor: str | None = None,
+        limit: int | None = None,
+        timeout_s: float | None = None,
+    ) -> JsonObject:
+        """Return one page from App Server's account-aware model catalog."""
+
+        params: JsonObject = {"includeHidden": bool(include_hidden)}
+        if cursor is not None:
+            validate_identifier(cursor, "cursor")
+            params["cursor"] = cursor
+        if limit is not None:
+            if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 1000:
+                raise ConfigurationError("model list limit must be an integer from 1 to 1000")
+            params["limit"] = limit
+        result = await self.request("model/list", params, timeout_s=timeout_s)
+        response = _require_object_result(result, "model/list")
+        if not isinstance(response.get("data"), list):
+            raise ProtocolError("model/list response must contain a data array")
+        next_cursor = response.get("nextCursor")
+        if next_cursor is not None and not isinstance(next_cursor, str):
+            raise ProtocolError("model/list nextCursor must be a string or null")
+        return response
 
     async def start_thread(
         self,
@@ -414,7 +599,12 @@ class CodexAppServerClient:
                 await self._signal_process(process, hard=True)
                 await wait_for_exit(process, self.config.kill_wait_s)
 
-        tasks = (self._reader_task, self._approval_task, self._stderr_task)
+        tasks = (
+            self._reader_task,
+            self._approval_task,
+            self._dynamic_tool_task,
+            self._stderr_task,
+        )
         for task in tasks:
             if task is not None and task is not current and not task.done():
                 task.cancel()
@@ -540,6 +730,26 @@ class CodexAppServerClient:
                 except asyncio.QueueFull as exc:
                     raise BackpressureError("notification queue is full") from exc
                 return
+            if method == DYNAMIC_TOOL_CALL_METHOD:
+                request = ApprovalRequest(cast(RequestId, request_id), method, normalized_params)
+                try:
+                    self._dynamic_tool_requests.put_nowait(request)
+                except asyncio.QueueFull:
+                    await self._send_message(
+                        {
+                            "id": request_id,
+                            "result": dynamic_tool_failure(
+                                "Octopus dynamic tool request queue is full"
+                            ),
+                        }
+                    )
+                return
+            if method == TOOL_USER_INPUT_METHOD:
+                # requestUserInput is an arbitrary questionnaire protocol, not
+                # a binary Apps approval. This host has no form UI at this
+                # boundary, so answer nothing without invoking ApprovalProvider.
+                await self._send_message({"id": request_id, "result": deny_approval(method)})
+                return
             if method not in APPROVAL_METHODS:
                 await self._send_message(
                     {
@@ -590,6 +800,11 @@ class CodexAppServerClient:
 
     async def _resolve_approval(self, request: ApprovalRequest) -> JsonObject:
         fallback = deny_approval(request.method)
+        if (
+            request.method == MCP_ELICITATION_APPROVAL_METHOD
+            and parse_mcp_elicitation_approval(request.params) is None
+        ):
+            return fallback
         handler = self._approval_handler
         if handler is None:
             return fallback
@@ -609,6 +824,48 @@ class CodexAppServerClient:
             raise
         except Exception as exc:
             _logger.warning("approval handler failed closed for %s: %s", request.method, exc)
+            return fallback
+
+    async def _dynamic_tool_loop(self) -> None:
+        try:
+            while True:
+                request = await self._dynamic_tool_requests.get()
+                response = await self._resolve_dynamic_tool(request)
+                await self._send_message({"id": request.request_id, "result": response})
+        except asyncio.CancelledError:
+            raise
+        except BaseException as exc:
+            if self._state not in {_State.CLOSING, _State.CLOSED}:
+                self._fail_connection(exc)
+                self._schedule_failure_cleanup()
+
+    async def _resolve_dynamic_tool(self, request: ApprovalRequest) -> JsonObject:
+        fallback = dynamic_tool_failure("Octopus dynamic tool bridge is unavailable")
+        handler = self._dynamic_tool_handler
+        if handler is None:
+            return fallback
+
+        async def _invoke() -> Mapping[str, Any]:
+            if inspect.iscoroutinefunction(handler):
+                return await handler(request)  # type: ignore[misc]
+            result = await asyncio.to_thread(handler, request)
+            if inspect.isawaitable(result):
+                return await result
+            return result
+
+        try:
+            raw = await asyncio.wait_for(_invoke(), timeout=self.config.approval_timeout_s)
+            return cast(JsonObject, validate_dynamic_tool_response(raw))
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            # Dynamic handlers may fail with provider payloads, host paths or
+            # credentials in their exception message.  Keep model response and
+            # server logs on the fixed, non-secret failure surface.
+            _logger.warning(
+                "dynamic tool handler failed closed (%s)",
+                type(exc).__name__,
+            )
             return fallback
 
     async def _stderr_loop(self) -> None:
@@ -713,6 +970,12 @@ class CodexAppServerClient:
             pass
         with contextlib.suppress(ProcessLookupError, OSError):
             process.kill() if hard else process.terminate()
+
+
+def _require_object_result(result: JsonValue, operation: str) -> JsonObject:
+    if not isinstance(result, dict):
+        raise ProtocolError(f"{operation} response must be a JSON object")
+    return cast(JsonObject, result)
 
 
 # Keep isinstance narrow without hiding programming errors behind fail-closed

@@ -157,6 +157,7 @@ export function TaskCollaboratorControl({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
+          data-slot="task-collaborator-trigger"
           className={cn(
             "group inline-flex h-[42px] max-w-[11rem] items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium shadow-none transition-all duration-base sm:h-8 sm:px-2",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
@@ -174,7 +175,10 @@ export function TaskCollaboratorControl({
           ) : (
             <UserIcon className="size-4 shrink-0" />
           )}
-          <span className="hidden min-w-0 truncate sm:inline">
+          <span
+            data-slot="task-collaborator-label"
+            className="hidden min-w-0 truncate sm:inline"
+          >
             {controlLabel}
           </span>
           <span

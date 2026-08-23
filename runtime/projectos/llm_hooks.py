@@ -204,7 +204,7 @@ def subagent_execute_task(
     if context.get("milestone_goal"):
         prompt = f"Milestone: {context['milestone_goal']}\nTask: {task.goal}"
     thread_id = str(context.get("thread_id") or "")
-    actor = str(context.get("owner_id") or "")
+    actor = str(context.get("owner_actor_id") or context.get("owner_id") or "")
     tenant_id = str(context.get("tenant_id") or "")
     project_id = str(context.get("project_id") or "")
     inherited_runtime_metadata = context.get("runtime_session_metadata")
@@ -233,9 +233,25 @@ def subagent_execute_task(
     workspace_path = context.get("workspace_path")
     if isinstance(workspace_path, str) and workspace_path:
         dispatch_context["workspace_path"] = workspace_path
+        runtime_session_metadata["workspace_path"] = workspace_path
+
+    # Project OS is a trusted, non-interactive server orchestrator. Carry its
+    # authenticated project principal as a real Session so production Codex
+    # account selection never falls back to an ordinary context dictionary.
+    # No approval provider is attached: the Coder backend therefore retains
+    # its explicit AutoDeny default for risky actions.
+    from runtime.platform.process.session import Session
+
+    project_session = Session(
+        actor=actor or None,
+        thread_id=thread_id or None,
+        conversation_id=thread_id or None,
+        metadata=dict(runtime_session_metadata),
+    )
 
     call_kwargs: dict[str, Any] = {
         "context": dispatch_context,
+        "session": project_session,
         "timeout_s": 900,
         "timeout_seconds": 900.0,
     }

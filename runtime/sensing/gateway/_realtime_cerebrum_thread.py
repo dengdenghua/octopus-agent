@@ -32,6 +32,9 @@ from runtime.protocol import (
 )
 from runtime.safety.approval.approval_gate import ApprovalProvider
 from runtime.safety.approval.approval_policy_store import load_policy
+from runtime.sensing.gateway._realtime_thread_delete_probe import (
+    assert_thread_accepts_runtime_writes,
+)
 from runtime.sensing.gateway.realtime_event_bridge import _ReactBridgeState, _safe_list_remove
 from runtime.sensing.gateway.realtime_gateway import EventEmitter, _RpcError
 from runtime.sensing.gateway.realtime_thread_history import (
@@ -493,8 +496,9 @@ def _snapshot_to_thread_store(
 async def _ensure_thread(
     runtime: CerebrumRuntime, thread_id: str, emitter: EventEmitter
 ) -> EventLog:
-    log = runtime._log_for(thread_id)
     async with runtime._lock:
+        assert_thread_accepts_runtime_writes(runtime, thread_id)
+        log = runtime._log_for(thread_id)
         if thread_id in runtime._known_threads:
             return log
         existed = log.path.exists() and log.path.stat().st_size > 0

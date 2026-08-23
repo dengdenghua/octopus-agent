@@ -17,10 +17,12 @@ export function EmptyShellView({
   effectiveActiveTab,
   onTabClick,
   onTabClose,
+  onClose,
   visibleDiffEntries,
   threadId,
   inferredWorkDir,
   browserTabPage,
+  personaWorkbenchPage,
   isLoading,
   className,
   machineRail,
@@ -35,13 +37,22 @@ export function EmptyShellView({
   visibleTabs: WorkbenchTab[];
   workbenchTabs: WorkbenchTab[];
   closedTabs: Set<AgentWorkbenchTabId>;
-  effectiveActiveTab: "agent" | "diff" | "terminal" | "browser" | "artifacts" | "project";
+  effectiveActiveTab:
+    | "agent"
+    | "diff"
+    | "terminal"
+    | "browser"
+    | "artifacts"
+    | "workspace"
+    | "project";
   onTabClick: (tabId: AgentWorkbenchTabId) => void;
   onTabClose: (tabId: AgentWorkbenchTabId) => void;
+  onClose?: () => void;
   visibleDiffEntries: DiffEntry[];
   threadId?: string | null;
   inferredWorkDir?: string;
   browserTabPage: ReactNode;
+  personaWorkbenchPage: ReactNode;
   isLoading?: boolean;
   className?: string;
   machineRail: ReactNode;
@@ -61,6 +72,8 @@ export function EmptyShellView({
       />
     ) : effectiveActiveTab === "browser" ? (
       browserTabPage
+    ) : effectiveActiveTab === "workspace" ? (
+      personaWorkbenchPage
     ) : (
       <WorkbenchEmptyPage
         title={t.agentWorkbenchPanel.robot}
@@ -87,6 +100,7 @@ export function EmptyShellView({
         effectiveActiveTab={effectiveActiveTab}
         onTabClick={onTabClick}
         onTabClose={onTabClose}
+        onClose={onClose}
       />
       <section
         aria-label={t.sidebar.ariaAgentWorkbench}

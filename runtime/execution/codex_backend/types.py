@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Protocol, TypeAlias
+from typing import Any, Literal, Protocol, TypeAlias
 
 JsonScalar: TypeAlias = None | bool | int | float | str
 JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
@@ -118,11 +118,77 @@ class ProcessLaunch:
 
     argv: tuple[str, ...]
     cwd: str | None
-    env: dict[str, str]
+    env: dict[str, str] = field(repr=False)
     stream_limit: int
 
 
 ProcessFactory: TypeAlias = Callable[[ProcessLaunch], Awaitable[AppServerProcess]]
+
+
+@dataclass(frozen=True, slots=True)
+class CodexProviderProfile:
+    """Server-resolved model provider injected into an isolated Codex home.
+
+    The browser never constructs this object.  It is derived from Octopus'
+    trusted model catalog after tenant/role resolution, then handed directly
+    to the sidecar security layer.  It never carries an upstream credential.
+    The optional repr-hidden bearer is a short-lived, in-memory capability for
+    an Octopus-owned loopback proxy and is revoked with its exact turn.
+    """
+
+    provider_id: str
+    name: str
+    base_url: str
+    model: str
+    wire_api: Literal["responses"] = "responses"
+    requires_openai_auth: bool = False
+    auth_env_key: Literal["OCTOPUS_CODEX_PROXY_TOKEN"] | None = None
+    scoped_bearer_token: str | None = field(default=None, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        import re
+        from urllib.parse import urlsplit
+
+        if not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", self.provider_id):
+            raise ConfigurationError("provider_id must be a lowercase Codex provider identifier")
+        if self.provider_id in {"openai", "ollama", "lmstudio"}:
+            raise ConfigurationError("custom provider_id cannot use a reserved Codex provider id")
+        for field_name in ("name", "base_url", "model"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip() or "\x00" in value:
+                raise ConfigurationError(f"{field_name} must be a non-empty, NUL-free string")
+        parsed = urlsplit(self.base_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ConfigurationError("base_url must be an absolute http(s) URL")
+        if parsed.username is not None or parsed.password is not None:
+            raise ConfigurationError("base_url must not contain embedded credentials")
+        if self.auth_env_key not in {None, "OCTOPUS_CODEX_PROXY_TOKEN"}:
+            raise ConfigurationError("scoped provider auth env key is not server-managed")
+        if (self.auth_env_key is None) != (self.scoped_bearer_token is None):
+            raise ConfigurationError("scoped provider authentication must be complete")
+        if self.scoped_bearer_token is not None:
+            if parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "::1"}:
+                raise ConfigurationError("scoped provider tokens may target only loopback HTTP")
+            try:
+                port = parsed.port
+            except ValueError:
+                port = None
+            if port is None:
+                raise ConfigurationError(
+                    "scoped provider loopback URL must include an explicit port"
+                )
+            if parsed.path.rstrip("/") != "/v1" or parsed.query or parsed.fragment:
+                raise ConfigurationError(
+                    "scoped provider loopback URL must target the /v1 API root"
+                )
+            token = self.scoped_bearer_token
+            if not 32 <= len(token) <= 512 or any(
+                char.isspace() or char == "\x00" for char in token
+            ):
+                raise ConfigurationError("scoped provider token must be a bounded opaque value")
+        object.__setattr__(self, "name", self.name.strip())
+        object.__setattr__(self, "base_url", self.base_url.rstrip("/"))
+        object.__setattr__(self, "model", self.model.strip())
 
 
 DEFAULT_ENV_ALLOWLIST = frozenset(
@@ -165,8 +231,8 @@ class CodexAppServerConfig:
     command: tuple[str, ...] = ("codex", "app-server", "--listen", "stdio://")
     cwd: str | None = None
     env_allowlist: frozenset[str] = DEFAULT_ENV_ALLOWLIST
-    env_overrides: Mapping[str, str] = field(default_factory=dict)
-    source_environment: Mapping[str, str] | None = None
+    env_overrides: Mapping[str, str] = field(default_factory=dict, repr=False)
+    source_environment: Mapping[str, str] | None = field(default=None, repr=False)
     client_name: str = "octopus_agent"
     client_title: str = "Octopus Agent"
     client_version: str = "0.2.0"
@@ -240,6 +306,7 @@ __all__ = [
     "BackpressureError",
     "CodexAppServerConfig",
     "CodexAppServerError",
+    "CodexProviderProfile",
     "ConfigurationError",
     "DEFAULT_ENV_ALLOWLIST",
     "JsonObject",

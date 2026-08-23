@@ -10,13 +10,15 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sqlite3
 from datetime import UTC, datetime
 from typing import Any
 
+from runtime.memory.cowork._collaboration_project_actions import (
+    ProjectMessageProjectionStale,
+)
 from runtime.memory.cowork.ids import optional_cowork_id, require_cowork_id
-from runtime.projectos.cowork_bridge import project_task_to_collaboration
 from runtime.projectos.model import ROLE_FOR_TASK, Task
+from runtime.projectos.store import ProjectBindingChangedError
 
 _ACTION_ALIASES = {
     "link_milestone": "link_milestone",
@@ -33,8 +35,8 @@ _PRIORITIES = frozenset({"P0", "P1", "P2", "P3"})
 class MessageProjectActionError(ValueError):
     """Expected API error raised while applying a message action."""
 
-    def __init__(self, status_code: int, detail: str) -> None:
-        super().__init__(detail)
+    def __init__(self, status_code: int, detail: Any) -> None:
+        super().__init__(str(detail))
         self.status_code = int(status_code)
         self.detail = detail
 
@@ -46,7 +48,8 @@ def _stable_id(prefix: str, *parts: Any) -> str:
 
 
 def _source(message: dict[str, Any], *, thread_id: str, room_id: str) -> dict[str, Any]:
-    metadata = message.get("metadata") if isinstance(message.get("metadata"), dict) else {}
+    raw_metadata = message.get("metadata")
+    metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
     return {
         "schema": "octopus.projectos.message_source.v1",
         "thread_id": thread_id,
@@ -59,8 +62,21 @@ def _source(message: dict[str, Any], *, thread_id: str, room_id: str) -> dict[st
     }
 
 
-def _bound_project(project_store: Any, thread_id: str, requested_id: str) -> Any:
-    project = project_store.project_for_thread(thread_id)
+def _binding_changed(thread_id: str, project_id: str, generation: int) -> MessageProjectActionError:
+    return MessageProjectActionError(
+        409,
+        {
+            "code": "PROJECT_BINDING_CHANGED",
+            "message": "thread project binding changed while the message action was applied",
+            "thread_id": thread_id,
+            "project_id": project_id,
+            "binding_generation": generation,
+        },
+    )
+
+
+def _bound_project(project_store: Any, thread_id: str, requested_id: str) -> tuple[Any, int]:
+    project, generation = project_store.binding_snapshot(thread_id)
     if project is None:
         raise MessageProjectActionError(
             409,
@@ -68,7 +84,7 @@ def _bound_project(project_store: Any, thread_id: str, requested_id: str) -> Any
         )
     if requested_id and requested_id != project.id:
         raise MessageProjectActionError(409, "requested project is not bound to this session")
-    return project
+    return project, generation
 
 
 def _project_milestone(project_store: Any, project: Any, milestone_id: str) -> Any:
@@ -81,35 +97,33 @@ def _project_milestone(project_store: Any, project: Any, milestone_id: str) -> A
     return milestone
 
 
-def _event_once(
+def _commit_source_action(
     project_store: Any,
     project_id: str,
     *,
     event_id: str,
     kind: str,
     payload: dict[str, Any],
-) -> tuple[dict[str, Any], bool]:
-    existing = project_store.get_event(event_id)
-    if existing is not None:
-        if existing.get("project_id") != project_id or existing.get("kind") != kind:
-            raise MessageProjectActionError(409, "project action id is already in use")
-        return existing, False
+    expected_thread_id: str,
+    expected_binding_generation: int,
+    task: Task | None = None,
+) -> tuple[dict[str, Any], Task | None, bool]:
     try:
-        return (
-            project_store.append_event(
-                project_id,
-                kind=kind,
-                payload=payload,
-                event_id=event_id,
-            ),
-            True,
+        return project_store.commit_message_action(
+            project_id,
+            event_id=event_id,
+            kind=kind,
+            payload=payload,
+            expected_thread_id=expected_thread_id,
+            expected_binding_generation=expected_binding_generation,
+            task=task,
         )
-    except sqlite3.IntegrityError:
-        # A concurrent retry may have won the unique event-id race.
-        existing = project_store.get_event(event_id)
-        if existing is not None and existing.get("project_id") == project_id:
-            return existing, False
-        raise
+    except ProjectBindingChangedError as exc:
+        raise _binding_changed(exc.thread_id, exc.project_id, exc.generation) from exc
+    except PermissionError as exc:
+        raise MessageProjectActionError(404, "project not found") from exc
+    except ValueError as exc:
+        raise MessageProjectActionError(409, str(exc)) from exc
 
 
 def _action_receipt(
@@ -119,6 +133,7 @@ def _action_receipt(
     project_id: str,
     target: dict[str, Any],
     event_id: str,
+    applied_at: str,
 ) -> dict[str, Any]:
     return {
         "id": action_id,
@@ -126,7 +141,7 @@ def _action_receipt(
         "project_id": project_id,
         "target": target,
         "event_id": event_id,
-        "applied_at": datetime.now(UTC).isoformat(),
+        "applied_at": applied_at,
     }
 
 
@@ -145,7 +160,8 @@ def _entity_ref(kind: str, entity_id: str, project_id: str, **extra: Any) -> dic
 
 
 def _existing_receipt(message: dict[str, Any], action_id: str) -> dict[str, Any] | None:
-    metadata = message.get("metadata") if isinstance(message.get("metadata"), dict) else {}
+    raw_metadata = message.get("metadata")
+    metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
     actions = metadata.get("project_actions")
     if not isinstance(actions, list):
         return None
@@ -157,6 +173,45 @@ def _existing_receipt(message: dict[str, Any], action_id: str) -> dict[str, Any]
         ),
         None,
     )
+
+
+def _task_projection(task: Task, *, project_id: str, tenant_id: str) -> dict[str, Any]:
+    raw = task.to_dict()
+    assigned_agent = str(raw.get("assigned_agent") or "")
+    assigned_role = str(raw.get("assigned_role") or "")
+    raw_input = raw.get("input")
+    source_message = raw_input.get("source_message") if isinstance(raw_input, dict) else None
+    return {
+        "id": task.id,
+        "kind": "project",
+        "title": task.goal or task.id,
+        "description": task.goal or "",
+        "status": task.status or "pending",
+        "assignees": [
+            item
+            for item in (
+                {"name": assigned_agent, "role": "agent"},
+                {"name": assigned_role, "role": "role"},
+            )
+            if item["name"]
+        ],
+        "artifacts": (
+            [{"kind": "project_task_output", "output": raw.get("output")}]
+            if raw.get("output") not in (None, "", {}, [])
+            else []
+        ),
+        "metadata": {
+            "source": "projectos",
+            "project_id": project_id,
+            "tenant_id": tenant_id,
+            "milestone_id": task.milestone_id,
+            "task_type": raw.get("type"),
+            "assigned_agent": assigned_agent,
+            "assigned_role": assigned_role,
+            "attempts": raw.get("attempts"),
+            **({"source_message": source_message} if source_message else {}),
+        },
+    }
 
 
 def apply_message_project_action(
@@ -178,7 +233,7 @@ def apply_message_project_action(
             400,
             "action must be link_milestone | create_item | record_decision | publish_artifact",
         )
-    project = _bound_project(
+    project, binding_generation = _bound_project(
         project_store,
         thread_id,
         str(body.get("project_id") or "").strip(),
@@ -189,9 +244,19 @@ def apply_message_project_action(
         for key, value in body.items()
         if key not in {"action_id", "run"} and value not in (None, "", [], {})
     }
-    action_id = _stable_id("MA", thread_id, source["message_seq"], action, action_seed)
+    action_id = _stable_id(
+        "MA",
+        thread_id,
+        project.id,
+        binding_generation,
+        source["message_seq"],
+        action,
+        action_seed,
+    )
     existing_receipt = _existing_receipt(message, action_id)
     if existing_receipt is not None:
+        if str(existing_receipt.get("project_id") or "") != project.id:
+            raise _binding_changed(thread_id, project.id, binding_generation)
         card = collaboration_store.message_by_source_id(
             thread_id,
             f"project-action:{action_id}",
@@ -207,6 +272,8 @@ def apply_message_project_action(
             "receipt": existing_receipt,
             "source_message": message,
             "system_card_message": card,
+            "projection_pending": False,
+            "recovery": None,
         }
 
     milestone = None
@@ -217,13 +284,17 @@ def apply_message_project_action(
             str(body.get("milestone_id") or ""),
         )
 
-    task = None
-    event: dict[str, Any]
-    created = False
+    task: Task | None = None
+    candidate_task: Task | None = None
+    event_kind: str
+    event_payload: dict[str, Any]
+    target: dict[str, Any] | None = None
     if action == "create_item":
-        if project.status in {"done", "failed"}:
+        if milestone is None:
+            raise RuntimeError("create_item milestone was not resolved")
+        if project.status in {"blocked", "done", "failed"}:
             raise MessageProjectActionError(409, "cannot add an item to a terminal project")
-        if milestone.status in {"done", "failed"}:
+        if milestone.status in {"blocked", "done", "failed"}:
             raise MessageProjectActionError(409, "cannot add an item to a terminal milestone")
         task_type = str(body.get("task_type") or "analysis").strip().lower()
         if task_type not in _TASK_TYPES:
@@ -257,7 +328,7 @@ def apply_message_project_action(
             estimate = max(0.0, float(body.get("estimate") or 0))
         except (TypeError, ValueError) as exc:
             raise MessageProjectActionError(400, "estimate must be a non-negative number") from exc
-        candidate = Task(
+        candidate_task = Task(
             id=task_id,
             milestone_id=milestone.id,
             type=task_type,  # type: ignore[arg-type]
@@ -278,53 +349,16 @@ def apply_message_project_action(
                 "source_message": source,
             },
         )
-        try:
-            task, created = project_store.add_task_to_milestone(project.id, candidate)
-        except PermissionError as exc:
-            raise MessageProjectActionError(404, "project not found") from exc
-        except ValueError as exc:
-            raise MessageProjectActionError(409, str(exc)) from exc
-        if not created:
-            existing_source = (
-                task.input.get("source_message") if isinstance(task.input, dict) else None
-            )
-            if existing_source != source:
-                raise MessageProjectActionError(409, "item_id already belongs to another source")
-        target = _entity_ref(
-            "task",
-            task.id,
-            project.id,
-            milestone_id=milestone.id,
-            task_id=task.id,
-            label=task.goal,
-        )
-        event_id = _stable_id("EV-MA", action_id)
-        event, event_created = _event_once(
-            project_store,
-            project.id,
-            event_id=event_id,
-            kind="project.task_created_from_message",
-            payload={
-                "actor": actor,
-                "milestone_id": milestone.id,
-                "task": task.to_dict(),
-                "source_message": source,
-            },
-        )
-        created = created or event_created
-        project_task_to_collaboration(
-            collaboration_store,
-            session_id=thread_id,
-            room_id=room_id,
-            project_id=project.id,
-            milestone_id=milestone.id,
-            task=task,
-            tenant_id=str(project.tenant_id or ""),
-        )
-        card_title = f"已创建事项 · {task.goal}"
-        card_summary = str(body.get("description") or source["text"]).strip()
-        card_status = task.status
+        event_kind = "project.task_created_from_message"
+        event_payload = {
+            "actor": actor,
+            "milestone_id": milestone.id,
+            "task": candidate_task.to_dict(),
+            "source_message": source,
+        }
     elif action == "link_milestone":
+        if milestone is None:
+            raise RuntimeError("link_milestone milestone was not resolved")
         target = _entity_ref(
             "milestone",
             milestone.id,
@@ -332,18 +366,12 @@ def apply_message_project_action(
             milestone_id=milestone.id,
             label=milestone.name,
         )
-        event_id = _stable_id("EV-MA", action_id)
-        event, created = _event_once(
-            project_store,
-            project.id,
-            event_id=event_id,
-            kind="project.message_linked",
-            payload={
-                "actor": actor,
-                "milestone_id": milestone.id,
-                "source_message": source,
-            },
-        )
+        event_kind = "project.message_linked"
+        event_payload = {
+            "actor": actor,
+            "milestone_id": milestone.id,
+            "source_message": source,
+        }
         card_title = f"已关联里程碑 · {milestone.name}"
         card_summary = source["text"]
         card_status = milestone.status
@@ -351,20 +379,13 @@ def apply_message_project_action(
         decision = str(body.get("decision") or body.get("title") or "").strip()
         if not decision:
             raise MessageProjectActionError(400, "decision is required for record_decision")
-        event_id = _stable_id("EV-MA", action_id)
-        event, created = _event_once(
-            project_store,
-            project.id,
-            event_id=event_id,
-            kind="project.decision_recorded",
-            payload={
-                "actor": actor,
-                "decision": decision,
-                "rationale": str(body.get("rationale") or "").strip(),
-                "source_message": source,
-            },
-        )
-        target = _entity_ref("decision", event["id"], project.id, label=decision[:256])
+        event_kind = "project.decision_recorded"
+        event_payload = {
+            "actor": actor,
+            "decision": decision,
+            "rationale": str(body.get("rationale") or "").strip(),
+            "source_message": source,
+        }
         card_title = "已记录项目决策"
         card_summary = decision
         card_status = "recorded"
@@ -391,18 +412,12 @@ def apply_message_project_action(
         )
         artifact["name"] = artifact_name
         artifact["title"] = artifact.get("title") or artifact_name
-        event_id = _stable_id("EV-MA", action_id)
-        event, created = _event_once(
-            project_store,
-            project.id,
-            event_id=event_id,
-            kind="project.artifact_published",
-            payload={
-                "actor": actor,
-                "artifact": artifact,
-                "source_message": source,
-            },
-        )
+        event_kind = "project.artifact_published"
+        event_payload = {
+            "actor": actor,
+            "artifact": artifact,
+            "source_message": source,
+        }
         target = _entity_ref(
             "artifact",
             artifact_id,
@@ -413,6 +428,50 @@ def apply_message_project_action(
         card_summary = str(artifact.get("summary") or artifact.get("path") or "")
         card_status = "published"
 
+    event_id = _stable_id("EV-MA", action_id)
+    event_payload["projection_intent"] = {
+        "schema": "octopus.projectos.message_action_projection.v1",
+        "action_id": action_id,
+        "action": action,
+        "thread_id": thread_id,
+        "room_id": room_id,
+        "project_id": project.id,
+        "binding_generation": binding_generation,
+        "source_message_seq": source["message_seq"],
+    }
+    event, task, created = _commit_source_action(
+        project_store,
+        project.id,
+        event_id=event_id,
+        kind=event_kind,
+        payload=event_payload,
+        expected_thread_id=thread_id,
+        expected_binding_generation=binding_generation,
+        task=candidate_task,
+    )
+    if action == "create_item":
+        if task is None:
+            raise RuntimeError("project message action task was not persisted")
+        existing_source = task.input.get("source_message") if isinstance(task.input, dict) else None
+        if existing_source != source:
+            raise MessageProjectActionError(409, "item_id already belongs to another source")
+        target = _entity_ref(
+            "task",
+            task.id,
+            project.id,
+            milestone_id=task.milestone_id,
+            task_id=task.id,
+            label=task.goal,
+        )
+        card_title = f"已创建事项 · {task.goal}"
+        card_summary = str(body.get("description") or source["text"]).strip()
+        card_status = task.status
+    elif action == "record_decision":
+        decision = str(event_payload["decision"])
+        target = _entity_ref("decision", event["id"], project.id, label=decision[:256])
+    if target is None:
+        raise RuntimeError("project message action target was not resolved")
+
     project_ref = _entity_ref("project", project.id, project.id, label=project.name)
     card_title = str(card_title).strip()[:512]
     card_summary = str(card_summary).strip()[:4096]
@@ -422,15 +481,12 @@ def apply_message_project_action(
         project_id=project.id,
         target=target,
         event_id=event["id"],
+        applied_at=datetime.fromtimestamp(float(event["created_at"]), UTC).isoformat(),
     )
-    source_message = collaboration_store.update_message_metadata(
-        thread_id,
-        int(message["seq"]),
-        {
-            "entity_refs": [project_ref, target],
-            "project_actions": [receipt],
-        },
-    )
+    source_metadata = {
+        "entity_refs": [project_ref, target],
+        "project_actions": [receipt],
+    }
     card_metadata = {
         "source_message_id": f"project-action:{action_id}",
         "message_type": "system_card",
@@ -446,18 +502,50 @@ def apply_message_project_action(
             "source_message_seq": source["message_seq"],
         },
     }
-    card_seq = collaboration_store.append_message(
-        thread_id,
-        room_id=room_id,
-        text=card_title,
-        participant_id="project-os",
-        display_name="Project OS",
-        metadata=card_metadata,
-    )
-    card_message = collaboration_store.message_for_session(thread_id, card_seq)
+    projection_pending = False
+    recovery = None
+    card_created = False
+    try:
+        projection = collaboration_store.commit_project_message_action(
+            session_id=thread_id,
+            room_id=room_id,
+            project_id=project.id,
+            binding_generation=binding_generation,
+            source_message_seq=int(message["seq"]),
+            source_metadata=source_metadata,
+            card_text=card_title,
+            card_metadata=card_metadata,
+            task=(
+                _task_projection(
+                    task, project_id=project.id, tenant_id=str(project.tenant_id or "")
+                )
+                if task is not None
+                else None
+            ),
+            milestone_id=task.milestone_id if task is not None else None,
+        )
+        source_message = projection["source_message"]
+        card_message = projection["system_card_message"]
+        card_created = bool(projection.get("card_created"))
+    except Exception as exc:  # Source action is durable; projection is recoverable.
+        projection_pending = True
+        source_message = message
+        card_message = None
+        recovery = {
+            "code": (
+                "PROJECT_BINDING_CHANGED"
+                if isinstance(exc, ProjectMessageProjectionStale)
+                else "PROJECT_ACTION_PROJECTION_PENDING"
+            ),
+            "event_id": event["id"],
+            "thread_id": thread_id,
+            "room_id": room_id,
+            "project_id": project.id,
+            "binding_generation": binding_generation,
+        }
     return {
         "ok": True,
-        "replayed": False,
+        "replayed": not bool(created) and not card_created,
         "created": bool(created),
         "action_id": action_id,
         "action": action,
@@ -469,6 +557,8 @@ def apply_message_project_action(
         "task": task.to_dict() if task is not None else None,
         "source_message": source_message,
         "system_card_message": card_message,
+        "projection_pending": projection_pending,
+        "recovery": recovery,
     }
 
 

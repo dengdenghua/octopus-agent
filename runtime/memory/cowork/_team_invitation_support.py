@@ -66,6 +66,26 @@ CREATE INDEX IF NOT EXISTS idx_team_join_requests_room
     ON team_join_requests(tenant_id, room_id, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_team_join_requests_actor
     ON team_join_requests(tenant_id, actor_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS team_invitation_reservations (
+    reservation_id   TEXT PRIMARY KEY,
+    invite_id        TEXT NOT NULL,
+    tenant_id        TEXT NOT NULL,
+    room_id          TEXT NOT NULL,
+    actor_id         TEXT NOT NULL,
+    use_number       INTEGER NOT NULL,
+    participant_id   TEXT,
+    audit_request_id TEXT NOT NULL,
+    join_request_id  TEXT,
+    decided_by       TEXT,
+    created_at       TEXT NOT NULL,
+    finalized_at     TEXT,
+    UNIQUE (invite_id, actor_id),
+    UNIQUE (invite_id, use_number),
+    FOREIGN KEY (invite_id) REFERENCES team_invitations(invite_id)
+);
+CREATE INDEX IF NOT EXISTS idx_team_invite_reservations_room
+    ON team_invitation_reservations(tenant_id, room_id, actor_id);
 """
 
 _INVITE_COLUMNS = (
@@ -77,6 +97,38 @@ _JOIN_REQUEST_COLUMNS = (
     "status, created_at, updated_at, expires_at, decided_at, decided_by, "
     "decision_reason, participant_id"
 )
+_RESERVATION_COLUMNS = (
+    "reservation_id, invite_id, tenant_id, room_id, actor_id, use_number, "
+    "participant_id, audit_request_id, join_request_id, decided_by, created_at, finalized_at"
+)
+
+
+class InvitationError(ValueError):
+    """Base class for invitation lifecycle failures."""
+
+
+class InvitationNotFound(InvitationError):
+    """The token does not exist in the caller's tenant."""
+
+
+class InvitationExpired(InvitationError):
+    """The token is past its expiry time."""
+
+
+class InvitationRevoked(InvitationError):
+    """The token was explicitly revoked."""
+
+
+class InvitationExhausted(InvitationError):
+    """The token has reached its maximum number of uses."""
+
+
+class JoinRequestNotFound(InvitationError):
+    """A tenant/room-scoped join request does not exist."""
+
+
+class JoinRequestConflict(InvitationError):
+    """The requested join-request transition is not valid from its state."""
 
 
 def _default_db_path() -> Path:
@@ -128,6 +180,16 @@ def _status(invitation: dict[str, Any], now: datetime) -> str:
     return "active"
 
 
+def _raise_unusable(invitation: dict[str, Any]) -> None:
+    status = str(invitation.get("status") or "")
+    if status == "expired":
+        raise InvitationExpired("invitation expired")
+    if status == "revoked":
+        raise InvitationRevoked("invitation revoked")
+    if status == "exhausted":
+        raise InvitationExhausted("invitation has reached its maximum uses")
+
+
 def _from_row(row: sqlite3.Row, *, now: datetime) -> dict[str, Any]:
     invitation = {
         "id": str(row["invite_id"]),
@@ -155,6 +217,52 @@ def _from_row(row: sqlite3.Row, *, now: datetime) -> dict[str, Any]:
 
 def _without_secret(invitation: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in invitation.items() if key != "token_hash"}
+
+
+def _reservation_row(
+    conn: sqlite3.Connection,
+    *,
+    invite_id: str,
+    actor_id: str,
+) -> sqlite3.Row | None:
+    return conn.execute(
+        f"SELECT {_RESERVATION_COLUMNS} FROM team_invitation_reservations "  # noqa: S608
+        "WHERE invite_id = ? AND actor_id = ?",
+        (invite_id, actor_id),
+    ).fetchone()
+
+
+def _reservation_by_id(conn: sqlite3.Connection, reservation_id: str) -> sqlite3.Row | None:
+    return conn.execute(
+        f"SELECT {_RESERVATION_COLUMNS} FROM team_invitation_reservations "  # noqa: S608
+        "WHERE reservation_id = ?",
+        (reservation_id,),
+    ).fetchone()
+
+
+def _join_request_has_reservation(
+    conn: sqlite3.Connection,
+    application: dict[str, Any],
+) -> bool:
+    return (
+        _reservation_row(
+            conn,
+            invite_id=str(application["invite_id"]),
+            actor_id=str(application["actor_id"]),
+        )
+        is not None
+    )
+
+
+def _reserved_payload(
+    invitation: dict[str, Any],
+    reservation: sqlite3.Row,
+) -> dict[str, Any]:
+    return {
+        **_without_secret(invitation),
+        "reservation_id": str(reservation["reservation_id"]),
+        "reservation_participant_id": reservation["participant_id"],
+    }
 
 
 def _join_request_from_row(row: sqlite3.Row) -> dict[str, Any]:

@@ -204,6 +204,15 @@ def _apply_orchestration_grant(session_metadata: dict[str, Any]) -> None:
     session_metadata["orchestration_token_budget"] = ultracode_token_budget()
 
 
+def _apply_react_session_metadata(
+    session_metadata: dict[str, Any], stack: Any, approval_provider: Any
+) -> None:
+    """Apply server-owned execution context to one ReAct turn session."""
+    _apply_orchestration_grant(session_metadata)
+    session_metadata["_execution_stack"] = stack
+    session_metadata["_approval_provider"] = approval_provider
+
+
 def _should_use_native_tool_loop(
     stack: Any,
     intent: ParsedIntent,

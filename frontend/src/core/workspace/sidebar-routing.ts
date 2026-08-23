@@ -4,6 +4,31 @@
  */
 export const PRIMARY_WORKSPACE_ROUTE = "/workspace/realtime/new";
 
+/**
+ * Resolve where the EchoAI side of the workspace switch should return.
+ *
+ * The browser surface lives at `/browser`, outside the workspace route tree.
+ * Keep the last internal workspace location so switching back does not discard
+ * the active conversation, project, or settings context.
+ */
+export function workspaceAgentReturnRoute(
+  pathname: string,
+  search = "",
+  rememberedRoute?: string | null,
+): string {
+  const currentRoute = `${pathname}${search}`;
+  if (pathname === "/workspace" || pathname.startsWith("/workspace/")) {
+    return currentRoute;
+  }
+  if (
+    rememberedRoute === "/workspace" ||
+    rememberedRoute?.startsWith("/workspace/")
+  ) {
+    return rememberedRoute;
+  }
+  return PRIMARY_WORKSPACE_ROUTE;
+}
+
 export function routePath(to: string): string {
   return to.split(/[?#]/)[0] || to;
 }

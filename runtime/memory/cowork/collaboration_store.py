@@ -16,6 +16,29 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from runtime.memory.cowork._collaboration_project_actions import (
+    CollaborationProjectActionStoreMixin,
+)
+from runtime.memory.cowork._collaboration_project_projection import (
+    delete_project_tasks as _delete_project_tasks,
+)
+from runtime.memory.cowork._collaboration_project_projection import (
+    delete_project_tasks_for_project as _delete_project_tasks_for_project,
+)
+from runtime.memory.cowork._collaboration_project_projection import (
+    set_room_project_metadata as _set_room_project_metadata,
+)
+from runtime.memory.cowork._collaboration_project_projection import (
+    upsert_project_task as _upsert_project_task,
+)
+from runtime.memory.cowork._collaboration_room_write import (
+    upsert_project_room as _upsert_project_room,
+)
+from runtime.memory.cowork._collaboration_room_write import upsert_room as _upsert_room
+from runtime.memory.cowork._collaboration_session_writes import (
+    append_message as _append_message,
+)
+from runtime.memory.cowork._collaboration_session_writes import upsert_task as _upsert_task
 from runtime.memory.cowork.ids import (
     normalize_display_name,
     normalize_search_query,
@@ -49,6 +72,68 @@ CREATE TABLE IF NOT EXISTS collaboration_rooms (
     updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_collab_rooms_room ON collaboration_rooms(room_id);
+
+CREATE TABLE IF NOT EXISTS collaboration_project_generations (
+    session_id  TEXT PRIMARY KEY,
+    project_id  TEXT NOT NULL DEFAULT '',
+    generation  INTEGER NOT NULL
+);
+INSERT OR IGNORE INTO collaboration_project_generations(session_id, project_id, generation)
+SELECT
+    session_id,
+    CASE WHEN json_valid(room_json) THEN COALESCE(
+            json_extract(room_json, '$.metadata.project_id'),
+            json_extract(room_json, '$.project_id'),
+            ''
+        ) ELSE '' END,
+    CASE
+        WHEN json_valid(room_json) THEN CASE
+            WHEN json_type(room_json, '$.metadata.project_binding_generation') = 'integer'
+            THEN MAX(0, CAST(json_extract(
+                room_json,
+                '$.metadata.project_binding_generation'
+            ) AS INTEGER))
+            ELSE 0
+        END
+        ELSE 0
+    END
+FROM collaboration_rooms
+WHERE CASE WHEN json_valid(room_json) THEN
+    json_extract(room_json, '$.metadata.project_id') IS NOT NULL
+    OR json_extract(room_json, '$.project_id') IS NOT NULL
+    OR json_extract(room_json, '$.metadata.project_binding_generation') IS NOT NULL
+    ELSE 0 END;
+
+CREATE TABLE IF NOT EXISTS collaboration_room_owners (
+    room_id     TEXT PRIMARY KEY,
+    session_id  TEXT NOT NULL,
+    project_id  TEXT NOT NULL DEFAULT '',
+    generation  INTEGER NOT NULL
+);
+INSERT OR IGNORE INTO collaboration_room_owners(room_id, session_id, project_id, generation)
+SELECT r.room_id, r.session_id, COALESCE(g.project_id, ''), COALESCE(g.generation, 0)
+FROM collaboration_rooms r
+LEFT JOIN collaboration_project_generations g ON g.session_id=r.session_id;
+
+CREATE TABLE IF NOT EXISTS collaboration_project_room_bindings (
+    project_id  TEXT NOT NULL,
+    session_id  TEXT NOT NULL,
+    room_id     TEXT NOT NULL,
+    generation  INTEGER NOT NULL,
+    PRIMARY KEY (project_id, session_id)
+);
+CREATE TABLE IF NOT EXISTS collaboration_deleted_projects (
+    project_id TEXT PRIMARY KEY,
+    token TEXT NOT NULL,
+    deleted_at TEXT NOT NULL
+);
+INSERT OR IGNORE INTO collaboration_project_room_bindings(
+    project_id, session_id, room_id, generation
+)
+SELECT g.project_id, r.session_id, r.room_id, g.generation
+FROM collaboration_rooms r
+INNER JOIN collaboration_project_generations g ON g.session_id=r.session_id
+WHERE g.project_id != '';
 
 CREATE TABLE IF NOT EXISTS collaboration_tasks (
     task_id    TEXT PRIMARY KEY,
@@ -283,6 +368,26 @@ def _merge_room_payload(
     return _normalize_room_payload(merged, room_id=room_id)
 
 
+def _fence_project_room_merge(
+    _existing: dict[str, Any] | None,
+    incoming: dict[str, Any],
+) -> dict[str, Any]:
+    """Strip project binding fields from the generic room merge path."""
+
+    candidate = dict(incoming)
+    incoming_metadata = candidate.get("metadata")
+    incoming_metadata = dict(incoming_metadata) if isinstance(incoming_metadata, dict) else {}
+    candidate.pop("project_id", None)
+    candidate.pop("is_project_group", None)
+    incoming_metadata.pop("project_id", None)
+    incoming_metadata.pop("project_binding_generation", None)
+    incoming_metadata.pop("binding_generation", None)
+    if incoming_metadata.get("source") == "projectos":
+        incoming_metadata.pop("source", None)
+    candidate["metadata"] = incoming_metadata
+    return candidate
+
+
 def _normalize_task_payload(
     payload: dict[str, Any],
     *,
@@ -336,7 +441,7 @@ def _normalize_task_payload(
     return payload
 
 
-class CollaborationStore:
+class CollaborationStore(CollaborationProjectActionStoreMixin):
     """Canonical room/task storage keyed by collaboration session id."""
 
     def __init__(self, base_dir: Path | str | None = None) -> None:
@@ -411,58 +516,23 @@ class CollaborationStore:
         return str(row[0]) if row else None
 
     def upsert_room(self, session_id: str, room: dict[str, Any]) -> dict[str, Any]:
-        session_id = require_cowork_id(session_id, label="session_id")
-        incoming = dict(room or {})
-        room_id = require_cowork_id(
-            incoming.get("id") or incoming.get("room_id") or f"collab-{session_id}",
-            label="room_id",
+        return _upsert_room(self, session_id, room)
+
+    def upsert_project_room(
+        self,
+        *,
+        session_id: str,
+        room: dict[str, Any],
+        project_id: str,
+        generation: int,
+    ) -> dict[str, Any]:
+        return _upsert_project_room(
+            self,
+            session_id=session_id,
+            room=room,
+            project_id=project_id,
+            generation=generation,
         )
-        incoming = _normalize_room_payload(incoming, room_id=room_id)
-        now = _now()
-        with self._lock, self._connect() as conn:
-            row = conn.execute(
-                "SELECT room_id, room_json, created_at FROM collaboration_rooms "
-                "WHERE session_id = ?",
-                (session_id,),
-            ).fetchone()
-            existing_payload = _load(row[1]) if row is not None and str(row[0]) == room_id else None
-            existing_room = conn.execute(
-                "SELECT session_id, room_json FROM collaboration_rooms WHERE room_id = ?",
-                (room_id,),
-            ).fetchone()
-            if existing_payload is None and existing_room is not None:
-                existing_payload = _load(existing_room[1])
-            payload = _merge_room_payload(existing_payload, incoming, room_id=room_id)
-            created_at = str(row[2]) if row else str(payload.get("created_at") or now)
-            payload.setdefault("created_at", created_at)
-            payload["updated_at"] = str(payload.get("updated_at") or now)
-            if existing_room and str(existing_room[0]) != session_id:
-                conn.execute(
-                    "UPDATE collaboration_tasks SET session_id = ? WHERE room_id = ?",
-                    (session_id, room_id),
-                )
-                conn.execute(
-                    "UPDATE collaboration_messages SET session_id = ? WHERE room_id = ?",
-                    (session_id, room_id),
-                )
-                conn.execute(
-                    "DELETE FROM collaboration_rooms WHERE room_id = ?",
-                    (room_id,),
-                )
-            conn.execute(
-                "INSERT INTO collaboration_rooms(session_id, room_id, room_json, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?) "
-                "ON CONFLICT(session_id) DO UPDATE SET "
-                "room_id = excluded.room_id, room_json = excluded.room_json, updated_at = excluded.updated_at",
-                (
-                    session_id,
-                    room_id,
-                    _dump(payload, label="room"),
-                    created_at,
-                    payload["updated_at"],
-                ),
-            )
-        return payload
 
     def upsert_room_by_id(self, room: dict[str, Any]) -> dict[str, Any] | None:
         payload = dict(room or {})
@@ -479,6 +549,28 @@ class CollaborationStore:
         if not row:
             return self.upsert_room(f"team:{room_id}", payload)
         return self.upsert_room(str(row[0]), payload)
+
+    def set_room_project_metadata(
+        self,
+        session_id: str,
+        project_id: str | None,
+        *,
+        expected_project_id: str | None = None,
+        generation: int | None = None,
+    ) -> dict[str, Any] | None:
+        """Add or remove only a room's optional project projection.
+
+        The room row, human participants, messages, and historical project
+        tasks are deliberately preserved.  ``expected_project_id`` protects
+        detach compensation from erasing a newer binding.
+        """
+        return _set_room_project_metadata(
+            self,
+            session_id,
+            project_id,
+            expected_project_id=expected_project_id,
+            generation=generation,
+        )
 
     def tasks_for_session(self, session_id: str) -> list[dict[str, Any]]:
         if not session_id:
@@ -505,42 +597,7 @@ class CollaborationStore:
         return [item for row in rows if (item := _load(row[0])) is not None]
 
     def upsert_task(self, session_id: str, task: dict[str, Any]) -> dict[str, Any]:
-        session_id = require_cowork_id(session_id, label="session_id")
-        payload = dict(task or {})
-        task_id = require_cowork_id(
-            payload.get("id") or payload.get("task_id") or "", label="task_id"
-        )
-        room_id = require_cowork_id(payload.get("room_id") or "", label="room_id")
-        payload = _normalize_task_payload(
-            payload,
-            task_id=task_id,
-            room_id=room_id,
-            session_id=session_id,
-        )
-        now = _now()
-        created_at = str(payload.get("created_at") or now)
-        updated_at = str(payload.get("updated_at") or now)
-        status = str(payload.get("status") or "pending")
-        with self._lock, self._connect() as conn:
-            conn.execute(
-                "INSERT INTO collaboration_tasks("
-                "task_id, session_id, room_id, status, task_json, created_at, updated_at"
-                ") VALUES (?, ?, ?, ?, ?, ?, ?) "
-                "ON CONFLICT(task_id) DO UPDATE SET "
-                "session_id = excluded.session_id, room_id = excluded.room_id, "
-                "status = excluded.status, task_json = excluded.task_json, "
-                "updated_at = excluded.updated_at",
-                (
-                    task_id,
-                    session_id,
-                    room_id,
-                    status,
-                    _dump(payload, label="task"),
-                    created_at,
-                    updated_at,
-                ),
-            )
-        return payload
+        return _upsert_task(self, session_id, task)
 
     def upsert_task_for_room(self, room_id: str, task: dict[str, Any]) -> dict[str, Any] | None:
         room_id = require_cowork_id(room_id, label="room_id")
@@ -559,20 +616,17 @@ class CollaborationStore:
         project_id: str,
         milestone_id: str,
         task: dict[str, Any],
+        binding_generation: int | None = None,
     ) -> dict[str, Any]:
-        payload = dict(task or {})
-        payload["kind"] = "project"
-        payload["room_id"] = room_id
-        payload["project_id"] = project_id
-        payload["milestone_id"] = milestone_id
-        metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
-        payload["metadata"] = {
-            **metadata,
-            "source": "projectos",
-            "project_id": project_id,
-            "milestone_id": milestone_id,
-        }
-        return self.upsert_task(session_id, payload)
+        return _upsert_project_task(
+            self,
+            session_id=session_id,
+            room_id=room_id,
+            project_id=project_id,
+            milestone_id=milestone_id,
+            task=task,
+            binding_generation=binding_generation,
+        )
 
     def project_tasks_for_project(self, project_id: str) -> list[dict[str, Any]]:
         if not project_id:
@@ -587,6 +641,69 @@ class CollaborationStore:
                 (project_id,),
             ).fetchall()
         return [item for row in rows if (item := _load(row[0])) is not None]
+
+    def delete_project_tasks(
+        self,
+        *,
+        session_id: str,
+        project_id: str,
+        source: str = "projectos",
+    ) -> int:
+        """Delete one failed Project OS projection without touching history.
+
+        Project detach deliberately preserves historical task cards because
+        the authoritative project still exists. Promotion compensation is
+        different: it may delete the newly-created project, so its projected
+        task rows must be removed first. Scope the delete by session, project,
+        kind, and producer so an unrelated project or Team Task cannot be
+        consumed by a stale compensation request.
+        """
+        return _delete_project_tasks(
+            self,
+            session_id=session_id,
+            project_id=project_id,
+            source=source,
+        )
+
+    def delete_project_tasks_for_project(
+        self,
+        *,
+        project_id: str,
+        source: str = "projectos",
+    ) -> int:
+        """Atomically remove one Project OS projection from every session.
+
+        The session ids are discovered and consumed inside the same SQLite
+        transaction. Each delete remains scoped by the exact
+        session/project/source triple, while the enclosing operation covers
+        historical or detached sessions that no longer have a project binding.
+        """
+        return _delete_project_tasks_for_project(
+            self,
+            project_id=project_id,
+            source=source,
+        )
+
+    def tombstone_project_projection(self, project_id: str, token: str) -> None:
+        from runtime.memory.cowork._collaboration_project_projection import (
+            tombstone_project_projection,
+        )
+
+        tombstone_project_projection(self, project_id=project_id, token=token)
+
+    def finalize_project_projection_tombstone(self, project_id: str, token: str) -> None:
+        from runtime.memory.cowork._collaboration_project_projection import (
+            finalize_project_projection_tombstone,
+        )
+
+        finalize_project_projection_tombstone(self, project_id=project_id, token=token)
+
+    def project_projection_tombstone_token(self, project_id: str) -> str:
+        from runtime.memory.cowork._collaboration_project_projection import (
+            project_projection_tombstone_token,
+        )
+
+        return project_projection_tombstone_token(self, project_id=project_id)
 
     def delete_task(self, task_id: str) -> bool:
         if not task_id:
@@ -628,53 +745,15 @@ class CollaborationStore:
         display_name: str = "",
         metadata: dict[str, Any] | None = None,
     ) -> int:
-        session_id = require_cowork_id(session_id, label="session_id")
-        room_id = require_cowork_id(room_id, label="room_id")
-        participant_id = optional_cowork_id(participant_id, label="participant_id")
-        display_name = normalize_display_name(display_name)
-        text = require_message_text(text)
-        message_metadata = _normalize_message_metadata(metadata)
-        ts = _now()
-        with self._lock, self._connect() as conn:
-            source_message_id = str(message_metadata.get("source_message_id") or "")
-            if source_message_id:
-                existing = conn.execute(
-                    "SELECT seq, room_id, participant_id, display_name, text "
-                    "FROM collaboration_messages "
-                    "WHERE session_id = ? "
-                    "AND CASE WHEN json_valid(metadata_json) "
-                    "THEN json_extract(metadata_json, '$.source_message_id') END = ?",
-                    (session_id, source_message_id),
-                ).fetchone()
-                if existing:
-                    if (
-                        str(existing[1] or "") != room_id
-                        or str(existing[2] or "") != participant_id
-                        or str(existing[3] or "") != display_name
-                        or str(existing[4] or "") != text
-                    ):
-                        raise ValueError(
-                            "source_message_id already belongs to a different room message"
-                        )
-                    return int(existing[0])
-            cur = conn.execute(
-                "INSERT INTO collaboration_messages("
-                "session_id, seq, room_id, participant_id, display_name, text, ts, metadata_json"
-                ") VALUES (?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM collaboration_messages "
-                "WHERE session_id = ?), ?, ?, ?, ?, ?, ?) RETURNING seq",
-                (
-                    session_id,
-                    session_id,
-                    room_id,
-                    participant_id,
-                    display_name,
-                    text,
-                    ts,
-                    _dump(message_metadata, label="message metadata"),
-                ),
-            )
-            row = cur.fetchone()
-            return int(row[0]) if row else 0
+        return _append_message(
+            self,
+            session_id,
+            room_id=room_id,
+            text=text,
+            participant_id=participant_id,
+            display_name=display_name,
+            metadata=metadata,
+        )
 
     def append_message_for_room(
         self,

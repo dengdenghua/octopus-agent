@@ -8,9 +8,30 @@ import {
   isNavRouteActive,
   isStorageLibraryRouteActive,
   isStorageRouteActive,
+  workspaceAgentReturnRoute,
 } from "./sidebar-routing";
 
 describe("sidebar routing helpers", () => {
+  it("returns from browser to the last workspace location", () => {
+    expect(
+      workspaceAgentReturnRoute(
+        "/browser",
+        "",
+        "/workspace/realtime/thread-42?mode=team",
+      ),
+    ).toBe("/workspace/realtime/thread-42?mode=team");
+    expect(
+      workspaceAgentReturnRoute(
+        "/workspace/agents",
+        "?surface=chat",
+        "/workspace/realtime/old",
+      ),
+    ).toBe("/workspace/agents?surface=chat");
+    expect(workspaceAgentReturnRoute("/browser", "", "https://bad.test")).toBe(
+      "/workspace/realtime/new",
+    );
+  });
+
   it("detects chat surface routes", () => {
     expect(isChatSurfaceRoute("/workspace/realtime")).toBe(true);
     expect(isChatSurfaceRoute("/workspace/realtime/new")).toBe(true);

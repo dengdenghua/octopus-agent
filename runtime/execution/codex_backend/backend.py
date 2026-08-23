@@ -11,9 +11,9 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import AsyncIterator, Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Self, cast
+from typing import Any, Protocol, Self, cast
 
 from runtime.safety.approval.approval_gate import ApprovalProvider
 from runtime.safety.sandboxing.sandbox import (
@@ -33,7 +33,9 @@ from .security import (
     CodexThreadBinding,
 )
 from .types import (
+    ApprovalHandler,
     CodexAppServerConfig,
+    CodexProviderProfile,
     JsonValue,
     Notification,
     ProtocolError,
@@ -80,7 +82,14 @@ class CodexExecutionRequest:
     model: str | None = None
     effort: str | None = None
     sandbox_mode: CodexSandboxMode = "workspace-write"
-    host_env: Mapping[str, str] | None = None
+    host_env: Mapping[str, str] | None = field(default=None, repr=False)
+    provider_profile: CodexProviderProfile | None = None
+    use_system_model_proxy: bool = False
+    developer_instructions: str | None = None
+    dynamic_tools: tuple[Mapping[str, Any], ...] = ()
+    dynamic_tool_handler: Any | None = None
+    selected_app_ids: tuple[str, ...] = ()
+    app_mentions: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -112,11 +121,84 @@ class CodexExecutionRequest:
             value = getattr(self, field_name)
             if value is not None and (not isinstance(value, str) or not value.strip()):
                 raise ValueError(f"{field_name} must be None or a non-empty string")
+        if len(self.selected_app_ids) > 32 or any(
+            not isinstance(app_id, str)
+            or not app_id.strip()
+            or len(app_id) > 256
+            or any(char in app_id for char in "\x00\r\n")
+            for app_id in self.selected_app_ids
+        ):
+            raise ValueError("selected_app_ids must contain bounded safe identifiers")
+        if len(self.app_mentions) > 8 or any(
+            not isinstance(mention, tuple)
+            or len(mention) != 2
+            or any(
+                not isinstance(value, str)
+                or not value.strip()
+                or len(value) > 256
+                or any(char in value for char in "\x00\r\n")
+                for value in mention
+            )
+            for mention in self.app_mentions
+        ):
+            raise ValueError("app_mentions must contain bounded (id, name) pairs")
+        if any(app_id not in self.selected_app_ids for app_id, _name in self.app_mentions):
+            raise ValueError("app_mentions must refer to selected apps")
         if self.sandbox_mode not in {"read-only", "workspace-write"}:
             raise ValueError("sandbox_mode must be 'read-only' or 'workspace-write'")
+        if self.provider_profile is not None and not isinstance(
+            self.provider_profile, CodexProviderProfile
+        ):
+            raise ValueError("provider_profile must be server-resolved")
+        if self.provider_profile is not None:
+            if self.model is None:
+                object.__setattr__(self, "model", self.provider_profile.model)
+            elif self.model != self.provider_profile.model:
+                raise ValueError("model must match the server-resolved provider profile")
+        if type(self.use_system_model_proxy) is not bool:
+            raise ValueError("use_system_model_proxy must be a server-resolved boolean")
+        if self.use_system_model_proxy and (
+            self.model is None or self.provider_profile is not None
+        ):
+            raise ValueError("system model proxy requests require an unresolved explicit model")
+        if self.developer_instructions is not None and (
+            not isinstance(self.developer_instructions, str)
+            or not self.developer_instructions.strip()
+            or "\x00" in self.developer_instructions
+            or len(self.developer_instructions) > 200_000
+        ):
+            raise ValueError("developer_instructions must be a non-empty, bounded, NUL-free string")
+        if not isinstance(self.dynamic_tools, tuple) or len(self.dynamic_tools) > 256:
+            raise ValueError("dynamic_tools must be a tuple of at most 256 tool specs")
+        seen_dynamic_names: set[str] = set()
+        for spec in self.dynamic_tools:
+            if not isinstance(spec, Mapping) or spec.get("type") != "function":
+                raise ValueError("dynamic tool specs must be function mappings")
+            name = spec.get("name")
+            schema = spec.get("inputSchema")
+            if (
+                not isinstance(name, str)
+                or not name.strip()
+                or len(name) > 128
+                or name in seen_dynamic_names
+                or not isinstance(schema, Mapping)
+            ):
+                raise ValueError("dynamic tool specs require unique names and object schemas")
+            seen_dynamic_names.add(name)
+        if self.dynamic_tools and not callable(self.dynamic_tool_handler):
+            raise ValueError("advertised dynamic tools require a server-owned handler")
 
 
-ClientFactory = Callable[..., CodexAppServerClient]
+class ClientFactory(Protocol):
+    """Constructor contract needed by the execution boundary."""
+
+    def __call__(
+        self,
+        config: CodexAppServerConfig,
+        *,
+        approval_handler: ApprovalHandler | None = None,
+        dynamic_tool_handler: ApprovalHandler | None = None,
+    ) -> CodexAppServerClient: ...
 
 
 class CodexExecutionSession:
@@ -207,6 +289,8 @@ class CodexExecutionSession:
                 task_id=self.request.outer_turn_id,
                 workspace=self.request.workspace,
                 sandbox_mode=self.request.sandbox_mode,
+                provider_profile=self.request.provider_profile,
+                selected_app_ids=self.request.selected_app_ids,
                 # This attestation is derived from the effective BackendChoice
                 # that will actually wrap the process, never from a
                 # caller-owned bool or a bypassed nested-incompatible backend.
@@ -230,6 +314,7 @@ class CodexExecutionSession:
                 outer_thread_id=self.request.outer_thread_id,
                 outer_turn_id=self.request.outer_turn_id,
                 workspace=context.workspace,
+                selected_app_ids=self.request.selected_app_ids,
                 is_interrupted=self._is_interrupted,
             )
             self._approval_broker = broker
@@ -247,7 +332,10 @@ class CodexExecutionSession:
                 source_environment={},
                 experimental_api=True,
             )
-            self._client = self._client_factory(config, approval_handler=broker)
+            client_kwargs: dict[str, Any] = {"approval_handler": broker}
+            if self.request.dynamic_tool_handler is not None:
+                client_kwargs["dynamic_tool_handler"] = self.request.dynamic_tool_handler
+            self._client = self._client_factory(config, **client_kwargs)
             await self._start_client()
 
             config_response = await self._request_pre_turn(
@@ -275,14 +363,28 @@ class CodexExecutionSession:
             # deliberate: after this point a lost/malformed response cannot
             # prove that the model did not run or tools did not execute.
             self._turn_started = True
+            input_items: str | list[dict[str, str]] = self.request.prompt
+            if self.request.app_mentions:
+                input_items = [{"type": "text", "text": self.request.prompt}]
+                input_items.extend(
+                    {"type": "mention", "name": name, "path": f"app://{app_id}"}
+                    for app_id, name in self.request.app_mentions
+                )
             turn = await self._require_client().start_turn(
                 inner_thread_id,
-                self.request.prompt,
+                input_items,
                 extra_params=turn_params,
             )
             inner_turn_id = _entity_id(turn, entity="turn", operation="turn/start")
             self._inner_turn_id = inner_turn_id
             broker.bind_inner_scope(thread_id=inner_thread_id, turn_id=inner_turn_id)
+            bind_dynamic_scope = getattr(
+                self.request.dynamic_tool_handler,
+                "bind_inner_scope",
+                None,
+            )
+            if callable(bind_dynamic_scope):
+                bind_dynamic_scope(thread_id=inner_thread_id, turn_id=inner_turn_id)
             return self
         except BaseException:
             await self._release(suppress_errors=True)
@@ -402,6 +504,12 @@ class CodexExecutionSession:
         overrides = context.thread_start_security_overrides()
         permissions = _permission_profile(overrides)
         params = _thread_extra_params(overrides, resume=True)
+        # ``thread/resume`` can otherwise restore a stale App Server catalog.
+        # Reassert the exact current-turn catalog, including an explicit empty
+        # list when Octopus revoked every tool since the previous turn.
+        params["dynamicTools"] = [dict(spec) for spec in self.request.dynamic_tools]
+        if self.request.developer_instructions is not None:
+            params["developerInstructions"] = self.request.developer_instructions
         return await self._require_client().resume_thread(
             inner_thread_id,
             cwd=str(context.workspace),
@@ -422,6 +530,9 @@ class CodexExecutionSession:
         overrides = context.thread_start_security_overrides()
         permissions = _permission_profile(overrides)
         params = _thread_extra_params(overrides, resume=False)
+        params["dynamicTools"] = [dict(spec) for spec in self.request.dynamic_tools]
+        if self.request.developer_instructions is not None:
+            params["developerInstructions"] = self.request.developer_instructions
         try:
             thread = await self._require_client().start_thread(
                 cwd=str(context.workspace),
@@ -606,15 +717,14 @@ def _thread_extra_params(
         "permissions",
         "ephemeral",
     }
-    supported_extras = (
-        {"runtimeWorkspaceRoots"}
-        if resume
-        else {
-            "runtimeWorkspaceRoots",
-            "dynamicTools",
-            "selectedCapabilityRoots",
-        }
-    )
+    # Resume must reassert every mutable capability selector.  Otherwise the
+    # App Server may retain the previous turn's dynamic tool allowlist.
+    supported_extras = {
+        "runtimeWorkspaceRoots",
+        "dynamicTools",
+        "selectedCapabilityRoots",
+        "developerInstructions",
+    }
     return {
         key: value
         for key, value in overrides.items()
