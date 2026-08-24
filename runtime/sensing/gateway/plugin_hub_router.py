@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from runtime.platform.plugins.plugin_hub import PluginHub
 
@@ -79,6 +79,71 @@ def create_plugin_hub_router(
 
     # ── Lifecycle control ──────────────────────────────────────
 
+    def _lifecycle_error(exc: Exception) -> HTTPException:
+        message = str(exc)
+        if isinstance(exc, KeyError):
+            return HTTPException(404, message)
+        if isinstance(exc, FileExistsError) or "not installed" in message:
+            return HTTPException(409, message)
+        if isinstance(exc, ValueError):
+            return HTTPException(400, message)
+        return HTTPException(400, message)
+
+    def _payload_bool(payload: dict[str, Any], key: str, default: bool) -> bool:
+        if key not in payload:
+            return default
+        value = payload[key]
+        if not isinstance(value, bool):
+            raise HTTPException(400, f"{key} must be a boolean")
+        return value
+
+    @router.post("/plugins/{name}/install", dependencies=[Depends(_operator_dep)])
+    def install_plugin(name: str, body: dict[str, Any] | None = None):
+        """Activate a factory workbench and optionally restore trashed works."""
+
+        payload = body or {}
+        recovery_value = payload.get("recovery_id")
+        if recovery_value is not None and not isinstance(recovery_value, str):
+            raise HTTPException(400, "recovery_id must be a string")
+        try:
+            return hub.install_plugin(
+                name,
+                enabled=_payload_bool(payload, "enabled", True),
+                restore_data=_payload_bool(payload, "restore_data", False),
+                recovery_id=recovery_value,
+            )
+        except (KeyError, ValueError, FileExistsError, RuntimeError) as exc:
+            raise _lifecycle_error(exc) from exc
+
+    @router.post("/plugins/{name}/enable", dependencies=[Depends(_operator_dep)])
+    def enable_plugin(name: str):
+        try:
+            return hub.enable_plugin(name)
+        except (KeyError, ValueError, FileExistsError, RuntimeError) as exc:
+            raise _lifecycle_error(exc) from exc
+
+    @router.post("/plugins/{name}/disable", dependencies=[Depends(_operator_dep)])
+    def disable_plugin(name: str):
+        try:
+            return hub.disable_plugin(name)
+        except (KeyError, ValueError, RuntimeError) as exc:
+            raise _lifecycle_error(exc) from exc
+
+    @router.delete("/plugins/{name}/install", dependencies=[Depends(_operator_dep)])
+    def uninstall_persisted_plugin(
+        name: str,
+        data_policy: str = Query(default="keep", pattern="^(keep|trash)$"),
+        confirm_data_move: bool = Query(default=False),
+    ):
+        try:
+            return hub.uninstall_plugin(
+                name,
+                data_policy=data_policy,
+                confirm_data_move=confirm_data_move,
+            )
+        except (KeyError, ValueError, RuntimeError) as exc:
+            raise _lifecycle_error(exc) from exc
+
     @router.post("/plugins/{name}/load", dependencies=[Depends(_operator_dep)])
     def load_plugin(name: str):
         """Load a discovered plugin by name."""
@@ -129,10 +194,13 @@ def create_plugin_hub_router(
     @router.get("/plugins/{name}")
     def get_plugin_detail(name: str):
         """Return full metadata for a single plugin."""
-        plugins = hub.list_plugins()
-        for p in plugins:
-            if p["id"] == name:
-                return p
+        detail = (
+            hub.get_plugin_detail(name)
+            if hasattr(hub, "get_plugin_detail")
+            else next((p for p in hub.list_plugins() if p["id"] == name), None)
+        )
+        if detail is not None:
+            return detail
         raise HTTPException(404, f"Plugin not found: {name}")
 
     return router

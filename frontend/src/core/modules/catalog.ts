@@ -51,6 +51,15 @@ export const MODULE_CATALOG: ModuleDescriptor[] = [
     section: "chatCapability",
     removable: true,
   },
+  {
+    // 叙事工坊：角色、世界观、剧情线与叙事资产的统一创作工作台。
+    id: "narrative",
+    to: "/workspace/narrative",
+    labelKey: "navNarrative",
+    group: "workspace",
+    section: "chatCapability",
+    removable: true,
+  },
 
   // ─── 成长与运营 ────────────────────────────────────────────
   {

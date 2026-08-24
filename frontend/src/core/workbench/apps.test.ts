@@ -1,12 +1,56 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
+  WORKBENCH_BUILTIN_APPS,
   resetWorkspaceWebShortcutCache,
   setWorkspaceWebShortcut,
   useWorkspaceWebShortcuts,
   workspaceWebAppRoute,
 } from "./apps";
+
+describe("built-in workbench apps", () => {
+  it("ships Narrative Studio as a removable runtime plugin application", () => {
+    expect(
+      WORKBENCH_BUILTIN_APPS.find((app) => app.id === "narrative"),
+    ).toEqual({
+      id: "narrative",
+      moduleId: "narrative",
+      name: "叙事工坊",
+      description: "角色、世界观、剧情分支与正典协作",
+      workspaceRoute: "/workspace/narrative",
+      launchUrl: "octopus://workspace/narrative",
+      icon: "narrative",
+      delivery: "remote",
+      cloudId: "workbench_narrative",
+      packageId: "narrative_studio",
+      runtimePlugin: "narrative_studio",
+    });
+  });
+
+  it("keeps the narrative icon and native browser mount wired", () => {
+    const browserHome = readFileSync(
+      resolve("src/components/browser/browser-home.tsx"),
+      "utf8",
+    );
+    const browserTab = readFileSync(
+      resolve("src/components/browser/webview-tab.tsx"),
+      "utf8",
+    );
+    const sidebar = readFileSync(
+      resolve("src/components/workspace/workspace-sidebar.tsx"),
+      "utf8",
+    );
+    expect(browserHome).toContain("narrative: BookOpenIcon");
+    expect(sidebar).toContain("narrative: BookOpenIcon");
+    expect(browserTab).toContain(
+      'narrative: lazy(() => import("@/app/workspace/narrative/page"))',
+    );
+  });
+});
 
 describe("workspace web shortcuts", () => {
   beforeEach(() => {

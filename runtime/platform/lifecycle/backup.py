@@ -5,7 +5,7 @@ import json
 import os
 import tarfile
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -51,10 +51,42 @@ class BackupManager:
         "hot_cache": "hot_cache/",
         "skills": "skills/",
         "agents": "agents/",
+        # Narrative Studio stores projects below the shared Octopus data root.
+        # Treat it as a first-class backup component so story worlds, drafts,
+        # reviews and immutable canon commits survive a machine migration.
+        "narrative_studio": "data/narrative-studio/",
     }
 
-    def __init__(self, base_dir: str = "~/.octopus") -> None:
-        self._base = Path(os.path.expanduser(base_dir))
+    def __init__(self, base_dir: str | Path | None = None) -> None:
+        """Create a backup manager for the active Octopus data layout.
+
+        ``base_dir`` is intentionally optional.  An explicit value preserves
+        the historical layout where every component is resolved below that
+        directory (including ``data/narrative-studio``).  Without one, the
+        runtime environment owns the location of Narrative Studio data:
+
+        * ``OCTOPUS_DATA_DIR`` points directly at the shared data directory;
+        * otherwise ``OCTOPUS_HOME`` stores data below ``<home>/data``;
+        * without either override, the legacy ``~/.octopus`` root is kept.
+
+        Archive names remain independent from those physical locations so a
+        backup can be restored on a machine with a different data directory.
+        """
+
+        self._explicit_base = base_dir is not None
+        if self._explicit_base:
+            self._base = Path(os.path.expanduser(str(base_dir)))
+            self._data_root = self._base / "data"
+            return
+
+        home_override = os.environ.get("OCTOPUS_HOME")
+        self._base = (
+            Path(os.path.expanduser(home_override)) if home_override else Path.home() / ".octopus"
+        )
+        data_override = os.environ.get("OCTOPUS_DATA_DIR")
+        self._data_root = (
+            Path(os.path.expanduser(data_override)) if data_override else self._base / "data"
+        )
 
     def backup(
         self,
@@ -78,7 +110,7 @@ class BackupManager:
                     rel_path = self.COMPONENTS.get(comp_name)
                     if rel_path is None:
                         continue
-                    abs_path = self._base / rel_path
+                    abs_path = self._component_path(comp_name, rel_path)
                     if not abs_path.exists():
                         continue
                     included_components.append(comp_name)
@@ -89,7 +121,10 @@ class BackupManager:
                     elif abs_path.is_dir():
                         for f in abs_path.rglob("*"):
                             if f.is_file():
-                                tar.add(str(f), arcname=str(f.relative_to(self._base)))
+                                tar.add(
+                                    str(f),
+                                    arcname=self._archive_name(comp_name, rel_path, abs_path, f),
+                                )
                                 total_bytes += f.stat().st_size
                                 total_files += 1
 
@@ -137,10 +172,15 @@ class BackupManager:
         try:
             with tarfile.open(str(input_path), "r:gz") as tar:
                 for member in tar.getmembers():
-                    comp_name = self._component_from_path(member.name)
-                    if comp_name is not None and comp_name not in selected:
+                    if member.name == "MANIFEST.json":
                         continue
-                    dest = self._base / member.name
+                    comp_name = self._component_from_path(member.name)
+                    # Restore only declared components.  This also keeps an
+                    # archive from smuggling unrelated files into the Octopus
+                    # home directory.
+                    if comp_name is None or comp_name not in selected:
+                        continue
+                    dest = self._restore_target(comp_name, member.name)
                     if dest.exists() and not overwrite:
                         continue
                     if member.isdir():
@@ -183,7 +223,7 @@ class BackupManager:
             rel_path = self.COMPONENTS.get(comp_name)
             if rel_path is None:
                 continue
-            abs_path = self._base / rel_path
+            abs_path = self._component_path(comp_name, rel_path)
             if not abs_path.exists():
                 continue
             if abs_path.is_file():
@@ -201,16 +241,78 @@ class BackupManager:
                     data[comp_name] = f"<unreadable: {abs_path}>"
             elif abs_path.is_dir():
                 file_list = sorted(
-                    str(f.relative_to(self._base)) for f in abs_path.rglob("*") if f.is_file()
+                    self._archive_name(comp_name, rel_path, abs_path, f)
+                    for f in abs_path.rglob("*")
+                    if f.is_file()
                 )
                 data[comp_name] = {"files": file_list, "count": len(file_list)}
 
         atomic_write_json(output, data)
         return output
 
+    def _component_path(self, comp_name: str, rel_path: str | None = None) -> Path:
+        """Return a component's physical path for this machine."""
+
+        rel_path = rel_path or self.COMPONENTS[comp_name]
+        if comp_name == "narrative_studio" and not self._explicit_base:
+            return self._data_root / "narrative-studio"
+        return self._base / rel_path
+
+    @staticmethod
+    def _archive_name(
+        comp_name: str,
+        rel_path: str,
+        component_path: Path,
+        file_path: Path,
+    ) -> str:
+        """Map a physical file to its stable, portable archive name."""
+
+        del comp_name  # reserved for future component-specific archive schemas
+        archive_root = PurePosixPath(rel_path.strip("/"))
+        relative = file_path.relative_to(component_path)
+        return archive_root.joinpath(*relative.parts).as_posix()
+
+    def _restore_target(self, comp_name: str, member_name: str) -> Path:
+        """Map a portable archive member to a safe machine-local target."""
+
+        if "\\" in member_name or "\x00" in member_name:
+            raise ValueError(f"backup member escapes destination: {member_name}")
+
+        archive_member = PurePosixPath(member_name)
+        if archive_member.is_absolute() or ".." in archive_member.parts:
+            raise ValueError(f"backup member escapes destination: {member_name}")
+
+        rel_path = self.COMPONENTS[comp_name]
+        archive_root = PurePosixPath(rel_path.strip("/"))
+        try:
+            suffix = archive_member.relative_to(archive_root)
+        except ValueError as exc:  # defensive: component matching must agree
+            raise ValueError(f"backup member escapes destination: {member_name}") from exc
+
+        component_path = self._component_path(comp_name, rel_path)
+        if not rel_path.endswith("/") and suffix.parts:
+            raise ValueError(f"backup member escapes destination: {member_name}")
+
+        target = component_path.joinpath(*suffix.parts).resolve()
+        if rel_path.endswith("/"):
+            destination_root = component_path.resolve()
+            if target != destination_root and destination_root not in target.parents:
+                raise ValueError(f"backup member escapes destination: {member_name}")
+        elif target != component_path.resolve():
+            raise ValueError(f"backup member escapes destination: {member_name}")
+        return target
+
     def _component_from_path(self, arcname: str) -> str | None:
-        top = arcname.split("/", 1)[0] if "/" in arcname else arcname
-        for comp_name, rel_path in self.COMPONENTS.items():
-            if top == rel_path.rstrip("/"):
+        candidate = arcname.strip("/")
+        # Component roots may be nested (for example
+        # ``data/narrative-studio``), so matching only the first path segment
+        # loses the component identity during a selective restore.
+        for comp_name, rel_path in sorted(
+            self.COMPONENTS.items(),
+            key=lambda item: len(item[1]),
+            reverse=True,
+        ):
+            root = rel_path.strip("/")
+            if candidate == root or candidate.startswith(root + "/"):
                 return comp_name
         return None

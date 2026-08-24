@@ -744,15 +744,13 @@ def create_agent_world_router(
         "/api/agent-market/cloud/plugins/{plugin_id}/install",
         dependencies=[Depends(_admin_dep)],
     )
-    def api_agent_market_cloud_plugin_install(plugin_id: str) -> dict[str, Any]:
+    def api_agent_market_cloud_plugin_install(
+        plugin_id: str,
+        request: Request,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         from runtime.execution.suckers.market_skills import immutable_prompt_catalog_required
 
-        if immutable_prompt_catalog_required():
-            raise HTTPException(
-                403,
-                "unsigned cloud plugin installation is disabled in shared/commercial "
-                "deployments; ship a reviewed signed plugin release",
-            )
         cat = _cloud_catalog("plugins")
         item = next((i for i in cat.items() if i.get("id") == plugin_id), None)
         if item is None:
@@ -760,14 +758,103 @@ def create_agent_world_router(
         # 内容包目录:codex 插件 plugins/codex/<name>,连接器 plugins/connector/<id>;
         # 条目 id 带前缀(codex_/wb_),成员名取 item["plugin"]。
         item_kind = str(item.get("kind") or "connector")
-        archive_kind = "codex" if item_kind == "plugin" else "connector"
+        archive_kind = (
+            "codex"
+            if item_kind == "plugin"
+            else "workbench"
+            if item_kind == "workbench"
+            else "connector"
+        )
         member = str(item.get("plugin") or plugin_id)
+        is_factory_workbench = archive_kind == "workbench" and bool(item.get("factory_seed"))
+        if immutable_prompt_catalog_required() and not is_factory_workbench:
+            raise HTTPException(
+                403,
+                "unsigned cloud plugin installation is disabled in shared/commercial "
+                "deployments; ship a reviewed signed plugin release",
+            )
+        payload = body or {}
+        enabled_value = payload.get("enabled", True)
+        restore_value = payload.get("restore_data", False)
+        recovery_value = payload.get("recovery_id")
+        if not isinstance(enabled_value, bool):
+            raise HTTPException(400, "enabled must be a boolean")
+        if not isinstance(restore_value, bool):
+            raise HTTPException(400, "restore_data must be a boolean")
+        if recovery_value is not None and not isinstance(recovery_value, str):
+            raise HTTPException(400, "recovery_id must be a string")
         try:
+            hub = getattr(request.app.state, "plugin_hub", None)
+            if is_factory_workbench and hub is not None:
+                return hub.install_plugin(
+                    member,
+                    enabled=enabled_value,
+                    restore_data=restore_value,
+                    recovery_id=recovery_value,
+                )
+            if is_factory_workbench:
+                return cat.install_plugin(
+                    member,
+                    plugin_kind=archive_kind,
+                    enabled=enabled_value,
+                    restore_data=restore_value,
+                    recovery_id=recovery_value,
+                )
             return cat.install_plugin(member, plugin_kind=archive_kind)
         except KeyError as exc:
             raise HTTPException(404, str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(409, str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @router.delete(
+        "/api/agent-market/cloud/plugins/{plugin_id}/install",
+        dependencies=[Depends(_admin_dep)],
+    )
+    def api_agent_market_cloud_plugin_uninstall(
+        plugin_id: str,
+        request: Request,
+        data_policy: str = Query(default="keep", pattern="^(keep|trash)$"),
+        confirm_data_move: bool = Query(default=False),
+    ) -> dict[str, Any]:
+        cat = _cloud_catalog("plugins")
+        item = next((i for i in cat.items() if i.get("id") == plugin_id), None)
+        if item is None:
+            raise HTTPException(404, f"cloud plugin not found: {plugin_id}")
+        item_kind = str(item.get("kind") or "connector")
+        archive_kind = (
+            "codex"
+            if item_kind == "plugin"
+            else "workbench"
+            if item_kind == "workbench"
+            else "connector"
+        )
+        member = str(item.get("plugin") or plugin_id)
+        is_factory_workbench = archive_kind == "workbench" and bool(item.get("factory_seed"))
+        try:
+            hub = getattr(request.app.state, "plugin_hub", None)
+            if is_factory_workbench and hub is not None:
+                return hub.uninstall_plugin(
+                    member,
+                    data_policy=data_policy,
+                    confirm_data_move=confirm_data_move,
+                )
+            if is_factory_workbench:
+                return cat.uninstall_plugin(
+                    member,
+                    plugin_kind=archive_kind,
+                    data_policy=data_policy,
+                    confirm_data_move=confirm_data_move,
+                )
+            return cat.uninstall_plugin(member, plugin_kind=archive_kind)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            status = 409 if "not installed" in str(exc) else 400
+            raise HTTPException(status, str(exc)) from exc
 
     return router
 

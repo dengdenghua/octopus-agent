@@ -274,6 +274,36 @@ export interface CloudPluginInstallResult {
   source?: string;
 }
 
+export interface CloudPluginUninstallResult {
+  uninstalled: boolean;
+  plugin_id: string;
+  kind?: string;
+  removed_skills?: string[];
+  restart_required?: boolean;
+  data?: {
+    status?: "kept" | "trashed" | "missing" | "restored";
+    recovery_id?: string;
+    path?: string;
+  };
+}
+
+export interface RuntimePluginStatus {
+  name?: string;
+  plugin_id?: string;
+  installed: boolean;
+  enabled: boolean;
+  loaded?: boolean;
+  started?: boolean;
+  source?: "factory" | "external" | string;
+  restart_required?: boolean;
+  data_state?: string;
+  recoveries?: Array<{
+    recovery_id: string;
+    created_at?: string | number;
+    path?: string;
+  }>;
+}
+
 /** 从云端安装技能(下载内容包 → 解包 → 落到 ~/.octopus/skills)。 */
 export async function installCloudSkill(name: string): Promise<CloudSkillInstallResult> {
   const res = await fetch(
@@ -288,16 +318,79 @@ export async function installCloudSkill(name: string): Promise<CloudSkillInstall
 }
 
 /** 从云端安装插件/连接器(下载内容包 → 解包 → 落地 + 复制捆绑技能)。 */
-export async function installCloudPlugin(pluginId: string): Promise<CloudPluginInstallResult> {
+export async function installCloudPlugin(
+  pluginId: string,
+  options: { restoreData?: boolean; recoveryId?: string } = {},
+): Promise<CloudPluginInstallResult> {
   const res = await fetch(
     `${getBackendBaseURL()}${AGENT_MARKET_API}/cloud/plugins/${encodeURIComponent(pluginId)}/install`,
-    { method: "POST", headers: authHeaders() },
+    {
+      method: "POST",
+      headers: { ...authHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        enabled: true,
+        restore_data: Boolean(options.restoreData),
+        ...(options.recoveryId ? { recovery_id: options.recoveryId } : {}),
+      }),
+    },
   );
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
     throw new Error(`云插件安装失败: HTTP ${res.status} ${txt}`.trim());
   }
   return res.json() as Promise<CloudPluginInstallResult>;
+}
+
+/** Remove a cloud-installed package or deactivate a removable factory workbench. */
+export async function uninstallCloudPlugin(
+  pluginId: string,
+  options: { dataPolicy?: "keep" | "trash"; confirmDataMove?: boolean } = {},
+): Promise<CloudPluginUninstallResult> {
+  const qs = new URLSearchParams({
+    data_policy: options.dataPolicy ?? "keep",
+    confirm_data_move: String(Boolean(options.confirmDataMove)),
+  });
+  const res = await fetch(
+    `${getBackendBaseURL()}${AGENT_MARKET_API}/cloud/plugins/${encodeURIComponent(pluginId)}/install?${qs.toString()}`,
+    { method: "DELETE", headers: authHeaders() },
+  );
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`云插件卸载失败: HTTP ${res.status} ${txt}`.trim());
+  }
+  return res.json() as Promise<CloudPluginUninstallResult>;
+}
+
+export async function fetchRuntimePluginStatus(
+  pluginName: string,
+): Promise<RuntimePluginStatus> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/plugin-hub/plugins/${encodeURIComponent(pluginName)}`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`插件状态读取失败: HTTP ${res.status} ${txt}`.trim());
+  }
+  return res.json() as Promise<RuntimePluginStatus>;
+}
+
+export async function setRuntimePluginEnabled(
+  pluginName: string,
+  enabled: boolean,
+): Promise<RuntimePluginStatus> {
+  const action = enabled ? "enable" : "disable";
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/plugin-hub/plugins/${encodeURIComponent(pluginName)}/${action}`,
+    { method: "POST", headers: authHeaders() },
+  );
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(
+      `插件${enabled ? "启用" : "停用"}失败: HTTP ${res.status} ${txt}`.trim(),
+    );
+  }
+  return res.json() as Promise<RuntimePluginStatus>;
 }
 
 export async function previewAgentPack(

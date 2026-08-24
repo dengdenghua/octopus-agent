@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -150,3 +151,255 @@ def test_websocket_missing_handler_closes_4404(tmp_path: Path) -> None:
         ws.receive_text()
 
     hub.unload("wsbroken")
+
+
+# ── Persistent workbench activation + route rollback ──────────
+
+
+def _make_narrative_factory(root: Path, data_dir: Path) -> Path:
+    plugin = root / "narrative_studio"
+    plugin.mkdir(parents=True)
+    (plugin / "plugin.yaml").write_text(
+        "\n".join(
+            [
+                "name: narrative_studio",
+                "display_name: Narrative Test",
+                "version: 0.2.0",
+                "config:",
+                f"  data_dir: {data_dir}",
+                "  echo_source_path: ''",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    source_skills = (
+        Path(__file__).resolve().parents[1]
+        / "runtime"
+        / "platform"
+        / "plugins"
+        / "bundled"
+        / "narrative_studio"
+        / "skills"
+    )
+    shutil.copytree(source_skills, plugin / "skills")
+    return plugin
+
+
+def test_factory_disable_persists_and_load_all_only_loads_enabled(tmp_path: Path) -> None:
+    bundled = tmp_path / "bundled"
+    activation = tmp_path / "data" / "plugins" / "workbench"
+    _make_narrative_factory(bundled, tmp_path / "data" / "narrative-studio")
+
+    first = PluginHub(
+        plugin_dir=tmp_path / "external",
+        bundled_plugin_dir=bundled,
+        activation_root=activation,
+        data_root=tmp_path / "data",
+    )
+    assert first.load_all() == ["narrative_studio"]
+    disabled = first.disable_plugin("narrative_studio")
+    assert disabled["installed"] is True
+    assert disabled["enabled"] is False
+    assert disabled["loaded"] is False
+
+    restarted = PluginHub(
+        plugin_dir=tmp_path / "external",
+        bundled_plugin_dir=bundled,
+        activation_root=activation,
+        data_root=tmp_path / "data",
+    )
+    assert restarted.load_all() == []
+    detail = restarted.get_plugin_detail("narrative_studio")
+    assert detail is not None
+    assert detail["state"] == "disabled"
+
+    enabled = restarted.enable_plugin("narrative_studio")
+    assert enabled["enabled"] is True
+    assert enabled["loaded"] is True
+    assert enabled["started"] is True
+
+
+def test_factory_disable_removes_narrative_routes_and_enable_does_not_duplicate(
+    tmp_path: Path,
+) -> None:
+    from collections import Counter
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    bundled = tmp_path / "bundled"
+    data_root = tmp_path / "data"
+    _make_narrative_factory(bundled, data_root / "narrative-studio")
+    app = FastAPI()
+    app.get("/host-route")(lambda: {"host": True})
+    hub = PluginHub(
+        plugin_dir=tmp_path / "external",
+        bundled_plugin_dir=bundled,
+        activation_root=data_root / "plugins" / "workbench",
+        data_root=data_root,
+        fastapi_app=app,
+    )
+
+    assert hub.load("narrative_studio") is not None
+
+    def narrative_routes() -> Counter[tuple[str, tuple[str, ...]]]:
+        return Counter(
+            (
+                path,
+                tuple(sorted(operations)),
+            )
+            for path, operations in app.openapi()["paths"].items()
+            if path.startswith("/api/plugins/narrative-studio")
+        )
+
+    original = narrative_routes()
+    assert original
+    client = TestClient(app)
+    assert client.get("/api/plugins/narrative-studio/status").status_code == 200
+    disabled = hub.disable_plugin("narrative_studio")
+    assert disabled["loaded"] is False
+    assert narrative_routes() == Counter()
+    assert client.get("/api/plugins/narrative-studio/status").status_code == 404
+    assert any(getattr(route, "path", None) == "/host-route" for route in app.routes)
+
+    enabled = hub.enable_plugin("narrative_studio")
+    assert enabled["loaded"] is True
+    assert narrative_routes() == original
+    assert client.get("/api/plugins/narrative-studio/status").status_code == 200
+
+
+def test_uninstall_keeps_narrative_works_and_can_reinstall(tmp_path: Path) -> None:
+    bundled = tmp_path / "bundled"
+    data_root = tmp_path / "data"
+    activation = data_root / "plugins" / "workbench"
+    _make_narrative_factory(bundled, data_root / "narrative-studio")
+    works = data_root / "narrative-studio"
+    works.mkdir(parents=True)
+    (works / "draft.txt").write_text("keep", encoding="utf-8")
+    hub = PluginHub(
+        plugin_dir=tmp_path / "external",
+        bundled_plugin_dir=bundled,
+        activation_root=activation,
+        data_root=data_root,
+    )
+    assert hub.load("narrative_studio") is not None
+
+    removed = hub.uninstall_plugin("narrative_studio")
+    assert removed["installed"] is False
+    assert removed["data"]["status"] == "kept"
+    assert (works / "draft.txt").exists()
+    assert hub.load("narrative_studio") is None
+
+    restarted = PluginHub(
+        plugin_dir=tmp_path / "external",
+        bundled_plugin_dir=bundled,
+        activation_root=activation,
+        data_root=data_root,
+    )
+    assert restarted.load_all() == []
+    detail = restarted.get_plugin_detail("narrative_studio")
+    assert detail is not None and detail["state"] == "uninstalled"
+
+    installed = restarted.install_plugin("narrative_studio")
+    assert installed["installed"] is True
+    assert installed["loaded"] is True
+    assert (works / "draft.txt").exists()
+
+
+def test_install_runtime_failure_rolls_back_persisted_activation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundled = tmp_path / "bundled"
+    data_root = tmp_path / "data"
+    activation = data_root / "plugins" / "workbench"
+    _make_narrative_factory(bundled, data_root / "narrative-studio")
+    hub = PluginHub(
+        plugin_dir=tmp_path / "external",
+        bundled_plugin_dir=bundled,
+        activation_root=activation,
+        data_root=data_root,
+    )
+    hub.uninstall_plugin("narrative_studio")
+    monkeypatch.setattr(hub, "load", lambda _name: None)
+
+    with pytest.raises(RuntimeError, match="failed to load"):
+        hub.install_plugin("narrative_studio")
+
+    state = hub._activation_store.state("narrative_studio")
+    assert state["installed"] is False
+    assert state["enabled"] is False
+
+
+def test_unload_removes_only_routes_registered_by_plugin(tmp_path: Path) -> None:
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    app.get("/host-route")(lambda: {"host": True})
+    plugin = tmp_path / "routeplug"
+    plugin.mkdir()
+    (plugin / "plugin.yaml").write_text("name: routeplug\n", encoding="utf-8")
+    (plugin / "__init__.py").write_text(
+        "from runtime.platform.plugins.plugin_base import ModulePlugin\n"
+        "class RoutePlugin(ModulePlugin):\n"
+        "    name = 'routeplug'\n"
+        "    def register_routes(self):\n"
+        "        @self.ctx.fastapi_app.get('/plugin-route')\n"
+        "        def plugin_route():\n"
+        "            return {'plugin': True}\n",
+        encoding="utf-8",
+    )
+    hub = PluginHub(plugin_dir=tmp_path, fastapi_app=app)
+    assert "/plugin-route" not in app.openapi()["paths"]
+
+    assert hub.load("routeplug") is not None
+    assert sum(getattr(route, "path", None) == "/plugin-route" for route in app.routes) == 1
+    assert "/plugin-route" in app.openapi()["paths"]
+    assert hub.unload("routeplug") is True
+    assert not any(getattr(route, "path", None) == "/plugin-route" for route in app.routes)
+    assert any(getattr(route, "path", None) == "/host-route" for route in app.routes)
+    assert "/plugin-route" not in app.openapi()["paths"]
+
+    assert hub.load("routeplug") is not None
+    assert sum(getattr(route, "path", None) == "/plugin-route" for route in app.routes) == 1
+
+
+def test_failed_load_rolls_back_skill_and_direct_route(tmp_path: Path) -> None:
+    from fastapi import FastAPI
+
+    class Registry:
+        def __init__(self) -> None:
+            self.names: set[str] = set()
+
+        def register(self, skill, *, verify_tests: bool = False) -> None:
+            del verify_tests
+            self.names.add(skill.name)
+
+        def unregister(self, name: str) -> None:
+            self.names.discard(name)
+
+    app = FastAPI()
+    registry = Registry()
+    plugin = tmp_path / "failplug"
+    plugin.mkdir()
+    (plugin / "plugin.yaml").write_text("name: failplug\n", encoding="utf-8")
+    (plugin / "__init__.py").write_text(
+        "from runtime.platform.plugins.plugin_base import ModulePlugin\n"
+        "class DemoSkill:\n"
+        "    name = 'failplug.skill'\n"
+        "class FailPlugin(ModulePlugin):\n"
+        "    name = 'failplug'\n"
+        "    def on_load(self, ctx):\n"
+        "        self.ctx = ctx\n"
+        "        ctx.register_skill(DemoSkill())\n"
+        "        @ctx.fastapi_app.get('/partial-route')\n"
+        "        def partial_route():\n"
+        "            return {}\n"
+        "        raise RuntimeError('boom')\n",
+        encoding="utf-8",
+    )
+    hub = PluginHub(plugin_dir=tmp_path, fastapi_app=app, skill_registry=registry)
+
+    assert hub.load("failplug") is None
+    assert registry.names == set()
+    assert not any(getattr(route, "path", None) == "/partial-route" for route in app.routes)
+    assert hub.get_plugin("failplug") is None

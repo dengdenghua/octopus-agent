@@ -1745,6 +1745,7 @@ export const zhCN: Translations = {
     navMcp: "MCP",
     navEvolution: "自进化",
     navProjects: "项目管理",
+    navNarrative: "叙事工坊",
     navPlugins: "插件",
     navHR: "HUB",
     navComputer: "本机助手",

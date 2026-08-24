@@ -18,6 +18,7 @@ import { uuid } from "@/core/utils/uuid";
 import { useWorkspaceShortcuts } from "@/core/shortcuts/use-global-shortcuts";
 import { useI18n } from "@/core/i18n/hooks";
 import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
+import { useWorkbenchAvailabilitySync } from "@/core/workbench/availability";
 
 const CommandPalette = lazy(() =>
   import("@/components/workspace/command-palette").then((m) => ({
@@ -120,6 +121,7 @@ export default function WorkspaceLayout() {
   const navigate = useNavigate();
   useTitleBarThemeSync();
   useWorkspaceShortcuts();
+  useWorkbenchAvailabilitySync();
   // A hidden module's route must also be unreachable by URL, not just absent
   // from the sidebar.
   useModuleRouteGuard(PRIMARY_WORKSPACE_ROUTE);

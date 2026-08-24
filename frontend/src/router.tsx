@@ -94,6 +94,7 @@ const KnowledgePage = lazy(() => import("./app/workspace/knowledge/page"));
 const StoragePage = lazy(() => import("./app/workspace/storage/page"));
 const EvolutionPage = lazy(() => import("./app/workspace/evolution/page"));
 const ProjectsPage = lazy(() => import("./app/workspace/projects/page"));
+const NarrativePage = lazy(() => import("./app/workspace/narrative/page"));
 const PaperTradingPage = lazy(
   () => import("./app/workspace/paper-trading/page"),
 );
@@ -242,6 +243,7 @@ export function AppRouter() {
               <Route path="database" element={<StorageRedirect />} />
               <Route path="evolution" element={<EvolutionPage />} />
               <Route path="projects" element={<ProjectsPage />} />
+              <Route path="narrative" element={<NarrativePage />} />
               <Route path="paper-trading" element={<PaperTradingPage />} />
               <Route
                 path="replay"

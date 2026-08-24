@@ -73,6 +73,9 @@ def _secured_client(tmp_path: Path, monkeypatch: Any) -> tuple[TestClient, dict[
         def install_plugin(self, name: str, *, plugin_kind: str) -> dict[str, Any]:
             return {"installed": True, "name": name, "kind": plugin_kind}
 
+        def uninstall_plugin(self, name: str, *, plugin_kind: str) -> dict[str, Any]:
+            return {"uninstalled": True, "name": name, "kind": plugin_kind}
+
     monkeypatch.setattr(cloud_expert_store, "CloudExpertStore", _CloudExpertStore)
     monkeypatch.setattr(cloud_catalog, "CloudCatalog", _CloudCatalog)
 
@@ -126,6 +129,7 @@ def test_agent_world_shared_content_mutations_reject_non_admin(
         ("POST", "/api/agent-market/cloud/store/demo/install", {}),
         ("POST", "/api/agent-market/cloud/skills/demo/install", {}),
         ("POST", "/api/agent-market/cloud/plugins/demo-plugin/install", {}),
+        ("DELETE", "/api/agent-market/cloud/plugins/demo-plugin/install", {}),
     )
 
     for method, path, kwargs in requests:
@@ -222,3 +226,70 @@ def test_production_rejects_unsigned_cloud_content_installs(
 
     assert [response.status_code for response in responses] == [403, 403, 403]
     assert all("shared/commercial" in response.json()["detail"] for response in responses)
+
+
+def test_reviewed_factory_workbench_delegates_to_live_plugin_hub(
+    monkeypatch: Any,
+) -> None:
+    import runtime.platform.plugins.cloud_catalog as cloud_catalog
+
+    class FactoryCatalog:
+        def __init__(self, _kind: str) -> None:
+            pass
+
+        def items(self) -> list[dict[str, Any]]:
+            return [
+                {
+                    "id": "workbench_narrative",
+                    "plugin": "narrative_studio",
+                    "kind": "workbench",
+                    "factory_seed": True,
+                }
+            ]
+
+    class Hub:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, Any]]] = []
+
+        def install_plugin(self, name: str, **kwargs: Any) -> dict[str, Any]:
+            self.calls.append((name, kwargs))
+            return {"ok": True, "installed": True, "restart_required": False}
+
+        def uninstall_plugin(self, name: str, **kwargs: Any) -> dict[str, Any]:
+            self.calls.append((name, kwargs))
+            return {"ok": True, "installed": False, "restart_required": False}
+
+    monkeypatch.setattr(cloud_catalog, "CloudCatalog", FactoryCatalog)
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "production")
+    identities = IdentityStore()
+    identities.add(Identity(actor_id="admin", roles=("admin",)), api_key_plaintext="sk-admin")
+    app = FastAPI()
+    hub = Hub()
+    app.state.plugin_hub = hub
+    app.include_router(create_agent_world_router(identity_store=identities, require_auth=True))
+    client = TestClient(app)
+    headers = _headers("sk-admin")
+
+    installed = client.post(
+        "/api/agent-market/cloud/plugins/workbench_narrative/install",
+        headers=headers,
+        json={"enabled": False},
+    )
+    removed = client.delete(
+        "/api/agent-market/cloud/plugins/workbench_narrative/install",
+        headers=headers,
+        params={"data_policy": "trash", "confirm_data_move": "true"},
+    )
+
+    assert installed.status_code == 200
+    assert removed.status_code == 200
+    assert hub.calls == [
+        (
+            "narrative_studio",
+            {"enabled": False, "restore_data": False, "recovery_id": None},
+        ),
+        (
+            "narrative_studio",
+            {"data_policy": "trash", "confirm_data_move": True},
+        ),
+    ]

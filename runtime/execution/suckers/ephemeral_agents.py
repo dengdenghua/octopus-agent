@@ -442,6 +442,109 @@ BUILTIN_ROLES: dict[str, EphemeralRoleDef] = {
             "todo_write",
         ),
     ),
+    # Narrative Studio drives these roles with an explicit, bounded context
+    # pack.  They deliberately inherit neither the caller conversation nor
+    # durable memory: story facts must come from cited project context, not an
+    # unrelated chat.  Read-only blackboard access is the entire tool surface;
+    # every output remains a candidate until human governance commits it.
+    "narrative-outline": EphemeralRoleDef(
+        id="narrative-outline",
+        display_name="Narrative Outliner",
+        description="Turns a story objective and cited context pack into a scene-level candidate outline.",
+        system_prompt=(
+            "You are a professional long-form story outliner. Use only the "
+            "facts and source references supplied in the task. Produce a "
+            "candidate outline with: dramatic objective, POV, scene beats, "
+            "turning point, emotional change, continuity dependencies, and "
+            "foreshadowing setup/payoff. Mark unsupported necessities as "
+            "[NEEDS DECISION]; never silently invent canon. Do not write prose "
+            "and never claim that your output is canonical."
+        ),
+        share_context=False,
+        share_memory=False,
+        tool_allowlist=("bb_read", "bb_keys"),
+    ),
+    "narrative-draft": EphemeralRoleDef(
+        id="narrative-draft",
+        display_name="Narrative Drafter",
+        description="Writes candidate prose from an approved outline and bounded story context.",
+        system_prompt=(
+            "You are a fiction drafter. Follow the supplied outline, POV, "
+            "language, voice constraints, and cited story facts exactly. "
+            "Prefer concrete action, sensory specificity, subtext, and causal "
+            "scene progression. Do not add world facts that the context does "
+            "not support; mark an unavoidable gap as [NEEDS DECISION]. Return "
+            "candidate prose only, never a canon declaration."
+        ),
+        share_context=False,
+        share_memory=False,
+        tool_allowlist=("bb_read", "bb_keys"),
+    ),
+    "narrative-continuity": EphemeralRoleDef(
+        id="narrative-continuity",
+        display_name="Continuity Auditor",
+        description="Checks a candidate draft against cited facts, state changes, chronology, and unresolved setup.",
+        system_prompt=(
+            "You are a strict narrative continuity auditor. Compare the draft "
+            "with every supplied source and state record. Report each issue as "
+            "severity (blocking/major/minor), exact draft evidence, conflicting "
+            "source reference, and the smallest safe correction. Also check "
+            "chronology, location, knowledge boundaries, motivation, inventory, "
+            "and foreshadowing. If evidence is absent, say unknown. Do not "
+            "rewrite the chapter and do not promote canon."
+        ),
+        share_context=False,
+        share_memory=False,
+        tool_allowlist=("bb_read", "bb_keys"),
+    ),
+    "narrative-style": EphemeralRoleDef(
+        id="narrative-style",
+        display_name="Style Critic",
+        description="Evaluates voice, pacing, clarity, dialogue, and repetition without changing story facts.",
+        system_prompt=(
+            "You are a literary style critic. Evaluate the candidate against "
+            "the requested audience, language, genre, and voice profile. "
+            "Identify pacing drag, exposition, repetition, vague language, "
+            "dialogue problems, tonal drift, and cliches. Quote only short "
+            "diagnostic fragments and propose targeted edits. Preserve all "
+            "story facts; do not make canon decisions."
+        ),
+        share_context=False,
+        share_memory=False,
+        tool_allowlist=("bb_read", "bb_keys"),
+    ),
+    "narrative-revision": EphemeralRoleDef(
+        id="narrative-revision",
+        display_name="Narrative Reviser",
+        description="Produces a new candidate revision from the draft and structured review findings.",
+        system_prompt=(
+            "You are a senior fiction reviser. Apply the supplied continuity "
+            "and style findings to the candidate draft while preserving POV, "
+            "intent, supported facts, and source traceability. Resolve every "
+            "blocking issue; if one cannot be resolved from evidence, leave a "
+            "clear [NEEDS DECISION] marker. Return the revised candidate prose "
+            "followed by a concise change log. Never claim canon status."
+        ),
+        share_context=False,
+        share_memory=False,
+        tool_allowlist=("bb_read", "bb_keys"),
+    ),
+    "narrative-editorial": EphemeralRoleDef(
+        id="narrative-editorial",
+        display_name="Editorial Judge",
+        description="Scores the revised candidate and recommends approve, revise, or block for human review.",
+        system_prompt=(
+            "You are the final editorial judge, not the canon authority. Review "
+            "the revised candidate and cited evidence. Return: recommendation "
+            "(approve/revise/block), scores from 0-100 for coherence, "
+            "continuity, character, pacing, prose, and originality, unresolved "
+            "blocking items, and a short rationale. Approval only means ready "
+            "for human governance; never commit or announce canon yourself."
+        ),
+        share_context=False,
+        share_memory=False,
+        tool_allowlist=("bb_read", "bb_keys"),
+    ),
 }
 
 

@@ -4,6 +4,7 @@ export type WorkbenchBuiltinIcon =
   | "projects"
   | "trading"
   | "design"
+  | "narrative"
   | "intelligence"
   | "community";
 
@@ -15,6 +16,13 @@ export interface WorkbenchBuiltinApp {
   workspaceRoute: string;
   launchUrl: string;
   icon: WorkbenchBuiltinIcon;
+  /** Core surfaces ship with the shell; remote surfaces are installed on demand. */
+  delivery?: "core" | "remote";
+  /** Cloud catalog id and extracted package directory for remote surfaces. */
+  cloudId?: string;
+  packageId?: string;
+  /** Runtime ModulePlugin name when this surface has a live plugin lifecycle. */
+  runtimePlugin?: string;
 }
 
 /** Native EchoAI pages that can also live in the browser desktop and Dock. */
@@ -45,6 +53,19 @@ export const WORKBENCH_BUILTIN_APPS: readonly WorkbenchBuiltinApp[] = [
     workspaceRoute: "/workspace/design",
     launchUrl: "octopus://workspace/design",
     icon: "design",
+  },
+  {
+    id: "narrative",
+    moduleId: "narrative",
+    name: "叙事工坊",
+    description: "角色、世界观、剧情分支与正典协作",
+    workspaceRoute: "/workspace/narrative",
+    launchUrl: "octopus://workspace/narrative",
+    icon: "narrative",
+    delivery: "remote",
+    cloudId: "workbench_narrative",
+    packageId: "narrative_studio",
+    runtimePlugin: "narrative_studio",
   },
   {
     id: "intelligence",

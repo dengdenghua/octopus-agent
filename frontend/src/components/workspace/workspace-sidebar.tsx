@@ -1,6 +1,7 @@
 import {
   ArrowLeftIcon,
   AppWindowIcon,
+  BookOpenIcon,
   BotIcon,
   ChevronRightIcon,
   DatabaseIcon,
@@ -175,6 +176,7 @@ const MODULE_ICONS: Record<string, ComponentType<SVGProps<SVGSVGElement>>> = {
   intelligence: RssIcon,
   "paper.trading": CandlestickChartIcon,
   projects: SquareKanbanIcon,
+  narrative: BookOpenIcon,
   evolution: DnaIcon,
   community: CompassIcon,
   knowledge: DatabaseIcon,

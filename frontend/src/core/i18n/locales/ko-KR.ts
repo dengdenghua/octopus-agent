@@ -1786,6 +1786,7 @@ export const koKR: Translations = {
     navMcp: "MCP",
     navEvolution: "자기 진화",
     navProjects: "프로젝트",
+    navNarrative: "스토리 공방",
     navPlugins: "플러그인",
     navHR: "인재",
     navComputer: "로컬 어시스턴트",

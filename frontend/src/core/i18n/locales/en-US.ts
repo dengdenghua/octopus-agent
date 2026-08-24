@@ -1824,6 +1824,7 @@ export const enUS: Translations = {
     navMcp: "MCP",
     navEvolution: "Evolution",
     navProjects: "Projects",
+    navNarrative: "Narrative Studio",
     navPlugins: "Plugins",
     navHR: "Agents",
     navComputer: "Local Assistant",

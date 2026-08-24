@@ -53,6 +53,11 @@ export function setModuleStateProvider(next: ModuleStateProvider): void {
 }
 
 let cache: Set<string> | null = null;
+/**
+ * Runtime availability is deliberately separate from the user's sidebar
+ * preference. A false value means the backend reports the module unavailable.
+ */
+let availabilityCache: ReadonlyMap<string, boolean> | null = null;
 const listeners = new Set<() => void>();
 
 function notify(): void {
@@ -81,7 +86,36 @@ export function isModuleEnabled(id: string): boolean {
 
 export function enabledModuleIds(): string[] {
   const disabled = getDisabledSet();
-  return defaultEnabledModuleIds().filter((id) => !disabled.has(id));
+  return defaultEnabledModuleIds().filter(
+    (id) => !disabled.has(id) && availabilityCache?.get(id) !== false,
+  );
+}
+
+/** Replace the server-backed availability snapshot for installable modules. */
+export function setModuleAvailabilitySnapshot(
+  availability: Readonly<Record<string, boolean>> | null,
+): void {
+  availabilityCache = availability
+    ? new Map(
+        Object.entries(availability).filter(
+          ([id]) => moduleById(id) !== undefined,
+        ),
+      )
+    : null;
+  snapshotKey = "";
+  snapshot = [];
+  notify();
+}
+
+/** Update one module after an install/enable/disable/uninstall mutation. */
+export function setModuleAvailable(id: string, available: boolean): void {
+  if (!moduleById(id)) return;
+  const next = new Map(availabilityCache ?? []);
+  next.set(id, available);
+  availabilityCache = next;
+  snapshotKey = "";
+  snapshot = [];
+  notify();
 }
 
 /** Enable/disable one module. Pinned modules are silently ignored. */
@@ -139,6 +173,7 @@ export function useEnabledModuleIds(): string[] {
 /** Test seam: drop the memoized state. */
 export function resetModuleStateCache(): void {
   cache = null;
+  availabilityCache = null;
   snapshotKey = "";
   snapshot = [];
   notify();

@@ -5,6 +5,8 @@ import {
   enabledModuleIds,
   isModuleEnabled,
   resetModuleStateCache,
+  setModuleAvailabilitySnapshot,
+  setModuleAvailable,
   setModuleEnabled,
   setModuleStateProvider,
 } from "./enabled-modules";
@@ -83,5 +85,22 @@ describe("enabled modules", () => {
     for (const m of MODULE_CATALOG) {
       if (m.id !== "community") expect(isModuleEnabled(m.id)).toBe(true);
     }
+  });
+
+  it("keeps runtime availability separate from the user's preference", () => {
+    setModuleEnabled("narrative", true);
+    setModuleAvailabilitySnapshot({ narrative: false });
+
+    expect(enabledModuleIds()).not.toContain("narrative");
+
+    setModuleAvailable("narrative", true);
+    expect(enabledModuleIds()).toContain("narrative");
+  });
+
+  it("does not allow a preference write to resurrect an unavailable module", () => {
+    setModuleAvailabilitySnapshot({ narrative: false });
+    setModuleEnabled("narrative", true);
+
+    expect(enabledModuleIds()).not.toContain("narrative");
   });
 });

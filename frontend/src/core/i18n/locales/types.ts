@@ -1582,6 +1582,7 @@ export interface Translations {
     navMcp: string;
     navEvolution: string;
     navProjects: string;
+    navNarrative: string;
     navPlugins: string;
     navHR: string;
     navComputer: string;

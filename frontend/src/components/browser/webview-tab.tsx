@@ -55,6 +55,8 @@ import {
 } from "@/core/navigation/workspace-route-preload";
 import { WORKBENCH_BUILTIN_APPS } from "@/core/workbench/apps";
 import { WorkbenchSurfaceProvider } from "@/core/workbench/workbench-surface";
+import { useEnabledModuleIds } from "@/core/modules/enabled-modules";
+import { useWorkbenchAvailabilitySync } from "@/core/workbench/availability";
 import {
   AUTOMATION_CAPSULE_CONTROLS_CLASS_NAME,
   AUTOMATION_CAPSULE_OVERLAY_CLASS_NAME,
@@ -89,6 +91,7 @@ const BROWSER_BUILTIN_COMPONENTS: Record<string, ComponentType> = {
   projects: lazy(loadProjectsPage),
   "paper-trading": lazy(loadPaperTradingPage),
   design: lazy(loadDesignPage),
+  narrative: lazy(() => import("@/app/workspace/narrative/page")),
   intelligence: lazy(loadIntelligencePage),
   community: lazy(loadCommunityPage),
 };
@@ -1636,6 +1639,12 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
     { tab, active, onPatch, onClose, renderDevice },
     imperativeRef,
   ) {
+    useWorkbenchAvailabilitySync();
+    const enabledModuleIds = useEnabledModuleIds();
+    const enabledModuleIdSet = useMemo(
+      () => new Set(enabledModuleIds),
+      [enabledModuleIds],
+    );
     const ref = useRef<WebviewElement | null>(null);
     const { t } = useI18n();
     const wt = t.browser.webviewTab;
@@ -2010,9 +2019,43 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
       );
     }
 
-    const builtinApp = WORKBENCH_BUILTIN_APPS.find(
+    const requestedBuiltinApp = WORKBENCH_BUILTIN_APPS.find(
       (app) => app.launchUrl === tab.url,
     );
+    const builtinApp =
+      requestedBuiltinApp &&
+      enabledModuleIdSet.has(requestedBuiltinApp.moduleId)
+        ? requestedBuiltinApp
+        : undefined;
+    if (requestedBuiltinApp && !builtinApp) {
+      return (
+        <div
+          style={style}
+          className="grid size-full place-items-center bg-background p-6"
+        >
+          <div className="max-w-sm text-center">
+            <PlugIcon className="mx-auto size-8 text-muted-foreground" />
+            <h2 className="mt-3 text-base font-semibold">应用未安装或已停用</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              请在 HUB 的应用市场中安装并启用{requestedBuiltinApp.name}。
+            </p>
+            <button
+              type="button"
+              className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+              onClick={() =>
+                onPatch({
+                  url: BROWSER_HOME_URL,
+                  title: "浏览器桌面",
+                  isLoading: false,
+                })
+              }
+            >
+              返回桌面
+            </button>
+          </div>
+        </div>
+      );
+    }
     const BuiltinPage = builtinApp
       ? BROWSER_BUILTIN_COMPONENTS[builtinApp.id]
       : undefined;

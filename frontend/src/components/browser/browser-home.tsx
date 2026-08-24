@@ -62,6 +62,8 @@ import {
   useWorkspaceWebShortcuts,
   type WorkbenchBuiltinIcon,
 } from "@/core/workbench/apps";
+import { useEnabledModuleIds } from "@/core/modules/enabled-modules";
+import { useWorkbenchAvailabilitySync } from "@/core/workbench/availability";
 
 import {
   BROWSER_EDIT_HOME_EVENT,
@@ -92,6 +94,7 @@ interface BrowserDesktopApp {
   color: string;
   description: string;
   category: DesktopAppCategory;
+  moduleId?: string;
   workspaceRoute?: string;
 }
 
@@ -154,6 +157,8 @@ interface EditWidgetState {
 const BUILTIN_ICON_MAP: Record<WorkbenchBuiltinIcon, LucideIcon> = {
   projects: SquareKanbanIcon,
   trading: CandlestickChartIcon,
+  design: PaletteIcon,
+  narrative: BookOpenIcon,
   intelligence: RssIcon,
   community: CompassIcon,
 };
@@ -167,6 +172,7 @@ const WORKSPACE_DESKTOP_APPS: BrowserDesktopApp[] = WORKBENCH_BUILTIN_APPS.map(
     description: app.description,
     category: "workspace",
     workspaceRoute: app.workspaceRoute,
+    moduleId: app.moduleId,
   }),
 );
 
@@ -927,6 +933,12 @@ export function BrowserHome({
   device: BrowserTab["device"];
   onOpen: (url: string) => void;
 }) {
+  useWorkbenchAvailabilitySync();
+  const enabledModuleIds = useEnabledModuleIds();
+  const enabledModuleIdSet = useMemo(
+    () => new Set(enabledModuleIds),
+    [enabledModuleIds],
+  );
   const { t } = useI18n();
   const wt = t.browser.webviewTab;
   const bt = t.browserHome;
@@ -1075,9 +1087,16 @@ export function BrowserHome({
     size: "medium",
   });
 
+  const visibleDesktopApps = useMemo(
+    () =>
+      AI_DESKTOP_APPS.filter(
+        (app) => !app.moduleId || enabledModuleIdSet.has(app.moduleId),
+      ),
+    [enabledModuleIdSet],
+  );
   const appByUrl = useMemo(
-    () => new Map(AI_DESKTOP_APPS.map((app) => [app.url, app])),
-    [],
+    () => new Map(visibleDesktopApps.map((app) => [app.url, app])),
+    [visibleDesktopApps],
   );
   const dockApps = useMemo(
     () =>
@@ -2692,6 +2711,7 @@ export function BrowserHome({
 
       {activePanel !== "home" && (
         <DesktopControlPanel
+          apps={visibleDesktopApps}
           panel={activePanel}
           onClose={() => setActivePanel("home")}
           onOpen={openDesktopApp}
@@ -2716,6 +2736,7 @@ export function BrowserHome({
 }
 
 function DesktopControlPanel({
+  apps,
   panel,
   onClose,
   onOpen,
@@ -2731,6 +2752,7 @@ function DesktopControlPanel({
   onResetLayout,
   onToggleEditMode,
 }: {
+  apps: readonly BrowserDesktopApp[];
   panel: DesktopPanelId;
   onClose: () => void;
   onOpen: (url: string) => void;
@@ -2955,7 +2977,7 @@ function DesktopControlPanel({
         )}
         {panel === "add" && (
           <div className="space-y-3">
-            {AI_DESKTOP_APPS.map((app) => {
+            {apps.map((app) => {
               const inDock = dockAppUrls.includes(app.url);
               const inWorkspaceSidebar = workspaceShortcutUrls.includes(
                 app.url,

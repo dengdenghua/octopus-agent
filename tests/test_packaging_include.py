@@ -38,6 +38,7 @@ _REQUIRED_RUNTIME_WHEEL_FILES = {
     "runtime/platform/process/thread_turn_claim.py",
     "runtime/platform/models/custom_model_selection.py",
     "runtime/platform/plugins/_secure_fetch.py",
+    "runtime/platform/plugins/workbench_activation.py",
     "runtime/platform/plugins/bundled/documents/__init__.py",
     "runtime/platform/plugins/bundled/github/__init__.py",
     "runtime/platform/plugins/bundled/paper_trading/_http_support.py",
@@ -73,6 +74,18 @@ _REQUIRED_BUNDLED_WHEEL_FILES = {
     "runtime/platform/plugins/bundled/github/plugin.yaml",
     "runtime/platform/plugins/bundled/mx2025_viewer/page/index.html",
     "runtime/platform/plugins/bundled/mx2025_viewer/plugin.yaml",
+    "runtime/platform/plugins/bundled/narrative_studio/__init__.py",
+    "runtime/platform/plugins/bundled/narrative_studio/echo_adapter.py",
+    "runtime/platform/plugins/bundled/narrative_studio/mcp_server.py",
+    "runtime/platform/plugins/bundled/narrative_studio/models.py",
+    "runtime/platform/plugins/bundled/narrative_studio/page/index.html",
+    "runtime/platform/plugins/bundled/narrative_studio/plugin.yaml",
+    "runtime/platform/plugins/bundled/narrative_studio/skill_assets.py",
+    "runtime/platform/plugins/bundled/narrative_studio/skills/canon-review/SKILL.md",
+    "runtime/platform/plugins/bundled/narrative_studio/skills/continuity/SKILL.md",
+    "runtime/platform/plugins/bundled/narrative_studio/skills/narrative-authoring/SKILL.md",
+    "runtime/platform/plugins/bundled/narrative_studio/store.py",
+    "runtime/platform/plugins/bundled/narrative_studio/v2_routes.py",
     "runtime/platform/plugins/bundled/paper_trading/README.md",
     "runtime/platform/plugins/bundled/paper_trading/page/index.html",
     "runtime/platform/plugins/bundled/paper_trading/page/watch.html",
@@ -88,6 +101,7 @@ _EXPECTED_BUNDLED_PLUGIN_IDS = {
     "documents",
     "github",
     "mx2025_viewer",
+    "narrative_studio",
     "paper_trading",
     "paper_trading_replica",
     "project_wiki",
@@ -405,10 +419,14 @@ def _assert_bundled_plugins_in_wheel(
             "-c",
             (
                 "from runtime.platform.plugins.plugin_hub import PluginHub; "
-                "items = {item['id']: item for item in PluginHub().discover()}; "
+                "hub = PluginHub(); "
+                "items = {item['id']: item for item in hub.discover()}; "
                 f"expected = set({expected}); "
                 "assert expected <= set(items), (expected, set(items)); "
                 "assert all(items[name]['bundled'] is True for name in expected); "
+                "narrative = hub.load('narrative_studio'); "
+                "assert narrative is not None; "
+                "assert narrative.version == '0.2.0'; "
                 "assert 'documents' in items['documents']['tags']; "
                 "assert items['documents']['version'] == '0.1.0'; "
                 "assert items['documents']['author'] == 'Octopus'; "

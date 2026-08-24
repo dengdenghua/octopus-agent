@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from runtime.platform.plugins._secure_fetch import fetch_public_https_bytes
+from runtime.platform.plugins.workbench_activation import WorkbenchActivationStore
 from runtime.platform.process.paths import app_paths
 
 REPO = Path(__file__).resolve().parents[3]
@@ -36,6 +37,27 @@ _MAX_ARCHIVE_BYTES = 128 * 1024 * 1024
 _MAX_ARCHIVE_MEMBERS = 10_000
 _MAX_EXTRACTED_BYTES = 256 * 1024 * 1024
 _MAX_MEMBER_BYTES = 64 * 1024 * 1024
+
+_FACTORY_WORKBENCH_APPS_BY_ID: dict[str, dict[str, Any]] = {
+    "workbench_narrative": {
+        "id": "workbench_narrative",
+        "plugin": "narrative_studio",
+        "source": "octopus",
+        "kind": "workbench",
+        "name": "Narrative Studio",
+        "name_zh": "叙事工坊",
+        "description": "角色、世界观、剧情线与叙事资产的统一创作工作台",
+        "category": "workbench",
+        "author": "Octopus",
+        "version": "0.2.0",
+        "factory_seed": True,
+        "removable": True,
+        "data_policies": ["keep", "trash"],
+    }
+}
+_FACTORY_WORKBENCH_PLUGINS = frozenset(
+    str(item["plugin"]) for item in _FACTORY_WORKBENCH_APPS_BY_ID.values()
+)
 
 
 def _load_remote(name: str) -> dict[str, Any] | None:
@@ -111,7 +133,28 @@ class CloudCatalog:
         return dict(self._load().get("meta") or {})
 
     def items(self) -> list[dict[str, Any]]:
-        return list(self._load().get(self._list_key) or [])
+        items = list(self._load().get(self._list_key) or [])
+        if self._kind == "plugins":
+            normalized: list[dict[str, Any]] = []
+            seen_factory: set[str] = set()
+            for item in items:
+                item_id = str(item.get("id") or "")
+                factory = _FACTORY_WORKBENCH_APPS_BY_ID.get(item_id)
+                if factory is not None:
+                    if item_id in seen_factory:
+                        continue
+                    normalized.append(dict(factory))
+                    seen_factory.add(item_id)
+                else:
+                    normalized.append(item)
+            items = normalized
+            known = {str(item.get("id") or "") for item in items}
+            items.extend(
+                dict(item)
+                for item in _FACTORY_WORKBENCH_APPS_BY_ID.values()
+                if item["id"] not in known
+            )
+        return items
 
     def list(
         self,
@@ -280,12 +323,22 @@ class CloudCatalog:
           3. 连接器安装状态 ~/.octopus/connectors/state.json(installed=true)
         """
         names: set[str] = set()
+        activation_store = self._workbench_activation_store()
+        for plugin_id in _FACTORY_WORKBENCH_PLUGINS:
+            if activation_store.state(plugin_id)["installed"]:
+                names.add(plugin_id)
         root = self.PLUGIN_INSTALL_ROOT
         if root.exists():
             for kind_dir in root.iterdir():
-                if kind_dir.is_dir():
+                if kind_dir.is_dir() and not kind_dir.name.startswith((".", "_")):
                     for d in kind_dir.iterdir():
-                        if d.is_dir():
+                        if (
+                            d.is_dir()
+                            and not (
+                                kind_dir.name == "workbench"
+                                and d.name in _FACTORY_WORKBENCH_PLUGINS
+                            )
+                        ):
                             names.add(d.name)
         codex_cache = self.CODEX_CACHE_ROOT
         if not codex_cache.is_dir():
@@ -353,9 +406,34 @@ class CloudCatalog:
         return copied
 
     def install_plugin(
-        self, plugin_id: str, *, plugin_kind: str = "connector", dest_root: str | Path | None = None
+        self,
+        plugin_id: str,
+        *,
+        plugin_kind: str = "connector",
+        dest_root: str | Path | None = None,
+        enabled: bool = True,
+        restore_data: bool = False,
+        recovery_id: str | None = None,
     ) -> dict[str, Any]:
         """下载插件内容包,把 plugins/<kind>/<id> 落地 + 复制捆绑技能到本地技能库。"""
+        if plugin_kind not in {"connector", "codex", "workbench"}:
+            raise ValueError(f"unsupported cloud plugin kind: {plugin_kind}")
+        if plugin_kind == "workbench" and plugin_id in _FACTORY_WORKBENCH_PLUGINS:
+            state = self._workbench_activation_store().install(
+                plugin_id,
+                enabled=enabled,
+                restore_data=restore_data,
+                recovery_id=recovery_id,
+            )
+            return {
+                **state,
+                "plugin_id": plugin_id,
+                "kind": plugin_kind,
+                "path": state["factory_path"],
+                "copied_skills": [],
+                "source": "factory",
+                "restart_required": True,
+            }
         safe = re.sub(r"[^A-Za-z0-9_-]", "_", plugin_id).strip("_") or "plugin"
         member_prefix = f"plugins/{plugin_kind}"
         dest = Path(dest_root or (self.PLUGIN_INSTALL_ROOT / plugin_kind))
@@ -393,3 +471,87 @@ class CloudCatalog:
             "copied_skills": copied,
             "source": "cloud",
         }
+
+    def uninstall_plugin(
+        self,
+        plugin_id: str,
+        *,
+        plugin_kind: str = "connector",
+        data_policy: str = "keep",
+        confirm_data_move: bool = False,
+    ) -> dict[str, Any]:
+        """Remove one mutable cloud package and its copied skills."""
+        if plugin_kind not in {"connector", "codex", "workbench"}:
+            raise ValueError(f"unsupported cloud plugin kind: {plugin_kind}")
+        if plugin_kind == "workbench" and plugin_id in _FACTORY_WORKBENCH_PLUGINS:
+            state = self._workbench_activation_store().uninstall(
+                plugin_id,
+                data_policy=data_policy,
+                confirm_data_move=confirm_data_move,
+            )
+            return {
+                **state,
+                "plugin_id": plugin_id,
+                "kind": plugin_kind,
+                "removed_skills": [],
+                "source": "factory",
+                "restart_required": True,
+            }
+
+        safe = re.sub(r"[^A-Za-z0-9_-]", "_", plugin_id).strip("_") or "plugin"
+        kind_root = (self.PLUGIN_INSTALL_ROOT / plugin_kind).resolve()
+        target = (kind_root / safe).resolve()
+        if kind_root not in target.parents:
+            raise ValueError(f"unsafe plugin id: {plugin_id}")
+        if not target.is_dir():
+            raise KeyError(f"cloud plugin is not installed: {plugin_id}")
+        shutil.rmtree(target)
+
+        removed_skills: list[str] = []
+        if self.SKILLS_ROOT.is_dir():
+            prefix = f"{safe}__"
+            for skill_dir in self.SKILLS_ROOT.iterdir():
+                if skill_dir.is_dir() and skill_dir.name.startswith(prefix):
+                    shutil.rmtree(skill_dir)
+                    removed_skills.append(skill_dir.name)
+        registry_path = self.SKILLS_ROOT / "registry.json"
+        if registry_path.exists() and removed_skills:
+            try:
+                registry = json.loads(registry_path.read_text("utf-8"))
+            except (OSError, json.JSONDecodeError):
+                registry = []
+            if isinstance(registry, list):
+                registry = [
+                    entry
+                    for entry in registry
+                    if not isinstance(entry, dict)
+                    or str(entry.get("name") or "") not in removed_skills
+                ]
+                registry_path.write_text(
+                    json.dumps(registry, ensure_ascii=False, indent=1), "utf-8"
+                )
+
+        if plugin_kind == "connector" and self.CONNECTOR_STATE_FILE.exists():
+            try:
+                state = json.loads(self.CONNECTOR_STATE_FILE.read_text("utf-8"))
+            except (OSError, json.JSONDecodeError):
+                state = {}
+            if isinstance(state, dict) and isinstance(state.get(safe), dict):
+                state[safe].update(installed=False, enabled=False)
+                self.CONNECTOR_STATE_FILE.write_text(
+                    json.dumps(state, ensure_ascii=False, indent=1), "utf-8"
+                )
+        return {
+            "uninstalled": True,
+            "plugin_id": plugin_id,
+            "kind": plugin_kind,
+            "removed_skills": sorted(removed_skills),
+        }
+
+    def _workbench_activation_store(self) -> WorkbenchActivationStore:
+        return WorkbenchActivationStore(
+            root=self.PLUGIN_INSTALL_ROOT / "workbench",
+            data_root=self.PLUGIN_INSTALL_ROOT.parent,
+            factory_root=REPO / "runtime" / "platform" / "plugins" / "bundled",
+            trash_root=self.PLUGIN_INSTALL_ROOT / ".trash",
+        )

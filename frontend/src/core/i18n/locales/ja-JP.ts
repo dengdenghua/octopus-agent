@@ -1805,6 +1805,7 @@ export const jaJP: Translations = {
     navMcp: "MCP",
     navEvolution: "自己進化",
     navProjects: "プロジェクト",
+    navNarrative: "物語工房",
     navPlugins: "プラグイン",
     navHR: "人材",
     navComputer: "ローカルアシスタント",
