@@ -90,3 +90,33 @@ def test_activate_window_target_uses_selected_app_and_window(monkeypatch) -> Non
     assert seen["args"] == ("com.example.App", "Example", "42-1", "Inbox")
     assert "process.frontmost = true" in seen["source"]
     assert result["window_title"] == "Inbox"
+
+
+def test_perform_accessibility_action_regrounds_before_press(monkeypatch) -> None:
+    monkeypatch.setattr(computer_macos, "MACOS_NATIVE_AVAILABLE", True)
+    seen = {}
+
+    def fake_run_jxa(source, *args, timeout=10.0):
+        seen["source"] = source
+        seen["args"] = args
+        return (
+            '{"action":"AXPress","score":24,"role":"AXButton",'
+            '"title":"Save","backend":"macos-accessibility"}',
+            None,
+        )
+
+    monkeypatch.setattr(computer_macos, "_run_jxa", fake_run_jxa)
+
+    result = computer_macos.perform_accessibility_action(
+        {
+            "role": "AXButton",
+            "title": "Save",
+            "position": [100, 200],
+        },
+        action="press",
+    )
+
+    assert seen["args"][1] == "AXPress"
+    assert '"title": "Save"' in seen["args"][0]
+    assert "bestScore < 4" in seen["source"]
+    assert result["backend"] == "macos-accessibility"

@@ -18,7 +18,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from runtime.execution.suckers import computer_skills, computer_uia_skills
+from runtime.execution.suckers import computer_macos, computer_skills, computer_uia_skills
 
 from .computer_router_state import _PENDING_TTL_SECONDS, ComputerRouterState
 
@@ -39,25 +39,52 @@ def _normalize_action(body: dict[str, Any]) -> dict[str, Any]:
             "clicks": int(body.get("clicks") or 1),
             "duration": float(body.get("duration") or 0.0),
         }
-        for key in ("source", "matched_control", "replay_assertion"):
+        for key in (
+            "source",
+            "matched_control",
+            "replay_assertion",
+            "semantic_target",
+            "semantic_action",
+        ):
             value = body.get(key)
             if isinstance(value, (str, dict)):
                 normalized[key] = value
-        return normalized
+        return _with_automation_target(normalized, body)
     if action == "type":
-        return {
-            "action": "type",
-            "text": str(body.get("text") or ""),
-            "interval": float(body.get("interval") or 0.01),
-        }
+        return _with_automation_target(
+            {
+                "action": "type",
+                "text": str(body.get("text") or ""),
+                "interval": float(body.get("interval") or 0.01),
+            },
+            body,
+        )
     if action == "key":
         keys = body.get("keys")
         if isinstance(keys, str):
             keys = [k.strip() for k in keys.split("+") if k.strip()]
         if not isinstance(keys, list):
             raise HTTPException(400, "keys must be a list or + separated string")
-        return {"action": "key", "keys": keys}
-    return {"action": "wait", "ms": int(body.get("ms") or 500)}
+        return _with_automation_target({"action": "key", "keys": keys}, body)
+    return _with_automation_target({"action": "wait", "ms": int(body.get("ms") or 500)}, body)
+
+
+def _with_automation_target(action: dict[str, Any], body: dict[str, Any]) -> dict[str, Any]:
+    raw = body.get("automation_target")
+    if not isinstance(raw, dict) or raw.get("kind") != "desktop_window":
+        return action
+    target_id = str(raw.get("id") or "").strip()
+    if not target_id:
+        return action
+    action["automation_target"] = {
+        "kind": "desktop_window",
+        "source": str(raw.get("source") or "computer"),
+        "id": target_id,
+        "title": str(raw.get("title") or ""),
+        "app_id": str(raw.get("app_id") or ""),
+        "app_name": str(raw.get("app_name") or ""),
+    }
+    return action
 
 
 def _risk_for(action: dict[str, Any]) -> dict[str, str]:
@@ -77,14 +104,56 @@ def _risk_for(action: dict[str, Any]) -> dict[str, str]:
 
 def _execute(action: dict[str, Any]) -> dict[str, Any]:
     kind = action["action"]
+    target = action.get("automation_target")
+    if kind != "wait" and isinstance(target, dict):
+        from runtime.execution.suckers import computer_macos
+
+        if computer_macos.MACOS_NATIVE_AVAILABLE:
+            activated = computer_macos.activate_window_target(
+                app_id=str(target.get("app_id") or ""),
+                app_name=str(target.get("app_name") or ""),
+                window_id=str(target.get("id") or ""),
+                window_title=str(target.get("title") or ""),
+            )
+            if activated.get("error"):
+                return {
+                    "error": str(activated["error"]),
+                    "automation_target": target,
+                }
     if kind == "click":
-        return computer_skills._mouse_click(
+        semantic_target = action.get("semantic_target")
+        semantic_action = str(action.get("semantic_action") or "").strip()
+        semantic_error = ""
+        if isinstance(semantic_target, dict) and semantic_action:
+            from runtime.execution.suckers import computer_macos
+
+            if computer_macos.MACOS_NATIVE_AVAILABLE:
+                semantic_result = computer_macos.perform_accessibility_action(
+                    semantic_target,
+                    action=semantic_action,
+                )
+                if not semantic_result.get("error"):
+                    return {
+                        **semantic_result,
+                        "semantic": True,
+                        "coordinate_fallback": False,
+                    }
+                semantic_error = str(semantic_result.get("error") or "")
+        coordinate_result = computer_skills._mouse_click(
             x=int(action["x"]),
             y=int(action["y"]),
             button=str(action.get("button") or "left"),
             clicks=int(action.get("clicks") or 1),
             duration=float(action.get("duration") or 0.0),
         )
+        if semantic_error and not coordinate_result.get("error"):
+            return {
+                **coordinate_result,
+                "semantic": False,
+                "coordinate_fallback": True,
+                "semantic_error": semantic_error,
+            }
+        return coordinate_result
     if kind == "move":
         return computer_skills._mouse_move(
             x=int(action["x"]),
@@ -207,6 +276,9 @@ def _stable_action_payload(action: dict[str, Any]) -> dict[str, Any]:
         "source",
         "matched_control",
         "replay_assertion",
+        "automation_target",
+        "semantic_target",
+        "semantic_action",
     }
     return {key: _stable_value(action.get(key)) for key in sorted(allowed) if key in action}
 
@@ -329,6 +401,83 @@ def _uia_actions_for_goal(goal: str) -> list[dict[str, Any]]:
     return [candidates[0][2]]
 
 
+def _macos_actions_for_goal(goal: str) -> list[dict[str, Any]]:
+    if not computer_macos.MACOS_NATIVE_AVAILABLE:
+        return []
+    snapshot = computer_macos.accessibility_snapshot(max_nodes=300)
+    if snapshot.get("error"):
+        return []
+    candidates: list[tuple[int, dict[str, Any]]] = []
+    for query in _goal_uia_queries(goal):
+        needle = query.strip().lower()
+        for element in snapshot.get("elements") or []:
+            if not isinstance(element, dict) or element.get("enabled") is False:
+                continue
+            position = element.get("position")
+            size = element.get("size")
+            if not (
+                isinstance(position, (list, tuple))
+                and len(position) >= 2
+                and isinstance(size, (list, tuple))
+                and len(size) >= 2
+            ):
+                continue
+            name = str(
+                element.get("title")
+                or element.get("description")
+                or element.get("value")
+                or ""
+            ).strip()
+            lowered = name.lower()
+            if not needle or needle not in lowered:
+                continue
+            role = str(element.get("role") or "")
+            score = 100 if lowered == needle else 70 if lowered.startswith(needle) else 50
+            if any(kind in role.lower() for kind in ("button", "menu", "link", "tab")):
+                score += 20
+            x = int(float(position[0]) + float(size[0]) / 2)
+            y = int(float(position[1]) + float(size[1]) / 2)
+            semantic_target = {
+                key: element.get(key)
+                for key in (
+                    "role",
+                    "title",
+                    "description",
+                    "value",
+                    "position",
+                    "size",
+                )
+                if element.get(key) not in (None, "")
+            }
+            candidates.append(
+                (
+                    score,
+                    {
+                        "action": "click",
+                        "x": x,
+                        "y": y,
+                        "button": "left",
+                        "clicks": 1,
+                        "duration": 0.0,
+                        "source": "macos-accessibility",
+                        "semantic_action": "press",
+                        "semantic_target": semantic_target,
+                        "matched_control": {
+                            "name": name,
+                            "control_type": role,
+                            "center": {"x": x, "y": y},
+                            "query": query,
+                            "score": score,
+                        },
+                    },
+                )
+            )
+    if not candidates:
+        return []
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return [candidates[0][1]]
+
+
 def _uia_match_score(match: dict[str, Any], query: str) -> int:
     needle = query.strip().lower()
     name = str(match.get("name") or "").strip().lower()
@@ -378,8 +527,8 @@ def _plan_actions(goal: str) -> list[dict[str, Any]]:
                 {"action": "key", "keys": ["enter"]},
             ]
         )
-    elif uia_actions := _uia_actions_for_goal(goal):
-        actions.extend(uia_actions)
+    elif semantic_actions := (_macos_actions_for_goal(goal) or _uia_actions_for_goal(goal)):
+        actions.extend(semantic_actions)
     elif any(word in text for word in ("browser", "chrome", "edge", "浏览器", "网页")):
         actions.extend(
             [

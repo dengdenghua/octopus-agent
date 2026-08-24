@@ -413,3 +413,106 @@ JSON.stringify({
     snapshot["backend"] = "macos-accessibility"
     snapshot["available"] = True
     return snapshot
+
+
+def perform_accessibility_action(
+    target: dict[str, Any],
+    *,
+    action: str = "press",
+) -> dict[str, Any]:
+    """Re-ground a snapshotted AX element and invoke its native action.
+
+    Snapshot indexes are intentionally not reused: the UI may have changed
+    between preview and confirmation.  The target's semantic attributes are
+    matched against a fresh frontmost-window tree immediately before acting.
+    Callers may fall back to the previewed bounds when native AX is unavailable.
+    """
+
+    if not MACOS_NATIVE_AVAILABLE:
+        return {"error": "macOS native automation is unavailable"}
+    normalized_action = str(action or "press").strip().lower()
+    action_names = {
+        "press": "AXPress",
+        "show_menu": "AXShowMenu",
+        "increment": "AXIncrement",
+        "decrement": "AXDecrement",
+        "expand": "AXExpand",
+        "collapse": "AXCollapse",
+    }
+    native_action = action_names.get(normalized_action)
+    if native_action is None:
+        return {"error": f"unsupported accessibility action: {normalized_action}"}
+    compact_target = {
+        key: target.get(key)
+        for key in (
+            "role",
+            "control_type",
+            "title",
+            "name",
+            "description",
+            "value",
+            "position",
+        )
+        if target.get(key) not in (None, "")
+    }
+    source = r"""
+ObjC.import('Foundation');
+const se = Application('System Events');
+const argv = $.NSProcessInfo.processInfo.arguments.js;
+const target = JSON.parse(String(argv[argv.length - 2] || '{}'));
+const nativeAction = String(argv[argv.length - 1] || 'AXPress');
+const front = se.applicationProcesses.whose({frontmost: true})();
+if (!front.length) throw new Error('no frontmost application');
+const windows = front[0].windows();
+if (!windows.length) throw new Error('frontmost application has no window');
+const safe = (fn, fallback = '') => { try { const value = fn(); return value == null ? fallback : value; } catch (_) { return fallback; } };
+const wantedRole = String(target.role || target.control_type || '');
+const wantedTitle = String(target.title || target.name || '');
+const wantedDescription = String(target.description || '');
+const wantedValue = String(target.value || '').slice(0, 500);
+const wantedPosition = Array.isArray(target.position) ? target.position : null;
+let best = null;
+let bestScore = -1e9;
+for (const element of safe(() => windows[0].entireContents(), [])) {
+  const role = String(safe(() => element.role(), ''));
+  const title = String(safe(() => element.title(), ''));
+  const description = String(safe(() => element.description(), ''));
+  const value = String(safe(() => element.value(), '')).slice(0, 500);
+  let score = 0;
+  if (wantedRole) score += role === wantedRole ? 8 : -8;
+  if (wantedTitle) score += title === wantedTitle ? 12 : -4;
+  if (wantedDescription) score += description === wantedDescription ? 6 : -2;
+  if (wantedValue) score += value === wantedValue ? 3 : 0;
+  if (wantedPosition) {
+    const position = safe(() => element.position(), null);
+    if (Array.isArray(position) && position.length >= 2) {
+      const distance = Math.abs(Number(position[0]) - Number(wantedPosition[0])) + Math.abs(Number(position[1]) - Number(wantedPosition[1]));
+      score += Math.max(-4, 4 - distance / 50);
+    }
+  }
+  if (score > bestScore) { best = element; bestScore = score; }
+}
+if (!best || bestScore < 4) throw new Error(`accessibility target is stale or ambiguous (score=${bestScore})`);
+const native = best.actions.byName(nativeAction);
+native.perform();
+JSON.stringify({
+  action: nativeAction,
+  score: bestScore,
+  role: String(safe(() => best.role(), '')),
+  title: String(safe(() => best.title(), '')),
+  backend: 'macos-accessibility'
+});
+"""
+    output, error = _run_jxa(
+        source,
+        json.dumps(compact_target, ensure_ascii=False),
+        native_action,
+        timeout=20.0,
+    )
+    if error:
+        return {"error": f"accessibility_action_failed: {error}"}
+    try:
+        result = json.loads(output)
+    except (TypeError, ValueError) as exc:
+        return {"error": f"accessibility_action_failed: {type(exc).__name__}: {exc}"}
+    return result if isinstance(result, dict) else {"error": "invalid accessibility action result"}
