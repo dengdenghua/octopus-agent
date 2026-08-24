@@ -11,11 +11,12 @@
 #   - main 入口指向 frontend/electron/main.cjs（frontend/package.json 的
 #     "main" 字段，electron-builder 据此打包入口）。
 #   - extraResources 放入首启配置模板和只读运行资源。Windows 的
-#     win.extraResources 额外强制携带 CI 生成的 PyInstaller 后端。
+#     win.extraResources 额外强制携带 CI 生成的 PyInstaller 后端和锁定的
+#     官方 Codex Windows 原生运行时。
 
 appId: ai.octopus.desktop
-productName: Octopus
-copyright: Octopus Authors
+productName: EchoAI
+copyright: EchoAI · EchoOS
 
 # 说明：main 入口由 frontend/package.json 的 "main" 字段决定
 # （值：electron/main.cjs）。此处仅注释备忘，避免重复声明产生歧义。
@@ -35,6 +36,10 @@ files:
 # main.cjs 在启动后端前会先将配置和可变资源安全物化到
 # userData。Python 运行时及依赖由 PyInstaller 后端固定，不从系统或网络获取。
 extraResources:
+  - from: ../extensions/octopus-browser-relay
+    to: extensions/octopus-browser-relay
+    filter:
+      - "**/*"
   - from: ../packaging/desktop/config.desktop.yaml
     to: config.desktop.yaml
   - from: ../agents
@@ -60,15 +65,29 @@ mac:
   target:
     - dmg
   category: public.app-category.developer-tools
+  # The PyInstaller backend and the pinned darwin-x64 Codex runtime are
+  # materialized by extras/desktop/build-backend-mac.cjs and
+  # extras/desktop/prepare-codex-mac.cjs before electron-builder runs.
+  extraResources:
+    - from: ../extras/desktop/build/backend/octopus-backend
+      to: backend/octopus-backend
+    - from: ../extras/desktop/build/codex
+      to: codex
+      filter:
+        - "**/*"
 
 win:
   target:
     - nsis
   # Release builds are invalid without Authenticode. electron-builder obtains
   # the protected PKCS#12 bundle from CSC_LINK/CSC_KEY_PASSWORD, signs the
-  # unpacked app, copied backend executable and NSIS installer, and requests a
+  # unpacked app, copied backend/Codex executables and NSIS installer, and requests a
   # SHA-256 RFC3161 timestamp from this explicitly trusted endpoint.
   forceCodeSigning: true
+  # Explicitly include every copied native executable (backend, Codex and its
+  # sandbox helpers) in electron-builder's signing transformer.
+  signExts:
+    - .exe
   artifactName: "${productName}-Setup-${version}-${env.GITHUB_SHA}.${ext}"
   signtoolOptions:
     signingHashAlgorithms:
@@ -77,16 +96,34 @@ win:
     # and both workflows require Windows to validate its timestamp certificate.
     rfc3161TimeStampServer: http://timestamp.digicert.com
   # 该文件由 extras/desktop/build-backend-win.cjs 在 CI 中生成。
-  # CI 在打包前后均显式校验；缺失时中止，不允许生成依赖
-  # 系统 uv/Python 的安装包。
+  # Codex 目录由 prepare-codex-win.cjs 从 pnpm 锁定的官方平台包生成。
+  # CI 在打包前后均显式校验；缺失时中止，不允许生成依赖系统
+  # uv/Python/Codex/PATH 或首启下载的安装包。
   extraResources:
     - from: ../extras/desktop/build/backend/octopus-backend.exe
       to: backend/octopus-backend.exe
+    - from: ../extras/desktop/build/codex
+      to: codex
+      filter:
+        - "**/*"
 
 linux:
   target:
     - AppImage
   category: Development
+  # Bind each AppImage to the exact source commit it was built from, matching
+  # the Windows installer naming so CI can verify provenance by filename.
+  artifactName: "${productName}-Setup-Linux-${version}-${env.GITHUB_SHA}.${ext}"
+  # The PyInstaller backend and the pinned linux-musl Codex runtime are
+  # materialized by extras/desktop/build-backend-linux.cjs and
+  # extras/desktop/prepare-codex-linux.cjs before electron-builder runs.
+  extraResources:
+    - from: ../extras/desktop/build/backend/octopus-backend
+      to: backend/octopus-backend
+    - from: ../extras/desktop/build/codex
+      to: codex
+      filter:
+        - "**/*"
 
 nsis:
   oneClick: false

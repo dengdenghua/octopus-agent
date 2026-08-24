@@ -11,9 +11,226 @@
 // network or host-tool fallback in a released installer.
 
 const { spawn } = require("child_process");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { app } = require("electron");
+
+const PACKAGED_CODEX_VERSION = "0.149.0";
+const IS_WINDOWS = process.platform === "win32";
+
+// Shared provenance of the codex 0.149.0 rust closure — identical across
+// platforms because the same crates ship in every native package.
+const CODEX_SOURCE_COMMIT = "758ef40f50c1a458425c7cfbf1eb12cbc07af0b0";
+const CODEX_CARGO_LOCK_SHA256 =
+  "0c32858e9c47d0acf82735c8620c96840a5381152eec63acad15d1acadb9edad";
+const RATATUI_VERSION = "0.30.2";
+const RATATUI_CRATE_SHA256 =
+  "3274ba0a2c5e1bcad2a2005d20f4dc59dad26b2eb0940fb094500dba4099d57d";
+const RIPGREP_VERSION = "15.2.0";
+const RIPGREP_SOURCE_COMMIT = "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f";
+const RIPGREP_CARGO_LOCK_SHA256 =
+  "7a7d39cda8a03930e578f1dbb724e055771901842eca239e03b01e19da946a64";
+
+// License texts reviewed once per codex release; shared by every platform.
+const SHARED_LICENSE_FILES = [
+  {
+    relative: "LICENSE",
+    expectedSha256:
+      "d17f227e4df5da1600391338865ce0f3055211760a36688f816941d58232d8dc",
+  },
+  {
+    relative: "NOTICE",
+    expectedSha256:
+      "9d71575ecfd9a843fc1677b0efb08053c6ba9fd686a0de1a6f5382fd3c220915",
+  },
+  {
+    relative: "third-party/codex-rust/THIRD_PARTY_LICENSES.md",
+    expectedSha256:
+      "198967762991bc9c638b7c304a11bf5b564cb1898e48acf35eca793c2b4557ae",
+  },
+  {
+    relative: "third-party/ratatui/LICENSE",
+    expectedSha256:
+      "50eb43e8d742c9c61a9391e42b2184fce54dbd1893a1bb1c85b8c9ee217ab1f5",
+  },
+  {
+    relative: "third-party/ripgrep/COPYING",
+    expectedSha256:
+      "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f",
+  },
+  {
+    relative: "third-party/ripgrep/THIRD_PARTY_LICENSES.html",
+    expectedSha256:
+      "d55f9ff28424dafc02ff01c2c054cb6bde273c904d6e13708d4ace1ab27b56a5",
+  },
+  {
+    relative: "third-party/ripgrep/THIRD_PARTY_LICENSES.md",
+    expectedSha256:
+      "4b0bade6d5a1b64f7300db89b0c5190da9e66adc15298acae4dd2a7697c7549b",
+  },
+  {
+    relative: "third-party/ripgrep/LICENSE-MIT",
+    expectedSha256:
+      "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f",
+  },
+  {
+    relative: "third-party/ripgrep/UNLICENSE",
+    expectedSha256:
+      "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c",
+  },
+];
+
+// Linux vendor tree files shared by both linux profiles. Mirrors the darwin
+// layout and additionally bundles bwrap (bubblewrap), the sandbox helper used
+// on Linux instead of the Windows sandbox artifacts.
+const LINUX_VENDOR_FILES = [
+  { relative: "bin/codex", executable: true },
+  { relative: "bin/codex-code-mode-host", executable: true },
+  { relative: "codex-path/rg", executable: true },
+  { relative: "codex-resources/zsh/bin/zsh", executable: true },
+  { relative: "codex-resources/bwrap", executable: true },
+  { relative: "codex-package.json" },
+  ...SHARED_LICENSE_FILES,
+  {
+    relative: "third-party/codex-rust/THIRD_PARTY_LICENSES-codex-cli.html",
+    expectedSha256:
+      "085bfd0627d8011777788beb1c74a7399c5acba157bac3eb766e0562f58a432b",
+  },
+];
+
+// linux-native are musl ELF executables; magic is the 4-byte ELF header.
+const LINUX_ARM64_PROFILE = {
+  platformPackage: "@openai/codex-linux-arm64",
+  integrity:
+    "sha512-fAXPpvIob+11RNZJS9CVVTsKb+V4Hw3woGFPj42D7fU2wBJUKI2jfAc4fLJNtrpwRecLeW601mtkMHOSIbWuuA==",
+  target: "aarch64-unknown-linux-musl",
+  fileHashPhase: "pre-package",
+  executableName: "codex",
+  executableMagic: "7f454c46", // first 4 bytes hex, ELF 64-bit
+  files: LINUX_VENDOR_FILES,
+};
+
+const LINUX_X64_PROFILE = {
+  platformPackage: "@openai/codex-linux-x64",
+  integrity:
+    "sha512-uZXaN9JPxu0/jjnqqJeTd4kRYPnjVZK3MiVndfG1mHhEaoDKL7ScWHfPqvAEOjwsSDEmQSlMfUkmvYp/CHciYw==",
+  target: "x86_64-unknown-linux-musl",
+  fileHashPhase: "pre-package",
+  executableName: "codex",
+  executableMagic: "7f454c46", // first 4 bytes hex, ELF 64-bit
+  files: LINUX_VENDOR_FILES,
+};
+
+// Platform profile: which native package is pinned, where its executable
+// lives, how the manifest was produced, and how executables are identified.
+// Profiles are keyed by `platform/arch`; linux mirrors the darwin layout plus
+// the bwrap (bubblewrap) sandbox helper, and its executables are ELF.
+const CODEX_PROFILE = IS_WINDOWS
+  ? {
+      platformPackage: "@openai/codex-win32-x64",
+      integrity:
+        "sha512-qKbwSOOO/fdhQ5MlXE2fts6taPxRPZ/zqeC+eqHD72hLRymV9rFCUbUxOCquognUPRPvS/2/kRCV0UVhoDd3yQ==",
+      target: "x86_64-pc-windows-msvc",
+      fileHashPhase: "pre-authenticode",
+      executableName: "codex.exe",
+      executableMagic: "4d5a", // first 2 bytes hex, Windows PE ("MZ")
+      files: [
+        { relative: "bin/codex.exe", executable: true },
+        { relative: "bin/codex-code-mode-host.exe", executable: true },
+        {
+          relative: "codex-resources/codex-command-runner.exe",
+          executable: true,
+        },
+        {
+          relative: "codex-resources/codex-windows-sandbox-setup.exe",
+          executable: true,
+        },
+        { relative: "codex-path/rg.exe", executable: true },
+        { relative: "codex-package.json" },
+        ...SHARED_LICENSE_FILES,
+        {
+          relative: "third-party/codex-rust/THIRD_PARTY_LICENSES-codex-cli.html",
+          expectedSha256:
+            "085bfd0627d8011777788beb1c74a7399c5acba157bac3eb766e0562f58a432b",
+        },
+        {
+          relative:
+            "third-party/codex-rust/THIRD_PARTY_LICENSES-code-mode-host.html",
+          expectedSha256:
+            "df6e9546efb4f6a30f06cc7417bb81beeee81bc2e9ea5c670cdfd04a2e9a1503",
+        },
+        {
+          relative:
+            "third-party/codex-rust/THIRD_PARTY_LICENSES-windows-sandbox.html",
+          expectedSha256:
+            "df32d1e635d49d3b86caa4b56e0015dcf116025792ef3c0957dec342a1909721",
+        },
+        {
+          relative: "third-party/codex-native/NATIVE_PROVENANCE.json",
+          expectedSha256:
+            "65e2c0c7f7b239ee758133ce17cfb680bc38aec84876ca81015458c41a988c7a",
+        },
+        {
+          relative: "third-party/codex-native/NATIVE_THIRD_PARTY_NOTICES.md",
+          expectedSha256:
+            "da7997facd0e36f4ebca01594c60abdc1204f5421a35d28c4760b13addf247c5",
+        },
+      ],
+    }
+  : process.platform === "linux"
+    ? process.arch === "arm64"
+      ? LINUX_ARM64_PROFILE
+      : LINUX_X64_PROFILE
+    : process.arch === "arm64"
+      ? {
+          platformPackage: "@openai/codex-darwin-arm64",
+          integrity:
+            "sha512-GsZJbzBWiD48RETrO8VHGAQNgfSrUVxItXZFeD87wswatPi0+lKuQo8Dx4nMYmOZhZrVtwr3al/feRrZxnDV8Q==",
+          target: "aarch64-apple-darwin",
+          fileHashPhase: "pre-codesign",
+          executableName: "codex",
+          executableMagic: "cffaedfe", // first 4 bytes hex, Mach-O 64-bit LE
+          files: [
+            { relative: "bin/codex", executable: true },
+            { relative: "bin/codex-code-mode-host", executable: true },
+            { relative: "codex-path/rg", executable: true },
+            { relative: "codex-resources/zsh/bin/zsh", executable: true },
+            { relative: "codex-package.json" },
+            ...SHARED_LICENSE_FILES,
+            {
+              relative: "third-party/codex-rust/THIRD_PARTY_LICENSES-codex-cli.html",
+              expectedSha256:
+                "085bfd0627d8011777788beb1c74a7399c5acba157bac3eb766e0562f58a432b",
+            },
+          ],
+        }
+      : {
+          platformPackage: "@openai/codex-darwin-x64",
+          integrity:
+            "sha512-H+mMgW3Nhc5QzGWEklCoFqACuOc0cVpgPkPQRw0LShoK7P5664T6BRnyl1yzT6orKPKv49cXry7DIWWZ19SanQ==",
+          target: "x86_64-apple-darwin",
+          fileHashPhase: "pre-codesign",
+          executableName: "codex",
+          executableMagic: "cffaedfe", // first 4 bytes hex, Mach-O 64-bit LE
+          files: [
+            { relative: "bin/codex", executable: true },
+            { relative: "bin/codex-code-mode-host", executable: true },
+            { relative: "codex-path/rg", executable: true },
+            { relative: "codex-resources/zsh/bin/zsh", executable: true },
+            { relative: "codex-package.json" },
+            ...SHARED_LICENSE_FILES,
+            {
+              relative: "third-party/codex-rust/THIRD_PARTY_LICENSES-codex-cli.html",
+              expectedSha256:
+                "085bfd0627d8011777788beb1c74a7399c5acba157bac3eb766e0562f58a432b",
+            },
+          ],
+        };
+const PACKAGED_CODEX_TARGET = CODEX_PROFILE.target;
+const PACKAGED_CODEX_INTEGRITY = CODEX_PROFILE.integrity;
+const PACKAGED_CODEX_FILES = CODEX_PROFILE.files;
+const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
 // Development layout roots the uv-managed venv under userData/backend. A test
 // can override it to reuse an existing venv — e.g. the Playwright smoke reuses
@@ -56,6 +273,196 @@ function requirePackagedBackendExecutable() {
     throw new Error(`packaged backend path is not a file: ${executable}`);
   }
   return executable;
+}
+
+function packagedCodexExecutable() {
+  return path.join(resourcesPath(), "codex", "bin", CODEX_PROFILE.executableName);
+}
+
+function sha256File(file) {
+  return crypto
+    .createHash("sha256")
+    .update(fs.readFileSync(file))
+    .digest("hex");
+}
+
+function pathIsInside(root, candidate) {
+  const relative = path.relative(root, candidate);
+  return (
+    relative !== "" &&
+    relative !== ".." &&
+    !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative)
+  );
+}
+
+function requireRegularFileInside(root, realRoot, relative) {
+  const candidate = path.resolve(root, relative);
+  if (!pathIsInside(root, candidate)) {
+    throw new Error(
+      `packaged Codex bundle path escapes its resource root: ${relative}`,
+    );
+  }
+  let info;
+  try {
+    info = fs.lstatSync(candidate);
+  } catch {
+    throw new Error(
+      `packaged Codex bundle file is missing: ${relative}; refusing PATH/network fallback`,
+    );
+  }
+  if (!info.isFile() || info.isSymbolicLink()) {
+    throw new Error(
+      `packaged Codex bundle path is not a regular file: ${relative}`,
+    );
+  }
+  const realCandidate = fs.realpathSync.native(candidate);
+  if (!pathIsInside(realRoot, realCandidate)) {
+    throw new Error(
+      `packaged Codex bundle file escapes its resource root: ${relative}`,
+    );
+  }
+  return candidate;
+}
+
+function requirePackagedCodexBundle() {
+  const executable = packagedCodexExecutable();
+  let info;
+  try {
+    info = fs.lstatSync(executable);
+  } catch {
+    throw new Error(
+      `packaged Codex executable is missing: ${executable}; refusing PATH/network fallback`,
+    );
+  }
+  if (!info.isFile() || info.isSymbolicLink()) {
+    throw new Error(`packaged Codex path is not a file: ${executable}`);
+  }
+
+  const root = path.resolve(resourcesPath(), "codex");
+  const rootInfo = fs.lstatSync(root);
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) {
+    throw new Error(
+      `packaged Codex resource root is not a regular directory: ${root}`,
+    );
+  }
+  const realRoot = fs.realpathSync.native(root);
+  const manifestPath = requireRegularFileInside(
+    root,
+    realRoot,
+    "octopus-codex-bundle.json",
+  );
+  const manifestInfo = fs.statSync(manifestPath);
+  if (manifestInfo.size <= 0 || manifestInfo.size > 1024 * 1024) {
+    throw new Error("packaged Codex bundle manifest has an invalid size");
+  }
+
+  let manifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  } catch {
+    throw new Error("packaged Codex bundle manifest is not valid JSON");
+  }
+  if (
+    manifest?.schema !== "octopus.codex_bundle.v1" ||
+    manifest?.package !== "@openai/codex" ||
+    manifest?.version !== PACKAGED_CODEX_VERSION ||
+    manifest?.platformPackage !== CODEX_PROFILE.platformPackage ||
+    manifest?.platformPackageIntegrity !== PACKAGED_CODEX_INTEGRITY ||
+    manifest?.target !== PACKAGED_CODEX_TARGET ||
+    manifest?.fileHashPhase !== CODEX_PROFILE.fileHashPhase ||
+    manifest?.licenses?.codex?.version !== PACKAGED_CODEX_VERSION ||
+    manifest?.licenses?.codex?.sourceTag !==
+      `rust-v${PACKAGED_CODEX_VERSION}` ||
+    manifest?.licenses?.codex?.sourceCommit !== CODEX_SOURCE_COMMIT ||
+    manifest?.licenses?.codex?.cargoLockSha256 !== CODEX_CARGO_LOCK_SHA256 ||
+    manifest?.licenses?.codex?.cargoAboutVersion !== "0.9.2" ||
+    manifest?.licenses?.ratatui?.version !== RATATUI_VERSION ||
+    manifest?.licenses?.ratatui?.crateSha256 !== RATATUI_CRATE_SHA256 ||
+    manifest?.licenses?.ripgrep?.version !== RIPGREP_VERSION ||
+    manifest?.licenses?.ripgrep?.sourceTag !== RIPGREP_VERSION ||
+    manifest?.licenses?.ripgrep?.sourceCommit !== RIPGREP_SOURCE_COMMIT ||
+    manifest?.licenses?.ripgrep?.cargoLockSha256 !== RIPGREP_CARGO_LOCK_SHA256 ||
+    manifest?.licenses?.ripgrep?.cargoAboutVersion !== "0.9.2" ||
+    JSON.stringify(manifest?.licenses?.ripgrep?.releaseFeatures) !==
+      '["pcre2"]' ||
+    !manifest.files ||
+    typeof manifest.files !== "object"
+  ) {
+    throw new Error(
+      "packaged Codex bundle manifest does not match the pinned runtime",
+    );
+  }
+  // Windows-only closure artifacts: the native provenance documents the
+  // reviewed win32 component list, and ripgrep's prebuilt Windows archive is
+  // hashed to the exact reviewed binary. The darwin bundle carries neither —
+  // its rg binary is covered by the manifest file map below.
+  if (IS_WINDOWS) {
+    if (
+      manifest?.licenses?.native?.schemaVersion !==
+        "codex-native-notices.v1" ||
+      manifest?.licenses?.native?.provenanceSha256 !==
+        "65e2c0c7f7b239ee758133ce17cfb680bc38aec84876ca81015458c41a988c7a" ||
+      manifest?.licenses?.native?.noticeSha256 !==
+        "da7997facd0e36f4ebca01594c60abdc1204f5421a35d28c4760b13addf247c5" ||
+      manifest?.licenses?.native?.componentCount !== 12 ||
+      manifest?.licenses?.native?.licenseInputCount !== 80 ||
+      manifest?.licenses?.ripgrep?.windowsArchiveSha256 !==
+        "71b2fef860abe467217a538ff31de02f5258807c0129f771846f87bd029aafc5" ||
+      manifest?.licenses?.ripgrep?.windowsExecutableSha256 !==
+        "14231169855ec5205cf5a1b6f1db358ff4aed4247c86b69ce8aae647c77f6680"
+    ) {
+      throw new Error(
+        "packaged Codex bundle manifest does not match the pinned runtime",
+      );
+    }
+  }
+
+  for (const required of PACKAGED_CODEX_FILES) {
+    const file = requireRegularFileInside(root, realRoot, required.relative);
+    const sourceHash = manifest.files[required.relative];
+    if (typeof sourceHash !== "string" || !SHA256_PATTERN.test(sourceHash)) {
+      throw new Error(
+        `packaged Codex manifest is missing a source SHA-256: ${required.relative}`,
+      );
+    }
+    if (required.executable) {
+      const magicBytes = CODEX_PROFILE.executableMagic.length / 2;
+      const descriptor = fs.openSync(file, "r");
+      try {
+        const header = Buffer.alloc(magicBytes);
+        if (
+          fs.readSync(descriptor, header, 0, magicBytes, 0) !== magicBytes ||
+          header.toString("hex") !== CODEX_PROFILE.executableMagic
+        ) {
+          throw new Error(
+            `packaged Codex executable is not a ${CODEX_PROFILE.target} binary: ${required.relative}`,
+          );
+        }
+      } finally {
+        fs.closeSync(descriptor);
+      }
+      // electron-builder adds Authenticode after this manifest is generated,
+      // so the source-package digest cannot match the signed PE. CI verifies
+      // every post-signing PE digest, publisher, and timestamp separately.
+      // macOS builds may be re-signed/ad-hoc signed during packaging, so
+      // executable digests are excluded from hash comparison there too.
+      continue;
+    }
+    const actualHash = sha256File(file);
+    const expectedHash = required.expectedSha256 || sourceHash;
+    if (sourceHash !== expectedHash || actualHash !== expectedHash) {
+      throw new Error(
+        `packaged Codex bundle hash mismatch: ${required.relative}`,
+      );
+    }
+  }
+
+  return executable;
+}
+
+function requirePackagedCodexExecutable() {
+  return requirePackagedCodexBundle();
 }
 
 function developmentUvCmd() {
@@ -190,12 +597,25 @@ async function spawnBackend(configPath, onProgress) {
     OCTOPUS_DESKTOP: "1",
     OCTOPUS_DATA_DIR: path.join(app.getPath("userData"), "data"),
     OCTOPUS_RESOURCES_DIR: path.join(app.getPath("userData"), "resources"),
+    OCTOPUS_PACKAGED_CODEX_VERSION: PACKAGED_CODEX_VERSION,
   };
+  if (packaged) {
+    env.OCTOPUS_BROWSER_EXTENSION_DIR = path.join(
+      resourcesPath(),
+      "extensions",
+      "octopus-browser-relay",
+    );
+  }
   if (!packaged) env.PYTHONPATH = resourcesPath();
   fs.mkdirSync(env.OCTOPUS_DATA_DIR, { recursive: true, mode: 0o700 });
   const executable = packaged
     ? requirePackagedBackendExecutable()
     : pythonExe();
+  if (packaged) {
+    // This absolute, verified resource path is the only Codex executable the
+    // packaged backend may resolve. Never inherit a host PATH installation.
+    env.OCTOPUS_CODEX_EXECUTABLE = requirePackagedCodexExecutable();
+  }
   const args = packaged
     ? [
         "serve",
@@ -256,4 +676,7 @@ module.exports = {
   pythonExe,
   packagedBackendExecutable,
   requirePackagedBackendExecutable,
+  packagedCodexExecutable,
+  requirePackagedCodexBundle,
+  requirePackagedCodexExecutable,
 };

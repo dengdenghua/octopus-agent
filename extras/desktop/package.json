@@ -5,13 +5,18 @@
   "private": true,
   "scripts": {
     "backend:build:win": "node build-backend-win.cjs",
+    "backend:build:mac": "node build-backend-mac.cjs",
+    "backend:build:linux": "node build-backend-linux.cjs",
     "codex:prepare:win": "node prepare-codex-win.cjs",
+    "codex:prepare:mac": "node prepare-codex-mac.cjs",
+    "codex:prepare:linux": "node prepare-codex-linux.cjs",
     "electron": "pnpm --dir ../../frontend electron",
     "electron:dev": "pnpm --dir ../../frontend electron:dev",
-    "electron:build": "node -e \"console.error('Desktop release builds are Windows-only; use electron:build:win');process.exit(1)\"",
+    "electron:build": "node -e \"console.error('Desktop release builds are platform-specific; use electron:build:win, electron:build:mac, electron:build:mac:x64 or electron:build:linux');process.exit(1)\"",
     "electron:build:win": "pnpm backend:build:win && pnpm --dir ../../frontend build && pnpm --dir ../../frontend electron:build:win",
-    "electron:build:mac": "node -e \"console.error('macOS desktop release is disabled until a bundled backend exists');process.exit(1)\"",
-    "electron:build:linux": "node -e \"console.error('Linux desktop release is disabled until a bundled backend exists');process.exit(1)\""
+    "electron:build:mac": "pnpm backend:build:mac && pnpm --dir ../../frontend build && pnpm --dir ../../frontend electron:build:mac",
+    "electron:build:mac:x64": "OCTOPUS_MAC_ARCH=x64 pnpm backend:build:mac && pnpm --dir ../../frontend build && pnpm --dir ../../frontend electron:build:mac:x64",
+    "electron:build:linux": "pnpm backend:build:linux && pnpm --dir ../../frontend build && pnpm --dir ../../frontend electron:build:linux"
   },
   "packageManager": "pnpm@10.26.2"
 }
