@@ -33,6 +33,7 @@ from fastapi import Request as FastAPIRequest
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
 from runtime.safety.auth import resolve_principal
+from runtime.safety.auth.websocket import accepted_auth_subprotocol, websocket_bearer_token
 from runtime.tentacle._dashboard_helpers import _auto_detect_vlm_config
 from runtime.tentacle._dashboard_html import _DASHBOARD_HTML
 from runtime.tentacle.base import ToolCall
@@ -106,13 +107,7 @@ def create_tentacle_router(
         if auth_header.lower().startswith("bearer "):
             token = auth_header[7:].strip()
         if token is None:
-            try:
-                subproto = ws.headers.get("sec-websocket-protocol") or ""
-            except Exception:  # noqa: BLE001
-                subproto = ""
-            parts = [part.strip() for part in subproto.split(",") if part.strip()]
-            if len(parts) >= 2 and parts[0].lower() == "bearer":
-                token = parts[1]
+            token = websocket_bearer_token(ws)
         if token is None:
             try:
                 token = ws.query_params.get("token")
@@ -505,7 +500,7 @@ def create_tentacle_router(
             await ws.close(code=1011, reason="Screen relay not available")
             return
 
-        await ws.accept()
+        await ws.accept(subprotocol=accepted_auth_subprotocol(ws))
         logger.info("screen stream client connected: %s", ws.client)
 
         try:
@@ -605,7 +600,7 @@ def create_tentacle_router(
             await ws.close(code=1011, reason="Screen relay not available")
             return
 
-        await ws.accept()
+        await ws.accept(subprotocol=accepted_auth_subprotocol(ws))
         logger.info("PC screen stream client connected: %s", ws.client)
 
         # 自动订阅 pc-host

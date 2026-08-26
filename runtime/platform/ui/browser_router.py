@@ -37,6 +37,7 @@ from runtime.platform.ui._browser_router_helpers import (
     secure_profile_dir,
 )
 from runtime.safety.auth.principal import require_operator, resolve_principal
+from runtime.safety.auth.websocket import accepted_auth_subprotocol
 from runtime.safety.replay.browser_desktop_replay import browser_session_replay_identity
 
 __all__ = [
@@ -726,9 +727,7 @@ def create_browser_router(
             backend._persist_browser_policy()
         return backend.browser_config_state
 
-    @router.get("/api/browser/relay/status")
-    def api_browser_relay_status(request: Request) -> dict[str, Any]:
-        _require_relay_owner(request)
+    def _relay_status_payload() -> dict[str, Any]:
         extension_path = backend._resolve_browser_extension_path()
         manifest = extension_path / "manifest.json"
         last_seen = int(backend.browser_relay_state.get("last_seen") or 0)
@@ -749,6 +748,37 @@ def create_browser_router(
             "site_policy": backend._relay_policy_snapshot(),
             "control": backend._relay_control_snapshot(),
         }
+
+    @router.get("/api/browser/relay/status")
+    def api_browser_relay_status(request: Request) -> dict[str, Any]:
+        _require_relay_owner(request)
+        return _relay_status_payload()
+
+    @router.websocket("/api/browser/relay/status/ws")
+    async def api_browser_relay_status_ws(websocket: WebSocket) -> None:
+        """Read-only status stream for settings and operator surfaces."""
+
+        try:
+            _require_relay_owner(websocket)
+        except HTTPException as exc:
+            await websocket.close(code=4403 if exc.status_code == 404 else 4401)
+            return
+        await websocket.accept(subprotocol=accepted_auth_subprotocol(websocket))
+        try:
+            while True:
+                await websocket.send_json(
+                    {
+                        "type": "browser_relay_status",
+                        "status": _relay_status_payload(),
+                    }
+                )
+                await asyncio.sleep(1)
+        except WebSocketDisconnect:
+            return
+        except RuntimeError:
+            # Starlette raises RuntimeError when the peer vanishes between
+            # ticks without completing a close handshake.
+            return
 
     @router.post("/api/browser/relay/heartbeat")
     def api_browser_relay_heartbeat(request: Request, body: dict[str, Any]) -> dict[str, Any]:

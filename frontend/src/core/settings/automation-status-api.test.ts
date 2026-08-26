@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/core/auth/api", () => ({
+  authHeaders: () => ({ Authorization: "Bearer 令牌 with spaces/(test)" }),
+}));
+
 import {
   subscribeBrowserRelayStatus,
   type BrowserRelayStatus,
@@ -49,6 +53,11 @@ describe("automation status stream", () => {
     const unsubscribe = subscribeBrowserRelayStatus(onStatus);
     const socket = FakeWebSocket.instances[0];
     expect(socket?.url).toContain("/api/browser/relay/status/ws");
+    expect(socket?.url).not.toContain("token=");
+    expect(socket?.protocols).toEqual([
+      "bearer.b64",
+      "5Luk54mMIHdpdGggc3BhY2VzLyh0ZXN0KQ",
+    ]);
 
     const status: BrowserRelayStatus = {
       connected: true,

@@ -25,6 +25,7 @@ except ImportError:  # pragma: no cover - keeps the core auth package optional
 
 
 from .identity import Identity, IdentityStore
+from .websocket import websocket_bearer_token
 
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
@@ -46,6 +47,12 @@ def _request_token(request: Any) -> str:
     authorization = str(headers.get("Authorization") or "")
     if authorization.lower().startswith("bearer "):
         return authorization[7:].strip()
+    # Browser WebSocket clients cannot set an Authorization header. Current
+    # clients use the shared base64url subprotocol transport; the helper also
+    # accepts the original raw ``bearer`` shape for rolling upgrades.
+    subprotocol_token = websocket_bearer_token(request)
+    if subprotocol_token:
+        return subprotocol_token
     query_params = getattr(request, "query_params", {}) or {}
     return str(query_params.get("token") or "").strip()
 

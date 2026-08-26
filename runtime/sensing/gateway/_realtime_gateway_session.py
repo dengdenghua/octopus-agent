@@ -37,6 +37,7 @@ from runtime.protocol import (
     Notification,
     decode_message,
 )
+from runtime.safety.auth.websocket import accepted_auth_subprotocol, websocket_bearer_token
 from runtime.sensing.gateway._realtime_gateway_approval import SharedTurnInterrupts
 from runtime.sensing.gateway._realtime_gateway_connection import RpcConnection
 from runtime.sensing.gateway._realtime_gateway_types import _ApprovalError, _RpcError
@@ -54,6 +55,7 @@ class _RealtimeGatewaySessionMixin:
     # reverse import (and therefore a cycle) back to the concrete gateway.
     _identity_store: Any
     _require_auth: bool
+    _allow_local_workspace_access: bool
     _jwt_secret: str | None
     _jwt_issuer: str | None
     _jwt_audience: str | None
@@ -92,7 +94,8 @@ class _RealtimeGatewaySessionMixin:
         Mirrors ``_resolve_actor`` (openai_gateway) but for WS.
         Token sources, in order of preference:
           1. ``Authorization: Bearer <token>`` header (some proxies pass it)
-          2. ``Sec-WebSocket-Protocol`` subprotocol value (browser-safe)
+          2. ``Sec-WebSocket-Protocol`` subprotocol value (browser-safe,
+             base64url-encoded by current clients)
           3. ``?token=...`` query parameter
 
         Returns ``actor_id`` on success, ``None`` when ``require_auth`` is
@@ -116,16 +119,7 @@ class _RealtimeGatewaySessionMixin:
             token = auth_header[7:].strip()
 
         if token is None:
-            try:
-                subproto = ws.headers.get("sec-websocket-protocol") or ""
-            except Exception:  # noqa: BLE001
-                subproto = ""
-            if subproto:
-                # Browsers can't set Authorization on WS; convention is to
-                # pass ``bearer, <token>`` (two protocol values, comma-sep).
-                parts = [p.strip() for p in subproto.split(",") if p.strip()]
-                if len(parts) >= 2 and parts[0].lower() == "bearer":
-                    token = parts[1]
+            token = websocket_bearer_token(ws)
 
         if token is None:
             try:
@@ -167,21 +161,13 @@ class _RealtimeGatewaySessionMixin:
         """Pick the subprotocol to acknowledge in ``accept()``.
 
         Browser clients that authenticate via ``Sec-WebSocket-Protocol``
-        offer ``bearer, <token>`` (parsed by ``_resolve_ws_actor``). RFC
-        6455 requires the server to select one of the offered protocols
-        when the client's handshake listed any — answering without a
-        ``Sec-WebSocket-Protocol`` header makes the browser fail the
-        connection outright. Only the ``bearer`` marker is echoed; the
-        token value itself is never a valid selection. Clients that
-        offer nothing (legacy ``?token=`` or header auth) get the old
-        behavior: no subprotocol.
+        offer a marker plus a token (parsed by ``_resolve_ws_actor``). RFC
+        6455 requires the server to select one of the offered protocols.
+        Only the non-secret marker is echoed; the token value itself is
+        never selected. Clients that offer nothing (legacy ``?token=`` or
+        header auth) get the old behavior: no subprotocol.
         """
-        try:
-            offered = ws.headers.get("sec-websocket-protocol") or ""
-        except Exception:  # noqa: BLE001
-            return None
-        parts = [p.strip().lower() for p in offered.split(",") if p.strip()]
-        return "bearer" if "bearer" in parts else None
+        return accepted_auth_subprotocol(ws)
 
     def _admit_connection(self, actor_id: str | None) -> bool:
         """Reserve a connection slot for ``actor_id`` under the per-actor
@@ -470,15 +456,27 @@ class _RealtimeGatewaySessionMixin:
                 "attachmentReadRoots",
                 "artifactOutputRoot",
             }
+            local_workspace_keys = {
+                "workspace_path",
+                "workspacePath",
+                "personal_workspace_path",
+                "personalWorkspacePath",
+                "extra_workspaces",
+                "extraWorkspaces",
+            }
 
             def _authenticated_metadata(raw: Any) -> dict[str, Any]:
                 metadata_dict = dict(raw) if isinstance(raw, dict) else {}
                 for key in path_keys:
+                    if self._allow_local_workspace_access and key in local_workspace_keys:
+                        continue
                     metadata_dict.pop(key, None)
                 metadata_dict.pop("actorId", None)
                 raw_context = metadata_dict.get("context")
                 context = dict(raw_context) if isinstance(raw_context, dict) else {}
                 for key in path_keys:
+                    if self._allow_local_workspace_access and key in local_workspace_keys:
+                        continue
                     context.pop(key, None)
                 context.pop("actorId", None)
                 context["actor_id"] = conn.actor_id
@@ -491,9 +489,11 @@ class _RealtimeGatewaySessionMixin:
                 return metadata_dict
 
             # Top-level cwd and every metadata-carried filesystem grant are
-            # client input. Authenticated turns always resolve their root from
-            # the server-owned thread allocation later in intent construction.
-            cleaned.pop("cwd", None)
+            # client input. Shared authenticated turns resolve their root from
+            # the server-owned thread allocation later in intent construction;
+            # loopback-local auth keeps only the user-selected workspace keys.
+            if not self._allow_local_workspace_access:
+                cleaned.pop("cwd", None)
             metadata_dict = _authenticated_metadata(cleaned.get("metadata"))
             cleaned["metadata"] = metadata_dict
             blocks = cleaned.get("input")

@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { authHeaders, getToken } from "@/core/auth/api";
+import { openAuthenticatedWebSocket } from "@/core/auth/websocket";
 import { getBackendBaseURL, getBackendWebSocketBaseURL } from "@/core/config";
 
 // ── Types ──────────────────────────────────────────────
@@ -54,10 +55,7 @@ const FRAME_TYPE_WEBP = 0x03;
 // ── Helpers ────────────────────────────────────────────
 
 function buildPcWsUrl(): string {
-  const base = `${getBackendWebSocketBaseURL()}/api/tentacle/pc-screen/stream`;
-  const token = getToken();
-  if (!token) return base;
-  return `${base}?token=${encodeURIComponent(token)}`;
+  return `${getBackendWebSocketBaseURL()}/api/tentacle/pc-screen/stream`;
 }
 
 function parseFrameHeader(buf: ArrayBuffer): {
@@ -242,7 +240,7 @@ export function usePcScreenStream(
       wsRef.current = null;
     }
 
-    const ws = new WebSocket(buildPcWsUrl());
+    const ws = openAuthenticatedWebSocket(buildPcWsUrl(), getToken());
     ws.binaryType = "arraybuffer";
     wsRef.current = ws;
 

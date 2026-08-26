@@ -15,6 +15,7 @@ drive it via Starlette's WebSocket test client. No network, no real LLM.
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import threading
 from pathlib import Path
@@ -112,6 +113,7 @@ def authenticated_gateway_client(tmp_path: Path) -> Any:
 
     store = IdentityStore()
     store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    store.add(Identity(actor_id="encoded"), api_key_plaintext="令牌 with spaces/(test)")
     runtime = EchoRuntime(logs_root=tmp_path / "threads")
     gateway = RealtimeGateway(
         runtime=runtime,
@@ -390,6 +392,22 @@ def test_realtime_accepts_subprotocol_token_when_required(
     ) as ws:
         assert ws.accepted_subprotocol == "bearer"
         outcome = _drive_turn(ws, thread_id="auth_th_subproto", text="hello auth")
+
+    assert outcome["response"].result["turn"]["status"] == "completed"
+
+
+def test_realtime_accepts_base64url_subprotocol_token_when_required(
+    authenticated_gateway_client: Any,
+) -> None:
+    client, _ = authenticated_gateway_client
+    token = "令牌 with spaces/(test)"
+    encoded = base64.urlsafe_b64encode(token.encode("utf-8")).decode("ascii").rstrip("=")
+    with client.websocket_connect(
+        "/api/realtime",
+        subprotocols=["bearer.b64", encoded],
+    ) as ws:
+        assert ws.accepted_subprotocol == "bearer.b64"
+        outcome = _drive_turn(ws, thread_id="auth_th_b64", text="hello encoded auth")
 
     assert outcome["response"].result["turn"]["status"] == "completed"
 

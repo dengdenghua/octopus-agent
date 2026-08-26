@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getToken } from "@/core/auth/api";
+import { openAuthenticatedWebSocket } from "@/core/auth/websocket";
 import { getBackendWebSocketBaseURL } from "@/core/config";
 
 // ── Types ──────────────────────────────────────────────
@@ -41,10 +42,7 @@ const FLAG_KEYFRAME = 0x01;
 // ── Helpers ────────────────────────────────────────────
 
 function buildWsUrl(): string {
-  const base = `${getBackendWebSocketBaseURL()}/api/tentacle/screen/stream`;
-  const token = getToken();
-  if (!token) return base;
-  return `${base}?token=${encodeURIComponent(token)}`;
+  return `${getBackendWebSocketBaseURL()}/api/tentacle/screen/stream`;
 }
 
 function parseFrameHeader(buf: ArrayBuffer): {
@@ -215,7 +213,7 @@ export function useScreenStream(
       wsRef.current = null;
     }
 
-    const ws = new WebSocket(buildWsUrl());
+    const ws = openAuthenticatedWebSocket(buildWsUrl(), getToken());
     ws.binaryType = "arraybuffer";
     wsRef.current = ws;
 

@@ -1,4 +1,5 @@
 import { authHeaders } from "@/core/auth/api";
+import { openAuthenticatedWebSocket } from "@/core/auth/websocket";
 import { getBackendBaseURL, getBackendWebSocketBaseURL } from "@/core/config";
 
 export interface BrowserRelayStatus {
@@ -40,17 +41,10 @@ export function subscribeBrowserRelayStatus(
   const connect = () => {
     if (disposed || typeof WebSocket === "undefined") return;
     const base = getBackendWebSocketBaseURL().replace(/\/+$/, "");
-    let url = `${base}/api/browser/relay/status/ws`;
+    const url = `${base}/api/browser/relay/status/ws`;
     const authorization = authHeaders().Authorization;
     const token = authorization?.replace(/^Bearer\s+/i, "") ?? "";
-    const safeProtocol = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(token);
-    if (token && !safeProtocol) {
-      url += `?token=${encodeURIComponent(token)}`;
-    }
-    socket =
-      token && safeProtocol
-        ? new WebSocket(url, ["bearer", token])
-        : new WebSocket(url);
+    socket = openAuthenticatedWebSocket(url, token);
     socket.onopen = () => {
       reconnectDelay = 500;
     };
