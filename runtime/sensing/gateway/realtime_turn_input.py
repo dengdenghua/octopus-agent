@@ -844,6 +844,20 @@ def _build_intent(
     audit_mode = _is_audit_intent(text, context_payload)
     if audit_mode:
         context_payload = {**context_payload, "audit_mode": True}
+        if _is_explicit_change_request(text):
+            # Preserve the audit surface for inspection turns, but let an
+            # explicit repair request become executable without requiring the
+            # user to manually switch modes first.
+            audit_mode = False
+            context_payload = {
+                **context_payload,
+                "audit_mode": False,
+                "mode": "code",
+                "workflow_mode": "develop",
+                "completion_policy": "develop",
+                "mode_preset": "develop.mode",
+                "workflow_preset": "develop.iterate",
+            }
     # Thread the turn's declared sandbox policy through to execution so
     # exec_shell can honour ``sandboxPolicy.networkAccess``. Default when
     # absent is network denied — a turn must explicitly opt in.
