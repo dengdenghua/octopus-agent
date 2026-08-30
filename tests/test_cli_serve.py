@@ -422,6 +422,7 @@ class TestSharedJournal:
         def spy_create_app(journal_path=None, **kwargs):
             captured_app["journal"] = kwargs.get("journal")
             captured_app["registry"] = kwargs.get("registry")
+            captured_app["kernel"] = kwargs.get("kernel")
             return real_create(journal_path=journal_path, **kwargs)
 
         monkeypatch.setattr(ui_module, "create_app", spy_create_app)
@@ -438,6 +439,9 @@ class TestSharedJournal:
         )
         assert captured_app["journal"] is not None
         assert captured_app["registry"] is not None
+        from runtime.kernel import AgentKernel
+
+        assert isinstance(captured_app["kernel"], AgentKernel)
 
     def test_serve_requires_auth_when_login_config_enabled(
         self,
@@ -479,6 +483,7 @@ class TestSharedJournal:
 
         assert rc == 0
         assert captured_app["cocoloop_require_auth"] is True
+        assert captured_app["allow_local_workspace_access"] is True
 
     def test_serve_passes_tentacle_config_to_app(
         self,
@@ -627,7 +632,7 @@ class TestCronImDelivery:
 
         ran = threading.Event()
 
-        def _fake_run_due(deliver=None, stop_event=None):
+        def _fake_run_due(deliver=None, stop_event=None, **_kwargs):
             try:
                 deliver(
                     {
@@ -684,7 +689,7 @@ class TestCronSchedulerDecoupling:
         started = threading.Event()
         release = threading.Event()
 
-        def _blocking_tick(deliver=None, stop_event=None):
+        def _blocking_tick(deliver=None, stop_event=None, **_kwargs):
             calls.append("start")
             started.set()
             release.wait(10)
@@ -728,7 +733,7 @@ class TestCronSchedulerDecoupling:
         started = threading.Event()
         stopped = threading.Event()
 
-        def _cooperative_tick(deliver=None, stop_event=None):
+        def _cooperative_tick(deliver=None, stop_event=None, **_kwargs):
             started.set()
             assert stop_event is not None
             assert stop_event.wait(5), "shutdown signal never reached cron executor"

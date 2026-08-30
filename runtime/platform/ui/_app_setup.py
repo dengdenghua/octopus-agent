@@ -2,7 +2,7 @@
 
 Extracted from ``app.py`` during the god-file reduction (§2.1 of the
 navigation map). Builds the ``FastAPI`` instance, the shared
-``AppState``, resolves the cocoloop/oct/molili/local jwt config, and
+``AppState``, resolves the cocoloop/oct/local jwt config, and
 installs the legacy control-plane auth middleware.
 """
 
@@ -63,11 +63,11 @@ def setup_app(
     stack: Any,
     cocoloop_identity_store: Any,
     cocoloop_require_auth: bool,
-    molili_config: Any,
-    molili_jwt_secret: str | None,
+    allow_local_workspace_access: bool,
     oct_config: Any,
     oct_jwt_secret: str | None,
     local_auth_config: Any,
+    kernel: Any = None,
 ) -> AppContext:
     """Build the app shell + auth config; return the shared context."""
     from runtime.platform.process.paths import app_paths, project_root, resources_root
@@ -90,6 +90,12 @@ def setup_app(
     # PluginHub loads so plugins with singleton account/state cannot
     # accidentally mount multi-user APIs or unauthenticated WebSockets.
     app.state.octopus_require_auth = bool(cocoloop_require_auth)
+    # ``allow_local_workspace_access`` is true only for the explicit local
+    # deployment contract on a loopback listener (computed by ``cli_serve``).
+    # Publish that already-validated posture before PluginHub loads so a
+    # plugin can require both conditions instead of inferring "single user"
+    # merely from an auth toggle or a manifest flag.
+    app.state.octopus_allow_local_workspace_access = bool(allow_local_workspace_access)
 
     # Gzip the static Vite UI bundle (~18 MB raw) and JSON API responses while
     # leaving SSE / streaming endpoints untouched. See GzipStaticMiddleware.
@@ -119,28 +125,20 @@ def setup_app(
         max_concurrency=_env_int("OCTOPUS_HTTP_MAX_CONCURRENCY", DEFAULT_MAX_CONCURRENCY),
     )
 
-    if molili_jwt_secret is None and molili_config is not None:
-        molili_jwt_secret = getattr(molili_config, "jwt_secret", None)
     if oct_jwt_secret is None and oct_config is not None:
         oct_jwt_secret = getattr(oct_config, "jwt_secret", None)
     oct_enabled = bool(oct_config is not None and getattr(oct_config, "enabled", False))
 
-    auth_enabled = (
-        oct_enabled
-        or bool(molili_config is not None and getattr(molili_config, "enabled", False))
-        or bool(local_auth_config is not None and getattr(local_auth_config, "enabled", False))
+    auth_enabled = oct_enabled or bool(
+        local_auth_config is not None and getattr(local_auth_config, "enabled", False)
     )
-    # oct 网关优先(母本账号体系已统一到 oct),其次 molili,再 local_auth
-    cocoloop_jwt_secret = (
-        (oct_jwt_secret if oct_enabled else None)
-        or molili_jwt_secret
-        or (getattr(local_auth_config, "jwt_secret", None) if local_auth_config else None)
+    # oct 网关优先，其次 local_auth。
+    cocoloop_jwt_secret = (oct_jwt_secret if oct_enabled else None) or (
+        getattr(local_auth_config, "jwt_secret", None) if local_auth_config else None
     )
     cocoloop_jwt_issuer = (
         getattr(oct_config, "jwt_issuer", None)
         if (oct_enabled and oct_jwt_secret)
-        else getattr(molili_config, "jwt_issuer", None)
-        if molili_jwt_secret and molili_config
         else getattr(local_auth_config, "jwt_issuer", None)
         if local_auth_config
         else None
@@ -148,8 +146,6 @@ def setup_app(
     cocoloop_jwt_audience = (
         getattr(oct_config, "jwt_audience", None)
         if (oct_enabled and oct_jwt_secret)
-        else getattr(molili_config, "jwt_audience", None)
-        if molili_jwt_secret and molili_config
         else getattr(local_auth_config, "jwt_audience", None)
         if local_auth_config
         else None
@@ -212,12 +208,14 @@ def setup_app(
         app=app,
         state=state,
         stack=stack,
+        kernel=kernel,
         paths=_paths,
         project_root=_project_root_path,
         resources_root=_resources_root_path,
         trace_store_path=trace_store_path,
         identity_store=cocoloop_identity_store,
         require_auth=cocoloop_require_auth,
+        allow_local_workspace_access=allow_local_workspace_access,
         jwt_secret=cocoloop_jwt_secret,
         jwt_issuer=cocoloop_jwt_issuer,
         jwt_audience=cocoloop_jwt_audience,

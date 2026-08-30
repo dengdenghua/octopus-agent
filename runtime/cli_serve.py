@@ -361,7 +361,7 @@ def register_cron_executor_task(
     try:
         from runtime.execution.cron_executor import recover_interrupted_cron_jobs
 
-        recovered = recover_interrupted_cron_jobs()
+        recovered = recover_interrupted_cron_jobs(allow_cross_tenant=True)
         if recovered.get("interrupted"):
             logging.getLogger(__name__).warning(
                 "cron recovery: %d job(s) interrupted at startup: %s",
@@ -437,7 +437,11 @@ def register_cron_executor_task(
 
         def _run() -> None:
             try:
-                run_due_cron_jobs(deliver=_deliver, stop_event=_stopping)
+                run_due_cron_jobs(
+                    deliver=_deliver,
+                    stop_event=_stopping,
+                    allow_cross_tenant=True,
+                )
             except Exception:  # noqa: BLE001 — a tick fault must not kill the cron pool
                 logging.getLogger(__name__).exception("cron tick failed")
 
@@ -533,9 +537,13 @@ def register_reflection_tasks(
         count += 1
 
     def _forge() -> None:
-        from runtime.safety.recovery import SkillForge
+        from runtime.safety.recovery import ForgeConfig, SkillForge
 
-        SkillForge(journal=stack.journal, registry=stack.registry).run()
+        SkillForge(
+            journal=stack.journal,
+            registry=stack.registry,
+            config=ForgeConfig(governed_rollout=True),
+        ).run()
 
     runner.add_periodic(
         "reflect_skill_forge",
@@ -564,7 +572,8 @@ def run_serve(
 
     from runtime.adapters.scheduler import BackgroundRunner
     from runtime.cli_core import _Colors
-    from runtime.platform.config import ConfigLoadError, build_from_config, load_from_yaml
+    from runtime.kernel import AgentKernel
+    from runtime.platform.config import ConfigLoadError, load_from_yaml
     from runtime.platform.i18n import _
 
     c = _Colors(color)
@@ -578,6 +587,12 @@ def run_serve(
         getattr(getattr(cfg, "oct", None), "enabled", False)
         or getattr(getattr(cfg, "local_auth", None), "enabled", False)
     )
+    deployment_mode = (
+        str(getattr(getattr(cfg, "execution", None), "deployment_mode", "local") or "local")
+        .strip()
+        .lower()
+    )
+    allow_local_workspace_access = deployment_mode == "local" and _is_loopback_host(host)
     bind_error = _insecure_bind_error(
         host=host,
         uds=uds,
@@ -639,8 +654,10 @@ def run_serve(
         print(_("cli.ui.not_installed"), file=sys.stderr)
         return 2
 
+    kernel: AgentKernel | None = None
     try:
-        stack = build_from_config(cfg)
+        kernel = AgentKernel.from_config(cfg)
+        stack = kernel.stack
     except Exception:
         _restore_execution_security(execution_env_previous)
         raise
@@ -808,12 +825,14 @@ def run_serve(
         journal=stack.journal,
         registry=stack.registry,
         stack=stack,
+        kernel=kernel,
         agent_registry=agent_registry,
         group_registry=group_registry,
         channel_manager=channel_manager,
         oct_config=cfg.oct,
         local_auth_config=cfg.local_auth,
         cocoloop_require_auth=require_ui_auth,
+        allow_local_workspace_access=allow_local_workspace_access,
         default_arm=cfg.default_arm_id,
         prompt_optimizer=optimizer,
         server_host=host,
@@ -931,6 +950,11 @@ def run_serve(
             close_all_persistent_clients()
         except Exception as exc:
             logging.getLogger(__name__).debug("mcp client shutdown failed: %s", exc)
+        if kernel is not None:
+            try:
+                kernel.close()
+            except Exception as exc:
+                logging.getLogger(__name__).debug("agent kernel shutdown failed: %s", exc)
         print(c.dim(_("cli.serve.stopped")))
         for name, st in runner.stats().items():
             print(

@@ -8,6 +8,7 @@ This folder contains the current architecture map for Octopus-Agent.
 2. `module-map.md`
 3. `high-res-map.md`
 4. `organ-tiering.md`
+5. `embedding-kernel.md` — how a desktop or another host embeds the Agent kernel
 
 ## Current notes
 

@@ -17,12 +17,14 @@ class AppContext:
     app: Any = None
     state: Any = None
     stack: Any = None
+    kernel: Any = None
     paths: Any = None
     project_root: Any = None
     resources_root: Any = None
     trace_store_path: Any = None
     identity_store: Any = None
     require_auth: bool = False
+    allow_local_workspace_access: bool = False
     jwt_secret: Any = None
     jwt_issuer: Any = None
     jwt_audience: Any = None
