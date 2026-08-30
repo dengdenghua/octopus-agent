@@ -353,3 +353,81 @@ class TestReadFileRange:
         assert r["total_lines"] == 2
         assert r["content"] == "line1\nline2"
         assert not r["truncated"]
+
+
+# ─── Explicitly-named hidden dirs ────────────────────────────
+
+
+class TestHiddenDirsAreVisibleWhenNamed:
+    """A named dot-directory must not be filtered back out after matching.
+
+    Regression: ``.github/workflows/*`` reported ``count: 0`` on a repo with
+    seven workflow files, so callers concluded the directory did not exist.
+    """
+
+    @staticmethod
+    def _repo(tmp_path: Path) -> Path:
+        (tmp_path / ".github" / "workflows").mkdir(parents=True)
+        (tmp_path / ".github" / "workflows" / "ci.yml").write_text("runs-on: ubuntu-latest\n")
+        (tmp_path / ".git").mkdir()
+        (tmp_path / ".git" / "config").write_text("runs-on: noise\n")
+        (tmp_path / "node_modules").mkdir()
+        (tmp_path / "node_modules" / "dep.yml").write_text("runs-on: noise\n")
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "main.py").write_text("x = 1\n")
+        return tmp_path
+
+    def test_named_hidden_dir_is_listed(self, tmp_path: Path):
+        root = self._repo(tmp_path)
+        r = _glob_files(pattern=".github/workflows/*", root=str(root))
+        assert [f["path"] for f in r["files"]] == [".github/workflows/ci.yml"]
+
+    def test_hidden_root_is_explicit_too(self, tmp_path: Path):
+        root = self._repo(tmp_path)
+        r = _glob_files(pattern="**/*.yml", root=str(root / ".github"))
+        assert r["count"] == 1
+
+    def test_grep_sees_named_hidden_dir(self, tmp_path: Path):
+        root = self._repo(tmp_path)
+        r = _grep_text(pattern="runs-on", root=str(root), glob=".github/**")
+        assert r["count"] == 1
+
+    def test_unnamed_hidden_and_noise_dirs_stay_excluded(self, tmp_path: Path):
+        root = self._repo(tmp_path)
+        paths = [f["path"] for f in _glob_files(pattern="**/*", root=str(root))["files"]]
+        assert paths == ["src/main.py"]
+
+    def test_wildcard_segment_does_not_unlock_hidden_trees(self, tmp_path: Path):
+        root = self._repo(tmp_path)
+        # '.*' is a guess, not an explicit name; it must not re-open .git/.
+        r = _glob_files(pattern=".*/**", root=str(root))
+        assert r["count"] == 0
+
+
+class TestTrailingRecursiveGlobMatchesFiles:
+    """``dir/**`` must enumerate files, as bash globstar and ripgrep do.
+
+    Regression: ``Path.glob`` resolves a trailing ``**`` to directories only, so
+    with the default ``include_dirs=False`` the query could never match.
+    """
+
+    @staticmethod
+    def _tree(tmp_path: Path) -> Path:
+        (tmp_path / "pkg" / "sub").mkdir(parents=True)
+        (tmp_path / "pkg" / "a.py").write_text("a\n")
+        (tmp_path / "pkg" / "sub" / "b.py").write_text("b\n")
+        return tmp_path
+
+    def test_trailing_globstar_returns_files(self, tmp_path: Path):
+        root = self._tree(tmp_path)
+        r = _glob_files(pattern="pkg/**", root=str(root))
+        assert sorted(f["path"] for f in r["files"]) == ["pkg/a.py", "pkg/sub/b.py"]
+
+    def test_bare_globstar_returns_files(self, tmp_path: Path):
+        root = self._tree(tmp_path)
+        assert _glob_files(pattern="**", root=str(root))["count"] == 2
+
+    def test_include_dirs_keeps_directory_semantics(self, tmp_path: Path):
+        root = self._tree(tmp_path)
+        r = _glob_files(pattern="pkg/**", root=str(root), include_dirs=True)
+        assert any(f["is_dir"] for f in r["files"])
