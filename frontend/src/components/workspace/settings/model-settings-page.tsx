@@ -47,6 +47,8 @@ import {
 } from "@/core/settings/local";
 import { registerPageAgentCapability } from "@/core/page-agent-bridge";
 import { ModelCookbook } from "@/components/workspace/model-cookbook";
+import { CoderEngineSettings } from "@/components/workspace/coder-engine-control";
+import { CodingToolboxPanel } from "./coding-toolbox-panel";
 
 import { MixSettingsSection } from "./mix-settings-section";
 import { SettingsSection } from "./settings-section";
@@ -1582,6 +1584,14 @@ export default function ModelSettingsPage() {
         onAddModel={handleOverviewAddModel}
         onScanLocal={handleOverviewScanLocal}
       />
+
+      <CodingToolboxPanel
+        onOpen={(target) =>
+          navigate(`/workspace/settings?section=${encodeURIComponent(target)}`)
+        }
+      />
+
+      <CoderEngineSettings />
 
       {/* ── Models Section ── */}
       <SettingsSection
