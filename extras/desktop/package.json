@@ -1,7 +1,7 @@
 {
   "name": "octopus-desktop-build-bridge",
   "version": "0.2.0",
-  "description": "Retired desktop shell; keeps only the Windows PyInstaller helper and delegates to frontend/electron",
+  "description": "Platform build bridge for the canonical frontend/electron desktop shell",
   "private": true,
   "scripts": {
     "backend:build:win": "node build-backend-win.cjs",

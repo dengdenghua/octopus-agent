@@ -5,15 +5,15 @@
 `extras/desktop/electron/` implementation remains only as archived source; no
 package script or CI workflow publishes it.
 
-This directory retains `build-backend-win.cjs`, the Windows PyInstaller helper,
-and `prepare-codex-win.cjs`, which copies the exact official `@openai/codex`
-Windows platform package pinned by `frontend/package.json` and
-`frontend/pnpm-lock.yaml`. They write the fixed runtimes expected by the
-canonical package to:
+This directory retains the platform-specific PyInstaller helpers and Codex
+runtime preparation scripts used by the canonical shell. Each preparation
+script copies the exact official `@openai/codex` platform package pinned by
+`frontend/package.json` and `frontend/pnpm-lock.yaml`. They write the fixed
+runtimes expected by the canonical package to:
 
 ```text
-extras/desktop/build/backend/octopus-backend.exe
-extras/desktop/build/codex/bin/codex.exe
+extras/desktop/build/backend/octopus-backend[.exe]
+extras/desktop/build/codex/bin/codex[.exe]
 ```
 
 ## Windows release build
@@ -69,5 +69,26 @@ reports with `extras/desktop/generate-codex-third-party-licenses.py` and the
 native/data bundle with `extras/desktop/generate-codex-native-notices.py`
 against the reviewed source commits and artifacts.
 
-macOS and Linux release commands intentionally fail until equivalent bundled
-backends and smoke tests exist.
+## Platform status
+
+| Platform          | Self-contained backend | Pinned Codex runtime |                                   Automated package smoke | Distribution status                                         |
+| ----------------- | ---------------------: | -------------------: | --------------------------------------------------------: | ----------------------------------------------------------- |
+| Windows x64       |                    Yes |                  Yes |                              GitHub-hosted Windows runner | Signed release path                                         |
+| macOS arm64 / x64 |                    Yes |                  Yes |                                          Local build only | Developer build; signing and notarization are not automated |
+| Linux x64 / arm64 |                    Yes |                  Yes | `build-linux.yml` builds and starts the packaged AppImage | CI artifact                                                 |
+
+The macOS and Linux helpers are functional build paths, not placeholders. Run
+them from the repository root through the bridge so the backend is generated
+before Electron packaging:
+
+```bash
+pnpm --dir extras/desktop electron:build:mac
+pnpm --dir extras/desktop electron:build:mac:x64
+pnpm --dir extras/desktop electron:build:linux
+```
+
+The macOS commands create developer artifacts only. A public macOS release
+still requires an Apple signing identity, hardened runtime configuration, and
+notarization automation; do not describe an unsigned local DMG as a production
+release. Linux packaging is independent of normal macOS development and is
+needed only when publishing or verifying the AppImage distribution.
