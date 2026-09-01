@@ -264,9 +264,7 @@ class NarrativeMcpServer:
         parsed = _BuildContextArguments.model_validate(args.model_dump())
         return self._store_provider().build_context_pack(
             parsed.project_id,
-            ContextPackBuildRequest.model_validate(
-                parsed.model_dump(exclude={"project_id"})
-            ),
+            ContextPackBuildRequest.model_validate(parsed.model_dump(exclude={"project_id"})),
         )
 
     def _create_chapter_candidate(self, args: _StrictArguments, actor: str | None) -> Any:

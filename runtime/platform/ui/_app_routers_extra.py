@@ -470,9 +470,7 @@ def mount_routers_b(
                 "session_titles": _session_titles,
             }
             if ctx.kernel is not None:
-                _realtime_runtime = ctx.kernel.create_realtime_runtime(
-                    **_realtime_runtime_kwargs
-                )
+                _realtime_runtime = ctx.kernel.create_realtime_runtime(**_realtime_runtime_kwargs)
             else:
                 from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
 

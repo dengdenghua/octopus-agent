@@ -537,9 +537,13 @@ def test_run_uses_minimal_env_and_allows_partner_context(monkeypatch) -> None:
 
     monkeypatch.setattr(b.subprocess, "run", fake_run)
     monkeypatch.setenv("PATH", "/usr/bin")
-    monkeypatch.setenv("HOME", "/Users/tester")
+    # User-shaped paths verify the inherited environment without using the host account.
+    monkeypatch.setenv("HOME", "/Users/tester")  # lint: allow-user-path
     monkeypatch.setenv("LANG", "zh_CN.UTF-8")
-    monkeypatch.setenv("XDG_CONFIG_HOME", "/Users/tester/.config")
+    monkeypatch.setenv(
+        "XDG_CONFIG_HOME",
+        "/Users/tester/.config",  # lint: allow-user-path
+    )
     monkeypatch.setenv("OPENAI_API_KEY", "must-not-leak")
     monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "must-not-leak")
     monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid")
@@ -565,9 +569,9 @@ def test_run_uses_minimal_env_and_allows_partner_context(monkeypatch) -> None:
         "NODE_OPTIONS",
     }.isdisjoint(captured["env"])
     assert captured["env"]["PATH"] == "/usr/bin"
-    assert captured["env"]["HOME"] == "/Users/tester"
+    assert captured["env"]["HOME"] == "/Users/tester"  # lint: allow-user-path
     assert captured["env"]["LANG"] == "zh_CN.UTF-8"
-    assert captured["env"]["XDG_CONFIG_HOME"] == "/Users/tester/.config"
+    assert captured["env"]["XDG_CONFIG_HOME"] == "/Users/tester/.config"  # lint: allow-user-path
     assert captured["env"]["OCTOPUS_TURN_ID"] == "t1"
     assert captured["env"]["OCTOPUS_AGENT_ID"] == "a1"
     assert captured["env"]["OCTOPUS_BLACKBOARD_DB"] == "/tmp/board.db"

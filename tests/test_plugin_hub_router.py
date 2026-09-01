@@ -112,12 +112,8 @@ def test_persistent_lifecycle_route_contract() -> None:
         {"enabled": False, "restore_data": True, "recovery_id": "recovery-1"},
     )
 
-    assert client.post(
-        "/api/plugin-hub/plugins/narrative_studio/enable"
-    ).status_code == 200
-    assert client.post(
-        "/api/plugin-hub/plugins/narrative_studio/disable"
-    ).status_code == 200
+    assert client.post("/api/plugin-hub/plugins/narrative_studio/enable").status_code == 200
+    assert client.post("/api/plugin-hub/plugins/narrative_studio/disable").status_code == 200
 
     removed = client.delete(
         "/api/plugin-hub/plugins/narrative_studio/install",

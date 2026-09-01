@@ -43,7 +43,7 @@ def _prompt_skill_roots() -> tuple[Path, ...]:
                 bundled_market_skills_dir(),
             )
         )
-    except (ImportError, OSError, ValueError):
+    except (ImportError, OSError, ValueError):  # best-effort: use the local bundled fallback
         pass
     roots.append(Path(__file__).resolve().parents[1] / "all_skills")
     resolved: list[Path] = []
@@ -189,7 +189,7 @@ def compose_codex_role_instructions(
         personal_mode = _build_personal_agent_mode_prompt(str(metadata.get("personal_mode") or ""))
         if personal_mode:
             sections.append(personal_mode)
-    except (ImportError, AttributeError, TypeError, ValueError):
+    except (ImportError, AttributeError, TypeError, ValueError):  # best-effort: optional modes
         pass
 
     for key, label, limit in (

@@ -312,7 +312,12 @@ def _selected_plugin_ids(goal: str, context: Mapping[str, Any]) -> tuple[str, ..
         from runtime.core.cerebrum.input_mentions import parse_input_mentions
 
         candidates.extend(parse_input_mentions(goal).plugins)
-    except (ImportError, AttributeError, TypeError, ValueError):
+    except (
+        ImportError,
+        AttributeError,
+        TypeError,
+        ValueError,
+    ):  # best-effort: explicit grants remain
         pass
 
     selected: list[str] = []

@@ -15,6 +15,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import runtime.safety.auth as safety_auth
+from runtime.platform.plugins.bundled import _office_io
 from runtime.platform.plugins.bundled import documents as documents_module
 from runtime.platform.plugins.bundled.documents import DocumentsPlugin
 from runtime.platform.plugins.plugin_base import ModuleContext
@@ -25,6 +27,17 @@ REQUIRES_DOCX = pytest.mark.skipif(
     not documents_module._DOCX_OK,
     reason="python-docx optional dependency not installed",
 )
+
+
+def test_office_write_fails_closed_when_file_safety_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.delattr(safety_auth, "check_file_write")
+
+    denial = _office_io.scoped_path_denial(tmp_path / "report.docx", write=True)
+
+    assert denial == "file safety policy unavailable"
 
 
 def test_bundled_documents_is_discoverable_and_loadable() -> None:

@@ -483,9 +483,9 @@ def test_sidepanel_pairing_connects_extension_to_authenticated_gateway(
 
     sidepanel.locator("#authTokenInput").fill(api_key)
     sidepanel.locator('#authForm button[type="submit"]').click()
-    sidepanel.locator("#authStatus").get_by_text(
-        "连接密钥已验证，Chrome Relay 已连接。"
-    ).wait_for(timeout=10_000)
+    sidepanel.locator("#authStatus").get_by_text("连接密钥已验证，Chrome Relay 已连接。").wait_for(
+        timeout=10_000
+    )
     assert sidepanel.locator("#authStatus").get_attribute("data-tone") == "success"
 
     page = context.new_page()

@@ -27,7 +27,9 @@ def capture_model(
     output_dir.mkdir(parents=True, exist_ok=True)
     captures: list[dict[str, Any]] = []
     for view in selected:
-        image = _render_model(model, view, size, str(scene.get("scene", {}).get("skyColor") or "#fafafa"))
+        image = _render_model(
+            model, view, size, str(scene.get("scene", {}).get("skyColor") or "#fafafa")
+        )
         path = output_dir / f"{model['id']}-{view}-{uuid4().hex[:8]}.png"
         image.save(path, format="PNG", optimize=True)
         captures.append(
@@ -107,7 +109,11 @@ def _render_model(model: dict[str, Any], view: str, size: int, background: str) 
             )
         elif shape == "cone":
             draw.polygon(
-                [(x, y - height / 2), (x - width / 2, y + height / 2), (x + width / 2, y + height / 2)],
+                [
+                    (x, y - height / 2),
+                    (x - width / 2, y + height / 2),
+                    (x + width / 2, y + height / 2),
+                ],
                 fill=color,
                 outline=outline,
             )
@@ -130,7 +136,9 @@ def _render_model(model: dict[str, Any], view: str, size: int, background: str) 
             )
         else:
             radius = max(2, min(width, height) * 0.05)
-            draw.rounded_rectangle(rect, radius=radius, fill=color, outline=outline, width=max(1, size // 320))
+            draw.rounded_rectangle(
+                rect, radius=radius, fill=color, outline=outline, width=max(1, size // 320)
+            )
     draw.line((size * 0.1, size * 0.84, size * 0.9, size * 0.84), fill=(40, 50, 65, 60), width=1)
     return image
 

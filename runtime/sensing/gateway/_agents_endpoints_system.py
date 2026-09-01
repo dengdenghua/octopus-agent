@@ -8,6 +8,7 @@ get/put endpoints to the injected router.
 from __future__ import annotations
 
 import json
+import logging
 from typing import TYPE_CHECKING, Any
 
 try:
@@ -27,6 +28,7 @@ if TYPE_CHECKING:
 
 
 _AUTOMATION_GROUP_ORDER = ("browser", "browser_act", "computer")
+_logger = logging.getLogger(__name__)
 
 
 def _reconcile_automation_registry(registry: Any, caps: Any) -> dict[str, list[str]]:
@@ -170,8 +172,8 @@ def _register_system(router: Any, ctx: _AgentsCtx, auth: _AuthActions) -> None:
                 try:
                     _save_caps(previous)
                     _reconcile_automation_registry(skill_registry, previous)
-                except Exception:
-                    pass
+                except Exception:  # noqa: BLE001 - preserve the original reconciliation failure
+                    _logger.exception("failed to roll back the automation tool catalog")
                 raise HTTPException(
                     500,
                     f"failed to refresh automation tool catalog: {exc}",

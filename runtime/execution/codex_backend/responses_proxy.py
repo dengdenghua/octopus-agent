@@ -351,7 +351,7 @@ class ScopedResponsesProxy:
             )
         try:
             await _write_http_response(writer, status, headers, payload)
-        except (ConnectionError, OSError, RuntimeError):
+        except (ConnectionError, OSError, RuntimeError):  # expected: client disconnected early
             pass
         finally:
             self._writers.discard(writer)

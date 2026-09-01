@@ -59,11 +59,7 @@ _STATE_FROM_THREAD_KEY = "state_from_thread"
 def _encoded_state_record(state: dict[str, Any]) -> dict[str, Any]:
     """Drop values duplicated verbatim by the record's ``thread`` payload."""
 
-    return {
-        key: value
-        for key, value in state.items()
-        if key not in {"values", "metadata"}
-    }
+    return {key: value for key, value in state.items() if key not in {"values", "metadata"}}
 
 
 def _decoded_state_record(

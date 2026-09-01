@@ -250,7 +250,7 @@ class ComfyUIBridgePlugin(ModulePlugin):
             current = json.loads(target.read_text(encoding="utf-8"))
             if isinstance(current, dict):
                 current_revision = int(current.get("revision") or 0)
-        except FileNotFoundError:
+        except FileNotFoundError:  # expected: a new workflow has no prior revision
             pass
         except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
             return {"ok": False, "error": str(exc)}

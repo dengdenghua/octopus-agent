@@ -137,9 +137,7 @@ def derive_connector_package_requirements(
         permissions.add("account.credentials")
     vendor = Path(package_dir) / "vendor"
     runtime_dependencies = (
-        sorted(path.name for path in vendor.iterdir() if path.is_file())
-        if vendor.is_dir()
-        else []
+        sorted(path.name for path in vendor.iterdir() if path.is_file()) if vendor.is_dir() else []
     )
     return {
         "host_api": MARKETPLACE_HOST_API,

@@ -86,7 +86,7 @@ def _element_center(item: dict[str, Any]) -> tuple[int, int] | None:
     if isinstance(center, dict):
         try:
             return int(center["x"]), int(center["y"])
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError):  # expected: try the next geometry shape
             pass
     position = item.get("position")
     size = item.get("size")
@@ -101,7 +101,7 @@ def _element_center(item: dict[str, Any]) -> tuple[int, int] | None:
                 int(float(position[0]) + float(size[0]) / 2),
                 int(float(position[1]) + float(size[1]) / 2),
             )
-        except (TypeError, ValueError):
+        except (TypeError, ValueError):  # expected: try the rectangle fallback
             pass
     rect = item.get("rect")
     if isinstance(rect, dict):
@@ -110,7 +110,7 @@ def _element_center(item: dict[str, Any]) -> tuple[int, int] | None:
                 int(rect["left"]) + int(rect["width"]) // 2,
                 int(rect["top"]) + int(rect["height"]) // 2,
             )
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError):  # expected: malformed geometry has no centre
             pass
     return None
 

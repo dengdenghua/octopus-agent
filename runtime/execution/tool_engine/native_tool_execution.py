@@ -50,7 +50,7 @@ def execute_native_tool_call(
         try:
             if not registry.is_enabled(normalized.name):
                 return (f"(skill disabled: {normalized.name})", True)
-        except (AttributeError, TypeError, ValueError):
+        except (AttributeError, TypeError, ValueError):  # best-effort: legacy registries omit it
             pass
         skill = registry.get(normalized.name)
     except (AttributeError, TypeError, KeyError) as exc:

@@ -81,9 +81,7 @@ def sample_times(
     return [start + (end - start) * index / (count - 1) for index in range(count)]
 
 
-def _base_frame(
-    project: dict[str, Any], at_sec: float
-) -> tuple[Image.Image, dict[str, Any]]:
+def _base_frame(project: dict[str, Any], at_sec: float) -> tuple[Image.Image, dict[str, Any]]:
     visible: list[dict[str, Any]] = []
     for track in project.get("tracks", []):
         if track.get("type") != "video" or track.get("hidden"):
@@ -191,9 +189,7 @@ def _apply_look(
     return image, warnings
 
 
-def _draw_active_text(
-    image: Image.Image, project: dict[str, Any], at_sec: float
-) -> Image.Image:
+def _draw_active_text(image: Image.Image, project: dict[str, Any], at_sec: float) -> Image.Image:
     active = [
         clip
         for track in project.get("tracks", [])
@@ -283,7 +279,7 @@ def _rgba(value: str, default_alpha: int) -> tuple[int, int, int, int]:
         if len(raw) == 6:
             rgb = tuple(int(raw[index : index + 2], 16) for index in range(0, 6, 2))
             return (*rgb, default_alpha)
-    except ValueError:
+    except ValueError:  # expected: malformed colours use the safe transparent fallback
         pass
     return (0, 0, 0, default_alpha)
 

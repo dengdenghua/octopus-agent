@@ -42,7 +42,7 @@ def _shanghai_now() -> datetime:
     if ZoneInfo is not None:
         try:
             return datetime.now(ZoneInfo("Asia/Shanghai"))
-        except Exception:  # pragma: no cover
+        except Exception:  # pragma: no cover  # expected: host timezone fallback
             pass
     return datetime.now()
 
@@ -357,7 +357,7 @@ class DailySignInScheduler:
             self.enabled = data.get("enabled") is True
             self.hour = self._valid_hour(data.get("hour", self.hour))
             self.minute = self._valid_minute(data.get("minute", self.minute))
-        except FileNotFoundError:
+        except FileNotFoundError:  # expected: settings are absent before first save
             pass
         except Exception as exc:  # noqa: BLE001
             _logger.warning("paper_trading: 自动签到设置读取失败: %s", exc)
@@ -366,7 +366,7 @@ class DailySignInScheduler:
             self.last_run_at = str(state.get("last_run_at") or "")
             result = state.get("last_result") or {}
             self.last_result = result if isinstance(result, dict) else {}
-        except FileNotFoundError:
+        except FileNotFoundError:  # expected: status is absent before first run
             pass
         except Exception as exc:  # noqa: BLE001
             _logger.warning("paper_trading: 自动签到状态读取失败: %s", exc)

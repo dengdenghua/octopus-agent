@@ -737,9 +737,7 @@ class TestAgentCompetitorScorecard:
             for link in general["operator_drilldown"]["links"]
         )
         provider_plugin = next(
-            row
-            for row in report["dimensions"]
-            if row["id"] == "model_provider_plugin_interop"
+            row for row in report["dimensions"] if row["id"] == "model_provider_plugin_interop"
         )
         assert provider_plugin["scores"] == {
             "codex": 94,

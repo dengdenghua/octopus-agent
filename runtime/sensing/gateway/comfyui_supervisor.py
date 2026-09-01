@@ -60,8 +60,12 @@ def process_status() -> dict[str, object]:
     with _LOCK:
         process = _PROCESS
         owned = process is not None
-        running = process is not None and process.poll() is None
-        pid = process.pid if running else None
+        if process is not None and process.poll() is None:
+            running = True
+            pid = process.pid
+        else:
+            running = False
+            pid = None
     return {"owned": owned, "running": running, "pid": pid}
 
 

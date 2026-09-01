@@ -70,9 +70,7 @@ def save_project(root: Path, project: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".json.tmp")
     with _LOCK:
-        temporary.write_text(
-            json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        temporary.write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8")
         temporary.replace(path)
 
 
@@ -106,7 +104,10 @@ def project_view(project: dict[str, Any], view: str = "clips") -> dict[str, Any]
         },
         "tracks": [
             {
-                **{key: track.get(key) for key in ("id", "type", "name", "locked", "hidden", "muted", "solo")},
+                **{
+                    key: track.get(key)
+                    for key in ("id", "type", "name", "locked", "hidden", "muted", "solo")
+                },
                 "clipCount": len(track.get("clips", [])),
             }
             for track in tracks
@@ -519,7 +520,9 @@ def _apply_operation(project: dict[str, Any], operation: dict[str, Any]) -> dict
             clip.setdefault("transitions", []).append(transition)
             return {"clipId": clip["id"], "transitionId": transition["id"]}
         elif kind == "remove_transition":
-            transition = _find(clip.setdefault("transitions", []), operation["transitionId"], "transition")
+            transition = _find(
+                clip.setdefault("transitions", []), operation["transitionId"], "transition"
+            )
             clip["transitions"].remove(transition)
             return {"clipId": clip["id"], "transitionId": transition["id"]}
         elif kind == "add_effect":
@@ -568,9 +571,7 @@ def _shift_clips(track: dict[str, Any], from_sec: float, delta: float) -> None:
             clip["endSec"] = max(clip["startSec"] + 0.01, float(clip["endSec"]) + delta)
 
 
-def _remove_range_from_track(
-    track: dict[str, Any], start: float, end: float, ripple: bool
-) -> int:
+def _remove_range_from_track(track: dict[str, Any], start: float, end: float, ripple: bool) -> int:
     duration = end - start
     updated: list[dict[str, Any]] = []
     affected = 0
@@ -642,7 +643,9 @@ def _parse_srt(content: str) -> list[tuple[float, float, str]]:
         end = _srt_seconds(match.group(2))
         if end <= start:
             raise ValueError("SRT cue end must be after start")
-        entries.append((start, end, "\n".join(line.strip() for line in match.group(3).splitlines())))
+        entries.append(
+            (start, end, "\n".join(line.strip() for line in match.group(3).splitlines()))
+        )
     if not entries:
         raise ValueError("no valid SRT cues found")
     return entries

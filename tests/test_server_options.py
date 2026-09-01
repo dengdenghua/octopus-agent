@@ -32,9 +32,7 @@ def test_sensitive_query_redaction_filter_scrubs_all_supported_key_names() -> No
         pathname=__file__,
         lineno=1,
         msg="%s",
-        args=(
-            "/path?access_token=one&auth_token=two&TOKEN=three&safe=value",
-        ),
+        args=("/path?access_token=one&auth_token=two&TOKEN=three&safe=value",),
         exc_info=None,
     )
 
@@ -50,7 +48,9 @@ def test_install_sensitive_query_log_redaction_is_idempotent() -> None:
     try:
         for logger in loggers:
             logger.filters = [
-                item for item in logger.filters if not isinstance(item, SensitiveQueryRedactionFilter)
+                item
+                for item in logger.filters
+                if not isinstance(item, SensitiveQueryRedactionFilter)
             ]
 
         install_sensitive_query_log_redaction()

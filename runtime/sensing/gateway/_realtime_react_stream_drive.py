@@ -1038,9 +1038,7 @@ async def _drive_react(
             log,
             emitter,
             terminal_status=(
-                TurnStatus.COMPLETED
-                if turn.status == TurnStatus.IN_PROGRESS
-                else turn.status
+                TurnStatus.COMPLETED if turn.status == TurnStatus.IN_PROGRESS else turn.status
             ),
         )
     # Note: background tool watchers (started by ``track_background_tool``)

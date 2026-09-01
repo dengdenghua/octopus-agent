@@ -226,9 +226,10 @@ def _request_for_turn(
         # Such embeddings receive no Octopus dynamic tools; production app
         # construction always supplies ``_stack``.
         capabilities = getattr(agent, "capabilities", None)
-        if not isinstance(capabilities, dict) or str(
-            capabilities.get("execution_backend") or ""
-        ).casefold() != "codex_app_server":
+        if (
+            not isinstance(capabilities, dict)
+            or str(capabilities.get("execution_backend") or "").casefold() != "codex_app_server"
+        ):
             raise CodexSecurityError("Codex App Server driver requires an embedded Coder role")
         command = str(
             capabilities.get("codex_app_server_executable")

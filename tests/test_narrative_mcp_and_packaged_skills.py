@@ -91,9 +91,7 @@ def _mcp_route_count(app: FastAPI) -> int:
 
     top_level = list(app.routes)
     nested = [child for route in top_level for child in routes_of(route)]
-    return sum(
-        getattr(route, "path", None) == MCP_ENDPOINT for route in [*top_level, *nested]
-    )
+    return sum(getattr(route, "path", None) == MCP_ENDPOINT for route in [*top_level, *nested])
 
 
 def test_mcp_initialize_status_and_candidate_only_tool_allowlist(tmp_path: Path) -> None:
@@ -265,10 +263,13 @@ def test_disable_enable_removes_and_restores_single_mcp_route_and_owned_skills(
 
     disabled = hub.disable_plugin("narrative_studio")
     assert disabled["enabled"] is False
-    assert client.post(
-        MCP_ENDPOINT,
-        json={"jsonrpc": "2.0", "id": 11, "method": "tools/list"},
-    ).status_code == 404
+    assert (
+        client.post(
+            MCP_ENDPOINT,
+            json={"jsonrpc": "2.0", "id": 11, "method": "tools/list"},
+        ).status_code
+        == 404
+    )
     assert PACKAGED_SKILL_NAMES.isdisjoint(set(registry.all_names()))
     assert _mcp_route_count(app) == 0
 

@@ -246,9 +246,7 @@ class ModelProviderPluginManager:
                 or entry_id
             ),
             "provider": "openai-compatible",
-            "base_url": self._normalize_base_url(
-                base_url or str(descriptor.get("base_url") or "")
-            ),
+            "base_url": self._normalize_base_url(base_url or str(descriptor.get("base_url") or "")),
             "api_key": "",
             "credential_ref": model_provider_credential_ref(connector_id),
             "managed_by_plugin": connector_id,

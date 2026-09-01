@@ -327,7 +327,7 @@ def _unlock(fd: int) -> None:
             import fcntl
 
             fcntl.flock(fd, fcntl.LOCK_UN)
-        except (ImportError, OSError):
+        except (ImportError, OSError):  # best-effort: closing the descriptor releases the lock
             pass
         return
     if os.name == "nt":  # pragma: no cover - exercised on Windows CI
@@ -340,7 +340,7 @@ def _unlock(fd: int) -> None:
                 msvcrt.LK_UNLCK,  # type: ignore[attr-defined]
                 1,
             )
-        except (ImportError, OSError):
+        except (ImportError, OSError):  # best-effort: closing the descriptor releases the lock
             pass
 
 

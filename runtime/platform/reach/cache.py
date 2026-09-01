@@ -119,7 +119,7 @@ class ReachCache:
             try:
                 with sqlite3.connect(self.path, timeout=3) as db:
                     db.execute("DELETE FROM reach_cache")
-            except (OSError, sqlite3.Error):
+            except (OSError, sqlite3.Error):  # best-effort: memory cache is already cleared
                 pass
 
 

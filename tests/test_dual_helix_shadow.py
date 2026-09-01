@@ -65,9 +65,7 @@ async def test_opt_in_shadow_run_uses_opposite_engine_on_isolated_snapshot(
     )
     for _ in range(50):
         await asyncio.sleep(0.01)
-        row = next(
-            item for item in service.status()["runs"] if item["run_id"] == queued["run_id"]
-        )
+        row = next(item for item in service.status()["runs"] if item["run_id"] == queued["run_id"])
         if row["status"] in {"completed", "failed"}:
             break
 
