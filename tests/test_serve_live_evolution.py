@@ -7,7 +7,10 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.usefixtures("bypass_serve_port_guard")
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.usefixtures("bypass_serve_port_guard"),
+]
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi import FastAPI  # noqa: E402

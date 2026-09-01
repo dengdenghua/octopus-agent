@@ -8,9 +8,10 @@ only fail when a process is actually on the other end, which is why the
 reference-seeding bug survived a green suite -- a fake client answers about
 files it was never asked to open.
 
-The server here is scripted (``tests/lsp_fake_server.py``), so these stay
-hermetic and fast; the end-to-end tests against a genuine language server are
-marked ``integration`` at the bottom.
+The server here is scripted (``tests/lsp_fake_server.py``), so the suite stays
+hermetic. It still exercises real subprocess transport and timeout behavior,
+so the module belongs to the integration tier; the final test additionally
+uses a genuine language server when available.
 """
 
 from __future__ import annotations
@@ -32,6 +33,8 @@ from runtime.execution.suckers.lsp_skills import (
     _LSPTimeoutError,
     _LSPTransportError,
 )
+
+pytestmark = pytest.mark.integration
 
 ROOT = Path(__file__).resolve().parents[1]
 

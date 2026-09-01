@@ -16,6 +16,8 @@ import yaml
 
 from runtime.platform.config import load_from_yaml
 
+pytestmark = [pytest.mark.contract, pytest.mark.platform]
+
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "packaging/desktop/config.desktop.yaml"
 MATERIALIZER = ROOT / "frontend/electron/desktop-config.cjs"

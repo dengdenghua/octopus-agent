@@ -14,6 +14,7 @@
 # installed, so the type ratchet silently never ran and `make lint` died.
 # Override with `make PYTHON=/path/to/python <target>`.
 PYTHON ?= $(shell if [ -x .venv/bin/python ]; then printf '%s' .venv/bin/python; else printf '%s' python; fi)
+FAST_TEST_MARKERS := not slow and not integration and not contract and not live
 
 # ─── Install ─────────────────────────────────────────
 install:  ## Install development dependencies
@@ -32,11 +33,11 @@ quickstart-serve:  ## Bootstrap local config and start the FastAPI service
 test:  ## Run pytest with coverage
 	$(PYTHON) -m pytest --cov=runtime --cov=tools -v
 
-test-fast:  ## Run pytest without coverage
-	$(PYTHON) -m pytest -q
+test-fast:  ## Run the fast local pytest subset without coverage
+	$(PYTHON) -m pytest -m "$(FAST_TEST_MARKERS)" -q
 
-test-unit:  ## Run unit tests excluding slow and integration tests
-	$(PYTHON) -m pytest -m "not slow and not integration" -v
+test-unit:  ## Run unit tests excluding slow, integration, contract, and live tests
+	$(PYTHON) -m pytest -m "$(FAST_TEST_MARKERS)" -v
 
 test-integration:  ## Run integration tests
 	$(PYTHON) -m pytest -m integration -v

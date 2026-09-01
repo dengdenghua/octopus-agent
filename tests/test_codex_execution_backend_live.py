@@ -37,6 +37,7 @@ from runtime.safety.sandboxing.sandbox import (
 )
 
 _RUN_LIVE = os.environ.get("OCTOPUS_RUN_CODEX_LIVE_SMOKE") == "1"
+pytestmark = pytest.mark.live
 
 
 class _RecordingClient(CodexAppServerClient):

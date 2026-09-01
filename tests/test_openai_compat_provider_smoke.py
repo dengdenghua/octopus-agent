@@ -11,10 +11,13 @@ from runtime.sensing.model_router.openai_compat_smoke_matrix import (
     openai_compat_smoke_providers,
 )
 
-pytestmark = pytest.mark.skipif(
-    os.environ.get("OCTOPUS_LIVE_MODEL_SMOKE") != "1",
-    reason="set OCTOPUS_LIVE_MODEL_SMOKE=1 and provider API keys to run live smoke tests",
-)
+pytestmark = [
+    pytest.mark.live,
+    pytest.mark.skipif(
+        os.environ.get("OCTOPUS_LIVE_MODEL_SMOKE") != "1",
+        reason="set OCTOPUS_LIVE_MODEL_SMOKE=1 and provider API keys to run live smoke tests",
+    ),
+]
 
 
 PROVIDERS = openai_compat_smoke_providers()

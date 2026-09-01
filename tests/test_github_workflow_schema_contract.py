@@ -3,7 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
+
+pytestmark = pytest.mark.contract
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
@@ -33,8 +36,7 @@ def test_job_timeouts_fit_github_actions_schema() -> None:
             violations.append(f"{path.relative_to(REPO_ROOT)}:{name}={timeout!r}")
 
     assert not violations, (
-        "GitHub rejects jobs whose timeout-minutes is outside 1..360: "
-        + ", ".join(violations)
+        "GitHub rejects jobs whose timeout-minutes is outside 1..360: " + ", ".join(violations)
     )
 
 
@@ -49,6 +51,5 @@ def test_job_environment_avoids_step_only_runner_context() -> None:
 
     assert not violations, (
         "runner context is unavailable in jobs.<job_id>.env; initialize these values "
-        "inside a step via RUNNER_TEMP: "
-        + ", ".join(violations)
+        "inside a step via RUNNER_TEMP: " + ", ".join(violations)
     )

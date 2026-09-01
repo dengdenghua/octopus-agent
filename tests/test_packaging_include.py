@@ -16,6 +16,10 @@ import tomllib
 import zipfile
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.contract
+
 _REPO = Path(__file__).resolve().parent.parent
 
 # Production modules introduced by behavior-preserving splits or routing fixes

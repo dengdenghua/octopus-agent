@@ -9,10 +9,13 @@ import pytest
 
 from demos.evolution_demo import run_demo
 
-pytestmark = pytest.mark.skipif(
-    shutil.which("git") is None,
-    reason="git not on PATH",
-)
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        shutil.which("git") is None,
+        reason="git not on PATH",
+    ),
+]
 
 
 # The bugfix demo trail used by run_demo includes exec_shell, which the

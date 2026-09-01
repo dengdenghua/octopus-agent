@@ -15,10 +15,13 @@ from demos.bugfix_demo import (
     setup_buggy_project,
 )
 
-pytestmark = pytest.mark.skipif(
-    shutil.which("git") is None,
-    reason="git not on PATH",
-)
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        shutil.which("git") is None,
+        reason="git not on PATH",
+    ),
+]
 
 
 # ═══════════════════════════════════════════════════════════

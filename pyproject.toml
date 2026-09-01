@@ -324,6 +324,9 @@ addopts = [
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: end-to-end integration tests",
+    "contract: schema, packaging, and generated-artifact contract tests",
+    "platform: operating-system and filesystem portability tests",
+    "live: tests that require real external services or credentials",
 ]
 
 # ─── ruff ────────────────────────────────────────────

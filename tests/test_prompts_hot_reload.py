@@ -22,10 +22,9 @@ Design notes
   it via ``monkeypatch.setenv`` in tests that flip it.  The autouse
   ``_reset_flags`` fixture forces a re-resolve before *and* after each
   test so cross-test bleed is impossible.
-* mtime tests force a tiny ``time.sleep`` after edits.  Some
-  filesystems (notably FAT, but also tmpfs in containers) only have
-  second-resolution mtime — sleeping past the next tick is the
-  cheapest robust way.
+* mtime tests advance the edited file's timestamp explicitly.  This
+  keeps the tests deterministic on coarse-grained filesystems without
+  paying a real one-second sleep for every edit.
 """
 
 from __future__ import annotations
@@ -113,6 +112,23 @@ def _flag_off(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setenv("OCTOPUS_FF_UI_PROMPTS_HOT_RELOAD", "0")
     _ff.reload()
+
+
+def _write_external_edit(path: Path, content: str) -> None:
+    """Rewrite ``path`` and force an observably newer mtime.
+
+    ``PromptRegistry`` compares ``st_mtime_ns`` values.  Advancing the
+    timestamp by two seconds works even when the underlying filesystem
+    rounds mtimes to whole or two-second ticks, while avoiding a real
+    sleep in the test suite.
+    """
+    previous = path.stat()
+    path.write_text(content, encoding="utf-8")
+    os.utime(
+        path,
+        ns=(previous.st_atime_ns, previous.st_mtime_ns + 2_000_000_000),
+    )
+    assert path.stat().st_mtime_ns != previous.st_mtime_ns
 
 
 # ═══════════════════════════════════════════════════════════
@@ -222,8 +238,7 @@ class TestHotReload:
         # Flip flag ON, then bash the file directly (simulating an
         # editor save outside the registry).
         _flag_on(monkeypatch)
-        time.sleep(1.1)  # ensure mtime advances on coarse-grained FS
-        (prompts_dir / "p.md").write_text("edited", encoding="utf-8")
+        _write_external_edit(prompts_dir / "p.md", "edited")
 
         assert registry.get("p") == "edited"
 
@@ -236,8 +251,7 @@ class TestHotReload:
         registry.set("p", "original")
         _flag_off(monkeypatch)
 
-        time.sleep(1.1)
-        (prompts_dir / "p.md").write_text("edited", encoding="utf-8")
+        _write_external_edit(prompts_dir / "p.md", "edited")
 
         # Sticky cache wins
         assert registry.get("p").startswith("original")
@@ -429,11 +443,7 @@ class TestMtimeCaching:
         assert registry.get("ghost").startswith("v1")
 
         # External edit
-        time.sleep(1.1)
-        (prompts_dir / "ghost.md").write_text(
-            "v2-from-disk",
-            encoding="utf-8",
-        )
+        _write_external_edit(prompts_dir / "ghost.md", "v2-from-disk")
 
         # Still the cached version because no re-stat occurs
         body = registry.get("ghost")
