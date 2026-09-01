@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any, TypeVar
 from uuid import uuid4
 
+from runtime.platform.io.sqlite import connect_closing
+
 from ._team_invitation_support import (
     _INVITE_COLUMNS,
     _JOIN_REQUEST_COLUMNS,
@@ -64,7 +66,7 @@ class TeamInvitationStore:
         return self._db
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self._db), timeout=10.0)
+        conn = connect_closing(str(self._db), timeout=10.0)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")

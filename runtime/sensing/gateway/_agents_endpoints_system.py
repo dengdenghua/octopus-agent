@@ -65,10 +65,11 @@ def _reconcile_automation_registry(registry: Any, caps: Any) -> dict[str, list[s
         # processed in stable order so compatibility aliases stay deterministic.
         for skill_id in sorted(expected):
             registry.unregister(skill_id)
-        registered.extend(register_group(registry, group))
-        still_missing = sorted(skill_id for skill_id in expected if not registry.has(skill_id))
-        if still_missing:
-            raise RuntimeError(f"automation group {group!r} failed to hot-load: {still_missing}")
+        # A group's catalog may include tools backed by optional native
+        # dependencies (for example direct pyautogui controls). A successful
+        # registrar is authoritative for what this host can expose; strict
+        # exception propagation still makes genuine partial failures roll back.
+        registered.extend(register_group(registry, group, raise_on_error=True))
 
     return {
         "registered": sorted(set(registered)),

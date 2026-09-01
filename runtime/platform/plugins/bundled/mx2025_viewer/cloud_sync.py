@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from runtime.platform.io import atomic_write_json
+from runtime.platform.io.sqlite import connect_closing
 
 
 def _b64(data: bytes) -> str:
@@ -50,7 +51,7 @@ class MXCloudSyncConnector:
         self._init_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, timeout=10)
+        conn = connect_closing(self.db_path, timeout=10)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         return conn

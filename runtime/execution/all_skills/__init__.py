@@ -605,13 +605,20 @@ def register_subset(
             )
 
 
-def register_group(registry: SkillRegistry, group: str) -> list[str]:
+def register_group(
+    registry: SkillRegistry,
+    group: str,
+    *,
+    raise_on_error: bool = False,
+) -> list[str]:
     """Register a single skill group into ``registry``.
 
     Used by the ``POST /api/capabilities/enable`` endpoint to hot-load
     a group that was excluded at startup by ``enable_web_skills=False``.
     Returns the list of skill names newly added (empty if the group was
-    already registered, unknown, or failed to register).
+    already registered, unknown, unavailable in this environment, or failed
+    to register). Set ``raise_on_error`` for transactional callers that must
+    distinguish an optional unavailable group from a broken registrar.
     """
     import contextlib
 
@@ -630,6 +637,8 @@ def register_group(registry: SkillRegistry, group: str) -> list[str]:
             type(exc).__name__,
             exc,
         )
+        if raise_on_error:
+            raise
         return []
     after: set[str] = set()
     with contextlib.suppress(Exception):

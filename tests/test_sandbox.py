@@ -824,12 +824,14 @@ class TestResolvedPosture:
         from runtime.safety.sandboxing import sandbox as sandbox_mod
         from runtime.safety.sandboxing.sandbox import (
             BubblewrapBackend,
+            LandlockBackend,
             SandboxViolation,
             SeatbeltBackend,
             resolve_process_backend,
         )
 
         monkeypatch.setattr(BubblewrapBackend, "available", staticmethod(lambda: False))
+        monkeypatch.setattr(LandlockBackend, "available", staticmethod(lambda: False))
         monkeypatch.setattr(SeatbeltBackend, "available", staticmethod(lambda: False))
         monkeypatch.setattr(sandbox_mod, "probe_backend_runs", lambda _b: True)
 
@@ -844,11 +846,13 @@ class TestResolvedPosture:
         from runtime.safety.sandboxing.sandbox import (
             BubblewrapBackend,
             DirectBackend,
+            LandlockBackend,
             SeatbeltBackend,
             resolve_process_backend,
         )
 
         monkeypatch.setattr(BubblewrapBackend, "available", staticmethod(lambda: False))
+        monkeypatch.setattr(LandlockBackend, "available", staticmethod(lambda: False))
         monkeypatch.setattr(SeatbeltBackend, "available", staticmethod(lambda: False))
         monkeypatch.setattr(sandbox_mod, "probe_backend_runs", lambda _b: True)
 

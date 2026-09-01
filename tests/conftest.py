@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import functools
+import os
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -22,6 +24,21 @@ from runtime.platform.models import (
     Trajectory,
     TrajectoryOutcome,
 )
+
+
+@pytest.fixture(autouse=True)
+def _restore_working_directory():
+    """Prevent one test's raw ``os.chdir`` from poisoning later subprocesses.
+
+    ``monkeypatch.chdir`` already restores itself, but a deleted-cwd regression
+    test must use ``os.chdir`` directly.  A prior version restored to the
+    ``tests/`` directory instead of the session's original root; child Python
+    processes then imported ``tests/runtime`` as a namespace package and could
+    no longer find the installed ``runtime.execution`` modules.
+    """
+    starting_directory = Path.cwd()
+    yield
+    os.chdir(starting_directory)
 
 
 @pytest.fixture

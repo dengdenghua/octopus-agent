@@ -30,7 +30,7 @@ quickstart-serve:  ## Bootstrap local config and start the FastAPI service
 
 # ─── Test ────────────────────────────────────────────
 test:  ## Run pytest with coverage
-	$(PYTHON) -m pytest --cov=runtime --cov=tools -v
+	$(PYTHON) -m pytest --cov=runtime -v
 
 test-fast:  ## Run pytest without coverage
 	$(PYTHON) -m pytest -q

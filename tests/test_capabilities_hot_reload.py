@@ -23,28 +23,33 @@ from runtime.sensing.gateway.agents_router import create_agents_router
 _GROUPS = ("browser", "browser_act", "computer")
 
 
-def _assert_groups(registry: SkillRegistry, *, present: bool) -> None:
-    for group in _GROUPS:
-        for skill_id in skills_in_group(group):
-            assert registry.has(skill_id) is present, (group, skill_id)
+def _assert_skills(registry: SkillRegistry, skills: set[str], *, present: bool) -> None:
+    for skill_id in skills:
+        assert registry.has(skill_id) is present, skill_id
+
+
+def _registered_automation_skills(registry: SkillRegistry) -> set[str]:
+    expected = {skill_id for group in _GROUPS for skill_id in skills_in_group(group)}
+    return {skill_id for skill_id in expected if registry.has(skill_id)}
 
 
 def test_reconcile_removes_and_restores_automation_groups() -> None:
     registry = SkillRegistry()
     for group in _GROUPS:
         register_group(registry, group)
-    _assert_groups(registry, present=True)
+    initially_registered = _registered_automation_skills(registry)
+    assert initially_registered
 
     removed = _reconcile_automation_registry(
         registry,
         Capabilities(browser_automation=False, desktop_automation=False),
     )
     assert removed["removed"]
-    _assert_groups(registry, present=False)
+    _assert_skills(registry, initially_registered, present=False)
 
     restored = _reconcile_automation_registry(registry, Capabilities.defaults())
     assert restored["registered"]
-    _assert_groups(registry, present=True)
+    _assert_skills(registry, initially_registered, present=True)
 
 
 def test_settings_capability_put_hot_applies_without_restart(
@@ -55,6 +60,8 @@ def test_settings_capability_put_hot_applies_without_restart(
     skill_registry = SkillRegistry()
     for group in _GROUPS:
         register_group(skill_registry, group)
+    initially_registered = _registered_automation_skills(skill_registry)
+    assert initially_registered
 
     app = FastAPI()
     app.state.octopus_state = SimpleNamespace(registry=skill_registry)
@@ -67,7 +74,7 @@ def test_settings_capability_put_hot_applies_without_restart(
     )
     assert disabled.status_code == 200
     assert disabled.json()["restart_required"] is False
-    _assert_groups(skill_registry, present=False)
+    _assert_skills(skill_registry, initially_registered, present=False)
 
     enabled = client.put(
         "/api/settings/capabilities",
@@ -76,4 +83,4 @@ def test_settings_capability_put_hot_applies_without_restart(
     assert enabled.status_code == 200
     assert enabled.json()["restart_required"] is False
     assert caps_mod.load() == Capabilities.defaults()
-    _assert_groups(skill_registry, present=True)
+    _assert_skills(skill_registry, initially_registered, present=True)

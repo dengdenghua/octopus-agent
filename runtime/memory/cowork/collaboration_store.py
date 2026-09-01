@@ -46,6 +46,7 @@ from runtime.memory.cowork.ids import (
     require_cowork_id,
     require_message_text,
 )
+from runtime.platform.io.sqlite import connect_closing
 
 _MAX_JSON_BYTES = 512 * 1024
 _MAX_LIST_ITEMS = 512
@@ -458,7 +459,7 @@ class CollaborationStore(CollaborationProjectActionStoreMixin):
 
     def _connect(self) -> sqlite3.Connection:
         self._dir.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(self._db), timeout=10.0)
+        conn = connect_closing(str(self._db), timeout=10.0)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.executescript(_SCHEMA)
         # ``CREATE TABLE IF NOT EXISTS`` does not add columns to installations

@@ -13,7 +13,7 @@ htmlcov/
 .trae/
 .workbuddy/
 logs/
-data/
+/data/
 deliverables/
 ura-artifacts/
 _outer_preflatten_*/
@@ -48,7 +48,7 @@ dist/
 .gitignore
 
 # Runtime data
-data/
+/data/
 *.jsonl
 *.sqlite
 *.sqlite3

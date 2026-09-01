@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from runtime.platform.io.sqlite import connect_closing
 from runtime.projectos._store_helpers import (
     _MAX_NAME_LENGTH,
     _available_milestone_id,
@@ -147,7 +148,7 @@ class ProjectStore(
         self._db = d / "projectos.db"
         self._lock = threading.Lock()
         self._scope = scope
-        with self._lock, sqlite3.connect(str(self._db)) as conn:
+        with self._lock, connect_closing(str(self._db)) as conn:
             conn.executescript(_SCHEMA)
             ensure_project_delete_schema(conn)
             conn.execute("BEGIN IMMEDIATE")
@@ -208,7 +209,7 @@ class ProjectStore(
         )
 
     def _conn(self) -> sqlite3.Connection:
-        return sqlite3.connect(str(self._db), timeout=10.0)
+        return connect_closing(str(self._db), timeout=10.0)
 
     # ── projects ─────────────────────────────────────────────────────────────
     def save_project(

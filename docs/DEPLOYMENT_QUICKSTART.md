@@ -63,8 +63,13 @@ pnpm --dir frontend build
 
 The resulting Windows installer contains a fixed PyInstaller backend. First
 launch never downloads Python dependencies and never falls back to system
-Python or uv; a missing backend aborts startup. macOS/Linux desktop releases
-are disabled until equivalent bundled backends and smoke tests exist.
+Python or uv; a missing backend aborts startup. Linux AppImage builds are also
+enabled on `main`: `build-linux.yml` bundles the pinned backend and Codex
+runtime, starts the extracted package, requires `/readyz`, and uploads a
+commit-bound CI artifact with checksums. It is not yet attached to the SemVer
+release workflow, so treat it as a verified CI artifact rather than a public
+Linux release. macOS desktop distribution remains disabled until it has an
+equivalent bundled backend, smoke test, signing, and notarization path.
 
 For development (run the backend separately, then Vite + Electron with hot
 reload):

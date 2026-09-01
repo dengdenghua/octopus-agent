@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -25,8 +26,7 @@ class TestDockerfile:
         assert "--no-fund" not in text
         assert "frontend/pnpm-workspace.yaml" in text
         assert (
-            "COPY pet-sidecar/models/octopus/octopus.fbx "
-            "/pet-sidecar/models/octopus/octopus.fbx"
+            "COPY pet-sidecar/models/octopus/octopus.fbx /pet-sidecar/models/octopus/octopus.fbx"
         ) in text
         assert (
             "COPY pet-sidecar/models/character_rigged_clean.glb "
@@ -44,6 +44,17 @@ class TestDockerfile:
 
     def test_dockerignore_exists(self):
         assert (REPO / ".dockerignore").exists()
+
+    def test_desktop_quickstart_matches_linux_build_status(self):
+        quickstart = (REPO / "docs" / "DEPLOYMENT_QUICKSTART.md").read_text(encoding="utf-8")
+        linux_workflow = (REPO / ".github" / "workflows" / "build-linux.yml").read_text(
+            encoding="utf-8"
+        )
+
+        assert "Build Linux AppImage" in linux_workflow
+        assert "Linux AppImage builds are also" in quickstart
+        assert "verified CI artifact rather than a public" in quickstart
+        assert "macOS/Linux desktop releases\nare disabled" not in quickstart
 
     def test_multi_stage_build(self):
         text = (REPO / "Dockerfile").read_text(encoding="utf-8")
@@ -113,6 +124,11 @@ class TestDockerfile:
         # Implementation note.
         for pattern in ["data/", "*.jsonl", "*.sqlite", ".env"]:
             assert pattern in text, f"missing .dockerignore entry: {pattern}"
+        # Runtime state is only the repository-root data directory. An
+        # unanchored rule also removes product assets such as
+        # extensions/*/storefront/data/icons from the build context.
+        assert all(line != "data/" for line in text.splitlines())
+        assert "/data/" in text.splitlines()
         assert "agents/*/sessions/" in text
         assert "agents/*/workspace/" in text
         for local_state in (
@@ -253,6 +269,27 @@ class TestDockerCompose:
 
 
 class TestPyproject:
+    def test_release_coverage_gate_measures_shippable_runtime(self):
+        project = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
+
+        assert project["tool"]["coverage"]["run"]["source"] == ["runtime"]
+        assert project["tool"]["coverage"]["report"]["fail_under"] == 78
+
+    def test_dev_extra_covers_unconditionally_collected_optional_surfaces(self):
+        project = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
+        dev = "\n".join(project["project"]["optional-dependencies"]["dev"])
+
+        for dependency in (
+            "a2a-sdk",
+            "av",
+            "bcrypt",
+            "mcp",
+            "opentelemetry-api",
+            "opentelemetry-sdk",
+            "playwright",
+        ):
+            assert dependency in dev
+
     def test_octopus_agent_script_registered(self):
         text = (REPO / "pyproject.toml").read_text(encoding="utf-8")
         assert 'octopus-agent = "runtime.cli:main"' in text

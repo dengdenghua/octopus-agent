@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from runtime.memory.cowork.ids import require_cowork_id
+from runtime.platform.io.sqlite import connect_closing
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS read_state (
@@ -84,7 +85,7 @@ class PresenceStore:
             conn.executescript(_SCHEMA)
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self._db), timeout=10.0)
+        conn = connect_closing(str(self._db), timeout=10.0)
         conn.execute("PRAGMA journal_mode=WAL")
         return conn
 

@@ -1,5 +1,4 @@
-"""Persistence for the thread-group model: an append-only membership event log
-plus the thread-scoped shared blackboard.
+"""Persistence for thread groups: append-only membership events and a shared blackboard.
 
 The membership log is sqlite (ordered, append-only, multi-process safe via an
 atomic ``seq`` computed inside the INSERT). The shared blackboard reuses the
@@ -33,6 +32,7 @@ from runtime.memory.cowork.ids import (
     optional_cowork_id,
     require_cowork_id,
 )
+from runtime.platform.io.sqlite import connect_closing
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS group_events (
@@ -268,7 +268,7 @@ class GroupStore:
 
     def _connect(self) -> sqlite3.Connection:
         self._dir.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(self._events_db), timeout=10.0)
+        conn = connect_closing(str(self._events_db), timeout=10.0)
         # DELETE mode is a correctness boundary: thread deletion atomically
         # commits across this DB plus the same-directory async/board DBs.
         # SQLite does not guarantee attached-database atomicity under WAL;
@@ -1052,7 +1052,7 @@ class GroupStore:
             claim = conn.execute("DELETE FROM group_room_links WHERE thread_id = ?", (thread_id,))
             deleted = deleted or claim.rowcount > 0
         if self._board_db.exists():
-            with self._lock, sqlite3.connect(str(self._board_db), timeout=5.0) as conn:
+            with self._lock, connect_closing(str(self._board_db), timeout=5.0) as conn:
                 # The board DB is lazily initialized, so tolerate a file that
                 # exists without the table (for example after interrupted setup).
                 table = conn.execute(

@@ -13,9 +13,10 @@ Scoring is pure; only the competence tally is persisted (a tiny sqlite table).
 from __future__ import annotations
 
 import re
-import sqlite3
 import threading
 from pathlib import Path
+
+from runtime.platform.io.sqlite import connect_closing
 
 _STOPWORDS = frozenset(
     {
@@ -95,7 +96,7 @@ class CompetenceStore:
         d.mkdir(parents=True, exist_ok=True)
         self._db = d / "competence.db"
         self._lock = threading.Lock()
-        with self._lock, sqlite3.connect(str(self._db)) as conn:
+        with self._lock, connect_closing(str(self._db)) as conn:
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS competence ("
                 "agent_id TEXT NOT NULL, tag TEXT NOT NULL, wins INTEGER DEFAULT 0, "
@@ -103,7 +104,7 @@ class CompetenceStore:
             )
 
     def record(self, agent_id: str, tag: str, success: bool) -> None:
-        with self._lock, sqlite3.connect(str(self._db)) as conn:
+        with self._lock, connect_closing(str(self._db)) as conn:
             conn.execute(
                 "INSERT INTO competence(agent_id, tag, wins, total) VALUES (?, ?, ?, 1) "
                 "ON CONFLICT(agent_id, tag) DO UPDATE SET wins = wins + ?, total = total + 1",
@@ -112,7 +113,7 @@ class CompetenceStore:
 
     def competence(self, agent_id: str, tag: str) -> float:
         """Success rate for (agent, tag), 0.5 prior when unseen (no strong signal)."""
-        with self._lock, sqlite3.connect(str(self._db)) as conn:
+        with self._lock, connect_closing(str(self._db)) as conn:
             row = conn.execute(
                 "SELECT wins, total FROM competence WHERE agent_id=? AND tag=?",
                 (agent_id, tag),

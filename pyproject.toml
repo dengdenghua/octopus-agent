@@ -33,6 +33,14 @@ dev = [
     # lightweight runtime packages in dev so clean CI collects the same suite
     # as a feature-complete workstation without pulling full model stacks.
     "av>=12.0",
+    "a2a-sdk>=1.1.0,<2.0",
+    "bcrypt>=4.0",
+    # instrumentation imports the API package opportunistically; when that
+    # package is present, its test path requires the SDK as well. Keeping the
+    # pair in dev prevents a clean CI install from selecting a half-enabled
+    # tracing state that collects tests and then fails at fixture setup.
+    "opentelemetry-api>=1.25",
+    "opentelemetry-sdk>=1.25",
     "mcp>=2.0.0,<3.0",
     "playwright>=1.48",
     # Windows does not ship an IANA timezone database. Runtime modules use
@@ -362,7 +370,11 @@ quote-style = "double"
 
 # ─── coverage ────────────────────────────────────────
 [tool.coverage.run]
-source = ["runtime", "tools"]
+# The release gate covers code shipped in the production runtime. Developer
+# maintenance tools have their own unit tests and CI ratchets; including their
+# platform-specific command entrypoints made the product metric depend on
+# which CI host happened to execute the suite.
+source = ["runtime"]
 omit = ["*/tests/*", "*/fixtures/*"]
 
 [tool.coverage.report]

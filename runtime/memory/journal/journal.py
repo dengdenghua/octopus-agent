@@ -170,6 +170,8 @@ def _refresh_session_index(
 class _StructuredJournalRedaction:
     """Structured, identity-preserving redaction shared by file journals."""
 
+    _redactor: Any
+
     @staticmethod
     def _scope_digest(value: str, *, field: str) -> str:
         """Return a deterministic storage identifier outside PII patterns."""
@@ -308,13 +310,17 @@ class _StructuredJournalRedaction:
             return replacement
         head, *tail = path
         if isinstance(head, int) and isinstance(value, list):
-            updated = list(value)
-            updated[head] = cls._replace_json_path(updated[head], tuple(tail), replacement)
-            return updated
+            updated_list = list(value)
+            updated_list[head] = cls._replace_json_path(
+                updated_list[head], tuple(tail), replacement
+            )
+            return updated_list
         if isinstance(head, str) and isinstance(value, dict):
-            updated = dict(value)
-            updated[head] = cls._replace_json_path(updated[head], tuple(tail), replacement)
-            return updated
+            updated_dict = dict(value)
+            updated_dict[head] = cls._replace_json_path(
+                updated_dict[head], tuple(tail), replacement
+            )
+            return updated_dict
         return value
 
     @staticmethod

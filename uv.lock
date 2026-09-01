@@ -3184,12 +3184,16 @@ desktop-core = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 dev = [
+    { name = "a2a-sdk" },
     { name = "av" },
     { name = "bandit" },
+    { name = "bcrypt" },
     { name = "httpx2" },
     { name = "mcp" },
     { name = "mypy" },
     { name = "numpy" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-sdk" },
     { name = "pip-audit" },
     { name = "playwright" },
     { name = "pyright" },
@@ -3288,6 +3292,7 @@ web = [
 [package.metadata]
 requires-dist = [
     { name = "a2a-sdk", marker = "extra == 'a2a'", specifier = ">=1.1.0,<2.0" },
+    { name = "a2a-sdk", marker = "extra == 'dev'", specifier = ">=1.1.0,<2.0" },
     { name = "anthropic", marker = "extra == 'all'", specifier = ">=0.40,<1.0" },
     { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.40,<1.0" },
     { name = "anthropic", marker = "extra == 'desktop-core'", specifier = ">=0.40,<1.0" },
@@ -3295,6 +3300,7 @@ requires-dist = [
     { name = "av", marker = "extra == 'video'", specifier = ">=12.0" },
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.7" },
     { name = "bcrypt", marker = "extra == 'all'", specifier = ">=4.0" },
+    { name = "bcrypt", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "bcrypt", marker = "extra == 'local-auth'", specifier = ">=4.0" },
     { name = "cryptography", specifier = ">=50.0.0" },
     { name = "cryptography", marker = "extra == 'all'", specifier = ">=50.0.0" },
@@ -3339,8 +3345,10 @@ requires-dist = [
     { name = "openpyxl", marker = "extra == 'desktop-core'", specifier = ">=3.1.5" },
     { name = "openpyxl", marker = "extra == 'office'", specifier = ">=3.1.5" },
     { name = "opentelemetry-api", marker = "extra == 'all'", specifier = ">=1.25" },
+    { name = "opentelemetry-api", marker = "extra == 'dev'", specifier = ">=1.25" },
     { name = "opentelemetry-api", marker = "extra == 'tracing'", specifier = ">=1.25" },
     { name = "opentelemetry-sdk", marker = "extra == 'all'", specifier = ">=1.25" },
+    { name = "opentelemetry-sdk", marker = "extra == 'dev'", specifier = ">=1.25" },
     { name = "opentelemetry-sdk", marker = "extra == 'tracing'", specifier = ">=1.25" },
     { name = "packaging", specifier = ">=24.0" },
     { name = "packaging", marker = "extra == 'desktop-core'", specifier = ">=24.0" },

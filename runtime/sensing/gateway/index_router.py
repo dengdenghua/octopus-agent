@@ -7,7 +7,6 @@ code search infrastructure in code_intelligence_skills.py.
 from __future__ import annotations
 
 import re
-import sqlite3
 import threading
 import time
 from pathlib import Path
@@ -25,6 +24,7 @@ except ImportError:  # pragma: no cover
     Request = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
 
+from runtime.platform.io.sqlite import connect_closing
 from runtime.sensing._fastapi_guard import require_fastapi
 
 _DB_PATH = Path("data/code_index.db")
@@ -50,9 +50,8 @@ def _count_db_rows() -> tuple[int, int]:
     if not _DB_PATH.exists():
         return 0, 0
     try:
-        conn = sqlite3.connect(str(_DB_PATH))
-        total = conn.execute("SELECT COUNT(*) FROM code_chunks").fetchone()[0]
-        conn.close()
+        with connect_closing(_DB_PATH) as conn:
+            total = conn.execute("SELECT COUNT(*) FROM code_chunks").fetchone()[0]
         return total, total
     except Exception:
         return 0, 0
@@ -69,9 +68,8 @@ def _get_db_stats() -> dict[str, Any]:
             "chunk_types": {},
         }
     try:
-        conn = sqlite3.connect(str(_DB_PATH))
-        rows = conn.execute("SELECT path FROM code_chunks").fetchall()
-        conn.close()
+        with connect_closing(_DB_PATH) as conn:
+            rows = conn.execute("SELECT path FROM code_chunks").fetchall()
         paths = [r[0] for r in rows]
         langs: dict[str, int] = {}
         files_set: set[str] = set()

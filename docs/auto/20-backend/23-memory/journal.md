@@ -174,7 +174,7 @@ tier: "core"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | class | `class InMemoryJournal(Journal)` |  |
-| class | `class JSONLJournal(Journal)` |  |
+| class | `class JSONLJournal(_StructuredJournalRedaction, Journal)` |  |
 
 ### `journal_context.py`
 
