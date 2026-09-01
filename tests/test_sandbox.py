@@ -702,6 +702,11 @@ class TestLandlockBackend:
         )
         assert argv[0] == sys.executable
         assert argv[1] == "-c"
+        wrapper = argv[2]
+        assert "PR_SET_NO_NEW_PRIVS = 38" in wrapper
+        assert wrapper.index("libc.prctl(PR_SET_NO_NEW_PRIVS") < wrapper.index(
+            "rc = libc.syscall(SYS_LANDLOCK_RESTRICT_SELF"
+        )
         assert "--" in argv
         assert argv[argv.index("--") + 1 :] == ["python", "-V"]
         spec = json.loads(env["OCTOPUS_LANDLOCK_SPEC"])

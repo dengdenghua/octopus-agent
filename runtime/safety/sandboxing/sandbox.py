@@ -675,6 +675,7 @@ SYS_LANDLOCK_CREATE_RULESET = 444
 SYS_LANDLOCK_ADD_RULE = 445
 SYS_LANDLOCK_RESTRICT_SELF = 446
 LANDLOCK_RULE_PATH_BENEATH = 1
+PR_SET_NO_NEW_PRIVS = 38
 
 # linux/landlock.h access rights (ABI v1 bits; ABI v2 adds REFER,
 # ABI v3 adds TRUNCATE - both handled below).
@@ -751,6 +752,13 @@ add_path_beneath("/", _READ)
 add_path_beneath("/dev/null", WRITE_FILE | TRUNCATE)
 for path in json.loads(os.environ["OCTOPUS_LANDLOCK_SPEC"])["write_paths"]:
     add_path_beneath(path, _READ | _WRITE)
+
+# Unprivileged processes must set no_new_privs before restricting themselves.
+# Without this, Landlock always fails with EPERM in the non-root production
+# container even when the host kernel supports the ABI.
+rc = libc.prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)
+if rc != 0:
+    raise OSError(ctypes.get_errno(), "prctl(PR_SET_NO_NEW_PRIVS)")
 
 rc = libc.syscall(SYS_LANDLOCK_RESTRICT_SELF, ruleset_fd, 0)
 if rc != 0:

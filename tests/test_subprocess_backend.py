@@ -12,6 +12,12 @@ from runtime.sensing.server import SubprocessBackend
 # Implementation note.
 pytestmark = pytest.mark.slow
 
+# Windows process creation performs substantially more cold-start work (and
+# hosted runners scan each fresh interpreter). Keep the product timeout tests
+# explicit below while giving ordinary portability checks enough operation
+# time; this is not a timeout on the pytest suite itself.
+_NORMAL_TIMEOUT_SECONDS = 60.0 if sys.platform == "win32" else 10.0
+
 
 # ═══════════════════════════════════════════════════════════
 # Implementation note.
@@ -20,7 +26,7 @@ pytestmark = pytest.mark.slow
 
 class TestBasicRunSkill:
     def test_list_cwd_in_subprocess(self, tmp_path: Path):
-        backend = SubprocessBackend(timeout_seconds=10.0)
+        backend = SubprocessBackend(timeout_seconds=_NORMAL_TIMEOUT_SECONDS)
         with backend.sandbox(arm_id="test") as box:
             result = box.run_skill("list_cwd", {"path": str(tmp_path)})
         assert "error" not in result
@@ -28,14 +34,14 @@ class TestBasicRunSkill:
         assert result["count"] == 0
 
     def test_count_words_subprocess(self):
-        backend = SubprocessBackend(timeout_seconds=10.0)
+        backend = SubprocessBackend(timeout_seconds=_NORMAL_TIMEOUT_SECONDS)
         with backend.sandbox(arm_id="test") as box:
             result = box.run_skill("count_words", {"text": "one two three four"})
         assert "error" not in result
         assert result["words"] == 4
 
     def test_subprocess_call_count_tracked(self):
-        backend = SubprocessBackend(timeout_seconds=10.0)
+        backend = SubprocessBackend(timeout_seconds=_NORMAL_TIMEOUT_SECONDS)
         with backend.sandbox(arm_id="test") as box:
             box.run_skill("count_words", {"text": "a b"})
             box.run_skill("count_words", {"text": "c d"})
@@ -68,7 +74,7 @@ class TestTimeout:
 class TestErrorHandling:
     def test_unknown_skill_nonzero_exit(self):
         """Implementation note."""
-        backend = SubprocessBackend(timeout_seconds=10.0)
+        backend = SubprocessBackend(timeout_seconds=_NORMAL_TIMEOUT_SECONDS)
         with backend.sandbox(arm_id="test") as box:
             result = box.run_skill("no_such_skill_xyz", {})
         assert "error" in result
@@ -78,7 +84,7 @@ class TestErrorHandling:
 
     def test_bad_args_caught(self):
         """Implementation note."""
-        backend = SubprocessBackend(timeout_seconds=10.0)
+        backend = SubprocessBackend(timeout_seconds=_NORMAL_TIMEOUT_SECONDS)
         with backend.sandbox(arm_id="test") as box:
             # Implementation note.
             # Implementation note.
@@ -99,7 +105,7 @@ class TestArgsPassing:
         p = tmp_path / "hello.txt"
         p.write_text("hello world", encoding="utf-8")
 
-        backend = SubprocessBackend(timeout_seconds=10.0)
+        backend = SubprocessBackend(timeout_seconds=_NORMAL_TIMEOUT_SECONDS)
         with backend.sandbox(arm_id="test") as box:
             result = box.run_skill("read_file", {"path": str(p)})
         assert "content" in result
@@ -118,7 +124,7 @@ class TestPathAudit:
         outside.write_text("outside", encoding="utf-8")
 
         backend = SubprocessBackend(
-            timeout_seconds=10.0,
+            timeout_seconds=_NORMAL_TIMEOUT_SECONDS,
             allowed_read_roots=[allowed],
         )
         with backend.sandbox(arm_id="test") as box:
@@ -140,7 +146,7 @@ class TestResourceLimitsUnix:
     def test_memory_limit_configured_no_crash_under_cap(self, tmp_path: Path):
         """Implementation note."""
         backend = SubprocessBackend(
-            timeout_seconds=10.0,
+            timeout_seconds=_NORMAL_TIMEOUT_SECONDS,
             max_memory_mb=512,
         )
         with backend.sandbox(arm_id="test") as box:
@@ -179,7 +185,7 @@ class TestBackwardCompat:
     def test_subprocess_mantle_has_local_api(self, tmp_path: Path):
         """Implementation note."""
         backend = SubprocessBackend(
-            timeout_seconds=10.0,
+            timeout_seconds=_NORMAL_TIMEOUT_SECONDS,
             allowed_read_roots=[tmp_path],
         )
         assert backend.allows_read(tmp_path / "a.txt") is True

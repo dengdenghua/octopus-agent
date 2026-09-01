@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+import pytest
 
 from runtime.platform.process.paths import (
     app_paths,
@@ -125,6 +128,10 @@ def test_bundled_market_skills_are_package_relative(monkeypatch, tmp_path):
     assert len(list(bundled.glob("*/SKILL.md"))) >= 3
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows keeps the current directory open and cannot model a deleted cwd",
+)
 def test_project_root_survives_a_deleted_cwd(monkeypatch, tmp_path):
     """A vanished working directory must not break path resolution.
 
@@ -155,8 +162,6 @@ def test_project_root_survives_a_deleted_cwd(monkeypatch, tmp_path):
         except OSError:
             pass
         else:  # pragma: no cover — platform keeps a live handle to the dir
-            import pytest
-
             pytest.skip("this platform still resolves a deleted cwd")
 
         assert project_root() == launch
