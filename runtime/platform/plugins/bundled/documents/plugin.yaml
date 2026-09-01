@@ -1,7 +1,7 @@
 name: documents
-version: 0.1.0
+version: 0.2.0
 description: >-
-  本地 docx 文档处理插件(创建 / 提取 / 转 Markdown / 元信息)。基于
+  本地 docx 文档处理插件(创建 / 提取 / 修改 / 转 Markdown / 元信息)。基于
   python-docx 独立自研,能力对标 OpenAI codex documents 插件,但实现完全
   原创——不包含任何 OpenAI 代码或提示词文本,无外部服务/connector 依赖。
 author: Octopus

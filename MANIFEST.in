@@ -8,6 +8,9 @@ recursive-include runtime/execution/all_skills *
 # licences, pages, and static assets are therefore executable package data,
 # not repository-only documentation.
 recursive-include runtime/platform/plugins/bundled *
+include runtime/platform/plugins/builtin-publishers.json
+recursive-exclude runtime/platform/plugins/bundled/narrative_studio *
+recursive-exclude runtime/platform/plugins/bundled/paper_trading *
 recursive-exclude runtime/sensing/gateway/agent_market_sources __pycache__ *.py[cod]
 recursive-exclude runtime/execution/all_skills __pycache__ *.py[cod]
 recursive-exclude runtime/platform/plugins/bundled __pycache__ *.py[cod]

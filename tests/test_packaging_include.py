@@ -25,44 +25,89 @@ _REPO = Path(__file__).resolve().parent.parent
 _REQUIRED_RUNTIME_WHEEL_FILES = {
     "runtime/core/cerebrum/react_execution_receipts.py",
     "runtime/execution/codex_backend/__init__.py",
+    "runtime/execution/codex_backend/_config_validation.py",
     "runtime/execution/codex_backend/_security_support.py",
     "runtime/execution/codex_backend/_transport.py",
+    "runtime/execution/codex_backend/account.py",
     "runtime/execution/codex_backend/approvals.py",
     "runtime/execution/codex_backend/backend.py",
     "runtime/execution/codex_backend/client.py",
+    "runtime/execution/codex_backend/command.py",
+    "runtime/execution/codex_backend/dynamic_tools.py",
     "runtime/execution/codex_backend/events.py",
+    "runtime/execution/codex_backend/model_profile.py",
+    "runtime/execution/codex_backend/paths.py",
+    "runtime/execution/codex_backend/responses_proxy.py",
+    "runtime/execution/codex_backend/role_context.py",
+    "runtime/execution/codex_backend/role_runner.py",
     "runtime/execution/codex_backend/security.py",
     "runtime/execution/codex_backend/types.py",
+    "runtime/execution/suckers/computer_macos.py",
+    "runtime/memory/cowork/_collaboration_project_projection.py",
+    "runtime/memory/cowork/_collaboration_project_actions.py",
+    "runtime/memory/cowork/_collaboration_room_write.py",
+    "runtime/memory/cowork/_collaboration_session_writes.py",
+    "runtime/memory/cowork/_group_blackboard.py",
+    "runtime/memory/cowork/_group_sqlite_coordination.py",
     "runtime/memory/cowork/_team_invitation_support.py",
     "runtime/memory/cowork/team_invitation_store.py",
+    "runtime/memory/threads/_state_mutation_lock.py",
+    "runtime/memory/threads/_permanent_deletion.py",
     "runtime/platform/process/thread_turn_claim.py",
     "runtime/platform/models/custom_model_selection.py",
+    "runtime/platform/io/transactional.py",
+    "runtime/platform/connectors/_token_refresher.py",
     "runtime/platform/plugins/_secure_fetch.py",
+    "runtime/platform/plugins/contribution_registry.py",
     "runtime/platform/plugins/workbench_activation.py",
+    "runtime/platform/plugins/workbench_package.py",
+    "runtime/platform/plugins/bundled/_office_io.py",
     "runtime/platform/plugins/bundled/documents/__init__.py",
     "runtime/platform/plugins/bundled/github/__init__.py",
-    "runtime/platform/plugins/bundled/paper_trading/_http_support.py",
-    "runtime/platform/plugins/bundled/paper_trading/live_push.py",
-    "runtime/platform/plugins/bundled/paper_trading/upstream_url.py",
+    "runtime/platform/plugins/bundled/pdf/__init__.py",
+    "runtime/platform/plugins/bundled/presentations/__init__.py",
+    "runtime/platform/plugins/bundled/spreadsheets/__init__.py",
     "runtime/projectos/_store_helpers.py",
+    "runtime/projectos/_store_message_actions.py",
+    "runtime/projectos/_store_project_deletion.py",
+    "runtime/projectos/_store_task_claims.py",
+    "runtime/projectos/_store_thread_bindings.py",
     "runtime/projectos/group_service.py",
     "runtime/projectos/message_actions.py",
+    "runtime/sensing/gateway/_computer_appshot_routes.py",
+    "runtime/sensing/gateway/_config_endpoints_codex.py",
     "runtime/sensing/gateway/_cowork_group_access.py",
     "runtime/sensing/gateway/_cowork_group_models.py",
+    "runtime/sensing/gateway/_cowork_group_room_ensure.py",
+    "runtime/sensing/gateway/_cowork_group_room_link.py",
     "runtime/sensing/gateway/_cowork_group_session.py",
+    "runtime/sensing/gateway/_device_flow_models.py",
     "runtime/sensing/gateway/_evolution_ops_insights.py",
+    "runtime/sensing/gateway/_projects_group_projections.py",
+    "runtime/sensing/gateway/_realtime_claim_aware_emitter.py",
     "runtime/sensing/gateway/_realtime_gateway_session.py",
     "runtime/sensing/gateway/_realtime_subagent_journal_items.py",
+    "runtime/sensing/gateway/_realtime_thread_delete_probe.py",
+    "runtime/sensing/gateway/_realtime_turn_idempotency.py",
     "runtime/sensing/gateway/_thread_state_auto_title.py",
+    "runtime/sensing/gateway/_thread_state_delete.py",
+    "runtime/sensing/gateway/_thread_state_search_projection.py",
+    "runtime/sensing/gateway/_team_room_binding.py",
+    "runtime/sensing/gateway/_team_room_creation.py",
+    "runtime/sensing/gateway/_team_room_delete.py",
+    "runtime/sensing/gateway/_team_room_persistence.py",
     "runtime/sensing/gateway/_team_rooms_access.py",
     "runtime/sensing/gateway/_team_rooms_state.py",
     "runtime/sensing/gateway/_team_tasks_access.py",
     "runtime/sensing/gateway/realtime_codex_backend.py",
     "runtime/sensing/gateway/realtime_interrupt_control.py",
+    "runtime/sensing/gateway/workbench_packages_router.py",
     "runtime/sensing/gateway/team_invitations_router.py",
     "runtime/sensing/gateway/team_rooms_models.py",
     "runtime/sensing/gateway/thread_access.py",
     "runtime/sensing/gateway/thread_workspace.py",
+    "runtime/safety/evolution/candidate_registry.py",
+    "runtime/safety/recovery/tenant_scope.py",
 }
 
 _REQUIRED_BUNDLED_WHEEL_FILES = {
@@ -72,24 +117,14 @@ _REQUIRED_BUNDLED_WHEEL_FILES = {
     "runtime/platform/plugins/bundled/github/LICENSE.txt",
     "runtime/platform/plugins/bundled/github/SKILL.md",
     "runtime/platform/plugins/bundled/github/plugin.yaml",
+    "runtime/platform/plugins/bundled/pdf/SKILL.md",
+    "runtime/platform/plugins/bundled/pdf/plugin.yaml",
+    "runtime/platform/plugins/bundled/presentations/SKILL.md",
+    "runtime/platform/plugins/bundled/presentations/plugin.yaml",
+    "runtime/platform/plugins/bundled/spreadsheets/SKILL.md",
+    "runtime/platform/plugins/bundled/spreadsheets/plugin.yaml",
     "runtime/platform/plugins/bundled/mx2025_viewer/page/index.html",
     "runtime/platform/plugins/bundled/mx2025_viewer/plugin.yaml",
-    "runtime/platform/plugins/bundled/narrative_studio/__init__.py",
-    "runtime/platform/plugins/bundled/narrative_studio/echo_adapter.py",
-    "runtime/platform/plugins/bundled/narrative_studio/mcp_server.py",
-    "runtime/platform/plugins/bundled/narrative_studio/models.py",
-    "runtime/platform/plugins/bundled/narrative_studio/page/index.html",
-    "runtime/platform/plugins/bundled/narrative_studio/plugin.yaml",
-    "runtime/platform/plugins/bundled/narrative_studio/skill_assets.py",
-    "runtime/platform/plugins/bundled/narrative_studio/skills/canon-review/SKILL.md",
-    "runtime/platform/plugins/bundled/narrative_studio/skills/continuity/SKILL.md",
-    "runtime/platform/plugins/bundled/narrative_studio/skills/narrative-authoring/SKILL.md",
-    "runtime/platform/plugins/bundled/narrative_studio/store.py",
-    "runtime/platform/plugins/bundled/narrative_studio/v2_routes.py",
-    "runtime/platform/plugins/bundled/paper_trading/README.md",
-    "runtime/platform/plugins/bundled/paper_trading/page/index.html",
-    "runtime/platform/plugins/bundled/paper_trading/page/watch.html",
-    "runtime/platform/plugins/bundled/paper_trading/plugin.yaml",
     "runtime/platform/plugins/bundled/paper_trading_replica/README.md",
     "runtime/platform/plugins/bundled/paper_trading_replica/page/index.html",
     "runtime/platform/plugins/bundled/paper_trading_replica/plugin.yaml",
@@ -101,10 +136,11 @@ _EXPECTED_BUNDLED_PLUGIN_IDS = {
     "documents",
     "github",
     "mx2025_viewer",
-    "narrative_studio",
-    "paper_trading",
     "paper_trading_replica",
+    "pdf",
+    "presentations",
     "project_wiki",
+    "spreadsheets",
     "whale_eye",
 }
 
@@ -130,6 +166,28 @@ _REQUIRED_TRACKED_RELEASE_FILES = (
         "frontend/config/public-asset-dedup.ts",
         "frontend/electron/desktop-config.cjs",
         "frontend/electron/desktop-protocol.cjs",
+        "extras/desktop/generate-codex-native-notices.py",
+        "extras/desktop/generate-codex-third-party-licenses.py",
+        "extras/desktop/prepare-codex-win.cjs",
+        "extras/desktop/licenses/codex-0.149.0/LICENSE",
+        "extras/desktop/licenses/codex-0.149.0/NATIVE_PROVENANCE.json",
+        "extras/desktop/licenses/codex-0.149.0/NATIVE_THIRD_PARTY_NOTICES.md",
+        "extras/desktop/licenses/codex-0.149.0/NOTICE",
+        "extras/desktop/licenses/codex-0.149.0/THIRD_PARTY_LICENSES-code-mode-host.html",
+        "extras/desktop/licenses/codex-0.149.0/THIRD_PARTY_LICENSES-codex-cli.html",
+        "extras/desktop/licenses/codex-0.149.0/THIRD_PARTY_LICENSES-windows-sandbox.html",
+        "extras/desktop/licenses/codex-0.149.0/THIRD_PARTY_LICENSES.md",
+        "extras/desktop/licenses/codex-0.149.0/cargo-about.hbs",
+        "extras/desktop/licenses/codex-0.149.0/cargo-about.toml",
+        "extras/desktop/licenses/ratatui-0.30.2/LICENSE",
+        "extras/desktop/licenses/ripgrep-15.2.0/COPYING",
+        "extras/desktop/licenses/ripgrep-15.2.0/LICENSE-MIT",
+        "extras/desktop/licenses/ripgrep-15.2.0/THIRD_PARTY_LICENSES-ripgrep.html",
+        "extras/desktop/licenses/ripgrep-15.2.0/THIRD_PARTY_LICENSES.md",
+        "extras/desktop/licenses/ripgrep-15.2.0/UNLICENSE",
+        "extras/desktop/licenses/ripgrep-15.2.0/cargo-about.hbs",
+        "extras/desktop/licenses/ripgrep-15.2.0/cargo-about.toml",
+        "extensions/octopus-browser-relay/cursor-overlay.js",
         "frontend/src/app/workspace/team/join/page.test.tsx",
         "frontend/src/components/workspace/collab/cowork-room-message-actions.tsx",
         "frontend/src/components/workspace/collab/cowork-room-system-card.tsx",
@@ -140,21 +198,52 @@ _REQUIRED_TRACKED_RELEASE_FILES = (
         "frontend/src/components/workspace/collab/invite-dialog.test.tsx",
         "frontend/src/components/workspace/community/community-assets.ts",
         "frontend/src/components/workspace/group-task-strategy.ts",
+        "frontend/src/components/workspace/automation-control-dock.test.tsx",
+        "frontend/src/components/workspace/automation-control-dock.tsx",
+        "frontend/src/components/workspace/chat-input-box/AutomationTargetControl.test.tsx",
+        "frontend/src/components/workspace/chat-input-box/AutomationTargetControl.tsx",
+        "frontend/src/components/workspace/coder-engine-control.test.tsx",
+        "frontend/src/components/workspace/coder-engine-control.tsx",
+        "frontend/src/components/browser/webview-adoption-lease.test.ts",
         "frontend/src/components/workspace/messages/message-list-timeline.test.tsx",
+        "frontend/src/components/workspace/realtime/group-project-capability.test.ts",
+        "frontend/src/components/workspace/realtime/group-project-capability.ts",
+        "frontend/src/components/workspace/realtime/conversation-empty-state.test.tsx",
+        "frontend/src/components/workspace/realtime/conversation-empty-state.tsx",
         "frontend/src/components/workspace/realtime/project-group-header-badge.test.tsx",
         "frontend/src/components/workspace/realtime/project-group-header-badge.tsx",
         "frontend/src/components/workspace/realtime/promote-group-to-project-dialog.test.tsx",
         "frontend/src/components/workspace/realtime/promote-group-to-project-dialog.tsx",
+        "frontend/src/components/workspace/realtime/realtime-group-header-layout.test.tsx",
+        "frontend/src/components/workspace/realtime/realtime-group-header-layout.tsx",
+        "frontend/src/components/workspace/realtime/work-group-project-continuity.test.tsx",
+        "frontend/src/components/workspace/settings/automation-capability-settings.test.tsx",
+        "frontend/src/components/workspace/settings/automation-capability-settings.tsx",
+        "frontend/src/components/workspace/settings/browser-automation-settings-page.tsx",
+        "frontend/src/components/workspace/settings/desktop-automation-settings-page.tsx",
         "frontend/src/components/workspace/team-mode-picker.test.tsx",
         "frontend/src/components/workspace/workspace-route-outlet.tsx",
         "frontend/src/core/auth/return-to.test.ts",
         "frontend/src/core/auth/return-to.ts",
         "frontend/src/core/collaboration/group-task-strategy-context.test.ts",
         "frontend/src/core/collaboration/group-task-strategy-context.ts",
+        "frontend/src/core/coder/api.test.ts",
+        "frontend/src/core/coder/api.ts",
         "frontend/src/core/cowork/hooks.test.ts",
         "frontend/src/core/cowork/mentions.test.ts",
         "frontend/src/core/cowork/mentions.ts",
+        "frontend/src/core/automation/target.test.ts",
+        "frontend/src/core/automation/target.ts",
+        "frontend/src/core/navigation/browser-cursor-overlay.test.ts",
+        "frontend/src/core/navigation/open-target.test.ts",
+        "frontend/src/core/navigation/open-target.ts",
         "frontend/src/core/projects/hooks.test.ts",
+        "frontend/src/core/realtime/realtime-send-contract.test.tsx",
+        "frontend/src/core/settings/automation-preferences.ts",
+        "frontend/src/core/settings/automation-status-api.ts",
+        "frontend/src/core/threads/optimistic-messages.test.ts",
+        "frontend/src/core/threads/optimistic-messages.ts",
+        "frontend/src/core/threads/realtime-send-regression.test.tsx",
         "frontend/src/core/teams/api.invites.test.ts",
         "tests/runtime/execution/codex_backend/test_security.py",
         "tests/test_audit_workflow_tool_policy.py",
@@ -163,6 +252,15 @@ _REQUIRED_TRACKED_RELEASE_FILES = (
         "tests/test_codex_backend_events.py",
         "tests/test_codex_execution_backend.py",
         "tests/test_codex_execution_backend_live.py",
+        "tests/test_coder_codex_control.py",
+        "tests/test_coder_role_routing.py",
+        "tests/test_codex_native_notices.py",
+        "tests/test_codex_dynamic_tools.py",
+        "tests/fixtures/codex_app_server_0_149/mcp_apps_approval_request.json",
+        "tests/fixtures/codex_app_server_0_149/mcp_form_request.json",
+        "tests/test_codex_responses_proxy.py",
+        "tests/test_codex_role_context.py",
+        "tests/test_computer_macos.py",
         "tests/test_desktop_config_packaging.py",
         "tests/test_documents_plugin.py",
         "tests/test_drive_codex_app_server.py",
@@ -171,20 +269,25 @@ _REQUIRED_TRACKED_RELEASE_FILES = (
         "tests/test_execution_metrics.py",
         "tests/test_github_plugin.py",
         "tests/test_hardened_verifier_smoke.py",
+        "tests/test_agent_world_cache.py",
         "tests/test_linked_team_room_acl.py",
         "tests/test_linux_hardened_verifier.py",
         "tests/test_linux_hardened_verifier_attacks.py",
         "tests/test_project_group_creation.py",
         "tests/test_project_group_join_approval.py",
         "tests/test_project_group_message_actions.py",
+        "tests/test_project_binding_lifecycle.py",
         "tests/test_react_parallel_dispatch.py",
         "tests/test_realtime_cross_worker_interrupt.py",
+        "tests/test_realtime_ownerless_local_acl.py",
         "tests/test_realtime_recovery_subscriptions.py",
+        "tests/test_realtime_send_integration.py",
         "tests/test_realtime_send_timeout.py",
         "tests/test_realtime_tool_audit_barrier.py",
         "tests/test_run_engine_comparison.py",
         "tests/test_source_provenance.py",
         "tests/test_team_invitation_security.py",
+        "tests/test_thread_state_permanent_delete.py",
         "tests/test_thread_turn_claim.py",
         "tests/test_trusted_verifier_controller.py",
         "tests/test_trusted_verifier_worker.py",
@@ -401,6 +504,23 @@ def _assert_bundled_plugins_in_wheel(
 ) -> None:
     missing = sorted(_REQUIRED_BUNDLED_WHEEL_FILES - packaged_names)
     assert not missing, "wheel omitted bundled plugin resources: " + ", ".join(missing)
+    remote_narrative = sorted(
+        name
+        for name in packaged_names
+        if name.startswith("runtime/platform/plugins/bundled/narrative_studio/")
+    )
+    assert not remote_narrative, (
+        "wheel must not embed the on-demand narrative plugin: " + ", ".join(remote_narrative)
+    )
+    remote_paper_trading = sorted(
+        name
+        for name in packaged_names
+        if name.startswith("runtime/platform/plugins/bundled/paper_trading/")
+    )
+    assert not remote_paper_trading, (
+        "wheel must not embed the on-demand paper-trading plugin: "
+        + ", ".join(remote_paper_trading)
+    )
 
     bundled_names = {
         name for name in packaged_names if name.startswith("runtime/platform/plugins/bundled/")
@@ -418,17 +538,22 @@ def _assert_bundled_plugins_in_wheel(
             sys.executable,
             "-c",
             (
-                "from runtime.platform.plugins.plugin_hub import PluginHub; "
-                "hub = PluginHub(); "
+                "from pathlib import Path; "
+                "import runtime.platform.plugins.plugin_hub as plugin_hub; "
+                "root = Path(plugin_hub.__file__).resolve().parent; "
+                "hub = plugin_hub.PluginHub("
+                "plugin_dir=Path.cwd() / 'empty-plugins', "
+                "bundled_plugin_dir=root / 'bundled', "
+                "activation_root=Path.cwd() / 'activation', "
+                "data_root=Path.cwd() / 'plugin-data'); "
                 "items = {item['id']: item for item in hub.discover()}; "
                 f"expected = set({expected}); "
                 "assert expected <= set(items), (expected, set(items)); "
                 "assert all(items[name]['bundled'] is True for name in expected); "
-                "narrative = hub.load('narrative_studio'); "
-                "assert narrative is not None; "
-                "assert narrative.version == '0.2.0'; "
+                "assert 'narrative_studio' not in items; "
+                "assert 'paper_trading' not in items; "
                 "assert 'documents' in items['documents']['tags']; "
-                "assert items['documents']['version'] == '0.1.0'; "
+                "assert items['documents']['version'] == '0.2.0'; "
                 "assert items['documents']['author'] == 'Octopus'; "
                 "assert 'github' in items['github']['tags']; "
                 "assert items['github']['version'] == '0.1.0'; "
