@@ -8,7 +8,6 @@ import {
   SparklesIcon,
   VideoIcon,
 } from "lucide-react";
-
 import type { Translations } from "./types";
 import { workspaceComputerZhCN } from "./workspace-computer";
 import { agentOperatorZhCN } from "./agent-operator";
@@ -72,7 +71,6 @@ export const zhCN: Translations = {
     stubResponseDescription: (method: string, path: string) =>
       `${method} ${path} 返回了桩数据。在真实后端接口启用前，请把当前工作区状态视为开发 fallback。`,
     openSidebarMenu: "打开侧栏菜单",
-    localPartnerModel: "本地伙伴模型(由 CLI 自身决定)",
     loadingWorkspace: "正在加载工作区...",
   },
 
@@ -90,7 +88,7 @@ export const zhCN: Translations = {
 
     createYourOwnSkill: "创建你自己的 Agent Skill",
     createYourOwnSkillDescription:
-      "创建自定义 Agent Skill 是 Octopus 的核心功能之一,Octopus\n会根据你的描述自动生成代码,你可以随时修改和优化\n这个 Skill,让它更好地为你服务。",
+      "创建自定义 Agent Skill 是 EchoAI 的核心功能之一,EchoAI\n会根据你的描述自动生成代码,你可以随时修改和优化\n这个 Skill,让它更好地为你服务。",
 
     scenes: {
       daily: "日常办公",
@@ -264,6 +262,7 @@ export const zhCN: Translations = {
     reviewAssigned: (label: string) => `审核交给：${label}`,
     taskCompleted: "任务完成",
     taskFailed: "任务未完成",
+    previousAttemptRecovered: "先前尝试失败，后续已恢复",
     taskOutputs: "任务产物",
     viewProcess: "查看过程",
     makeSimilar: "做同款",
@@ -358,13 +357,13 @@ export const zhCN: Translations = {
     collaboratorsCountUnit: "人",
     collaboratorsHelp:
       "默认只由被 @ 的 AI 回复；加入协作者后可选择分工协作或并行共创。",
-    collaboratorsSearchPlaceholder: "搜索 Agent / 本地伙伴",
+    collaboratorsSearchPlaceholder: "搜索 Agent / 已安装能力",
     collaboratorsTaskFallback: "团队任务",
     collaboratorsCoreGroup: "白幽灵小队",
     collaboratorsOnDemandGroup: "按需能力",
     collaboratorsOnDemandBadge: "按需",
     collaboratorsOnDemandHint:
-      "专家、数位分身和本地伙伴只加入当前对话，不会切换你的主身份。",
+      "专家、数位分身和已安装能力只加入当前对话，不会切换你的主身份。",
     responseMode: "AI 参与方式",
     responseModeTeamRequired: "请先添加 AI 成员，再选择分工协作或并行共创",
     groupTaskTools: "发起任务与添加内容",
@@ -383,9 +382,26 @@ export const zhCN: Translations = {
     codexSpec: "Spec",
     codexGoal: "Goal",
     composerInsertions: "插入到输入框",
-    insertCodexPlan: "插入 Plan 标识",
+    uploadImages: "上传图片",
+    projectFiles: "项目文件",
+    workspaceFiles: (workspace: string) => `${workspace} 的文件`,
+    noWorkspaceFiles: "请先选择项目文件夹，再浏览工作区文件。",
+    uploadDeviceFiles: "从设备选择文件",
+    commands: "命令",
+    plugins: "插件",
+    skills: "技能",
+    availablePlugins: "可用插件",
+    managePlugins: "管理插件",
+    explorePlugins: "探索更多插件",
+    noAvailablePlugins: "暂无已启用插件",
+    searchSkills: "搜索技能",
+    manageSkills: "管理技能",
+    noAvailableSkills: "暂无已启用技能",
+    capabilityLoadFailed: "能力列表加载失败",
+    removeCapability: (name: string) => `移除 ${name}`,
+    insertCodexPlan: "计划模式",
     insertCodexSpec: "插入 Spec 标识",
-    insertCodexGoal: "插入 Goal 标识",
+    insertCodexGoal: "持续目标",
     insertBrowserSurface: "插入 Browser 标识",
     insertChromeSurface: "插入 Chrome 标识",
     workflow: "工作流",
@@ -395,7 +411,7 @@ export const zhCN: Translations = {
     collapse: "收起",
     materialNote: "材料备注",
     url: "URL",
-    file: "文件",
+    file: "添加文件",
     text: "文本",
     textTitle: "文本标题",
     pasteTextMaterial: "粘贴文本材料",
@@ -441,6 +457,32 @@ export const zhCN: Translations = {
     permissionAcceptEdits: "接受编辑",
     permissionConfirm: "默认",
     addImage: "添加图片（粘贴 / 拖拽 / 选择）",
+    addAppshot: "附加当前窗口快照",
+    capturingAppshot: "正在附加当前窗口…",
+    appshotHint: "一次性添加截图与可访问文本",
+    appshotSource: "当前窗口 Appshot",
+    appshotFailed: "无法读取当前窗口",
+    windowTools: "窗口",
+    automationTarget: "操作目标",
+    chooseAutomationTarget: "选择浏览器或桌面窗口",
+    currentChromeTab: "当前 Chrome 标签页",
+    currentDesktopWindow: "桌面窗口",
+    loadingAutomationTargets: "正在发现可操作窗口…",
+    noAutomationTargets: "暂无可操作窗口，请先连接浏览器扩展或打开应用窗口。",
+    clearAutomationTarget: "取消固定目标",
+    automationOnline: "浏览器在线",
+    automationOffline: "浏览器离线",
+    automationReconnecting: "正在重连",
+    automationDesktop: "桌面控制",
+    automationIdle: "待命",
+    automationRunning: "Agent 正在控制",
+    automationPaused: "已暂停",
+    automationPause: "暂停",
+    automationResume: "继续",
+    automationTakeover: "我来操作",
+    automationEvidence: "操作记录",
+    automationNoEvidence: "还没有操作记录",
+    automationControlFailed: "无法更新控制状态",
     removeImage: "移除",
     readme: "README",
   },
@@ -483,26 +525,26 @@ export const zhCN: Translations = {
     categoryWriting: "写作",
     categoryTravel: "旅行",
     aiMembersLabel: "初始 AI 协作成员",
-    aiMembersDescription: "创建时直接加入项目群；至少保留一位，之后仍可调整。",
+    aiMembersDescription: "创建时直接加入工作群；至少保留一位，之后仍可调整。",
     aiMembersSelected: (count) => `已选 ${count} 位`,
     agentsLoading: "正在加载可用 AI…",
     agentsUnavailable: "暂时无法加载列表，将使用默认通用助手创建。",
     humanMembersLabel: "真人成员",
     humanMembersAfterCreate: "创建后邀请",
     humanMembersDescription:
-      "创建完成会直接进入项目群，再通过安全邀请链接选择成员或访客。",
-    invitePeopleOnArrival: "进入项目群后立即邀请",
+      "创建完成会直接进入工作群，再通过安全邀请链接选择成员或访客。",
+    invitePeopleOnArrival: "进入工作群后立即邀请",
     creatorRoleLabel: "你的项目角色",
     creatorRole: "项目负责人 · 群主",
     creatorRoleDescription: "你拥有项目管理、AI 编排和真人邀请权限。",
-    hint: "项目、项目群和右侧工作台会一次创建并自动绑定。",
+    hint: "工作群、项目能力和右侧工作台会一次创建并自动绑定。",
     cancel: "取消",
     create: "创建项目",
   },
 
   promoteProjectDialog: {
-    trigger: "转为项目",
-    title: "把当前工作群转为项目",
+    trigger: "建立项目计划",
+    title: "为当前工作群建立项目计划",
     description:
       "保留当前成员和全部聊天记录，并为这个群增加里程碑、事项、资料与项目工作台。",
     nameLabel: "项目名称",
@@ -512,8 +554,33 @@ export const zhCN: Translations = {
     cancel: "取消",
     submit: "创建并绑定",
     submitting: "正在创建…",
-    success: "当前工作群已转为项目群",
-    failed: "转为项目失败，请重试",
+    success: "当前工作群已开启项目能力",
+    failed: "建立项目计划失败，请重试",
+  },
+
+  projectCapability: {
+    enabled: "项目已开启",
+    startPlan: "建立项目计划",
+    openWorkbench: "打开项目工作台",
+    moreActions: "项目操作",
+    detach: "关闭项目能力",
+    detachConfirmTitle: "关闭这个群的项目能力？",
+    detachConfirmDescription:
+      "项目计划将从当前工作群移出；群成员、邀请、聊天记录和当前链接都会保留。",
+    detachConfirmAction: "关闭项目能力",
+    forceDetachConfirmTitle: "项目仍在执行，仍要关闭项目能力？",
+    forceDetachConfirmDescription:
+      "项目执行与状态将和当前工作群分离，但项目记录不会删除，仍可在项目列表中查看。群成员与全部聊天记录保持不变。",
+    forceDetachConfirmAction: "仍然关闭",
+    detached: "项目能力已关闭，工作群和聊天记录均已保留",
+    detachCancelled: "未关闭项目能力",
+    detachFailed: "关闭项目能力失败，请重试",
+    detachBindingChanged: "当前群绑定的项目已变化，请刷新后重试",
+    statusPlanning: "筹备中",
+    statusRunning: "进行中",
+    statusBlocked: "有风险",
+    statusDone: "已完成",
+    statusFailed: "异常",
   },
 
   // Clarification Questionnaire
@@ -606,7 +673,7 @@ export const zhCN: Translations = {
     readFile: "查看文件",
     updateFile: "更新文件",
     runAction: "执行操作",
-    teammateTimeout: "团队成员暂未返回，Octopus 接管",
+    teammateTimeout: "团队成员暂未返回，EchoAI 接管",
     factSummaryPath: (value: string) => `已确认：${value}`,
     factSummaryCount: (value: string) => `已确认：共 ${value} 项`,
     factSummaryStatus: (value: string) => `已确认：${value}`,
@@ -930,6 +997,7 @@ export const zhCN: Translations = {
       close: "关闭右侧窗口",
       open: "打开右侧窗口",
     },
+    viewActions: "视图控制",
     finalArtifact: {
       generated: "最终报告已生成",
       view: "查看",
@@ -940,7 +1008,7 @@ export const zhCN: Translations = {
       idle: "REC：录制本轮对话并学习为可复用回放技能",
     },
     replay: {
-      titleDefault: "Octopus 运行回放",
+      titleDefault: "EchoAI 运行回放",
       footer: "自包含离线回放",
     },
     composer: {
@@ -949,8 +1017,7 @@ export const zhCN: Translations = {
       legacyOnDemandAttachments:
         "历史角色会话不再直接执行；已打开新任务，请重新添加附件后发送。",
       placeholderCode: "描述要修改、排查、重构或验证的代码任务...",
-      placeholderNew:
-        "直接说需求：@ 引用文件，/ 调用技能，支持多 Agent 协作...",
+      placeholderNew: "描述任务，@ 引用文件，/ 调用技能...",
       placeholderOctopus: "今天帮你做些什么？ @ 引用对话文件，/ 调用技能与指令",
     },
     recorder: {
@@ -1373,6 +1440,7 @@ export const zhCN: Translations = {
     computerViewEmptyDesc:
       "当任务派发给子智能体执行时，可以在这里查看子智能体的独立电脑操作记录。",
     visibilityPanelTitle: "能力决策",
+    visibilityPanelAttention: "需要处理",
     visibilityPanelEmpty: "本轮暂无能力决策",
     visibilityStep: "决策",
     scrollToBottom: "滚动到底部",
@@ -1672,6 +1740,40 @@ export const zhCN: Translations = {
     emptyHint: "生成代码后将自动显示预览",
     showPanel: "显示预览",
     hidePanel: "隐藏预览",
+    inspectElement: "选择元素",
+    cancelInspect: "取消选择",
+    inspectHint: "点击页面元素 · Esc 取消",
+    aiEditTitle: "让 AI 修改所选元素",
+    aiEditCancel: "取消元素修改",
+    aiEditPlaceholder: "例如：把标题改得更有科技感，并保持现有布局",
+    aiEditSend: "发送修改",
+    aiEditQueued: "已发送给 AI，将在当前任务中修改并刷新预览",
+    aiEditUnavailable: "当前任务暂时无法接收修改，请稍后重试",
+    officeEdit: "AI 修改",
+    officeSelect: "选择内容",
+    officeCancelSelect: "取消选择",
+    officeSelected: "已选择",
+    officeEditTitle: "修改这份办公文件",
+    officeEditPlaceholder: "例如：把第三页改成风险矩阵，并保持现有配色",
+    officeEditHint: "修改会发送到当前任务，完成后自动刷新预览",
+    previewError: "预览加载失败，请检查登录状态后重试",
+    previewRetry: "重新加载预览",
+    officeFidelity: "原貌预览",
+    humanEdit: "直接编辑",
+    humanEditing: "正在人工编辑页面",
+    humanUnsaved: "有未保存修改",
+    humanSave: "保存页面",
+    humanCancel: "放弃修改",
+    humanSaved: "页面修改已保存",
+    humanUndo: "撤销上次保存",
+    humanRestored: "已恢复到保存前版本",
+    humanConflict: "Agent 已更新页面，你的修改尚未保存",
+    humanReloadLatest: "放弃并载入最新版",
+    humanUnavailable: "这个 HTML 不是可写的任务产物",
+    humanDiscardTitle: "放弃未保存的页面修改？",
+    humanDiscardDescription:
+      "离开当前预览会丢失尚未保存的人工修改，此操作无法撤销。",
+    humanDiscardConfirm: "放弃并离开",
   },
 
   // Code Status
@@ -1745,6 +1847,7 @@ export const zhCN: Translations = {
     navMcp: "MCP",
     navEvolution: "自进化",
     navProjects: "项目管理",
+    navDesign: "设计画布",
     navNarrative: "叙事工坊",
     navPlugins: "插件",
     navHR: "HUB",
@@ -1759,6 +1862,9 @@ export const zhCN: Translations = {
     groupSystem: "系统",
     // Agent / team footer
     noAgents: "暂无可用智能体",
+    loadingAgents: "正在加载智能体…",
+    agentsLoadFailed: "智能体列表加载失败",
+    retryAgents: "重新加载",
     remainingCredits: "剩余积分",
     logout: "退出登录",
     noTeams: "暂无协作组",
@@ -1774,7 +1880,6 @@ export const zhCN: Translations = {
     openAgentHudFor: (name: string) => `打开 ${name} 的 HUD`,
     currentAgent: "当前 Agent",
     soloChat: "单人对话",
-    localCliPartners: "本地 CLI 伙伴",
     oneOnOneTask: "一对一任务",
     soloTasks: "单人任务",
     groupTasks: "协作任务",
@@ -1948,8 +2053,8 @@ export const zhCN: Translations = {
       "限制智能体能同时保留的标签页数量。使用 retain=true 打开的页面在任务结束后不会被自动关闭。",
     saveConfig: "保存配置",
     configSaved: "配置已保存",
-    installExtensionTitle: "安装 Octopus Browser Relay",
-    installExtensionDesc: "安装扩展以将浏览器连接到 Octopus。",
+    installExtensionTitle: "安装 EchoAI Browser Relay",
+    installExtensionDesc: "安装扩展以将浏览器连接到 EchoAI。",
     step1Title: "打开 Chrome 扩展管理页面并启用开发者模式",
     step1Desc: "在浏览器地址栏输入并打开扩展管理页面",
     step1Action: "打开 chrome://extensions",
@@ -1965,7 +2070,7 @@ export const zhCN: Translations = {
     relayDisconnected: "扩展未连接",
     relayVersion: "版本",
     compareTitle: "选择连接方式",
-    compareDesc: "两种方式均可将浏览器连接到 Octopus，选择最适合你的方案。",
+    compareDesc: "两种方式均可将浏览器连接到 EchoAI，选择最适合你的方案。",
     compareFeature: "功能",
     compareExtension: "扩展方式",
     compareCdp: "CDP 直连",
@@ -1998,7 +2103,7 @@ export const zhCN: Translations = {
     allVersions: "所有版本",
     // Page Agent integration
     pageAgentDesc:
-      "Page Agent 是阿里巴巴开源的 GUI Agent 框架，通过文本 DOM 操作控制网页，无需截图或多模态模型。通过 MCP 协议集成到 Octopus。",
+      "Page Agent 是阿里巴巴开源的 GUI Agent 框架，通过文本 DOM 操作控制网页，无需截图或多模态模型。通过 MCP 协议集成到 EchoAI。",
     pageAgentDocs: "查看文档",
     pageAgentFeature1: "页内 JS 集成",
     pageAgentFeature1Desc: "无需 Python、无需 headless 浏览器，纯前端注入。",
@@ -2040,7 +2145,7 @@ export const zhCN: Translations = {
     extConNeedExtension: "需要安装一个 Chrome 扩展。",
     cdpProNoExtension: "无需安装任何扩展。",
     cdpProChrome144: "Chrome 144+ 即可用。",
-    cdpConReAuth: "每次重启 Octopus 后需重新授权。",
+    cdpConReAuth: "每次重启 EchoAI 后需重新授权。",
     cdpConChrome144Only: "仅支持 Chrome 144+。",
   },
 
@@ -2243,7 +2348,7 @@ export const zhCN: Translations = {
     reasonExternal: "外部触发",
     resumedTitlePrefix: "已恢复 · 任务",
     resumedDescWithThread:
-      "已跳到原对话 · 发任何消息自动从检查点接续(+15 轮)。",
+      "已返回原对话，将从保存的检查点继续；所需运行额度会按暂停原因续接。",
     resumedTitleClearMark: "已清暂停标记 · 任务",
     resumedDescNoThread: "无 thread_id 记录 · 手动去对应线程发消息即可接续。",
     clearedPrefix: "已清除 · 任务",
@@ -2251,11 +2356,11 @@ export const zhCN: Translations = {
     pauseRequestedDesc: "下轮迭代后生效,状态会自动切到'已暂停'。",
     agentLabel: "智能体：",
     threadLabel: "会话：",
-    tokensLabel: "tokens",
-    costLabel: "cost",
+    tokensLabel: "累计处理量",
+    costLabel: "成本",
     budgetDialogTitle: "已到达预算检查点",
     budgetDialogDesc:
-      "任务已在越过预算护栏前保存 checkpoint。你可以追加预算继续，或者先保持暂停。",
+      "任务状态已经保存。累计处理量额度与美元成本额度相互独立；只有你明确填写美元金额时才会提高成本上限。",
     budgetResumedDesc: "已追加预算并从 checkpoint 继续，不需要从头开始。",
     extraTokensKLabel: "Token(k)",
     extraUsdLabel: "费用($)",
@@ -2282,7 +2387,7 @@ export const zhCN: Translations = {
     loadoutReady: "能力已接入",
     saved: "Agent 配置已保存",
     saveFailed: (msg) => `保存失败：${msg}`,
-    officialFaction: "Octopus 指挥部",
+    officialFaction: "EchoAI 指挥部",
     authorFaction: (author) => `${author} Lab`,
     categoryRoles: {
       assistant: "支援",
@@ -2553,11 +2658,11 @@ export const zhCN: Translations = {
       "你好!我是你的智能体 {name},请帮我定义我的 **SOUL**?",
     save: "保存智能体",
     saving: "正在保存智能体...",
-    saveRequested: "已收到保存请求,Octopus 将自动创建必要的文件和配置",
+    saveRequested: "已收到保存请求,EchoAI 将自动创建必要的文件和配置",
     saveHint: "你可以继续与智能体对话来完善它的功能,或者现在就开始使用",
     saveCommandMessage:
       "如果你想修改智能体的配置,可以直接编辑工作目录中的文件。系统提示词存储在 SOUL.md 中,你可以使用 setup_agent 命令来更新配置",
-    agentCreatedPendingRefresh: "智能体已创建,Octopus 正在刷新以应用更改",
+    agentCreatedPendingRefresh: "智能体已创建,EchoAI 正在刷新以应用更改",
     more: "更多操作",
     agentCreated: "智能体创建成功!",
     startChatting: "开始对话",
@@ -2781,13 +2886,13 @@ export const zhCN: Translations = {
 
   // Workspace
   workspace: {
-    officialWebsite: "访问 Octopus 官网",
-    githubTooltip: "查看 Octopus 的 Github 仓库",
+    officialWebsite: "访问 EchoAI 官网",
+    githubTooltip: "查看 EchoAI 的 Github 仓库",
     settingsAndMore: "设置和更多",
-    visitGithub: "在 Github 上关注 Octopus",
+    visitGithub: "在 Github 上关注 EchoAI",
     reportIssue: "报告问题",
     contactUs: "联系我们",
-    about: "关于 Octopus",
+    about: "关于 EchoAI",
     modes: {
       chat: "对话",
       team: "团队",
@@ -2799,7 +2904,7 @@ export const zhCN: Translations = {
       badge: "Agent OS 控制中心",
       headline: "赋予智能体目标，然后监督工作。",
       description:
-        "Octopus 将目标转化为计划，在限定运行时中执行工具，记录轨迹，并为下一次运行保留有用的记忆。",
+        "EchoAI 将目标转化为计划，在限定运行时中执行工具，记录轨迹，并为下一次运行保留有用的记忆。",
       newTask: "新任务",
       codeTask: "代码任务",
       systemLoop: {
@@ -2874,6 +2979,11 @@ export const zhCN: Translations = {
     noChangesArtifacts: "暂无变更产物",
     noPreviewArtifacts: "暂无预览内容",
     retry: "重试",
+    messageQueued: "排队中",
+    messageSending: "发送中",
+    messageSendFailed: "发送失败",
+    previousMessagePending: "上一条消息仍在发送，请等待确认后重试",
+    steeringTurnUnavailable: "原任务已不再运行，请重新发送为一条新消息",
     editResend: "编辑并重发",
     regenerateResponse: "重新生成回复",
     forkFromHere: "从这里派生新会话",
@@ -2913,7 +3023,7 @@ export const zhCN: Translations = {
 
   // Page titles (document title)
   pages: {
-    appName: "Mimic",
+    appName: "EchoAI",
     chats: "对话",
     newChat: "新对话",
     untitled: "未命名",
@@ -2938,7 +3048,7 @@ export const zhCN: Translations = {
     writeFile: "写入文件",
     clickToViewContent: "点击查看内容",
     writeTodos: "创建 To-do 列表",
-    skillInstallTooltip: "点击安装此技能到 Octopus 工作区",
+    skillInstallTooltip: "点击安装此技能到 EchoAI 工作区",
     toastSkillInstallFailed: "安装技能失败",
     toastExportConversationFailed: "导出对话失败",
   },
@@ -2956,20 +3066,33 @@ export const zhCN: Translations = {
     thinking: "AI 正在思考",
     thoughtProcess: "实时工作日志",
     connectionLost: "本次回复已中断，可继续发送消息或重试。",
-    networkLost: "网络连接中断，任务已自动暂停。发送消息即可从断点恢复。",
+    networkLost:
+      "模型连接中断；已完成的步骤和子 Agent 结果已保留，重试即可继续。",
+    modelAuthRequiredTitle: "模型登录已失效",
+    modelAuthRequired:
+      "当前模型凭据无效或尚未登录。请在模型设置中重新登录，或切换到其他可用模型。",
+    subagentCapabilityMismatchTitle: "子 Agent 能力不匹配",
+    subagentCapabilityMismatch:
+      "所选子 Agent 不具备这项任务所需的能力，因此没有执行。请更换合适的 Agent 后重试。",
+    modelRateLimitedTitle: "模型暂时限流",
+    modelRateLimited:
+      "当前模型请求过多或额度已达上限。可稍后重试，或切换到其他可用模型继续。",
+    openModelSettings: "打开模型设置",
     turnFailed: "本轮任务未完成。可继续发送消息或重试。",
     guardBlocked: "结果已保留，但完成条件未通过。请按下方原因继续收敛。",
     lifecycleFailed: "任务运行状态未能可靠落盘，请重试或重启后端。",
     workspaceWriteRequired:
       "该任务要求修改项目文件，但本轮没有产生有效的文件变更。",
     verificationRequired:
-      "代码改动需要先完成验证，Octopus 才会结束本轮。请运行测试、lint、typecheck 或构建后继续。",
+      "代码改动已保留，但暂未取得验证结果。EchoAI 已尝试自动验证；请查看建议命令后继续。",
+    verificationRunFailed:
+      "自动验证已运行但未通过。代码改动已保留，请查看下方失败命令与输出。",
     environmentBlocked: "任务被环境约束阻塞，原因见下方。",
     environmentBlockedAuthorizeCommon: "授权「常用域名」并重试",
     environmentBlockedAuthorizeFull: "授权完整网络并重试",
     blockedOnUser: "任务需要你的输入才能继续。",
     streamEndpointUnavailable:
-      "当前后端未启用或暂不可用对话/团队流接口，请启动完整 Octopus 后端或检查前端代理。",
+      "当前后端未启用或暂不可用对话/团队流接口，请启动完整 EchoAI 后端或检查前端代理。",
     iteration: (count: number) => `第 ${count} 轮`,
     toolCalls: (count: number) => `${count} 次调用`,
     generating: "生成中…",
@@ -3066,7 +3189,7 @@ export const zhCN: Translations = {
     noResults: "没有找到匹配的操作",
     actions: "操作",
     keyboardShortcuts: "键盘快捷键",
-    keyboardShortcutsDescription: "使用键盘快捷键更高效地使用 Octopus",
+    keyboardShortcutsDescription: "使用键盘快捷键更高效地使用 EchoAI",
     openCommandPalette: "打开命令面板",
     commandPaletteDescription: "搜索要执行的命令...",
     toggleSidebar: "切换侧边栏",
@@ -3152,11 +3275,13 @@ export const zhCN: Translations = {
   // Settings
   settings: {
     title: "设置",
-    description: "管理你的 Octopus 账户和偏好设置",
+    description: "管理你的 EchoAI 账户和偏好设置",
     sections: {
       account: "账户",
       subscription: "订阅与用量",
       appearance: "外观",
+      general: "通用",
+      conversation: "对话",
       memory: "记忆与个人规则",
       tools: "工具",
       skills: "技能",
@@ -3217,9 +3342,9 @@ export const zhCN: Translations = {
         emptyState: "尚未配置审批规则，可直接使用下方表单添加第一条。",
         loading: "加载规则...",
         loadFailed: "加载规则失败",
-        addTitle: "新增规则",
-        effectLabel: "效果",
-        effectAllow: "放行",
+        addTitle: "新增审批规则",
+        effectLabel: "调用处理方式",
+        effectAllow: "允许调用",
         effectDeny: "拒绝",
         toolLabel: "工具名（支持通配符）",
         toolPlaceholder: "例如 read_* 或 exec_shell",
@@ -3227,7 +3352,7 @@ export const zhCN: Translations = {
         argsPlaceholder: "例如 rm -rf",
         reasonLabel: "理由（可选）",
         reasonPlaceholder: "在审计日志里展示",
-        addButton: "添加规则",
+        addButton: "保存审批规则",
         adding: "添加中...",
         addError: "添加规则失败",
         deleteButton: "删除",
@@ -3302,7 +3427,7 @@ export const zhCN: Translations = {
     memory: {
       title: "记忆",
       description:
-        "管理 Octopus 保存的事实与对话摘要，并控制何时记录、何时用于回答。",
+        "管理 EchoAI 保存的事实与对话摘要，并控制何时记录、何时用于回答。",
       empty: "还没有记忆信息",
       rawJson: "原始 JSON",
       exportButton: "导出记忆",
@@ -3311,7 +3436,7 @@ export const zhCN: Translations = {
       importConfirmTitle: "确认导入记忆？",
       importConfirmDescription: "导入的记忆将覆盖现有的记忆数据",
       importFileLabel: "选择记忆文件",
-      importInvalidFile: "文件格式无效，请选择由 Octopus 导出的 JSON 记忆文件",
+      importInvalidFile: "文件格式无效，请选择由 EchoAI 导出的 JSON 记忆文件",
       importFileTooLarge: "记忆文件不能超过 5 MB",
       importSuccess: "记忆导入成功",
       manualFactSource: "手动添加",
@@ -3464,7 +3589,7 @@ export const zhCN: Translations = {
       createSkill: "创建技能",
       emptyTitle: "还没有自定义技能",
       emptyDescription:
-        "自定义 Agent Skill 可以放在 Octopus 工作区的 `/skills/custom` 目录中",
+        "自定义 Agent Skill 可以放在 EchoAI 工作区的 `/skills/custom` 目录中",
       emptyButton: "了解如何创建技能",
       enabledDescription:
         "已启用的技能会进入 Agent 可用工具目录；关闭后模型不可见，也不能执行。",
@@ -3487,16 +3612,16 @@ export const zhCN: Translations = {
     notification: {
       title: "通知",
       description:
-        "窗口不在前台时，Octopus 会在任务完成后提醒你，适合需要切换去处理其他工作的长任务。",
+        "窗口不在前台时，EchoAI 会在任务完成后提醒你，适合需要切换去处理其他工作的长任务。",
       enableNotification: "启用通知",
       permissionGranted: "权限已允许",
       permissionPrompt: "需要授权",
       permissionDenied: "权限被拒绝",
       requestPermission: "请求通知权限",
       deniedHint:
-        "通知权限已被拒绝，请前往系统或浏览器的通知设置，为 Octopus 开启通知。",
+        "通知权限已被拒绝，请前往系统或浏览器的通知设置，为 EchoAI 开启通知。",
       testButton: "发送测试通知",
-      testTitle: "Mimic",
+      testTitle: "EchoAI",
       testBody: "这是一条测试通知。",
       testSent: "测试通知已发送",
       requestFailed: "无法请求通知权限",
@@ -3747,16 +3872,16 @@ export const zhCN: Translations = {
       },
     },
     octopusMix: {
-      title: "Octopus Mix · 多模型协同",
+      title: "EchoAI Mix · 多模型协同",
       description:
-        "选 2+ 个模型作为 proposer(各自独立起草、无工具),再选一个 aggregator 综合出最终答案。聊天里选 “Octopus Mix” 即走此配置;proposer 留空则用默认模型 × 数量。",
+        "选 2+ 个模型作为 proposer(各自独立起草、无工具),再选一个 aggregator 综合出最终答案。聊天里选 “EchoAI Mix” 即走此配置;proposer 留空则用默认模型 × 数量。",
       proposersLabel: "Proposers(参与起草的模型)",
       noCandidates: "暂无可选模型",
       aggregatorLabel: "Aggregator",
       aggregatorDefault: "默认",
       nLabel: "无池时数量",
       saveButton: "保存",
-      saveSuccess: "Octopus Mix 配置已保存",
+      saveSuccess: "EchoAI Mix 配置已保存",
       saveFailed: (status: number) => `保存失败 (${status})`,
       saveFailedFallback: "保存失败",
     },
@@ -3897,7 +4022,7 @@ export const zhCN: Translations = {
     reject: "拒绝",
     approveExecute: "批准并执行",
     startQuest: "开始 Quest",
-    questDesc: "描述一个复杂任务,让 Octopus 自主规划、执行和验证",
+    questDesc: "描述一个复杂任务,让 EchoAI 自主规划、执行和验证",
     requirementPlaceholder: "描述你想要完成的任务...",
     executionPlan: "执行计划",
     verificationPassed: "验证通过",
@@ -4040,7 +4165,7 @@ export const zhCN: Translations = {
       listFailed: "插件列表读取失败",
       installFailed: "插件安装失败",
       statusFailed: "插件状态更新失败",
-      removeConfirm: "从 Octopus 移除此插件？本地文件不会被删除。",
+      removeConfirm: "从 EchoAI 移除此插件？本地文件不会被删除。",
       removeFailed: "插件移除失败",
       enabled: "启用",
       disabled: "停用",
@@ -4050,7 +4175,7 @@ export const zhCN: Translations = {
       emptyWeb: "当前 localhost 预览无法访问 Electron 插件接口。",
       placeholderTitle: "插件目录占位",
       placeholderDesc:
-        "本地预览不能访问桌面端插件接口，但这里会展示 Octopus 支持的插件类型。",
+        "本地预览不能访问桌面端插件接口，但这里会展示 EchoAI 支持的插件类型。",
       placeholderBrowserTitle: "浏览器插件",
       placeholderBrowserDesc:
         "Chrome / Edge 扩展，让 Agent 能读取页面、点击控件和截图。",
@@ -4154,14 +4279,6 @@ export const zhCN: Translations = {
     createAgentCardDesc: "创建自定义角色",
     addAgent: "添加",
     newAgent: "新建角色",
-    importAgentPack: "导入 Agent Pack",
-    importAgentPackDesc: "从本地 Claude / Codex plugin pack 预览并导入 Agent。",
-    importAgentPackPlaceholder:
-      "输入本地 pack 根目录路径，例如 F:\\packs\\kimi-agent",
-    previewAgentPack: "预览",
-    importSelectedAgent: "导入选中 Agent",
-    noImportableAgents: "这个 pack 没有发现可导入的 agents/ Markdown Agent。",
-    importedAgent: (name: string, path: string) => `已导入 ${name} · ${path}`,
     discoverTagline: "浏览、配置和召唤可协作的角色",
     toastInstalled: (name: string) => `"${name}" 已添加`,
     toastCapabilityPackInstalled: (name: string, count: number) =>
@@ -4173,19 +4290,11 @@ export const zhCN: Translations = {
       `评分 ${rating}，${count} 条评价`,
     downloadCountAriaLabel: (count: string) => `下载量 ${count}`,
     authorPrefix: "作者:",
-    packContentLabels: {
-      plugins: "插件",
-      apps: "应用",
-      agents: "角色",
-      skills: "技能",
-      commands: "命令",
-      mcp: "MCP",
-    },
   },
 
   // Agent World Unified
   agentWorldUnified: {
-    pageTitle: "角色中心",
+    pageTitle: "HUB",
     pageDescription: "管理本地角色，并从商城接入新的协作伙伴。",
     addAgentButton: "添加角色",
     roleLibrary: "角色库",
@@ -4202,12 +4311,22 @@ export const zhCN: Translations = {
     installSuccessWithFailure: (installed: number, failed: number) =>
       `已加入 ${installed} 个角色，${failed} 个失败`,
     installFailed: "安装失败，请稍后重试",
-    connectLocalPartner: "接入本地伙伴",
     enterprise: "企业版",
     localTab: "本地",
     enabledTab: "已启用",
     marketplaceTab: "商城",
     categoryFilterLabel: "按角色类型筛选",
+    domainFilterLabel: "按业务领域筛选",
+    domains: {
+      all: "全部",
+      general: "通用",
+      coding: "编程",
+      research: "研究",
+      creative: "创意",
+      automation: "自动化",
+      ecommerce: "电商",
+      finance: "财经",
+    },
     loadingAgents: "正在加载角色…",
     loadAgentsFailed: "角色列表加载失败，请稍后重试。",
     retryAgents: "重新加载",
@@ -4217,26 +4336,6 @@ export const zhCN: Translations = {
   },
 
   // Local Agent Connect Dialog
-  localAgentConnect: {
-    title: "接入本地伙伴",
-    description:
-      "自动检测本机已安装的 Agent 工具，注册到 Hub 后就可以在团队任务里直接指派。",
-    detecting: "正在检测本地伙伴...",
-    detectFailed: "本地伙伴检测失败",
-    retryDetect: "重新检测",
-    statusConnected: "已接入",
-    statusDetected: "已检测",
-    statusNotDetected: "未检测到",
-    availableCount: (count: number) => `可接入 ${count} 个`,
-    cancel: "取消",
-    connectSelected: (count: number) => `接入 ${count} 个 Agent`,
-    noPartnerSelected: "请选择一个已检测到的本地伙伴",
-    registerSuccess: (count: number) => `已接入 ${count} 个本地伙伴`,
-    alreadyExists: "这些本地伙伴已经在 Hub 里了",
-    noPartnersAvailable: "没有可接入的本地伙伴，请先安装对应本地工具",
-    registerFailed: "接入本地伙伴失败",
-    partnerNameAria: (name: string) => `${name} 名称`,
-  },
 
   // Agent World Card
   agentWorldCard: {},
@@ -4380,7 +4479,7 @@ export const zhCN: Translations = {
     },
     extensionMarketplace: {
       title: "拓展",
-      subtitle: "管理 Octopus 浏览器拓展能力",
+      subtitle: "管理 EchoAI 浏览器拓展能力",
       installLocal: "安装本地拓展",
       refreshAriaLabel: "刷新拓展",
       closeAriaLabel: "关闭拓展",
@@ -4406,7 +4505,7 @@ export const zhCN: Translations = {
       errorInstallFailed: "拓展安装失败",
       errorStatusFailed: "拓展状态更新失败",
       errorRemoveFailed: "拓展移除失败",
-      confirmRemove: "从 Octopus 移除此拓展？本地文件不会被删除。",
+      confirmRemove: "从 EchoAI 移除此拓展？本地文件不会被删除。",
       categoryFeatured: "精选",
       categoryEfficiency: "效率",
       categoryResearch: "研究",
@@ -4433,16 +4532,16 @@ export const zhCN: Translations = {
       openDirectory: "打开目录",
       extPluginTitle: "外部浏览器插件",
       extPluginDesc:
-        "给 Chrome / Edge 使用。插件连接本机 Octopus，让外部网页也能被 Agent 读取和操作。",
+        "给 Chrome / Edge 使用。插件连接本机 EchoAI，让外部网页也能被 Agent 读取和操作。",
       dragToBookmarks: "拖到书签栏",
       dragToBookmarksDesc: "轻量 Page Agent 模式，适合临时连接当前网页。",
       dragToBookmarksTitle: "拖到 Chrome/Edge 书签栏",
       step1Temporary:
-        "1. 临时使用：把上面的 Octopus Agent 拖到书签栏，在目标网页点击它。",
+        "1. 临时使用：把上面的 EchoAI Agent 拖到书签栏，在目标网页点击它。",
       step2LongTerm:
         '2. 长期使用：打开 Chrome/Edge 扩展管理页，启用"开发者模式"。',
       step3LoadExtension:
-        '3. 点击"加载已解压的扩展程序"，选择 Octopus 插件目录。',
+        '3. 点击"加载已解压的扩展程序"，选择 EchoAI 插件目录。',
       pluginDirectory: "插件目录",
       pluginDirectoryOpened: (path: string) => `插件目录已打开: ${path}`,
       pluginPathCopied: "插件目录路径已复制",
@@ -4613,7 +4712,7 @@ export const zhCN: Translations = {
       searchOrUrl: "搜索或输入网址",
       siteInfo: "站点信息",
       siteInfoDesc:
-        "登录态、Cookie 和本地数据会保留在 Octopus 浏览器中，并在标签页之间共享。",
+        "登录态、Cookie 和本地数据会保留在 EchoAI 浏览器中，并在标签页之间共享。",
       clearData: "清除数据",
       openExternally: "外部打开",
       confirmClearSiteData:
@@ -4725,7 +4824,20 @@ export const zhCN: Translations = {
     surfaceModeScreenshot: "截图",
     selectDevicePreset: "选择设备预设",
     continueInFullBrowser: "在完整浏览器中继续",
-    takeoverButton: "打开 AI 浏览器",
+    takeoverButton: "AI 浏览器",
+    switchToLivePreview: "切换到实时预览",
+    switchToLivePreviewDescription: "在可交互页面中继续浏览",
+    switchToScreenshot: "切换到截图预览",
+    switchToScreenshotDescription: "查看并操作最新页面截图",
+    sessionHealthyLabel: "会话运行正常",
+    sessionAttentionLabel: "会话需要关注",
+    endSession: "结束浏览会话",
+    annotateScreenshot: "标注截图并发送到对话",
+    annotationButton: "标注",
+    annotationPlaceholder: "写下要修改的地方，可点击截图标记位置",
+    annotationInputLabel: "截图标注说明",
+    sendAnnotation: "发送",
+    cancelAnnotation: "取消标注",
     sessionNeedsAttention: (issues) => `浏览器会话需要关注：${issues}`,
     reconnectButton: "重连",
     semanticSnapshotFallback: "页面语义快照",
@@ -4738,11 +4850,16 @@ export const zhCN: Translations = {
     clickMode: "单击",
     doubleClickMode: "双击",
     localServices: "本地服务",
+    noLocalServices: "暂未发现运行中的本地服务",
     scanButton: "扫描",
     serviceTypeFrontend: "前端",
     serviceTypeBackend: "后端",
     serviceTypeOther: "服务",
     scanLocalServices: "扫描本地服务",
+    localPreviewMode: "本地预览",
+    localPreviewRunning: (port) => `端口 ${port} · 运行中`,
+    localPreviewRefresh: "刷新预览",
+    localPreviewOpenExternal: "在系统浏览器中打开",
     selectedAction: (action) => `已选中 ${action}`,
     locateActionTitle: "在截图上定位该动作",
     deselectTitle: "取消选中",
@@ -4907,7 +5024,8 @@ export const zhCN: Translations = {
 
   // Intent-based mode auto-switch
   modeIntent: {
-    suggestSwitch: (modeLabel: string) => `建议切换到「${modeLabel}」模式？`,
+    suggestSwitch: (modeLabel: string) =>
+      `检测到相关意图，后续任务使用「${modeLabel}」模式？`,
     switch: "切换",
     ignore: "忽略",
     autoSwitched: (modeLabel: string) => `已自动切换到「${modeLabel}」模式`,
@@ -5393,12 +5511,13 @@ export const zhCN: Translations = {
       roomRequired: "请先创建工作群，再邀请真人",
       joinPolicyLabel: "加入方式",
       joinPolicyApply: "申请后加入",
-      joinPolicyApplyDesc: "项目群默认先由群主审批，再开放项目与聊天内容。",
+      joinPolicyApplyDesc:
+        "工作群默认先由群主审批，再开放群聊与已启用的项目内容。",
       joinPolicyDirect: "直接加入",
       joinPolicyDirectDesc: "拿到有效链接的同租户成员可立即加入。",
       directJoinConfirmTitle: "确认开放直接加入？",
       directJoinConfirmDescription:
-        "切换后，当前所有仍有效的邀请链接都会立即允许成员进入项目群，无需群主审批。",
+        "切换后，当前所有仍有效的邀请链接都会立即允许成员进入这个工作群，无需群主审批。",
       directJoinConfirmAction: "开放直接加入",
       directJoinConfirmCancel: "继续审批",
       policySaveFailed: "保存加入方式失败",
@@ -5638,13 +5757,13 @@ export const zhCN: Translations = {
 
   intelligencePanel: {
     examplePrompts: [
-      "每天跟踪 Octopus Agent 相关 GitHub release、issue 和竞品动态，只保留和产品决策有关的变化",
+      "每天跟踪 EchoAI Agent 相关 GitHub release、issue 和竞品动态，只保留和产品决策有关的变化",
       "每周汇总 AI Agent、浏览器自动化、多智能体框架的新论文和开源项目，过滤重复新闻",
       "关注三个竞品的价格、插件生态、企业版功能变化，发现重要更新时提醒我",
     ],
     goalLabel: "描述你想持续追踪的内容",
     goalPlaceholder:
-      "例如：每天跟踪 Octopus Agent、browser-use 和 OpenAI Agent SDK 的 release、issue 与重要讨论，只保留影响产品路线的变化。",
+      "例如：每天跟踪 EchoAI Agent、browser-use 和 OpenAI Agent SDK 的 release、issue 与重要讨论，只保留影响产品路线的变化。",
     subscriptionName: "订阅名称",
     keywords: "关键词（用逗号分隔）",
     cadence: "执行频率",
@@ -5719,6 +5838,7 @@ export const zhCN: Translations = {
   // Public Thinking Status
   publicThinkingStatus: {
     waitingForModel: "思考中",
+    firstResponseSlow: "首个响应较慢，任务仍在等待",
     modelWorking: "思考中...",
     thinkingCompleted: "思考已完成",
     slowResponse: "还在继续，稍慢一些",
@@ -5939,10 +6059,10 @@ export const zhCN: Translations = {
   // Onboarding
   onboarding: {
     title: "新手引导",
-    welcomeToOctopus: "欢迎使用 Octopus",
+    welcomeToOctopus: "欢迎使用 EchoAI",
     yourAIPlatform: "你的 AI 智能体平台",
     welcomeDesc:
-      "Octopus 是一个开源的超级智能体平台，可以编排子智能体、记忆和沙箱来完成几乎任何事情 \u2014 由可扩展的技能驱动。",
+      "EchoAI 是一个开源的超级智能体平台，可以编排子智能体、记忆和沙箱来完成几乎任何事情 \u2014 由可扩展的技能驱动。",
     chatModes: "任务能力",
     chatModesDesc: "从一个任务开始，按需要接入能力和协作者",
     modeChat: "对话",
@@ -6152,7 +6272,7 @@ export const zhCN: Translations = {
     },
     technicalDetails: "技术细节",
     createPluginPrompt:
-      "使用 $plugin-creator 创建一个新的 Octopus 插件。\n请先询问插件名称、用途、是否包含 skills/apps/MCP，然后 scaffold 到个人插件目录，补齐 manifest，并验证插件可被市场识别。",
+      "使用 $plugin-creator 创建一个新的 EchoAI 插件。\n请先询问插件名称、用途、是否包含 skills/apps/MCP，然后 scaffold 到个人插件目录，补齐 manifest，并验证插件可被市场识别。",
   },
 
   // Local skill directory panel
@@ -6315,7 +6435,7 @@ export const zhCN: Translations = {
   // Bundle Info
   bundleInfo: {
     title: "构建信息",
-    appVersion: "Octopus 版本",
+    appVersion: "EchoAI 版本",
     license: "开源许可",
     environment: "环境",
     vite: "Vite",
@@ -6343,6 +6463,9 @@ export const zhCN: Translations = {
     autoModelDescription: "让系统根据任务类型自动选择最合适的模型",
     autoModelBadge: "智能",
     longContextHint: "使用 100 万上下文",
+    contextLength: "上下文长度",
+    contextStandard: "标准",
+    contextMax: "Max",
   },
 
   // Account Settings
@@ -6351,7 +6474,7 @@ export const zhCN: Translations = {
     octAccount: "官方账号",
     available: "可用",
     refreshing: "刷新中",
-    refresh: "刷新",
+    refresh: "刷新积分余额",
     byType: "按类型",
     granted: "累计",
     expiredOrFrozen: "已过期 / 冻结",
@@ -6374,7 +6497,7 @@ export const zhCN: Translations = {
     confirmDelete: "确认删除",
     factoryResetTitle: "恢复出厂设置",
     factoryResetDescription:
-      "清除本地对话、工作区、记忆、安装状态和浏览器侧 Octopus 缓存，保留源码与内置角色。",
+      "清除本地对话、工作区、记忆、安装状态和浏览器侧 EchoAI 缓存，保留源码与内置角色。",
     factoryResetDialogDescription:
       "这会删除本机运行数据和本地缓存，操作后需要重启或刷新应用。源码、内置角色目录不会被删除。",
     factoryResetTypeToConfirm: "输入 RESET OCTOPUS 确认",
@@ -6409,7 +6532,7 @@ export const zhCN: Translations = {
     totalCredits: (total) => `共 ${total} 积分`,
     billingUnavailableTitle: "套餐暂时不可用",
     billingUnavailableDescription:
-      "当前 Octopus 账号已登录，但计费服务尚未连接。请重试刷新账号关联与可购买套餐。",
+      "当前 EchoAI 账号已登录，但计费服务尚未连接。请重试刷新账号关联与可购买套餐。",
     subscriptionUnavailable: "订阅信息暂时无法加载。",
     plansUnavailable: "套餐加载失败。",
     noPlans: "当前暂无可购买的套餐。",
@@ -6652,7 +6775,7 @@ export const zhCN: Translations = {
   // App Authorization page
   appAuth: {
     pageTitle: "应用授权",
-    pageSubtitle: "授权第三方平台，让 Octopus 代表你访问数据。",
+    pageSubtitle: "授权第三方平台，让 EchoAI 代表你访问数据。",
     searchPlaceholder: "搜索应用授权...",
     connectedCount: (n: number) => `${n} 个已连接`,
     tabAll: "全部",
@@ -6786,6 +6909,10 @@ export const zhCN: Translations = {
       `已加载 ${rules} 条规则${statsReset ? " · 统计已重置" : ""}`,
     reloadError: (error: string) => `错误: ${error}`,
     fetchFailed: "请求失败",
+    dataLoading: "正在加载反射数据…",
+    dataUnavailable: "反射数据暂时无法加载。",
+    dataRefreshFailed: "刷新失败，当前显示上次成功加载的数据。",
+    retryButton: "重试",
     reloadFailed: "重新加载失败",
     statTry: "尝试",
     statHit: "命中",
@@ -6795,6 +6922,7 @@ export const zhCN: Translations = {
     statLastHourHits: "上小时命中",
     sparklineTitle: "反射命中 · 最近 60 分钟 · 粒度 1 分钟",
     sparklineEmpty: "最近 60 分钟无反射命中",
+    sparklineUnavailable: "反射趋势暂时无法加载。",
     rulesTableTitle: "规则",
     responseTiersTitle: "响应层级",
     colRule: "规则",
@@ -6806,6 +6934,7 @@ export const zhCN: Translations = {
     colRate: "比率",
     colLast: "最后",
     noRulesLoaded: "未加载任何规则。",
+    rulesUnavailable: "规则数据暂时无法加载。",
     tierEnabled: "已启用",
     tierDisabled: "已禁用",
     tierSize: "大小",
@@ -6900,6 +7029,9 @@ export const zhCN: Translations = {
     addendumAppliedTitle: "当前已应用的附录",
     addendumLive: "运行中",
     addendumNone: "无",
+    stateLoading: "加载中…",
+    stateUnavailable: "状态不可用",
+    addendumUnavailable: "附录状态暂时无法加载；现有设置没有改变。",
     addendumClearButton: "清除（手动）",
     addendumBytes: (size: number) => `${size} 字节`,
     knobIterations: "迭代次数",
@@ -6921,6 +7053,8 @@ export const zhCN: Translations = {
     canaryTitle: "Canary / 回滚",
     canaryRefresh: "刷新",
     canaryEmpty: "暂无 canary 状态",
+    canaryUnavailable: "Canary 状态暂时无法加载；现有数据没有改变。",
+    canaryCountsUnavailable: "活跃 — · 已回滚 — · 总计 —",
     canaryCounts: (active: number, rolledBack: number, total: number) =>
       `活跃 ${active} · 已回滚 ${rolledBack} · 总计 ${total}`,
     canaryPhase: (phase: string) => `阶段 ${phase}`,
@@ -7040,6 +7174,72 @@ export const zhCN: Translations = {
     journalRow: (task: string, arm: string) => `任务=${task} 策略=${arm}`,
     subtitle:
       "运行时自省面板 · 并行协作 / 黑板 / 日志流 / 自进化 / 上下文预算 / 成本",
+    shell: {
+      startTask: "开始一次任务",
+      runReviewTitle: "运行复盘",
+      runReviewDescription: "先看任务是否顺畅，哪里报错，哪里值得回看。",
+      liveEventsTitle: "实时事件",
+      liveEventsDescription: "并行协作、黑板和日志流合并成一个事件视图。",
+      resourcesTitle: "资源与成本",
+      resourcesDescription: "上下文预算、令牌消耗和成本汇总放在一起看。",
+      systemTitle: "系统状态",
+      systemDescription: "自进化、诊断和后台状态统一收口。",
+      overviewTab: "总览",
+      eventsTab: "事件流",
+      resourcesTab: "资源与成本",
+      systemTab: "系统",
+      overviewTitle: "先从总览开始",
+      overviewDescription:
+        "把当前后台的健康、事件、资源和系统状态分成四个视角，扫一眼就知道该去哪里。",
+      openNewTask: "打开一次新任务",
+      eventsEyebrow: "事件流",
+      eventsTitle: "运行、协作和日志放到一起看",
+      eventsDescription:
+        "这部分保留了原有的运行复盘、协作、黑板和日志，但不再把它们拆成一长排标签。",
+      resourcesEyebrow: "资源与成本",
+      resourcesGroupTitle: "先看预算，再看账单",
+      resourcesGroupDescription:
+        "把上下文预算和花费放在同一个层级里，减少来回切换。",
+      systemEyebrow: "系统",
+      systemGroupTitle: "把后台状态和自进化收口",
+      systemGroupDescription:
+        "诊断不再单独占一个孤岛标签，而是和自进化一起作为系统视图。",
+    },
+    toolEffects: {
+      title: "外部动作回执",
+      description: "识别重复执行、节点接管和必须人工核对的外部副作用。",
+      retryAuthorizedSuccess: "已允许一次受 fencing token 保护的重试",
+      retryAuthorizationFailed: "放行失败",
+      pendingReview: (count: number) => `${count} 项待核对`,
+      noPendingReview: "无待核对项",
+      refreshAriaLabel: "刷新外部动作回执",
+      backendLabel: "后端",
+      sharedAcrossHosts: "跨节点共享",
+      localCoordination: "本机协调",
+      committedLabel: "已提交",
+      runningLabel: "执行中",
+      loadFailed: (error: string) => `回执状态读取失败：${error}`,
+      empty: "暂无外部动作回执；工具执行后会自动出现在这里。",
+      unknownTool: "未知工具",
+      receiptMeta: (task: string, step: number, token: number) =>
+        `任务 ${task} · 步骤 ${step} · token ${token}`,
+      reviewAndRetry: "核对后重试",
+      collapsedHistory: "已收起历史提交记录，仅保留需关注项与最近 6 条",
+      confirmTitle: "确认外部动作没有发生",
+      confirmDescription:
+        "只有在外部系统、文件或远程服务中确认该动作没有成功后才能放行。系统会核对 fencing token，页面过期时不会误操作新回执。",
+      reasonPlaceholder: "填写核对依据，例如：支付平台确认没有生成订单。",
+      cancel: "取消",
+      submitting: "正在核对状态…",
+      confirmRetry: "确认未发生并允许重试",
+      states: {
+        claimed: "已占用",
+        started: "执行中",
+        committed: "已提交",
+        indeterminate: "需核对",
+        retryAuthorized: "已放行一次",
+      },
+    },
     swarmCardTitle: "Agent 协作会话 · 实时技能调用",
     noConcurrentTasks: "暂无并发任务",
     noConcurrentTasksHint:
@@ -7117,6 +7317,7 @@ export const zhCN: Translations = {
     // Regeneration panel
     loading: "加载中…",
     errorPrefix: "错误:",
+    crossTenantAdminRequired: "需要跨租户管理员权限。",
     trajectoryTotal: "轨迹总数",
     failureCount: "失败数",
     regenProducers: {
@@ -7271,7 +7472,7 @@ export const zhCN: Translations = {
   evolutionPanel: {
     title: "自进化状态",
     description:
-      "Octopus 会在任务结束后复盘，把稳定有用的经验带到下一次任务里。这里展示它目前学到了什么、会怎样影响之后的执行。",
+      "EchoAI 会在任务结束后复盘，把稳定有用的经验带到下一次任务里。这里展示它目前学到了什么、会怎样影响之后的执行。",
     summaryEmpty: "还在积累经验",
     summaryReady: (learned: number, total: number) =>
       `已从 ${total} 次任务中沉淀 ${learned} 条可复用经验`,
@@ -7296,7 +7497,7 @@ export const zhCN: Translations = {
     statAllTrajsTooltip: (total: number) =>
       `${total} 个历史任务已进入复盘池。样本越多，经验越接近稳定规律，而不是单次偶然结果。`,
     statAllTrajsDesc:
-      "这里统计已经进入复盘池的历史任务。Octopus 会从这些样本里寻找稳定做法和风险模式。",
+      "这里统计已经进入复盘池的历史任务。EchoAI 会从这些样本里寻找稳定做法和风险模式。",
     statAllTrajsPoints: (total: number, learned: number) => [
       `${total} 个样本已进入复盘池，用来判断哪些规律足够稳定。`,
       `${learned} 条经验已沉淀完成，后续同类任务会自动参考。`,
@@ -7325,7 +7526,7 @@ export const zhCN: Translations = {
     noMitigationsHint:
       "还没有发现稳定重复的问题。这里不是错误日志，而是“反复出现、值得下次避开”的模式；等某类错误多次出现后，会沉淀成避坑提醒。",
     noMemoriesHint:
-      "还没有足够稳定的成功经验。当前 0 条表示还没有某个做法连续成功到可以复用；Octopus 不会因为一次偶然成功就把它写进记忆。",
+      "还没有足够稳定的成功经验。当前 0 条表示还没有某个做法连续成功到可以复用；EchoAI 不会因为一次偶然成功就把它写进记忆。",
     linesSuffix: (n: number) => `${n} 条`,
     forgetLineTitle: "遗忘这条（让系统忘记这次学到的内容）",
     forgetLineButton: "忘记",
@@ -7363,7 +7564,7 @@ export const zhCN: Translations = {
   privacySettings: {
     identityLockTitle: "身份锁 · Identity Lock",
     identityLockDesc:
-      "开启时 · 模型回复里的厂家 / 型号名（Claude / Kimi / Anthropic / 月之暗面 等）会被替换成 Octopus · 用户看到的永远是产品身份。关闭后进入开发模式 · LLM 真身会原样显示 · 方便调 prompt / 验证路由。",
+      "开启时 · 模型回复里的厂家 / 型号名（Claude / Kimi / Anthropic / 月之暗面 等）会被替换成 EchoAI · 用户看到的永远是产品身份。关闭后进入开发模式 · LLM 真身会原样显示 · 方便调 prompt / 验证路由。",
     lockedTag: "LOCKED",
     unlockedTag: "UNLOCKED",
     sourceLabel: "source",
@@ -7403,7 +7604,7 @@ export const zhCN: Translations = {
     efficiencyModeDesc: "优先使用云端高性能模型，响应更快、能力更强。",
     privacyMode: "隐私模式",
     privacyModeDesc: "优先使用本地模型，数据不离开本机。",
-    detectButton: "检测",
+    detectButton: "重新检测设备能力",
     recommendedTag: "推荐",
     enabledTag: "已启用",
     deviceLabel: "设备：",
@@ -7412,7 +7613,7 @@ export const zhCN: Translations = {
     // 路径黑名单
     pathDenyTitle: "不可读取文件夹",
     pathDenyDesc: "添加后，Agent 将拒绝读取或写入这些路径下的任何文件。",
-    addPathButton: "新增",
+    addPathButton: "添加不可读取文件夹",
     pathDenyEmpty: "暂无 — 默认黑名单（.vscode / AppData / .cache 等）已生效",
     pathActionAria: (path: string) => `操作 ${path}`,
     pathDeleteButton: "删除",
@@ -7573,13 +7774,13 @@ export const zhCN: Translations = {
   // Register page
   registerPage: {
     loadingText: "加载中...",
-    badgeText: "创建你的 Octopus 账户",
+    badgeText: "创建你的 EchoAI 账户",
     heroTitleLine1: "加入后立即开始",
     heroTitleLine2: "多智能体工作流",
     heroDescription:
       "建立自己的工作区，接入技能、工具和模型，把研究、协作与自动化任务统一到一个平台里。",
     cardTitle: "创建账户",
-    cardDescription: "加入 Octopus 开始你的智能体之旅",
+    cardDescription: "加入 EchoAI 开始你的智能体之旅",
     usernameLabel: "用户名",
     usernamePlaceholder: "至少 3 个字符",
     emailLabel: "邮箱（可选）",
@@ -7632,6 +7833,9 @@ export const zhCN: Translations = {
       sendFailed: "发送失败",
       fillRequired: "请填写手机号和验证码",
       emailFillRequired: "请填写邮箱和验证码",
+      emailRequired: "请输入邮箱地址",
+      codeRequired: "请输入验证码",
+      invalidCode: "请输入 6 位数字验证码",
       loginFailed: "登录失败",
       enterFailed: "进入失败",
       gatewayNotEnabled:
@@ -7657,7 +7861,7 @@ export const zhCN: Translations = {
       privacyPolicy: "隐私政策",
     },
     page: {
-      title: "安全访问你的 Octopus 工作区",
+      title: "安全访问你的 EchoAI 工作区",
       subtitle: "登录后继续你的",
       description:
         "继续你的研究、编码、协作与自动化任务，在统一工作区里管理上下文、技能与执行结果。",
@@ -7791,8 +7995,8 @@ export const zhCN: Translations = {
   },
 
   hero: {
-    releaseBadge: "Octopus 2.0 已发布",
-    withOctopus: "与 Octopus 一起",
+    releaseBadge: "EchoAI 2.0 已发布",
+    withOctopus: "与 EchoAI 一起",
     heroDescription:
       "一个开源的 SuperAgent 框架，能做研究、写代码、产内容。借助沙箱、记忆、工具、技能和子智能体，它可以处理从几分钟到几小时不等的不同层级任务。",
   },
@@ -8007,11 +8211,27 @@ export const zhCN: Translations = {
 
   share: {
     share: "分享",
-    saveImage: "存为图片",
-    copyImage: "复制图片",
-    imageSaved: "已存为图片",
-    imageCopied: "图片已复制",
-    imageFailed: "生成图片失败",
+    shareTask: "分享任务",
+    shareDescription: "生成公开只读快照，不包含推理、工具参数和本地路径",
+    wechat: "微信",
+    moments: "朋友圈",
+    copyLink: "复制链接",
+    qrCode: "二维码",
+    openInBrowser: "浏览器",
+    creatingLink: "正在生成分享链接…",
+    linkCopied: "分享链接已复制",
+    linkFailed: "生成分享链接失败",
+    wechatQrTitle: "分享到微信",
+    momentsQrTitle: "分享到朋友圈",
+    qrTitle: "分享二维码",
+    wechatQrHint: "打开微信扫一扫，扫描二维码后发送给好友。",
+    momentsQrHint: "使用微信扫描二维码，打开后可分享到朋友圈。",
+    qrHint: "扫描二维码打开公开任务。",
+    localOnlyHint: "当前是本地地址，仅本机可访问；部署到公网后可直接分享。",
+    stopSharing: "取消公开分享",
+    sharingStopped: "已取消公开分享",
+    stopSharingFailed: "取消分享失败",
+    unavailable: "请先发送一条消息，再分享这个任务",
     exportReplay: "导出可回放 HTML",
   },
 
@@ -8032,9 +8252,10 @@ export const zhCN: Translations = {
     applyButton: "申请加入",
     applying: "提交申请中...",
     approvalRequired: "需要群主审批",
-    approvalRequiredDescription: "申请通过前不会显示项目工作台和群聊内容。",
+    approvalRequiredDescription:
+      "申请通过前不会显示群聊内容及已启用的项目工作台。",
     requestPendingTitle: "申请已提交",
-    requestPendingDescription: "群主审批后，这里会自动进入项目群。",
+    requestPendingDescription: "群主审批后，这里会自动进入工作群。",
     requestSubmitted: "加入申请已提交",
     requestRejected: "加入申请已被拒绝",
     requestWithdrawn: "加入申请已撤回",
@@ -8504,13 +8725,13 @@ export const zhCN: Translations = {
   desktop: {
     disabledTitle: "桌面助手未开启",
     disabledDescription:
-      "Octopus 默认进入欢迎、登录与工作区。需要处理系统桌面文件时，可以单独开启透明桌面助手。",
+      "EchoAI 默认进入欢迎、登录与工作区。需要处理系统桌面文件时，可以单独开启透明桌面助手。",
     enableButton: "开启桌面助手",
     pluginSettingsButton: "打开插件设置",
     backToWorkspaceButton: "回到工作区",
     header: {
       workspaceTooltip: "打开工作台",
-      brand: "Mimic",
+      brand: "EchoAI",
       accountModels: "官方模型",
       desktopAssistant: "桌面助手",
       desktopCount: (count) => `桌面 ${count || "--"}`,
@@ -8773,7 +8994,7 @@ export const zhCN: Translations = {
       "当前打开的是网页环境，所以右键菜单安装/移除会保持禁用。切到桌面版后，这两项才会真正生效。",
     contextMenuTitle: "系统右键菜单",
     contextMenuDescription:
-      '在 Windows 桌面空白处右键显示 "Octopus 一键整理桌面"。',
+      '在 Windows 桌面空白处右键显示 "EchoAI 一键整理桌面"。',
     installButton: "安装右键命令",
     installingButton: "安装中",
     removeButton: "移除",
@@ -8786,7 +9007,7 @@ export const zhCN: Translations = {
     backToWorkspace: "回到工作区",
     confirmRemoveTitle: "移除系统右键菜单？",
     confirmRemoveDescription:
-      "将从 Windows 桌面右键菜单中移除 Octopus 一键整理命令。",
+      "将从 Windows 桌面右键菜单中移除 EchoAI 一键整理命令。",
   },
 
   // Knowledge page
@@ -8993,9 +9214,9 @@ export const zhCN: Translations = {
       colType: "类型",
       colItems: "项目",
       footerOnline:
-        "常用位置与 Octopus NAS 已接入。本地数据库只保存路径、缩略图、OCR 文本和向量索引。",
+        "常用位置与 EchoAI NAS 已接入。本地数据库只保存路径、缩略图、OCR 文本和向量索引。",
       footerOffline:
-        "常用位置可直接浏览；Octopus NAS 正等待连接。本地数据库只保存路径、缩略图、OCR 文本和向量索引。",
+        "常用位置可直接浏览；EchoAI NAS 正等待连接。本地数据库只保存路径、缩略图、OCR 文本和向量索引。",
       folderType: "文件夹",
     },
     sources: {

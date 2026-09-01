@@ -138,6 +138,7 @@ Self-evolution subsystem — biomimetic alias: *Regeneration*.
 | `rule_extractor.py` | — |
 | `scheduler.py` | — |
 | `skill_forge.py` | — |
+| `tenant_scope.py` | Tenant-safe journal reads for learning and regeneration. |
 | `variant_evaluator.py` | — |
 | `workflow_applier.py` | — |
 | `workflow_rewriter.py` | — |
@@ -421,6 +422,17 @@ Self-evolution subsystem — biomimetic alias: *Regeneration*.
 | class | `class UnsafeSkillPromotionError(ValueError)` | Raised when a forged public skill would wrap dangerous tools. |
 | class | `class ForgeConfig` |  |
 | class | `class SkillForge` |  |
+
+### `tenant_scope.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def authoritative_scope_context(scope)` | Serialize a server-resolved scope for trusted in-process context. |
+| func | `def trusted_scope_from_user_context(user_context)` | Recover only the private scope marker stamped by a server boundary. |
+| func | `def trusted_scope_from_session(session)` | Recover a complete principal tuple from a server-owned Session. |
+| func | `def is_legacy_unscoped_event(event)` | Return ``True`` only when an event carries no ownership identity. |
+| func | `def read_learning_events(journal, event_type, scope)` | Read journal events without implicitly crossing tenant boundaries. |
+| func | `def read_learning_journal(journal, scope)` | Read every learnable event under the same fail-closed policy. |
 
 ### `variant_evaluator.py`
 

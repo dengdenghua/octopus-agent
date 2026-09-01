@@ -1,5 +1,5 @@
 import type { ChatStatus } from "ai";
-import { memo, useMemo, type ReactNode } from "react";
+import { memo, useCallback, useMemo, type ReactNode } from "react";
 
 import { getBackendBaseURL } from "@/core/config";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
@@ -16,8 +16,6 @@ import type {
 } from "@/core/research/api";
 import type { ReasoningEffort } from "@/core/threads";
 import type { UploadedFileInfo } from "@/core/uploads";
-import { cn } from "@/lib/utils";
-
 import type { ReasoningMode } from "./reasoning-mode";
 import {
   ModeSelector,
@@ -35,6 +33,7 @@ import { ChatComposer } from "./chat-input-box/ChatComposer";
 import { ModeIntentSuggestion } from "./chat-input-box/mode-intent-suggestion";
 import type { GroupTaskStrategy } from "./group-task-strategy";
 import type { MentionMemberInput } from "./mention-autocomplete";
+import type { AutomationTarget } from "@/core/computer/api";
 
 /**
  * Simplified chat composer for the /workspace/realtime route. Same visual
@@ -53,11 +52,22 @@ export interface ChatInputBoxProps {
   mentionMembers?: MentionMemberInput[];
   /** Optional per-turn response strategy rendered inside the composer footer. */
   responseModeControl?: ReactNode;
-  /** Group conversations keep task execution strategy in the + menu instead
-   * of exposing personal/project work modes as persistent footer state. */
+  /** Optional compact content appended to the workspace/mode status row. */
+  statusTrailing?: ReactNode;
+  /** Stable browser tab / desktop window bound to this conversation. */
+  automationTarget?: AutomationTarget | null;
+  onAutomationTargetChange?: (target: AutomationTarget | null) => void;
+  /** Group conversations also expose the workspace/mode strip. Their selected
+   * mode is projected into this per-turn group task strategy. */
   isGroupConversation?: boolean;
   groupTaskStrategy?: GroupTaskStrategy;
   onGroupTaskStrategyChange?: (strategy: GroupTaskStrategy) => void;
+  /** Project planning is a durable group capability, not a per-turn task
+   * strategy. This independent action creates it or opens its workbench. */
+  projectCapabilityEnabled?: boolean;
+  onProjectCapabilityAction?: () => void;
+  /** Opens a workspace side panel for local slash commands such as /record. */
+  onSwitchPanel?: (panel: string) => void;
   workDir?: string;
   displayAgent?: Pick<
     Agent,
@@ -92,13 +102,14 @@ export interface ChatInputBoxProps {
   personalMode?: PersonalMode;
   projectDetection?: DetectResponse | null;
   reasoningEffort?: ReasoningEffort;
-  /** When set, this chat targets a local CLI partner (e.g. "codex-cli"); the
-   * model control switches from the Octopus picker to the partner's own model
-   * (passed to the CLI via -m). */
-  partnerId?: string;
-  /** User override for the partner model; empty ⇒ the CLI's own default. */
-  partnerModel?: string;
-  onPartnerModelChange?: (model: string) => void;
+  /** Use the shared server-owned model profile control. This is intentionally
+   * independent of the selected role: roles change persona/capabilities, not
+   * the user's Octopus vs ChatGPT/Codex model source. */
+  modelProfileControl?: boolean;
+  /** Execution kernel for this role. Model source remains independently
+   * selectable: Octopus uses per-thread model_name, Codex uses its scoped
+   * server profile. */
+  executionEngine?: "octopus" | "codex";
   onPermissionModeChange?: (mode: PermissionMode) => void;
   onProjectAgentModeChange?: (mode: AgentModeName) => void;
   onAuditIntensityChange?: (intensity: AuditIntensity) => void;
@@ -116,6 +127,8 @@ export interface ChatInputBoxProps {
   onProjectDetectionChange?: (detection: DetectResponse | null) => void;
   onReasoningEffortChange?: (effort: ReasoningEffort) => void;
   onModelChange?: (modelName: string) => void;
+  /** Add a quiet, non-message timeline marker after a confirmed model switch. */
+  onModelSwitchNotice?: (modelName: string) => void;
   onModeChange?: (mode: ReasoningMode, draft?: string) => void;
   onDeepResearch?: (
     topic: string,
@@ -169,6 +182,9 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
     onAcceptModeIntent,
     onDismissModeIntent,
     isGroupConversation = false,
+    groupTaskStrategy = "auto",
+    onGroupTaskStrategyChange,
+    statusTrailing,
   } = props;
 
   const { t } = useI18n();
@@ -211,12 +227,59 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
   // Personal-space work mode (general/build/research) shows only when no project
   // dir is bound — the project ModeSelector takes over once a folder is picked.
   const showPersonalModeSegment = !hasWorkDir && !isProjectMode;
+  const visiblePersonalMode =
+    isGroupConversation &&
+    (groupTaskStrategy === "build" || groupTaskStrategy === "research")
+      ? groupTaskStrategy
+      : personalMode;
+  const visibleProjectMode =
+    isGroupConversation &&
+    (groupTaskStrategy === "develop" ||
+      groupTaskStrategy === "audit" ||
+      groupTaskStrategy === "uxui")
+      ? groupTaskStrategy
+      : projectAgentMode;
+  const groupPersonalModeLabels = isGroupConversation
+    ? {
+        general: t.chatInputBox.groupTaskAuto,
+        build: t.chatInputBox.groupTaskBuild,
+        research: t.chatInputBox.groupTaskResearch,
+      }
+    : undefined;
+  const groupProjectModeLabels = isGroupConversation
+    ? {
+        develop: t.chatInputBox.groupTaskDevelop,
+        audit: t.chatInputBox.groupTaskAudit,
+        uxui: t.chatInputBox.groupTaskUxui,
+      }
+    : undefined;
+  const changePersonalMode = useCallback(
+    (next: PersonalMode) => {
+      if (isGroupConversation && onGroupTaskStrategyChange) {
+        onGroupTaskStrategyChange(next === "general" ? "auto" : next);
+        return;
+      }
+      onPersonalModeChange?.(next);
+    },
+    [isGroupConversation, onGroupTaskStrategyChange, onPersonalModeChange],
+  );
+  const changeProjectMode = useCallback(
+    (next: AgentModeName) => {
+      if (isGroupConversation && onGroupTaskStrategyChange) {
+        onGroupTaskStrategyChange(next);
+        return;
+      }
+      onProjectAgentModeChange?.(next);
+    },
+    [isGroupConversation, onGroupTaskStrategyChange, onProjectAgentModeChange],
+  );
   const showAgentSegment = false;
   const statusSegmentCount =
     (showAgentSegment ? 1 : 0) +
     (showWorkDirSegment ? 1 : 0) +
     (showModeSegment ? 1 : 0) +
-    (showPersonalModeSegment ? 1 : 0);
+    (showPersonalModeSegment ? 1 : 0) +
+    (statusTrailing ? 1 : 0);
   const showStatusStrip = statusSegmentCount > 0;
 
   return (
@@ -230,19 +293,12 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
         />
       ) : null}
       <ChatComposer {...props} />
-      {!isGroupConversation && showWorkDirSelector && showStatusStrip && (
+      {showWorkDirSelector && showStatusStrip && (
         <div
           data-testid="chat-status-strip"
-          className="flex min-h-7 flex-wrap items-center gap-2 border-t border-border-subtle/60 px-2 pt-1.5 text-xs text-muted-foreground"
+          className="flex min-h-8 items-center gap-2 overflow-x-auto px-2 pt-1 text-xs text-muted-foreground [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          <div
-            className={cn(
-              "inline-flex max-w-full items-center gap-1.5",
-              statusSegmentCount > 1
-                ? "border-l border-border-subtle pl-2"
-                : "pl-0",
-            )}
-          >
+          <div className="inline-flex max-w-full items-center gap-1.5 rounded-lg px-0.5 py-0.5">
             {showAgentSegment ? (
               <>
                 <div
@@ -291,15 +347,14 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
                     <ModeSelector
                       workDir={workDir ?? ""}
                       sessionId={threadId ?? "new"}
-                      mode={projectAgentMode}
+                      mode={visibleProjectMode}
+                      labelOverrides={groupProjectModeLabels}
                       auditIntensity={auditIntensity}
                       codeModeUnlocked={codeModeUnlocked}
                       readOnlyHint={projectReadOnlyHint}
                       chromeless
                       permissionLabel={permissionLabel}
-                      onModeChange={
-                        onProjectAgentModeChange ?? (() => undefined)
-                      }
+                      onModeChange={changeProjectMode}
                       onAuditIntensityChange={onAuditIntensityChange}
                       onDetectionChange={onProjectDetectionChange}
                       onManualOverrideChange={onManualOverrideChange}
@@ -317,10 +372,24 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
                   />
                 )}
                 <PersonalModeSelector
-                  mode={personalMode}
+                  mode={visiblePersonalMode}
+                  labelOverrides={groupPersonalModeLabels}
                   chromeless
-                  onModeChange={onPersonalModeChange ?? (() => undefined)}
+                  onModeChange={changePersonalMode}
                 />
+              </>
+            ) : null}
+            {statusTrailing ? (
+              <>
+                {(showAgentSegment ||
+                  showWorkDirSegment ||
+                  showPersonalModeSegment) && (
+                  <span
+                    className="h-3 w-px shrink-0 bg-border/35"
+                    aria-hidden="true"
+                  />
+                )}
+                {statusTrailing}
               </>
             ) : null}
           </div>

@@ -1,6 +1,6 @@
 import type { AIMessage, Message } from "@/core/api/types";
 import type { BaseStream } from "@/core/api/use-stream-types";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import {
   AlertTriangleIcon,
   ChevronDownIcon,
@@ -25,6 +25,7 @@ import {
 } from "@/components/ai-elements/conversation";
 import { useLocalSettings } from "@/core/settings";
 import { useI18n } from "@/core/i18n/hooks";
+import { emitOpenSettings } from "@/core/events/event-bus";
 import {
   extractContentFromMessage,
   extractPresentFilesFromMessage,
@@ -79,6 +80,7 @@ import {
   type FailurePresentation,
   hasMessageOutputSummary,
   MessageOutputSummary,
+  extractRetryPrompt,
 } from "./message-output-summary";
 import { MessageListSkeleton } from "./skeleton";
 import { ParallelSubtasksGrid } from "./parallel-subtasks-grid";
@@ -95,7 +97,7 @@ export const MESSAGE_LIST_DEFAULT_PADDING_BOTTOM = 160;
 export const MESSAGE_LIST_FOLLOWUPS_EXTRA_PADDING_BOTTOM = 80;
 export const MESSAGE_LIST_TIMEOUT_WARNING_MS = 300_000;
 type SubtaskUpdate = Partial<Subtask> & { id: string };
-interface TurnMarker {
+export interface TurnMarker {
   key: string;
   kind: "dot" | "phase";
   label: string;
@@ -133,6 +135,118 @@ const EMPTY_AGENT_ROSTER: MessageListAgentRosterEntry[] = [];
 const TURN_LOCATOR_VISIBLE_LIMIT = 17;
 const TURN_SCROLL_VIEWPORT_CLASS = "message-list-scroll-viewport";
 const STREAM_PROGRESS_TAIL_LENGTH = 240;
+const HISTORY_TURN_KEEP_MOUNTED = 2;
+const HISTORY_TURN_OVERSCAN_PX = 1200;
+const HISTORY_TURN_ESTIMATED_HEIGHT = 320;
+const HISTORY_TURN_HEIGHT_CACHE_LIMIT = 500;
+const historicalTurnHeightCache = new Map<string, number>();
+
+function rememberHistoricalTurnHeight(key: string, height: number) {
+  if (!Number.isFinite(height) || height < 1) return;
+  historicalTurnHeightCache.delete(key);
+  historicalTurnHeightCache.set(key, Math.ceil(height));
+  if (historicalTurnHeightCache.size <= HISTORY_TURN_HEIGHT_CACHE_LIMIT) return;
+  const oldest = historicalTurnHeightCache.keys().next().value;
+  if (typeof oldest === "string") historicalTurnHeightCache.delete(oldest);
+}
+
+/**
+ * Keep completed turns in normal document flow while unmounting React-heavy
+ * content well outside the viewport. Unlike translated-row virtualizers, the
+ * wrapper itself never moves, so a growing live answer cannot overlap the next
+ * turn and browser scroll anchoring can preserve the reader's position.
+ */
+export function HistoricalTurnBoundary({
+  cacheKey,
+  children,
+  className,
+  estimatedHeight = HISTORY_TURN_ESTIMATED_HEIGHT,
+  onNode,
+  virtualize,
+  ...props
+}: ComponentProps<"div"> & {
+  cacheKey: string;
+  estimatedHeight?: number;
+  onNode?: (node: HTMLDivElement | null) => void;
+  virtualize: boolean;
+}) {
+  const nodeRef = useRef<HTMLDivElement | null>(null);
+  const [measuredHeight, setMeasuredHeight] = useState(
+    () => historicalTurnHeightCache.get(cacheKey) ?? null,
+  );
+  const [mounted, setMounted] = useState(
+    () => !virtualize || typeof IntersectionObserver === "undefined",
+  );
+
+  useEffect(() => {
+    const cached = historicalTurnHeightCache.get(cacheKey) ?? null;
+    setMeasuredHeight(cached);
+    if (!virtualize || typeof IntersectionObserver === "undefined") {
+      setMounted(true);
+    }
+  }, [cacheKey, virtualize]);
+
+  useEffect(() => {
+    const node = nodeRef.current;
+    if (!node || !virtualize || typeof IntersectionObserver === "undefined") {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setMounted(true);
+          return;
+        }
+        if (node.contains(document.activeElement)) return;
+        const height = node.getBoundingClientRect().height;
+        rememberHistoricalTurnHeight(cacheKey, height);
+        if (height > 0) setMeasuredHeight(Math.ceil(height));
+        setMounted(false);
+      },
+      { rootMargin: `${HISTORY_TURN_OVERSCAN_PX}px 0px` },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [cacheKey, virtualize]);
+
+  useEffect(() => {
+    const node = nodeRef.current;
+    if (!node || !mounted || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      const height = node.getBoundingClientRect().height;
+      if (height < 1) return;
+      const rounded = Math.ceil(height);
+      rememberHistoricalTurnHeight(cacheKey, rounded);
+      setMeasuredHeight((current) => (current === rounded ? current : rounded));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [cacheKey, mounted]);
+
+  return (
+    <div
+      {...props}
+      ref={(node) => {
+        nodeRef.current = node;
+        onNode?.(node);
+      }}
+      className={className}
+      data-turn-mounted={mounted ? "true" : "false"}
+      style={
+        mounted
+          ? props.style
+          : {
+              ...props.style,
+              height: measuredHeight ?? estimatedHeight,
+            }
+      }
+    >
+      {mounted ? children : null}
+    </div>
+  );
+}
 
 function cssEscape(value: string): string {
   const escape = globalThis.CSS?.escape;
@@ -222,6 +336,8 @@ interface GroupTurnRenderInfo {
   previousAssistantGroupCount: number;
   /** Nearest previous assistant-ish group's non-null identity, if any. */
   previousAssistantIdentity: string | undefined;
+  /** Whether this turn contains an assistant processing lane. */
+  hasProcessingLane: boolean;
 }
 
 /**
@@ -254,6 +370,50 @@ export function partitionMessageGroupsIntoTurns(
   }
 
   return turns;
+}
+
+/**
+ * Derive locator markers in one pass over the already-partitioned turns.
+ *
+ * The previous implementation searched forward for the next human group for
+ * every marker. Long threads therefore rebuilt the locator in O(turns²) on
+ * streamed frames even though partitionMessageGroupsIntoTurns had already
+ * calculated the exact boundaries.
+ */
+export function buildTurnMarkers(
+  groups: CoreMessageGroup[],
+  turns: MessageTurnSlice[],
+  turnLabel: (number: number) => string,
+): TurnMarker[] {
+  const markers: TurnMarker[] = [];
+
+  for (const turn of turns) {
+    const firstGroupIndex = turn.groupIndexes[0];
+    if (firstGroupIndex === undefined) continue;
+    const humanGroup = groups[firstGroupIndex];
+    // A restored assistant/system prelude is a render turn, but not a user
+    // turn and therefore must not appear in the locator rail.
+    if (!humanGroup || humanGroup.type !== "human") continue;
+
+    const turnMessages: Message[] = [];
+    for (const groupIndex of turn.groupIndexes) {
+      const group = groups[groupIndex];
+      if (group) turnMessages.push(...group.messages);
+    }
+    const firstMessage = humanGroup.messages[0];
+    const rawLabel = firstMessage
+      ? extractTextFromMessage(firstMessage).replace(/\s+/g, " ").trim()
+      : "";
+    const number = markers.length + 1;
+    markers.push({
+      key: turn.key,
+      kind: turnMarkerKindFromMessages(turnMessages),
+      label: rawLabel || turnLabel(number),
+      number,
+    });
+  }
+
+  return markers;
 }
 
 export function streamingMessageProgressKey(
@@ -672,6 +832,18 @@ export function failureKind(
   if (failureKindHint === "environment") {
     return "environment";
   }
+  if (failureKindHint === "auth" || failureKindHint === "authentication") {
+    return "auth";
+  }
+  if (failureKindHint === "rate_limit" || failureKindHint === "rate-limit") {
+    return "rate-limit";
+  }
+  if (
+    failureKindHint === "capability" ||
+    failureKindHint === "missing_required_capability"
+  ) {
+    return "capability";
+  }
   const isClientClose =
     /client closed/.test(normalized) ||
     /websocket closed \(1000/.test(normalized);
@@ -688,7 +860,28 @@ export function failureKind(
     return "lifecycle";
   }
   if (
-    /network error|fetch failed|econnrefused|timeout|websocket closed \(1006|transport error|connection (refused|reset|lost)|model_stream_disconnected|remoteprotocolerror|server disconnected/i.test(
+    /missing_required_capability|lacks required capabilit|capability mismatch|能力不匹配|缺少所需能力/i.test(
+      signal,
+    )
+  ) {
+    return "capability";
+  }
+  if (
+    /http_401|http_403|unauthorized|invalid api.?key|invalid credential|credential refresh|credentials?.*(?:expired|invalid)|(?:not|未).*logged in.*chatgpt|尚未登录\s*chatgpt|登录.*chatgpt/i.test(
+      signal,
+    )
+  ) {
+    return "auth";
+  }
+  if (
+    /http_429|rate.?limit|too many requests|quota exceeded|usage limit|请求过多|限流|额度.*(?:用完|耗尽|上限)/i.test(
+      signal,
+    )
+  ) {
+    return "rate-limit";
+  }
+  if (
+    /network error|fetch failed|econnrefused|timeout|websocket closed \(1006|transport error|connection (refused|reset|lost)|model_stream_disconnected|unexpected_eof_while_reading|ssl eof|remoteprotocolerror|server disconnected/i.test(
       signal,
     )
   ) {
@@ -755,6 +948,7 @@ const MemoizedGroup = memo(
     subagentTurnIndex,
     showSubagentCluster,
     renderGroupContent,
+    groupTurnRenderInfo,
   }: {
     group: CoreMessageGroup;
     index: number;
@@ -784,7 +978,9 @@ const MemoizedGroup = memo(
       showAssistantAvatar?: boolean,
       beforeProcessingContent?: ReactNode,
       suppressSubagentRows?: boolean,
+      turnRenderInfo?: GroupTurnRenderInfo,
     ) => ReactNode;
+    groupTurnRenderInfo: GroupTurnRenderInfo;
   }) {
     return (
       <div
@@ -818,6 +1014,7 @@ const MemoizedGroup = memo(
             />
           ) : undefined,
           Boolean(subagentAgents?.length || subagentEvents?.length),
+          groupTurnRenderInfo,
         )}
       </div>
     );
@@ -854,9 +1051,10 @@ const MemoizedGroup = memo(
  * text would overlap and the scroll bar would jitter.
  *
  * Turns now stay in normal document flow. Stable historical turns opt into
- * CSS ``content-visibility:auto`` while the latest turn is always fully
- * rendered. This skips off-screen layout and paint without a measurement loop,
- * translated rows, or any chance of hiding the active streaming response.
+ * CSS ``content-visibility:auto`` and distant turns unmount behind fixed-height
+ * wrappers. The latest four turns are always fully rendered. This skips React,
+ * layout and paint work without translated rows or any chance of hiding the
+ * active streaming response.
  */
 
 export function MessageList({
@@ -878,6 +1076,7 @@ export function MessageList({
   mode,
   project,
   onSendFollowUp,
+  onRetryTask,
   onAuthorizeNetwork,
   projectMessageActions,
   timelineEntries = [],
@@ -915,6 +1114,8 @@ export function MessageList({
   project?: string | null;
   /** Callback when user selects a follow-up suggestion */
   onSendFollowUp?: (prompt: string) => void;
+  /** Retry a failed task while preserving its conversation context. */
+  onRetryTask?: (prompt: string) => void;
   /** Callback when the user authorizes network access from the
    *  environment-blocked banner ("common domains" or "full"). */
   onAuthorizeNetwork?: (tier: "common" | "full") => void;
@@ -1210,29 +1411,41 @@ export function MessageList({
               : t.streaming.environmentBlocked
             : kind === "network"
               ? t.streaming.networkLost
-              : kind === "verification"
-                ? t.streaming.verificationRequired
-                : kind === "guard"
-                  ? hasStructuredReadableDetail
-                    ? failure.detail
-                    : t.streaming.guardBlocked
-                  : kind === "lifecycle"
-                    ? t.streaming.lifecycleFailed
-                    : requiresWorkspaceWrite
-                      ? t.streaming.workspaceWriteRequired
-                      : hasStructuredReadableDetail
-                        ? failure.detail
-                        : t.streaming.turnFailed;
+              : kind === "auth"
+                ? t.streaming.modelAuthRequired
+                : kind === "capability"
+                  ? t.streaming.subagentCapabilityMismatch
+                  : kind === "rate-limit"
+                    ? t.streaming.modelRateLimited
+                    : kind === "verification"
+                      ? t.streaming.verificationRequired
+                      : kind === "verification-failed"
+                        ? t.streaming.verificationRunFailed
+                        : kind === "guard"
+                          ? hasStructuredReadableDetail
+                            ? failure.detail
+                            : t.streaming.guardBlocked
+                          : kind === "lifecycle"
+                            ? t.streaming.lifecycleFailed
+                            : requiresWorkspaceWrite
+                              ? t.streaming.workspaceWriteRequired
+                              : hasStructuredReadableDetail
+                                ? failure.detail
+                                : t.streaming.turnFailed;
       return { ...failure, kind, message };
     },
     [
       t.streaming.blockedOnUser,
       t.streaming.environmentBlocked,
       t.streaming.networkLost,
+      t.streaming.modelAuthRequired,
+      t.streaming.subagentCapabilityMismatch,
+      t.streaming.modelRateLimited,
       t.streaming.guardBlocked,
       t.streaming.lifecycleFailed,
       t.streaming.turnFailed,
       t.streaming.verificationRequired,
+      t.streaming.verificationRunFailed,
       t.streaming.workspaceWriteRequired,
     ],
   );
@@ -1267,6 +1480,9 @@ export function MessageList({
   // failures — render them amber, not destructive red.
   const isWarningFailure =
     isNetworkError ||
+    failureReceipt?.kind === "auth" ||
+    failureReceipt?.kind === "capability" ||
+    failureReceipt?.kind === "rate-limit" ||
     failureReceipt?.kind === "environment" ||
     failureReceipt?.kind === "blocked";
   const failureHeaderText =
@@ -1274,13 +1490,23 @@ export function MessageList({
       ? t.streaming.blockedOnUser
       : failureReceipt?.kind === "environment"
         ? t.streaming.environmentBlocked
-        : isNetworkError
-          ? t.streaming.networkLost
-          : t.message.taskFailed;
+        : failureReceipt?.kind === "auth"
+          ? t.streaming.modelAuthRequiredTitle
+          : failureReceipt?.kind === "capability"
+            ? t.streaming.subagentCapabilityMismatchTitle
+            : failureReceipt?.kind === "rate-limit"
+              ? t.streaming.modelRateLimitedTitle
+              : isNetworkError
+                ? t.streaming.networkLost
+                : t.message.taskFailed;
   const isVerificationRequiredError = failureReceipt?.kind === "verification";
   const errorBannerText = failureReceipt?.message ?? null;
   const verificationAuditNotice =
     isVerificationRequiredError && errorBannerText ? errorBannerText : null;
+  const fallbackRetryPrompt = useMemo(
+    () => extractRetryPrompt(latestTurnMessages(messages), messages),
+    [messages],
+  );
 
   // Tool-run folding into collapsible bubbles lives in the group/timeline
   // layer (message-group.tsx): `aggregateSimilarToolCalls` merges consecutive
@@ -1456,30 +1682,11 @@ export function MessageList({
   // so listeners are not torn down and re-attached per frame.
   const turnMarkersRef = useRef<TurnMarker[]>([]);
   const turnMarkers = useMemo<TurnMarker[]>(() => {
-    const markers: TurnMarker[] = [];
-    for (let index = 0; index < groupedMessages.length; index += 1) {
-      const group = groupedMessages[index]!;
-      if (group.type !== "human") continue;
-      const nextHumanIndex = groupedMessages.findIndex(
-        (candidate, candidateIndex) =>
-          candidateIndex > index && candidate.type === "human",
-      );
-      const endIndex =
-        nextHumanIndex === -1 ? groupedMessages.length : nextHumanIndex;
-      const turnMessages = groupedMessages
-        .slice(index, endIndex)
-        .flatMap((candidate) => candidate.messages);
-      const firstMessage = group.messages[0];
-      const rawLabel = firstMessage
-        ? extractTextFromMessage(firstMessage).replace(/\s+/g, " ").trim()
-        : "";
-      markers.push({
-        key: `${group.type}:${group.id ?? `idx-${index}`}`,
-        kind: turnMarkerKindFromMessages(turnMessages),
-        label: rawLabel || t.message.turnLabel(markers.length + 1),
-        number: markers.length + 1,
-      });
-    }
+    const markers = buildTurnMarkers(
+      groupedMessages,
+      messageTurns,
+      t.message.turnLabel,
+    );
     const previous = turnMarkersRef.current;
     if (
       previous.length === markers.length &&
@@ -1489,7 +1696,7 @@ export function MessageList({
     }
     turnMarkersRef.current = markers;
     return markers;
-  }, [groupedMessages, t.message]);
+  }, [groupedMessages, messageTurns, t.message.turnLabel]);
   const [activeTurnKey, setActiveTurnKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1847,34 +2054,38 @@ export function MessageList({
     showAssistantAvatar = true,
     beforeProcessingContent?: ReactNode,
     suppressSubagentRows = false,
+    turnRenderInfo?: GroupTurnRenderInfo,
   ) => {
     if (group.type === "human" || group.type === "assistant") {
-      const groupIndex = groupedMessages.indexOf(group);
-      const turnHasProcessingLane = (() => {
-        if (groupIndex < 0) return false;
-        for (let index = groupIndex - 1; index >= 0; index -= 1) {
-          const previous = groupedMessages[index]!;
-          if (previous.type === "human") break;
-          if (previous.type === "assistant:processing") return true;
-        }
-        for (
-          let index = groupIndex + 1;
-          index < groupedMessages.length;
-          index += 1
-        ) {
-          const next = groupedMessages[index]!;
-          if (next.type === "human") break;
-          if (next.type === "assistant:processing") return true;
-        }
-        return false;
-      })();
+      const groupIndex = turnRenderInfo ? -1 : groupedMessages.indexOf(group);
+      const turnHasProcessingLane =
+        turnRenderInfo?.hasProcessingLane ??
+        (() => {
+          if (groupIndex < 0) return false;
+          for (let index = groupIndex - 1; index >= 0; index -= 1) {
+            const previous = groupedMessages[index]!;
+            if (previous.type === "human") break;
+            if (previous.type === "assistant:processing") return true;
+          }
+          for (
+            let index = groupIndex + 1;
+            index < groupedMessages.length;
+            index += 1
+          ) {
+            const next = groupedMessages[index]!;
+            if (next.type === "human") break;
+            if (next.type === "assistant:processing") return true;
+          }
+          return false;
+        })();
+      const groupTurnMessages =
+        turnRenderInfo?.turnMessages ??
+        turnMessagesForGroup(groupedMessages, group);
       const isTerminalAssistantGroup =
         group.type === "assistant" &&
-        isLastAssistantGroupOfTurn(groupedMessages, group) &&
-        !hasLaterProcessActivity(
-          turnMessagesForGroup(groupedMessages, group),
-          group,
-        );
+        (turnRenderInfo?.isLastAssistantOfTurn ??
+          (isLastAssistantGroupOfTurn(groupedMessages, group) &&
+            !hasLaterProcessActivity(groupTurnMessages, group)));
       const isProcessChangeGroup =
         group.type === "assistant" &&
         !isTerminalAssistantGroup &&
@@ -1884,16 +2095,20 @@ export function MessageList({
           <MessageOutputSummary
             auditNotice={auditNotice}
             messages={group.messages}
-            turnMessages={turnMessagesForGroup(groupedMessages, group)}
+            turnMessages={groupTurnMessages}
+            retryContextMessages={messages}
             threadId={threadId}
             onOpenArtifact={onOpenArtifact}
+            onRetryTask={onRetryTask}
             failure={failure}
           />
         ) : isProcessChangeGroup ? (
           <MessageOutputSummary
             messages={group.messages}
+            retryContextMessages={messages}
             threadId={threadId}
             onOpenArtifact={onOpenArtifact}
+            onRetryTask={onRetryTask}
             presentation="process"
           />
         ) : null;
@@ -2106,8 +2321,12 @@ export function MessageList({
       const seen = new Set<Message>();
       const turnMessages: Message[] = [];
       let lastAssistantActivityIndex = -1;
+      let hasProcessingLane = false;
       for (let index = start; index <= end; index += 1) {
         const group = groupedMessages[index]!;
+        if (group.type === "assistant:processing") {
+          hasProcessingLane = true;
+        }
         if (
           group.type === "assistant" ||
           group.type === "assistant:processing" ||
@@ -2136,6 +2355,7 @@ export function MessageList({
           assistantIdentity,
           previousAssistantGroupCount,
           previousAssistantIdentity,
+          hasProcessingLane,
         });
         if (
           group.type === "assistant" ||
@@ -2166,6 +2386,16 @@ export function MessageList({
         hasCluster: boolean;
       }
     >();
+    // Historical events are immutable for this render. Index them once
+    // instead of filtering the complete event history for every turn.
+    const historicalEventsByTurn = new Map<number, LiveToolEvent[]>();
+    for (const event of allToolEvents ?? []) {
+      const eventTurnIndex = event.turnIndex ?? event.iteration;
+      if (typeof eventTurnIndex !== "number") continue;
+      const bucket = historicalEventsByTurn.get(eventTurnIndex);
+      if (bucket) bucket.push(event);
+      else historicalEventsByTurn.set(eventTurnIndex, [event]);
+    }
     for (let turnIndex = 0; turnIndex < messageTurns.length; turnIndex += 1) {
       const turn = messageTurns[turnIndex]!;
       const turnMessages =
@@ -2175,11 +2405,7 @@ export function MessageList({
       const isLatestTurn = turnIndex === messageTurns.length - 1;
       const sourceEvents = isLatestTurn
         ? [...(lastTurnToolEvents ?? []), ...(liveToolEvents ?? [])]
-        : (allToolEvents ?? []).filter(
-            (event) =>
-              event.turnIndex === turnIndex ||
-              (event.turnIndex === undefined && event.iteration === turnIndex),
-          );
+        : (historicalEventsByTurn.get(turnIndex) ?? []);
       const seenEventIds = new Set<string>();
       const events = sourceEvents.filter((event) => {
         if (seenEventIds.has(event.id)) return false;
@@ -2244,7 +2470,16 @@ export function MessageList({
     >
       <ConversationContent
         scrollClassName={TURN_SCROLL_VIEWPORT_CLASS}
-        className="mx-auto w-full max-w-(--container-width-md) gap-7 px-4 pt-2"
+        data-density={showSenderName ? "compact" : "comfortable"}
+        className={cn(
+          "mx-auto w-full max-w-(--container-width-md) px-4 pt-2 pb-0",
+          // A work-group timeline contains sender labels, short human turns,
+          // and compact project events.  The private-chat rhythm is too airy
+          // here and makes the room read like a report rather than a live
+          // conversation.  Keep long AI answers' internal spacing unchanged;
+          // only tighten the distance between top-level turns.
+          showSenderName ? "gap-5" : "gap-7",
+        )}
       >
         {header}
         {!hasTimelineContent ? emptyState : null}
@@ -2294,10 +2529,17 @@ export function MessageList({
             ? resolveAgentIdentity()
             : null;
 
+          const virtualizeHistoricalTurn =
+            !isLatestTurn &&
+            messageTurns.length > HISTORY_TURN_KEEP_MOUNTED * 2 &&
+            turnIndex < messageTurns.length - HISTORY_TURN_KEEP_MOUNTED;
+
           return (
-            <div
+            <HistoricalTurnBoundary
               key={turn.key}
-              ref={(node) => {
+              cacheKey={`${threadId}:${turn.key}`}
+              virtualize={virtualizeHistoricalTurn}
+              onNode={(node) => {
                 if (!markerKey) return;
                 if (node) {
                   groupRefs.current[markerKey] = node;
@@ -2347,7 +2589,33 @@ export function MessageList({
                     ? structuredFailureFromMessages(groupTurnMessages)
                     : null;
                 const historicalGroupFailure = structuredGroupFailure
-                  ? presentFailure(structuredGroupFailure)
+                  ? {
+                      ...presentFailure(structuredGroupFailure),
+                      resolved: (() => {
+                        let sawLaterHumanTurn = false;
+                        for (
+                          let laterIndex = index + 1;
+                          laterIndex < groupedMessages.length;
+                          laterIndex += 1
+                        ) {
+                          const laterGroup = groupedMessages[laterIndex]!;
+                          if (laterGroup.type === "human") {
+                            sawLaterHumanTurn = true;
+                            continue;
+                          }
+                          if (
+                            sawLaterHumanTurn &&
+                            laterGroup.type === "assistant" &&
+                            laterGroup.messages.some((message) =>
+                              isSettledAssistantAnswer(message),
+                            )
+                          ) {
+                            return true;
+                          }
+                        }
+                        return false;
+                      })(),
+                    }
                   : null;
                 const shouldShowFailureReceipt =
                   Boolean(failureReceipt) &&
@@ -2402,6 +2670,7 @@ export function MessageList({
                         Boolean(subagentRenderInfo?.hasCluster) &&
                         index === subagentRenderInfo?.firstProcessingIndex
                       }
+                      groupTurnRenderInfo={groupInfo}
                     />
                   </Fragment>
                 );
@@ -2438,7 +2707,7 @@ export function MessageList({
                     />
                   </div>
                 ))}
-            </div>
+            </HistoricalTurnBoundary>
           );
         })}
 
@@ -2512,18 +2781,64 @@ export function MessageList({
                       </button>
                     </div>
                   )}
+                {(failureReceipt?.kind === "auth" ||
+                  failureReceipt?.kind === "rate-limit") && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => emitOpenSettings("models")}
+                      className="rounded-md border border-warning/80 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/20 dark:border-warning/60"
+                    >
+                      {t.streaming.openModelSettings}
+                    </button>
+                    {failureReceipt.kind === "rate-limit" &&
+                      fallbackRetryPrompt &&
+                      onRetryTask && (
+                        <button
+                          type="button"
+                          onClick={() => onRetryTask(fallbackRetryPrompt)}
+                          className="rounded-md border border-warning/40 px-2.5 py-1 text-xs font-medium text-warning/90 transition-colors hover:bg-warning/10 dark:border-warning/50"
+                        >
+                          {t.message.retryTask}
+                        </button>
+                      )}
+                  </div>
+                )}
+                {failureReceipt?.kind === "capability" &&
+                  fallbackRetryPrompt &&
+                  onRetryTask && (
+                    <div className="mt-2">
+                      <button
+                        type="button"
+                        onClick={() => onRetryTask(fallbackRetryPrompt)}
+                        className="rounded-md border border-warning/80 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/20 dark:border-warning/60"
+                      >
+                        {t.message.retryTask}
+                      </button>
+                    </div>
+                  )}
               </div>
             </div>
           )}
 
         <div
+          aria-hidden="true"
+          data-clearance-mode="composer-overlap-only"
           data-testid="conversation-bottom-safe-area"
           style={{
-            // The composer is an overlay. Reserve its measured height plus a
-            // small reading-safe zone so an expanded reasoning block can be
-            // scrolled completely above both the composer and the floating
-            // "latest" affordance.
-            height: `calc(max(${paddingBottom}px, var(--chat-input-overlay-height, ${paddingBottom}px)) + 56px)`,
+            // Keep the scroll viewport itself fixed so historical turns never
+            // move when streamed text grows. The content already contributes
+            // a 28px flex gap before this node and the overlay contributes a
+            // 32px transparent fade above its input card. Reserve only the
+            // remaining opaque composer overlap plus a small safety margin.
+            // The old full composer height + 56px created a second, visible
+            // window of empty space below short answers.
+            // `paddingBottom` is only a fallback for standalone/test renders.
+            // Once ChatPageLayout publishes the measured composer height, use
+            // it directly. Treating the fallback as a permanent minimum left
+            // a visible empty strip whenever the compact composer was shorter
+            // than the old 160px estimate.
+            height: `max(0px, calc(var(--chat-input-overlay-height, ${paddingBottom}px) - 52px))`,
           }}
         />
       </ConversationContent>

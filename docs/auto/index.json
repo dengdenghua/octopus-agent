@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "generated_at": "2026-08-22T01:43:23+00:00",
+  "generated_at": "2026-09-01T10:14:52+00:00",
   "files_analyzed": 170,
   "tree": [
     {
@@ -1031,6 +1031,11 @@
     {
       "from": "20-backend/22-safety/recovery.md",
       "to": "20-backend/21-runtime/tool-engine.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/22-safety/recovery.md",
+      "to": "20-backend/22-safety/auth.md",
       "type": "imports"
     },
     {

@@ -507,7 +507,7 @@ tier: "core"
 
 ## Who imports this
 
-**58** file(s) reference this package:
+**60** file(s) reference this package:
 
 - **`runtime/cli_code.py/`** · 1 file(s)
   - `runtime/cli_code.py`
@@ -523,13 +523,13 @@ tier: "core"
   - `runtime/cli_serve.py`
 - **`runtime/core/`** · 1 file(s)
   - `runtime/core/graph_runtime/runtime.py`
-- **`runtime/execution/`** · 7 file(s)
+- **`runtime/execution/`** · 9 file(s)
+  - `runtime/execution/codex_backend/dynamic_tools.py`
+  - `runtime/execution/codex_backend/role_context.py`
   - `runtime/execution/loops/_controller_attempt.py`
   - `runtime/execution/misc/parallel_runner.py`
   - `runtime/execution/parallel_agents/_orchestrator_models.py`
-  - `runtime/execution/parallel_agents/stack_runner.py`
-  - `runtime/execution/subagents/react_drive.py`
-  - _… and 2 more_
+  - _… and 4 more_
 - **`runtime/memory/`** · 4 file(s)
   - `runtime/memory/cowork/turn_plan.py`
   - `runtime/memory/diagnostics/_trace_store_recovery.py`

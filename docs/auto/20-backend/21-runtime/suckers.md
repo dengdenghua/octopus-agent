@@ -85,6 +85,7 @@ Suckers = skill pool.
 | `code_navigation.py` | Cross-file symbol lookup and Python import-graph analysis. |
 | `codex_plugin_skills.py` | — |
 | `computer_api_skills.py` | Agent-facing computer automation skills. |
+| `computer_macos.py` | — |
 | `computer_skills.py` | — |
 | `computer_uia_skills.py` | — |
 | `computer_use_loop.py` | — |
@@ -120,6 +121,7 @@ Suckers = skill pool.
 | `notebook_skills.py` | — |
 | `plan_mode.py` | — |
 | `rate_limit.py` | Per-skill rate limiter — runaway-loop protection for LLM agents. |
+| `reach_skills.py` | — |
 | `registry.py` | — |
 | `role_delegation_guidance.py` | Role-specific delegation guidance for hierarchical orchestration. |
 | `search.py` | Semantic skill search — TF-IDF-based skill discovery. |
@@ -306,6 +308,21 @@ Suckers = skill pool.
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def register_computer_api_skills(registry)` |  |
+
+### `computer_macos.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def screen_info()` |  |
+| func | `def capture_screen(path, region)` |  |
+| func | `def move_mouse(x, y)` |  |
+| func | `def click_mouse(x, y, button, clicks)` |  |
+| func | `def type_text(text)` |  |
+| func | `def press_keys(keys)` |  |
+| func | `def list_apps()` |  |
+| func | `def activate_window_target(app_id, app_name, window_id, window_title)` | Bring one operator-selected macOS window to the foreground. |
+| func | `def accessibility_snapshot(max_nodes)` |  |
+| func | `def perform_accessibility_action(target, action)` | Re-ground a snapshotted AX element and invoke its native action. |
 
 ### `computer_skills.py`
 
@@ -568,6 +585,12 @@ Suckers = skill pool.
 | --- | --- | --- |
 | class | `class SkillRateLimiter` | Per-(skill, caller) token bucket rate limiter. |
 
+### `reach_skills.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def register_reach_skills(registry)` |  |
+
 ### `registry.py`
 
 | Kind | Symbol | Doc |
@@ -673,7 +696,7 @@ Suckers = skill pool.
 
 ## Who imports this
 
-**71** file(s) reference this package:
+**86** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
@@ -694,24 +717,24 @@ Suckers = skill pool.
   - `runtime/core/cerebrum/_react_prompt_assembly_guidance.py`
   - `runtime/core/cerebrum/capability_router.py`
   - _… and 3 more_
-- **`runtime/execution/`** · 11 file(s)
+- **`runtime/execution/`** · 13 file(s)
   - `runtime/execution/all_skills/__init__.py`
   - `runtime/execution/arms/base.py`
+  - `runtime/execution/codex_backend/dynamic_tools.py`
+  - `runtime/execution/codex_backend/role_context.py`
   - `runtime/execution/loops/verifiers.py`
-  - `runtime/execution/misc/skill_policy.py`
-  - `runtime/execution/subagents/_bridge_trace.py`
-  - _… and 6 more_
+  - _… and 8 more_
 - **`runtime/memory/`** · 3 file(s)
   - `runtime/memory/cowork/runtime.py`
   - `runtime/memory/hemolymph/composer.py`
   - `runtime/memory/learning/deep_evolution.py`
-- **`runtime/platform/`** · 11 file(s)
+- **`runtime/platform/`** · 23 file(s)
   - `runtime/platform/config/builder.py`
   - `runtime/platform/lifecycle/demo.py`
-  - `runtime/platform/plugins/bundled/documents/__init__.py`
-  - `runtime/platform/plugins/bundled/github/__init__.py`
-  - `runtime/platform/plugins/bundled/paper_trading/__init__.py`
-  - _… and 6 more_
+  - `runtime/platform/plugins/bundled/clip_studio/__init__.py`
+  - `runtime/platform/plugins/bundled/comfyui_bridge/__init__.py`
+  - `runtime/platform/plugins/bundled/director_stage/__init__.py`
+  - _… and 18 more_
 - **`runtime/research/`** · 2 file(s)
   - `runtime/research/pipeline.py`
   - `runtime/research/prefetch.py`
@@ -722,13 +745,13 @@ Suckers = skill pool.
   - `runtime/safety/hooks/tool_edge_hooks.py`
   - `runtime/safety/recovery/intel_collector.py`
   - `runtime/safety/recovery/skill_forge.py`
-- **`runtime/sensing/`** · 23 file(s)
+- **`runtime/sensing/`** · 24 file(s)
   - `runtime/sensing/gateway/_agent_world_helpers.py`
+  - `runtime/sensing/gateway/_computer_appshot_routes.py`
   - `runtime/sensing/gateway/_meta_mentions.py`
   - `runtime/sensing/gateway/_realtime_react_stream_drive.py`
   - `runtime/sensing/gateway/_realtime_react_stream_helpers.py`
-  - `runtime/sensing/gateway/_team_stream_group_fanout.py`
-  - _… and 18 more_
+  - _… and 19 more_
 - **`runtime/tour.py/`** · 1 file(s)
   - `runtime/tour.py`
 

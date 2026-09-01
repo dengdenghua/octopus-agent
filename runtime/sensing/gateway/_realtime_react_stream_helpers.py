@@ -298,8 +298,25 @@ def _model_error_reply(exc: BaseException) -> str | None:
     lower = text.lower()
     if "http_402" in lower or "insufficient_balance" in lower or "模型账户余额不足" in text:
         return "当前模型账户余额不足，所以这次没有完成。请给当前模型供应商账户充值，或切换到其他可用模型后重试。"
-    if "http_401" in lower or "http_403" in lower or "api key" in lower:
+    if (
+        "http_401" in lower
+        or "http_403" in lower
+        or "api key" in lower
+        or "credential refresh" in lower
+        or "invalid credential" in lower
+        or "尚未登录 chatgpt" in lower
+        or "not logged in to chatgpt" in lower
+    ):
         return "当前模型 API Key 无效或没有权限，所以这次没有完成。请在模型设置里更新 Key，或切换到其他可用模型后重试。"
+    if (
+        "http_429" in lower
+        or "rate limit" in lower
+        or "rate_limit" in lower
+        or "too many requests" in lower
+        or "quota exceeded" in lower
+        or "usage limit" in lower
+    ):
+        return "当前模型请求过多或额度已达上限，所以这次没有完成。请稍后重试，或切换到其他可用模型继续。"
     return None
 
 

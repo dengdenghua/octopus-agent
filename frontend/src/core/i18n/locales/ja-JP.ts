@@ -8,7 +8,6 @@ import {
   SparklesIcon,
   VideoIcon,
 } from "lucide-react";
-
 import type { Translations } from "./types";
 import { workspaceComputerJaJP } from "./workspace-computer";
 import { agentOperatorJaJP } from "./agent-operator";
@@ -72,7 +71,6 @@ export const jaJP: Translations = {
     stubResponseDescription: (method: string, path: string) =>
       `${method} ${path} がスタブデータを返しました。実際のバックエンドエンドポイントが有効になるまで、このワークスペース状態を開発フォールバックとして扱ってください。`,
     openSidebarMenu: "サイドバーメニューを開く",
-    localPartnerModel: "ローカルパートナーモデル(CLI が管理)",
     loadingWorkspace: "ワークスペースを読み込み中...",
   },
 
@@ -86,12 +84,12 @@ export const jaJP: Translations = {
   welcome: {
     greeting: "こんにちは、{name} です",
     description:
-      "🦌 Octopusへようこそ。オープンソースのスーパーエージェントです。ビルトインスキルとカスタムスキルを使って、ウェブ検索、データ分析、スライドやウェブページなどのアーティファクト生成など、ほぼ何でもこなせます。",
+      "🦌 EchoAIへようこそ。オープンソースのスーパーエージェントです。ビルトインスキルとカスタムスキルを使って、ウェブ検索、データ分析、スライドやウェブページなどのアーティファクト生成など、ほぼ何でもこなせます。",
     octopusTagline: "マルチエージェント協働 · 一つの入力で直接解決",
 
     createYourOwnSkill: "スキルを自作する",
     createYourOwnSkillDescription:
-      "Octopusの力を解放する独自のスキルを作成しましょう。カスタムスキルがあれば、\nOctopusはウェブ検索、データ分析、スライドやウェブページなどの\nアーティファクト生成など、ほぼ何でもこなせます。",
+      "EchoAIの力を解放する独自のスキルを作成しましょう。カスタムスキルがあれば、\nEchoAIはウェブ検索、データ分析、スライドやウェブページなどの\nアーティファクト生成など、ほぼ何でもこなせます。",
 
     scenes: {
       daily: "日常業務",
@@ -269,6 +267,8 @@ export const jaJP: Translations = {
     reviewAssigned: (label: string) => `レビュー担当: ${label}`,
     taskCompleted: "タスク完了",
     taskFailed: "タスクが完了しませんでした",
+    previousAttemptRecovered:
+      "以前の試行は失敗しましたが、後続のターンで復旧しました",
     taskOutputs: "タスク成果物",
     viewProcess: "プロセスを見る",
     makeSimilar: "同じものを作る",
@@ -368,13 +368,13 @@ export const jaJP: Translations = {
     collaboratorsCountUnit: "members",
     collaboratorsHelp:
       "通常は必要な AI だけが応答します。AI メンバーを追加すると、分担協働または並列共創を選べます。",
-    collaboratorsSearchPlaceholder: "エージェント / ローカルパートナーを検索",
+    collaboratorsSearchPlaceholder: "エージェント / インストール済み機能を検索",
     collaboratorsTaskFallback: "チームタスク",
     collaboratorsCoreGroup: "ホワイトゴースト分隊",
     collaboratorsOnDemandGroup: "オンデマンド能力",
     collaboratorsOnDemandBadge: "オンデマンド",
     collaboratorsOnDemandHint:
-      "専門家、デジタルツイン、ローカルパートナーはこの会話にのみ参加し、メインの人格は切り替えません。",
+      "専門家、デジタルツイン、インストール済み機能はこの会話にのみ参加し、メインの人格は切り替えません。",
     responseMode: "AI の参加方法",
     responseModeTeamRequired:
       "分担協働または並列共創を使う前に AI メンバーを追加してください",
@@ -389,14 +389,31 @@ export const jaJP: Translations = {
     groupTaskUxui: "UX/UI レビュー",
     groupTaskActive: "タスク",
     groupTaskClear: "自動処理に戻す",
+    projectFiles: "プロジェクトファイル",
+    removeCapability: (name: string) => `${name} を削除`,
+    uploadImages: "画像をアップロード",
+    workspaceFiles: (name: string) => `プロジェクトファイル · ${name}`,
+    noWorkspaceFiles: "このチャットにはプロジェクトフォルダーがありません",
+    uploadDeviceFiles: "デバイスからファイルをアップロード",
+    commands: "コマンド",
+    plugins: "プラグイン",
+    availablePlugins: "利用可能なプラグイン",
+    capabilityLoadFailed: "機能一覧を読み込めませんでした",
+    noAvailablePlugins: "利用可能なプラグインはありません",
+    managePlugins: "プラグインを管理",
+    explorePlugins: "プラグインを探す",
+    skills: "Skills",
+    searchSkills: "Skills を検索",
+    noAvailableSkills: "利用可能な Skill はありません",
+    manageSkills: "Skills を管理",
     addResearchMaterial: "資料を追加",
     codexPlan: "プラン",
     codexSpec: "仕様",
     codexGoal: "ゴール",
     composerInsertions: "入力欄に挿入",
-    insertCodexPlan: "Plan マーカーを挿入",
+    insertCodexPlan: "計画モード",
     insertCodexSpec: "Spec マーカーを挿入",
-    insertCodexGoal: "Goal マーカーを挿入",
+    insertCodexGoal: "継続目標",
     insertBrowserSurface: "Browser マーカーを挿入",
     insertChromeSurface: "Chrome マーカーを挿入",
     workflow: "ワークフロー",
@@ -406,7 +423,7 @@ export const jaJP: Translations = {
     collapse: "折りたたむ",
     materialNote: "資料メモ",
     url: "URL",
-    file: "ファイル",
+    file: "ファイルを追加",
     text: "テキスト",
     textTitle: "テキストタイトル",
     pasteTextMaterial: "テキスト資料を貼り付け",
@@ -458,6 +475,33 @@ export const jaJP: Translations = {
     permissionAcceptEdits: "編集を受け入れる",
     permissionConfirm: "デフォルト",
     addImage: "画像を追加（貼り付け / ドラッグ / 選択）",
+    addAppshot: "現在のウインドウのスナップショットを添付",
+    capturingAppshot: "現在のウインドウを添付中…",
+    appshotHint: "画像とアクセシビリティテキストを一度だけ追加",
+    appshotSource: "現在のウインドウ Appshot",
+    appshotFailed: "現在のウインドウを読み取れません",
+    windowTools: "ウインドウ",
+    automationTarget: "操作対象",
+    chooseAutomationTarget: "ブラウザーまたはデスクトップウインドウを選択",
+    currentChromeTab: "現在の Chrome タブ",
+    currentDesktopWindow: "デスクトップウインドウ",
+    loadingAutomationTargets: "操作可能なウインドウを検索中…",
+    noAutomationTargets:
+      "操作可能なウインドウがありません。ブラウザー拡張を接続するか、アプリを開いてください。",
+    clearAutomationTarget: "固定した対象を解除",
+    automationOnline: "ブラウザー接続中",
+    automationOffline: "ブラウザーオフライン",
+    automationReconnecting: "再接続中",
+    automationDesktop: "デスクトップ操作",
+    automationIdle: "待機中",
+    automationRunning: "Agent が操作中",
+    automationPaused: "一時停止",
+    automationPause: "一時停止",
+    automationResume: "再開",
+    automationTakeover: "自分で操作",
+    automationEvidence: "操作履歴",
+    automationNoEvidence: "操作履歴はまだありません",
+    automationControlFailed: "操作状態を更新できません",
     removeImage: "削除",
     readme: "README",
   },
@@ -503,7 +547,7 @@ export const jaJP: Translations = {
     categoryTravel: "Travel",
     aiMembersLabel: "初期 AI コラボレーター",
     aiMembersDescription:
-      "作成時にプロジェクトグループへ参加します。最低 1 名を残し、後から変更できます。",
+      "作成時にワークグループへ参加します。最低 1 名を残し、後から変更できます。",
     aiMembersSelected: (count) => `${count} 名選択済み`,
     agentsLoading: "利用可能な AI を読み込み中…",
     agentsUnavailable:
@@ -511,20 +555,20 @@ export const jaJP: Translations = {
     humanMembersLabel: "人間のメンバー",
     humanMembersAfterCreate: "作成後に招待",
     humanMembersDescription:
-      "作成後にプロジェクトグループへ移動し、安全なリンクでメンバーまたは閲覧者を招待できます。",
+      "作成後にワークグループへ移動し、安全なリンクでメンバーまたは閲覧者を招待できます。",
     invitePeopleOnArrival: "グループを開いたらすぐに招待",
     creatorRoleLabel: "あなたのプロジェクトロール",
     creatorRole: "プロジェクト責任者 · グループオーナー",
     creatorRoleDescription:
       "プロジェクト管理、AI 編成、メンバー招待の権限があります。",
-    hint: "プロジェクト、グループ、右側のワークベンチをまとめて作成し連携します。",
+    hint: "ワークグループ、プロジェクト機能、右側のワークベンチをまとめて作成し連携します。",
     cancel: "Cancel",
     create: "プロジェクトを作成",
   },
 
   promoteProjectDialog: {
-    trigger: "プロジェクト化",
-    title: "このワークグループをプロジェクトに変換",
+    trigger: "プロジェクト計画を作成",
+    title: "このワークグループにプロジェクト計画を作成",
     description:
       "現在のメンバーとチャット履歴を保持したまま、マイルストーン、項目、資料、プロジェクトワークベンチを追加します。",
     nameLabel: "プロジェクト名",
@@ -535,8 +579,37 @@ export const jaJP: Translations = {
     cancel: "キャンセル",
     submit: "作成して関連付ける",
     submitting: "作成中…",
-    success: "ワークグループをプロジェクトグループに変換しました",
-    failed: "プロジェクトへの変換に失敗しました。もう一度お試しください。",
+    success: "このワークグループでプロジェクト機能を有効にしました",
+    failed: "プロジェクト計画を作成できませんでした。もう一度お試しください。",
+  },
+
+  projectCapability: {
+    enabled: "プロジェクト有効",
+    startPlan: "プロジェクト計画を作成",
+    openWorkbench: "プロジェクトワークベンチを開く",
+    moreActions: "プロジェクト操作",
+    detach: "プロジェクト機能をオフにする",
+    detachConfirmTitle: "このグループのプロジェクト機能をオフにしますか？",
+    detachConfirmDescription:
+      "プロジェクト計画のみを切り離します。メンバー、招待、チャット履歴、現在のリンクは保持されます。",
+    detachConfirmAction: "プロジェクト機能をオフにする",
+    forceDetachConfirmTitle:
+      "プロジェクトは進行中です。それでもプロジェクト機能をオフにしますか？",
+    forceDetachConfirmDescription:
+      "プロジェクトの実行と状態はこのワークグループから切り離されますが、プロジェクト記録は削除されず、プロジェクト一覧から確認できます。メンバーとチャット履歴は保持されます。",
+    forceDetachConfirmAction: "それでもオフにする",
+    detached:
+      "プロジェクト機能をオフにしました。ワークグループと履歴は保持されています",
+    detachCancelled: "プロジェクト機能はオフにしていません",
+    detachFailed:
+      "プロジェクト機能をオフにできませんでした。もう一度お試しください。",
+    detachBindingChanged:
+      "このグループに関連付けられたプロジェクトが変更されました。更新してから再度お試しください。",
+    statusPlanning: "準備中",
+    statusRunning: "進行中",
+    statusBlocked: "リスクあり",
+    statusDone: "完了",
+    statusFailed: "異常",
   },
 
   // Clarification Questionnaire
@@ -632,7 +705,7 @@ export const jaJP: Translations = {
     updateFile: "ファイルを更新",
     runAction: "操作を実行",
     teammateTimeout:
-      "チームメンバーが時間内に返答しなかったため、Octopus が引き継ぎました",
+      "チームメンバーが時間内に返答しなかったため、EchoAI が引き継ぎました",
     factSummaryPath: (value: string) => `確認済み: ${value}`,
     factSummaryCount: (value: string) => `確認済み: ${value} 件`,
     factSummaryStatus: (value: string) => `確認済み: ${value}`,
@@ -965,6 +1038,7 @@ export const jaJP: Translations = {
       close: "右パネルを閉じる",
       open: "右パネルを開く",
     },
+    viewActions: "表示コントロール",
     finalArtifact: {
       generated: "最終レポートが生成されました",
       view: "View",
@@ -975,7 +1049,7 @@ export const jaJP: Translations = {
       idle: "REC：この会話を録画し、再利用可能なリプレイスキルとして学習",
     },
     replay: {
-      titleDefault: "Octopus 実行リプレイ",
+      titleDefault: "EchoAI 実行リプレイ",
       footer: "自己完結型オフラインリプレイ",
     },
     composer: {
@@ -1420,6 +1494,7 @@ export const jaJP: Translations = {
     computerViewEmptyDesc:
       "タスクがサブエージェントにディスパッチされると、ここでサブエージェントの独立したコンピュータ操作記録を確認できます。",
     visibilityPanelTitle: "能力判断",
+    visibilityPanelAttention: "対応が必要",
     visibilityPanelEmpty: "このターンに能力判断はありません",
     visibilityStep: "判断",
     scrollToBottom: "最下部へスクロール",
@@ -1731,6 +1806,45 @@ export const jaJP: Translations = {
     emptyHint: "コード生成後にプレビューが表示されます",
     showPanel: "プレビューを表示",
     hidePanel: "プレビューを非表示",
+    inspectElement: "要素を選択",
+    cancelInspect: "選択をキャンセル",
+    inspectHint: "ページ要素をクリック · Esc でキャンセル",
+    aiEditTitle: "選択した要素を AI で編集",
+    aiEditCancel: "要素編集をキャンセル",
+    aiEditPlaceholder: "例：レイアウトを保ったまま見出しを未来的にする",
+    aiEditSend: "編集を送信",
+    aiEditQueued:
+      "AI に送信しました。このタスクでファイルとプレビューを更新します。",
+    aiEditUnavailable:
+      "現在このタスクでは編集を受け付けられません。しばらくしてから再試行してください。",
+    officeEdit: "AI で編集",
+    officeSelect: "内容を選択",
+    officeCancelSelect: "選択をキャンセル",
+    officeSelected: "選択済み",
+    officeEditTitle: "この Office ファイルを編集",
+    officeEditPlaceholder:
+      "例：3 ページ目をリスクマトリクスにし、現在のテーマを維持する",
+    officeEditHint:
+      "編集は現在のタスクに送信され、完了後にプレビューが更新されます",
+    previewError:
+      "プレビューを読み込めません。ログイン状態を確認して再試行してください。",
+    previewRetry: "プレビューを再読み込み",
+    officeFidelity: "元のレイアウト",
+    humanEdit: "直接編集",
+    humanEditing: "ページを編集中",
+    humanUnsaved: "未保存の変更があります",
+    humanSave: "ページを保存",
+    humanCancel: "変更を破棄",
+    humanSaved: "ページの変更を保存しました",
+    humanUndo: "前回の保存を元に戻す",
+    humanRestored: "保存前のバージョンに復元しました",
+    humanConflict: "Agent がページを更新しました。変更は未保存です",
+    humanReloadLatest: "破棄して最新版を読み込む",
+    humanUnavailable: "この HTML は書き込み可能なタスク成果物ではありません",
+    humanDiscardTitle: "未保存のページ変更を破棄しますか？",
+    humanDiscardDescription:
+      "このプレビューを離れると、未保存の編集内容は失われ、元に戻せません。",
+    humanDiscardConfirm: "破棄して移動",
   },
 
   // Code Status
@@ -1805,6 +1919,7 @@ export const jaJP: Translations = {
     navMcp: "MCP",
     navEvolution: "自己進化",
     navProjects: "プロジェクト",
+    navDesign: "デザインキャンバス",
     navNarrative: "物語工房",
     navPlugins: "プラグイン",
     navHR: "人材",
@@ -1819,6 +1934,9 @@ export const jaJP: Translations = {
     groupSystem: "システム",
     // Agent / team footer
     noAgents: "利用可能なエージェントがありません",
+    loadingAgents: "エージェントを読み込み中…",
+    agentsLoadFailed: "エージェント一覧を読み込めませんでした",
+    retryAgents: "再読み込み",
     remainingCredits: "クレジット残高",
     logout: "ログアウト",
     noTeams: "グループはまだありません",
@@ -1835,7 +1953,6 @@ export const jaJP: Translations = {
     openAgentHudFor: (name: string) => `${name} の HUD を開く`,
     currentAgent: "現在のエージェント",
     soloChat: "個人チャット",
-    localCliPartners: "ローカル CLI パートナー",
     oneOnOneTask: "1対1タスク",
     soloTasks: "個人タスク",
     groupTasks: "共同タスク",
@@ -2014,9 +2131,9 @@ export const jaJP: Translations = {
       "エージェントが保持できるタブ数を制限。retain=true で開いたタブはタスク終了後も自動的に閉じられません。",
     saveConfig: "設定を保存",
     configSaved: "設定を保存しました",
-    installExtensionTitle: "Octopus Browser Relay をインストール",
+    installExtensionTitle: "EchoAI Browser Relay をインストール",
     installExtensionDesc:
-      "拡張機能をインストールしてブラウザーを Octopus に接続。",
+      "拡張機能をインストールしてブラウザーを EchoAI に接続。",
     step1Title: "Chrome 拡張機能ページを開き、デベロッパーモードを有効化",
     step1Desc: "ブラウザーで拡張機能管理ページを開く",
     step1Action: "chrome://extensions を開く",
@@ -2033,7 +2150,7 @@ export const jaJP: Translations = {
     relayVersion: "Version",
     compareTitle: "接続方式を選択",
     compareDesc:
-      "どちらの方式もブラウザーを Octopus に接続します。ニーズに合ったものを選択。",
+      "どちらの方式もブラウザーを EchoAI に接続します。ニーズに合ったものを選択。",
     compareFeature: "Feature",
     compareExtension: "Extension",
     compareCdp: "CDP 直接接続",
@@ -2066,7 +2183,7 @@ export const jaJP: Translations = {
     allVersions: "すべてのバージョン",
     // Page Agent integration
     pageAgentDesc:
-      "Page Agent は Alibaba がオープンソース化した GUI Agent フレームワークで、テキストベースの DOM 操作でウェブページを制御します。スクリーンショットやマルチモーダルモデル不要。MCP プロトコルで Octopus に統合。",
+      "Page Agent は Alibaba がオープンソース化した GUI Agent フレームワークで、テキストベースの DOM 操作でウェブページを制御します。スクリーンショットやマルチモーダルモデル不要。MCP プロトコルで EchoAI に統合。",
     pageAgentDocs: "ドキュメントを表示",
     pageAgentFeature1: "ページ内 JS 統合",
     pageAgentFeature1Desc:
@@ -2111,7 +2228,7 @@ export const jaJP: Translations = {
     extConNeedExtension: "Chrome 拡張機能のインストールが必要です。",
     cdpProNoExtension: "拡張機能のインストールは不要です。",
     cdpProChrome144: "Chrome 144+ で動作。",
-    cdpConReAuth: "Octopus 再起動のたびに再認証が必要です。",
+    cdpConReAuth: "EchoAI 再起動のたびに再認証が必要です。",
     cdpConChrome144Only: "Chrome 144+ のみサポート。",
   },
 
@@ -2374,7 +2491,7 @@ export const jaJP: Translations = {
     loadoutReady: "ロードアウト準備完了",
     saved: "Agent 設定を保存しました",
     saveFailed: (msg) => `保存失敗：${msg}`,
-    officialFaction: "Octopus コマンド",
+    officialFaction: "EchoAI コマンド",
     authorFaction: (author) => `${author} Lab`,
     categoryRoles: {
       assistant: "サポート",
@@ -2729,13 +2846,13 @@ export const jaJP: Translations = {
     save: "エージェントを保存",
     saving: "エージェントを保存中...",
     saveRequested:
-      "保存をリクエストしました。Octopus が初期バージョンを生成して保存しています。",
+      "保存をリクエストしました。EchoAI が初期バージョンを生成して保存しています。",
     saveHint:
       "これが初稿であっても、右上のメニューからいつでもこのエージェントを保存できます。",
     saveCommandMessage:
       "これまでの議論の内容に基づいて、このカスタムエージェントを今すぐ保存してください。これは保存に対する私の明示的な確認とみなしてください。まだ不足している詳細がある場合は、妥当な想定を行い、簡潔な初版の SOUL.md を英語で生成し、追加の確認を求めずにすぐ setup_agent を呼び出してください。",
     agentCreatedPendingRefresh:
-      "エージェントは作成されましたが、Octopus がまだ読み込めていません。しばらくしてからこのページを更新してください。",
+      "エージェントは作成されましたが、EchoAI がまだ読み込めていません。しばらくしてからこのページを更新してください。",
     more: "その他の操作",
     agentCreated: "エージェントを作成しました！",
     startChatting: "チャットを開始",
@@ -2989,13 +3106,13 @@ export const jaJP: Translations = {
 
   // Workspace
   workspace: {
-    officialWebsite: "Octopus 公式サイト",
-    githubTooltip: "GitHub で Octopus を見る",
+    officialWebsite: "EchoAI 公式サイト",
+    githubTooltip: "GitHub で EchoAI を見る",
     settingsAndMore: "設定など",
-    visitGithub: "GitHub で Octopus を見る",
+    visitGithub: "GitHub で EchoAI を見る",
     reportIssue: "問題を報告",
     contactUs: "お問い合わせ",
-    about: "Octopus について",
+    about: "EchoAI について",
     modes: {
       chat: "チャット",
       team: "チーム",
@@ -3007,7 +3124,7 @@ export const jaJP: Translations = {
       badge: "Agent OS コントロールルーム",
       headline: "エージェントに目標を与え、作業を監督しましょう。",
       description:
-        "Octopus は目標を計画に変換し、スコープ化されたランタイムでツールを実行し、トレースを記録して、次回の実行に役立つメモリを保持します。",
+        "EchoAI は目標を計画に変換し、スコープ化されたランタイムでツールを実行し、トレースを記録して、次回の実行に役立つメモリを保持します。",
       newTask: "新しいタスク",
       codeTask: "コードタスク",
       systemLoop: {
@@ -3084,6 +3201,13 @@ export const jaJP: Translations = {
     noChangesArtifacts: "変更はありません",
     noPreviewArtifacts: "プレビューできる内容はありません",
     retry: "再試行",
+    messageQueued: "送信待ち",
+    messageSending: "送信中",
+    messageSendFailed: "送信失敗",
+    previousMessagePending:
+      "前のメッセージを送信中です。確認されてから再試行してください。",
+    steeringTurnUnavailable:
+      "元のタスクは実行中ではありません。新しいメッセージとして送信してください。",
     editResend: "編集して再送信",
     regenerateResponse: "応答を再生成",
     forkFromHere: "ここから会話を分岐",
@@ -3128,7 +3252,7 @@ export const jaJP: Translations = {
 
   // Page titles (document title)
   pages: {
-    appName: "Octopus",
+    appName: "EchoAI",
     chats: "Chats",
     newChat: "新規チャット",
     untitled: "Untitled",
@@ -3154,7 +3278,7 @@ export const jaJP: Translations = {
     writeFile: "ファイルに書く",
     clickToViewContent: "クリックしてファイル内容を表示",
     writeTodos: "Todo リストを更新",
-    skillInstallTooltip: "スキルをインストールして Octopus で利用可能に",
+    skillInstallTooltip: "スキルをインストールして EchoAI で利用可能に",
     toastSkillInstallFailed: "スキルのインストールに失敗しました",
     toastExportConversationFailed: "会話のエクスポートに失敗しました",
   },
@@ -3175,7 +3299,17 @@ export const jaJP: Translations = {
     connectionLost:
       "この返信は中断されました。チャットを続けるか再試行してください。",
     networkLost:
-      "ネットワークが切断されました。タスクは自動一時停止 —メッセージを送信してチェックポイントから再開。",
+      "モデル接続が切断されました。完了済みの手順とサブエージェント結果は保持されています。再試行して続行できます。",
+    modelAuthRequiredTitle: "モデルのログインが切れました",
+    modelAuthRequired:
+      "現在のモデル認証情報が無効か、ログインしていません。モデル設定で再ログインするか、別の利用可能なモデルに切り替えてください。",
+    subagentCapabilityMismatchTitle: "サブエージェントの能力が一致しません",
+    subagentCapabilityMismatch:
+      "選択したサブエージェントには、このタスクに必要な能力がないため実行されませんでした。適切なエージェントを選んで再試行してください。",
+    modelRateLimitedTitle: "モデルが一時的にレート制限されています",
+    modelRateLimited:
+      "現在のモデルへのリクエストが多すぎるか、上限に達しています。後でもう一度試すか、別の利用可能なモデルに切り替えてください。",
+    openModelSettings: "モデル設定を開く",
     turnFailed:
       "このターンは完了前に停止しました。チャットを続けるか再試行してください。",
     guardBlocked:
@@ -3185,14 +3319,16 @@ export const jaJP: Translations = {
     workspaceWriteRequired:
       "このタスクはプロジェクトファイルの変更が必要ですが、有効なファイル変更が記録されませんでした。",
     verificationRequired:
-      "コード変更を検証してからでないと Octopus はこのターンを終了できません。テスト、lint、typecheck、ビルドを実行して続行。",
+      "コード変更は保持されましたが、検証結果を取得できませんでした。EchoAI は自動検証を試行済みです。推奨コマンドを確認して続行してください。",
+    verificationRunFailed:
+      "自動検証を実行しましたが失敗しました。コード変更は保持されています。下記の失敗コマンドと出力を確認してください。",
     environmentBlocked:
       "環境上の制約でタスクがブロックされています — 理由は下記のとおりです。",
     environmentBlockedAuthorizeCommon: "「共通ドメイン」を許可して再試行",
     environmentBlockedAuthorizeFull: "フルネットワークを許可して再試行",
     blockedOnUser: "タスクを続けるには、あなたの入力が必要です。",
     streamEndpointUnavailable:
-      "バックエンドのチャット/チームストリームエンドポイントが有効でないか利用不可。完全な Octopus バックエンドを起動するかフロントエンドプロキシを確認。",
+      "バックエンドのチャット/チームストリームエンドポイントが有効でないか利用不可。完全な EchoAI バックエンドを起動するかフロントエンドプロキシを確認。",
     iteration: (count: number) => `第 ${count} ラウンド`,
     toolCalls: (count: number) => `${count} 回呼び出し`,
     generating: "生成中…",
@@ -3290,7 +3426,7 @@ export const jaJP: Translations = {
     actions: "Actions",
     keyboardShortcuts: "キーボードショートカット",
     keyboardShortcutsDescription:
-      "キーボードショートカットで Octopus をより速く操作。",
+      "キーボードショートカットで EchoAI をより速く操作。",
     openCommandPalette: "コマンドパレットを開く",
     commandPaletteDescription: "実行するコマンドを検索...",
     toggleSidebar: "サイドバーを切り替え",
@@ -3376,11 +3512,13 @@ export const jaJP: Translations = {
   // Settings
   settings: {
     title: "設定",
-    description: "Octopus の見た目と動作を好みに合わせて調整します。",
+    description: "EchoAI の見た目と動作を好みに合わせて調整します。",
     sections: {
       account: "アカウント",
       subscription: "プランと請求",
       appearance: "外観",
+      general: "一般",
+      conversation: "会話",
       memory: "メモリと個人ルール",
       tools: "ツール",
       skills: "スキル",
@@ -3533,7 +3671,7 @@ export const jaJP: Translations = {
     memory: {
       title: "メモリ",
       description:
-        "保存された事実と会話要約を管理し、Octopus が記録・利用するタイミングを設定します。",
+        "保存された事実と会話要約を管理し、EchoAI が記録・利用するタイミングを設定します。",
       empty: "表示できるメモリはありません。",
       rawJson: "元の JSON",
       exportButton: "メモリを書き出す",
@@ -3544,7 +3682,7 @@ export const jaJP: Translations = {
         "選択した JSON バックアップで現在のメモリを上書きします。",
       importFileLabel: "選択したファイル",
       importInvalidFile:
-        "ファイルを読み込めません。Octopus が書き出した有効な JSON ファイルを選択してください。",
+        "ファイルを読み込めません。EchoAI が書き出した有効な JSON ファイルを選択してください。",
       importFileTooLarge: "メモリファイルは 5 MB 以下にしてください。",
       importSuccess: "メモリを読み込みました",
       manualFactSource: "手動追加",
@@ -3709,7 +3847,7 @@ export const jaJP: Translations = {
       createSkill: "スキルを作成",
       emptyTitle: "エージェントスキルはまだありません",
       emptyDescription:
-        "エージェントスキルのフォルダーは、Octopus のルートフォルダー配下の `/skills/custom` フォルダーに配置してください。",
+        "エージェントスキルのフォルダーは、EchoAI のルートフォルダー配下の `/skills/custom` フォルダーに配置してください。",
       emptyButton: "最初のスキルを作成",
       enabledDescription:
         "有効なスキルはエージェントのツールカタログに登録されます。無効なスキルはモデルから非表示になり、実行できません。",
@@ -3733,16 +3871,16 @@ export const jaJP: Translations = {
     notification: {
       title: "通知",
       description:
-        "ウィンドウが非アクティブなとき、Octopus はタスク完了を通知します。長時間のタスク中に別の作業へ切り替える場合に便利です。",
+        "ウィンドウが非アクティブなとき、EchoAI はタスク完了を通知します。長時間のタスク中に別の作業へ切り替える場合に便利です。",
       enableNotification: "通知を有効にする",
       permissionGranted: "許可済み",
       permissionPrompt: "許可が必要です",
       permissionDenied: "拒否されました",
       requestPermission: "通知を許可する",
       deniedHint:
-        "通知が拒否されています。システムまたはブラウザの通知設定で Octopus を有効にしてください。",
+        "通知が拒否されています。システムまたはブラウザの通知設定で EchoAI を有効にしてください。",
       testButton: "テスト通知を送信",
-      testTitle: "Octopus",
+      testTitle: "EchoAI",
       testBody: "これはテスト通知です。",
       testSent: "テスト通知を送信しました",
       requestFailed: "通知の許可を要求できませんでした",
@@ -3999,16 +4137,16 @@ export const jaJP: Translations = {
       },
     },
     octopusMix: {
-      title: "Octopus Mix · マルチモデル協調",
+      title: "EchoAI Mix · マルチモデル協調",
       description:
-        "2 つ以上のモデルを proposer(独立して下書き、ツールなし)として選び、aggregator を 1 つ選んで回答を統合します。チャットで「Octopus Mix」を選択するとこの設定が使われ、proposer プールが空の場合はデフォルトモデル × 数量が使われます。",
+        "2 つ以上のモデルを proposer(独立して下書き、ツールなし)として選び、aggregator を 1 つ選んで回答を統合します。チャットで「EchoAI Mix」を選択するとこの設定が使われ、proposer プールが空の場合はデフォルトモデル × 数量が使われます。",
       proposersLabel: "Proposers(下書きに参加するモデル)",
       noCandidates: "選択可能なモデルがありません",
       aggregatorLabel: "アグリゲーター",
       aggregatorDefault: "デフォルト",
       nLabel: "プールなしの時の数",
       saveButton: "保存",
-      saveSuccess: "Octopus Mix 設定を保存しました",
+      saveSuccess: "EchoAI Mix 設定を保存しました",
       saveFailed: (status: number) => `保存に失敗しました (${status})`,
       saveFailedFallback: "保存に失敗しました",
     },
@@ -4145,7 +4283,7 @@ export const jaJP: Translations = {
     reject: "Reject",
     approveExecute: "承認 & 実行",
     startQuest: "Quest を開始",
-    questDesc: "複雑なタスクを記述し、Octopus が自律的に計画、実行、検証",
+    questDesc: "複雑なタスクを記述し、EchoAI が自律的に計画、実行、検証",
     requirementPlaceholder: "達成したいことを記述...",
     executionPlan: "実行計画",
     verificationPassed: "検証合格",
@@ -4297,7 +4435,7 @@ export const jaJP: Translations = {
       installFailed: "プラグインのインストールに失敗",
       statusFailed: "プラグインステータスの更新に失敗",
       removeConfirm:
-        "このプラグインを Octopus から削除しますか？ローカルファイルは削除されません。",
+        "このプラグインを EchoAI から削除しますか？ローカルファイルは削除されません。",
       removeFailed: "プラグインの削除に失敗",
       enabled: "Enabled",
       disabled: "Disabled",
@@ -4309,7 +4447,7 @@ export const jaJP: Translations = {
         "localhost プレビューは Electron プラグイン API にアクセスできません。",
       placeholderTitle: "プラグインカタログプレースホルダー",
       placeholderDesc:
-        "デスクトップアプリでローカルプラグインをインストール・管理。プレビューでも Octopus がサポートするプラグインカテゴリを表示。",
+        "デスクトップアプリでローカルプラグインをインストール・管理。プレビューでも EchoAI がサポートするプラグインカテゴリを表示。",
       placeholderBrowserTitle: "ブラウザープラグイン",
       placeholderBrowserDesc:
         "Agent がページの読み取り、コントロールのクリック、スクリーンショットの取得を可能にする Chrome / Edge 拡張機能。",
@@ -4414,17 +4552,6 @@ export const jaJP: Translations = {
     createAgentCardDesc: "カスタムロールを作成します",
     addAgent: "追加",
     newAgent: "新しいロール",
-    importAgentPack: "Agent Pack をインポート",
-    importAgentPackDesc:
-      "ローカルの Claude / Codex プラグインパックをプレビューしてロールをインポートします。",
-    importAgentPackPlaceholder:
-      "ローカルパックのルートパスを入力（例: F:\\packs\\kimi-agent）",
-    previewAgentPack: "プレビュー",
-    importSelectedAgent: "選択したロールをインポート",
-    noImportableAgents:
-      "このパックにインポート可能なロールまたは Markdown ロールがありません。",
-    importedAgent: (name: string, path: string) =>
-      `${name} をインポートしました · ${path}`,
     discoverTagline: "協働ロールを閲覧、設定、追加します",
     toastInstalled: (name: string) => `「${name}」を追加しました`,
     toastCapabilityPackInstalled: (name: string, count: number) =>
@@ -4436,14 +4563,6 @@ export const jaJP: Translations = {
       `評価 ${rating}、レビュー ${count} 件`,
     downloadCountAriaLabel: (count: string) => `ダウンロード数 ${count}`,
     authorPrefix: "作成者:",
-    packContentLabels: {
-      plugins: "プラグイン",
-      apps: "アプリ",
-      agents: "ロール",
-      skills: "スキル",
-      commands: "コマンド",
-      mcp: "MCP",
-    },
   },
 
   // Agent World Unified
@@ -4467,12 +4586,22 @@ export const jaJP: Translations = {
     installSuccessWithFailure: (installed: number, failed: number) =>
       `${installed} 件を追加、${failed} 件は失敗しました`,
     installFailed: "追加に失敗しました。しばらくしてからもう一度お試しください",
-    connectLocalPartner: "ローカルパートナーを接続",
     enterprise: "エンタープライズ",
     localTab: "ローカル",
     enabledTab: "有効",
     marketplaceTab: "マーケットプレイス",
     categoryFilterLabel: "ロールカテゴリで絞り込む",
+    domainFilterLabel: "業務分野で絞り込む",
+    domains: {
+      all: "すべて",
+      general: "一般",
+      coding: "開発",
+      research: "リサーチ",
+      creative: "クリエイティブ",
+      automation: "自動化",
+      ecommerce: "Eコマース",
+      finance: "金融",
+    },
     loadingAgents: "ロールを読み込み中…",
     loadAgentsFailed:
       "ロール一覧を読み込めませんでした。もう一度お試しください。",
@@ -4483,28 +4612,6 @@ export const jaJP: Translations = {
   },
 
   // Local Agent Connect Dialog
-  localAgentConnect: {
-    title: "ローカルパートナーに接続",
-    description:
-      "このマシンにインストールされた Agent ツールを自動検出し、エージェントライブラリに登録してチームタスクで直接割り当て可能に。",
-    detecting: "ローカルパートナーを検出中...",
-    detectFailed: "ローカルパートナーの検出に失敗しました",
-    retryDetect: "Retry",
-    statusConnected: "Connected",
-    statusDetected: "Detected",
-    statusNotDetected: "未検出",
-    availableCount: (count: number) => `${count} 個接続可能`,
-    cancel: "Cancel",
-    connectSelected: (count: number) => `${count} Agent を接続`,
-    noPartnerSelected: "検出されたローカルパートナーを選択してください",
-    registerSuccess: (count: number) => `${count} 個のローカルパートナーを接続`,
-    alreadyExists:
-      "これらのローカルパートナーはすでにエージェントライブラリにあります",
-    noPartnersAvailable:
-      "接続可能なローカルパートナーがありません。対応するローカルツールを先にインストールしてください",
-    registerFailed: "ローカルパートナーの接続に失敗しました",
-    partnerNameAria: (name: string) => `${name} 名`,
-  },
 
   // Agent World Card
   agentWorldCard: {},
@@ -4658,7 +4765,7 @@ export const jaJP: Translations = {
     },
     extensionMarketplace: {
       title: "Extensions",
-      subtitle: "Octopus ブラウザー拡張機能を管理",
+      subtitle: "EchoAI ブラウザー拡張機能を管理",
       installLocal: "ローカル拡張機能をインストール",
       refreshAriaLabel: "拡張機能を更新",
       closeAriaLabel: "拡張機能を閉じる",
@@ -4689,7 +4796,7 @@ export const jaJP: Translations = {
       errorStatusFailed: "拡張機能ステータスの更新に失敗",
       errorRemoveFailed: "拡張機能の削除に失敗",
       confirmRemove:
-        "この拡張機能を Octopus から削除しますか？ローカルファイルは削除されません。",
+        "この拡張機能を EchoAI から削除しますか？ローカルファイルは削除されません。",
       categoryFeatured: "Featured",
       categoryEfficiency: "Efficiency",
       categoryResearch: "Research",
@@ -4717,17 +4824,17 @@ export const jaJP: Translations = {
       openDirectory: "ディレクトリを開く",
       extPluginTitle: "外部ブラウザープラグイン",
       extPluginDesc:
-        "Chrome / Edge 向け。プラグインはローカル Octopus に接続し、外部ページを Agent が読み取り・操作可能に。",
+        "Chrome / Edge 向け。プラグインはローカル EchoAI に接続し、外部ページを Agent が読み取り・操作可能に。",
       dragToBookmarks: "ブックマークバーにドラッグ",
       dragToBookmarksDesc:
         "軽量 Page Agent モード、現在のページを一時的に接続するのに適しています。",
       dragToBookmarksTitle: "Chrome/Edge ブックマークバーにドラッグ",
       step1Temporary:
-        "1. 一時使用：上の Octopus Agent をブックマークバーにドラッグし、対象ページでクリック。",
+        "1. 一時使用：上の EchoAI Agent をブックマークバーにドラッグし、対象ページでクリック。",
       step2LongTerm:
         "2. 長期使用：Chrome/Edge 拡張機能管理ページを開き、「デベロッパーモード」を有効化。",
       step3LoadExtension:
-        "3. 「パッケージ化されていない拡張機能を読み込む」をクリックし、Octopus プラグインディレクトリを選択。",
+        "3. 「パッケージ化されていない拡張機能を読み込む」をクリックし、EchoAI プラグインディレクトリを選択。",
       pluginDirectory: "プラグインディレクトリ",
       pluginDirectoryOpened: (path: string) =>
         `プラグインディレクトリを開きました：${path}`,
@@ -4902,7 +5009,7 @@ export const jaJP: Translations = {
       searchOrUrl: "検索または URL を入力",
       siteInfo: "サイト情報",
       siteInfoDesc:
-        "ログイン状態、Cookie、ローカルデータは Octopus ブラウザーに保持され、タブ間で共有されます。",
+        "ログイン状態、Cookie、ローカルデータは EchoAI ブラウザーに保持され、タブ間で共有されます。",
       clearData: "データをクリア",
       openExternally: "外部で開く",
       confirmClearSiteData:
@@ -5019,7 +5126,20 @@ export const jaJP: Translations = {
     surfaceModeScreenshot: "Screenshot",
     selectDevicePreset: "デバイスプリセットを選択",
     continueInFullBrowser: "完全ブラウザーで続行",
-    takeoverButton: "AI ブラウザを開く",
+    takeoverButton: "AI ブラウザ",
+    switchToLivePreview: "ライブプレビューに切り替え",
+    switchToLivePreviewDescription: "操作可能なページで閲覧を続けます",
+    switchToScreenshot: "スクリーンショット表示に切り替え",
+    switchToScreenshotDescription: "最新の画面を表示して操作します",
+    sessionHealthyLabel: "セッションは正常です",
+    sessionAttentionLabel: "セッションを確認してください",
+    endSession: "ブラウザーセッションを終了",
+    annotateScreenshot: "スクリーンショットに注釈してチャットへ送信",
+    annotationButton: "注釈",
+    annotationPlaceholder: "変更内容を書き、スクリーンショット上で位置を指定",
+    annotationInputLabel: "スクリーンショット注釈",
+    sendAnnotation: "送信",
+    cancelAnnotation: "注釈をキャンセル",
     sessionNeedsAttention: (issues) => `ブラウザセッションが要注意：${issues}`,
     reconnectButton: "Reconnect",
     semanticSnapshotFallback: "ページセマンティックスナップショット",
@@ -5032,11 +5152,16 @@ export const jaJP: Translations = {
     clickMode: "シングルクリック",
     doubleClickMode: "ダブルクリック",
     localServices: "ローカルサービス",
+    noLocalServices: "実行中のローカルサービスはありません",
     scanButton: "Scan",
     serviceTypeFrontend: "Frontend",
     serviceTypeBackend: "Backend",
     serviceTypeOther: "Service",
     scanLocalServices: "ローカルサービスをスキャン",
+    localPreviewMode: "ローカルプレビュー",
+    localPreviewRunning: (port) => `ポート ${port} · 実行中`,
+    localPreviewRefresh: "プレビューを更新",
+    localPreviewOpenExternal: "システムブラウザで開く",
     selectedAction: (action) => `選択中 ${action}`,
     locateActionTitle: "スクリーンショットでこのアクションを特定",
     deselectTitle: "Deselect",
@@ -5684,13 +5809,13 @@ export const jaJP: Translations = {
       joinPolicyLabel: "参加方法",
       joinPolicyApply: "承認後に参加",
       joinPolicyApplyDesc:
-        "プロジェクトとチャットを開く前に、グループ管理者の承認が必要です。",
+        "グループチャットと有効なプロジェクト内容を開く前に、グループ管理者の承認が必要です。",
       joinPolicyDirect: "直接参加",
       joinPolicyDirectDesc:
         "有効なリンクを持つ同じテナントのメンバーはすぐ参加できます。",
       directJoinConfirmTitle: "直接参加を許可しますか？",
       directJoinConfirmDescription:
-        "切り替えると、現在有効なすべての招待リンクから、オーナーの承認なしでこのプロジェクトグループに参加できます。",
+        "切り替えると、現在有効なすべての招待リンクから、オーナーの承認なしでこのワークグループに参加できます。",
       directJoinConfirmAction: "直接参加を許可",
       directJoinConfirmCancel: "承認制を維持",
       policySaveFailed: "参加方法を保存できませんでした",
@@ -5963,13 +6088,13 @@ export const jaJP: Translations = {
 
   intelligencePanel: {
     examplePrompts: [
-      "Octopus Agent の GitHub リリース、Issue、競合動向を毎日追跡し、製品判断に関係する変更だけを残す",
+      "EchoAI Agent の GitHub リリース、Issue、競合動向を毎日追跡し、製品判断に関係する変更だけを残す",
       "AI Agent、ブラウザ自動化、マルチエージェントの新しい論文と OSS を毎週まとめ、重複ニュースを除外する",
       "競合3社の価格、プラグイン、企業向け機能の変更を監視し、重要な更新を通知する",
     ],
     goalLabel: "継続的に追跡したい内容",
     goalPlaceholder:
-      "例：Octopus Agent、browser-use、OpenAI Agent SDK のリリースや重要な議論を毎日追跡し、製品ロードマップに影響する変更だけを残す。",
+      "例：EchoAI Agent、browser-use、OpenAI Agent SDK のリリースや重要な議論を毎日追跡し、製品ロードマップに影響する変更だけを残す。",
     subscriptionName: "購読名",
     keywords: "キーワード（カンマ区切り）",
     cadence: "実行頻度",
@@ -6045,6 +6170,7 @@ export const jaJP: Translations = {
   // Public Thinking Status
   publicThinkingStatus: {
     waitingForModel: "思考中",
+    firstResponseSlow: "最初の応答に時間がかかっています",
     modelWorking: "思考中...",
     thinkingCompleted: "思考完了",
     slowResponse: "続けています。少し時間がかかっています",
@@ -6271,10 +6397,10 @@ export const jaJP: Translations = {
   // Onboarding
   onboarding: {
     title: "オンボーディングガイド",
-    welcomeToOctopus: "Octopus へようこそ",
+    welcomeToOctopus: "EchoAI へようこそ",
     yourAIPlatform: "あなたの AI Agent プラットフォーム",
     welcomeDesc:
-      "Octopus はオープンソースのスーパー Agent フレームワークで、サブ Agent、メモリ、サンドボックスを編成してほぼ何でもこなします — 拡張可能なスキルで駆動されます。",
+      "EchoAI はオープンソースのスーパー Agent フレームワークで、サブ Agent、メモリ、サンドボックスを編成してほぼ何でもこなします — 拡張可能なスキルで駆動されます。",
     chatModes: "タスク能力",
     chatModesDesc: "一つのタスクから始めて、必要に応じて能力と協力者を追加",
     modeChat: "Chat",
@@ -6498,7 +6624,7 @@ export const jaJP: Translations = {
     },
     technicalDetails: "技術詳細",
     createPluginPrompt:
-      "$plugin-creator を使って新しい Octopus プラグインを作成してください。\nまずプラグイン名、用途、skills/apps/MCP を含むかどうかを確認し、個人プラグインディレクトリにスキャフォールドして manifest を完成させ、プラグインがマーケットプレイスで認識できるか検証してください。",
+      "$plugin-creator を使って新しい EchoAI プラグインを作成してください。\nまずプラグイン名、用途、skills/apps/MCP を含むかどうかを確認し、個人プラグインディレクトリにスキャフォールドして manifest を完成させ、プラグインがマーケットプレイスで認識できるか検証してください。",
   },
 
   // Local skill directory panel
@@ -6665,7 +6791,7 @@ export const jaJP: Translations = {
 
   // Bundle Info
   bundleInfo: {
-    appVersion: "Octopus バージョン",
+    appVersion: "EchoAI バージョン",
     license: "ライセンス",
     title: "ビルド情報",
     environment: "環境",
@@ -6697,6 +6823,9 @@ export const jaJP: Translations = {
       "タスクタイプに応じてシステムが最適なモデルを自動選択",
     autoModelBadge: "Smart",
     longContextHint: "1M コンテキストを使用",
+    contextLength: "コンテキスト長",
+    contextStandard: "標準",
+    contextMax: "Max",
   },
 
   // Account Settings
@@ -6729,7 +6858,7 @@ export const jaJP: Translations = {
     confirmDelete: "削除を確認",
     factoryResetTitle: "工場出荷状態に戻す",
     factoryResetDescription:
-      "ローカルの会話、ワークスペース、メモリ、インストール状態、ブラウザー側の Octopus キャッシュを消去します。ソースコードと組み込みロールは保持されます。",
+      "ローカルの会話、ワークスペース、メモリ、インストール状態、ブラウザー側の EchoAI キャッシュを消去します。ソースコードと組み込みロールは保持されます。",
     factoryResetDialogDescription:
       "ローカルの実行データとキャッシュを削除します。完了後にアプリを再起動または再読み込みしてください。ソースコードと組み込みロールのフォルダーは削除されません。",
     factoryResetTypeToConfirm: "確認のため RESET OCTOPUS と入力",
@@ -6768,7 +6897,7 @@ export const jaJP: Translations = {
     totalCredits: (total) => `合計 ${total} クレジット`,
     billingUnavailableTitle: "プランを一時的に利用できません",
     billingUnavailableDescription:
-      "Octopus アカウントにはログイン済みですが、請求サービスに接続されていません。再試行してアカウント連携とプランを更新してください。",
+      "EchoAI アカウントにはログイン済みですが、請求サービスに接続されていません。再試行してアカウント連携とプランを更新してください。",
     subscriptionUnavailable: "サブスクリプション情報を読み込めませんでした。",
     plansUnavailable: "プランを読み込めませんでした。",
     noPlans: "現在購入できるプランはありません。",
@@ -7020,7 +7149,7 @@ export const jaJP: Translations = {
   appAuth: {
     pageTitle: "アプリ認可",
     pageSubtitle:
-      "サードパーティプラットフォームを認可し、Octopus があなたに代わってデータにアクセスできるようにします。",
+      "サードパーティプラットフォームを認可し、EchoAI があなたに代わってデータにアクセスできるようにします。",
     searchPlaceholder: "認可を検索...",
     connectedCount: (n: number) => `${n} 接続済み`,
     tabAll: "All",
@@ -7160,6 +7289,11 @@ export const jaJP: Translations = {
       `${rules} 条のルールを読み込み${statsReset ? " · 統計リセット" : ""}`,
     reloadError: (error: string) => `エラー：${error}`,
     fetchFailed: "リクエスト失敗",
+    dataLoading: "反射データを読み込み中…",
+    dataUnavailable: "反射データを一時的に読み込めません。",
+    dataRefreshFailed:
+      "更新に失敗しました。最後に正常に読み込んだデータを表示しています。",
+    retryButton: "再試行",
     reloadFailed: "リロード失敗",
     statTry: "Try",
     statHit: "Hit",
@@ -7169,6 +7303,7 @@ export const jaJP: Translations = {
     statLastHourHits: "直近 1 時間のヒット",
     sparklineTitle: "反射ヒット · 直近 60 分 · 1 分バケット",
     sparklineEmpty: "直近 60 分の反射ヒットはありません",
+    sparklineUnavailable: "反射トレンドを一時的に読み込めません。",
     rulesTableTitle: "Rules",
     responseTiersTitle: "応答階層",
     colRule: "Rule",
@@ -7180,6 +7315,7 @@ export const jaJP: Translations = {
     colRate: "Rate",
     colLast: "Last",
     noRulesLoaded: "ルールが読み込まれていません。",
+    rulesUnavailable: "ルールデータを一時的に読み込めません。",
     tierEnabled: "enabled",
     tierDisabled: "disabled",
     tierSize: "size",
@@ -7275,6 +7411,10 @@ export const jaJP: Translations = {
     addendumAppliedTitle: "現在適用中のアドエンダム",
     addendumLive: "live",
     addendumNone: "none",
+    stateLoading: "読み込み中…",
+    stateUnavailable: "状態を取得できません",
+    addendumUnavailable:
+      "アドエンダムの状態を一時的に読み込めません。既存の設定は変更されていません。",
     addendumClearButton: "クリア (手動)",
     addendumBytes: (size: number) => `${size} バイト`,
     knobIterations: "iterations",
@@ -7297,6 +7437,9 @@ export const jaJP: Translations = {
     canaryTitle: "Canary / ロールバック",
     canaryRefresh: "refresh",
     canaryEmpty: "まだ canary 状態がありません",
+    canaryUnavailable:
+      "Canary 状態を一時的に読み込めません。既存のデータは変更されていません。",
+    canaryCountsUnavailable: "アクティブ — · ロールバック済み — · 合計 —",
     canaryCounts: (active: number, rolledBack: number, total: number) =>
       `アクティブ ${active} · ロールバック ${rolledBack} · 合計 ${total}`,
     canaryPhase: (phase: string) => `フェーズ ${phase}`,
@@ -7421,6 +7564,81 @@ export const jaJP: Translations = {
     journalRow: (task: string, arm: string) => `タスク=${task} 戦略=${arm}`,
     subtitle:
       "ランタイム内省パネル · 並列コラボ / ブラックボード / ジャーナルストリーム / 自己進化 / コンテキスト予算 / コスト",
+    shell: {
+      startTask: "タスクを開始",
+      runReviewTitle: "実行レビュー",
+      runReviewDescription:
+        "順調だった箇所、失敗した箇所、詳しく確認すべき箇所を確認します。",
+      liveEventsTitle: "ライブイベント",
+      liveEventsDescription:
+        "コラボレーション、ブラックボード、ログを一つのイベントビューにまとめます。",
+      resourcesTitle: "リソースとコスト",
+      resourcesDescription:
+        "コンテキスト予算、トークン使用量、コスト集計を一か所で確認します。",
+      systemTitle: "システム状態",
+      systemDescription:
+        "自己進化、診断、バックエンド状態をまとめて確認します。",
+      overviewTab: "概要",
+      eventsTab: "イベント",
+      resourcesTab: "リソースとコスト",
+      systemTab: "システム",
+      overviewTitle: "まず概要を確認",
+      overviewDescription:
+        "健全性、イベント、リソース、システム状態を四つのビューに整理しています。",
+      openNewTask: "新しいタスクを開く",
+      eventsEyebrow: "イベント",
+      eventsTitle: "実行、コラボレーション、ログをまとめて表示",
+      eventsDescription:
+        "長いタブ列を移動せずに、実行レビュー、コラボレーション、ブラックボード、ログを確認できます。",
+      resourcesEyebrow: "リソースとコスト",
+      resourcesGroupTitle: "予算を先に、請求を次に",
+      resourcesGroupDescription:
+        "コンテキスト予算と支出を同じ階層で比較できます。",
+      systemEyebrow: "システム",
+      systemGroupTitle: "バックエンド状態と自己進化を統合",
+      systemGroupDescription:
+        "診断と自己進化を一つのシステムビューにまとめます。",
+    },
+    toolEffects: {
+      title: "外部アクションの受領記録",
+      description:
+        "重複実行、ホスト引き継ぎ、人による確認が必要な外部副作用を検出します。",
+      retryAuthorizedSuccess:
+        "フェンシングトークンで保護された再試行を 1 回許可しました",
+      retryAuthorizationFailed: "許可に失敗しました",
+      pendingReview: (count: number) => `${count} 件が確認待ち`,
+      noPendingReview: "確認待ちはありません",
+      refreshAriaLabel: "外部アクション受領記録を更新",
+      backendLabel: "バックエンド",
+      sharedAcrossHosts: "ホスト間で共有",
+      localCoordination: "ローカル調整",
+      committedLabel: "コミット済み",
+      runningLabel: "実行中",
+      loadFailed: (error: string) => `受領状態を読み込めませんでした: ${error}`,
+      empty:
+        "外部アクションの受領記録はまだありません。ツール実行後に自動表示されます。",
+      unknownTool: "不明なツール",
+      receiptMeta: (task: string, step: number, token: number) =>
+        `タスク ${task} · ステップ ${step} · token ${token}`,
+      reviewAndRetry: "確認して再試行",
+      collapsedHistory:
+        "過去のコミット済み記録を折りたたみ、要確認項目と最新 6 件を表示しています。",
+      confirmTitle: "外部アクションが発生していないことを確認",
+      confirmDescription:
+        "外部システム、ファイル、リモートサービスでアクションが成功していないことを確認した場合のみ再試行を許可してください。フェンシングトークンにより古い画面から新しい記録を変更できません。",
+      reasonPlaceholder:
+        "確認根拠を入力してください。例: 決済サービスで注文が作成されていないことを確認。",
+      cancel: "キャンセル",
+      submitting: "状態を確認中…",
+      confirmRetry: "未実行を確認して再試行を許可",
+      states: {
+        claimed: "確保済み",
+        started: "実行中",
+        committed: "コミット済み",
+        indeterminate: "要確認",
+        retryAuthorized: "再試行許可済み",
+      },
+    },
     swarmCardTitle: "Agent コラボレーションセッション · ライブスキル呼び出し",
     noConcurrentTasks: "同時実行タスクなし",
     noConcurrentTasksHint:
@@ -7502,6 +7720,7 @@ export const jaJP: Translations = {
     // Regeneration panel
     loading: "読み込み中…",
     errorPrefix: "エラー:",
+    crossTenantAdminRequired: "テナント横断の管理者権限が必要です。",
     trajectoryTotal: "軌跡総数",
     failureCount: "失敗数",
     regenProducers: {
@@ -7659,7 +7878,7 @@ export const jaJP: Translations = {
   evolutionPanel: {
     title: "自己進化ステータス",
     description:
-      "Octopus は完了したタスクを振り返り、有用な教訓を次回の実行に持ち込みます。ここでは何を学んだか、次のタスクにどう影響するかを表示します。",
+      "EchoAI は完了したタスクを振り返り、有用な教訓を次回の実行に持ち込みます。ここでは何を学んだか、次のタスクにどう影響するかを表示します。",
     summaryEmpty: "経験を蓄積中",
     summaryReady: (learned: number, total: number) =>
       `${total} タスクから ${learned} 条の再利用可能な経験を蓄積`,
@@ -7685,11 +7904,11 @@ export const jaJP: Translations = {
     statAllTrajsTooltip: (total: number) =>
       `${total} 件の履歴タスクが振り返りプールに入っています。サンプルが多いほど、経験は単発の結果ではなく安定した法則に近づきます。`,
     statAllTrajsDesc:
-      "振り返りプールに入った履歴タスクです。Octopus はこれらから安定做法とリスクパターンを見つけます。",
+      "振り返りプールに入った履歴タスクです。EchoAI はこれらから安定做法とリスクパターンを見つけます。",
     statAllTrajsPoints: (total: number, learned: number) => [
       `${total} samples are in the review pool.`,
       `${learned} lessons are ready to be applied automatically in similar tasks.`,
-      "As the sample grows, Octopus weighs long-term patterns more than one-off outcomes.",
+      "As the sample grows, EchoAI weighs long-term patterns more than one-off outcomes.",
     ],
     statReactLabel: "深いタスク",
     statReactHint: (reviewCount: number) =>
@@ -7704,14 +7923,14 @@ export const jaJP: Translations = {
       `${failures} items are marked for review and prioritized for risk lessons.`,
       "Worth checking does not mean you must fix it manually; it means the system is learning from these records first.",
     ],
-    learnedMitigationsTitle: "Octopus が回避を学んだ落とし穴",
+    learnedMitigationsTitle: "EchoAI が回避を学んだ落とし穴",
     learnedMitigationsDesc:
       "これらの教訓は繰り返し失敗から得られ、次回のガードレールとして使用されます。",
-    consolidatedMemoriesTitle: "Octopus が記憶した有効な做法",
+    consolidatedMemoriesTitle: "EchoAI が記憶した有効な做法",
     consolidatedMemoriesDesc:
       "これらの做法は繰り返し成功し、類似タスクで再利用可能です。",
     noMitigationsHint:
-      "まだ繰り返し落とし穴が見つかっていません。問題が繰り返されると、Octopus はここに回避すべき内容をリストします。",
+      "まだ繰り返し落とし穴が見つかっていません。問題が繰り返されると、EchoAI はここに回避すべき内容をリストします。",
     noMemoriesHint:
       "まだ安定した成功做法に十分な証拠がありません。類似タスクが増えると、再利用可能な做法がここに表示されます。",
     linesSuffix: (n: number) => `${n}`,
@@ -7729,7 +7948,7 @@ export const jaJP: Translations = {
     reflectingButton: "Reviewing...",
     reflectButton: "今すぐ振り返り",
     reflectHint:
-      "通常クリック不要です。Octopus は自動的に振り返ります。重要タスク後に即座に教訓を整理したい場合に使用してください。",
+      "通常クリック不要です。EchoAI は自動的に振り返ります。重要タスク後に即座に教訓を整理したい場合に使用してください。",
     advancedTitle: "高度な詳細",
     reactVariantsTitle: "実行戦略実験",
     tableName: "Strategy",
@@ -7751,7 +7970,7 @@ export const jaJP: Translations = {
   privacySettings: {
     identityLockTitle: "アイデンティティロック",
     identityLockDesc:
-      "有効な場合、モデル応答内のベンダー名・モデル名（Claude / Kimi / Anthropic / Moonshot など）は Octopus に書き換えられ、ユーザーには製品アイデンティティのみが表示されます。無効にすると開発者モードになり、LLM の本来のアイデンティティがそのまま表示されます。プロンプトの調整やルーティングの検証に便利です。",
+      "有効な場合、モデル応答内のベンダー名・モデル名（Claude / Kimi / Anthropic / Moonshot など）は EchoAI に書き換えられ、ユーザーには製品アイデンティティのみが表示されます。無効にすると開発者モードになり、LLM の本来のアイデンティティがそのまま表示されます。プロンプトの調整やルーティングの検証に便利です。",
     lockedTag: "LOCKED",
     unlockedTag: "UNLOCKED",
     sourceLabel: "source",
@@ -7982,13 +8201,13 @@ export const jaJP: Translations = {
   // Register page
   registerPage: {
     loadingText: "読み込み中...",
-    badgeText: "Octopus アカウントを作成",
+    badgeText: "EchoAI アカウントを作成",
     heroTitleLine1: "参加してすぐに始められる",
     heroTitleLine2: "マルチエージェントワークフロー",
     heroDescription:
       "自分のワークスペースをセットアップし、スキル・ツール・モデルを接続して、調査、コラボレーション、自動化を一つのプラットフォームに統合しましょう。",
     cardTitle: "アカウントを作成",
-    cardDescription: "Octopus に参加してエージェントの旅を始めましょう",
+    cardDescription: "EchoAI に参加してエージェントの旅を始めましょう",
     usernameLabel: "ユーザー名",
     usernamePlaceholder: "3 文字以上",
     emailLabel: "メールアドレス（任意）",
@@ -8041,6 +8260,9 @@ export const jaJP: Translations = {
       sendFailed: "送信に失敗しました",
       fillRequired: "電話番号と認証コードを入力してください",
       emailFillRequired: "メールアドレスと認証コードを入力してください",
+      emailRequired: "メールアドレスを入力してください",
+      codeRequired: "認証コードを入力してください",
+      invalidCode: "6 桁の数字の認証コードを入力してください",
       loginFailed: "ログインに失敗しました",
       enterFailed: "アクセスに失敗しました",
       gatewayNotEnabled:
@@ -8067,7 +8289,7 @@ export const jaJP: Translations = {
       privacyPolicy: "プライバシーポリシー",
     },
     page: {
-      title: "Octopus ワークスペースへの安全なアクセス",
+      title: "EchoAI ワークスペースへの安全なアクセス",
       subtitle: "ログインして続ける",
       description:
         "調査、コーディング、コラボレーション、自動化タスクを、コンテキスト・スキル・実行結果を一元管理するワークスペースで続けましょう。",
@@ -8168,8 +8390,8 @@ export const jaJP: Translations = {
   },
 
   hero: {
-    releaseBadge: "Octopus 2.0 リリース",
-    withOctopus: "Octopus と一緒に",
+    releaseBadge: "EchoAI 2.0 リリース",
+    withOctopus: "EchoAI と一緒に",
     heroDescription:
       "オープンソースの SuperAgent フレームワーク。研究、コーディング、創作ができます。サンドボックス、メモリ、ツール、スキル、サブ Agent の助けを借りて、数分から数時間の様々なレベルのタスクを処理します。",
   },
@@ -8396,11 +8618,29 @@ export const jaJP: Translations = {
 
   share: {
     share: "共有",
-    saveImage: "画像として保存",
-    copyImage: "画像をコピー",
-    imageSaved: "画像を保存しました",
-    imageCopied: "画像をコピーしました",
-    imageFailed: "画像の生成に失敗しました",
+    shareTask: "タスクを共有",
+    shareDescription:
+      "推論、ツールの詳細、ローカルパスを除いた読み取り専用スナップショットを作成します",
+    wechat: "WeChat",
+    moments: "Moments",
+    copyLink: "リンクをコピー",
+    qrCode: "QR コード",
+    openInBrowser: "ブラウザ",
+    creatingLink: "共有リンクを作成中…",
+    linkCopied: "共有リンクをコピーしました",
+    linkFailed: "共有リンクの作成に失敗しました",
+    wechatQrTitle: "WeChat に共有",
+    momentsQrTitle: "Moments に共有",
+    qrTitle: "共有 QR コード",
+    wechatQrHint: "WeChat でスキャンして、友だちにページを送信します。",
+    momentsQrHint: "WeChat でスキャンしてページを開き、Moments に共有します。",
+    qrHint: "QR コードをスキャンして公開タスクを開きます。",
+    localOnlyHint:
+      "現在はローカルアドレスのため、この端末でのみ開けます。公開環境では公開 URL が使われます。",
+    stopSharing: "公開共有を停止",
+    sharingStopped: "公開共有を停止しました",
+    stopSharingFailed: "共有の停止に失敗しました",
+    unavailable: "このタスクを共有する前にメッセージを送信してください",
     exportReplay: "再生可能な HTML を書き出し",
   },
 
@@ -8423,10 +8663,10 @@ export const jaJP: Translations = {
     applying: "申請中...",
     approvalRequired: "管理者の承認が必要です",
     approvalRequiredDescription:
-      "承認されるまでプロジェクトとグループチャットは表示されません。",
+      "承認されるまでグループチャットと有効なプロジェクトワークベンチは表示されません。",
     requestPendingTitle: "申請を送信しました",
     requestPendingDescription:
-      "承認後、このページからプロジェクトグループに入れます。",
+      "承認後、このページからワークグループに入れます。",
     requestSubmitted: "参加申請を送信しました",
     requestRejected: "参加申請は拒否されました",
     requestWithdrawn: "参加申請を取り下げました",
@@ -8911,13 +9151,13 @@ export const jaJP: Translations = {
   desktop: {
     disabledTitle: "デスクトップアシスタントはオフです",
     disabledDescription:
-      "Octopus はデフォルトでウェルカム、ログイン、ワークスペース画面を開きます。システムのデスクトップファイルを管理する場合は、透明なデスクトップアシスタントを有効にしてください。",
+      "EchoAI はデフォルトでウェルカム、ログイン、ワークスペース画面を開きます。システムのデスクトップファイルを管理する場合は、透明なデスクトップアシスタントを有効にしてください。",
     enableButton: "デスクトップアシスタントを有効にする",
     pluginSettingsButton: "プラグイン設定を開く",
     backToWorkspaceButton: "ワークスペースに戻る",
     header: {
       workspaceTooltip: "ワークスペースを開く",
-      brand: "Octopus",
+      brand: "EchoAI",
       accountModels: "公式モデル",
       desktopAssistant: "デスクトップアシスタント",
       desktopCount: (count) => `デスクトップ ${count || "--"}`,
@@ -9195,7 +9435,7 @@ export const jaJP: Translations = {
       "現在はウェブ環境のため、右クリックメニューのインストール/削除は無効のままです。デスクトップ版に切り替えると、これら2項目が有効になります。",
     contextMenuTitle: "システム右クリックメニュー",
     contextMenuDescription:
-      "Windows デスクトップの空き領域を右クリックすると「Octopus 一括整理デスクトップ」が表示されます。",
+      "Windows デスクトップの空き領域を右クリックすると「EchoAI 一括整理デスクトップ」が表示されます。",
     installButton: "右クリックコマンドをインストール",
     installingButton: "インストール中",
     removeButton: "削除",
@@ -9208,7 +9448,7 @@ export const jaJP: Translations = {
     backToWorkspace: "ワークスペースに戻る",
     confirmRemoveTitle: "システム右クリックメニューを削除しますか？",
     confirmRemoveDescription:
-      "Windows デスクトップの右クリックメニューから Octopus 一括整理コマンドを削除します。",
+      "Windows デスクトップの右クリックメニューから EchoAI 一括整理コマンドを削除します。",
   },
 
   // Knowledge page
@@ -9425,9 +9665,9 @@ export const jaJP: Translations = {
       colType: "種類",
       colItems: "項目",
       footerOnline:
-        "よく使う場所は Octopus NAS に接続済みです。ローカルデータベースはパス、サムネイル、OCRテキスト、ベクトルインデックスのみを保存します。",
+        "よく使う場所は EchoAI NAS に接続済みです。ローカルデータベースはパス、サムネイル、OCRテキスト、ベクトルインデックスのみを保存します。",
       footerOffline:
-        "よく使う場所は直接閲覧できます。Octopus NAS は接続待ちです。ローカルデータベースはパス、サムネイル、OCRテキスト、ベクトルインデックスのみを保存します。",
+        "よく使う場所は直接閲覧できます。EchoAI NAS は接続待ちです。ローカルデータベースはパス、サムネイル、OCRテキスト、ベクトルインデックスのみを保存します。",
       folderType: "フォルダ",
     },
     sources: {

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AIMessage, Message, ToolMessage } from "@/core/api/types";
 import type { BaseStream } from "@/core/api/use-stream-types";
 import type { AgentThreadState } from "@/core/threads";
+import { eventBus } from "@/core/events/event-bus";
 import { SubtasksProvider } from "@/core/tasks/context";
 import { renderWithProviders } from "@/test/harness";
 
@@ -242,6 +243,68 @@ describe("MessageOutputSummary", () => {
 
     expect(onRetryTask).toHaveBeenCalledWith("分析该项目");
     expect(window.location.hash).toBe("");
+  });
+
+  it("opens model settings instead of blindly retrying an auth failure", () => {
+    const onRetryTask = vi.fn();
+    const openSettings = vi.fn();
+    const unsubscribe = eventBus.on("ui:open-settings", openSettings);
+    const human: Message = {
+      id: "user-auth-retry",
+      type: "human",
+      content: "继续任务",
+    };
+
+    renderWithProviders(
+      <MessageOutputSummary
+        messages={[human]}
+        failure={{
+          message: "模型登录已失效",
+          detail: "credential refresh failed",
+          kind: "auth",
+        }}
+        onRetryTask={onRetryTask}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "打开模型设置" }));
+
+    expect(onRetryTask).not.toHaveBeenCalled();
+    expect(openSettings).toHaveBeenCalledTimes(1);
+    expect(openSettings).toHaveBeenCalledWith({ tab: "models" });
+    unsubscribe();
+  });
+
+  it("offers both model switching and retry for a rate limit", () => {
+    const onRetryTask = vi.fn();
+    const openSettings = vi.fn();
+    const unsubscribe = eventBus.on("ui:open-settings", openSettings);
+    const human: Message = {
+      id: "user-rate-limit",
+      type: "human",
+      content: "审计项目",
+    };
+
+    renderWithProviders(
+      <MessageOutputSummary
+        messages={[human]}
+        failure={{
+          message: "模型暂时限流",
+          detail: "http_429",
+          kind: "rate-limit",
+        }}
+        onRetryTask={onRetryTask}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "打开模型设置" }));
+    expect(openSettings).toHaveBeenCalledWith({ tab: "models" });
+
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(onRetryTask).toHaveBeenCalledWith("审计项目");
+    unsubscribe();
   });
 
   it("retries the original objective when the failed turn is punctuation-only", () => {
@@ -833,11 +896,12 @@ describe("MessageList failure visibility", () => {
     ];
     renderMessageList(mockThread({ messages }));
 
+    expect(screen.getByText("先前尝试失败，后续已恢复")).toBeInTheDocument();
     expect(
-      screen.getByText(
+      screen.queryByText(
         "该任务要求修改项目文件，但本轮没有产生有效的文件变更。",
       ),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("任务未完成")).not.toBeInTheDocument();
     expect(
       screen.queryByText(/implementation task yet/),

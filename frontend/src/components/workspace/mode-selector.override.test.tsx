@@ -28,7 +28,7 @@ vi.mock("@/core/i18n/hooks", () => ({
   }),
 }));
 
-import { ModeSelector } from "./mode-selector";
+import { ModeSelector, persistModeSelection } from "./mode-selector";
 
 function mockFetch() {
   return vi.stubGlobal(
@@ -112,5 +112,35 @@ describe("ModeSelector.onManualOverrideChange", () => {
     // of snapping back to the default develop/标准.
     expect(onModeChange).toHaveBeenCalledWith("audit");
     expect(onAuditIntensityChange).toHaveBeenCalledWith("max");
+  });
+
+  it("persists a mode only after the server accepts it", async () => {
+    await persistModeSelection("audit", "s1", "/workspace/a");
+
+    expect(
+      JSON.parse(window.localStorage.getItem("octopus:modeOverride")!),
+    ).toEqual({
+      "/workspace/a": { mode: "audit" },
+    });
+  });
+
+  it("rejects a failed server update without overwriting the saved mode", async () => {
+    window.localStorage.setItem(
+      "octopus:modeOverride",
+      JSON.stringify({ "/workspace/a": { mode: "develop" } }),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("failed", { status: 500 })),
+    );
+
+    await expect(
+      persistModeSelection("audit", "s1", "/workspace/a"),
+    ).rejects.toThrow("Mode update failed: 500");
+    expect(
+      JSON.parse(window.localStorage.getItem("octopus:modeOverride")!),
+    ).toEqual({
+      "/workspace/a": { mode: "develop" },
+    });
   });
 });

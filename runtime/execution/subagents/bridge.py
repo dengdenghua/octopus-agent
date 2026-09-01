@@ -431,6 +431,10 @@ def call_subagent(
     # write-tools set and the call succeeded, we extract its path.
     _files_touched: list[str] = []
     _files_seen: set[str] = set()
+    # Some coordinator roles intentionally deliver through the shared
+    # blackboard instead of a final text reply. Keep that as valid completion
+    # evidence while rejecting read-only children that silently return empty.
+    _shared_output_state = {"written": False}
     _subagent_write_tools: frozenset[str] = frozenset(
         {
             "write_text_file",
@@ -630,6 +634,8 @@ def call_subagent(
         try:
             if event.get("type") == "sub_tool_end" and event.get("status") == "success":
                 name = event.get("skill") or event.get("name") or ""
+                if name == "bb_write":
+                    _shared_output_state["written"] = True
                 if name in _subagent_write_tools:
                     args = event.get("args") or {}
                     path = args.get("path") if isinstance(args, dict) else None
@@ -964,6 +970,25 @@ def call_subagent(
         """
         if not isinstance(result, dict):
             return result
+        output = result.get("output")
+        has_output = isinstance(output, str) and bool(output.strip())
+        has_structured_output = result.get("parsed") is not None
+        has_shared_output = bool(_files_touched) or _shared_output_state["written"]
+        reported_success = bool(result.get("success", result.get("ok", True)))
+        if (
+            reported_success
+            and not result.get("error")
+            and not has_output
+            and not has_structured_output
+            and not has_shared_output
+        ):
+            # A successful runner return with no answer and no shared artifact
+            # is not a usable sub-agent result. Mark it explicitly so the
+            # parent can recover or re-dispatch instead of treating an empty
+            # tile as completed work.
+            result["success"] = False
+            result["status"] = "empty_output"
+            result["error"] = "subagent completed without usable output"
         _attach_trace_fields(result, _trace_context)
         result.setdefault("iteration_count", _rounds_state["max_round"])
         result.setdefault("files_touched", list(_files_touched))
@@ -1491,69 +1516,21 @@ def _dispatch_partner(
     prompt: str,
     timeout_s: int,
 ) -> dict[str, Any] | None:
-    """Route a registry-backed subagent to an external CLI backend (dsh provider).
+    """Reject persisted definitions that still name the retired CLI backend.
 
-    ``backend`` on a subagent definition names a LocalPartner spec id
-    (``claude-code`` / ``codex-cli`` / ``openclaw`` / ``trae-cli`` / ...) or
-    its ``agent_id`` alias (``local_claude_code`` ...). The run is best-effort
-    and never raises: unknown backend, missing executable, non-zero exit and
-    timeout all become structured results. Returns ``None`` only when the
-    partner has no stable headless invocation (``unsupported``) so the caller
-    falls back to the in-process loop.
+    External model access is installed through model-provider plugins.  We fail
+    explicitly instead of probing the host or silently falling back to another
+    model, so old configuration cannot resurrect local CLI execution.
     """
-    from runtime.execution.agents.local_partner_bridge import run_local_partner
-    from runtime.execution.agents.local_partner_discovery import which_command
-    from runtime.execution.agents.local_partner_specs import LOCAL_PARTNER_SPECS
-
-    spec = LOCAL_PARTNER_SPECS.get(definition.backend)
-    if spec is None:
-        spec = next(
-            (
-                candidate
-                for candidate in LOCAL_PARTNER_SPECS.values()
-                if candidate.get("agent_id") == definition.backend
-            ),
-            None,
-        )
-    if spec is None:
-        return {
-            "agent_id": definition.name,
-            "output": "",
-            "success": False,
-            "error": f"unknown subagent backend {definition.backend!r}",
-            "backend": definition.backend,
-        }
-    partner_id = spec["id"]
-    command, _path = which_command(list(spec.get("commands") or []))
-    if command is None:
-        return {
-            "agent_id": definition.name,
-            "output": "",
-            "success": False,
-            "error": f"backend {partner_id!r} executable not found on this machine",
-            "backend": partner_id,
-        }
-    result = run_local_partner(
-        partner_id=partner_id,
-        command=command,
-        prompt=prompt,
-        timeout=float(timeout_s) if timeout_s else 300.0,
-        model=definition.model,
-    )
-    if result.unsupported:
-        return None
-    base: dict[str, Any] = {
-        "agent_id": definition.name,
-        "output": result.output,
-        "backend": partner_id,
-        "command": command,
-    }
-    if result.ok:
-        return {**base, "success": True}
+    del prompt, timeout_s
     return {
-        **base,
+        "agent_id": definition.name,
+        "output": "",
         "success": False,
-        "error": result.error or result.raw_error or f"{partner_id} exited non-zero",
-        "failure_kind": result.failure_kind,
-        "timed_out": result.timed_out,
+        "error": (
+            f"legacy CLI backend {definition.backend!r} has been removed; "
+            "install and configure a model-provider plugin instead"
+        ),
+        "backend": definition.backend,
+        "failure_kind": "legacy_cli_backend_removed",
     }

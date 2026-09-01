@@ -8,7 +8,6 @@ import {
   SparklesIcon,
   VideoIcon,
 } from "lucide-react";
-
 import type { Translations } from "./types";
 import { workspaceComputerKoKR } from "./workspace-computer";
 import { agentOperatorKoKR } from "./agent-operator";
@@ -72,7 +71,6 @@ export const koKR: Translations = {
     stubResponseDescription: (method: string, path: string) =>
       `${method} ${path}이(가) 스텁 데이터를 반환했습니다. 실제 백엔드 엔드포인트가 활성화되기 전까지 이 워크스페이스 상태는 개발용 fallback으로 간주하세요.`,
     openSidebarMenu: "사이드바 메뉴 열기",
-    localPartnerModel: "로컬 파트너 모델(CLI가 관리)",
     loadingWorkspace: "작업 공간 불러오는 중...",
   },
 
@@ -91,7 +89,7 @@ export const koKR: Translations = {
 
     createYourOwnSkill: "나만의 Agent 스킬 만들기",
     createYourOwnSkillDescription:
-      "나만의 스킬을 만들어 Octopus의 힘을 발휘하세요. 커스텀 스킬로,\nOctopus가 웹 검색, 데이터 분석, 슬라이드 및 웹 페이지 같은\n산출물 생성 등 거의 모든 작업을 수행할 수 있습니다.",
+      "나만의 스킬을 만들어 EchoAI의 힘을 발휘하세요. 커스텀 스킬로,\nEchoAI가 웹 검색, 데이터 분석, 슬라이드 및 웹 페이지 같은\n산출물 생성 등 거의 모든 작업을 수행할 수 있습니다.",
 
     scenes: {
       daily: "일상 업무",
@@ -269,6 +267,8 @@ export const koKR: Translations = {
     reviewAssigned: (label: string) => `검토 담당: ${label}`,
     taskCompleted: "작업 완료",
     taskFailed: "작업을 완료하지 못했습니다",
+    previousAttemptRecovered:
+      "이전 시도는 실패했지만 이후 작업에서 복구되었습니다",
     taskOutputs: "작업 산출물",
     viewProcess: "과정 보기",
     makeSimilar: "비슷한 것 만들기",
@@ -366,13 +366,13 @@ export const koKR: Translations = {
     collaboratorsCountUnit: "명",
     collaboratorsHelp:
       "기본적으로 필요한 AI만 응답합니다. AI 멤버를 추가하면 역할 분담 또는 병렬 공동 작업을 선택할 수 있습니다.",
-    collaboratorsSearchPlaceholder: "에이전트 / 로컬 파트너 검색",
+    collaboratorsSearchPlaceholder: "에이전트 / 설치된 기능 검색",
     collaboratorsTaskFallback: "팀 작업",
     collaboratorsCoreGroup: "화이트 고스트 분대",
     collaboratorsOnDemandGroup: "온디맨드 기능",
     collaboratorsOnDemandBadge: "온디맨드",
     collaboratorsOnDemandHint:
-      "전문가, 디지털 트윈, 로컬 파트너는 현재 대화에만 참여하며 기본 정체성을 바꾸지 않습니다.",
+      "전문가, 디지털 트윈, 설치된 기능은 현재 대화에만 참여하며 기본 정체성을 바꾸지 않습니다.",
     responseMode: "AI 참여 방식",
     responseModeTeamRequired:
       "역할 분담 또는 병렬 공동 작업을 사용하기 전에 AI 멤버를 추가하세요",
@@ -387,14 +387,31 @@ export const koKR: Translations = {
     groupTaskUxui: "UX/UI 검토",
     groupTaskActive: "작업",
     groupTaskClear: "자동 처리로 돌아가기",
+    projectFiles: "프로젝트 파일",
+    removeCapability: (name: string) => `${name} 제거`,
+    uploadImages: "이미지 업로드",
+    workspaceFiles: (name: string) => `프로젝트 파일 · ${name}`,
+    noWorkspaceFiles: "이 대화에 연결된 프로젝트 폴더가 없습니다",
+    uploadDeviceFiles: "기기에서 파일 업로드",
+    commands: "명령",
+    plugins: "플러그인",
+    availablePlugins: "사용 가능한 플러그인",
+    capabilityLoadFailed: "기능 목록을 불러오지 못했습니다",
+    noAvailablePlugins: "사용 가능한 플러그인이 없습니다",
+    managePlugins: "플러그인 관리",
+    explorePlugins: "플러그인 탐색",
+    skills: "Skills",
+    searchSkills: "Skills 검색",
+    noAvailableSkills: "사용 가능한 Skill이 없습니다",
+    manageSkills: "Skills 관리",
     addResearchMaterial: "자료 추가",
     codexPlan: "Plan",
     codexSpec: "Spec",
     codexGoal: "Goal",
     composerInsertions: "입력창에 삽입",
-    insertCodexPlan: "Plan 마커 삽입",
+    insertCodexPlan: "계획 모드",
     insertCodexSpec: "Spec 마커 삽입",
-    insertCodexGoal: "Goal 마커 삽입",
+    insertCodexGoal: "지속 목표",
     insertBrowserSurface: "Browser 마커 삽입",
     insertChromeSurface: "Chrome 마커 삽입",
     workflow: "워크플로",
@@ -404,7 +421,7 @@ export const koKR: Translations = {
     collapse: "접기",
     materialNote: "자료 메모",
     url: "URL",
-    file: "파일",
+    file: "파일 추가",
     text: "텍스트",
     textTitle: "텍스트 제목",
     pasteTextMaterial: "텍스트 자료 붙여넣기",
@@ -455,6 +472,33 @@ export const koKR: Translations = {
     permissionAcceptEdits: "편집 수락",
     permissionConfirm: "기본",
     addImage: "이미지 추가 (붙여넣기 / 드래그 / 선택)",
+    addAppshot: "현재 창 스냅샷 첨부",
+    capturingAppshot: "현재 창을 첨부하는 중…",
+    appshotHint: "스크린샷과 접근성 텍스트를 한 번만 추가",
+    appshotSource: "현재 창 Appshot",
+    appshotFailed: "현재 창을 읽을 수 없습니다",
+    windowTools: "창",
+    automationTarget: "작업 대상",
+    chooseAutomationTarget: "브라우저 또는 데스크톱 창 선택",
+    currentChromeTab: "현재 Chrome 탭",
+    currentDesktopWindow: "데스크톱 창",
+    loadingAutomationTargets: "제어 가능한 창을 찾는 중…",
+    noAutomationTargets:
+      "제어 가능한 창이 없습니다. 브라우저 확장을 연결하거나 앱 창을 여세요.",
+    clearAutomationTarget: "고정 대상 해제",
+    automationOnline: "브라우저 온라인",
+    automationOffline: "브라우저 오프라인",
+    automationReconnecting: "재연결 중",
+    automationDesktop: "데스크톱 제어",
+    automationIdle: "대기 중",
+    automationRunning: "Agent 제어 중",
+    automationPaused: "일시 중지됨",
+    automationPause: "일시 중지",
+    automationResume: "계속",
+    automationTakeover: "직접 조작",
+    automationEvidence: "작업 기록",
+    automationNoEvidence: "아직 작업 기록이 없습니다",
+    automationControlFailed: "제어 상태를 업데이트할 수 없습니다",
     removeImage: "제거",
     readme: "README",
   },
@@ -499,7 +543,7 @@ export const koKR: Translations = {
     categoryTravel: "Travel",
     aiMembersLabel: "초기 AI 협업 멤버",
     aiMembersDescription:
-      "생성할 때 프로젝트 그룹에 바로 참여합니다. 한 명 이상 유지하고 나중에 변경할 수 있습니다.",
+      "생성할 때 작업 그룹에 바로 참여합니다. 한 명 이상 유지하고 나중에 변경할 수 있습니다.",
     aiMembersSelected: (count) => `${count}명 선택됨`,
     agentsLoading: "사용 가능한 AI를 불러오는 중…",
     agentsUnavailable:
@@ -507,20 +551,20 @@ export const koKR: Translations = {
     humanMembersLabel: "사람 멤버",
     humanMembersAfterCreate: "생성 후 초대",
     humanMembersDescription:
-      "생성 후 프로젝트 그룹으로 이동하여 안전한 링크로 멤버 또는 뷰어를 초대할 수 있습니다.",
-    invitePeopleOnArrival: "프로젝트 그룹을 열면 바로 초대",
+      "생성 후 작업 그룹으로 이동하여 안전한 링크로 멤버 또는 뷰어를 초대할 수 있습니다.",
+    invitePeopleOnArrival: "작업 그룹을 열면 바로 초대",
     creatorRoleLabel: "내 프로젝트 역할",
     creatorRole: "프로젝트 책임자 · 그룹 소유자",
     creatorRoleDescription:
       "프로젝트 관리, AI 편성, 사람 초대 권한을 가집니다.",
-    hint: "프로젝트, 프로젝트 그룹, 오른쪽 워크벤치를 한 번에 만들고 연결합니다.",
+    hint: "작업 그룹, 프로젝트 기능, 오른쪽 워크벤치를 한 번에 만들고 연결합니다.",
     cancel: "Cancel",
     create: "프로젝트 생성",
   },
 
   promoteProjectDialog: {
-    trigger: "프로젝트로 전환",
-    title: "현재 작업 그룹을 프로젝트로 전환",
+    trigger: "프로젝트 계획 만들기",
+    title: "현재 작업 그룹에 프로젝트 계획 만들기",
     description:
       "현재 멤버와 전체 채팅 기록을 유지하면서 마일스톤, 항목, 자료, 프로젝트 워크벤치를 추가합니다.",
     nameLabel: "프로젝트 이름",
@@ -531,8 +575,35 @@ export const koKR: Translations = {
     cancel: "취소",
     submit: "생성하고 연결",
     submitting: "생성 중…",
-    success: "작업 그룹을 프로젝트 그룹으로 전환했습니다",
-    failed: "프로젝트 전환에 실패했습니다. 다시 시도해 주세요.",
+    success: "현재 작업 그룹에서 프로젝트 기능을 켰습니다",
+    failed: "프로젝트 계획을 만들지 못했습니다. 다시 시도해 주세요.",
+  },
+
+  projectCapability: {
+    enabled: "프로젝트 켜짐",
+    startPlan: "프로젝트 계획 만들기",
+    openWorkbench: "프로젝트 워크벤치 열기",
+    moreActions: "프로젝트 작업",
+    detach: "프로젝트 기능 끄기",
+    detachConfirmTitle: "이 그룹의 프로젝트 기능을 끌까요?",
+    detachConfirmDescription:
+      "프로젝트 계획만 분리됩니다. 그룹 멤버, 초대, 채팅 기록과 현재 링크는 그대로 유지됩니다.",
+    detachConfirmAction: "프로젝트 기능 끄기",
+    forceDetachConfirmTitle:
+      "프로젝트가 진행 중입니다. 그래도 프로젝트 기능을 끌까요?",
+    forceDetachConfirmDescription:
+      "프로젝트 실행과 상태는 현재 작업 그룹에서 분리되지만 프로젝트 기록은 삭제되지 않고 프로젝트 목록에서 계속 볼 수 있습니다. 그룹 멤버와 전체 채팅 기록은 유지됩니다.",
+    forceDetachConfirmAction: "그래도 끄기",
+    detached: "프로젝트 기능을 껐습니다. 작업 그룹과 채팅 기록은 유지됩니다",
+    detachCancelled: "프로젝트 기능을 끄지 않았습니다",
+    detachFailed: "프로젝트 기능을 끄지 못했습니다. 다시 시도해 주세요.",
+    detachBindingChanged:
+      "현재 그룹에 연결된 프로젝트가 변경되었습니다. 새로고침한 뒤 다시 시도해 주세요.",
+    statusPlanning: "준비 중",
+    statusRunning: "진행 중",
+    statusBlocked: "위험 있음",
+    statusDone: "완료",
+    statusFailed: "문제 발생",
   },
 
   // Clarification Questionnaire
@@ -627,7 +698,7 @@ export const koKR: Translations = {
     readFile: "파일 확인",
     updateFile: "파일 업데이트",
     runAction: "작업 수행",
-    teammateTimeout: "팀원이 제시간에 응답하지 않아 Octopus 가 인계받았습니다",
+    teammateTimeout: "팀원이 제시간에 응답하지 않아 EchoAI 가 인계받았습니다",
     factSummaryPath: (value: string) => `확인됨: ${value}`,
     factSummaryCount: (value: string) => `확인됨: ${value}개`,
     factSummaryStatus: (value: string) => `확인됨: ${value}`,
@@ -957,6 +1028,7 @@ export const koKR: Translations = {
       close: "오른쪽 패널 닫기",
       open: "오른쪽 패널 열기",
     },
+    viewActions: "보기 컨트롤",
     finalArtifact: {
       generated: "최종 보고서가 생성되었습니다",
       view: "View",
@@ -967,7 +1039,7 @@ export const koKR: Translations = {
       idle: "REC: 이 대화를 녹화하고 재사용 가능한 리플레이 스킬로 학습",
     },
     replay: {
-      titleDefault: "Octopus 실행 리플레이",
+      titleDefault: "EchoAI 실행 리플레이",
       footer: "자체 포함 오프라인 리플레이",
     },
     composer: {
@@ -1406,6 +1478,7 @@ export const koKR: Translations = {
     computerViewEmptyDesc:
       "작업이 서브에이전트에 할당되면 여기에서 서브에이전트의 독립적인 컴퓨터 작업 기록을 볼 수 있습니다.",
     visibilityPanelTitle: "기능 결정",
+    visibilityPanelAttention: "조치 필요",
     visibilityPanelEmpty: "이번 턴에 기능 결정이 없습니다",
     visibilityStep: "결정",
     scrollToBottom: "맨 아래로 스크롤",
@@ -1714,6 +1787,46 @@ export const koKR: Translations = {
     emptyHint: "코드 생성 후 미리보기가 표시됩니다",
     showPanel: "미리보기 표시",
     hidePanel: "미리보기 숨기기",
+    inspectElement: "요소 선택",
+    cancelInspect: "선택 취소",
+    inspectHint: "페이지 요소 클릭 · Esc로 취소",
+    aiEditTitle: "선택한 요소를 AI로 수정",
+    aiEditCancel: "요소 수정 취소",
+    aiEditPlaceholder: "예: 레이아웃을 유지하면서 제목을 더 미래적으로 변경",
+    aiEditSend: "수정 보내기",
+    aiEditQueued:
+      "AI에 전송했습니다. 현재 작업에서 파일과 미리보기를 업데이트합니다.",
+    aiEditUnavailable:
+      "현재 이 작업에서 수정을 받을 수 없습니다. 잠시 후 다시 시도하세요.",
+    officeEdit: "AI로 수정",
+    officeSelect: "내용 선택",
+    officeCancelSelect: "선택 취소",
+    officeSelected: "선택됨",
+    officeEditTitle: "이 오피스 파일 수정",
+    officeEditPlaceholder:
+      "예: 3페이지를 위험 매트릭스로 바꾸고 현재 테마는 유지",
+    officeEditHint:
+      "수정 요청은 현재 작업으로 전송되며 완료 후 미리보기가 새로고침됩니다",
+    previewError:
+      "미리보기를 불러올 수 없습니다. 로그인 상태를 확인한 후 다시 시도하세요.",
+    previewRetry: "미리보기 다시 불러오기",
+    officeFidelity: "원본 레이아웃",
+    humanEdit: "직접 편집",
+    humanEditing: "페이지 편집 중",
+    humanUnsaved: "저장되지 않은 변경 사항",
+    humanSave: "페이지 저장",
+    humanCancel: "변경 취소",
+    humanSaved: "페이지 변경 사항을 저장했습니다",
+    humanUndo: "마지막 저장 실행 취소",
+    humanRestored: "저장 전 버전으로 복원했습니다",
+    humanConflict:
+      "Agent가 페이지를 업데이트했습니다. 변경 사항은 저장되지 않았습니다",
+    humanReloadLatest: "버리고 최신 버전 불러오기",
+    humanUnavailable: "이 HTML은 쓰기 가능한 작업 결과물이 아닙니다",
+    humanDiscardTitle: "저장하지 않은 페이지 변경 사항을 버릴까요?",
+    humanDiscardDescription:
+      "이 미리보기를 벗어나면 저장하지 않은 편집 내용이 사라지며 되돌릴 수 없습니다.",
+    humanDiscardConfirm: "버리고 나가기",
   },
 
   // Code Status
@@ -1786,6 +1899,7 @@ export const koKR: Translations = {
     navMcp: "MCP",
     navEvolution: "자기 진화",
     navProjects: "프로젝트",
+    navDesign: "디자인 캔버스",
     navNarrative: "스토리 공방",
     navPlugins: "플러그인",
     navHR: "인재",
@@ -1800,6 +1914,9 @@ export const koKR: Translations = {
     groupSystem: "시스템",
     // Agent / team footer
     noAgents: "사용 가능한 에이전트가 없습니다",
+    loadingAgents: "에이전트 불러오는 중…",
+    agentsLoadFailed: "에이전트 목록을 불러오지 못했습니다",
+    retryAgents: "다시 불러오기",
     remainingCredits: "크레딧 잔액",
     logout: "로그아웃",
     noTeams: "아직 그룹이 없습니다",
@@ -1816,7 +1933,6 @@ export const koKR: Translations = {
     openAgentHudFor: (name: string) => `${name}의 HUD 열기`,
     currentAgent: "현재 에이전트",
     soloChat: "개인 대화",
-    localCliPartners: "로컬 CLI 파트너",
     oneOnOneTask: "일대일 작업",
     soloTasks: "개인 작업",
     groupTasks: "협업 작업",
@@ -1992,8 +2108,8 @@ export const koKR: Translations = {
       "에이전트가 유지할 수 있는 탭 수를 제한합니다. retain=true로 열린 탭은 작업 종료 후 자동으로 닫히지 않습니다.",
     saveConfig: "구성 저장",
     configSaved: "구성이 저장되었습니다",
-    installExtensionTitle: "Octopus Browser Relay 설치",
-    installExtensionDesc: "확장을 설치해 브라우저를 Octopus에 연결하세요.",
+    installExtensionTitle: "EchoAI Browser Relay 설치",
+    installExtensionDesc: "확장을 설치해 브라우저를 EchoAI에 연결하세요.",
     step1Title: "Chrome 확장 페이지를 열고 개발자 모드 활성화",
     step1Desc: "브라우저에서 확장 관리 페이지 열기",
     step1Action: "chrome://extensions 열기",
@@ -2010,7 +2126,7 @@ export const koKR: Translations = {
     relayVersion: "버전",
     compareTitle: "연결 방식 선택",
     compareDesc:
-      "두 방식 모두 브라우저를 Octopus에 연결합니다. 필요에 맞는 방식을 선택하세요.",
+      "두 방식 모두 브라우저를 EchoAI에 연결합니다. 필요에 맞는 방식을 선택하세요.",
     compareFeature: "기능",
     compareExtension: "확장 방식",
     compareCdp: "CDP 직접 연결",
@@ -2043,7 +2159,7 @@ export const koKR: Translations = {
     allVersions: "모든 버전",
     // Page Agent integration
     pageAgentDesc:
-      "Page Agent는 Alibaba가 오픈 소스로 공개한 GUI Agent 프레임워크입니다. 텍스트 기반 DOM 조작으로 웹페이지를 제어하며 스크린샷이나 멀티모달 모델이 필요 없습니다. MCP 프로토콜로 Octopus에 통합됩니다.",
+      "Page Agent는 Alibaba가 오픈 소스로 공개한 GUI Agent 프레임워크입니다. 텍스트 기반 DOM 조작으로 웹페이지를 제어하며 스크린샷이나 멀티모달 모델이 필요 없습니다. MCP 프로토콜로 EchoAI에 통합됩니다.",
     pageAgentDocs: "문서 보기",
     pageAgentFeature1: "페이지 내 JS 통합",
     pageAgentFeature1Desc:
@@ -2088,7 +2204,7 @@ export const koKR: Translations = {
     extConNeedExtension: "Chrome 확장을 설치해야 합니다.",
     cdpProNoExtension: "확장을 설치할 필요가 없습니다.",
     cdpProChrome144: "Chrome 144+에서 사용 가능합니다.",
-    cdpConReAuth: "Octopus를 재시작할 때마다 다시 인증해야 합니다.",
+    cdpConReAuth: "EchoAI를 재시작할 때마다 다시 인증해야 합니다.",
     cdpConChrome144Only: "Chrome 144+만 지원합니다.",
   },
 
@@ -2346,7 +2462,7 @@ export const koKR: Translations = {
     loadoutReady: "능력 연결됨",
     saved: "Agent 구성이 저장되었습니다",
     saveFailed: (msg) => `저장 실패: ${msg}`,
-    officialFaction: "Octopus 사령부",
+    officialFaction: "EchoAI 사령부",
     authorFaction: (author) => `${author} Lab`,
     categoryRoles: {
       assistant: "지원",
@@ -2678,13 +2794,13 @@ export const koKR: Translations = {
     save: "에이전트 저장",
     saving: "에이전트 저장 중...",
     saveRequested:
-      "저장이 요청되었습니다. Octopus가 지금 초기 버전을 생성하고 저장합니다.",
+      "저장이 요청되었습니다. EchoAI가 지금 초기 버전을 생성하고 저장합니다.",
     saveHint:
       "초안 단계여도 오른쪽 위 메뉴에서 언제든지 이 에이전트를 저장할 수 있습니다.",
     saveCommandMessage:
       "지금까지 논의한 모든 내용을 바탕으로 이 커스텀 에이전트를 지금 저장해 주세요. 이 메시지를 저장에 대한 나의 명시적 확인으로 간주하세요. 아직 빠진 세부 사항이 있다면 합리적으로 추정하고, 간결한 첫 SOUL.md를 영어로 생성한 다음, 추가 확인을 요청하지 말고 즉시 setup_agent를 호출하세요.",
     agentCreatedPendingRefresh:
-      "에이전트가 생성되었지만 Octopus가 아직 불러오지 못했습니다. 잠시 후 이 페이지를 새로고침하세요.",
+      "에이전트가 생성되었지만 EchoAI가 아직 불러오지 못했습니다. 잠시 후 이 페이지를 새로고침하세요.",
     more: "더 보기",
     agentCreated: "에이전트가 생성되었습니다!",
     startChatting: "채팅 시작",
@@ -2934,13 +3050,13 @@ export const koKR: Translations = {
 
   // Workspace
   workspace: {
-    officialWebsite: "Octopus 공식 웹사이트",
-    githubTooltip: "Github의 Octopus",
+    officialWebsite: "EchoAI 공식 웹사이트",
+    githubTooltip: "Github의 EchoAI",
     settingsAndMore: "설정 및 더 보기",
-    visitGithub: "GitHub의 Octopus",
+    visitGithub: "GitHub의 EchoAI",
     reportIssue: "문제 보고",
     contactUs: "문의하기",
-    about: "Octopus 정보",
+    about: "EchoAI 정보",
     modes: {
       chat: "채팅",
       team: "팀",
@@ -2952,7 +3068,7 @@ export const koKR: Translations = {
       badge: "Agent OS 컨트롤 룸",
       headline: "에이전트에게 목표를 주고 작업을 감독하세요.",
       description:
-        "Octopus는 목표를 계획으로 바꾸고, 범위가 지정된 런타임에서 도구를 실행하며, 추적을 기록하고, 다음 실행을 위해 유용한 메모리를 보존합니다.",
+        "EchoAI는 목표를 계획으로 바꾸고, 범위가 지정된 런타임에서 도구를 실행하며, 추적을 기록하고, 다음 실행을 위해 유용한 메모리를 보존합니다.",
       newTask: "새 작업",
       codeTask: "코드 작업",
       systemLoop: {
@@ -3028,6 +3144,13 @@ export const koKR: Translations = {
     noChangesArtifacts: "변경된 아티팩트 없음",
     noPreviewArtifacts: "미리볼 내용 없음",
     retry: "다시 시도",
+    messageQueued: "대기 중",
+    messageSending: "보내는 중",
+    messageSendFailed: "전송 실패",
+    previousMessagePending:
+      "이전 메시지를 보내는 중입니다. 전송이 확인된 후 다시 시도하세요.",
+    steeringTurnUnavailable:
+      "원래 작업이 더 이상 실행 중이 아닙니다. 새 메시지로 다시 보내세요.",
     editResend: "편집 후 보내기",
     regenerateResponse: "응답 다시 생성",
     forkFromHere: "여기에서 대화 분기",
@@ -3072,7 +3195,7 @@ export const koKR: Translations = {
 
   // Page titles (document title)
   pages: {
-    appName: "Octopus",
+    appName: "EchoAI",
     chats: "Chats",
     newChat: "새 대화",
     untitled: "Untitled",
@@ -3098,7 +3221,7 @@ export const koKR: Translations = {
     writeFile: "파일 쓰기",
     clickToViewContent: "클릭하여 파일 내용 보기",
     writeTodos: "할 일 목록 업데이트",
-    skillInstallTooltip: "스킬을 설치하여 Octopus에서 사용 가능하게 합니다",
+    skillInstallTooltip: "스킬을 설치하여 EchoAI에서 사용 가능하게 합니다",
     toastSkillInstallFailed: "스킬 설치 실패",
     toastExportConversationFailed: "대화 내보내기 실패",
   },
@@ -3119,7 +3242,17 @@ export const koKR: Translations = {
     connectionLost:
       "이번 답변이 중단되었습니다. 대화를 계속하거나 재시도하세요.",
     networkLost:
-      "네트워크 연결이 끊겼습니다. 작업이 자동으로 일시정지되었습니다 — 메시지를 보내 체크포인트에서 재개하세요.",
+      "모델 연결이 끊겼습니다. 완료된 단계와 하위 에이전트 결과는 보존되었습니다. 재시도하여 계속하세요.",
+    modelAuthRequiredTitle: "모델 로그인이 만료되었습니다",
+    modelAuthRequired:
+      "현재 모델 인증 정보가 유효하지 않거나 로그인되어 있지 않습니다. 모델 설정에서 다시 로그인하거나 사용 가능한 다른 모델로 전환하세요.",
+    subagentCapabilityMismatchTitle: "서브 Agent 기능이 일치하지 않습니다",
+    subagentCapabilityMismatch:
+      "선택한 서브 Agent가 이 작업에 필요한 기능을 제공하지 않아 실행되지 않았습니다. 적합한 Agent를 선택한 뒤 다시 시도하세요.",
+    modelRateLimitedTitle: "모델이 일시적으로 요청 제한 상태입니다",
+    modelRateLimited:
+      "현재 모델에 요청이 너무 많거나 할당량에 도달했습니다. 나중에 다시 시도하거나 사용 가능한 다른 모델로 전환하세요.",
+    openModelSettings: "모델 설정 열기",
     turnFailed:
       "이번 턴이 완료되기 전에 중지되었습니다. 대화를 계속하거나 재시도하세요.",
     guardBlocked:
@@ -3129,14 +3262,16 @@ export const koKR: Translations = {
     workspaceWriteRequired:
       "이 작업은 프로젝트 파일 변경이 필요하지만, 성공적인 파일 변경이 기록되지 않았습니다.",
     verificationRequired:
-      "코드 변경사항은 Octopus가 이번 턴을 종료하기 전에 검증이 필요합니다. 테스트, lint, typecheck, 또는 빌드를 실행한 후 계속하세요.",
+      "코드 변경사항은 보존되었지만 검증 결과를 얻지 못했습니다. EchoAI가 자동 검증을 시도했으니 권장 명령을 확인한 후 계속하세요.",
+    verificationRunFailed:
+      "자동 검증을 실행했지만 통과하지 못했습니다. 코드 변경사항은 보존되었으니 아래 실패한 명령과 출력을 확인하세요.",
     environmentBlocked:
       "환경 제약으로 작업이 차단되었습니다 — 아래에 이유가 있습니다.",
     environmentBlockedAuthorizeCommon: '"공통 도메인" 승인 후 재시도',
     environmentBlockedAuthorizeFull: "전체 네트워크 승인 후 재시도",
     blockedOnUser: "계속하려면 사용자의 입력이 필요합니다.",
     streamEndpointUnavailable:
-      "백엔드 채팅/팀 스트림 엔드포인트가 활성화되지 않았거나 사용할 수 없습니다. 전체 Octopus 백엔드를 시작하거나 프론트엔드 프록시를 확인하세요.",
+      "백엔드 채팅/팀 스트림 엔드포인트가 활성화되지 않았거나 사용할 수 없습니다. 전체 EchoAI 백엔드를 시작하거나 프론트엔드 프록시를 확인하세요.",
     iteration: (count: number) => `${count}번째 라운드`,
     toolCalls: (count: number) => `${count}회 호출`,
     generating: "생성 중…",
@@ -3234,7 +3369,7 @@ export const koKR: Translations = {
     actions: "Actions",
     keyboardShortcuts: "키보드 단축키",
     keyboardShortcutsDescription:
-      "키보드 단축키로 Octopus를 더 빠르게 사용하세요.",
+      "키보드 단축키로 EchoAI를 더 빠르게 사용하세요.",
     openCommandPalette: "명령 팔레트 열기",
     commandPaletteDescription: "실행할 명령 검색...",
     toggleSidebar: "사이드바 전환",
@@ -3320,11 +3455,13 @@ export const koKR: Translations = {
   // Settings
   settings: {
     title: "설정",
-    description: "Octopus의 모양과 동작을 조정합니다.",
+    description: "EchoAI의 모양과 동작을 조정합니다.",
     sections: {
       account: "계정",
       subscription: "구독 및 결제",
       appearance: "모양",
+      general: "일반",
+      conversation: "대화",
       memory: "메모리 및 개인 규칙",
       tools: "도구",
       skills: "스킬",
@@ -3474,7 +3611,7 @@ export const koKR: Translations = {
     memory: {
       title: "메모리",
       description:
-        "저장된 사실과 대화 요약을 관리하고 Octopus가 기록하고 사용하는 시점을 설정합니다.",
+        "저장된 사실과 대화 요약을 관리하고 EchoAI가 기록하고 사용하는 시점을 설정합니다.",
       empty: "표시할 메모리가 없습니다.",
       rawJson: "원본 JSON",
       exportButton: "메모리 내보내기",
@@ -3485,7 +3622,7 @@ export const koKR: Translations = {
         "선택한 JSON 백업으로 현재 메모리를 덮어씁니다.",
       importFileLabel: "선택한 파일",
       importInvalidFile:
-        "파일을 읽지 못했습니다. Octopus에서 내보낸 올바른 JSON 파일을 선택하세요.",
+        "파일을 읽지 못했습니다. EchoAI에서 내보낸 올바른 JSON 파일을 선택하세요.",
       importFileTooLarge: "메모리 파일은 5 MB 이하여야 합니다.",
       importSuccess: "메모리를 가져왔습니다",
       manualFactSource: "직접 추가",
@@ -3650,7 +3787,7 @@ export const koKR: Translations = {
       createSkill: "스킬 만들기",
       emptyTitle: "아직 에이전트 스킬이 없습니다",
       emptyDescription:
-        "에이전트 스킬 폴더를 Octopus 루트 폴더 아래의 `/skills/custom` 폴더에 넣으세요.",
+        "에이전트 스킬 폴더를 EchoAI 루트 폴더 아래의 `/skills/custom` 폴더에 넣으세요.",
       emptyButton: "첫 번째 스킬 만들기",
       enabledDescription:
         "활성화된 스킬은 에이전트 도구 카탈로그에 등록됩니다. 비활성화된 스킬은 모델에 표시되지 않으며 실행할 수 없습니다.",
@@ -3674,16 +3811,16 @@ export const koKR: Translations = {
     notification: {
       title: "알림",
       description:
-        "창이 비활성 상태일 때 Octopus가 작업 완료를 알려 줍니다. 긴 작업 중 다른 업무로 전환할 때 유용합니다.",
+        "창이 비활성 상태일 때 EchoAI가 작업 완료를 알려 줍니다. 긴 작업 중 다른 업무로 전환할 때 유용합니다.",
       enableNotification: "알림 사용",
       permissionGranted: "권한 허용됨",
       permissionPrompt: "권한 필요",
       permissionDenied: "권한 거부됨",
       requestPermission: "알림 권한 요청",
       deniedHint:
-        "알림 권한이 거부되었습니다. 시스템 또는 브라우저 알림 설정에서 Octopus 알림을 켜 주세요.",
+        "알림 권한이 거부되었습니다. 시스템 또는 브라우저 알림 설정에서 EchoAI 알림을 켜 주세요.",
       testButton: "테스트 알림 보내기",
-      testTitle: "Octopus",
+      testTitle: "EchoAI",
       testBody: "테스트 알림입니다.",
       testSent: "테스트 알림을 보냈습니다",
       requestFailed: "알림 권한을 요청할 수 없습니다",
@@ -3936,16 +4073,16 @@ export const koKR: Translations = {
       },
     },
     octopusMix: {
-      title: "Octopus Mix · 멀티 모델 협업",
+      title: "EchoAI Mix · 멀티 모델 협업",
       description:
-        "2개 이상의 모델을 proposer(독립적으로 초안 작성, 도구 없음)로 선택하고, aggregator를 하나 선택해 최종 답변을 합칩니다. 채팅에서 “Octopus Mix”를 선택하면 이 설정을 사용하며, proposer 풀이 비어 있으면 기본 모델 × 수량으로 동작합니다.",
+        "2개 이상의 모델을 proposer(독립적으로 초안 작성, 도구 없음)로 선택하고, aggregator를 하나 선택해 최종 답변을 합칩니다. 채팅에서 “EchoAI Mix”를 선택하면 이 설정을 사용하며, proposer 풀이 비어 있으면 기본 모델 × 수량으로 동작합니다.",
       proposersLabel: "Proposers(초안을 작성하는 모델)",
       noCandidates: "선택 가능한 모델이 없습니다",
       aggregatorLabel: "Aggregator",
       aggregatorDefault: "기본값",
       nLabel: "풀이 없을 때 수량",
       saveButton: "저장",
-      saveSuccess: "Octopus Mix 설정이 저장되었습니다",
+      saveSuccess: "EchoAI Mix 설정이 저장되었습니다",
       saveFailed: (status: number) => `저장 실패 (${status})`,
       saveFailedFallback: "저장 실패",
     },
@@ -4081,7 +4218,7 @@ export const koKR: Translations = {
     approveExecute: "승인 및 실행",
     startQuest: "Quest 시작",
     questDesc:
-      "복잡한 작업을 설명하면 Octopus가 자율적으로 계획, 실행, 검증합니다",
+      "복잡한 작업을 설명하면 EchoAI가 자율적으로 계획, 실행, 검증합니다",
     requirementPlaceholder: "수행하고 싶은 작업을 설명하세요...",
     executionPlan: "실행 계획",
     verificationPassed: "검증 통과",
@@ -4228,7 +4365,7 @@ export const koKR: Translations = {
       installFailed: "플러그인 설치 실패",
       statusFailed: "플러그인 상태 업데이트 실패",
       removeConfirm:
-        "Octopus에서 이 플러그인을 제거하시겠습니까? 로컬 파일은 삭제되지 않습니다.",
+        "EchoAI에서 이 플러그인을 제거하시겠습니까? 로컬 파일은 삭제되지 않습니다.",
       removeFailed: "플러그인 제거 실패",
       enabled: "Enabled",
       disabled: "Disabled",
@@ -4240,7 +4377,7 @@ export const koKR: Translations = {
         "localhost 미리보기는 Electron 플러그인 API에 접근할 수 없습니다.",
       placeholderTitle: "플러그인 카탈로그 자리표시자",
       placeholderDesc:
-        "로컬 플러그인을 설치하고 관리하려면 데스크톱 앱을 실행하세요. 미리보기에서는 Octopus가 지원하는 플러그인 카테고리가 표시됩니다.",
+        "로컬 플러그인을 설치하고 관리하려면 데스크톱 앱을 실행하세요. 미리보기에서는 EchoAI가 지원하는 플러그인 카테고리가 표시됩니다.",
       placeholderBrowserTitle: "브라우저 플러그인",
       placeholderBrowserDesc:
         "Agent가 페이지를 읽고, 컨트롤을 클릭하고, 스크린샷을 수집할 수 있게 하는 Chrome / Edge 확장 프로그램.",
@@ -4345,17 +4482,6 @@ export const koKR: Translations = {
     createAgentCardDesc: "사용자 지정 역할을 만듭니다",
     addAgent: "추가",
     newAgent: "새 역할",
-    importAgentPack: "Agent Pack 가져오기",
-    importAgentPackDesc:
-      "로컬 Claude / Codex 플러그인 팩을 미리 보고 역할을 가져옵니다.",
-    importAgentPackPlaceholder:
-      "로컬 팩 루트 경로 입력 (예: F:\\packs\\kimi-agent)",
-    previewAgentPack: "미리 보기",
-    importSelectedAgent: "선택한 역할 가져오기",
-    noImportableAgents:
-      "이 팩에서 가져올 수 있는 역할 또는 Markdown 역할을 찾지 못했습니다.",
-    importedAgent: (name: string, path: string) =>
-      `${name} 가져오기 완료 · ${path}`,
     discoverTagline: "협업 역할을 둘러보고 설정하고 추가하세요",
     toastInstalled: (name: string) => `“${name}” 역할을 추가했습니다`,
     toastCapabilityPackInstalled: (name: string, count: number) =>
@@ -4367,14 +4493,6 @@ export const koKR: Translations = {
       `평점 ${rating}, 리뷰 ${count}개`,
     downloadCountAriaLabel: (count: string) => `다운로드 ${count}회`,
     authorPrefix: "작성자:",
-    packContentLabels: {
-      plugins: "플러그인",
-      apps: "앱",
-      agents: "역할",
-      skills: "스킬",
-      commands: "명령어",
-      mcp: "MCP",
-    },
   },
 
   // Agent World Unified
@@ -4397,12 +4515,22 @@ export const koKR: Translations = {
     installSuccessWithFailure: (installed: number, failed: number) =>
       `${installed}개 추가, ${failed}개 실패`,
     installFailed: "추가하지 못했습니다. 잠시 후 다시 시도해 주세요",
-    connectLocalPartner: "로컬 파트너 연결",
     enterprise: "엔터프라이즈",
     localTab: "로컬",
     enabledTab: "사용 중",
     marketplaceTab: "마켓플레이스",
     categoryFilterLabel: "역할 카테고리로 필터링",
+    domainFilterLabel: "업무 분야로 필터링",
+    domains: {
+      all: "전체",
+      general: "일반",
+      coding: "코딩",
+      research: "리서치",
+      creative: "크리에이티브",
+      automation: "자동화",
+      ecommerce: "이커머스",
+      finance: "금융",
+    },
     loadingAgents: "역할을 불러오는 중…",
     loadAgentsFailed: "역할 목록을 불러오지 못했습니다. 다시 시도해 주세요.",
     retryAgents: "다시 불러오기",
@@ -4412,27 +4540,6 @@ export const koKR: Translations = {
   },
 
   // Local Agent Connect Dialog
-  localAgentConnect: {
-    title: "로컬 파트너 연결",
-    description:
-      "이 시스템에 설치된 Agent 도구를 자동 감지하여 Hub에 등록하면 팀 작업에서 직접 할당할 수 있습니다.",
-    detecting: "로컬 파트너 감지 중...",
-    detectFailed: "로컬 파트너 감지 실패",
-    retryDetect: "Retry",
-    statusConnected: "Connected",
-    statusDetected: "Detected",
-    statusNotDetected: "감지되지 않음",
-    availableCount: (count: number) => `${count}개 사용 가능`,
-    cancel: "Cancel",
-    connectSelected: (count: number) => `${count}개 Agent 연결`,
-    noPartnerSelected: "감지된 로컬 파트너를 선택하세요",
-    registerSuccess: (count: number) => `${count}개 로컬 파트너 연결됨`,
-    alreadyExists: "이러한 로컬 파트너는 이미 Hub에 있습니다",
-    noPartnersAvailable:
-      "연결 가능한 로컬 파트너가 없습니다; 먼저 해당 로컬 도구를 설치하세요",
-    registerFailed: "로컬 파트너 연결 실패",
-    partnerNameAria: (name: string) => `${name} 이름`,
-  },
 
   // Agent World Card
   agentWorldCard: {},
@@ -4579,7 +4686,7 @@ export const koKR: Translations = {
     },
     extensionMarketplace: {
       title: "확장",
-      subtitle: "Octopus 브라우저 확장 기능 관리",
+      subtitle: "EchoAI 브라우저 확장 기능 관리",
       installLocal: "로컬 확장 설치",
       refreshAriaLabel: "확장 새로 고침",
       closeAriaLabel: "확장 닫기",
@@ -4607,7 +4714,7 @@ export const koKR: Translations = {
       errorStatusFailed: "확장 상태 업데이트 실패",
       errorRemoveFailed: "확장 제거 실패",
       confirmRemove:
-        "Octopus에서 이 확장을 제거하시겠습니까? 로컬 파일은 삭제되지 않습니다.",
+        "EchoAI에서 이 확장을 제거하시겠습니까? 로컬 파일은 삭제되지 않습니다.",
       categoryFeatured: "추천",
       categoryEfficiency: "효율",
       categoryResearch: "리서치",
@@ -4634,17 +4741,17 @@ export const koKR: Translations = {
       openDirectory: "디렉터리 열기",
       extPluginTitle: "외부 브라우저 플러그인",
       extPluginDesc:
-        "Chrome / Edge용. 플러그인이 로컬 Octopus에 연결되어 외부 페이지도 Agent가 읽고 조작할 수 있습니다.",
+        "Chrome / Edge용. 플러그인이 로컬 EchoAI에 연결되어 외부 페이지도 Agent가 읽고 조작할 수 있습니다.",
       dragToBookmarks: "북마크 바로 드래그",
       dragToBookmarksDesc:
         "가벼운 Page Agent 모드로, 현재 페이지를 임시 연결하기에 적합합니다.",
       dragToBookmarksTitle: "Chrome/Edge 북마크 바로 드래그",
       step1Temporary:
-        "1. 임시 사용: 위의 Octopus Agent를 북마크 바로 드래그한 뒤, 대상 페이지에서 클릭하세요.",
+        "1. 임시 사용: 위의 EchoAI Agent를 북마크 바로 드래그한 뒤, 대상 페이지에서 클릭하세요.",
       step2LongTerm:
         "2. 장기 사용: Chrome/Edge 확장 관리 페이지를 열고 '개발자 모드'를 활성화하세요.",
       step3LoadExtension:
-        "3. '압축 해제된 확장 프로그램 로드'를 클릭하고 Octopus 플러그인 디렉터리를 선택하세요.",
+        "3. '압축 해제된 확장 프로그램 로드'를 클릭하고 EchoAI 플러그인 디렉터리를 선택하세요.",
       pluginDirectory: "플러그인 디렉터리",
       pluginDirectoryOpened: (path: string) =>
         `플러그인 디렉터리 열림: ${path}`,
@@ -4820,7 +4927,7 @@ export const koKR: Translations = {
       searchOrUrl: "검색 또는 URL 입력",
       siteInfo: "사이트 정보",
       siteInfoDesc:
-        "로그인 상태, 쿠키, 로컬 데이터는 Octopus 브라우저에 유지되며 탭 간에 공유됩니다.",
+        "로그인 상태, 쿠키, 로컬 데이터는 EchoAI 브라우저에 유지되며 탭 간에 공유됩니다.",
       clearData: "데이터 지우기",
       openExternally: "외부에서 열기",
       confirmClearSiteData:
@@ -4934,7 +5041,20 @@ export const koKR: Translations = {
     surfaceModeScreenshot: "스크린샷",
     selectDevicePreset: "기기 프리셋 선택",
     continueInFullBrowser: "전체 브라우저에서 계속",
-    takeoverButton: "AI 브라우저 열기",
+    takeoverButton: "AI 브라우저",
+    switchToLivePreview: "실시간 미리보기로 전환",
+    switchToLivePreviewDescription: "상호작용 가능한 페이지에서 계속 탐색",
+    switchToScreenshot: "스크린샷 미리보기로 전환",
+    switchToScreenshotDescription: "최신 화면을 확인하고 조작",
+    sessionHealthyLabel: "세션 정상 실행 중",
+    sessionAttentionLabel: "세션 확인 필요",
+    endSession: "브라우저 세션 종료",
+    annotateScreenshot: "스크린샷에 표시해 대화로 보내기",
+    annotationButton: "표시",
+    annotationPlaceholder: "변경할 내용을 쓰고 스크린샷에서 위치를 표시하세요",
+    annotationInputLabel: "스크린샷 표시 설명",
+    sendAnnotation: "보내기",
+    cancelAnnotation: "표시 취소",
     sessionNeedsAttention: (issues) => `브라우저 세션 확인 필요: ${issues}`,
     reconnectButton: "다시 연결",
     semanticSnapshotFallback: "페이지 시맨틱 스냅샷",
@@ -4947,11 +5067,16 @@ export const koKR: Translations = {
     clickMode: "한 번 클릭",
     doubleClickMode: "더블 클릭",
     localServices: "로컬 서비스",
+    noLocalServices: "실행 중인 로컬 서비스를 찾지 못했습니다",
     scanButton: "스캔",
     serviceTypeFrontend: "프론트엔드",
     serviceTypeBackend: "백엔드",
     serviceTypeOther: "서비스",
     scanLocalServices: "로컬 서비스 스캔",
+    localPreviewMode: "로컬 미리보기",
+    localPreviewRunning: (port) => `포트 ${port} · 실행 중`,
+    localPreviewRefresh: "미리보기 새로고침",
+    localPreviewOpenExternal: "시스템 브라우저에서 열기",
     selectedAction: (action) => `${action} 선택됨`,
     locateActionTitle: "스크린샷에서 이 액션 위치 찾기",
     deselectTitle: "선택 해제",
@@ -5596,13 +5721,13 @@ export const koKR: Translations = {
       joinPolicyLabel: "가입 방식",
       joinPolicyApply: "승인 후 가입",
       joinPolicyApplyDesc:
-        "프로젝트와 채팅을 열기 전에 그룹 관리자의 승인이 필요합니다.",
+        "그룹 대화와 활성화된 프로젝트 내용을 열기 전에 그룹 관리자 승인이 필요합니다.",
       joinPolicyDirect: "바로 가입",
       joinPolicyDirectDesc:
         "유효한 링크가 있는 같은 테넌트 사용자는 즉시 가입합니다.",
       directJoinConfirmTitle: "바로 가입을 허용할까요?",
       directJoinConfirmDescription:
-        "전환하면 현재 유효한 모든 초대 링크로 소유자 승인 없이 프로젝트 그룹에 바로 가입할 수 있습니다.",
+        "전환하면 현재 유효한 모든 초대 링크로 소유자 승인 없이 이 작업 그룹에 바로 가입할 수 있습니다.",
       directJoinConfirmAction: "바로 가입 허용",
       directJoinConfirmCancel: "승인 유지",
       policySaveFailed: "가입 방식을 저장하지 못했습니다",
@@ -5874,13 +5999,13 @@ export const koKR: Translations = {
 
   intelligencePanel: {
     examplePrompts: [
-      "Octopus Agent의 GitHub 릴리스, 이슈와 경쟁사 동향을 매일 추적하고 제품 결정에 필요한 변경만 남기기",
+      "EchoAI Agent의 GitHub 릴리스, 이슈와 경쟁사 동향을 매일 추적하고 제품 결정에 필요한 변경만 남기기",
       "AI Agent, 브라우저 자동화와 멀티 에이전트 프레임워크의 새 논문 및 오픈소스를 매주 요약하고 중복 뉴스 제거하기",
       "경쟁사 3곳의 가격, 플러그인 생태계와 기업 기능 변경을 추적하고 중요한 업데이트 알림 받기",
     ],
     goalLabel: "계속 추적할 내용 설명",
     goalPlaceholder:
-      "예: Octopus Agent, browser-use와 OpenAI Agent SDK의 릴리스 및 주요 논의를 매일 추적하고 제품 로드맵에 영향을 주는 변경만 남기기.",
+      "예: EchoAI Agent, browser-use와 OpenAI Agent SDK의 릴리스 및 주요 논의를 매일 추적하고 제품 로드맵에 영향을 주는 변경만 남기기.",
     subscriptionName: "구독 이름",
     keywords: "키워드(쉼표로 구분)",
     cadence: "실행 빈도",
@@ -5956,6 +6081,7 @@ export const koKR: Translations = {
   // Public Thinking Status
   publicThinkingStatus: {
     waitingForModel: "생각 중",
+    firstResponseSlow: "첫 응답이 평소보다 늦어지고 있습니다",
     modelWorking: "생각 중...",
     thinkingCompleted: "생각 완료",
     slowResponse: "계속 진행 중입니다. 조금 더 걸리고 있습니다",
@@ -6178,10 +6304,10 @@ export const koKR: Translations = {
   // Onboarding
   onboarding: {
     title: "온보딩 가이드",
-    welcomeToOctopus: "Octopus에 오신 것을 환영합니다",
+    welcomeToOctopus: "EchoAI에 오신 것을 환영합니다",
     yourAIPlatform: "당신의 AI Agent 플랫폼",
     welcomeDesc:
-      "Octopus는 오픈소스 슈퍼 Agent 플랫폼으로, 서브 Agent, 메모리, 샌드박스를 조율하여 거의 모든 작업을 수행합니다 — 확장 가능한 스킬로 구동됩니다.",
+      "EchoAI는 오픈소스 슈퍼 Agent 플랫폼으로, 서브 Agent, 메모리, 샌드박스를 조율하여 거의 모든 작업을 수행합니다 — 확장 가능한 스킬로 구동됩니다.",
     chatModes: "작업 역량",
     chatModesDesc: "하나의 작업으로 시작한 후, 역량과 헬퍼를 추가하세요",
     modeChat: "Chat",
@@ -6404,7 +6530,7 @@ export const koKR: Translations = {
     },
     technicalDetails: "기술 세부 정보",
     createPluginPrompt:
-      "$plugin-creator를 사용하여 새로운 Octopus 플러그인을 만드세요.\n먼저 플러그인 이름, 용도, skills/apps/MCP 포함 여부를 물어본 후, 개인 플러그인 디렉터리에 scaffold하고, manifest를 완성하고, 플러그인이 마켓플레이스에서 인식되는지 검증하세요.",
+      "$plugin-creator를 사용하여 새로운 EchoAI 플러그인을 만드세요.\n먼저 플러그인 이름, 용도, skills/apps/MCP 포함 여부를 물어본 후, 개인 플러그인 디렉터리에 scaffold하고, manifest를 완성하고, 플러그인이 마켓플레이스에서 인식되는지 검증하세요.",
   },
 
   // Local skill directory panel
@@ -6570,7 +6696,7 @@ export const koKR: Translations = {
 
   // Bundle Info
   bundleInfo: {
-    appVersion: "Octopus 버전",
+    appVersion: "EchoAI 버전",
     license: "라이선스",
     title: "빌드 정보",
     environment: "환경",
@@ -6601,6 +6727,9 @@ export const koKR: Translations = {
     autoModelDescription: "시스템이 작업별로 최적의 모델을 선택하게 합니다",
     autoModelBadge: "Smart",
     longContextHint: "1M 컨텍스트 사용",
+    contextLength: "컨텍스트 길이",
+    contextStandard: "표준",
+    contextMax: "Max",
   },
 
   // Account Settings
@@ -6633,7 +6762,7 @@ export const koKR: Translations = {
     confirmDelete: "삭제 확인",
     factoryResetTitle: "초기화",
     factoryResetDescription:
-      "로컬 대화, 작업 공간, 메모리, 설치 상태 및 브라우저의 Octopus 캐시를 삭제합니다. 소스 코드와 기본 역할은 유지됩니다.",
+      "로컬 대화, 작업 공간, 메모리, 설치 상태 및 브라우저의 EchoAI 캐시를 삭제합니다. 소스 코드와 기본 역할은 유지됩니다.",
     factoryResetDialogDescription:
       "로컬 실행 데이터와 캐시가 삭제됩니다. 완료 후 앱을 다시 시작하거나 새로고침하세요. 소스 코드와 기본 역할 폴더는 삭제되지 않습니다.",
     factoryResetTypeToConfirm: "확인하려면 RESET OCTOPUS 입력",
@@ -6671,7 +6800,7 @@ export const koKR: Translations = {
     totalCredits: (total) => `총 ${total} 크레딧`,
     billingUnavailableTitle: "요금제를 일시적으로 사용할 수 없습니다",
     billingUnavailableDescription:
-      "Octopus 계정에는 로그인되어 있지만 결제 서비스가 연결되지 않았습니다. 다시 시도해 계정 연결과 요금제를 새로고침하세요.",
+      "EchoAI 계정에는 로그인되어 있지만 결제 서비스가 연결되지 않았습니다. 다시 시도해 계정 연결과 요금제를 새로고침하세요.",
     subscriptionUnavailable: "구독 정보를 불러올 수 없습니다.",
     plansUnavailable: "요금제를 불러올 수 없습니다.",
     noPlans: "현재 구매 가능한 요금제가 없습니다.",
@@ -6922,7 +7051,7 @@ export const koKR: Translations = {
   appAuth: {
     pageTitle: "앱 인증",
     pageSubtitle:
-      "서드파티 플랫폼을 인증해 Octopus가 사용자를 대신해 데이터에 접근하도록 합니다.",
+      "서드파티 플랫폼을 인증해 EchoAI가 사용자를 대신해 데이터에 접근하도록 합니다.",
     searchPlaceholder: "인증 검색...",
     connectedCount: (n: number) => `${n}개 연결됨`,
     tabAll: "전체",
@@ -7062,6 +7191,11 @@ export const koKR: Translations = {
       `${rules}개 규칙 로드됨${statsReset ? " · 통계 초기화됨" : ""}`,
     reloadError: (error: string) => `오류: ${error}`,
     fetchFailed: "요청 실패",
+    dataLoading: "리플렉스 데이터를 불러오는 중…",
+    dataUnavailable: "리플렉스 데이터를 일시적으로 불러올 수 없습니다.",
+    dataRefreshFailed:
+      "새로 고침에 실패했습니다. 마지막으로 불러온 데이터를 표시합니다.",
+    retryButton: "다시 시도",
     reloadFailed: "다시 로드 실패",
     statTry: "Try",
     statHit: "Hit",
@@ -7071,6 +7205,7 @@ export const koKR: Translations = {
     statLastHourHits: "지난 시간 히트",
     sparklineTitle: "리플렉스 히트 · 최근 60분 · 1분 버킷",
     sparklineEmpty: "최근 60분간 리플렉스 히트 없음",
+    sparklineUnavailable: "리플렉스 추세를 일시적으로 불러올 수 없습니다.",
     rulesTableTitle: "Rules",
     responseTiersTitle: "응답 계층",
     colRule: "Rule",
@@ -7082,6 +7217,7 @@ export const koKR: Translations = {
     colRate: "Rate",
     colLast: "Last",
     noRulesLoaded: "로드된 규칙이 없습니다.",
+    rulesUnavailable: "규칙 데이터를 일시적으로 불러올 수 없습니다.",
     tierEnabled: "enabled",
     tierDisabled: "disabled",
     tierSize: "size",
@@ -7176,6 +7312,10 @@ export const koKR: Translations = {
     addendumAppliedTitle: "현재 적용된 추가본",
     addendumLive: "live",
     addendumNone: "none",
+    stateLoading: "불러오는 중…",
+    stateUnavailable: "상태를 사용할 수 없음",
+    addendumUnavailable:
+      "추가본 상태를 일시적으로 불러올 수 없습니다. 기존 설정은 변경되지 않았습니다.",
     addendumClearButton: "지우기 (수동)",
     addendumBytes: (size: number) => `${size}바이트`,
     knobIterations: "iterations",
@@ -7197,6 +7337,9 @@ export const koKR: Translations = {
     canaryTitle: "카나리 / 롤백",
     canaryRefresh: "refresh",
     canaryEmpty: "아직 카나리 상태가 없습니다",
+    canaryUnavailable:
+      "카나리 상태를 일시적으로 불러올 수 없습니다. 기존 데이터는 변경되지 않았습니다.",
+    canaryCountsUnavailable: "활성 — · 롤백됨 — · 합계 —",
     canaryCounts: (active: number, rolledBack: number, total: number) =>
       `활성 ${active} · 롤백 ${rolledBack} · 합계 ${total}`,
     canaryPhase: (phase: string) => `단계 ${phase}`,
@@ -7318,6 +7461,81 @@ export const koKR: Translations = {
     journalRow: (task: string, arm: string) => `작업=${task} 전략=${arm}`,
     subtitle:
       "런타임 자기 성찰 · 병렬 협업 / 보드 / 저널 스트림 / 자가 진화 / 컨텍스트 예산 / 비용",
+    shell: {
+      startTask: "작업 시작",
+      runReviewTitle: "실행 검토",
+      runReviewDescription:
+        "원활했던 부분, 실패한 부분, 자세히 살펴볼 부분을 확인합니다.",
+      liveEventsTitle: "실시간 이벤트",
+      liveEventsDescription:
+        "협업, 블랙보드 활동, 로그를 하나의 이벤트 보기로 통합합니다.",
+      resourcesTitle: "리소스 및 비용",
+      resourcesDescription:
+        "컨텍스트 예산, 토큰 사용량, 비용 합계를 한곳에서 확인합니다.",
+      systemTitle: "시스템 상태",
+      systemDescription: "자가 진화, 진단, 백엔드 상태를 함께 확인합니다.",
+      overviewTab: "개요",
+      eventsTab: "이벤트",
+      resourcesTab: "리소스 및 비용",
+      systemTab: "시스템",
+      overviewTitle: "개요부터 확인",
+      overviewDescription:
+        "상태, 이벤트, 리소스, 시스템 상태를 네 가지 명확한 보기로 구성했습니다.",
+      openNewTask: "새 작업 열기",
+      eventsEyebrow: "이벤트",
+      eventsTitle: "실행, 협업, 로그를 한곳에",
+      eventsDescription:
+        "긴 탭 목록을 오가지 않고 실행 검토, 협업, 블랙보드, 로그를 확인합니다.",
+      resourcesEyebrow: "리소스 및 비용",
+      resourcesGroupTitle: "예산을 먼저, 청구를 다음에",
+      resourcesGroupDescription:
+        "컨텍스트 예산과 지출을 같은 단계에서 비교할 수 있습니다.",
+      systemEyebrow: "시스템",
+      systemGroupTitle: "백엔드 상태와 자가 진화를 한곳에",
+      systemGroupDescription:
+        "진단과 자가 진화를 하나의 시스템 보기로 통합합니다.",
+    },
+    toolEffects: {
+      title: "외부 작업 영수증",
+      description:
+        "중복 실행, 호스트 인계, 사람의 확인이 필요한 외부 부작용을 감지합니다.",
+      retryAuthorizedSuccess:
+        "펜싱 토큰으로 보호된 재시도를 한 번 허용했습니다",
+      retryAuthorizationFailed: "허용하지 못했습니다",
+      pendingReview: (count: number) => `${count}개 검토 대기`,
+      noPendingReview: "검토 대기 항목 없음",
+      refreshAriaLabel: "외부 작업 영수증 새로 고침",
+      backendLabel: "백엔드",
+      sharedAcrossHosts: "호스트 간 공유",
+      localCoordination: "로컬 조정",
+      committedLabel: "커밋됨",
+      runningLabel: "실행 중",
+      loadFailed: (error: string) =>
+        `영수증 상태를 불러오지 못했습니다: ${error}`,
+      empty:
+        "외부 작업 영수증이 아직 없습니다. 도구 실행 후 자동으로 표시됩니다.",
+      unknownTool: "알 수 없는 도구",
+      receiptMeta: (task: string, step: number, token: number) =>
+        `작업 ${task} · 단계 ${step} · token ${token}`,
+      reviewAndRetry: "검토 후 재시도",
+      collapsedHistory:
+        "이전 커밋 기록은 접고, 확인이 필요한 항목과 최근 6개를 표시합니다.",
+      confirmTitle: "외부 작업이 발생하지 않았는지 확인",
+      confirmDescription:
+        "외부 시스템, 파일 또는 원격 서비스에서 작업이 성공하지 않았음을 확인한 경우에만 재시도를 허용하세요. 펜싱 토큰은 오래된 화면이 새 영수증을 변경하지 못하게 합니다.",
+      reasonPlaceholder:
+        "확인 근거를 입력하세요. 예: 결제 서비스에서 주문이 생성되지 않았음을 확인했습니다.",
+      cancel: "취소",
+      submitting: "상태 확인 중…",
+      confirmRetry: "미발생 확인 및 재시도 허용",
+      states: {
+        claimed: "확보됨",
+        started: "실행 중",
+        committed: "커밋됨",
+        indeterminate: "검토 필요",
+        retryAuthorized: "재시도 허용됨",
+      },
+    },
     swarmCardTitle: "Agent 협업 세션 · 실시간 스킬 호출",
     noConcurrentTasks: "동시 작업 없음",
     noConcurrentTasksHint:
@@ -7397,6 +7615,7 @@ export const koKR: Translations = {
     // Regeneration panel
     loading: "로드 중…",
     errorPrefix: "오류:",
+    crossTenantAdminRequired: "테넌트 간 관리자 권한이 필요합니다.",
     trajectoryTotal: "전체 궤적",
     failureCount: "실패 수",
     regenProducers: {
@@ -7553,7 +7772,7 @@ export const koKR: Translations = {
   evolutionPanel: {
     title: "자가 진화 상태",
     description:
-      "Octopus는 완료된 작업을 복기해 유용한 교훈을 다음 작업에 반영합니다. 여기서 학습한 내용과 다음 작업에 미칠 영향을 확인할 수 있습니다.",
+      "EchoAI는 완료된 작업을 복기해 유용한 교훈을 다음 작업에 반영합니다. 여기서 학습한 내용과 다음 작업에 미칠 영향을 확인할 수 있습니다.",
     summaryEmpty: "경험 축적 중",
     summaryReady: (learned: number, total: number) =>
       `${total}건 작업에서 ${learned}건 재사용 가능 교훈을 축적했습니다`,
@@ -7578,7 +7797,7 @@ export const koKR: Translations = {
     statAllTrajsTooltip: (total: number) =>
       `${total}개 과거 작업이 복기 풀에 있습니다. 샘플이 많을수록 교훈이 단발 결과가 아닌 안정적 규칙에 가까워집니다.`,
     statAllTrajsDesc:
-      "복기 풀에 들어간 과거 작업입니다. Octopus는 이 샘플에서 안정적 방법과 리스크 패턴을 찾습니다.",
+      "복기 풀에 들어간 과거 작업입니다. EchoAI는 이 샘플에서 안정적 방법과 리스크 패턴을 찾습니다.",
     statAllTrajsPoints: (total: number, learned: number) => [
       `${total}개 샘플이 복기 풀에 들어갔습니다.`,
       `${learned}건 교훈이 비슷한 작업에 자동 적용될 준비가 되었습니다.`,
@@ -7604,7 +7823,7 @@ export const koKR: Translations = {
     consolidatedMemoriesDesc:
       "반복 검증된 효과적인 방법들로, 다음 비슷한 작업에서 자동으로 우선 참조됩니다.",
     noMitigationsHint:
-      "아직 반복되는 함정이 발견되지 않았습니다. 문제가 반복되면 Octopus가 여기에 피해야 할 항목을 표시합니다.",
+      "아직 반복되는 함정이 발견되지 않았습니다. 문제가 반복되면 EchoAI가 여기에 피해야 할 항목을 표시합니다.",
     noMemoriesHint:
       "아직 충분히 안정적인 성공 방법이 없습니다. 비슷한 작업이 더 누적되면 재사용 가능한 방법이 여기 나타납니다.",
     linesSuffix: (n: number) => `${n}건`,
@@ -7644,7 +7863,7 @@ export const koKR: Translations = {
   privacySettings: {
     identityLockTitle: "아이덴티티 락",
     identityLockDesc:
-      "활성화하면 모델 응답의 벤더/모델 이름(Claude / Kimi / Anthropic / Moonshot 등)이 Octopus로 재작성되며 사용자는 제품 정체성만 보게 됩니다. 비활성화하면 원본 LLM 정체가 그대로 표시되는 개발자 모드가 됩니다 — 프롬프트 튜닝이나 라우팅 확인에 유용합니다.",
+      "활성화하면 모델 응답의 벤더/모델 이름(Claude / Kimi / Anthropic / Moonshot 등)이 EchoAI로 재작성되며 사용자는 제품 정체성만 보게 됩니다. 비활성화하면 원본 LLM 정체가 그대로 표시되는 개발자 모드가 됩니다 — 프롬프트 튜닝이나 라우팅 확인에 유용합니다.",
     lockedTag: "LOCKED",
     unlockedTag: "UNLOCKED",
     sourceLabel: "source",
@@ -7872,13 +8091,13 @@ export const koKR: Translations = {
   // Register page
   registerPage: {
     loadingText: "로드 중...",
-    badgeText: "Octopus 계정 만들기",
+    badgeText: "EchoAI 계정 만들기",
     heroTitleLine1: "가입 후 바로 시작하세요",
     heroTitleLine2: "멀티 에이전트 워크플로",
     heroDescription:
       "자신만의 워크스페이스를 설정하고 스킬, 도구, 모델을 연결하여 리서치, 협업, 자동화를 하나의 플랫폼에서 통합하세요.",
     cardTitle: "계정 만들기",
-    cardDescription: "Octopus에 가입하여 에이전트 여정을 시작하세요",
+    cardDescription: "EchoAI에 가입하여 에이전트 여정을 시작하세요",
     usernameLabel: "사용자 이름",
     usernamePlaceholder: "최소 3자",
     emailLabel: "이메일 (선택 사항)",
@@ -7931,6 +8150,9 @@ export const koKR: Translations = {
       sendFailed: "전송에 실패했습니다",
       fillRequired: "전화번호와 인증 코드를 입력하세요",
       emailFillRequired: "이메일과 인증 코드를 입력하세요",
+      emailRequired: "이메일 주소를 입력하세요",
+      codeRequired: "인증 코드를 입력하세요",
+      invalidCode: "6자리 숫자 인증 코드를 입력하세요",
       loginFailed: "로그인에 실패했습니다",
       enterFailed: "입장에 실패했습니다",
       gatewayNotEnabled:
@@ -7956,7 +8178,7 @@ export const koKR: Translations = {
       privacyPolicy: "개인정보 처리방침",
     },
     page: {
-      title: "Octopus 워크스페이스에 안전하게 액세스",
+      title: "EchoAI 워크스페이스에 안전하게 액세스",
       subtitle: "계속하기",
       description:
         "컨텍스트, 스킬, 실행 결과를 관리하는 통합 워크스페이스에서 리서치, 코딩, 협업, 자동화 작업을 계속하세요.",
@@ -8056,8 +8278,8 @@ export const koKR: Translations = {
   },
 
   hero: {
-    releaseBadge: "Octopus 2.0 출시",
-    withOctopus: "Octopus와 함께",
+    releaseBadge: "EchoAI 2.0 출시",
+    withOctopus: "EchoAI와 함께",
     heroDescription:
       "오픈소스 SuperAgent 프레임워크로 연구, 코딩, 콘텐츠 생성을 수행합니다. 샌드박스, 메모리, 도구, 스킬, 서브 Agent를 활용해 몇 분에서 몇 시간까지 다양한 작업을 처리합니다.",
   },
@@ -8282,11 +8504,29 @@ export const koKR: Translations = {
 
   share: {
     share: "공유",
-    saveImage: "이미지로 저장",
-    copyImage: "이미지 복사",
-    imageSaved: "이미지로 저장됨",
-    imageCopied: "이미지 복사됨",
-    imageFailed: "이미지 생성 실패",
+    shareTask: "작업 공유",
+    shareDescription:
+      "추론, 도구 데이터, 로컬 경로를 제외한 공개 읽기 전용 스냅샷을 만듭니다",
+    wechat: "WeChat",
+    moments: "Moments",
+    copyLink: "링크 복사",
+    qrCode: "QR 코드",
+    openInBrowser: "브라우저",
+    creatingLink: "공유 링크 만드는 중…",
+    linkCopied: "공유 링크를 복사했습니다",
+    linkFailed: "공유 링크를 만들지 못했습니다",
+    wechatQrTitle: "WeChat으로 공유",
+    momentsQrTitle: "Moments로 공유",
+    qrTitle: "공유 QR 코드",
+    wechatQrHint: "WeChat으로 스캔한 뒤 친구에게 페이지를 보내세요.",
+    momentsQrHint: "WeChat으로 스캔해 페이지를 열고 Moments로 공유하세요.",
+    qrHint: "QR 코드를 스캔해 공개 작업을 여세요.",
+    localOnlyHint:
+      "현재 로컬 주소는 이 기기에서만 열립니다. 배포 환경에서는 공개 주소를 사용합니다.",
+    stopSharing: "공개 공유 중지",
+    sharingStopped: "공개 공유를 중지했습니다",
+    stopSharingFailed: "공유를 중지하지 못했습니다",
+    unavailable: "이 작업을 공유하기 전에 메시지를 보내세요",
     exportReplay: "재생 가능한 HTML 내보내기",
   },
 
@@ -8309,10 +8549,10 @@ export const koKR: Translations = {
     applying: "신청 중...",
     approvalRequired: "그룹 관리자 승인이 필요합니다",
     approvalRequiredDescription:
-      "승인 전에는 프로젝트 작업대와 그룹 대화를 볼 수 없습니다.",
+      "승인 전에는 그룹 대화와 활성화된 프로젝트 작업대를 볼 수 없습니다.",
     requestPendingTitle: "신청을 제출했습니다",
     requestPendingDescription:
-      "승인되면 이 페이지에서 프로젝트 그룹으로 이동합니다.",
+      "승인되면 이 페이지에서 작업 그룹으로 이동합니다.",
     requestSubmitted: "가입 신청을 제출했습니다",
     requestRejected: "가입 신청이 거절되었습니다",
     requestWithdrawn: "가입 신청을 철회했습니다",
@@ -8789,13 +9029,13 @@ export const koKR: Translations = {
   desktop: {
     disabledTitle: "데스크톱 도우미가 꺼져 있어요",
     disabledDescription:
-      "Octopus 는 기본적으로 환영, 로그인, 작업 공간 화면으로 들어갑니다. 시스템 데스크톱 파일을 관리하려면 투명 데스크톱 도우미를 켜세요.",
+      "EchoAI 는 기본적으로 환영, 로그인, 작업 공간 화면으로 들어갑니다. 시스템 데스크톱 파일을 관리하려면 투명 데스크톱 도우미를 켜세요.",
     enableButton: "데스크톱 도우미 켜기",
     pluginSettingsButton: "플러그인 설정 열기",
     backToWorkspaceButton: "작업 공간으로 돌아가기",
     header: {
       workspaceTooltip: "작업 공간 열기",
-      brand: "Octopus",
+      brand: "EchoAI",
       accountModels: "공식 모델",
       desktopAssistant: "데스크톱 도우미",
       desktopCount: (count) => `데스크톱 ${count || "--"}`,
@@ -9062,7 +9302,7 @@ export const koKR: Translations = {
       "현재 웹 환경이므로 우클릭 메뉴 설치/제거는 비활성화 상태로 유지됩니다. 데스크톱 버전으로 전환하면 두 항목이 실제로 적용됩니다.",
     contextMenuTitle: "시스템 우클릭 메뉴",
     contextMenuDescription:
-      'Windows 데스크톱 빈 공간을 우클릭하면 "Octopus 한 번에 데스크톱 정리"가 표시됩니다.',
+      'Windows 데스크톱 빈 공간을 우클릭하면 "EchoAI 한 번에 데스크톱 정리"가 표시됩니다.',
     installButton: "우클릭 명령 설치",
     installingButton: "설치 중",
     removeButton: "제거",
@@ -9075,7 +9315,7 @@ export const koKR: Translations = {
     backToWorkspace: "워크스페이스로 돌아가기",
     confirmRemoveTitle: "시스템 우클릭 메뉴를 제거하시겠습니까?",
     confirmRemoveDescription:
-      "Windows 데스크톱 우클릭 메뉴에서 Octopus 한 번에 정리 명령을 제거합니다.",
+      "Windows 데스크톱 우클릭 메뉴에서 EchoAI 한 번에 정리 명령을 제거합니다.",
   },
 
   // Knowledge page
@@ -9289,9 +9529,9 @@ export const koKR: Translations = {
       colType: "유형",
       colItems: "항목",
       footerOnline:
-        "자주 쓰는 위치가 Octopus NAS에 연결되었습니다. 로컬 데이터베이스는 경로, 썸네일, OCR 텍스트, 벡터 인덱스만 저장합니다.",
+        "자주 쓰는 위치가 EchoAI NAS에 연결되었습니다. 로컬 데이터베이스는 경로, 썸네일, OCR 텍스트, 벡터 인덱스만 저장합니다.",
       footerOffline:
-        "자주 쓰는 위치는 바로 탐색할 수 있으며, Octopus NAS는 연결 대기 중입니다. 로컬 데이터베이스는 경로, 썸네일, OCR 텍스트, 벡터 인덱스만 저장합니다.",
+        "자주 쓰는 위치는 바로 탐색할 수 있으며, EchoAI NAS는 연결 대기 중입니다. 로컬 데이터베이스는 경로, 썸네일, OCR 텍스트, 벡터 인덱스만 저장합니다.",
       folderType: "폴더",
     },
     sources: {

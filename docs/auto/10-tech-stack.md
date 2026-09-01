@@ -11,7 +11,9 @@ tier: "standard"
 
 ## 后端（Python）
 
+- `cryptography>=50.0.0`
 - `defusedxml>=0.7.1`
+- `packaging>=24.0`
 - `pillow>=12.3.0`
 - `pydantic>=2.12.0`
 

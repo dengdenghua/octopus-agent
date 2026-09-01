@@ -140,16 +140,21 @@ function loadDetection(workspacePath: string): Promise<DetectResponse> {
   return cached;
 }
 
-async function setModeOnServer(
+export async function persistModeSelection(
   mode: AgentModeName,
   sessionId: string,
+  workspacePath: string,
 ): Promise<void> {
   const url = `${getBackendBaseURL()}/api/agent-modes/current`;
-  await fetch(url, {
+  const response = await fetch(url, {
     method: "PUT",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ mode, session_id: sessionId }),
   });
+  if (!response.ok) {
+    throw new Error(`Mode update failed: ${response.status}`);
+  }
+  writeStoredModeOverride(workspacePath, mode);
 }
 
 interface ModeSelectorProps {
@@ -162,6 +167,7 @@ interface ModeSelectorProps {
    * tooltip on the mode chip — replacing the old standalone access chip. */
   readOnlyHint?: string;
   chromeless?: boolean;
+  labelOverrides?: Partial<Record<AgentModeName, string>>;
   permissionLabel?: string;
   onModeChange: (mode: AgentModeName) => void;
   onAuditIntensityChange?: (intensity: AuditIntensity) => void;
@@ -182,6 +188,7 @@ export function ModeSelector({
   codeModeUnlocked = false,
   readOnlyHint,
   chromeless = false,
+  labelOverrides,
   permissionLabel,
   onModeChange,
   onAuditIntensityChange,
@@ -192,6 +199,7 @@ export function ModeSelector({
   const { t } = useI18n();
   const [detection, setDetection] = useState<DetectResponse | null>(null);
   const [detecting, setDetecting] = useState(false);
+  const [switching, setSwitching] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [modes, setModes] = useState<ModeInfo[]>([]);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -356,19 +364,25 @@ export function ModeSelector({
   const handleToggle = useCallback(
     async (newMode: AgentModeName) => {
       const previousMode = mode;
+      const previousManualOverride = manualOverrideRef.current;
       manualOverrideRef.current = true;
       setManualOverride(true);
       onManualOverrideChange?.(true);
       onModeChange(newMode);
-      writeStoredModeOverride(workDir, newMode);
       setExpanded(false);
       triggerRef.current?.focus();
+      setSwitching(true);
       try {
-        await setModeOnServer(newMode, sessionId);
+        await persistModeSelection(newMode, sessionId, workDir);
       } catch (e) {
         swallow(e);
+        manualOverrideRef.current = previousManualOverride;
+        setManualOverride(previousManualOverride);
+        onManualOverrideChange?.(previousManualOverride);
         onModeChange(previousMode);
         toast.error("切换模式失败，已还原");
+      } finally {
+        setSwitching(false);
       }
     },
     [mode, onManualOverrideChange, onModeChange, sessionId, workDir],
@@ -452,8 +466,9 @@ export function ModeSelector({
     : null;
   const isManualOverride =
     manualOverride || Boolean(autoMode && autoMode !== mode);
-  const ActiveIcon = detecting ? LoaderIcon : activeOption.icon;
-  const activeLabel = activeOption.label;
+  const busy = detecting || switching;
+  const ActiveIcon = busy ? LoaderIcon : activeOption.icon;
+  const activeLabel = labelOverrides?.[mode]?.trim() || activeOption.label;
   const modeInfo = modes.find((item) => item.name === mode);
   const workspaceLabel = compactWorkspaceLabel(workDir);
 
@@ -466,6 +481,8 @@ export function ModeSelector({
         aria-expanded={expanded}
         aria-haspopup="listbox"
         aria-controls={expanded ? listboxId : undefined}
+        aria-busy={switching}
+        disabled={switching}
         onClick={() => setExpanded(!expanded)}
         onKeyDown={(e) => {
           if (!expanded && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
@@ -485,15 +502,8 @@ export function ModeSelector({
         )}
         title={activeOption.tooltip}
       >
-        <ActiveIcon className={cn("size-3", detecting && "animate-spin")} />
-        <span
-          className={cn(
-            "truncate",
-            chromeless ? "max-w-[42px]" : "max-w-[72px]",
-          )}
-        >
-          {activeLabel}
-        </span>
+        <ActiveIcon className={cn("size-3", busy && "animate-spin")} />
+        <span className="max-w-[72px] truncate">{activeLabel}</span>
         {!chromeless && detection && isManualOverride && (
           <span className="text-xs opacity-50">
             {t.modes.manualOverrideShort}
@@ -566,7 +576,10 @@ export function ModeSelector({
                       >
                         <Icon className="size-4 shrink-0" />
                         <div className="flex min-w-0 items-center gap-2 text-left">
-                          <span className="font-semibold">{option.label}</span>
+                          <span className="font-semibold">
+                            {labelOverrides?.[option.name]?.trim() ||
+                              option.label}
+                          </span>
                           <span className="truncate text-xs opacity-70">
                             {option.desc}
                           </span>

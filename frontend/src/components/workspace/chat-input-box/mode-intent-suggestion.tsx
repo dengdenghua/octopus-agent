@@ -25,7 +25,7 @@ interface ModeIntentSuggestionProps {
   /** Human-readable label for the suggested mode. */
   modeLabel: string;
   /** Called when the user accepts the switch. */
-  onAccept?: (mode: AgentModeName) => void;
+  onAccept?: (mode: AgentModeName) => void | Promise<void>;
   /** Called when the user dismisses the suggestion. */
   onDismiss?: (mode: AgentModeName) => void;
   className?: string;
@@ -70,6 +70,7 @@ export function ModeIntentSuggestion({
   const [dismissed, setDismissed] = useState(() =>
     readDismissedModes().includes(mode),
   );
+  const [accepting, setAccepting] = useState(false);
 
   // If the parent switches which mode it's suggesting (e.g. a new verdict
   // arrives), reset the local dismissed flag so the new suggestion shows.
@@ -77,10 +78,19 @@ export function ModeIntentSuggestion({
     setDismissed(readDismissedModes().includes(mode));
   }, [mode]);
 
-  const handleAccept = useCallback(() => {
-    setDismissed(true);
-    onAccept?.(mode);
-  }, [mode, onAccept]);
+  const handleAccept = useCallback(async () => {
+    if (accepting) return;
+    setAccepting(true);
+    try {
+      await onAccept?.(mode);
+      setDismissed(true);
+    } catch {
+      // The parent owns rollback and user-facing error reporting. Keeping the
+      // suggestion visible gives the user an explicit retry path.
+    } finally {
+      setAccepting(false);
+    }
+  }, [accepting, mode, onAccept]);
 
   const handleDismiss = useCallback(() => {
     setDismissed(true);
@@ -107,8 +117,10 @@ export function ModeIntentSuggestion({
         <button
           type="button"
           data-testid="mode-intent-accept"
+          aria-busy={accepting}
+          disabled={accepting}
           onClick={handleAccept}
-          className="rounded-md px-2 py-0.5 font-medium text-primary transition-colors hover:bg-primary/10"
+          className="rounded-md px-2 py-0.5 font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-wait disabled:opacity-60"
         >
           {t.modeIntent.switch}
         </button>

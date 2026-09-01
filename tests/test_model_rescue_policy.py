@@ -17,6 +17,14 @@ def test_retryable_model_error_covers_capacity_and_transport_failures() -> None:
     assert is_retryable_model_error(RuntimeError("http_429: rate limit exceeded"))
     assert is_retryable_model_error(TimeoutError("upstream timeout"))
     assert is_retryable_model_error(ConnectionError("connection reset by peer"))
+    assert is_retryable_model_error(
+        RuntimeError(
+            "[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol"
+        )
+    )
+    assert is_retryable_model_error(
+        RuntimeError("RemoteProtocolError: server disconnected without sending a response")
+    )
     assert not is_retryable_model_error(ValueError("invalid request schema"))
 
 

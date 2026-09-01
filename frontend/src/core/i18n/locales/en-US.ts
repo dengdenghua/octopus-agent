@@ -8,7 +8,6 @@ import {
   SparklesIcon,
   VideoIcon,
 } from "lucide-react";
-
 import type { Translations } from "./types";
 import { workspaceComputerEnUS } from "./workspace-computer";
 import { agentOperatorEnUS } from "./agent-operator";
@@ -72,7 +71,6 @@ export const enUS: Translations = {
     stubResponseDescription: (method: string, path: string) =>
       `${method} ${path} returned stub data. Treat this workspace state as a development fallback until the real backend endpoint is enabled.`,
     openSidebarMenu: "Open sidebar menu",
-    localPartnerModel: "Local partner model (owned by the CLI)",
     loadingWorkspace: "Loading workspace...",
   },
 
@@ -86,12 +84,12 @@ export const enUS: Translations = {
   welcome: {
     greeting: "Hello, I am {name}",
     description:
-      "Welcome to 🦌 Octopus, an open source super agent. With built-in and custom skills, Octopus helps you search on the web, analyze data, and generate artifacts like slides, web pages and do almost anything.",
+      "Welcome to 🦌 EchoAI, an open source super agent. With built-in and custom skills, EchoAI helps you search on the web, analyze data, and generate artifacts like slides, web pages and do almost anything.",
     octopusTagline: "Multi-agent collaboration · One input, direct solutions",
 
     createYourOwnSkill: "Create Your Own Skill",
     createYourOwnSkillDescription:
-      "Create your own skill to release the power of Octopus. With customized skills,\nOctopus can help you search on the web, analyze data, and generate\n artifacts like slides, web pages and do almost anything.",
+      "Create your own skill to release the power of EchoAI. With customized skills,\nEchoAI can help you search on the web, analyze data, and generate\n artifacts like slides, web pages and do almost anything.",
 
     scenes: {
       daily: "Daily Work",
@@ -274,6 +272,7 @@ export const enUS: Translations = {
     reviewAssigned: (label: string) => `Review assigned to: ${label}`,
     taskCompleted: "Task complete",
     taskFailed: "Task did not complete",
+    previousAttemptRecovered: "Earlier attempt failed; a later turn recovered",
     taskOutputs: "Task outputs",
     viewProcess: "View process",
     makeSimilar: "Make similar",
@@ -378,13 +377,13 @@ export const enUS: Translations = {
     collaboratorsCountUnit: "members",
     collaboratorsHelp:
       "Only @mentioned AI members reply by default; add collaborators for coordinated or parallel work.",
-    collaboratorsSearchPlaceholder: "Search agents / local partners",
+    collaboratorsSearchPlaceholder: "Search agents / installed capabilities",
     collaboratorsTaskFallback: "Team task",
     collaboratorsCoreGroup: "White Ghost Squad",
     collaboratorsOnDemandGroup: "On-demand capabilities",
     collaboratorsOnDemandBadge: "On demand",
     collaboratorsOnDemandHint:
-      "Experts, digital twins, and local partners join only this conversation; they do not replace your primary identity.",
+      "Experts, digital twins, and installed capabilities join only this conversation; they do not replace your primary identity.",
     responseMode: "AI participation",
     responseModeTeamRequired:
       "Add an AI member before using Coordinated or Parallel collaboration",
@@ -404,9 +403,26 @@ export const enUS: Translations = {
     codexSpec: "Spec",
     codexGoal: "Goal",
     composerInsertions: "Insert into input",
-    insertCodexPlan: "Insert Plan marker",
+    uploadImages: "Upload images",
+    projectFiles: "Project files",
+    workspaceFiles: (workspace: string) => `${workspace} files`,
+    noWorkspaceFiles: "Choose a project folder to browse workspace files.",
+    uploadDeviceFiles: "Choose files from device",
+    commands: "Commands",
+    plugins: "Plugins",
+    skills: "Skills",
+    availablePlugins: "Available plugins",
+    managePlugins: "Manage plugins",
+    explorePlugins: "Explore more plugins",
+    noAvailablePlugins: "No enabled plugins",
+    searchSkills: "Search skills",
+    manageSkills: "Manage skills",
+    noAvailableSkills: "No enabled skills",
+    capabilityLoadFailed: "Unable to load capabilities",
+    removeCapability: (name: string) => `Remove ${name}`,
+    insertCodexPlan: "Plan mode",
     insertCodexSpec: "Insert Spec marker",
-    insertCodexGoal: "Insert Goal marker",
+    insertCodexGoal: "Goal",
     insertBrowserSurface: "Insert Browser marker",
     insertChromeSurface: "Insert Chrome marker",
     workflow: "Workflow",
@@ -416,7 +432,7 @@ export const enUS: Translations = {
     collapse: "Collapse",
     materialNote: "Material Note",
     url: "URL",
-    file: "File",
+    file: "Add files",
     text: "Text",
     textTitle: "Text Title",
     pasteTextMaterial: "Paste text material",
@@ -466,6 +482,33 @@ export const enUS: Translations = {
     permissionAcceptEdits: "Accept edits",
     permissionConfirm: "Default",
     addImage: "Add image (paste / drag / select)",
+    addAppshot: "Attach current window snapshot",
+    capturingAppshot: "Attaching the current window…",
+    appshotHint: "Add a one-time screenshot and accessibility text",
+    appshotSource: "Current window Appshot",
+    appshotFailed: "Unable to read the current window",
+    windowTools: "Window",
+    automationTarget: "Target",
+    chooseAutomationTarget: "Choose a browser or desktop window",
+    currentChromeTab: "Current Chrome tab",
+    currentDesktopWindow: "Desktop window",
+    loadingAutomationTargets: "Finding controllable windows…",
+    noAutomationTargets:
+      "No controllable windows. Connect the browser relay or open an app window.",
+    clearAutomationTarget: "Clear pinned target",
+    automationOnline: "Browser online",
+    automationOffline: "Browser offline",
+    automationReconnecting: "Reconnecting",
+    automationDesktop: "Desktop control",
+    automationIdle: "Idle",
+    automationRunning: "Agent controlling",
+    automationPaused: "Paused",
+    automationPause: "Pause",
+    automationResume: "Resume",
+    automationTakeover: "Take over",
+    automationEvidence: "Action receipts",
+    automationNoEvidence: "No action receipts yet",
+    automationControlFailed: "Unable to update control state",
     removeImage: "Remove",
     readme: "README",
   },
@@ -511,7 +554,7 @@ export const enUS: Translations = {
     categoryTravel: "Travel",
     aiMembersLabel: "Initial AI collaborators",
     aiMembersDescription:
-      "They join the project group immediately. Keep at least one; you can adjust the roster later.",
+      "They join the work group immediately. Keep at least one; you can adjust the roster later.",
     aiMembersSelected: (count) => `${count} selected`,
     agentsLoading: "Loading available AI…",
     agentsUnavailable:
@@ -519,20 +562,20 @@ export const enUS: Translations = {
     humanMembersLabel: "People",
     humanMembersAfterCreate: "Invite after creation",
     humanMembersDescription:
-      "After creation, you will enter the project group and can invite members or viewers with a secure link.",
+      "After creation, you will enter the work group and can invite members or viewers with a secure link.",
     invitePeopleOnArrival: "Invite people when the group opens",
     creatorRoleLabel: "Your project role",
     creatorRole: "Project owner · Group owner",
     creatorRoleDescription:
       "You can manage the project, orchestrate AI, and invite people.",
-    hint: "The project, its group, and the right-side workbench are created and linked together.",
+    hint: "The work group, project capabilities, and right-side workbench are created and linked together.",
     cancel: "Cancel",
     create: "Create project",
   },
 
   promoteProjectDialog: {
-    trigger: "Convert to project",
-    title: "Convert this work group to a project",
+    trigger: "Create project plan",
+    title: "Create a project plan for this work group",
     description:
       "Keep the current members and full chat history, then add milestones, items, files, and a project workbench.",
     nameLabel: "Project name",
@@ -543,8 +586,36 @@ export const enUS: Translations = {
     cancel: "Cancel",
     submit: "Create and attach",
     submitting: "Creating…",
-    success: "This work group is now a project group",
-    failed: "Could not convert this group. Try again.",
+    success: "Project capabilities are now enabled for this work group",
+    failed: "Could not create the project plan. Try again.",
+  },
+
+  projectCapability: {
+    enabled: "Project enabled",
+    startPlan: "Create project plan",
+    openWorkbench: "Open project workbench",
+    moreActions: "Project actions",
+    detach: "Turn off project capabilities",
+    detachConfirmTitle: "Turn off project capabilities for this group?",
+    detachConfirmDescription:
+      "The project plan will be detached. Group members, invitations, chat history, and this link will stay unchanged.",
+    detachConfirmAction: "Turn off project capabilities",
+    forceDetachConfirmTitle:
+      "The project is still active. Turn off project capabilities anyway?",
+    forceDetachConfirmDescription:
+      "Project execution and status will be separated from this work group, but the project record will remain available in Projects. Group members and the full chat history will stay unchanged.",
+    forceDetachConfirmAction: "Turn off anyway",
+    detached:
+      "Project capabilities are off; the work group and chat history were kept",
+    detachCancelled: "Project capabilities were not turned off",
+    detachFailed: "Could not turn off project capabilities. Try again.",
+    detachBindingChanged:
+      "This group is now attached to a different project. Refresh and try again.",
+    statusPlanning: "Planning",
+    statusRunning: "In progress",
+    statusBlocked: "At risk",
+    statusDone: "Completed",
+    statusFailed: "Issue",
   },
 
   // Clarification Questionnaire
@@ -639,7 +710,7 @@ export const enUS: Translations = {
     readFile: "Read file",
     updateFile: "Update file",
     runAction: "Run operation",
-    teammateTimeout: "Teammate did not return in time; Octopus took over",
+    teammateTimeout: "Teammate did not return in time; EchoAI took over",
     factSummaryPath: (value: string) => `Confirmed: ${value}`,
     factSummaryCount: (value: string) => `Confirmed: ${value} items`,
     factSummaryStatus: (value: string) => `Confirmed: ${value}`,
@@ -980,6 +1051,7 @@ export const enUS: Translations = {
       close: "Close right panel",
       open: "Open right panel",
     },
+    viewActions: "View controls",
     finalArtifact: {
       generated: "Final report generated",
       view: "View",
@@ -990,7 +1062,7 @@ export const enUS: Translations = {
       idle: "REC: Record this conversation and learn as a reusable replay skill",
     },
     replay: {
-      titleDefault: "Octopus Run Replay",
+      titleDefault: "EchoAI Run Replay",
       footer: "Self-contained offline replay",
     },
     composer: {
@@ -1444,6 +1516,7 @@ export const enUS: Translations = {
     computerViewEmptyDesc:
       "When tasks are dispatched to subagents, you can view their independent computer operation records here.",
     visibilityPanelTitle: "Capability decisions",
+    visibilityPanelAttention: "Action required",
     visibilityPanelEmpty: "No capability decisions this turn",
     visibilityStep: "Decision",
     scrollToBottom: "Scroll to bottom",
@@ -1752,6 +1825,46 @@ export const enUS: Translations = {
     emptyHint: "Preview will appear after code generation",
     showPanel: "Show preview",
     hidePanel: "Hide preview",
+    inspectElement: "Select element",
+    cancelInspect: "Cancel selection",
+    inspectHint: "Click a page element · Esc to cancel",
+    aiEditTitle: "Ask AI to edit this element",
+    aiEditCancel: "Cancel element edit",
+    aiEditPlaceholder:
+      "e.g. Make this heading more futuristic without changing the layout",
+    aiEditSend: "Send edit",
+    aiEditQueued:
+      "Sent to AI. This task will update the file and refresh the preview.",
+    aiEditUnavailable:
+      "This task cannot accept the edit right now. Please try again shortly.",
+    officeEdit: "Edit with AI",
+    officeSelect: "Select content",
+    officeCancelSelect: "Cancel selection",
+    officeSelected: "Selected",
+    officeEditTitle: "Edit this office file",
+    officeEditPlaceholder:
+      "For example: turn slide 3 into a risk matrix and keep the current theme",
+    officeEditHint:
+      "The edit is sent to this task and the preview refreshes when it finishes",
+    previewError:
+      "Unable to load the preview. Check your sign-in and try again.",
+    previewRetry: "Reload preview",
+    officeFidelity: "Original layout",
+    humanEdit: "Edit directly",
+    humanEditing: "Editing page",
+    humanUnsaved: "Unsaved changes",
+    humanSave: "Save page",
+    humanCancel: "Discard changes",
+    humanSaved: "Page changes saved",
+    humanUndo: "Undo last save",
+    humanRestored: "Restored the version from before the save",
+    humanConflict: "The Agent updated this page; your changes are not saved",
+    humanReloadLatest: "Discard and load latest",
+    humanUnavailable: "This HTML is not a writable task artifact",
+    humanDiscardTitle: "Discard unsaved page changes?",
+    humanDiscardDescription:
+      "Leaving this preview will lose your unsaved edits. This cannot be undone.",
+    humanDiscardConfirm: "Discard and leave",
   },
 
   // Code Status
@@ -1824,6 +1937,7 @@ export const enUS: Translations = {
     navMcp: "MCP",
     navEvolution: "Evolution",
     navProjects: "Projects",
+    navDesign: "Design Canvas",
     navNarrative: "Narrative Studio",
     navPlugins: "Plugins",
     navHR: "Agents",
@@ -1838,6 +1952,9 @@ export const enUS: Translations = {
     groupSystem: "System",
     // Agent / team footer
     noAgents: "No agents available",
+    loadingAgents: "Loading agents…",
+    agentsLoadFailed: "Could not load agents",
+    retryAgents: "Reload",
     remainingCredits: "Credits balance",
     logout: "Log out",
     noTeams: "No groups yet",
@@ -1853,7 +1970,6 @@ export const enUS: Translations = {
     openAgentHudFor: (name: string) => `Open HUD for ${name}`,
     currentAgent: "Current agent",
     soloChat: "Solo chat",
-    localCliPartners: "Local CLI partners",
     oneOnOneTask: "One-on-one task",
     soloTasks: "Solo tasks",
     groupTasks: "Collaborative tasks",
@@ -2031,9 +2147,9 @@ export const enUS: Translations = {
       "Limit the number of tabs the agent can retain. Tabs opened with retain=true won't be auto-closed after a task ends.",
     saveConfig: "Save Config",
     configSaved: "Config saved",
-    installExtensionTitle: "Install Octopus Browser Relay",
+    installExtensionTitle: "Install EchoAI Browser Relay",
     installExtensionDesc:
-      "Install the extension to connect your browser to Octopus.",
+      "Install the extension to connect your browser to EchoAI.",
     step1Title: "Open Chrome Extensions page and enable Developer Mode",
     step1Desc: "Open the extensions management page in your browser",
     step1Action: "Open chrome://extensions",
@@ -2051,7 +2167,7 @@ export const enUS: Translations = {
     relayVersion: "Version",
     compareTitle: "Choose Connection Method",
     compareDesc:
-      "Both methods connect your browser to Octopus. Choose the one that fits your needs.",
+      "Both methods connect your browser to EchoAI. Choose the one that fits your needs.",
     compareFeature: "Feature",
     compareExtension: "Extension",
     compareCdp: "CDP Direct",
@@ -2084,7 +2200,7 @@ export const enUS: Translations = {
     allVersions: "All versions",
     // Page Agent integration
     pageAgentDesc:
-      "Page Agent is an open-source GUI Agent framework by Alibaba. It controls web pages via text-based DOM manipulation — no screenshots or multimodal models needed. Integrated into Octopus via MCP protocol.",
+      "Page Agent is an open-source GUI Agent framework by Alibaba. It controls web pages via text-based DOM manipulation — no screenshots or multimodal models needed. Integrated into EchoAI via MCP protocol.",
     pageAgentDocs: "View docs",
     pageAgentFeature1: "In-page JS integration",
     pageAgentFeature1Desc:
@@ -2130,7 +2246,7 @@ export const enUS: Translations = {
     extConNeedExtension: "Requires installing a Chrome extension.",
     cdpProNoExtension: "No extension installation required.",
     cdpProChrome144: "Works with Chrome 144+.",
-    cdpConReAuth: "Requires re-authorization after each Octopus restart.",
+    cdpConReAuth: "Requires re-authorization after each EchoAI restart.",
     cdpConChrome144Only: "Only supports Chrome 144+.",
   },
 
@@ -2348,7 +2464,7 @@ export const enUS: Translations = {
     reasonExternal: "External trigger",
     resumedTitlePrefix: "Resumed · task",
     resumedDescWithThread:
-      "Jumped to the original conversation. Send any message to continue from the checkpoint (+15 iterations).",
+      "Returned to the original conversation and will continue from the saved checkpoint with runway appropriate to the pause reason.",
     resumedTitleClearMark: "Pause flag cleared · task",
     resumedDescNoThread:
       "No thread_id recorded. Open the relevant thread and send a message to continue.",
@@ -2358,11 +2474,11 @@ export const enUS: Translations = {
       "Effective on the next iteration; status will switch to Paused automatically.",
     agentLabel: "agent:",
     threadLabel: "thread:",
-    tokensLabel: "tokens",
+    tokensLabel: "cumulative usage",
     costLabel: "cost",
     budgetDialogTitle: "Budget checkpoint reached",
     budgetDialogDesc:
-      "The task has saved a checkpoint before crossing its budget guardrail. Add more budget to continue, or keep it paused.",
+      "Task state is saved. Cumulative processing runway and USD cost are independent; the cost ceiling increases only when you enter a USD amount explicitly.",
     budgetResumedDesc:
       "Added budget and resumed from the checkpoint. The task can continue without starting over.",
     extraTokensKLabel: "Tokens (k)",
@@ -2391,7 +2507,7 @@ export const enUS: Translations = {
     loadoutReady: "LOADOUT READY",
     saved: "Agent configuration saved",
     saveFailed: (msg) => `Save failed: ${msg}`,
-    officialFaction: "Octopus Command",
+    officialFaction: "EchoAI Command",
     authorFaction: (author) => `${author} Lab`,
     categoryRoles: {
       assistant: "Support",
@@ -2746,13 +2862,13 @@ export const enUS: Translations = {
     save: "Save agent",
     saving: "Saving agent...",
     saveRequested:
-      "Save requested. Octopus is generating and saving an initial version now.",
+      "Save requested. EchoAI is generating and saving an initial version now.",
     saveHint:
       "You can save this agent at any time from the top-right menu, even if this is only a first draft.",
     saveCommandMessage:
       "Please save this custom agent now based on everything we have discussed so far. Treat this as my explicit confirmation to save. If some details are still missing, make reasonable assumptions, generate a concise first SOUL.md in English, and call setup_agent immediately without asking me for more confirmation.",
     agentCreatedPendingRefresh:
-      "The agent was created, but Octopus could not load it yet. Please refresh this page in a moment.",
+      "The agent was created, but EchoAI could not load it yet. Please refresh this page in a moment.",
     more: "More actions",
     agentCreated: "Agent created!",
     startChatting: "Start chatting",
@@ -3006,13 +3122,13 @@ export const enUS: Translations = {
 
   // Workspace
   workspace: {
-    officialWebsite: "Octopus's official website",
-    githubTooltip: "Octopus on Github",
+    officialWebsite: "EchoAI's official website",
+    githubTooltip: "EchoAI on Github",
     settingsAndMore: "Settings and more",
-    visitGithub: "Octopus on GitHub",
+    visitGithub: "EchoAI on GitHub",
     reportIssue: "Report a issue",
     contactUs: "Contact us",
-    about: "About Octopus",
+    about: "About EchoAI",
     modes: {
       chat: "Chat",
       team: "Team",
@@ -3024,7 +3140,7 @@ export const enUS: Translations = {
       badge: "Agent OS Control Room",
       headline: "Give agents a goal, then supervise the work.",
       description:
-        "Octopus turns goals into plans, runs tools in a scoped runtime, records the trace, and keeps useful memory for the next run.",
+        "EchoAI turns goals into plans, runs tools in a scoped runtime, records the trace, and keeps useful memory for the next run.",
       newTask: "New Task",
       codeTask: "Code Task",
       systemLoop: {
@@ -3102,6 +3218,13 @@ export const enUS: Translations = {
     noChangesArtifacts: "No changes",
     noPreviewArtifacts: "Nothing to preview",
     retry: "Retry",
+    messageQueued: "Queued",
+    messageSending: "Sending",
+    messageSendFailed: "Not sent",
+    previousMessagePending:
+      "The previous message is still sending. Wait for confirmation, then retry.",
+    steeringTurnUnavailable:
+      "The original task is no longer running. Send this again as a new message.",
     editResend: "Edit and resend",
     regenerateResponse: "Regenerate response",
     forkFromHere: "Fork conversation from here",
@@ -3146,7 +3269,7 @@ export const enUS: Translations = {
 
   // Page titles (document title)
   pages: {
-    appName: "Octopus",
+    appName: "EchoAI",
     chats: "Chats",
     newChat: "New chat",
     untitled: "Untitled",
@@ -3172,7 +3295,7 @@ export const enUS: Translations = {
     writeFile: "Write file",
     clickToViewContent: "Click to view file content",
     writeTodos: "Update to-do list",
-    skillInstallTooltip: "Install skill and make it available to Octopus",
+    skillInstallTooltip: "Install skill and make it available to EchoAI",
     toastSkillInstallFailed: "Failed to install skill",
     toastExportConversationFailed: "Failed to export conversation",
   },
@@ -3192,7 +3315,17 @@ export const enUS: Translations = {
     thoughtProcess: "Live work log",
     connectionLost: "This reply was interrupted. Continue the chat or retry.",
     networkLost:
-      "Network disconnected. Task auto-paused — send a message to resume from checkpoint.",
+      "The model connection dropped. Completed steps and sub-agent results were preserved; retry to continue.",
+    modelAuthRequiredTitle: "Model sign-in expired",
+    modelAuthRequired:
+      "The current model credentials are invalid or not signed in. Sign in again in Model settings, or switch to another available model.",
+    subagentCapabilityMismatchTitle: "Sub-agent capability mismatch",
+    subagentCapabilityMismatch:
+      "The selected sub-agent does not provide a capability required by this task, so it was not run. Choose a suitable agent and retry.",
+    modelRateLimitedTitle: "Model temporarily rate limited",
+    modelRateLimited:
+      "The current model is receiving too many requests or has reached its quota. Retry later or switch to another available model.",
+    openModelSettings: "Open model settings",
     turnFailed:
       "This turn stopped before finishing. Continue the chat or retry.",
     guardBlocked:
@@ -3202,14 +3335,16 @@ export const enUS: Translations = {
     workspaceWriteRequired:
       "This task requires a project file change, but no successful file change was recorded.",
     verificationRequired:
-      "Code changes need verification before Octopus can finish this turn. Run tests, lint, typecheck, or build, then continue.",
+      "The code changes were preserved, but no verification result was produced. EchoAI already attempted automatic verification; review the suggested command to continue.",
+    verificationRunFailed:
+      "Automatic verification ran and failed. The code changes were preserved; review the failed command and output below.",
     environmentBlocked:
       "This task is blocked by an environment constraint — the reason is below.",
     environmentBlockedAuthorizeCommon: 'Authorize "common domains" and retry',
     environmentBlockedAuthorizeFull: "Authorize full network and retry",
     blockedOnUser: "This task needs your input before it can continue.",
     streamEndpointUnavailable:
-      "The backend chat/team stream endpoint is not enabled or is unavailable. Start the full Octopus backend or check the frontend proxy.",
+      "The backend chat/team stream endpoint is not enabled or is unavailable. Start the full EchoAI backend or check the frontend proxy.",
     iteration: (count: number) => `Round ${count}`,
     toolCalls: (count: number) => `${count} call${count === 1 ? "" : "s"}`,
     generating: "Generating…",
@@ -3307,7 +3442,7 @@ export const enUS: Translations = {
     actions: "Actions",
     keyboardShortcuts: "Keyboard Shortcuts",
     keyboardShortcutsDescription:
-      "Navigate Octopus faster with keyboard shortcuts.",
+      "Navigate EchoAI faster with keyboard shortcuts.",
     openCommandPalette: "Open Command Palette",
     commandPaletteDescription: "Search for a command to run...",
     toggleSidebar: "Toggle Sidebar",
@@ -3393,11 +3528,13 @@ export const enUS: Translations = {
   // Settings
   settings: {
     title: "Settings",
-    description: "Adjust how Octopus looks and behaves for you.",
+    description: "Adjust how EchoAI looks and behaves for you.",
     sections: {
       account: "Account",
       subscription: "Plan & Usage",
       appearance: "Appearance",
+      general: "General",
+      conversation: "Conversation",
       memory: "Memory & Personal Rules",
       tools: "Tools",
       skills: "Skills",
@@ -3549,7 +3686,7 @@ export const enUS: Translations = {
     memory: {
       title: "Memory",
       description:
-        "Manage saved facts and conversation summaries, and control when Octopus records and uses them.",
+        "Manage saved facts and conversation summaries, and control when EchoAI records and uses them.",
       empty: "No memory data to display.",
       rawJson: "Raw JSON",
       exportButton: "Export memory",
@@ -3726,7 +3863,7 @@ export const enUS: Translations = {
       createSkill: "Create skill",
       emptyTitle: "No agent skill yet",
       emptyDescription:
-        "Put your agent skill folders under the `/skills/custom` folder under the root folder of Octopus.",
+        "Put your agent skill folders under the `/skills/custom` folder under the root folder of EchoAI.",
       emptyButton: "Create Your First Skill",
       enabledDescription:
         "Enabled skills enter the Agent tool catalog. Disabled skills are hidden from models and cannot be executed.",
@@ -3750,16 +3887,16 @@ export const enUS: Translations = {
     notification: {
       title: "Notification",
       description:
-        "Octopus only sends a completion notification when the window is not active. This is especially useful for long-running tasks so you can switch to other work and get notified when done.",
+        "EchoAI only sends a completion notification when the window is not active. This is especially useful for long-running tasks so you can switch to other work and get notified when done.",
       enableNotification: "Enable notifications",
       permissionGranted: "Permission granted",
       permissionPrompt: "Permission required",
       permissionDenied: "Permission denied",
       requestPermission: "Request notification permission",
       deniedHint:
-        "Notification permission was denied. Enable Octopus notifications in your system or browser notification settings.",
+        "Notification permission was denied. Enable EchoAI notifications in your system or browser notification settings.",
       testButton: "Send test notification",
-      testTitle: "Octopus",
+      testTitle: "EchoAI",
       testBody: "This is a test notification.",
       testSent: "Test notification sent",
       requestFailed: "Unable to request notification permission",
@@ -4016,16 +4153,16 @@ export const enUS: Translations = {
       },
     },
     octopusMix: {
-      title: "Octopus Mix · multi-model collaboration",
+      title: "EchoAI Mix · multi-model collaboration",
       description:
-        "Pick 2+ models as proposers (each drafts independently, no tools), then pick one aggregator to merge their answers. Selecting “Octopus Mix” in chat routes through this config; if the proposer pool is empty, the default model × count is used instead.",
+        "Pick 2+ models as proposers (each drafts independently, no tools), then pick one aggregator to merge their answers. Selecting “EchoAI Mix” in chat routes through this config; if the proposer pool is empty, the default model × count is used instead.",
       proposersLabel: "Proposers (models that draft)",
       noCandidates: "No models available",
       aggregatorLabel: "Aggregator",
       aggregatorDefault: "Default",
       nLabel: "Count when pool is empty",
       saveButton: "Save",
-      saveSuccess: "Octopus Mix configuration saved",
+      saveSuccess: "EchoAI Mix configuration saved",
       saveFailed: (status: number) => `Save failed (${status})`,
       saveFailedFallback: "Save failed",
     },
@@ -4162,7 +4299,7 @@ export const enUS: Translations = {
     approveExecute: "Approve & Execute",
     startQuest: "Start Quest",
     questDesc:
-      "Describe a complex task and let Octopus autonomously plan, execute, and verify it",
+      "Describe a complex task and let EchoAI autonomously plan, execute, and verify it",
     requirementPlaceholder: "Describe what you want to accomplish...",
     executionPlan: "Execution Plan",
     verificationPassed: "Verification passed",
@@ -4310,7 +4447,7 @@ export const enUS: Translations = {
       installFailed: "Plugin installation failed",
       statusFailed: "Plugin status update failed",
       removeConfirm:
-        "Remove this plugin from Octopus? Local files will not be deleted.",
+        "Remove this plugin from EchoAI? Local files will not be deleted.",
       removeFailed: "Plugin removal failed",
       enabled: "Enabled",
       disabled: "Disabled",
@@ -4321,7 +4458,7 @@ export const enUS: Translations = {
       emptyWeb: "The localhost preview cannot access the Electron plugin API.",
       placeholderTitle: "Plugin catalog placeholder",
       placeholderDesc:
-        "Run the desktop app to install and manage local plugins. The preview still shows the plugin categories Octopus supports.",
+        "Run the desktop app to install and manage local plugins. The preview still shows the plugin categories EchoAI supports.",
       placeholderBrowserTitle: "Browser plugins",
       placeholderBrowserDesc:
         "Chrome / Edge extensions that let agents read pages, click controls, and collect screenshots.",
@@ -4426,16 +4563,6 @@ export const enUS: Translations = {
     createAgentCardDesc: "Build a custom role",
     addAgent: "Add",
     newAgent: "New role",
-    importAgentPack: "Import Agent Pack",
-    importAgentPackDesc:
-      "Preview and import agents from a local Claude / Codex plugin pack.",
-    importAgentPackPlaceholder:
-      "Enter a local pack root path, for example F:\\packs\\kimi-agent",
-    previewAgentPack: "Preview",
-    importSelectedAgent: "Import selected agent",
-    noImportableAgents:
-      "No importable agents or Markdown agents were found in this pack.",
-    importedAgent: (name: string, path: string) => `Imported ${name} · ${path}`,
     discoverTagline: "Browse, configure, and summon collaborative roles",
     toastInstalled: (name: string) => `"${name}" joined the role library`,
     toastCapabilityPackInstalled: (name: string, count: number) =>
@@ -4447,14 +4574,6 @@ export const enUS: Translations = {
       `Rated ${rating} from ${count} reviews`,
     downloadCountAriaLabel: (count: string) => `${count} downloads`,
     authorPrefix: "By",
-    packContentLabels: {
-      plugins: "Plugins",
-      apps: "Apps",
-      agents: "Agents",
-      skills: "Skills",
-      commands: "Commands",
-      mcp: "MCP",
-    },
   },
 
   // Agent World Unified
@@ -4478,12 +4597,22 @@ export const enUS: Translations = {
     installSuccessWithFailure: (installed: number, failed: number) =>
       `${installed} joined, ${failed} failed`,
     installFailed: "Installation failed, please try again later",
-    connectLocalPartner: "Connect Local Partner",
     enterprise: "Enterprise",
     localTab: "Local",
     enabledTab: "Enabled",
     marketplaceTab: "Marketplace",
     categoryFilterLabel: "Filter by role category",
+    domainFilterLabel: "Filter by business domain",
+    domains: {
+      all: "All",
+      general: "General",
+      coding: "Coding",
+      research: "Research",
+      creative: "Creative",
+      automation: "Automation",
+      ecommerce: "E-commerce",
+      finance: "Finance",
+    },
     loadingAgents: "Loading roles…",
     loadAgentsFailed: "Roles could not be loaded. Please try again.",
     retryAgents: "Reload",
@@ -4493,29 +4622,6 @@ export const enUS: Translations = {
   },
 
   // Local Agent Connect Dialog
-  localAgentConnect: {
-    title: "Connect Local Partner",
-    description:
-      "Auto-detect Agent tools installed on this machine and register them to the agent library so they can be assigned directly in team tasks.",
-    detecting: "Detecting local partners...",
-    detectFailed: "Local partner detection failed",
-    retryDetect: "Retry",
-    statusConnected: "Connected",
-    statusDetected: "Detected",
-    statusNotDetected: "Not detected",
-    availableCount: (count: number) => `${count} available`,
-    cancel: "Cancel",
-    connectSelected: (count: number) =>
-      `Connect ${count} Agent${count === 1 ? "" : "s"}`,
-    noPartnerSelected: "Please select a detected local partner",
-    registerSuccess: (count: number) =>
-      `${count} local partner${count === 1 ? "" : "s"} connected`,
-    alreadyExists: "These local partners are already in the agent library",
-    noPartnersAvailable:
-      "No connectable local partners; please install the corresponding local tool first",
-    registerFailed: "Failed to connect local partners",
-    partnerNameAria: (name: string) => `${name} name`,
-  },
 
   // Agent World Card
   agentWorldCard: {},
@@ -4671,7 +4777,7 @@ Strategy:
     },
     extensionMarketplace: {
       title: "Extensions",
-      subtitle: "Manage Octopus browser extension capabilities",
+      subtitle: "Manage EchoAI browser extension capabilities",
       installLocal: "Install Local Extension",
       refreshAriaLabel: "Refresh extensions",
       closeAriaLabel: "Close extensions",
@@ -4701,7 +4807,7 @@ Strategy:
       errorStatusFailed: "Extension status update failed",
       errorRemoveFailed: "Extension removal failed",
       confirmRemove:
-        "Remove this extension from Octopus? Local files will not be deleted.",
+        "Remove this extension from EchoAI? Local files will not be deleted.",
       categoryFeatured: "Featured",
       categoryEfficiency: "Efficiency",
       categoryResearch: "Research",
@@ -4730,17 +4836,17 @@ Strategy:
       openDirectory: "Open Directory",
       extPluginTitle: "External Browser Plugin",
       extPluginDesc:
-        "For Chrome / Edge. The plugin connects to local Octopus, allowing external pages to be read and operated by Agent.",
+        "For Chrome / Edge. The plugin connects to local EchoAI, allowing external pages to be read and operated by Agent.",
       dragToBookmarks: "Drag to Bookmarks Bar",
       dragToBookmarksDesc:
         "Lightweight Page Agent mode, suitable for temporarily connecting the current page.",
       dragToBookmarksTitle: "Drag to Chrome/Edge bookmarks bar",
       step1Temporary:
-        "1. Temporary: Drag the Octopus Agent above to your bookmarks bar, then click it on the target page.",
+        "1. Temporary: Drag the EchoAI Agent above to your bookmarks bar, then click it on the target page.",
       step2LongTerm:
         "2. Long-term: Open Chrome/Edge extension management page, enable 'Developer mode'.",
       step3LoadExtension:
-        "3. Click 'Load unpacked extension', select the Octopus plugin directory.",
+        "3. Click 'Load unpacked extension', select the EchoAI plugin directory.",
       pluginDirectory: "Plugin Directory",
       pluginDirectoryOpened: (path: string) =>
         `Plugin directory opened: ${path}`,
@@ -4916,7 +5022,7 @@ Strategy:
       searchOrUrl: "Search or enter URL",
       siteInfo: "Site Info",
       siteInfoDesc:
-        "Login state, cookies, and local data are retained in the Octopus browser and shared across tabs.",
+        "Login state, cookies, and local data are retained in the EchoAI browser and shared across tabs.",
       clearData: "Clear Data",
       openExternally: "Open Externally",
       confirmClearSiteData:
@@ -5032,7 +5138,21 @@ Strategy:
     surfaceModeScreenshot: "Screenshot",
     selectDevicePreset: "Select device preset",
     continueInFullBrowser: "Continue in full browser",
-    takeoverButton: "Open AI Browser",
+    takeoverButton: "AI Browser",
+    switchToLivePreview: "Switch to live preview",
+    switchToLivePreviewDescription: "Continue in an interactive page",
+    switchToScreenshot: "Switch to screenshot preview",
+    switchToScreenshotDescription: "View and operate the latest screenshot",
+    sessionHealthyLabel: "Session running normally",
+    sessionAttentionLabel: "Session needs attention",
+    endSession: "End browser session",
+    annotateScreenshot: "Annotate screenshot and send to chat",
+    annotationButton: "Annotate",
+    annotationPlaceholder:
+      "Describe the change, then mark it on the screenshot",
+    annotationInputLabel: "Screenshot annotation note",
+    sendAnnotation: "Send",
+    cancelAnnotation: "Cancel annotation",
     sessionNeedsAttention: (issues) =>
       `Browser session needs attention: ${issues}`,
     reconnectButton: "Reconnect",
@@ -5046,11 +5166,16 @@ Strategy:
     clickMode: "single click",
     doubleClickMode: "double click",
     localServices: "Local Services",
+    noLocalServices: "No running local services found",
     scanButton: "Scan",
     serviceTypeFrontend: "Frontend",
     serviceTypeBackend: "Backend",
     serviceTypeOther: "Service",
     scanLocalServices: "Scan local services",
+    localPreviewMode: "Local preview",
+    localPreviewRunning: (port) => `Port ${port} · Running`,
+    localPreviewRefresh: "Refresh preview",
+    localPreviewOpenExternal: "Open in system browser",
     selectedAction: (action) => `Selected ${action}`,
     locateActionTitle: "Locate this action on screenshot",
     deselectTitle: "Deselect",
@@ -5728,13 +5853,13 @@ Strategy:
       joinPolicyLabel: "Join method",
       joinPolicyApply: "Request approval",
       joinPolicyApplyDesc:
-        "Project groups require owner approval before project and chat access is granted.",
+        "Work groups require owner approval before chat and any enabled project content become available.",
       joinPolicyDirect: "Join directly",
       joinPolicyDirectDesc:
         "People in the same tenant with a valid link can join immediately.",
       directJoinConfirmTitle: "Allow direct joining?",
       directJoinConfirmDescription:
-        "All currently active invite links will immediately let people enter this project group without owner approval.",
+        "All currently active invite links will immediately let people enter this work group without owner approval.",
       directJoinConfirmAction: "Allow direct joining",
       directJoinConfirmCancel: "Keep approval",
       policySaveFailed: "Failed to save the join method",
@@ -5981,13 +6106,13 @@ Strategy:
 
   intelligencePanel: {
     examplePrompts: [
-      "Track Octopus Agent GitHub releases, issues, and competitor updates daily, keeping only changes relevant to product decisions",
+      "Track EchoAI Agent GitHub releases, issues, and competitor updates daily, keeping only changes relevant to product decisions",
       "Summarize new papers and open-source projects on AI Agents, browser automation, and multi-agent frameworks weekly, filtering duplicate news",
       "Monitor pricing, plugin ecosystem, and enterprise feature changes for three competitors, alerting on important updates",
     ],
     goalLabel: "Describe what you want to track continuously",
     goalPlaceholder:
-      "e.g., Track Octopus Agent, browser-use, and OpenAI Agent SDK releases, issues, and important discussions daily, keeping only changes that impact the product roadmap.",
+      "e.g., Track EchoAI Agent, browser-use, and OpenAI Agent SDK releases, issues, and important discussions daily, keeping only changes that impact the product roadmap.",
     subscriptionName: "Subscription name",
     keywords: "Keywords (comma-separated)",
     cadence: "Frequency",
@@ -6063,6 +6188,7 @@ Strategy:
   // Public Thinking Status
   publicThinkingStatus: {
     waitingForModel: "Thinking",
+    firstResponseSlow: "First response is taking longer",
     modelWorking: "Thinking...",
     thinkingCompleted: "Thinking complete",
     slowResponse: "Still on it — slower than usual",
@@ -6297,10 +6423,10 @@ Strategy:
   // Onboarding
   onboarding: {
     title: "Onboarding Guide",
-    welcomeToOctopus: "Welcome to Octopus",
+    welcomeToOctopus: "Welcome to EchoAI",
     yourAIPlatform: "Your AI Agent Platform",
     welcomeDesc:
-      "Octopus is an open-source super agent harness that orchestrates sub-agents, memory, and sandboxes to do almost anything \u2014 powered by extensible skills.",
+      "EchoAI is an open-source super agent harness that orchestrates sub-agents, memory, and sandboxes to do almost anything \u2014 powered by extensible skills.",
     chatModes: "Task capabilities",
     chatModesDesc: "Start with one task, then add capabilities and helpers",
     modeChat: "Chat",
@@ -6525,7 +6651,7 @@ Strategy:
     },
     technicalDetails: "Technical details",
     createPluginPrompt:
-      "Use $plugin-creator to create a new Octopus plugin.\nPlease first ask for the plugin name, purpose, and whether it includes skills/apps/MCP, then scaffold it into the personal plugin directory, complete the manifest, and verify the plugin can be recognized by the marketplace.",
+      "Use $plugin-creator to create a new EchoAI plugin.\nPlease first ask for the plugin name, purpose, and whether it includes skills/apps/MCP, then scaffold it into the personal plugin directory, complete the manifest, and verify the plugin can be recognized by the marketplace.",
   },
 
   // Local skill directory panel
@@ -6693,7 +6819,7 @@ Strategy:
   // Bundle Info
   bundleInfo: {
     title: "Build Information",
-    appVersion: "Octopus version",
+    appVersion: "EchoAI version",
     license: "License",
     environment: "Environment",
     vite: "Vite",
@@ -6722,6 +6848,9 @@ Strategy:
     autoModelDescription: "Let the system pick the best model per task",
     autoModelBadge: "Smart",
     longContextHint: "Use the 1M context window",
+    contextLength: "Context length",
+    contextStandard: "Standard",
+    contextMax: "Max",
   },
 
   // Account Settings
@@ -6754,7 +6883,7 @@ Strategy:
     confirmDelete: "Confirm Delete",
     factoryResetTitle: "Factory reset",
     factoryResetDescription:
-      "Clear local conversations, workspaces, memory, install state, and browser-side Octopus cache. Source code and built-in roles are preserved.",
+      "Clear local conversations, workspaces, memory, install state, and browser-side EchoAI cache. Source code and built-in roles are preserved.",
     factoryResetDialogDescription:
       "This deletes local runtime data and cache. Restart or refresh the app afterward. Source code and built-in role folders will not be deleted.",
     factoryResetTypeToConfirm: "Type RESET OCTOPUS to confirm",
@@ -6792,7 +6921,7 @@ Strategy:
     totalCredits: (total) => `Total ${total} credits`,
     billingUnavailableTitle: "Plans are temporarily unavailable",
     billingUnavailableDescription:
-      "Your Octopus account is signed in, but the billing service is not connected. Retry to refresh the account link and available plans.",
+      "Your EchoAI account is signed in, but the billing service is not connected. Retry to refresh the account link and available plans.",
     subscriptionUnavailable: "Subscription information could not be loaded.",
     plansUnavailable: "Plans could not be loaded.",
     noPlans: "No purchasable plans are currently available.",
@@ -7043,7 +7172,7 @@ Strategy:
   appAuth: {
     pageTitle: "App authorizations",
     pageSubtitle:
-      "Authorize third-party platforms so Octopus can access data on your behalf.",
+      "Authorize third-party platforms so EchoAI can access data on your behalf.",
     searchPlaceholder: "Search authorizations...",
     connectedCount: (n: number) => `${n} connected`,
     tabAll: "All",
@@ -7184,6 +7313,11 @@ Strategy:
       `loaded ${rules} rules${statsReset ? " · stats reset" : ""}`,
     reloadError: (error: string) => `error: ${error}`,
     fetchFailed: "fetch failed",
+    dataLoading: "Loading reflex data…",
+    dataUnavailable: "Reflex data is temporarily unavailable.",
+    dataRefreshFailed:
+      "Refresh failed. Showing the last successfully loaded data.",
+    retryButton: "Retry",
     reloadFailed: "reload failed",
     statTry: "Try",
     statHit: "Hit",
@@ -7193,6 +7327,7 @@ Strategy:
     statLastHourHits: "Last hour hits",
     sparklineTitle: "Reflex hits · last 60 min · 1 min buckets",
     sparklineEmpty: "No reflex hits in the last 60 minutes",
+    sparklineUnavailable: "Reflex trend data is temporarily unavailable.",
     rulesTableTitle: "Rules",
     responseTiersTitle: "Response tiers",
     colRule: "Rule",
@@ -7204,6 +7339,7 @@ Strategy:
     colRate: "Rate",
     colLast: "Last",
     noRulesLoaded: "No rules loaded.",
+    rulesUnavailable: "Rule data is temporarily unavailable.",
     tierEnabled: "enabled",
     tierDisabled: "disabled",
     tierSize: "size",
@@ -7298,6 +7434,10 @@ Strategy:
     addendumAppliedTitle: "Currently applied addendum",
     addendumLive: "live",
     addendumNone: "none",
+    stateLoading: "loading…",
+    stateUnavailable: "unavailable",
+    addendumUnavailable:
+      "Addendum status is temporarily unavailable. Existing settings are unchanged.",
     addendumClearButton: "Clear (manual)",
     addendumBytes: (size: number) => `${size} bytes`,
     knobIterations: "iterations",
@@ -7320,6 +7460,9 @@ Strategy:
     canaryTitle: "Canary / rollback",
     canaryRefresh: "refresh",
     canaryEmpty: "No canary states yet",
+    canaryUnavailable:
+      "Canary status is temporarily unavailable. Existing data is unchanged.",
+    canaryCountsUnavailable: "active — · rolled back — · total —",
     canaryCounts: (active: number, rolledBack: number, total: number) =>
       `active ${active} · rolled back ${rolledBack} · total ${total}`,
     canaryPhase: (phase: string) => `phase ${phase}`,
@@ -7444,6 +7587,81 @@ Strategy:
     journalRow: (task: string, arm: string) => `task=${task} arm=${arm}`,
     subtitle:
       "Runtime introspection · parallel collaboration / blackboard / journal stream / self-evolution / context budget / cost",
+    shell: {
+      startTask: "Start a task",
+      runReviewTitle: "Run review",
+      runReviewDescription:
+        "See what ran smoothly, what failed, and what deserves a closer look.",
+      liveEventsTitle: "Live events",
+      liveEventsDescription:
+        "Collaboration, blackboard activity, and logs in one event view.",
+      resourcesTitle: "Resources and cost",
+      resourcesDescription:
+        "Context budget, token usage, and cost totals in one place.",
+      systemTitle: "System status",
+      systemDescription:
+        "Self-evolution, diagnostics, and backend state together.",
+      overviewTab: "Overview",
+      eventsTab: "Events",
+      resourcesTab: "Resources and cost",
+      systemTab: "System",
+      overviewTitle: "Start with the overview",
+      overviewDescription:
+        "Health, events, resources, and system state are grouped into four clear views.",
+      openNewTask: "Open a new task",
+      eventsEyebrow: "Events",
+      eventsTitle: "Runs, collaboration, and logs together",
+      eventsDescription:
+        "Review runs, collaboration, blackboard activity, and logs without navigating a long row of tabs.",
+      resourcesEyebrow: "Resources and cost",
+      resourcesGroupTitle: "Budget first, bill second",
+      resourcesGroupDescription:
+        "Context budget and spend share one level, so you can compare them without switching views.",
+      systemEyebrow: "System",
+      systemGroupTitle: "Backend state and self-evolution together",
+      systemGroupDescription:
+        "Diagnostics and self-evolution now share a single system view.",
+    },
+    toolEffects: {
+      title: "External action receipts",
+      description:
+        "Detect duplicate execution, host takeover, and external side effects that need human review.",
+      retryAuthorizedSuccess:
+        "One fencing-token-protected retry was authorized",
+      retryAuthorizationFailed: "Authorization failed",
+      pendingReview: (count: number) => `${count} awaiting review`,
+      noPendingReview: "Nothing awaiting review",
+      refreshAriaLabel: "Refresh external action receipts",
+      backendLabel: "Backend",
+      sharedAcrossHosts: "Shared across hosts",
+      localCoordination: "Local coordination",
+      committedLabel: "Committed",
+      runningLabel: "Running",
+      loadFailed: (error: string) => `Could not load receipt state: ${error}`,
+      empty:
+        "No external action receipts yet. Tool activity will appear here automatically.",
+      unknownTool: "Unknown tool",
+      receiptMeta: (task: string, step: number, token: number) =>
+        `Task ${task} · step ${step} · token ${token}`,
+      reviewAndRetry: "Review and retry",
+      collapsedHistory:
+        "Older committed receipts are hidden; showing items needing attention and the latest 6.",
+      confirmTitle: "Confirm the external action did not happen",
+      confirmDescription:
+        "Authorize a retry only after confirming that the action did not succeed in the external system, file, or remote service. The fencing token prevents a stale page from changing a newer receipt.",
+      reasonPlaceholder:
+        "Enter evidence, for example: the payment provider confirms no order was created.",
+      cancel: "Cancel",
+      submitting: "Checking state…",
+      confirmRetry: "Confirm and allow retry",
+      states: {
+        claimed: "Claimed",
+        started: "Running",
+        committed: "Committed",
+        indeterminate: "Needs review",
+        retryAuthorized: "Retry authorized",
+      },
+    },
     swarmCardTitle: "Agent collaboration session · live skill calls",
     noConcurrentTasks: "No concurrent tasks",
     noConcurrentTasksHint:
@@ -7525,6 +7743,8 @@ Strategy:
     // Regeneration panel
     loading: "Loading…",
     errorPrefix: "Error:",
+    crossTenantAdminRequired:
+      "Cross-tenant administrator permission is required.",
     trajectoryTotal: "Total trajectories",
     failureCount: "Failure count",
     regenProducers: {
@@ -7681,14 +7901,14 @@ Strategy:
   evolutionPanel: {
     title: "Self-evolution status",
     description:
-      "Octopus reviews completed tasks and carries useful lessons into future runs. This view shows what it has learned and how it will affect the next task.",
+      "EchoAI reviews completed tasks and carries useful lessons into future runs. This view shows what it has learned and how it will affect the next task.",
     summaryEmpty: "Still collecting experience",
     summaryReady: (learned: number, total: number) =>
       `Learned ${learned} reusable lessons from ${total} tasks`,
     summaryHealthy:
       "No action is needed right now; similar future tasks will use these lessons automatically.",
     summaryFailures: (failures: number) =>
-      `${failures} deep-task failures were recorded recently, so Octopus will prioritize learning how to avoid them.`,
+      `${failures} deep-task failures were recorded recently, so EchoAI will prioritize learning how to avoid them.`,
     statusNormal: "Looks good",
     statusNeedsReview: "Worth checking",
     statAvoidRule: "Risk lessons",
@@ -7706,11 +7926,11 @@ Strategy:
     statAllTrajsTooltip: (total: number) =>
       `${total} historical tasks are in the review pool. More samples make lessons less dependent on one-off outcomes.`,
     statAllTrajsDesc:
-      "These are historical tasks in the review pool. Octopus uses them to find stable approaches and risk patterns.",
+      "These are historical tasks in the review pool. EchoAI uses them to find stable approaches and risk patterns.",
     statAllTrajsPoints: (total: number, learned: number) => [
       `${total} samples are in the review pool.`,
       `${learned} lessons are ready to be applied automatically in similar tasks.`,
-      "As the sample grows, Octopus weighs long-term patterns more than one-off outcomes.",
+      "As the sample grows, EchoAI weighs long-term patterns more than one-off outcomes.",
     ],
     statReactLabel: "Deep tasks",
     statReactHint: (reviewCount: number) =>
@@ -7725,14 +7945,14 @@ Strategy:
       `${failures} items are marked for review and prioritized for risk lessons.`,
       "Worth checking does not mean you must fix it manually; it means the system is learning from these records first.",
     ],
-    learnedMitigationsTitle: "Pitfalls Octopus learned to avoid",
+    learnedMitigationsTitle: "Pitfalls EchoAI learned to avoid",
     learnedMitigationsDesc:
       "These lessons come from repeated failures and are used as guardrails next time.",
-    consolidatedMemoriesTitle: "Useful approaches Octopus remembers",
+    consolidatedMemoriesTitle: "Useful approaches EchoAI remembers",
     consolidatedMemoriesDesc:
       "These approaches worked repeatedly and can be reused on similar tasks.",
     noMitigationsHint:
-      "No repeated pitfall has been found yet. Once a problem repeats, Octopus will list what to avoid here.",
+      "No repeated pitfall has been found yet. Once a problem repeats, EchoAI will list what to avoid here.",
     noMemoriesHint:
       "No stable successful approach has enough evidence yet. After more similar tasks, reusable approaches will appear here.",
     linesSuffix: (n: number) => `${n}`,
@@ -7746,11 +7966,11 @@ Strategy:
     failureTypeError: "a type error",
     failureGeneric: (failure: string) => `failure signature ${failure}`,
     toolFailureLesson: (tool: string, failure: string, count: number) =>
-      `${tool} failed ${count} times due to ${failure}; next time Octopus will validate inputs first and switch tools if needed.`,
+      `${tool} failed ${count} times due to ${failure}; next time EchoAI will validate inputs first and switch tools if needed.`,
     reflectingButton: "Reviewing...",
     reflectButton: "Review now",
     reflectHint:
-      "You usually do not need to click this. Octopus reviews tasks automatically; use this after an important task to organize lessons immediately.",
+      "You usually do not need to click this. EchoAI reviews tasks automatically; use this after an important task to organize lessons immediately.",
     advancedTitle: "Advanced details",
     reactVariantsTitle: "Execution strategy experiments",
     tableName: "Strategy",
@@ -7772,7 +7992,7 @@ Strategy:
   privacySettings: {
     identityLockTitle: "Identity Lock",
     identityLockDesc:
-      "When enabled, vendor/model names in model replies (Claude / Kimi / Anthropic / Moonshot, etc.) are rewritten to Octopus · users only see the product identity. Disable to enter developer mode where the raw LLM identity shows through — useful for tuning prompts or verifying routing.",
+      "When enabled, vendor/model names in model replies (Claude / Kimi / Anthropic / Moonshot, etc.) are rewritten to EchoAI · users only see the product identity. Disable to enter developer mode where the raw LLM identity shows through — useful for tuning prompts or verifying routing.",
     lockedTag: "LOCKED",
     unlockedTag: "UNLOCKED",
     sourceLabel: "source",
@@ -8002,13 +8222,13 @@ Strategy:
   // Register page
   registerPage: {
     loadingText: "Loading...",
-    badgeText: "Create your Octopus account",
+    badgeText: "Create your EchoAI account",
     heroTitleLine1: "Start right after you join",
     heroTitleLine2: "the multi-agent workflow",
     heroDescription:
       "Set up your own workspace, plug in skills, tools and models, and unify research, collaboration and automation on one platform.",
     cardTitle: "Create account",
-    cardDescription: "Join Octopus and start your agent journey",
+    cardDescription: "Join EchoAI and start your agent journey",
     usernameLabel: "Username",
     usernamePlaceholder: "at least 3 characters",
     emailLabel: "Email (optional)",
@@ -8061,6 +8281,9 @@ Strategy:
       sendFailed: "Failed to send",
       fillRequired: "Please fill in phone number and verification code",
       emailFillRequired: "Please fill in email and verification code",
+      emailRequired: "Please enter your email address",
+      codeRequired: "Please enter the verification code",
+      invalidCode: "Enter the 6-digit verification code",
       loginFailed: "Login failed",
       enterFailed: "Failed to enter",
       gatewayNotEnabled:
@@ -8088,7 +8311,7 @@ Strategy:
       privacyPolicy: "Privacy Policy",
     },
     page: {
-      title: "Secure Access to Your Octopus Workspace",
+      title: "Secure Access to Your EchoAI Workspace",
       subtitle: "Continue your",
       description:
         "Continue your research, coding, collaboration, and automation tasks in a unified workspace for managing context, skills, and execution results.",
@@ -8188,8 +8411,8 @@ Strategy:
   },
 
   hero: {
-    releaseBadge: "Octopus 2.0 released",
-    withOctopus: "with Octopus",
+    releaseBadge: "EchoAI 2.0 released",
+    withOctopus: "with EchoAI",
     heroDescription:
       "An open-source SuperAgent harness that researches, codes, and creates. With the help of sandboxes, memories, tools, skills and subagents, it handles different levels of tasks that could take minutes to hours.",
   },
@@ -8417,11 +8640,29 @@ Strategy:
 
   share: {
     share: "Share",
-    saveImage: "Save as image",
-    copyImage: "Copy image",
-    imageSaved: "Saved as image",
-    imageCopied: "Image copied",
-    imageFailed: "Failed to make the image",
+    shareTask: "Share task",
+    shareDescription:
+      "Creates a public read-only snapshot without reasoning, tool payloads, or local paths",
+    wechat: "WeChat",
+    moments: "Moments",
+    copyLink: "Copy link",
+    qrCode: "QR code",
+    openInBrowser: "Browser",
+    creatingLink: "Creating share link…",
+    linkCopied: "Share link copied",
+    linkFailed: "Failed to create the share link",
+    wechatQrTitle: "Share to WeChat",
+    momentsQrTitle: "Share to Moments",
+    qrTitle: "Share QR code",
+    wechatQrHint: "Scan with WeChat, then send the page to a friend.",
+    momentsQrHint: "Scan with WeChat, open the page, then share it to Moments.",
+    qrHint: "Scan the QR code to open the public task.",
+    localOnlyHint:
+      "This is a local address and only works on this device. A deployed site uses its public address.",
+    stopSharing: "Stop public sharing",
+    sharingStopped: "Public sharing stopped",
+    stopSharingFailed: "Failed to stop sharing",
+    unavailable: "Send a message before sharing this task",
     exportReplay: "Export replayable HTML",
   },
 
@@ -8444,10 +8685,10 @@ Strategy:
     applying: "Submitting request...",
     approvalRequired: "Owner approval required",
     approvalRequiredDescription:
-      "Project workspace and group messages stay private until approval.",
+      "Group messages and any enabled project workbench stay private until approval.",
     requestPendingTitle: "Request submitted",
     requestPendingDescription:
-      "This page will enter the project group after the owner approves you.",
+      "This page will enter the work group after the owner approves you.",
     requestSubmitted: "Join request submitted",
     requestRejected: "The join request was rejected",
     requestWithdrawn: "The join request was withdrawn",
@@ -8942,13 +9183,13 @@ Strategy:
   desktop: {
     disabledTitle: "Desktop assistant is off",
     disabledDescription:
-      "By default, Octopus opens the welcome, sign-in, and workspace surfaces. Turn on the transparent desktop assistant when you want to manage system desktop files.",
+      "By default, EchoAI opens the welcome, sign-in, and workspace surfaces. Turn on the transparent desktop assistant when you want to manage system desktop files.",
     enableButton: "Enable Desktop Assistant",
     pluginSettingsButton: "Open Plugin Settings",
     backToWorkspaceButton: "Back to Workspace",
     header: {
       workspaceTooltip: "Open Workspace",
-      brand: "Octopus",
+      brand: "EchoAI",
       accountModels: "Official Models",
       desktopAssistant: "Desktop Assistant",
       desktopCount: (count) => `Desktop ${count || "--"}`,
@@ -9214,7 +9455,7 @@ Strategy:
       "You're in a web environment, so right-click menu install/remove stays disabled. Switch to the desktop app to make these options take effect.",
     contextMenuTitle: "System right-click menu",
     contextMenuDescription:
-      'Right-click on the Windows desktop shows "Octopus Organize Desktop".',
+      'Right-click on the Windows desktop shows "EchoAI Organize Desktop".',
     installButton: "Install right-click command",
     installingButton: "Installing",
     removeButton: "Remove",
@@ -9227,7 +9468,7 @@ Strategy:
     backToWorkspace: "Back to workspace",
     confirmRemoveTitle: "Remove system right-click menu?",
     confirmRemoveDescription:
-      "This will remove the Octopus one-click organize command from the Windows desktop right-click menu.",
+      "This will remove the EchoAI one-click organize command from the Windows desktop right-click menu.",
   },
 
   // Knowledge page
@@ -9445,9 +9686,9 @@ Strategy:
       colType: "Type",
       colItems: "Items",
       footerOnline:
-        "Frequent locations are connected to Octopus NAS. The local database only stores paths, thumbnails, OCR text, and vector indexes.",
+        "Frequent locations are connected to EchoAI NAS. The local database only stores paths, thumbnails, OCR text, and vector indexes.",
       footerOffline:
-        "Frequent locations are browsable; Octopus NAS is waiting to connect. The local database only stores paths, thumbnails, OCR text, and vector indexes.",
+        "Frequent locations are browsable; EchoAI NAS is waiting to connect. The local database only stores paths, thumbnails, OCR text, and vector indexes.",
       folderType: "Folder",
     },
     sources: {

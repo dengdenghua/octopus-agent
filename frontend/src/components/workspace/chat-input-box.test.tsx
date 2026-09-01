@@ -16,11 +16,46 @@ import type * as UploadsApiModule from "@/core/uploads/api";
 
 import { ChatInputBox } from "./chat-input-box";
 import type { GroupTaskStrategy } from "./group-task-strategy";
+import type { AgentModeName } from "./mode-selector";
 
 const uploadFilesMock = vi.fn();
 const uploadWithProgressMock = vi.fn();
 const modelCatalog = vi.hoisted(() => ({
   current: [] as Array<Record<string, unknown>>,
+}));
+const capabilityCatalog = vi.hoisted(() => ({
+  pluginOptions: [] as Array<{ enabled?: boolean } | undefined>,
+  skillOptions: [] as Array<{ enabled?: boolean } | undefined>,
+  plugins: [
+    {
+      id: "seedance",
+      name: "Seedance",
+      description: "Generate videos",
+      enabled: true,
+      state: "running",
+    },
+    {
+      id: "disabled-plugin",
+      name: "Disabled plugin",
+      description: "Hidden",
+      enabled: false,
+      state: "stopped",
+    },
+  ],
+  skills: [
+    {
+      name: "video-generate",
+      description: "Generate a video from a prompt",
+      enabled: true,
+      category: "media",
+    },
+    {
+      name: "disabled-skill",
+      description: "Hidden",
+      enabled: false,
+      category: "other",
+    },
+  ],
 }));
 
 // Only the transport is stubbed — ``useAttachmentUploads`` runs for real so the
@@ -41,6 +76,31 @@ vi.mock("@/core/models/hooks", () => ({
   useModels: () => ({
     models: modelCatalog.current,
   }),
+}));
+
+vi.mock("@/core/plugins/hooks", () => ({
+  usePlugins: (options?: { enabled?: boolean }) => {
+    capabilityCatalog.pluginOptions.push(options);
+    return {
+      plugins: capabilityCatalog.plugins,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+  },
+}));
+
+vi.mock("@/core/skills/hooks", () => ({
+  useSkills: (options?: { enabled?: boolean }) => {
+    capabilityCatalog.skillOptions.push(options);
+    return {
+      skills: capabilityCatalog.skills,
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+  },
 }));
 
 vi.mock("@/providers/AuthProvider", () => ({
@@ -90,6 +150,68 @@ async function openToolsMenu() {
   return screen.findByRole("menu");
 }
 
+it("keeps the plus entry visually lightweight when focused", () => {
+  renderWithProviders(<ChatInputBox mode="react" threadId="thread-plus" />);
+
+  expect(screen.getByTestId("chat-tools-trigger")).toHaveClass(
+    "focus-visible:outline-none",
+  );
+});
+
+it("keeps an accepted mode suggestion reflected in the status strip", async () => {
+  window.localStorage.setItem(
+    "octopus:modeOverride",
+    JSON.stringify({ "/workspace/mode-suggestion": { mode: "develop" } }),
+  );
+  const fetchSpy = vi
+    .spyOn(globalThis, "fetch")
+    .mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/agent-modes/detect")) {
+        return new Response(
+          JSON.stringify({
+            recommended_mode: "coder",
+            confidence: 0.9,
+            reason: "test",
+            signals: {},
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ modes: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+  function Harness() {
+    const [projectMode, setProjectMode] = useState<AgentModeName>("develop");
+    return (
+      <ChatInputBox
+        mode="code"
+        threadId="thread-mode-suggestion"
+        workDir="/workspace/mode-suggestion"
+        showWorkDirSelector
+        projectAgentMode={projectMode}
+        onProjectAgentModeChange={setProjectMode}
+        modeIntentSuggestion={{ mode: "audit", label: "Audit" }}
+        onAcceptModeIntent={async (next) => setProjectMode(next)}
+      />
+    );
+  }
+
+  const user = userEvent.setup();
+  renderWithProviders(<Harness />);
+  await user.click(screen.getByTestId("mode-intent-accept"));
+
+  await waitFor(() =>
+    expect(screen.getByTestId("chat-status-strip")).toHaveTextContent(
+      /Audit|审计/,
+    ),
+  );
+  fetchSpy.mockRestore();
+});
+
 function uploadedInfo(file: File) {
   return {
     filename: file.name,
@@ -102,6 +224,10 @@ function uploadedInfo(file: File) {
 }
 
 beforeEach(() => {
+  // Composer drafts intentionally persist across reloads, but not across
+  // independent tests. A full-suite predecessor may otherwise leave a draft
+  // under a reused thread id and make send-failure isolation assertions flaky.
+  window.localStorage.clear();
   modelCatalog.current = [
     {
       id: "test-model",
@@ -112,6 +238,8 @@ beforeEach(() => {
   ];
   uploadFilesMock.mockReset();
   uploadWithProgressMock.mockReset();
+  capabilityCatalog.pluginOptions = [];
+  capabilityCatalog.skillOptions = [];
   // Attaching now uploads immediately, so every test needs a transport.
   // The default resolves at once; progress-specific tests override it.
   uploadWithProgressMock.mockImplementation(
@@ -127,6 +255,67 @@ beforeEach(() => {
 });
 
 describe("<ChatInputBox /> cowork materials", () => {
+  it("places the automation target picker inside the plus menu", async () => {
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-target-menu"
+        automationTarget={{
+          kind: "desktop_window",
+          source: "computer",
+          id: "window-7",
+          title: "Project notes",
+          app_name: "Notes",
+        }}
+        onAutomationTargetChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId("automation-target-trigger")).toBeNull();
+    expect(
+      screen.getByTestId("automation-target-active-indicator"),
+    ).toBeInTheDocument();
+
+    const menu = await openToolsMenu();
+    expect(
+      within(menu).getByTestId("automation-target-submenu-trigger"),
+    ).toHaveTextContent("Window · Project notes");
+    expect(within(menu).queryByTestId("chat-add-appshot")).toBeNull();
+  });
+
+  it("renders the shared model profile control independently of agent role", () => {
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-unified-model-control"
+        modelProfileControl
+      />,
+    );
+
+    expect(screen.getByTestId("coder-engine-trigger")).toBeInTheDocument();
+    expect(screen.queryByTestId("model-picker-trigger")).toBeNull();
+  });
+
+  it("opens the Teach & Repeat library for /record without sending a message", async () => {
+    const user = userEvent.setup();
+    const onSwitchPanel = vi.fn();
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-record"
+        onSwitchPanel={onSwitchPanel}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    await user.type(textarea(), "/record");
+    await user.click(screen.getByLabelText("Send"));
+
+    expect(onSwitchPanel).toHaveBeenCalledWith("teach-repeat");
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it("replaces Inspiration with the response strategy in collaboration", () => {
     renderWithProviders(
       <ChatInputBox
@@ -141,11 +330,17 @@ describe("<ChatInputBox /> cowork materials", () => {
 
     const control = screen.getByTestId("response-mode-control");
     expect(control.closest(".composer-footer")).toBeInTheDocument();
+    expect(control.closest(".composer-footer__response")).toBeInTheDocument();
+    expect(
+      screen
+        .getByTestId("model-picker-trigger")
+        .closest(".composer-footer__model"),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("chat-mode-toggle")).toBeNull();
     expect(screen.getByTestId("chat-send-button")).toBeInTheDocument();
   });
 
-  it("moves group task strategy into the + menu and keeps the active choice visible", async () => {
+  it("moves restore-auto into + and removes it after use", async () => {
     const onStrategyChange = vi.fn();
     const onSubmit = vi.fn();
 
@@ -156,6 +351,7 @@ describe("<ChatInputBox /> cowork materials", () => {
           mode="react"
           threadId="thread-group-strategy"
           isGroupConversation
+          showWorkDirSelector
           groupTaskStrategy={strategy}
           onGroupTaskStrategyChange={(next) => {
             onStrategyChange(next);
@@ -169,28 +365,32 @@ describe("<ChatInputBox /> cowork materials", () => {
     renderWithProviders(<ControlledGroupComposer />);
 
     expect(
-      screen.getByRole("button", { name: "Start a task or add content" }),
+      screen.getByRole("button", { name: "Add content" }),
     ).toBeInTheDocument();
-    const menu = await openToolsMenu();
-    const research = within(menu).getByTestId("group-task-strategy-research");
-    expect(
-      within(menu).getByTestId("group-task-strategy-auto"),
-    ).toHaveAttribute("aria-checked", "true");
-
-    fireEvent.click(research);
+    fireEvent.click(screen.getByRole("button", { name: "Auto" }));
+    fireEvent.click(screen.getByRole("option", { name: /Deep research/ }));
 
     expect(onStrategyChange).toHaveBeenLastCalledWith("research");
     expect(onSubmit).not.toHaveBeenCalled();
-    expect(screen.getByTestId("group-task-strategy-chip")).toHaveTextContent(
-      "Task · Deep research",
-    );
+    expect(screen.queryByTestId("group-task-strategy-chip")).toBeNull();
+    expect(screen.queryByTestId("group-task-strategy-indicator")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Deep research" }),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("chat-composer")).queryByText("Deep research"),
+    ).toBeNull();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Return to automatic handling" }),
-    );
+    const menu = await openToolsMenu();
+    fireEvent.click(within(menu).getByTestId("group-task-clear-action"));
 
     expect(onStrategyChange).toHaveBeenLastCalledWith("auto");
     expect(screen.queryByTestId("group-task-strategy-chip")).toBeNull();
+    expect(screen.queryByTestId("group-task-strategy-indicator")).toBeNull();
+    const reopenedMenu = await openToolsMenu();
+    expect(
+      within(reopenedMenu).queryByTestId("group-task-clear-action"),
+    ).toBeNull();
   });
 
   it("offers create-deliverable without a folder and develop with a folder", async () => {
@@ -199,14 +399,17 @@ describe("<ChatInputBox /> cowork materials", () => {
         mode="react"
         threadId="thread-group-personal"
         isGroupConversation
+        showWorkDirSelector
         groupTaskStrategy="auto"
         onGroupTaskStrategyChange={vi.fn()}
       />,
     );
 
-    let menu = await openToolsMenu();
-    expect(within(menu).getByText("Create deliverable")).toBeInTheDocument();
-    expect(within(menu).queryByText("Develop")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Auto" }));
+    expect(
+      screen.getByRole("option", { name: /Create deliverable/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Develop/ })).toBeNull();
     first.unmount();
 
     renderWithProviders(
@@ -215,28 +418,100 @@ describe("<ChatInputBox /> cowork materials", () => {
         threadId="thread-group-project"
         workDir="/workspace/project"
         isGroupConversation
+        showWorkDirSelector
         groupTaskStrategy="auto"
         onGroupTaskStrategyChange={vi.fn()}
       />,
     );
 
-    menu = await openToolsMenu();
-    expect(within(menu).getByText("Develop")).toBeInTheDocument();
-    expect(within(menu).queryByText("Create deliverable")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Develop/ }));
+    expect(screen.getByRole("option", { name: /Develop/ })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /Create deliverable/ }),
+    ).toBeNull();
   });
 
-  it("hides personal/project status and default permission chrome in groups", () => {
+  it("keeps project planning separate from the per-turn task strategy", async () => {
+    const onProjectCapabilityAction = vi.fn();
+    const onStrategyChange = vi.fn();
+    const unbound = renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-group-project-plan"
+        isGroupConversation
+        showWorkDirSelector
+        groupTaskStrategy="auto"
+        onGroupTaskStrategyChange={onStrategyChange}
+        onProjectCapabilityAction={onProjectCapabilityAction}
+      />,
+    );
+
+    let menu = await openToolsMenu();
+    fireEvent.click(
+      within(menu).getByTestId("group-project-capability-action"),
+    );
+    expect(onProjectCapabilityAction).toHaveBeenCalledTimes(1);
+    expect(onStrategyChange).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("group-task-strategy-chip")).toBeNull();
+    unbound.unmount();
+
+    const onBoundStrategyChange = vi.fn();
+    renderWithProviders(
+      <ChatInputBox
+        mode="code"
+        threadId="thread-group-bound-project"
+        workDir="/workspace/project"
+        isGroupConversation
+        showWorkDirSelector
+        groupTaskStrategy="auto"
+        onGroupTaskStrategyChange={onBoundStrategyChange}
+        projectCapabilityEnabled
+        onProjectCapabilityAction={onProjectCapabilityAction}
+        responseModeControl={
+          <div data-testid="bound-project-response-mode">AI participation</div>
+        }
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Develop/ }));
+    fireEvent.click(screen.getByRole("option", { name: /Read-only audit/ }));
+    menu = await openToolsMenu();
+    expect(
+      within(menu).getByText("Open project workbench"),
+    ).toBeInTheDocument();
+    expect(within(menu).queryByText("Create project plan")).toBeNull();
+    expect(within(menu).queryByTestId("group-task-strategy-audit")).toBeNull();
+    expect(onBoundStrategyChange).toHaveBeenCalledWith("audit");
+    expect(onProjectCapabilityAction).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByTestId("bound-project-response-mode"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps personal/project status visible in groups and hides only default permission chrome", () => {
+    const onGroupTaskStrategyChange = vi.fn();
     const group = renderWithProviders(
       <ChatInputBox
         mode="react"
         threadId="thread-group-clean-footer"
         isGroupConversation
+        groupTaskStrategy="auto"
+        onGroupTaskStrategyChange={onGroupTaskStrategyChange}
         showWorkDirSelector
+        statusTrailing={<span data-testid="group-roster-inline">avatars</span>}
         permissionMode="default"
       />,
     );
 
-    expect(screen.queryByTestId("chat-status-strip")).toBeNull();
+    expect(screen.getByTestId("chat-status-strip")).toBeInTheDocument();
+    expect(
+      screen
+        .getByTestId("chat-status-strip")
+        .contains(screen.getByTestId("group-roster-inline")),
+    ).toBe(true);
+    expect(screen.getByTitle("Personal space")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Auto" }));
+    fireEvent.click(screen.getByRole("option", { name: /Create deliverable/ }));
+    expect(onGroupTaskStrategyChange).toHaveBeenCalledWith("build");
     expect(screen.queryByTestId("permission-mode-trigger")).toBeNull();
     group.unmount();
 
@@ -346,7 +621,8 @@ describe("<ChatInputBox /> cowork materials", () => {
     );
   });
 
-  it("keeps prompt-only shortcuts out of the quick tools menu", async () => {
+  it("keeps the add menu focused on user-facing context and task controls", async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <ChatInputBox
         mode="deep"
@@ -363,15 +639,24 @@ describe("<ChatInputBox /> cowork materials", () => {
     const inMenu = within(menu);
 
     expect(screen.getByText("Research settings")).toBeInTheDocument();
-    expect(screen.getByText("Insert Plan marker")).toBeInTheDocument();
-    expect(screen.getByText("Insert Spec marker")).toBeInTheDocument();
-    expect(screen.getByText("Insert Goal marker")).toBeInTheDocument();
-    expect(screen.getByText("Insert Browser marker")).toBeInTheDocument();
-    expect(screen.getByText("Insert Chrome marker")).toBeInTheDocument();
-    expect(screen.getByText("Add material")).toBeInTheDocument();
+    expect(screen.getByText("Upload images")).toBeInTheDocument();
+    expect(screen.getByText("Project files")).toBeInTheDocument();
+    expect(screen.getByText("Commands")).toBeInTheDocument();
+    expect(screen.getByText("Plugins")).toBeInTheDocument();
+    expect(screen.getByText("Skills")).toBeInTheDocument();
+    await user.hover(screen.getByTestId("chat-commands-submenu"));
+    expect(await screen.findByText("Spec")).toBeInTheDocument();
+    expect(screen.getByText("Plan")).toBeInTheDocument();
     expect(
-      screen.getByText("Add image (paste / drag / select)"),
-    ).toBeInTheDocument();
+      screen.getByText("Goal").closest('[role="menuitem"]'),
+    ).toHaveTextContent("🎯Goal");
+    expect(screen.getByText("Milestone")).toBeInTheDocument();
+    expect(screen.getByText("Browser")).toBeInTheDocument();
+    expect(screen.getByText("Chrome")).toBeInTheDocument();
+    expect(screen.queryByText("Add material")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Add image (paste / drag / select)"),
+    ).not.toBeInTheDocument();
     expect(inMenu.queryByText("Default")).not.toBeInTheDocument();
     expect(inMenu.queryByText("Web search")).not.toBeInTheDocument();
     expect(inMenu.queryByText("Create PPT")).not.toBeInTheDocument();
@@ -384,7 +669,8 @@ describe("<ChatInputBox /> cowork materials", () => {
     expect(inMenu.queryByText("Web Search Research")).not.toBeInTheDocument();
   });
 
-  it("inserts Codex mode markers into the draft without switching mode", async () => {
+  it("inserts user-facing plan and goal modes without switching the model mode", async () => {
+    const user = userEvent.setup();
     const onModeChange = vi.fn();
     renderWithProviders(
       <ChatInputBox
@@ -397,80 +683,56 @@ describe("<ChatInputBox /> cowork materials", () => {
     );
 
     await openToolsMenu();
-    fireEvent.click(screen.getByText("Insert Plan marker"));
+    await user.hover(screen.getByTestId("chat-commands-submenu"));
+    fireEvent.click(await screen.findByText("Plan"));
 
-    expect(textarea().value).toBe("/mode plan\n");
-    expect(onModeChange).not.toHaveBeenCalled();
-
-    fireEvent.change(textarea(), {
-      target: { value: "/mode plan\nAudit this repo" },
-    });
-    await openToolsMenu();
-    fireEvent.click(screen.getByText("Insert Spec marker"));
-
-    expect(textarea().value).toBe("/mode spec\nAudit this repo");
-    expect(onModeChange).not.toHaveBeenCalled();
-
-    await openToolsMenu();
-    fireEvent.click(screen.getByText("Insert Goal marker"));
-
-    expect(textarea().value).toBe("/mode goal\nAudit this repo");
-    expect(onModeChange).not.toHaveBeenCalled();
-  });
-
-  it("inserts Browser surface marker into the draft without switching mode", async () => {
-    const onModeChange = vi.fn();
-    renderWithProviders(
-      <ChatInputBox
-        mode="react"
-        threadId="thread-1"
-        allowAgentModes
-        onModeChange={onModeChange}
-        onDeepResearch={vi.fn()}
-      />,
+    expect(textarea().value).toBe("");
+    expect(screen.getByTestId("composer-command-prefix")).toHaveTextContent(
+      "Plan",
     );
-
-    await openToolsMenu();
-    fireEvent.click(screen.getByText("Insert Browser marker"));
-
-    expect(textarea().value).toBe("@Browser\n");
-    expect(onModeChange).not.toHaveBeenCalled();
-
-    fireEvent.change(textarea(), {
-      target: { value: "@Browser\nOpen the current page" },
-    });
-    await openToolsMenu();
-    fireEvent.click(screen.getByText("Insert Browser marker"));
-
-    expect(textarea().value).toBe("@Browser\nOpen the current page");
-    expect(onModeChange).not.toHaveBeenCalled();
-  });
-
-  it("inserts Chrome surface marker into the draft without switching mode", async () => {
-    const onModeChange = vi.fn();
-    renderWithProviders(
-      <ChatInputBox
-        mode="react"
-        threadId="thread-1"
-        allowAgentModes
-        onModeChange={onModeChange}
-        onDeepResearch={vi.fn()}
-      />,
+    expect(screen.getByTestId("composer-command-prefix")).toHaveClass(
+      "font-bold",
+      "text-sky-600",
     );
-
-    await openToolsMenu();
-    fireEvent.click(screen.getByText("Insert Chrome marker"));
-
-    expect(textarea().value).toBe("@Chrome\n");
     expect(onModeChange).not.toHaveBeenCalled();
 
     fireEvent.change(textarea(), {
-      target: { value: "@Browser\nOpen the signed-in page" },
+      target: { value: "Audit this repo" },
     });
     await openToolsMenu();
-    fireEvent.click(screen.getByText("Insert Chrome marker"));
+    await user.hover(screen.getByTestId("chat-commands-submenu"));
+    fireEvent.click(await screen.findByText("Goal"));
 
-    expect(textarea().value).toBe("@Chrome\nOpen the signed-in page");
+    expect(textarea().value).toBe("Audit this repo");
+    expect(screen.getByTestId("composer-command-prefix")).toHaveTextContent(
+      "Goal",
+    );
+    expect(screen.getByTestId("composer-command-prefix")).toHaveTextContent(
+      "🎯",
+    );
+    expect(screen.getByTestId("composer-command-prefix")).toHaveClass(
+      "font-bold",
+      "text-violet-600",
+    );
+    expect(screen.getByTestId("composer-long-task-indicator")).toHaveAttribute(
+      "aria-label",
+      "Goal 模式 · 点击退出",
+    );
+    expect(screen.getByTestId("composer-long-task-indicator")).toHaveClass(
+      "text-muted-foreground",
+    );
+    expect(
+      screen.getByTestId("composer-long-task-indicator"),
+    ).toHaveTextContent("🎯");
+    const longTaskIndicator = screen.getByTestId(
+      "composer-long-task-indicator",
+    );
+    const permissionTrigger = screen.getByTestId("permission-mode-trigger");
+    expect(longTaskIndicator.closest(".ml-auto")).toBeNull();
+    expect(
+      permissionTrigger.compareDocumentPosition(longTaskIndicator) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(onModeChange).not.toHaveBeenCalled();
   });
 
@@ -490,7 +752,147 @@ describe("<ChatInputBox /> cowork materials", () => {
     expect(screen.getByTitle("Send")).toBeDisabled();
     fireEvent.click(screen.getByTitle("Send"));
     expect(onSubmit).not.toHaveBeenCalled();
-    expect(textarea().value).toBe("/mode plan\n");
+    expect(textarea().value).toBe("");
+    expect(screen.getByTestId("composer-command-prefix")).toHaveTextContent(
+      "Plan",
+    );
+  });
+
+  it("shows Milestone as a mode and sends through the Project OS command", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-project-mode"
+        onSubmit={onSubmit}
+      />,
+    );
+
+    await openToolsMenu();
+    await user.hover(screen.getByTestId("chat-commands-submenu"));
+    fireEvent.click(await screen.findByText("Milestone"));
+
+    expect(textarea()).toHaveValue("");
+    expect(screen.getByTestId("composer-command-prefix")).toHaveTextContent(
+      "Milestone",
+    );
+    expect(screen.getByTestId("composer-command-prefix")).toHaveClass(
+      "font-bold",
+      "text-rose-600",
+    );
+    expect(textarea()).toHaveClass("pl-[7.5rem]");
+    expect(screen.getByTitle("Send")).toBeDisabled();
+
+    fireEvent.change(textarea(), { target: { value: "Ship the release" } });
+    fireEvent.click(screen.getByTitle("Send"));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith({
+        text: "/project run\nShip the release",
+      }),
+    );
+    expect(screen.getByTestId("composer-long-task-indicator")).toHaveAttribute(
+      "aria-label",
+      "里程碑模式 · 点击退出",
+    );
+    expect(screen.getByTestId("composer-command-prefix")).toHaveTextContent(
+      "Milestone",
+    );
+    expect(textarea()).toHaveValue("");
+
+    fireEvent.click(screen.getByTestId("composer-long-task-indicator"));
+    expect(screen.queryByTestId("composer-long-task-indicator")).toBeNull();
+    expect(screen.queryByTestId("composer-command-prefix")).toBeNull();
+  });
+
+  it("lazily exposes plugins and skills as removable colored references", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-capability-menu"
+        onSubmit={onSubmit}
+      />,
+    );
+
+    expect(capabilityCatalog.pluginOptions.at(-1)).toEqual({ enabled: false });
+    expect(capabilityCatalog.skillOptions.at(-1)).toEqual({ enabled: false });
+
+    await openToolsMenu();
+    expect(capabilityCatalog.pluginOptions.at(-1)).toEqual({ enabled: true });
+    expect(capabilityCatalog.skillOptions.at(-1)).toEqual({ enabled: true });
+    await user.hover(screen.getByTestId("chat-plugins-submenu"));
+    fireEvent.click(await screen.findByText("Seedance"));
+
+    expect(
+      screen.getByTestId("composer-capability-plugin-seedance"),
+    ).toHaveClass("text-violet-700");
+    expect(screen.getByTitle("Send")).toBeDisabled();
+
+    fireEvent.change(textarea(), { target: { value: "Create launch clip" } });
+    await openToolsMenu();
+    await user.hover(screen.getByTestId("chat-skills-submenu"));
+    const search = await screen.findByTestId("chat-skill-search");
+    fireEvent.change(search, { target: { value: "video" } });
+    expect(screen.queryByText("disabled-skill")).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByText("video-generate"));
+
+    await openToolsMenu();
+    await user.hover(screen.getByTestId("chat-commands-submenu"));
+    fireEvent.click(await screen.findByText("Browser"));
+    await openToolsMenu();
+    await user.hover(screen.getByTestId("chat-commands-submenu"));
+    fireEvent.click(await screen.findByText("Chrome"));
+    expect(
+      screen.getByTestId("composer-capability-surface-chrome"),
+    ).toHaveTextContent("Chrome");
+    expect(
+      screen.queryByTestId("composer-capability-surface-browser"),
+    ).not.toBeInTheDocument();
+    await openToolsMenu();
+    await user.hover(screen.getByTestId("chat-commands-submenu"));
+    fireEvent.click(await screen.findByText("Browser"));
+    await openToolsMenu();
+    await user.hover(screen.getByTestId("chat-commands-submenu"));
+    fireEvent.click(await screen.findByText("Goal"));
+
+    expect(
+      screen.getByTestId("composer-capability-skill-video-generate"),
+    ).toHaveClass("text-blue-700");
+    expect(
+      screen.getByTestId("composer-capability-surface-browser"),
+    ).toHaveClass("text-cyan-700");
+    expect(screen.getByTestId("composer-command-prefix")).toHaveTextContent(
+      "Goal",
+    );
+
+    fireEvent.click(screen.getByTitle("Send"));
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith({
+        text: "/mode goal\n@plugin:seedance @skill:video-generate @Browser\nCreate launch clip",
+      }),
+    );
+  });
+
+  it("removes an empty highlighted command with Backspace", () => {
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-1"
+        defaultValue={"/mode goal\n"}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByTestId("chat-composer-input"), {
+      key: "Backspace",
+    });
+
+    expect(
+      screen.queryByTestId("composer-command-prefix"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("chat-composer-input")).toHaveValue("");
   });
 
   it("sends default execution mode through the normal message path", async () => {
@@ -545,35 +947,6 @@ describe("<ChatInputBox /> cowork materials", () => {
     fireEvent.click(send);
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
-  });
-
-  it("preserves partner /model commands for the CLI adapter", () => {
-    const onSubmit = vi.fn();
-    const onModelChange = vi.fn();
-    const onPartnerModelChange = vi.fn();
-    renderWithProviders(
-      <ChatInputBox
-        mode="react"
-        threadId="thread-1"
-        partnerId="trae-cli"
-        onSubmit={onSubmit}
-        onModelChange={onModelChange}
-        onPartnerModelChange={onPartnerModelChange}
-      />,
-    );
-
-    fireEvent.change(textarea(), {
-      target: { value: "/model doubao-seed\nInspect this repository" },
-    });
-    fireEvent.click(screen.getByTitle("Send"));
-
-    expect(onSubmit).toHaveBeenCalledWith({
-      text: "/model doubao-seed\nInspect this repository",
-      images: undefined,
-      files: undefined,
-    });
-    expect(onModelChange).not.toHaveBeenCalled();
-    expect(onPartnerModelChange).not.toHaveBeenCalled();
   });
 
   it("allows sending a pasted image without typed text", async () => {
@@ -651,8 +1024,9 @@ describe("<ChatInputBox /> cowork materials", () => {
     );
 
     const file = new File(["brief"], "brief.md", { type: "text/markdown" });
-    const inputs = document.querySelectorAll('input[type="file"]');
-    const contextInput = inputs[inputs.length - 1] as HTMLInputElement;
+    const contextInput = screen.getByTestId(
+      "chat-device-file-input",
+    ) as HTMLInputElement;
     fireEvent.change(contextInput, {
       target: { files: [file] },
     });

@@ -63,6 +63,7 @@ tier: "core"
 | `tool_guardrails.py` | — |
 | `trust_engine.py` | — |
 | `url_guard.py` | — |
+| `websocket.py` | Shared browser-safe WebSocket bearer-token transport helpers. |
 
 ## Key classes & functions
 
@@ -176,10 +177,18 @@ tier: "core"
 | func | `def safe_httpx_get(url, timeout, allow_private, follow_redirects, read_cap_bytes)` | Rebinding-proof GET via httpx when the dep is available. |
 | func | `def safe_httpx_request(method, url, json, data, headers, timeout, allow_private, follow_redirects, read_cap_bytes)` | Make one rebinding-resistant HTTP request. |
 
+### `websocket.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def offered_websocket_subprotocols(connection)` | Return the handshake protocols in client order. |
+| func | `def websocket_bearer_token(connection)` | Decode a bearer token offered through WebSocket subprotocols. |
+| func | `def accepted_auth_subprotocol(connection)` | Select only the non-secret auth marker from the client's offer. |
+
 
 ## Who imports this
 
-**114** file(s) reference this package:
+**130** file(s) reference this package:
 
 - **`runtime/adapters/`** · 5 file(s)
   - `runtime/adapters/integrations/local_auth/router.py`
@@ -191,17 +200,19 @@ tier: "core"
   - `runtime/cli_core.py`
 - **`runtime/cli_run.py/`** · 1 file(s)
   - `runtime/cli_run.py`
+- **`runtime/cloud_edge/`** · 1 file(s)
+  - `runtime/cloud_edge/router.py`
 - **`runtime/core/`** · 3 file(s)
   - `runtime/core/nerves/reflex/actions.py`
   - `runtime/core/nerves/reflex/broadcast.py`
   - `runtime/core/nerves/reflex/tiers.py`
-- **`runtime/execution/`** · 16 file(s)
+- **`runtime/execution/`** · 19 file(s)
+  - `runtime/execution/codex_backend/account.py`
+  - `runtime/execution/codex_backend/model_profile.py`
+  - `runtime/execution/codex_backend/role_runner.py`
   - `runtime/execution/misc/parallel_runner.py`
   - `runtime/execution/subagents/bridge.py`
-  - `runtime/execution/suckers/_delegation_skills_common.py`
-  - `runtime/execution/suckers/_ephemeral_tool_exec.py`
-  - `runtime/execution/suckers/_write_skills_common.py`
-  - _… and 11 more_
+  - _… and 14 more_
 - **`runtime/memory/`** · 9 file(s)
   - `runtime/memory/diagnostics/_trace_store_replay_storage.py`
   - `runtime/memory/diagnostics/_trace_store_storage.py`
@@ -209,25 +220,31 @@ tier: "core"
   - `runtime/memory/journal/journal.py`
   - `runtime/memory/learning/experience_ledger.py`
   - _… and 4 more_
-- **`runtime/platform/`** · 12 file(s)
+- **`runtime/platform/`** · 15 file(s)
   - `runtime/platform/config/builder.py`
   - `runtime/platform/io/lease.py`
   - `runtime/platform/plugins/_secure_fetch.py`
+  - `runtime/platform/plugins/bundled/_office_io.py`
   - `runtime/platform/plugins/bundled/whale_eye/service.py`
-  - `runtime/platform/ui/_app_setup.py`
-  - _… and 7 more_
-- **`runtime/projectos/`** · 2 file(s)
+  - _… and 10 more_
+- **`runtime/projectos/`** · 6 file(s)
+  - `runtime/projectos/_store_message_actions.py`
+  - `runtime/projectos/_store_project_deletion.py`
+  - `runtime/projectos/_store_task_claims.py`
+  - `runtime/projectos/_store_thread_bindings.py`
   - `runtime/projectos/engine.py`
   - `runtime/projectos/store.py`
-- **`runtime/safety/`** · 1 file(s)
+- **`runtime/safety/`** · 3 file(s)
+  - `runtime/safety/evolution/candidate_registry.py`
   - `runtime/safety/evolution/proposal_ledger.py`
-- **`runtime/sensing/`** · 60 file(s)
+  - `runtime/safety/recovery/tenant_scope.py`
+- **`runtime/sensing/`** · 63 file(s)
   - `runtime/sensing/gateway/_agent_trace_router_stores.py`
+  - `runtime/sensing/gateway/_config_endpoints_codex.py`
   - `runtime/sensing/gateway/_config_endpoints_local_models.py`
   - `runtime/sensing/gateway/_config_endpoints_security.py`
   - `runtime/sensing/gateway/_cowork_group_access.py`
-  - `runtime/sensing/gateway/_observability_auth.py`
-  - _… and 55 more_
+  - _… and 58 more_
 - **`runtime/tentacle/`** · 2 file(s)
   - `runtime/tentacle/coordinator.py`
   - `runtime/tentacle/dashboard.py`

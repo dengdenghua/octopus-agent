@@ -45,7 +45,9 @@ tier: "core"
 | `effect_receipts.py` | Crash-safe tool effect receipts for durable agent turns. |
 | `effect_store.py` | Transactional cross-process coordination for tool side effects. |
 | `executor.py` | — |
+| `native_tool_execution.py` | Execute a model-native tool call through the Octopus executor boundary. |
 | `redis_effect_store.py` | Redis-backed, cross-host tool-effect receipts. |
+| `session_metadata.py` | Project caller context into the metadata trusted by tool sessions. |
 | `session_projection.py` | Byte-bounded projection of a session's conversation surface. |
 | `session_reference.py` | Cross-session reference resolver — dsh ``@dsh-session-reference`` service. |
 | `session_reference_uri.py` | Canonical session URI and inline mention encoding (dsh ``uri.ts``). |
@@ -94,11 +96,23 @@ tier: "core"
 | --- | --- | --- |
 | class | `class ToolExecutor` | Skill-step executor with read-before-write + diff/rollback wiring. |
 
+### `native_tool_execution.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def execute_native_tool_call(stack, call, max_chars, prune_middle, spill_oversized)` | Run one native tool request through the normal executor chokepoint. |
+
 ### `redis_effect_store.py`
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | class | `class RedisEffectStore` |  |
+
+### `session_metadata.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def project_tool_session_metadata(user_context)` | Return the allowlisted context that may survive tool-thread hops. |
 
 ### `session_projection.py`
 
@@ -214,7 +228,7 @@ tier: "core"
 
 ## Who imports this
 
-**19** file(s) reference this package:
+**20** file(s) reference this package:
 
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
@@ -226,7 +240,8 @@ tier: "core"
   - `runtime/core/cerebrum/_react_execution_results.py`
   - `runtime/core/cerebrum/react_parallel_dispatch.py`
   - `runtime/core/graph_runtime/runtime.py`
-- **`runtime/execution/`** · 5 file(s)
+- **`runtime/execution/`** · 6 file(s)
+  - `runtime/execution/codex_backend/dynamic_tools.py`
   - `runtime/execution/subagents/sessions.py`
   - `runtime/execution/suckers/_ephemeral_tool_exec.py`
   - `runtime/execution/suckers/agent_meta_skills.py`

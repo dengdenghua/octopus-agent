@@ -16,7 +16,6 @@ import { RealtimeGroupHeaderLayout } from "@/components/workspace/realtime/realt
 import {
   RealtimeChatHeaderActions,
   RealtimeChatHeaderMemberSurface,
-  RealtimeChatHeaderOverflowMenu,
   type RealtimeChatHeaderShareOptions,
 } from "@/components/workspace/realtime/realtime-chat-header-controls";
 import { PromoteGroupToProjectDialog } from "@/components/workspace/realtime/promote-group-to-project-dialog";
@@ -76,17 +75,23 @@ import {
 import { ConversationRosterStrip } from "@/components/workspace/conversation-roster-strip";
 import type { GroupTaskStrategy } from "@/components/workspace/group-task-strategy";
 import { ComposerStepProgress } from "@/components/workspace/composer-step-progress";
-import type {
-  AgentModeName,
-  AuditIntensity,
-  DetectResponse,
-  DetectionSignals,
+import {
+  persistModeSelection,
+  type AgentModeName,
+  type AuditIntensity,
+  type DetectResponse,
+  type DetectionSignals,
 } from "@/components/workspace/mode-selector";
 import type { ReasoningMode } from "@/components/workspace/reasoning-mode";
 import type { PersonalMode } from "@/components/workspace/personal-mode-selector";
 import { RecRecorderOverlay } from "@/components/workspace/rec-recorder-overlay";
+import { useCapabilitySurface } from "@/core/plugins/use-capability-surface";
 import type { PromptInputFilePart, UploadedFileInfo } from "@/core/uploads";
 import { normalizeWorkspaceArtifactRef } from "@/core/artifacts/utils";
+import {
+  OPEN_ARTIFACT_EVENT,
+  type OpenArtifactDetail,
+} from "@/core/artifacts/open-artifact";
 import {
   preferredWorkbenchTab,
   rememberWorkbenchTab,
@@ -110,13 +115,20 @@ import {
 import {
   MESSAGE_LIST_DEFAULT_PADDING_BOTTOM,
   MessageList,
+  type MessageListTimelineEntry,
 } from "@/components/workspace/messages";
+import { ModelSwitchTimelineEntry } from "@/components/workspace/messages/model-switch-timeline-entry";
 import { convertToSteps } from "@/components/workspace/messages/message-group";
 import { extractResultUrl } from "@/components/workspace/messages/message-output-summary";
 import { LoadOlderTurnsBanner } from "@/components/workspace/messages/load-older-turns-banner";
 import { ThreadProviders } from "@/components/workspace/messages/context";
 import { liveEventIsReportLike } from "@/core/threads/report-deliverable";
 import { ThreadTitle } from "@/components/workspace/thread-title";
+import {
+  loadModelSwitchEvents,
+  recordModelSwitchEvent,
+  type ModelSwitchEvent,
+} from "@/core/threads/model-switch-events";
 import { ShareMenu } from "@/components/workspace/share-menu";
 import {
   TeamModePicker,
@@ -189,7 +201,6 @@ import {
   dedupePersonaAgentsByDisplayName,
   useAgent,
   useAgents,
-  useLocalCliAgents,
   useMobileDevices,
 } from "@/core/agents";
 import { emitAgentChanged, eventBus, useEvent } from "@/core/events";
@@ -223,6 +234,8 @@ import {
   type CoworkRoomMessage,
 } from "@/core/cowork";
 import { currentActorId } from "@/core/auth/api";
+import { canAccessGlobalControlPlane } from "@/core/auth/control-plane-access";
+import { useAuth } from "@/providers/AuthProvider";
 import { usePauseTask, useTasks } from "@/core/tasks/hooks";
 import { isAIMessage, isHumanMessage, type Message } from "@/core/api/types";
 import {
@@ -230,11 +243,17 @@ import {
   parseUploadedFiles,
   stripUploadedFilesTag,
 } from "@/core/messages/utils";
+import {
+  QUICK_REPLY_EVENT,
+  quickReplyTextForThread,
+  type QuickReplyDetail,
+} from "@/core/messages/quick-reply";
 import { useI18n } from "@/core/i18n/hooks";
 import { ToolEffectsProvider } from "@/core/observability/tool-effects-context";
 import {
   extractContentFromMessage,
   extractTextFromMessage,
+  isAssistantStopTerminalState,
   isSettledAssistantAnswer,
   latestAssistantTerminalState,
   assistantAnswerRequestsUserInput,
@@ -498,6 +517,7 @@ function RealtimePageContent({
   chatState: ReturnType<typeof useThreadChat>;
 }) {
   const { t } = useI18n();
+  const { authStatus, user } = useAuth();
   const { threadId, isNewThread, setIsNewThread } = chatState;
   const isMobile = useIsMobile();
   const {
@@ -559,15 +579,17 @@ function RealtimePageContent({
   const [chatsDrawerOpen, setChatsDrawerOpen] = useState(false);
   // 助理专属：右侧内嵌「自动化 / 订阅」管理面板开关。
   const [showAutomationPanel, setShowAutomationPanel] = useState(false);
+  const recorderPluginEnabled = useCapabilitySurface("chat.recorder");
   const [showTeachRepeatPanel, setShowTeachRepeatPanel] = useState(false);
   const closeSpecialUtilityPanels = useCallback(() => {
     setShowTeachRepeatPanel(false);
     setShowAutomationPanel(false);
   }, []);
   const openTeachRepeatPanel = useCallback(() => {
+    if (!recorderPluginEnabled) return;
     setShowAutomationPanel(false);
     setShowTeachRepeatPanel(true);
-  }, []);
+  }, [recorderPluginEnabled]);
   const toggleAutomationPanel = useCallback(() => {
     setShowTeachRepeatPanel(false);
     setShowAutomationPanel((open) => !open);
@@ -614,8 +636,10 @@ function RealtimePageContent({
   const [recOverlayOpen, setRecOverlayOpen] = useState(false);
   const [recIsRecording, setRecIsRecording] = useState(false);
   useEffect(() => {
-    if (isNewThread || !threadId) {
+    if (!recorderPluginEnabled || isNewThread || !threadId) {
       setRecIsRecording(false);
+      setRecOverlayOpen(false);
+      setShowTeachRepeatPanel(false);
       return;
     }
 
@@ -629,7 +653,7 @@ function RealtimePageContent({
     return () => {
       cancelled = true;
     };
-  }, [isNewThread, threadId]);
+  }, [isNewThread, recorderPluginEnabled, threadId]);
   // Work directory for Agent project/code state. Empty means the thread uses its
   // isolated personal coding workspace; selecting a local folder binds a user
   // project directory without mixing it with the separate Team workspace.
@@ -700,6 +724,7 @@ function RealtimePageContent({
         : undefined,
     [threadIdentityQuery.data],
   );
+  const [collaboratorPickerOpen, setCollaboratorPickerOpen] = useState(false);
   const coworkGroupQuery = useCoworkGroup(isNewThread ? null : threadId);
   const collabSessionQuery = useCollabSession(isNewThread ? null : threadId);
   const boundProjectQuery = useBoundProjectState(isNewThread ? null : threadId);
@@ -754,14 +779,24 @@ function RealtimePageContent({
 
   const { models } = useModels();
   const { agents: builtinAgents } = useAgents();
-  const { cliAgents } = useLocalCliAgents();
-  const { mobileAgents } = useMobileDevices();
+  const hasPersistedCollaboration = Boolean(
+    collabSessionQuery.data?.room_id ||
+    (collabSessionQuery.data &&
+      (collabSessionQuery.data.roster.length > 1 ||
+        collabSessionQuery.data.mode !== "chat")) ||
+    (coworkGroupQuery.data &&
+      (coworkGroupQuery.data.state.roster.length > 1 ||
+        coworkGroupQuery.data.state.mode !== "chat")),
+  );
+  const { mobileAgents } = useMobileDevices({
+    enabled: collaboratorPickerOpen || hasPersistedCollaboration,
+  });
   const allTaskCollaboratorAgents = useMemo(
     () =>
       dedupePersonaAgentsByDisplayName(
-        dedupeAgentsByName([...mobileAgents, ...cliAgents, ...builtinAgents]),
+        dedupeAgentsByName([...mobileAgents, ...builtinAgents]),
       ),
-    [builtinAgents, cliAgents, mobileAgents],
+    [builtinAgents, mobileAgents],
   );
   const collaborationMentionMembers = useMemo(
     () =>
@@ -783,7 +818,6 @@ function RealtimePageContent({
   const [teamModeIntent, setTeamModeIntent] = useState<TeamMode>("chat");
   const [groupTaskStrategy, setGroupTaskStrategy] =
     useState<GroupTaskStrategy>("auto");
-  const [collaboratorPickerOpen, setCollaboratorPickerOpen] = useState(false);
   const [humanInviteDialogOpen, setHumanInviteDialogOpen] = useState(false);
   const [humanInviteRoomId, setHumanInviteRoomId] = useState("");
   const [promoteGroupDialogOpen, setPromoteGroupDialogOpen] = useState(false);
@@ -885,6 +919,16 @@ function RealtimePageContent({
     () => new URLSearchParams(location.search),
     [location.search],
   );
+  const embeddedDesignChat =
+    searchParams.get("embedded") === "design" ||
+    (typeof window !== "undefined" &&
+      window.parent !== window &&
+      window.frameElement?.getAttribute("data-echo-design-chat") === "true");
+  const embeddedDesignProject = searchParams.get("project")?.trim() || "";
+  const embeddedCreationSpace =
+    searchParams.get("creation_space")?.trim() || "";
+  const embeddedCreativeProject =
+    searchParams.get("creative_project")?.trim() || "";
   const initialPrompt = useMemo(() => {
     return searchParams.get("prompt") ?? "";
   }, [searchParams]);
@@ -1009,6 +1053,10 @@ function RealtimePageContent({
     : resolvedThreadOwnerAgentId && resolvedThreadOwnerAgentId !== activeAgentId
       ? threadOwnerAgent
       : activeAgent;
+  const selectedExecutionEngine =
+    displayAgent?.capabilities?.execution_backend === "codex_app_server"
+      ? ("codex" as const)
+      : ("octopus" as const);
   const currentTaskAgentName = displayAgent?.name ?? effectiveAgentId;
   const composerDisplayAgent = useMemo(
     () =>
@@ -1124,6 +1172,7 @@ function RealtimePageContent({
   }, [applyTaskCollaboratorPreset]);
   useEffect(() => {
     if (
+      embeddedDesignChat ||
       isNewThread ||
       threadIdentityQuery.isPending ||
       localStartedThreadIdRef.current === threadId
@@ -1145,6 +1194,7 @@ function RealtimePageContent({
       setTeamModeIntent(normalizeTeamResponseMode(savedCollaborationMode));
     }
   }, [
+    embeddedDesignChat,
     isNewThread,
     persistedCollaboratorKey,
     persistedCollaboratorIds,
@@ -1305,7 +1355,8 @@ function RealtimePageContent({
     }
     return roster;
   }, [composerDisplayAgent, effectiveAgentId, selectedCollaborators]);
-  const collaborationEnabled = selectedCollaborators.length > 0;
+  const collaborationEnabled =
+    !embeddedDesignChat && selectedCollaborators.length > 0;
   const visibleCollaborationRoster = useMemo(() => {
     const primary =
       collaborationEnabled || savedCollaborationRoster.length === 0
@@ -1333,8 +1384,10 @@ function RealtimePageContent({
     coworkCollaborationProfiles,
     savedCollaborationRoster,
   ]);
-  const visibleCollaborationEnabled = visibleCollaborationRoster.length > 1;
+  const visibleCollaborationEnabled =
+    !embeddedDesignChat && visibleCollaborationRoster.length > 1;
   const isGroupConversation =
+    !embeddedDesignChat &&
     !isOctopusAssistant &&
     (visibleCollaborationEnabled ||
       Boolean(collabSessionQuery.data?.room_id) ||
@@ -1557,6 +1610,7 @@ function RealtimePageContent({
   const lastEnsuredCollabRoomRef = useRef<string | null>(null);
   useEffect(() => {
     if (
+      embeddedDesignChat ||
       isNewThread ||
       !threadId ||
       threadId === "new" ||
@@ -1597,6 +1651,7 @@ function RealtimePageContent({
     collaborationRoomMemberPayload,
     collaborationRoomSignature,
     collaborationTeamName,
+    embeddedDesignChat,
     effectiveAgentId,
     ensureCollabRoomMutation,
     isNewThread,
@@ -1625,10 +1680,15 @@ function RealtimePageContent({
     ? settings.personal_space.default_folder.trim()
     : "";
   const personalWorkspacePath = personalWorkspaceRoot
-    ? joinPath(
-        personalWorkspaceRoot,
-        personalRoleFolderName(displayAgent, effectiveAgentId),
-      )
+    ? embeddedDesignChat && embeddedCreationSpace
+      ? joinPath(
+          joinPath(personalWorkspaceRoot, "创作空间"),
+          personalRoleFolderName(displayAgent, embeddedCreationSpace),
+        )
+      : joinPath(
+          personalWorkspaceRoot,
+          personalRoleFolderName(displayAgent, effectiveAgentId),
+        )
     : "";
   const isProjectCodeMode = !!projectWorkspacePath;
   // When user has explicitly selected a named agent (not default "general", not octopus)
@@ -1650,36 +1710,6 @@ function RealtimePageContent({
   // flag removed. Tool/permission scoping lives in the skills &
   // permissions system, not a global gate.
   const codeModeUnlocked = true;
-  // Local CLI partner: driven by spawning its own CLI, so
-  // its model comes from the CLI's config, not the Octopus model picker.
-  const partnerCaps = displayAgent?.capabilities as
-    | { local_partner?: boolean; local_partner_id?: string }
-    | undefined;
-  const localPartnerIdByAgentId: Record<string, string> = {
-    local_claude_code: "claude-code",
-    local_codex_cli: "codex-cli",
-    local_trae_cli: "trae-cli",
-    local_qoder_cli: "qoder-cli",
-    local_kimi_cli: "kimi-cli",
-    local_codebuddy_cli: "codebuddy-cli",
-    local_opencode_cli: "opencode-cli",
-    local_hermes: "hermes",
-  };
-  const isLocalPartner =
-    effectiveAgentId.startsWith("local_") ||
-    Boolean(partnerCaps?.local_partner);
-  const partnerId = isLocalPartner
-    ? String(
-        partnerCaps?.local_partner_id ??
-          localPartnerIdByAgentId[effectiveAgentId] ??
-          "",
-      )
-    : "";
-  const [partnerModel, setPartnerModel] = useState("");
-  // Reset the override when switching to a different agent.
-  useEffect(() => {
-    setPartnerModel("");
-  }, [effectiveAgentId]);
   const projectSignals = useMemo(() => {
     if (!isProjectCodeMode || !projectDetection) return undefined;
     const signals = projectDetection.signals;
@@ -1724,8 +1754,23 @@ function RealtimePageContent({
     ? "team"
     : effectiveMode;
   const threadRouteFor = useCallback(
-    (id: string) => `/workspace/realtime/${encodeURIComponent(id)}`,
-    [],
+    (id: string) => {
+      const path = `/workspace/realtime/${encodeURIComponent(id)}`;
+      if (!embeddedDesignChat) return path;
+      const query = new URLSearchParams({ embedded: "design" });
+      if (embeddedDesignProject) query.set("project", embeddedDesignProject);
+      if (embeddedCreationSpace)
+        query.set("creation_space", embeddedCreationSpace);
+      if (embeddedCreativeProject)
+        query.set("creative_project", embeddedCreativeProject);
+      return `${path}?${query.toString()}`;
+    },
+    [
+      embeddedCreativeProject,
+      embeddedCreationSpace,
+      embeddedDesignChat,
+      embeddedDesignProject,
+    ],
   );
   const markSidebarThreadRunning = useCallback(
     (id: string) => {
@@ -2146,7 +2191,7 @@ function RealtimePageContent({
     // Octopus is the global assistant entry point — it sits ABOVE the
     // persona picker, not as a selectable role. Navigating to the assistant
     // thread MUST NOT mutate the footer's active persona, otherwise the
-    // footer drifts to a random agent (e.g. the first local CLI partner)
+    // footer drifts to a random task collaborator
     // because "octopus" is filtered out of switcherAgents.
     if (selectedAgent === "octopus") return;
     if (!isPrimaryPersonaAgentId(selectedAgent)) {
@@ -2254,95 +2299,103 @@ function RealtimePageContent({
       // stale `agent_name` in the shared settings store (shared across
       // threads) clobbers the current page's pick — which is how turn 2+
       // started sending the wrong id before this fix.
-      context: applyCoderModelProfileBoundary(effectiveAgentId, {
-        ...settings.context,
-        reasoning_effort: effectiveReasoningEffort,
-        // Opt-in guardian independent review for high-risk actions. Only
-        // sent when the user enabled it; the backend gate reads these and
-        // degrades to the rule engine on review failure. The review model
-        // is left to the backend (conversation's own model) unless the
-        // user explicitly picked one.
-        guardian_review_enabled: settings.context.guardian_review_enabled
-          ? true
-          : undefined,
-        guardian_review_model:
-          settings.context.guardian_review_enabled &&
-          settings.context.guardian_review_model
-            ? settings.context.guardian_review_model
+      context: applyCoderModelProfileBoundary(
+        effectiveAgentId,
+        {
+          ...settings.context,
+          reasoning_effort: effectiveReasoningEffort,
+          // Opt-in guardian independent review for high-risk actions. Only
+          // sent when the user enabled it; the backend gate reads these and
+          // degrades to the rule engine on review failure. The review model
+          // is left to the backend (conversation's own model) unless the
+          // user explicitly picked one.
+          guardian_review_enabled: settings.context.guardian_review_enabled
+            ? true
             : undefined,
-        mode: streamMode,
-        workspace_path: isProjectCodeMode ? projectWorkspacePath : undefined,
-        workspace_scope: isProjectCodeMode
-          ? "project"
-          : isCodingWorkspaceMode
-            ? "personal"
+          guardian_review_model:
+            settings.context.guardian_review_enabled &&
+            settings.context.guardian_review_model
+              ? settings.context.guardian_review_model
+              : undefined,
+          mode: streamMode,
+          workspace_path: isProjectCodeMode ? projectWorkspacePath : undefined,
+          workspace_scope: isProjectCodeMode
+            ? "project"
+            : isCodingWorkspaceMode
+              ? "personal"
+              : undefined,
+          personal_workspace_enabled:
+            !isProjectCodeMode && isCodingWorkspaceMode ? true : undefined,
+          // Personal space keeps one user-selected root while each role gets a
+          // readable, isolated child folder. The UI still presents this as
+          // personal space; only an explicitly picked folder is a project.
+          personal_workspace_path:
+            !isProjectCodeMode && isCodingWorkspaceMode
+              ? personalWorkspacePath || undefined
+              : undefined,
+          capability_mode: isCodingWorkspaceMode ? "code" : undefined,
+          code_mode: isCodingWorkspaceMode ? "solo" : undefined,
+          // Project presets describe how to operate on a bound user project.
+          // Personal space has its own general/build/research contract; sending
+          // the default project "develop" bundle here made all three personal
+          // modes behave like development mode.
+          agent_mode: isProjectCodeMode ? projectAgentMode : undefined,
+          mode_preset: isProjectCodeMode ? projectModePreset.id : undefined,
+          workflow_preset: isProjectCodeMode
+            ? workflowPresetForMode(projectAgentMode, auditIntensity)
             : undefined,
-        personal_workspace_enabled:
-          !isProjectCodeMode && isCodingWorkspaceMode ? true : undefined,
-        // Personal space keeps one user-selected root while each role gets a
-        // readable, isolated child folder. The UI still presents this as
-        // personal space; only an explicitly picked folder is a project.
-        personal_workspace_path:
-          !isProjectCodeMode && isCodingWorkspaceMode
-            ? personalWorkspacePath || undefined
+          // UX/UI is not just a prompt label: enable the runtime's browser
+          // regression contract so visual work must be inspected after changes.
+          browser_regression_enabled:
+            isProjectCodeMode && projectAgentMode === "uxui" ? true : undefined,
+          // Personal-space work mode. Backend keeps this as scope steering while the
+          // same code capability/tool chain remains available in personal workspace.
+          personal_mode: !isProjectCodeMode ? personalMode : undefined,
+          personal_instructions: !isProjectCodeMode
+            ? settings.personal_space.custom_instructions.trim() || undefined
             : undefined,
-        capability_mode: isCodingWorkspaceMode ? "code" : undefined,
-        code_mode: isCodingWorkspaceMode ? "solo" : undefined,
-        // Project presets describe how to operate on a bound user project.
-        // Personal space has its own general/build/research contract; sending
-        // the default project "develop" bundle here made all three personal
-        // modes behave like development mode.
-        agent_mode: isProjectCodeMode ? projectAgentMode : undefined,
-        mode_preset: isProjectCodeMode ? projectModePreset.id : undefined,
-        workflow_preset: isProjectCodeMode
-          ? workflowPresetForMode(projectAgentMode, auditIntensity)
-          : undefined,
-        // UX/UI is not just a prompt label: enable the runtime's browser
-        // regression contract so visual work must be inspected after changes.
-        browser_regression_enabled:
-          isProjectCodeMode && projectAgentMode === "uxui" ? true : undefined,
-        // Personal-space work mode. Backend keeps this as scope steering while the
-        // same code capability/tool chain remains available in personal workspace.
-        personal_mode: !isProjectCodeMode ? personalMode : undefined,
-        personal_instructions: !isProjectCodeMode
-          ? settings.personal_space.custom_instructions.trim() || undefined
-          : undefined,
-        skill_pack_profile: isProjectCodeMode
-          ? projectModePreset.skillPackProfile
-          : undefined,
-        verification_policy: isProjectCodeMode
-          ? projectModePreset.verificationPolicy
-          : undefined,
-        default_skill_packs: isProjectCodeMode
-          ? projectModePreset.defaultSkillPacks
-          : undefined,
-        default_plugins: isProjectCodeMode
-          ? projectModePreset.defaultPlugins
-          : undefined,
-        mode_contract: isProjectCodeMode
-          ? projectModePreset.promptContract
-          : undefined,
-        project_signals: projectSignals,
-        agent_name: effectiveAgentId,
-        // Local CLI partner model override. CLIs with a stable model flag receive
-        // it; others keep their own default. Kept separate from
-        // model_name (octopus's namespace) on purpose.
-        partner_model: partnerId ? partnerModel : undefined,
-        // A stable, user-visible browser tab / desktop window reference. The
-        // runtime receives structured identity instead of guessing from prose.
-        automation_target: automationTarget || undefined,
-        interaction_mode:
-          effectiveMode === "react" ||
-          effectiveMode === "deep" ||
-          effectiveMode === "code"
-            ? "office"
+          skill_pack_profile: isProjectCodeMode
+            ? projectModePreset.skillPackProfile
             : undefined,
-        ...collaborationContext,
-        // Group strategy owns the work contract for this turn. Spread it last
-        // so hidden personal/project selectors cannot leak stale constraints
-        // into a project group (including Project OS groups without workDir).
-        ...(isGroupConversation ? activeGroupTaskContext : {}),
-      }),
+          verification_policy: isProjectCodeMode
+            ? projectModePreset.verificationPolicy
+            : undefined,
+          default_skill_packs: isProjectCodeMode
+            ? projectModePreset.defaultSkillPacks
+            : undefined,
+          default_plugins: isProjectCodeMode
+            ? projectModePreset.defaultPlugins
+            : undefined,
+          mode_contract: isProjectCodeMode
+            ? projectModePreset.promptContract
+            : undefined,
+          project_signals: projectSignals,
+          agent_name: effectiveAgentId,
+          // The outer Realtime layer owns transport and lifecycle only for a
+          // Codex role. It must not smart-route a second, purely decorative
+          // system model over the model that the Codex account profile will
+          // actually execute.
+          execution_engine: selectedExecutionEngine,
+          // A stable, user-visible browser tab / desktop window reference. The
+          // runtime receives structured identity instead of guessing from prose.
+          automation_target:
+            !embeddedDesignChat && automationTarget
+              ? automationTarget
+              : undefined,
+          interaction_mode:
+            effectiveMode === "react" ||
+            effectiveMode === "deep" ||
+            effectiveMode === "code"
+              ? "office"
+              : undefined,
+          ...collaborationContext,
+          // Group strategy owns the work contract for this turn. Spread it last
+          // so hidden personal/project selectors cannot leak stale constraints
+          // into a project group (including Project OS groups without workDir).
+          ...(isGroupConversation ? activeGroupTaskContext : {}),
+        },
+        selectedExecutionEngine,
+      ),
       onStart: (startedThreadId) => {
         if (startedThreadId !== threadId) {
           clearSidebarThreadStatus(threadId);
@@ -2384,6 +2437,7 @@ function RealtimePageContent({
       clearSidebarThreadStatus,
       collaborationContext,
       commitThreadRoute,
+      embeddedDesignChat,
       effectiveAgentId,
       effectiveMode,
       effectiveReasoningEffort,
@@ -2391,8 +2445,6 @@ function RealtimePageContent({
       isGroupConversation,
       isProjectCodeMode,
       markSidebarThreadRunning,
-      partnerId,
-      partnerModel,
       personalMode,
       personalWorkspacePath,
       projectAgentMode,
@@ -2400,6 +2452,7 @@ function RealtimePageContent({
       projectSignals,
       projectWorkspacePath,
       qc,
+      selectedExecutionEngine,
       setIsNewThread,
       settings.context,
       settings.personal_space.custom_instructions,
@@ -2430,6 +2483,34 @@ function RealtimePageContent({
       ) ?? models[0]
     );
   }, [models, settings.context.model_name]);
+  const [modelSwitchTimeline, setModelSwitchTimeline] = useState<{
+    threadId: string;
+    events: ModelSwitchEvent[];
+  }>(() => ({
+    threadId,
+    events: loadModelSwitchEvents(threadId),
+  }));
+  useEffect(() => {
+    setModelSwitchTimeline({
+      threadId,
+      events: loadModelSwitchEvents(threadId),
+    });
+  }, [threadId]);
+  const modelSwitchTimelineEntries = useMemo<MessageListTimelineEntry[]>(() => {
+    const visibleEvents =
+      modelSwitchTimeline.threadId === threadId
+        ? modelSwitchTimeline.events
+        : [];
+    return visibleEvents.map((event) => ({
+      id: event.id,
+      createdAt: event.createdAt,
+      content: <ModelSwitchTimelineEntry modelName={event.modelName} />,
+    }));
+  }, [modelSwitchTimeline, threadId]);
+  const conversationTimelineEntries = useMemo<MessageListTimelineEntry[]>(
+    () => [...roomTimelineEntries, ...modelSwitchTimelineEntries],
+    [modelSwitchTimelineEntries, roomTimelineEntries],
+  );
   const maxContextTokens = useMemo(
     () => resolveModelContextWindow(selectedModel),
     [selectedModel],
@@ -2493,10 +2574,19 @@ function RealtimePageContent({
         href: targetPath,
         threadId,
       });
+      // A fast terminal failure can be reduced in one React batch, so the
+      // usual loading edge never invokes onFinish. Commit immediately once
+      // the first message is already terminal; otherwise `/new` remounts can
+      // discard the only visible failure receipt and leave a ghost draft.
+      if (!thread.isLoading) {
+        commitThreadRoute();
+      }
     }
   }, [
+    commitThreadRoute,
     isNewThread,
     thread.messages.length,
+    thread.isLoading,
     setIsNewThread,
     stageThreadRoute,
     threadId,
@@ -2746,7 +2836,9 @@ function RealtimePageContent({
     () => latestAssistantTerminalState(lastTurnMessages),
     [lastTurnMessages],
   );
-  const agentRunInterrupted = lastTurnTerminalState === "interrupted";
+  const agentRunInterrupted = isAssistantStopTerminalState(
+    lastTurnTerminalState,
+  );
   const agentRunPaused = lastTurnTerminalState === "paused";
   const legacyBlockedOnUser = useMemo(
     () =>
@@ -2882,17 +2974,19 @@ function RealtimePageContent({
     ],
   );
   const canOpenAgentWorkbench =
-    !isNewThread ||
-    collaborationEnabled ||
-    hasRenderableAgentWorkbench ||
-    !!previewBlocks ||
-    // Realtime keeps the right workbench available from the first turn. The
-    // actual file tree still lives in the left project pane; this panel is the
-    // live agent workstation and replay surface.
-    isCodingWorkspaceMode ||
-    isRealtimeRoute;
+    !embeddedDesignChat &&
+    (!isNewThread ||
+      collaborationEnabled ||
+      hasRenderableAgentWorkbench ||
+      !!previewBlocks ||
+      // Realtime keeps the right workbench available from the first turn. The
+      // actual file tree still lives in the left project pane; this panel is the
+      // live agent workstation and replay surface.
+      isCodingWorkspaceMode ||
+      isRealtimeRoute);
   const durableCollaborationEnabled =
-    collaborationEnabled || Boolean(boundProjectQuery.data);
+    !embeddedDesignChat &&
+    (collaborationEnabled || Boolean(boundProjectQuery.data));
   const showAgentWorkbench =
     canOpenAgentWorkbench &&
     (agentWorkbenchManuallyOpened ||
@@ -2955,10 +3049,19 @@ function RealtimePageContent({
     if (
       durableCollaborationEnabled ||
       !agentWorkbenchManuallyOpened ||
+      // Never undo an explicit user action. This flag is set by the header
+      // menu and artifact-link handoff; auto-dismiss is only for untouched,
+      // system-opened empty workbenches.
+      agentWorkbenchTabTouched ||
       thread.isLoading ||
       !agentRunSettled ||
       !hasCurrentTurnAgentResponse ||
       hasRenderableAgentWorkbench ||
+      // A user-opened artifact is valid workbench content even when this
+      // historical turn has no replayable agent events. Without this guard,
+      // the empty-workbench cleanup closes the panel in the same render batch
+      // that a markdown Office/PDF link opens it.
+      (agentWorkbenchTab === "artifacts" && artifacts.length > 0) ||
       artifactsOpen ||
       showAgentPlan ||
       previewBlocks ||
@@ -2976,10 +3079,13 @@ function RealtimePageContent({
   }, [
     agentRunSettled,
     agentWorkbenchManuallyOpened,
+    agentWorkbenchTabTouched,
     artifactsOpen,
     durableCollaborationEnabled,
     hasCurrentTurnAgentResponse,
     hasRenderableAgentWorkbench,
+    agentWorkbenchTab,
+    artifacts.length,
     previewBlocks,
     resultPreviewUrl,
     settledWorkbenchTurnKey,
@@ -3133,12 +3239,25 @@ function RealtimePageContent({
   }, [closeSpecialUtilityPanels, setArtifactsOpen]);
 
   const handleAcceptModeIntent = useCallback(
-    (mode: AgentModeName) => {
+    async (mode: AgentModeName) => {
+      const previousMode = projectAgentMode;
+      const previousManualOverride = modeManualOverride;
+      const label = modeLabelFor(mode, t);
       setProjectAgentMode(mode);
+      setModeManualOverride(true);
       setModeIntentSuggestion(null);
-      toast.success(t.modeIntent.autoSwitched(modeLabelFor(mode, t)));
+      try {
+        await persistModeSelection(mode, threadId, effectiveWorkDir);
+        toast.success(t.modeIntent.autoSwitched(label));
+      } catch (error) {
+        setProjectAgentMode(previousMode);
+        setModeManualOverride(previousManualOverride);
+        setModeIntentSuggestion({ mode, label });
+        toast.error("切换模式失败，已还原");
+        throw error;
+      }
     },
-    [t],
+    [effectiveWorkDir, modeManualOverride, projectAgentMode, t, threadId],
   );
 
   const handleDismissModeIntent = useCallback(() => {
@@ -3314,7 +3433,14 @@ function RealtimePageContent({
   // Session storage is consumed once, so refresh cannot duplicate the send.
   const pendingNewSessionSentRef = useRef(false);
   useEffect(() => {
-    if (!isNewThread || pendingNewSessionSentRef.current) return;
+    if (!isNewThread) {
+      // The page component survives hash-route transitions. Reset the
+      // one-shot latch when returning to an existing thread so a later Retry
+      // can hand off and auto-send another fresh task.
+      pendingNewSessionSentRef.current = false;
+      return;
+    }
+    if (pendingNewSessionSentRef.current) return;
     const pendingText = consumePendingNewSession();
     if (!pendingText) return;
     pendingNewSessionSentRef.current = true;
@@ -3330,15 +3456,16 @@ function RealtimePageContent({
 
   useEffect(() => {
     const handleQuickReply = (event: Event) => {
-      const detail = (event as CustomEvent<{ text?: unknown }>).detail;
-      const text = typeof detail?.text === "string" ? detail.text.trim() : "";
+      const detail = (event as CustomEvent<QuickReplyDetail>).detail;
+      const text = quickReplyTextForThread(detail, threadId);
       if (!text || thread.isLoading) return;
+      event.preventDefault();
       markSidebarThreadRunning(threadId);
       void sendMessage(threadId, { text, files: [] });
     };
-    window.addEventListener("octopus:quick-reply", handleQuickReply);
+    window.addEventListener(QUICK_REPLY_EVENT, handleQuickReply);
     return () => {
-      window.removeEventListener("octopus:quick-reply", handleQuickReply);
+      window.removeEventListener(QUICK_REPLY_EVENT, handleQuickReply);
     };
   }, [markSidebarThreadRunning, sendMessage, thread.isLoading, threadId]);
 
@@ -3347,6 +3474,18 @@ function RealtimePageContent({
     (prompt: string) => {
       const text = prompt.trim();
       if (!text || thread.isLoading) return;
+      markSidebarThreadRunning(threadId);
+      void sendMessage(threadId, { text, files: [] });
+    },
+    [markSidebarThreadRunning, sendMessage, thread.isLoading, threadId],
+  );
+  const handleRetryTask = useCallback(
+    (prompt: string) => {
+      const text = prompt.trim();
+      if (!text || thread.isLoading) return;
+      // A retry should actually resume the failed conversation. Sending the
+      // recovered objective as a new turn preserves the gathered evidence
+      // and avoids leaving the user on a pre-filled, unsent "new task" page.
       markSidebarThreadRunning(threadId);
       void sendMessage(threadId, { text, files: [] });
     },
@@ -3551,6 +3690,19 @@ function RealtimePageContent({
     ],
   );
 
+  useEffect(() => {
+    const handleOpenArtifact = (event: Event) => {
+      const detail = (event as CustomEvent<OpenArtifactDetail>).detail;
+      const path = typeof detail?.path === "string" ? detail.path.trim() : "";
+      if (!path) return;
+      event.preventDefault();
+      openWorkbenchArtifact(path);
+    };
+    window.addEventListener(OPEN_ARTIFACT_EVENT, handleOpenArtifact);
+    return () =>
+      window.removeEventListener(OPEN_ARTIFACT_EVENT, handleOpenArtifact);
+  }, [openWorkbenchArtifact]);
+
   const openFinalArtifactPanel = useCallback(() => {
     const firstEntry = finalArtifactEntries[0];
     if (firstEntry?.path) openWorkbenchArtifact(firstEntry.path);
@@ -3674,12 +3826,9 @@ function RealtimePageContent({
         displayAgent?.avatar_url ||
         `/api/agents/${encodeURIComponent(effectiveAgentId)}/avatar`,
       icon: displayAgent?.icon || null,
-      execution_engine:
-        displayAgent?.capabilities?.execution_backend === "codex_app_server"
-          ? ("codex" as const)
-          : ("octopus" as const),
+      execution_engine: selectedExecutionEngine,
     }),
-    [displayAgent, effectiveAgentId],
+    [displayAgent, effectiveAgentId, selectedExecutionEngine],
   );
 
   const handleModelChange = useCallback(
@@ -3690,6 +3839,33 @@ function RealtimePageContent({
       });
     },
     [setSettings, settings.context],
+  );
+
+  const handleModelSwitchNotice = useCallback(
+    (modelName: string) => {
+      if (
+        isNewThread ||
+        !threadId ||
+        threadId === "new" ||
+        thread.messages.length === 0
+      ) {
+        return;
+      }
+      setModelSwitchTimeline((current) => {
+        const currentEvents =
+          current.threadId === threadId
+            ? current.events
+            : loadModelSwitchEvents(threadId);
+        return {
+          threadId,
+          events: recordModelSwitchEvent(threadId, currentEvents, {
+            modelName,
+            afterMessageCount: thread.messages.length,
+          }),
+        };
+      });
+    },
+    [isNewThread, thread.messages.length, threadId],
   );
 
   const handleReasoningEffortChange = useCallback(
@@ -3743,6 +3919,29 @@ function RealtimePageContent({
       vitals={(thread as typeof thread & { vitals?: StreamVitals }).vitals}
     />
   );
+  const headerHumanInvite =
+    !isOctopusAssistant && canManageHumanInvites ? (
+      <GroupHumanInviteButton
+        roomId={resolvedHumanInviteRoomId}
+        threadId={threadId}
+        onEnsureRoom={ensureHumanInviteRoom}
+        onRoomResolved={setHumanInviteRoomId}
+        open={humanInviteDialogOpen}
+        onOpenChange={(open) => {
+          setHumanInviteDialogOpen(open);
+          if (open) setCollaboratorPickerOpen(false);
+        }}
+        size="sm"
+        variant="ghost"
+        className="w-full justify-start gap-2 px-2"
+        disabled={isNewThread || ensureCollabRoomMutation.isPending}
+      />
+    ) : null;
+  const onlineCollaboratorCount =
+    collabSessionQuery.data?.presence.reduce(
+      (count, member) => count + (member.online ? 1 : 0),
+      0,
+    ) ?? 0;
   const headerMemberControl =
     !isOctopusAssistant && canManageHumanInvites ? (
       <TaskCollaboratorControl
@@ -3756,41 +3955,29 @@ function RealtimePageContent({
         onSelectedAgentIdsChange={handleSelectedCollaboratorIdsChange}
         onTeamModeChange={handleTeamModeIntentChange}
         roster={visibleCollaborationRoster}
-        threadId={threadId}
+        onlineCount={onlineCollaboratorCount}
+        humanInviteAction={headerHumanInvite}
         labelPrefix="AI"
         disabled={replaceCoworkRosterMutation.isPending}
       />
     ) : undefined;
-  const headerHumanInvite =
-    !isOctopusAssistant && canManageHumanInvites ? (
-      <GroupHumanInviteButton
-        roomId={resolvedHumanInviteRoomId}
+  const headerRecorder =
+    !isOctopusAssistant && recorderPluginEnabled ? (
+      <ChatHeaderRecButton
         threadId={threadId}
-        onEnsureRoom={ensureHumanInviteRoom}
-        onRoomResolved={setHumanInviteRoomId}
-        open={humanInviteDialogOpen}
-        onOpenChange={setHumanInviteDialogOpen}
-        iconOnly
-        size="icon-sm"
-        variant="ghost"
-        disabled={isNewThread || ensureCollabRoomMutation.isPending}
+        onOpen={() => setRecOverlayOpen(true)}
+        isRecording={recIsRecording}
       />
     ) : null;
-  const headerRecorder = !isOctopusAssistant ? (
-    <ChatHeaderRecButton
-      threadId={threadId}
-      onOpen={() => setRecOverlayOpen(true)}
-      isRecording={recIsRecording}
-    />
-  ) : null;
+  const headerShareTitle =
+    boundProjectState?.project.name ||
+    headerThreadTitle ||
+    thread?.values?.title ||
+    initialPrompt;
   const headerShareOptions: RealtimeChatHeaderShareOptions | undefined =
-    thread?.values?.title || initialPrompt
+    headerShareTitle
       ? {
-          title:
-            boundProjectState?.project.name ||
-            thread?.values?.title ||
-            initialPrompt ||
-            "EchoAI",
+          title: headerShareTitle,
           prompt: initialPrompt || undefined,
           onExportReplay:
             replayBlocks.length > 0 ? handleExportReplay : undefined,
@@ -3818,6 +4005,7 @@ function RealtimePageContent({
     isOctopusAssistant && headerShareOptions ? (
       <ShareMenu
         iconOnly
+        threadId={threadId}
         title={headerShareOptions.title}
         prompt={headerShareOptions.prompt}
         summary={headerShareOptions.summary}
@@ -3826,23 +4014,24 @@ function RealtimePageContent({
       />
     ) : null;
   const headerMemberSurface = !isOctopusAssistant ? (
-    <RealtimeChatHeaderMemberSurface
-      aiMembers={headerMemberControl}
-      humanInvite={headerHumanInvite}
-    />
+    <RealtimeChatHeaderMemberSurface aiMembers={headerMemberControl} />
   ) : null;
   const headerActions = !isOctopusAssistant ? (
     <RealtimeChatHeaderActions
-      recording={recIsRecording ? headerRecorder : null}
+      recording={recorderPluginEnabled ? headerRecorder : null}
       workbench={headerWorkbench}
-      overflow={
-        <RealtimeChatHeaderOverflowMenu
-          onOpenRecorder={
-            recIsRecording ? undefined : () => setRecOverlayOpen(true)
-          }
-          recorderDisabled={isNewThread}
-          share={headerShareOptions ?? undefined}
-        />
+      share={
+        headerShareOptions ? (
+          <ShareMenu
+            iconOnly
+            threadId={threadId}
+            title={headerShareOptions.title}
+            prompt={headerShareOptions.prompt}
+            summary={headerShareOptions.summary}
+            footer={headerShareOptions.footer}
+            onExportReplay={headerShareOptions.onExportReplay}
+          />
+        ) : null
       }
     />
   ) : null;
@@ -3850,7 +4039,12 @@ function RealtimePageContent({
   return (
     <SubtasksProvider>
       <ThreadProviders thread={thread} isMock={false}>
-        <ToolEffectsProvider enabled={!isNewThread} active={thread.isLoading}>
+        <ToolEffectsProvider
+          enabled={
+            !isNewThread && canAccessGlobalControlPlane(authStatus, user)
+          }
+          active={thread.isLoading}
+        >
           <ChatBox artifactPanelMode="external" threadId={threadId}>
             <ChatPageLayout
               isNewThread={isNewThread}
@@ -3863,7 +4057,7 @@ function RealtimePageContent({
               }
               header={
                 <>
-                  {!isOctopusAssistant && (
+                  {!embeddedDesignChat && !isOctopusAssistant && (
                     <ChatHeaderMenuButton
                       onClick={() => setChatsDrawerOpen(true)}
                       className="absolute left-3 top-1/2 -translate-y-1/2 md:hidden"
@@ -3873,7 +4067,7 @@ function RealtimePageContent({
                     <RealtimeGroupHeaderLayout
                       title={headerTitle}
                       projectStatus={
-                        boundProjectState ? (
+                        !embeddedDesignChat && boundProjectState ? (
                           <ProjectGroupHeaderBadge
                             name={boundProjectState.project.name}
                             status={boundProjectState.project.status}
@@ -3891,8 +4085,8 @@ function RealtimePageContent({
                         ) : null
                       }
                       runStatus={headerRunStatus}
-                      members={headerMemberSurface}
-                      workbench={headerActions}
+                      members={embeddedDesignChat ? null : headerMemberSurface}
+                      workbench={embeddedDesignChat ? null : headerActions}
                     />
                   ) : (
                     <>
@@ -3948,7 +4142,13 @@ function RealtimePageContent({
                   {projectDetachDialog}
                 </>
               }
-              headerClassName={!isOctopusAssistant ? "md:pl-3" : undefined}
+              headerClassName={
+                embeddedDesignChat
+                  ? "px-3"
+                  : !isOctopusAssistant
+                    ? "md:pl-3"
+                    : undefined
+              }
               messageList={
                 <MessageList
                   className="size-full"
@@ -3957,6 +4157,7 @@ function RealtimePageContent({
                   onOpenArtifact={openWorkbenchArtifact}
                   project={projectWorkspacePath || null}
                   onSendFollowUp={handleSendFollowUp}
+                  onRetryTask={handleRetryTask}
                   onAuthorizeNetwork={handleAuthorizeNetwork}
                   header={
                     realtimeApprovals.hasMoreTurns ? (
@@ -3981,9 +4182,11 @@ function RealtimePageContent({
                   }
                   paddingBottom={MESSAGE_LIST_DEFAULT_PADDING_BOTTOM}
                   mode={effectiveMode}
-                  liveToolEvents={lastTurnToolEvents}
-                  lastTurnToolEvents={lastTurnToolEvents}
-                  allToolEvents={allToolEvents}
+                  liveToolEvents={embeddedDesignChat ? [] : lastTurnToolEvents}
+                  lastTurnToolEvents={
+                    embeddedDesignChat ? [] : lastTurnToolEvents
+                  }
+                  allToolEvents={embeddedDesignChat ? [] : allToolEvents}
                   completedAgentOutput={hasCompletedAgentOutput}
                   currentAgent={currentAgent}
                   agentRoster={
@@ -3992,13 +4195,14 @@ function RealtimePageContent({
                       : undefined
                   }
                   showSenderName={
-                    visibleCollaborationEnabled ||
-                    Boolean(collabSessionQuery.data?.room_id) ||
-                    isProjectHomeThread
+                    !embeddedDesignChat &&
+                    (visibleCollaborationEnabled ||
+                      Boolean(collabSessionQuery.data?.room_id) ||
+                      isProjectHomeThread)
                   }
                   projectMessageActions={projectMessageActions}
                   allowThreadFork={allowThreadFork}
-                  timelineEntries={roomTimelineEntries}
+                  timelineEntries={conversationTimelineEntries}
                   footer={
                     <>
                       {hasCompletedAgentOutput &&
@@ -4063,13 +4267,11 @@ function RealtimePageContent({
                                 : "ready"
                           }
                           modelName={settings.context.model_name}
-                          // Model source is a user-level execution preference,
-                          // not a role capability. Keep one selector while the
-                          // user switches between Coder and every other role.
-                          modelProfileControl
-                          partnerId={partnerId}
-                          partnerModel={partnerModel}
-                          onPartnerModelChange={setPartnerModel}
+                          // Keep one selector, but project model ownership by
+                          // engine: Codex roles use the server-owned profile;
+                          // native roles serialize the thread's model source.
+                          modelProfileControl={!embeddedDesignChat}
+                          executionEngine={selectedExecutionEngine}
                           mode={effectiveMode}
                           reasoningEffort={effectiveReasoningEffort}
                           threadId={threadId}
@@ -4085,13 +4287,17 @@ function RealtimePageContent({
                                 ? () => setPromoteGroupDialogOpen(true)
                                 : undefined
                           }
-                          onSwitchPanel={(panel) => {
-                            if (panel === "teach-repeat") {
-                              openTeachRepeatPanel();
-                            }
-                          }}
+                          onSwitchPanel={
+                            recorderPluginEnabled
+                              ? (panel) => {
+                                  if (panel === "teach-repeat") {
+                                    openTeachRepeatPanel();
+                                  }
+                                }
+                              : undefined
+                          }
                           responseModeControl={
-                            isGroupConversation ? (
+                            !embeddedDesignChat && isGroupConversation ? (
                               <TeamModePicker
                                 value={teamModeIntent}
                                 onChange={handleTeamModeIntentChange}
@@ -4113,21 +4319,25 @@ function RealtimePageContent({
                             ) : undefined
                           }
                           statusTrailing={
-                            isGroupConversation ? (
+                            !embeddedDesignChat && isGroupConversation ? (
                               <ConversationRosterStrip
                                 seats={collaborationRosterSeats}
                                 onMemberClick={openAgentPanel}
                               />
                             ) : undefined
                           }
-                          automationTarget={automationTarget}
+                          automationTarget={
+                            embeddedDesignChat ? null : automationTarget
+                          }
                           onAutomationTargetChange={
-                            handleAutomationTargetChange
+                            embeddedDesignChat
+                              ? undefined
+                              : handleAutomationTargetChange
                           }
                           disabled={researchLoading}
                           workDir={effectiveWorkDir}
                           displayAgent={composerDisplayAgent}
-                          showWorkDirSelector
+                          showWorkDirSelector={!embeddedDesignChat}
                           onWorkDirChange={handleWorkDirChange}
                           lockWorkDirToThread={!isNewThread}
                           onOpenWorkDirInNewTask={openWorkDirInNewTask}
@@ -4149,6 +4359,7 @@ function RealtimePageContent({
                           isCompressingContext={isCompressingContext}
                           onCompressContext={handleCompressContext}
                           onModelChange={handleModelChange}
+                          onModelSwitchNotice={handleModelSwitchNotice}
                           onReasoningEffortChange={handleReasoningEffortChange}
                           onModeChange={handleModeChange}
                           permissionMode={normalizePermissionMode(
@@ -4157,8 +4368,8 @@ function RealtimePageContent({
                           onPermissionModeChange={handlePermissionModeChange}
                           onSubmit={handleSubmit}
                           onDeepResearch={handleDeepResearch}
-                          showInspirationToggle
-                          allowAgentModes
+                          showInspirationToggle={!embeddedDesignChat}
+                          allowAgentModes={!embeddedDesignChat}
                           onStop={handleStop}
                           isUploading={isUploading}
                           autoFocus={isNewThread}
@@ -4172,10 +4383,11 @@ function RealtimePageContent({
                                   ? t.realtime.composer.placeholderNew
                                   : undefined
                           }
-                          className={cn(
-                            isNewThread &&
-                              "border-border-default bg-card/95 shadow-[0_18px_56px_-34px_rgba(15,23,42,0.45)]",
-                          )}
+                          className={
+                            isNewThread
+                              ? "border-border-subtle bg-card/90 shadow-none"
+                              : undefined
+                          }
                         />
                       </div>
                     </div>
@@ -4188,7 +4400,7 @@ function RealtimePageContent({
                 </div>
               }
               secondaryPanel={
-                showTeachRepeatPanel ? (
+                recorderPluginEnabled && showTeachRepeatPanel ? (
                   <div className="flex size-full min-h-0 flex-col overflow-hidden">
                     <div className="flex h-11 shrink-0 items-center justify-between border-b border-border-default px-3">
                       <span className="text-sm font-semibold">
@@ -4257,8 +4469,10 @@ function RealtimePageContent({
                     onClose={() => setShowAgentPlan(false)}
                   />
                 ) : showAgentWorkbench ? (
-                  <AgentWorkbenchPanel
-                    activeTab={agentWorkbenchTab}
+                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <div className="flex min-h-0 flex-1">
+                      <AgentWorkbenchPanel
+                        activeTab={agentWorkbenchTab}
                     personaId={effectiveAgentId}
                     events={workbenchDisplayEvents}
                     progressOutline={progressOutline}
@@ -4327,8 +4541,10 @@ function RealtimePageContent({
                     }
                     onClose={closeAgentWorkbenchPanel}
                     onSelectTab={selectAgentWorkbenchTab}
-                    onOpenArtifact={openWorkbenchArtifact}
-                  />
+                        onOpenArtifact={openWorkbenchArtifact}
+                      />
+                    </div>
+                  </div>
                 ) : undefined
               }
               onSecondaryClose={closeUnifiedRightPanel}
@@ -4339,22 +4555,24 @@ function RealtimePageContent({
             open={chatsDrawerOpen}
             onOpenChange={setChatsDrawerOpen}
           />
-          <RecRecorderOverlay
-            open={recOverlayOpen}
-            threadId={threadId}
-            defaultName={
-              thread?.values?.title ||
-              initialPrompt ||
-              t.realtime.recorder.defaultName
-            }
-            initiallyRecording={recIsRecording}
-            onClose={() => setRecOverlayOpen(false)}
-            onRecordingChange={setRecIsRecording}
-            onOpenLibrary={() => {
-              setRecOverlayOpen(false);
-              openTeachRepeatPanel();
-            }}
-          />
+          {recorderPluginEnabled ? (
+            <RecRecorderOverlay
+              open={recOverlayOpen}
+              threadId={threadId}
+              defaultName={
+                thread?.values?.title ||
+                initialPrompt ||
+                t.realtime.recorder.defaultName
+              }
+              initiallyRecording={recIsRecording}
+              onClose={() => setRecOverlayOpen(false)}
+              onRecordingChange={setRecIsRecording}
+              onOpenLibrary={() => {
+                setRecOverlayOpen(false);
+                openTeachRepeatPanel();
+              }}
+            />
+          ) : null}
         </ToolEffectsProvider>
 
         {/* 流式调试面板 */}
