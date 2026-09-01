@@ -25,7 +25,7 @@ def _run_quality_cmd(
     command: list[str],
     cwd: str | Path,
     *,
-    timeout_s: float = _QUALITY_TIMEOUT_S,
+    timeout_s: float | None = _QUALITY_TIMEOUT_S,
     sandbox_dir: str | None = None,
 ) -> dict[str, Any]:
     """Shared runner for code quality tools."""
@@ -74,10 +74,16 @@ def _run_tests(
     *,
     command: str = "",
     paths: str | list[str] | None = None,
+    timeout_s: float | None = None,
     sandbox_dir: str | None = None,
     **_kw: Any,
 ) -> dict[str, Any]:
-    """Run project tests. Auto-detects runner if command not specified."""
+    """Run project tests without a default wall-clock limit.
+
+    Output continues to stream through the active tool-output sink and the
+    run remains cancellable. Callers may still provide a positive
+    ``timeout_s`` when they explicitly want a hard deadline.
+    """
     if not cwd:
         return {"error": "missing cwd"}
     resolved, err = _ensure_sandbox(cwd, sandbox_dir)
@@ -115,7 +121,12 @@ def _run_tests(
         return {"error": path_error}
     argv.extend(normalized_paths)
 
-    return _run_quality_cmd(argv, resolved, sandbox_dir=sandbox_dir)
+    return _run_quality_cmd(
+        argv,
+        resolved,
+        timeout_s=timeout_s,
+        sandbox_dir=sandbox_dir,
+    )
 
 
 def _normalize_quality_paths(

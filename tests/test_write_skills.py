@@ -513,9 +513,11 @@ def test_python_quality_defaults_disable_tool_caches(
 ):
     (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
     commands: list[list[str]] = []
+    timeouts: list[float | None] = []
 
-    def fake_stream_run(command, **_kwargs):
+    def fake_stream_run(command, **kwargs):
         commands.append(command)
+        timeouts.append(kwargs.get("timeout"))
         return {
             "exit_code": 0,
             "stdout": "",
@@ -535,10 +537,35 @@ def test_python_quality_defaults_disable_tool_caches(
     assert "--no-cache" in commands[1]
     assert "--diff" in commands[1]
     assert "--no-cache" in commands[2]
+    assert timeouts == [None, 60.0, 60.0]
 
     assert _lint_check(cwd=str(tmp_path), fix=True)["success"] is True
     assert "--fix" in commands[3]
     assert "--diff" not in commands[3]
+
+
+def test_run_tests_forwards_explicit_timeout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+    observed: dict[str, float | None] = {}
+
+    def fake_stream_run(_command, **kwargs):
+        observed["timeout"] = kwargs.get("timeout")
+        return {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "timed_out": False,
+            "sandbox_backend": "direct",
+            "sandbox_hard": False,
+        }
+
+    monkeypatch.setattr("runtime.platform.process.streaming.stream_run", fake_stream_run)
+
+    assert _run_tests(cwd=str(tmp_path), timeout_s=12.5)["success"] is True
+    assert observed["timeout"] == 12.5
 
 
 def test_quality_paths_accept_one_string_without_splitting(

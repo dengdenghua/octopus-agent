@@ -273,6 +273,20 @@ def test_stream_run_timeout_kills_child_process_tree(tmp_path: Path) -> None:
     assert not marker.exists()
 
 
+def test_stream_run_without_timeout_completes_and_remains_auditable(tmp_path: Path) -> None:
+    result = stream_run(
+        [sys.executable, "-c", "import time; time.sleep(0.15); print('done')"],
+        timeout=None,
+        cwd=str(tmp_path),
+    )
+
+    assert result["exit_code"] == 0
+    assert result["stdout"].strip() == "done"
+    assert result["timed_out"] is False
+    assert result["execution_policy"]["timeout_s"] is None
+    assert result["execution_policy"]["result"]["status"] == "completed"
+
+
 def test_stream_run_execution_policy_records_output_truncation(tmp_path: Path) -> None:
     payload = "PAYLOAD_SHOULD_NOT_APPEAR"
     result = stream_run(

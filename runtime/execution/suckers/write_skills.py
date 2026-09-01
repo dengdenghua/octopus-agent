@@ -570,7 +570,11 @@ def register_code_quality_skills(registry: SkillRegistry) -> int:
     registry.register(
         Skill(
             name="run_tests",
-            description="Run project tests (auto-detects pytest/vitest/npm test).",
+            description=(
+                "Run project tests (auto-detects pytest/vitest/npm test). Tests have no "
+                "default wall-clock limit, stream progress while running, and remain "
+                "cancellable; pass a positive timeout_s only for an explicit deadline."
+            ),
             affinity=["test", "code", "quality"],
             cost_profile="mid",
             trusted_source="skill://public/run_tests",
