@@ -4,8 +4,8 @@ Codex speaks the Responses wire protocol, while Octopus already owns the
 configured model router and its long-lived provider credentials.  This module
 keeps those credentials out of the model-controlled Codex process: one turn
 gets one loopback listener and one in-memory bearer token.  The token is bound
-to the full authenticated turn scope, expires, rejects logical replays, and is
-revoked when the execution session closes.
+to the full authenticated turn scope, expires, deduplicates bounded transport
+retries, and is revoked when the execution session closes.
 """
 
 from __future__ import annotations
@@ -43,6 +43,8 @@ _MAX_BODY_BYTES = 2 * 1024 * 1024
 _MAX_IMAGE_BYTES = 8 * 1024 * 1024
 _MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 _MAX_REQUESTS = 256
+_MAX_IDEMPOTENT_CACHE_ENTRIES = 32
+_MAX_IDEMPOTENT_CACHE_BYTES = 32 * 1024 * 1024
 _IGNORED_HISTORY_TYPES = frozenset(
     {
         "compaction",
@@ -136,7 +138,16 @@ class ScopedResponsesProxy:
         self._token: str | None = None
         self._expires_at = 0.0
         self._request_count = 0
-        self._seen_requests: set[bytes] = set()
+        # Codex can repeat the same Responses POST when a streamed connection
+        # closes after the host completed it but before the client recorded the
+        # response. Share the first in-flight/completed result instead of
+        # charging for a second model call. Completed payloads are evicted
+        # below so a long turn cannot retain an unbounded response cache.
+        self._request_results: dict[
+            bytes,
+            asyncio.Future[tuple[int, dict[str, str], bytes]],
+        ] = {}
+        self._completed_request_bytes = 0
         self._active = False
         self._call_lock = asyncio.Lock()
         self._writers: set[asyncio.StreamWriter] = set()
@@ -196,7 +207,11 @@ class ScopedResponsesProxy:
     async def close(self) -> None:
         self._active = False
         self._token = None
-        self._seen_requests.clear()
+        for future in self._request_results.values():
+            if not future.done():
+                future.cancel()
+        self._request_results.clear()
+        self._completed_request_bytes = 0
         server, self._server = self._server, None
         if server is not None:
             server.close()
@@ -283,41 +298,53 @@ class ScopedResponsesProxy:
             raise _RequestRejected(413, "Responses request body is outside the allowed size")
         body = await reader.readexactly(content_length)
         payload = _parse_json_object(body)
-        await self._authorize_and_reserve(headers, payload)
-        request, projections = responses_payload_to_model_request(
-            payload,
-            expected_model=self.scope.model,
-        )
-        async with self._call_lock:
-            response = await asyncio.to_thread(self._call_router, request)
-        response_object = model_response_to_responses(
-            response,
-            model=self.scope.model,
-            projections=projections,
-        )
-        if payload.get("stream") is False:
-            encoded = _json_bytes(response_object)
-            if len(encoded) > _MAX_RESPONSE_BYTES:
-                raise ResponsesProxyError("Octopus model response exceeded the proxy limit")
-            return 200, {"Content-Type": "application/json"}, encoded
-        encoded = _responses_sse(response_object)
-        if len(encoded) > _MAX_RESPONSE_BYTES:
-            raise ResponsesProxyError("Octopus model response exceeded the proxy limit")
-        return (
-            200,
-            {
-                "Content-Type": "text/event-stream",
-                "Cache-Control": "no-cache",
-                "X-Accel-Buffering": "no",
-            },
-            encoded,
-        )
+        fingerprint, existing = await self._authorize_and_reserve(headers, payload)
+        if existing is not None:
+            return await asyncio.shield(existing)
+        try:
+            request, projections = responses_payload_to_model_request(
+                payload,
+                expected_model=self.scope.model,
+            )
+            async with self._call_lock:
+                response = await asyncio.to_thread(self._call_router, request)
+            response_object = model_response_to_responses(
+                response,
+                model=self.scope.model,
+                projections=projections,
+            )
+            if payload.get("stream") is False:
+                encoded = _json_bytes(response_object)
+                if len(encoded) > _MAX_RESPONSE_BYTES:
+                    raise ResponsesProxyError("Octopus model response exceeded the proxy limit")
+                result = 200, {"Content-Type": "application/json"}, encoded
+            else:
+                encoded = _responses_sse(response_object)
+                if len(encoded) > _MAX_RESPONSE_BYTES:
+                    raise ResponsesProxyError("Octopus model response exceeded the proxy limit")
+                result = (
+                    200,
+                    {
+                        "Content-Type": "text/event-stream",
+                        "Cache-Control": "no-cache",
+                        "X-Accel-Buffering": "no",
+                    },
+                    encoded,
+                )
+        except BaseException:
+            self._fail_request(fingerprint)
+            raise
+        self._complete_request(fingerprint, result)
+        return result
 
     async def _authorize_and_reserve(
         self,
         headers: Mapping[str, str],
         payload: Mapping[str, Any],
-    ) -> None:
+    ) -> tuple[
+        bytes,
+        asyncio.Future[tuple[int, dict[str, str], bytes]] | None,
+    ]:
         token = self._token
         supplied = headers.get("authorization") or ""
         expected = f"Bearer {token}" if token is not None else ""
@@ -329,12 +356,72 @@ class ScopedResponsesProxy:
             raise _RequestRejected(403, "Responses model is outside the authorized turn scope")
         canonical = _json_bytes(payload, sort_keys=True)
         fingerprint = hashlib.sha256(canonical).digest()
-        if fingerprint in self._seen_requests:
-            raise _RequestRejected(409, "Responses request replay was rejected")
+        existing = self._request_results.get(fingerprint)
+        if existing is not None:
+            return fingerprint, existing
         if self._request_count >= self._max_requests:
             raise _RequestRejected(429, "Responses turn request budget was exhausted")
-        self._seen_requests.add(fingerprint)
+        self._request_results[fingerprint] = asyncio.get_running_loop().create_future()
         self._request_count += 1
+        return fingerprint, None
+
+    def _complete_request(
+        self,
+        fingerprint: bytes,
+        result: tuple[int, dict[str, str], bytes],
+    ) -> None:
+        future = self._request_results.get(fingerprint)
+        if future is None or future.done():
+            return
+        future.set_result(result)
+        self._completed_request_bytes += len(result[2])
+        self._evict_completed_requests(keep=fingerprint)
+
+    def _fail_request(self, fingerprint: bytes) -> None:
+        """Wake concurrent duplicates with the same sanitized failure.
+
+        Removing the failed reservation permits a later explicit retry. A
+        result, rather than a cancelled/exceptional Future, ensures duplicates
+        receive a valid HTTP response and never see an unexplained EOF.
+        """
+
+        future = self._request_results.pop(fingerprint, None)
+        if future is None or future.done():
+            return
+        future.set_result(
+            (
+                502,
+                {"Content-Type": "application/json"},
+                _json_bytes(
+                    {
+                        "error": {
+                            "message": "Octopus model request failed",
+                            "type": "server_error",
+                        }
+                    }
+                ),
+            )
+        )
+
+    def _evict_completed_requests(self, *, keep: bytes) -> None:
+        while (
+            len(self._request_results) > _MAX_IDEMPOTENT_CACHE_ENTRIES
+            or self._completed_request_bytes > _MAX_IDEMPOTENT_CACHE_BYTES
+        ):
+            evicted = False
+            for fingerprint, future in tuple(self._request_results.items()):
+                if fingerprint == keep or not future.done() or future.cancelled():
+                    continue
+                result = future.result()
+                self._request_results.pop(fingerprint, None)
+                self._completed_request_bytes = max(
+                    0,
+                    self._completed_request_bytes - len(result[2]),
+                )
+                evicted = True
+                break
+            if not evicted:
+                break
 
     def _call_router(self, request: ModelRequest) -> ModelResponse:
         scope = (

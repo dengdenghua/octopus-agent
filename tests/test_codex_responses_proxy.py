@@ -6,11 +6,13 @@ import shutil
 import time
 import tomllib
 from pathlib import Path
+from threading import Event
 from typing import Any
 from urllib.parse import urlsplit
 
 import pytest
 
+from runtime.execution.codex_backend import responses_proxy as responses_proxy_module
 from runtime.execution.codex_backend.backend import CodexExecutionRequest, CodexExecutionSession
 from runtime.execution.codex_backend.command import resolve_codex_app_server_command
 from runtime.execution.codex_backend.responses_proxy import (
@@ -86,6 +88,20 @@ class _RealToolLoopRouter:
             input_tokens=13,
             output_tokens=6,
         )
+
+
+class _BlockingFailRouter:
+    def __init__(self) -> None:
+        self.calls = 0
+        self.started = Event()
+        self.release = Event()
+
+    def call(self, _request: ModelRequest) -> ModelResponse:
+        self.calls += 1
+        self.started.set()
+        if not self.release.wait(timeout=5.0):
+            raise TimeoutError("test did not release provider")
+        raise RuntimeError("private provider failure")
 
 
 def _scope(*, turn: str = "turn-a", model: str = "deepseek-chat") -> CodexResponsesScope:
@@ -244,9 +260,10 @@ async def test_proxy_normalizes_real_tool_history_and_emits_codex_sse() -> None:
 
 
 @pytest.mark.asyncio
-async def test_proxy_token_allows_multi_round_but_rejects_replay_cross_scope_and_expiry() -> None:
+async def test_proxy_token_allows_multi_round_idempotent_retry_cross_scope_and_expiry() -> None:
+    first_router = _RecordingRouter(tools=False)
     first = ScopedResponsesProxy(
-        _RecordingRouter(tools=False),
+        first_router,
         scope=_scope(turn="turn-a"),
         trusted_session=None,
     )
@@ -261,7 +278,8 @@ async def test_proxy_token_allows_multi_round_but_rejects_replay_cross_scope_and
         first_profile = first.provider_profile
         second_profile = second.provider_profile
         assert (await _post(first_profile, _tool_history_payload()))[0] == 200
-        assert (await _post(first_profile, _tool_history_payload()))[0] == 409
+        assert (await _post(first_profile, _tool_history_payload()))[0] == 200
+        assert len(first_router.requests) == 1
         assert (await _post(first_profile, _tool_history_payload(suffix=" second model round")))[
             0
         ] == 200
@@ -279,6 +297,88 @@ async def test_proxy_token_allows_multi_round_but_rejects_replay_cross_scope_and
     finally:
         await first.close()
         await second.close()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_failed_retry_gets_sanitized_http_response_and_can_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    router = _BlockingFailRouter()
+    async with ScopedResponsesProxy(
+        router,
+        scope=_scope(),
+        trusted_session=None,
+    ) as proxy:
+        profile = proxy.provider_profile
+        duplicate_reserved = asyncio.Event()
+        authorize = proxy._authorize_and_reserve
+
+        async def observe_duplicate(headers: Any, payload: Any) -> Any:
+            result = await authorize(headers, payload)
+            if result[1] is not None:
+                duplicate_reserved.set()
+            return result
+
+        monkeypatch.setattr(proxy, "_authorize_and_reserve", observe_duplicate)
+        first = asyncio.create_task(_post(profile, _tool_history_payload()))
+        assert await asyncio.to_thread(router.started.wait, 2.0)
+        duplicate = asyncio.create_task(_post(profile, _tool_history_payload()))
+        await asyncio.wait_for(duplicate_reserved.wait(), timeout=2.0)
+        router.release.set()
+        first_result, duplicate_result = await asyncio.gather(first, duplicate)
+        retry_result = await _post(profile, _tool_history_payload())
+
+    assert first_result[0] == 502
+    assert duplicate_result[0] == 502
+    assert retry_result[0] == 502
+    assert router.calls == 2
+    assert b"private provider failure" not in first_result[2]
+    assert b"private provider failure" not in duplicate_result[2]
+
+
+@pytest.mark.asyncio
+async def test_completed_idempotency_cache_is_bounded() -> None:
+    router = _RecordingRouter(tools=False)
+    async with ScopedResponsesProxy(
+        router,
+        scope=_scope(),
+        trusted_session=None,
+    ) as proxy:
+        profile = proxy.provider_profile
+        for index in range(33):
+            assert (
+                await _post(
+                    profile,
+                    _tool_history_payload(suffix=f" request-{index}"),
+                )
+            )[0] == 200
+        assert len(proxy._request_results) <= 32
+        assert proxy._completed_request_bytes <= 32 * 1024 * 1024
+        assert (await _post(profile, _tool_history_payload(suffix=" request-0")))[0] == 200
+
+    assert len(router.requests) == 34
+
+
+@pytest.mark.asyncio
+async def test_completed_idempotency_cache_enforces_byte_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(responses_proxy_module, "_MAX_IDEMPOTENT_CACHE_BYTES", 10)
+    proxy = ScopedResponsesProxy(
+        _RecordingRouter(tools=False),
+        scope=_scope(),
+        trusted_session=None,
+    )
+    first = b"first"
+    second = b"second"
+    proxy._request_results[first] = asyncio.get_running_loop().create_future()
+    proxy._complete_request(first, (200, {}, b"123456"))
+    proxy._request_results[second] = asyncio.get_running_loop().create_future()
+    proxy._complete_request(second, (200, {}, b"abcdef"))
+
+    assert first not in proxy._request_results
+    assert second in proxy._request_results
+    assert proxy._completed_request_bytes == 6
 
 
 @pytest.mark.asyncio
