@@ -18,6 +18,12 @@ class TestDockerfile:
     def test_dockerfile_exists(self):
         assert (REPO / "Dockerfile").exists()
 
+    def test_frontend_install_uses_supported_locked_pnpm_flags(self):
+        text = (REPO / "Dockerfile").read_text(encoding="utf-8")
+
+        assert "pnpm install --frozen-lockfile" in text
+        assert "--no-fund" not in text
+
     def test_dockerignore_exists(self):
         assert (REPO / ".dockerignore").exists()
 
