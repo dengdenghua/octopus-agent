@@ -207,6 +207,9 @@ def test_electron_materialized_desktop_config_loads_in_python(tmp_path: Path) ->
     config = load_from_yaml(target)
 
     assert first == {"path": str(target), "changed": True}
+    assert config.planner.model == "octopus-agent"
+    assert config.oct.enabled is True
+    assert config.oct.jwt_secret == first_secret
     assert config.local_auth.enabled is True
     assert config.local_auth.jwt_secret == first_secret
     assert len(first_secret) >= 64
@@ -290,8 +293,10 @@ def test_desktop_main_fails_closed_before_spawning_backend() -> None:
     assert "ensureDesktopConfigFile" in source
     assert "ensurePackagedResources();" in lifecycle
     # Brand name changed from "Octopus 启动失败" to "EchoAI 启动失败"
-    assert ('dialog.showErrorBox("Octopus 启动失败"' in source
-            or 'dialog.showErrorBox("EchoAI 启动失败"' in source)
+    assert (
+        'dialog.showErrorBox("Octopus 启动失败"' in source
+        or 'dialog.showErrorBox("EchoAI 启动失败"' in source
+    )
     assert "app.exit(1);" in source
     assert materialize < spawn
     assert 'app.setAppUserModelId("ai.octopus.desktop")' in source
@@ -850,13 +855,13 @@ def test_windows_codex_third_party_reports_are_reproducibly_pinned() -> None:
     generator = CODEX_LICENSE_GENERATOR.read_text(encoding="utf-8")
     reports = {
         "THIRD_PARTY_LICENSES-codex-cli.html": (
-            "085bfd0627d8011777788beb1c74a7399c5acba157bac3eb766e0562f58a432b"
+            "841d5072916479fc3d6fbe8c4b240b66d468de9f625a2fcb658c34fe1a4ec771"
         ),
         "THIRD_PARTY_LICENSES-code-mode-host.html": (
-            "df6e9546efb4f6a30f06cc7417bb81beeee81bc2e9ea5c670cdfd04a2e9a1503"
+            "6b562200ef39938051e8eca39ce61a4d032752e04e1d21ba0fe216bd0ad91434"
         ),
         "THIRD_PARTY_LICENSES-windows-sandbox.html": (
-            "df32d1e635d49d3b86caa4b56e0015dcf116025792ef3c0957dec342a1909721"
+            "8858ef427eb901498d06d12d14ce6c3ef53fdeb352251006276dac8ec53ac5e4"
         ),
     }
 
@@ -931,7 +936,9 @@ def test_legacy_desktop_package_delegates_and_cannot_publish_old_shell() -> None
     assert "codex:prepare:mac" in frontend_scripts["electron:build:mac"]
     assert "--mac --arm64 --publish never" in frontend_scripts["electron:build:mac"]
     assert "electron-builder" in frontend_scripts["electron:build:mac"]
-    assert frontend_scripts["codex:prepare:linux"] == ("node ../extras/desktop/prepare-codex-linux.cjs")
+    assert frontend_scripts["codex:prepare:linux"] == (
+        "node ../extras/desktop/prepare-codex-linux.cjs"
+    )
     assert "codex:prepare:linux" in frontend_scripts["electron:build:linux"]
     assert "--linux --x64 --publish never" in frontend_scripts["electron:build:linux"]
     assert "electron-builder" in frontend_scripts["electron:build:linux"]
@@ -1064,10 +1071,16 @@ def test_linux_codex_preparer_pins_only_the_locked_linux_packages() -> None:
     assert 'const CODEX_VERSION = "0.149.0";' in source
     assert 'platformPackage: "@openai/codex-linux-x64"' in source
     assert 'platformPackage: "@openai/codex-linux-arm64"' in source
-    assert "targetTriple: \"x86_64-unknown-linux-musl\"" in source
-    assert "targetTriple: \"aarch64-unknown-linux-musl\"" in source
-    assert "sha512-uZXaN9JPxu0/jjnqqJeTd4kRYPnjVZK3MiVndfG1mHhEaoDKL7ScWHfPqvAEOjwsSDEmQSlMfUkmvYp/CHciYw==" in source
-    assert "sha512-fAXPpvIob+11RNZJS9CVVTsKb+V4Hw3woGFPj42D7fU2wBJUKI2jfAc4fLJNtrpwRecLeW601mtkMHOSIbWuuA==" in source
+    assert 'targetTriple: "x86_64-unknown-linux-musl"' in source
+    assert 'targetTriple: "aarch64-unknown-linux-musl"' in source
+    assert (
+        "sha512-uZXaN9JPxu0/jjnqqJeTd4kRYPnjVZK3MiVndfG1mHhEaoDKL7ScWHfPqvAEOjwsSDEmQSlMfUkmvYp/CHciYw=="
+        in source
+    )
+    assert (
+        "sha512-fAXPpvIob+11RNZJS9CVVTsKb+V4Hw3woGFPj42D7fU2wBJUKI2jfAc4fLJNtrpwRecLeW601mtkMHOSIbWuuA=="
+        in source
+    )
     assert '"codex-resources/bwrap"' in source
     assert 'EXECUTABLE_MAGIC = "7f454c46"' in source
     assert 'schema: "octopus.codex_bundle.v1"' in source
@@ -1076,7 +1089,7 @@ def test_linux_codex_preparer_pins_only_the_locked_linux_packages() -> None:
     # preparer must be able to fetch the registry tarball pinned by the lock's
     # integrity (verified byte-for-byte before extraction). Offline never applies
     # here; the runtime bundle is fully materialized before electron-builder.
-    assert 'tarballUrl:' in source
+    assert "tarballUrl:" in source
     assert "registry.npmjs.org/@openai/codex" in source
     assert "pnpm" in source
     assert "npm install" not in source
@@ -1085,14 +1098,14 @@ def test_linux_codex_preparer_pins_only_the_locked_linux_packages() -> None:
 def test_linux_backend_runtime_profile_is_selected_on_linux() -> None:
     source = BACKEND_RUNTIME.read_text(encoding="utf-8")
 
-    assert 'LINUX_ARM64_PROFILE' in source
-    assert 'LINUX_X64_PROFILE' in source
+    assert "LINUX_ARM64_PROFILE" in source
+    assert "LINUX_X64_PROFILE" in source
     assert '"@openai/codex-linux-arm64"' in source
     assert '"@openai/codex-linux-x64"' in source
     assert '"aarch64-unknown-linux-musl"' in source
     assert '"x86_64-unknown-linux-musl"' in source
     assert 'executableMagic: "7f454c46"' in source
-    assert 'profiled deep' not in source
+    assert "profiled deep" not in source
     # Linux must not regress the darwin/Windows selection under any arch.
     assert 'process.platform === "linux"' in source
 
@@ -1104,5 +1117,5 @@ def test_linux_resources_are_declared_in_build_config() -> None:
     assert "AppImage" in segment
     assert "extras/desktop/build/backend/octopus-backend" in segment
     assert "extras/desktop/build/codex" in segment
-    assert 'to: codex' in segment
+    assert "to: codex" in segment
     assert "GITHUB_SHA" in segment

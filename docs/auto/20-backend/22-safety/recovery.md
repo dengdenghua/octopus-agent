@@ -465,7 +465,7 @@ Self-evolution subsystem — biomimetic alias: *Regeneration*.
 
 ## Who imports this
 
-**28** file(s) reference this package:
+**30** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
@@ -480,23 +480,23 @@ Self-evolution subsystem — biomimetic alias: *Regeneration*.
 - **`runtime/memory/`** · 2 file(s)
   - `runtime/memory/diagnostics/wiki_compiler.py`
   - `runtime/memory/learning/promotion_applier.py`
-- **`runtime/platform/`** · 6 file(s)
+- **`runtime/platform/`** · 7 file(s)
+  - `runtime/platform/capabilities/tenant_context.py`
   - `runtime/platform/ui/_app_stack.py`
   - `runtime/platform/ui/_reflex_admin_gepa_apply.py`
   - `runtime/platform/ui/_reflex_admin_gepa_autotick.py`
   - `runtime/platform/ui/_reflex_admin_gepa_run.py`
-  - `runtime/platform/ui/_reflex_admin_gepa_runs.py`
-  - `runtime/platform/ui/_reflex_admin_gepa_variants.py`
+  - _… and 2 more_
 - **`runtime/safety/`** · 4 file(s)
   - `runtime/safety/evolution/auto_trigger.py`
   - `runtime/safety/evolution/drift_monitor.py`
   - `runtime/safety/evolution/replay_latency_budget.py`
   - `runtime/safety/experiments/prompt_optimizer.py`
-- **`runtime/sensing/`** · 10 file(s)
+- **`runtime/sensing/`** · 11 file(s)
   - `runtime/sensing/gateway/_agents_endpoints_system.py`
   - `runtime/sensing/gateway/_observability_helpers.py`
   - `runtime/sensing/gateway/_observability_journal.py`
   - `runtime/sensing/gateway/_observability_kg.py`
   - `runtime/sensing/gateway/_observability_rollback_panels.py`
-  - _… and 5 more_
+  - _… and 6 more_
 

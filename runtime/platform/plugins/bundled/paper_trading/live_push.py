@@ -167,6 +167,7 @@ class LivePushClient:
         subscribe_timeout: float = 20.0,
         socket_timeout: float = 15.0,
         auto_start: bool = True,
+        state_callback: Any | None = None,
     ) -> None:
         self._client = client
         self._host = host or ""
@@ -174,6 +175,7 @@ class LivePushClient:
         self._reconnect_max = float(reconnect_max)
         self._subscribe_timeout = float(subscribe_timeout)
         self._socket_timeout = float(socket_timeout)
+        self._state_callback = state_callback
         self._callbacks: dict[str, list[Any]] = defaultdict(list)
         self._global_callbacks: list[Any] = []  # 全事件回调(SSE/策略通吃)
         self._subs: dict[str, tuple[Any, list[Any]]] = {}  # event -> (params, callbacks)
@@ -207,9 +209,11 @@ class LivePushClient:
         """启动后台推送线程;已启动则幂等返回。"""
         if not HAS_WEBSOCKETS:
             self._last_error = "缺少 websockets 依赖"
+            self._notify_state("failure", self._last_error)
             return False
         if not self._client.has_credentials:
             self._last_error = "未配置平台凭证"
+            self._notify_state("failure", self._last_error)
             return False
         with self._lock:
             if self.running:
@@ -385,7 +389,9 @@ class LivePushClient:
                 backoff = self._reconnect_delay
             except Exception as exc:  # noqa: BLE001 — 重连循环,必须全兜住
                 self._last_error = str(exc)[:200]
-                _logger.warning("paper_trading: 推送连接异常,%.0fs 后重连: %s", backoff, exc)
+                if not self._stop.is_set():
+                    self._notify_state("failure", self._last_error)
+                    _logger.warning("paper_trading: 推送连接异常,%.0fs 后重连: %s", backoff, exc)
             self._connected = False
             if self._stop.is_set():
                 break
@@ -401,16 +407,16 @@ class LivePushClient:
         except PlatformClientError as exc:
             self._last_error = str(exc)
             _logger.warning("paper_trading: 已拒绝不安全的推送连接: %s", exc)
-            return
+            raise
         try:
             token = client.login()  # token 未过期则不发网络请求
         except Exception as exc:  # noqa: BLE001
             self._last_error = f"登录失败: {exc}"
             _logger.warning("paper_trading: 推送前登录失败: %s", exc)
-            return
+            raise PlatformClientError(self._last_error) from exc
         if not self._host:
             self._last_error = "推送 host 为空"
-            return
+            raise PlatformClientError(self._last_error)
         q = urllib.parse.urlencode(
             {"EIO": 3, "source": "h5", "sign": _ws_sign(1234), "transport": "websocket"}
         )
@@ -426,13 +432,15 @@ class LivePushClient:
             ) as ws:
                 self._loop = asyncio.get_running_loop()
                 self._ws = ws
-                self._connected = True
-                self._connected_at = time.time()
                 # engine.io open 包
                 await asyncio.wait_for(ws.recv(), timeout=self._subscribe_timeout)
                 # socket.io v2 默认命名空间 CONNECT
                 await ws.send("40")
                 await asyncio.wait_for(ws.recv(), timeout=self._subscribe_timeout)
+                self._connected = True
+                self._connected_at = time.time()
+                self._last_error = ""
+                self._notify_state("connected", "")
                 # 重订阅所有事件
                 with self._lock:
                     subs = list(self._subs.items())
@@ -456,6 +464,15 @@ class LivePushClient:
             self._connected = False
             self._loop = None
             self._ws = None
+
+    def _notify_state(self, state: str, error: str = "") -> None:
+        callback = self._state_callback
+        if callback is None:
+            return
+        try:
+            callback(state, error)
+        except Exception as exc:  # noqa: BLE001 - observer cannot stop reconnects
+            _logger.warning("paper_trading: 推送状态回调异常(%s): %s", state, exc)
 
     def _frame(self, event: str, params: list[Any], token: str) -> str:
         payload = {

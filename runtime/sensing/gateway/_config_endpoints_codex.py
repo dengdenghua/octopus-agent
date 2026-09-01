@@ -90,8 +90,11 @@ def _register_coder_codex(router: Any, ctx: _ConfigCtx) -> None:
         tags=["coder"],
     )
     async def api_coder_codex_account(request: Request) -> dict[str, object]:
+        scope = scope_from_request(request)
         try:
-            status = await accounts.read_account(scope_from_request(request))
+            status = await accounts.run_on_runtime_loop(
+                scope, lambda: accounts.read_account(scope)
+            )
         except Exception as exc:
             raise _account_http_error(exc, operation="read") from None
         return status.to_wire()
@@ -141,10 +144,14 @@ def _register_coder_codex(router: Any, ctx: _ConfigCtx) -> None:
             raise HTTPException(400, "Codex login request is invalid")
         api_key = body.api_key.get_secret_value() if body.api_key is not None else None
         try:
-            return await accounts.login(
-                scope_from_request(request),
-                login_type=body.type,
-                api_key=api_key,
+            scope = scope_from_request(request)
+            return await accounts.run_on_runtime_loop(
+                scope,
+                lambda: accounts.login(
+                    scope,
+                    login_type=body.type,
+                    api_key=api_key,
+                ),
             )
         except Exception as exc:
             raise _account_http_error(exc, operation="login") from None
@@ -161,9 +168,10 @@ def _register_coder_codex(router: Any, ctx: _ConfigCtx) -> None:
         request: Request,
     ) -> dict[str, object]:
         try:
-            return await accounts.cancel_login(
-                scope_from_request(request),
-                login_id=login_id,
+            scope = scope_from_request(request)
+            return await accounts.run_on_runtime_loop(
+                scope,
+                lambda: accounts.cancel_login(scope, login_id=login_id),
             )
         except Exception as exc:
             raise _account_http_error(exc, operation="cancel") from None
@@ -181,7 +189,9 @@ def _register_coder_codex(router: Any, ctx: _ConfigCtx) -> None:
             # cannot leave a stale Codex-account model selected; conversely a
             # preference write failure aborts before authentication changes.
             preferences.write(scope, CodexModelPreference(mode="follow_system"))
-            return await accounts.logout(scope)
+            return await accounts.run_on_runtime_loop(
+                scope, lambda: accounts.logout(scope)
+            )
         except Exception as exc:
             raise _account_http_error(exc, operation="logout") from None
 
@@ -195,9 +205,10 @@ def _register_coder_codex(router: Any, ctx: _ConfigCtx) -> None:
         include_hidden: bool = False,
     ) -> dict[str, object]:
         try:
-            models = await accounts.list_models(
-                scope_from_request(request),
-                include_hidden=include_hidden,
+            scope = scope_from_request(request)
+            models = await accounts.run_on_runtime_loop(
+                scope,
+                lambda: accounts.list_models(scope, include_hidden=include_hidden),
             )
         except Exception as exc:
             raise _account_http_error(exc, operation="models") from None
@@ -210,7 +221,10 @@ def _register_coder_codex(router: Any, ctx: _ConfigCtx) -> None:
     )
     async def api_coder_codex_rate_limits(request: Request) -> dict[str, object]:
         try:
-            return await accounts.read_rate_limits(scope_from_request(request))
+            scope = scope_from_request(request)
+            return await accounts.run_on_runtime_loop(
+                scope, lambda: accounts.read_rate_limits(scope)
+            )
         except Exception as exc:
             raise _account_http_error(exc, operation="rate limits") from None
 
@@ -221,7 +235,10 @@ def _register_coder_codex(router: Any, ctx: _ConfigCtx) -> None:
     )
     async def api_coder_codex_usage(request: Request) -> dict[str, object]:
         try:
-            return await accounts.read_usage(scope_from_request(request))
+            scope = scope_from_request(request)
+            return await accounts.run_on_runtime_loop(
+                scope, lambda: accounts.read_usage(scope)
+            )
         except Exception as exc:
             raise _account_http_error(exc, operation="usage") from None
 
@@ -236,7 +253,10 @@ def _register_coder_codex(router: Any, ctx: _ConfigCtx) -> None:
     ) -> dict[str, object]:
         scope = scope_from_request(request)
         try:
-            apps = await accounts.list_apps(scope, force_refetch=force_refetch)
+            apps = await accounts.run_on_runtime_loop(
+                scope,
+                lambda: accounts.list_apps(scope, force_refetch=force_refetch),
+            )
         except Exception as exc:
             raise _account_http_error(exc, operation="apps") from None
         selected = set(preferences.read(scope).app_ids)
@@ -253,7 +273,9 @@ def _register_coder_codex(router: Any, ctx: _ConfigCtx) -> None:
     ) -> dict[str, object]:
         scope = scope_from_request(request)
         try:
-            apps = await accounts.list_apps(scope, force_refetch=False)
+            apps = await accounts.run_on_runtime_loop(
+                scope, lambda: accounts.list_apps(scope, force_refetch=False)
+            )
             accessible = {
                 str(app["id"])
                 for app in apps

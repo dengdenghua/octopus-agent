@@ -1,13 +1,13 @@
 ---
 type: "SensingSubsystem"
 title: "Sensing · Model Router"
-description: "ModelRouter 抽象 · Anthropic / OpenAI / Molili / Mock / MultiModelRouter (multi-provider fallback)。"
+description: "ModelRouter 抽象 · Anthropic / OpenAI / Oct / Mock / MultiModelRouter (multi-provider fallback)。"
 tags: ["backend", "sensing"]
 tier: "standard"
 ---
 # Sensing · Model Router
 
-> ModelRouter 抽象 · Anthropic / OpenAI / Molili / Mock / MultiModelRouter (multi-provider fallback)。
+> ModelRouter 抽象 · Anthropic / OpenAI / Oct / Mock / MultiModelRouter (multi-provider fallback)。
 
 **Source**: `runtime/sensing/model_router/`
 
@@ -61,6 +61,7 @@ tier: "standard"
 | `actor_context.py` | Actor context for model-router calls — a provider-neutral home. |
 | `anthropic_router.py` | — |
 | `capability_probe.py` | Provider Capability Auto-Detection. |
+| `chatgpt_subscription_router.py` | ChatGPT-subscription model transport for the native Octopus kernel. |
 | `credential_pool.py` | — |
 | `custom_model_flags.py` | Operator-declared capability flags from ``custom_models.json``. |
 | `dispatch_router.py` | — |
@@ -122,6 +123,14 @@ tier: "standard"
 | func | `def get_cached_capabilities(provider_key)` | Return in-memory cached capabilities for ``provider_key``, or None. |
 | func | `def clear_capability_cache()` | Flush the in-memory capability cache (useful in tests). |
 | func | `def probe_provider(router, model, timeout_s, force)` | Probe ``router`` and return its runtime capabilities. |
+
+### `chatgpt_subscription_router.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class ChatGPTSubscriptionRouterError(LLMResponseFormatError)` | A ChatGPT-login model could not be called safely. |
+| class | `class ChatGPTSubscriptionCredentialBroker` | Server-only view of the current principal's managed Codex login. |
+| class | `class ChatGPTSubscriptionModelRouter(Provider, ModelRouter)` | Run ChatGPT-login models while retaining the Octopus native kernel. |
 
 ### `credential_pool.py`
 

@@ -4,6 +4,9 @@ members become the team and tasks route to them by capability."""
 from __future__ import annotations
 
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
+from threading import Barrier, BrokenBarrierError, Lock
 
 import pytest
 
@@ -11,6 +14,7 @@ from runtime.memory.cowork import service
 from runtime.memory.cowork.group import MemberEvent
 from runtime.memory.cowork.group_store import GroupStore
 from runtime.memory.cowork.session import link_room
+from runtime.platform.process.session import Session, current_session
 from runtime.projectos import cowork_bridge
 from runtime.projectos.cowork_bridge import (
     engine_for_group,
@@ -19,8 +23,8 @@ from runtime.projectos.cowork_bridge import (
     run_project_from_group,
     team_execute_for_group,
 )
-from runtime.projectos.engine import stub_decompose_tasks, stub_generate_milestones
-from runtime.projectos.model import Milestone, Task
+from runtime.projectos.engine import ProjectEngine, stub_decompose_tasks, stub_generate_milestones
+from runtime.projectos.model import Milestone, Project, Task
 from runtime.projectos.store import ProjectStore
 from runtime.projectos.timeline import project_process_timeline
 
@@ -57,6 +61,8 @@ def _project_table_counts(store: ProjectStore) -> dict[str, int]:
                 "projects",
                 "milestones",
                 "tasks",
+                "task_claims",
+                "milestone_claims",
                 "thread_projects",
                 "project_events",
             )
@@ -200,6 +206,170 @@ def test_project_from_group_can_reuse_active_thread_project(tmp_path) -> None:
     )
 
 
+def test_concurrent_group_runs_execute_only_the_cas_winners_task(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    group_store = GroupStore(base_dir=tmp_path / "cowork")
+    service.invite_member(
+        group_store,
+        "thread-race",
+        actor="owner",
+        target_id="build-agent",
+        kind="agent",
+    )
+    stores = [
+        ProjectStore(base_dir=tmp_path / "projectos"),
+        ProjectStore(base_dir=tmp_path / "projectos"),
+    ]
+    bind_barrier = Barrier(2)
+    claim_barrier = Barrier(2)
+    for store in stores:
+        original_bind = store.bind_thread_if_absent_versioned
+        original_claim = store.claim_task
+
+        def synchronized_bind(*args, _bind=original_bind, **kwargs):
+            bind_barrier.wait(timeout=5)
+            return _bind(*args, **kwargs)
+
+        def synchronized_claim(*args, _claim=original_claim, **kwargs):
+            # The CAS loser may observe the winner's project after its only
+            # runnable task has already been claimed and therefore never call
+            # ``claim_task``. The barrier widens the true concurrent-claim
+            # window when both runners reach it, but it is not itself the
+            # invariant under test; the execute-count assertion below is.
+            with suppress(BrokenBarrierError):
+                claim_barrier.wait(timeout=5)
+            return _claim(*args, **kwargs)
+
+        monkeypatch.setattr(store, "bind_thread_if_absent_versioned", synchronized_bind)
+        monkeypatch.setattr(store, "claim_task", synchronized_claim)
+
+    execute_calls = 0
+    execute_lock = Lock()
+
+    def execute(task: Task, context: dict) -> str:
+        nonlocal execute_calls
+        with execute_lock:
+            execute_calls += 1
+        return "single execution"
+
+    def milestones(goal: str) -> list[Milestone]:
+        return [Milestone(id="MS1", name="build", goal=goal)]
+
+    def tasks(ms: Milestone) -> list[Task]:
+        return [
+            Task(
+                id=f"{ms.id}-T1",
+                milestone_id=ms.id,
+                type="code",
+                goal=ms.goal,
+            )
+        ]
+
+    def run(store: ProjectStore) -> dict:
+        return run_project_from_group(
+            store,
+            group_store,
+            "thread-race",
+            name="Concurrent project",
+            goal="execute once",
+            hooks={
+                "generate_milestones": milestones,
+                "decompose_tasks": tasks,
+                "execute_task": execute,
+            },
+            run=True,
+            max_ticks=1,
+            reuse_active=True,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(run, stores))
+
+    project_ids = {str(result["project"]["id"]) for result in results}
+    assert len(project_ids) == 1
+    assert sorted(bool(result["reused"]) for result in results) == [False, True]
+    assert execute_calls == 1
+    project_id = project_ids.pop()
+    all_projects = stores[0].list_projects()
+    assert len(all_projects) == 2
+    orphan = next(project for project in all_projects if project.id != project_id)
+    assert any(
+        event["kind"] == "project.group_attach_orphaned"
+        and event["payload"]["winner_project_id"] == project_id
+        for event in stores[0].events_for_project(orphan.id)
+    )
+    milestone = stores[0].milestones_for(project_id)[0]
+    stored_tasks = stores[0].tasks_for_milestone(milestone.id)
+    assert len(stored_tasks) == 1
+    assert stored_tasks[0].status == "done"
+    assert stored_tasks[0].output == "single execution"
+
+
+def test_reuse_active_loser_preserves_external_updates_without_cleanup(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    group_store = _attached_group(tmp_path)
+    store = ProjectStore(base_dir=tmp_path / "projectos")
+    external_store = ProjectStore(base_dir=tmp_path / "projectos")
+    thread_id = "thread-attach-failure"
+    winner = Project(id="P-reuse-winner", name="CAS winner", goal="Own the group")
+    candidate_ids: list[str] = []
+    real_bind_if_absent = store.bind_thread_if_absent_versioned
+
+    def install_winner(inner_thread_id: str, candidate_id: str, **kwargs):
+        candidate_ids.append(candidate_id)
+        candidate = external_store.get_project(candidate_id)
+        assert candidate is not None
+        candidate.name = "Externally updated orphan"
+        external_store.save_project(candidate)
+        milestone = external_store.milestones_for(candidate_id)[0]
+        external_store.add_task_to_milestone(
+            candidate_id,
+            Task(id="T-external", milestone_id=milestone.id, type="code", goal="keep me"),
+        )
+        external_store.append_event(
+            candidate_id,
+            kind="external.update",
+            payload={"preserve": True},
+        )
+        store.save_project(winner)
+        store.bind_thread(inner_thread_id, winner.id)
+        return real_bind_if_absent(inner_thread_id, candidate_id, **kwargs)
+
+    def forbidden_cleanup(*_args, **_kwargs):
+        raise AssertionError("committed group plans must never be auto-deleted")
+
+    monkeypatch.setattr(store, "bind_thread_if_absent_versioned", install_winner)
+    monkeypatch.setattr(store, "delete_project", forbidden_cleanup)
+    monkeypatch.setattr(store, "delete_project_if_unbound", forbidden_cleanup)
+
+    result = run_project_from_group(
+        store,
+        group_store,
+        thread_id,
+        name="Losing candidate",
+        goal="Never erase external updates",
+        run=False,
+        reuse_active=True,
+    )
+
+    candidate_id = candidate_ids[0]
+    assert result["project"]["id"] == winner.id
+    assert store.project_for_thread(thread_id).id == winner.id
+    assert store.get_project(candidate_id).name == "Externally updated orphan"
+    assert [
+        task.id
+        for task in store.tasks_for_milestone(store.get_project(candidate_id).milestone_ids[0])
+    ] == ["T-external"]
+    assert {event["kind"] for event in store.events_for_project(candidate_id)} >= {
+        "external.update",
+        "project.group_attach_orphaned",
+    }
+
+
 def test_from_group_endpoint_turns_a_group_into_a_project_team(tmp_path) -> None:
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
@@ -284,7 +454,7 @@ def test_from_group_default_attaches_without_execution_or_changing_response_mode
 
 
 @pytest.mark.parametrize("failure_stage", ["bind", "state", "event"])
-def test_new_project_attach_failure_removes_shell_and_preserves_group(
+def test_new_project_attach_failure_preserves_plan_and_returns_recovery(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
     failure_stage: str,
@@ -295,15 +465,16 @@ def test_new_project_attach_failure_removes_shell_and_preserves_group(
     before_state = group_store.state(thread_id).to_dict()
     before_events = [event.to_dict() for event in group_store.events(thread_id)]
     planned_ids: list[str] = []
-    real_bind = project_store.bind_thread
+    real_bind = project_store.bind_thread_versioned
 
-    def capture_bind(inner_thread_id: str, project_id: str, **kwargs) -> None:
+    def capture_bind(inner_thread_id: str, project_id: str, **kwargs):
         planned_ids.append(project_id)
-        real_bind(inner_thread_id, project_id, **kwargs)
+        result = real_bind(inner_thread_id, project_id, **kwargs)
         if failure_stage == "bind":
             raise RuntimeError("injected bind failure after commit")
+        return result
 
-    monkeypatch.setattr(project_store, "bind_thread", capture_bind)
+    monkeypatch.setattr(project_store, "bind_thread_versioned", capture_bind)
     if failure_stage == "state":
         monkeypatch.setattr(
             cowork_bridge,
@@ -321,31 +492,72 @@ def test_new_project_attach_failure_removes_shell_and_preserves_group(
             ),
         )
 
-    with pytest.raises(RuntimeError, match="injected"):
-        run_project_from_group(
-            project_store,
-            group_store,
-            thread_id,
-            name="Attach failure",
-            goal="Leave no project shell",
-            run=False,
-        )
+    result = run_project_from_group(
+        project_store,
+        group_store,
+        thread_id,
+        name="Attach failure",
+        goal="Preserve the committed project plan",
+        run=False,
+    )
 
     assert len(planned_ids) == 1
     project_id = planned_ids[0]
-    assert project_store.get_project(project_id) is None
-    assert project_store.milestones_for(project_id) == []
-    assert project_store.events_for_project(project_id) == []
-    assert project_store.project_for_thread(thread_id) is None
-    assert _project_table_counts(project_store) == {
-        "projects": 0,
-        "milestones": 0,
-        "tasks": 0,
-        "thread_projects": 0,
-        "project_events": 0,
-    }
+    assert result["ok"] is False
+    assert result["recovery"]["code"] == "PROJECT_ATTACH_RECOVERY_PENDING"
+    assert result["recovery"]["project_id"] == project_id
+    assert project_store.get_project(project_id) is not None
+    assert project_store.milestones_for(project_id)
+    assert project_store.project_for_thread(thread_id).id == project_id
+    event_kinds = {event["kind"] for event in project_store.events_for_project(project_id)}
+    assert "project.planned" in event_kinds
+    if failure_stage == "event":
+        assert result["recovery"]["recovery_recorded"] is False
+    else:
+        assert "project.group_attach_recovery_pending" in event_kinds
     assert group_store.state(thread_id).to_dict() == before_state
     assert [event.to_dict() for event in group_store.events(thread_id)] == before_events
+
+
+def test_plan_commit_before_return_uses_known_id_and_preserves_source(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    group_store = _attached_group(tmp_path)
+    project_store = ProjectStore(base_dir=tmp_path / "projectos")
+    real_plan = ProjectEngine.plan
+    committed_ids: list[str] = []
+
+    def commit_then_raise(self, name: str, goal: str, *, project_id: str | None = None):
+        project = real_plan(self, name, goal, project_id=project_id)
+        committed_ids.append(project.id)
+        project_store.append_event(
+            project.id,
+            kind="external.after_plan",
+            payload={"preserve": True},
+        )
+        raise RuntimeError("injected return failure after plan commit")
+
+    monkeypatch.setattr(ProjectEngine, "plan", commit_then_raise)
+
+    result = run_project_from_group(
+        project_store,
+        group_store,
+        "thread-attach-failure",
+        name="Known id",
+        goal="Preserve commit-before-return",
+        run=False,
+        reuse_active=True,
+    )
+
+    assert result["ok"] is False
+    assert result["recovery"]["phase"] == "plan_commit"
+    assert result["recovery"]["project_id"] == committed_ids[0]
+    assert project_store.get_project(committed_ids[0]) is not None
+    assert {event["kind"] for event in project_store.events_for_project(committed_ids[0])} >= {
+        "external.after_plan",
+        "project.group_attach_recovery_pending",
+    }
 
 
 def test_run_failure_after_attach_keeps_recoverable_project(
@@ -474,6 +686,7 @@ def _managed_project_context() -> dict:
             "workspace_path": "/managed/thread-managed",
             "_artifact_output_root": "/managed/thread-managed/output/final",
             "preserved": "yes",
+            "workflow_preset": "audit.deep",
         },
     }
 
@@ -493,18 +706,43 @@ def _assert_team_scope(calls: list[dict], explicit_runner) -> None:
             "workspace_path": "/managed/thread-managed",
             "_artifact_output_root": "/managed/thread-managed/output/final",
             "preserved": "yes",
+            "workflow_preset": "audit.deep",
             "source": "projectos_team_task",
             "project_id": "P-managed",
             "task_id": "T-managed",
             "tenant_id": "tenant-a",
         }
+        assert call["ambient_session"] is None
+        trusted = call["session"]
+        assert isinstance(trusted, Session)
+        assert trusted.actor == "alice"
+        assert trusted.thread_id == "thread-managed"
+        assert trusted.conversation_id == "thread-managed"
+        assert trusted.metadata == context["runtime_session_metadata"]
+        from runtime.execution.codex_backend.role_runner import resolve_codex_sandbox_mode
+
+        assert (
+            resolve_codex_sandbox_mode(
+                context,
+                trusted_parent_metadata=trusted.metadata,
+            )
+            == "read-only"
+        )
 
 
-def test_team_swarm_propagates_managed_project_scope(monkeypatch) -> None:
+def test_production_team_swarm_propagates_trusted_project_session(monkeypatch) -> None:
     calls: list[dict] = []
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "production")
 
     def fake_call_subagent(agent_id, prompt, **kwargs):
-        calls.append({"agent_id": agent_id, "prompt": prompt, **kwargs})
+        calls.append(
+            {
+                "agent_id": agent_id,
+                "prompt": prompt,
+                "ambient_session": current_session(),
+                **kwargs,
+            }
+        )
         return {"success": True, "output": f"swarm output from {agent_id}"}
 
     def explicit_runner(prompt: str, **kwargs) -> str:
@@ -531,11 +769,19 @@ def test_team_swarm_propagates_managed_project_scope(monkeypatch) -> None:
     _assert_team_scope(calls, explicit_runner)
 
 
-def test_team_cluster_propagates_managed_project_scope(monkeypatch) -> None:
+def test_production_team_cluster_propagates_trusted_project_session(monkeypatch) -> None:
     calls: list[dict] = []
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "production")
 
     def fake_call_subagent(agent_id, prompt, **kwargs):
-        calls.append({"agent_id": agent_id, "prompt": prompt, **kwargs})
+        calls.append(
+            {
+                "agent_id": agent_id,
+                "prompt": prompt,
+                "ambient_session": current_session(),
+                **kwargs,
+            }
+        )
         return {"success": True, "output": f"cluster output from {agent_id}"}
 
     def explicit_runner(prompt: str, **kwargs) -> str:

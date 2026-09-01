@@ -16,10 +16,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-from runtime.execution.agents.local_partner_bridge import (
+from runtime.execution.agents.shared_blackboard import (
     blackboard_brief,
     harvest_to_blackboard,
-    partner_identity,
 )
 from runtime.execution.codex_backend.backend import (
     CodexBackendUnavailable,
@@ -30,15 +29,25 @@ from runtime.execution.codex_backend.events import (
     CodexEventState,
     translate_notification,
 )
+from runtime.execution.codex_backend.role_runner import (
+    agent_uses_codex_execution_backend,
+    build_codex_role_request,
+    codex_app_server_command,
+    codex_execution_lifecycle,
+    require_codex_backend_enabled,
+    resolve_codex_sandbox_mode,
+)
+from runtime.execution.codex_backend.role_runner import (
+    state_root_for_workspace as _shared_state_root_for_workspace,
+)
 from runtime.execution.codex_backend.security import (
     CodexSandboxMode,
     CodexSecurityError,
-    CodexSecurityPolicy,
-    CodexSidecarSecurity,
 )
 from runtime.execution.codex_backend.types import RemoteError, RequestTimeoutError
 from runtime.platform.process.paths import app_paths
-from runtime.platform.runtime_policy.feature_flags import is_on, resolution
+from runtime.platform.process.session import Session, current_session
+from runtime.platform.runtime_policy.feature_flags import resolution
 from runtime.protocol import AgentMessageItem, ServerMethod, TurnStatus
 from runtime.safety.sandboxing.sandbox import (
     effective_process_sandbox_mode,
@@ -87,25 +96,11 @@ def agent_is_codex_app_server_partner(agent: Any) -> bool:
     of silently running the weaker legacy CLI path.
     """
 
-    capabilities = getattr(agent, "capabilities", None)
-    identity = partner_identity(capabilities)
-    if identity is None or identity[0] != "codex-cli":
-        return False
-    if isinstance(capabilities, dict) and capabilities.get("codex_app_server") is False:
-        return _deployment_mode() in _PRODUCTION_MODES
-    flag = _explicit_feature_flag()
-    if _deployment_mode() in _PRODUCTION_MODES:
-        return True
-    return is_on("execution.codex_app_server") if flag is not None else True
+    return agent_uses_codex_execution_backend(agent)
 
 
 def _require_enabled_for_deployment() -> None:
-    if _deployment_mode() in _PRODUCTION_MODES and _explicit_feature_flag() is not True:
-        raise CodexSecurityError(
-            "Codex App Server is disabled for this production-like deployment; "
-            "set OCTOPUS_CODEX_APP_SERVER_ENABLED=true only after hard sandbox "
-            "and tenant credential provisioning are configured"
-        )
+    require_codex_backend_enabled()
 
 
 def _turn_timeout_s() -> float:
@@ -119,35 +114,8 @@ def _turn_timeout_s() -> float:
         return _DEFAULT_TURN_TIMEOUT_S
 
 
-def _is_within(candidate: Path, root: Path) -> bool:
-    try:
-        candidate.relative_to(root)
-    except ValueError:
-        return False
-    return True
-
-
 def _state_root_for_workspace(workspace: Path) -> Path:
-    explicit = str(os.environ.get("OCTOPUS_CODEX_STATE_DIR") or "").strip()
-    if explicit:
-        path = Path(explicit).expanduser()
-        if not path.is_absolute():
-            raise CodexSecurityError("OCTOPUS_CODEX_STATE_DIR must be absolute")
-        return path.resolve(strict=False)
-
-    candidates = (
-        app_paths().data_dir / "codex_backend",
-        Path.home() / ".octopus" / "codex_backend",
-    )
-    resolved_workspace = workspace.resolve(strict=True)
-    for candidate in candidates:
-        resolved_candidate = candidate.expanduser().resolve(strict=False)
-        if not (
-            _is_within(resolved_candidate, resolved_workspace)
-            or _is_within(resolved_workspace, resolved_candidate)
-        ):
-            return resolved_candidate
-    raise CodexSecurityError("no non-overlapping Codex state directory is available")
+    return _shared_state_root_for_workspace(workspace)
 
 
 def _source_codex_home() -> Path | None:
@@ -166,28 +134,54 @@ def _source_codex_home() -> Path | None:
     return (Path.home() / ".codex").resolve(strict=False)
 
 
-def _sandbox_mode(context: dict[str, Any]) -> CodexSandboxMode:
-    raw_policy = context.get("sandbox_policy")
-    raw_type = raw_policy.get("type") if isinstance(raw_policy, dict) else None
-    normalized = str(raw_type or "").strip().replace("_", "-").casefold()
-    if normalized in {"readonly", "read-only"}:
-        return "read-only"
-    # ``danger-full-access`` is intentionally capped here.  Codex may request
-    # one-operation escalation through Octopus, but a client cannot select an
-    # unbrokered full-access inner turn.
-    return "workspace-write"
+def _sandbox_mode(
+    context: dict[str, Any],
+    *,
+    trusted_parent_metadata: dict[str, Any] | None = None,
+) -> CodexSandboxMode:
+    # ``danger-full-access`` remains capped by the shared resolver.  Audit and
+    # trusted parent read-only declarations additionally force the built-in
+    # Codex shell/patch surface into a read-only filesystem profile.
+    return resolve_codex_sandbox_mode(
+        context,
+        trusted_parent_metadata=trusted_parent_metadata,
+    )
 
 
 def _partner_command(agent: Any) -> tuple[str, ...]:
-    identity = partner_identity(getattr(agent, "capabilities", None))
-    if identity is None or identity[0] != "codex-cli":
-        raise CodexSecurityError("Codex App Server driver requires a codex-cli partner")
-    command = str(identity[1]).strip()
-    if not command or "\x00" in command:
-        raise CodexSecurityError("Codex executable is invalid")
-    # Strict parsing is part of the security contract: a Codex upgrade must
-    # fail visibly instead of silently ignoring a now-unknown isolation field.
-    return (command, "app-server", "--strict-config", "--listen", "stdio://")
+    return codex_app_server_command(agent)
+
+
+def _trusted_realtime_parent(
+    turn: Any,
+    agent: Any,
+    context: dict[str, Any],
+    workspace: Path,
+) -> Session | None:
+    trusted_parent = current_session()
+    if trusted_parent is not None:
+        return trusted_parent
+    # These TurnParams fields are excluded from client serialization and
+    # stamped by RealtimeGateway after its thread/tenant authorization checks.
+    # Never synthesize a principal Session from user_context identity fields.
+    params = getattr(turn, "params", None)
+    actor = str(getattr(params, "owner_actor_id", None) or "").strip()
+    tenant = str(getattr(params, "tenant_id", None) or "").strip()
+    if bool(actor) != bool(tenant):
+        raise CodexSecurityError("authenticated realtime principal is incomplete")
+    if not actor:
+        return None
+    trusted_metadata = dict(context)
+    trusted_metadata["tenant_id"] = tenant
+    trusted_metadata["workspace_path"] = str(workspace)
+    return Session(
+        actor=actor,
+        agent=agent,
+        thread_id=str(getattr(turn, "thread_id", "") or ""),
+        conversation_id=str(getattr(turn, "thread_id", "") or ""),
+        turn_id=str(getattr(turn, "id", "") or ""),
+        metadata=trusted_metadata,
+    )
 
 
 def _request_for_turn(
@@ -197,6 +191,8 @@ def _request_for_turn(
     agent: Any,
     *,
     text: str,
+    approval_provider: Any = None,
+    is_interrupted: Any = None,
 ) -> CodexExecutionRequest:
     context = getattr(intent, "user_context", None)
     context = dict(context) if isinstance(context, dict) else {}
@@ -212,34 +208,69 @@ def _request_for_turn(
         raise CodexSecurityError("server-resolved Codex workspace does not exist") from exc
     if not workspace.is_dir():
         raise CodexSecurityError("server-resolved Codex workspace is not a directory")
-
-    owner = str(context.get("owner_actor_id") or "local").strip() or "local"
-    tenant = str(context.get("tenant_id") or "local").strip() or "local"
-    realm = str(os.environ.get("OCTOPUS_CODEX_REALM") or app_paths().data_dir.resolve())
-    model = str(context.get("partner_model") or "").strip()
-    if model.casefold() in {"", "auto", "default"}:
-        model = ""
-    effort = str(context.get("reasoning_effort") or "").strip()
-
+    # Realtime turn validation designates ``cwd`` as the execution
+    # coordinate. A browser-supplied workspace_path must not override it.
+    context["workspace_path"] = str(workspace)
+    trusted_parent = _trusted_realtime_parent(turn, agent, context, workspace)
+    if trusted_parent is not None:
+        context["caller_session"] = trusted_parent
     prompt = text
     brief = blackboard_brief(str(getattr(turn, "id", "") or ""))
     if brief:
         prompt = f"{brief}\n\n---\n\n{text}"
 
-    return CodexExecutionRequest(
+    stack = getattr(runtime, "_stack", None)
+    if stack is None:
+        # Keep the small adapter independently testable and compatible with
+        # older embeddings that have not wired an Octopus execution stack.
+        # Such embeddings receive no Octopus dynamic tools; production app
+        # construction always supplies ``_stack``.
+        capabilities = getattr(agent, "capabilities", None)
+        if not isinstance(capabilities, dict) or str(
+            capabilities.get("execution_backend") or ""
+        ).casefold() != "codex_app_server":
+            raise CodexSecurityError("Codex App Server driver requires an embedded Coder role")
+        command = str(
+            capabilities.get("codex_app_server_executable")
+            or capabilities.get("codex_executable")
+            or "codex"
+        ).strip()
+        if not command or "\x00" in command:
+            raise CodexSecurityError("Codex executable is invalid")
+        model = ""
+        return CodexExecutionRequest(
+            outer_thread_id=str(getattr(turn, "thread_id", "") or ""),
+            outer_turn_id=str(getattr(turn, "id", "") or ""),
+            workspace=workspace,
+            realm_id=str(os.environ.get("OCTOPUS_CODEX_REALM") or app_paths().data_dir.resolve()),
+            tenant_id=str(context.get("tenant_id") or "local"),
+            principal_id=str(context.get("owner_actor_id") or "local"),
+            prompt=prompt,
+            command=(command, "app-server", "--strict-config", "--listen", "stdio://"),
+            source_codex_home=_source_codex_home(),
+            model=model or None,
+            effort=str(context.get("reasoning_effort") or "").strip() or None,
+            sandbox_mode=_sandbox_mode(
+                context,
+                trusted_parent_metadata=(
+                    trusted_parent.metadata
+                    if trusted_parent is not None and isinstance(trusted_parent.metadata, dict)
+                    else None
+                ),
+            ),
+        )
+
+    request, _broker, _provider = build_codex_role_request(
+        stack,
+        agent,
+        prompt,
+        context=context,
         outer_thread_id=str(getattr(turn, "thread_id", "") or ""),
         outer_turn_id=str(getattr(turn, "id", "") or ""),
-        workspace=workspace,
-        realm_id=realm,
-        tenant_id=tenant,
-        principal_id=owner,
-        prompt=prompt,
-        command=_partner_command(agent),
-        source_codex_home=_source_codex_home(),
-        model=model or None,
-        effort=effort or None,
-        sandbox_mode=_sandbox_mode(context),
+        approval_provider=approval_provider,
+        is_interrupted=is_interrupted,
     )
+    return request
 
 
 async def _heartbeat(emitter: Any, turn: Any, *, started_at: float) -> None:
@@ -291,47 +322,60 @@ async def drive_codex_app_server(
 ) -> bool:
     """Run one outer turn through Codex and stream it into native UI items.
 
-    Returns ``False`` only when the versioned App Server API is unavailable
-    before ``turn/start``.  The caller then uses the already-hardened one-shot
-    adapter.  Every security failure and every post-start failure is terminal.
+    The embedded Coder has no persona/policy-equivalent fallback. Every
+    security failure and every App Server failure is terminal.
     """
 
     _require_enabled_for_deployment()
-    request = _request_for_turn(runtime, turn, intent, agent, text=text)
-    security = CodexSidecarSecurity(
-        CodexSecurityPolicy(
-            state_root=_state_root_for_workspace(request.workspace),
-            allowed_workspace_roots=(request.workspace,),
-            deployment_mode=_deployment_mode(),
-        )
-    )
-    session = CodexExecutionSession(
-        request,
-        security=security,
+
+    def interrupted() -> bool:
+        return bool(emitter.is_turn_interrupted(turn.id))
+
+    request = _request_for_turn(
+        runtime,
+        turn,
+        intent,
+        agent,
+        text=text,
         approval_provider=provider,
-        is_interrupted=lambda: bool(emitter.is_turn_interrupted(turn.id)),
-        process_backend=resolved_process_backend(effective_process_sandbox_mode()),
+        is_interrupted=interrupted,
     )
-    try:
+    # Persist the engine-owned effective model, not an outer smart-routing
+    # candidate. This is the authoritative coordinate used by history,
+    # outcome/evolution records and any UI that inspects the completed turn.
+    if request.model and getattr(turn, "params", None) is not None:
+        copy_with_update = getattr(turn.params, "model_copy", None)
+        if callable(copy_with_update):
+            turn.params = copy_with_update(update={"model": request.model})
+        else:
+            # Lightweight test/dynamic adapters may expose a mutable params
+            # object rather than the production Pydantic model.
+            turn.params.model = request.model
+    turn.execution_engine = "codex"
+    raw_context = getattr(intent, "user_context", None)
+    context = dict(raw_context) if isinstance(raw_context, dict) else {}
+    trusted_parent = _trusted_realtime_parent(turn, agent, context, request.workspace)
+    async with codex_execution_lifecycle(
+        getattr(runtime, "_stack", None),
+        request,
+        trusted_session=trusted_parent,
+        approval_provider=provider,
+        is_interrupted=interrupted,
+        timeout_s=_turn_timeout_s(),
+        state_root=_state_root_for_workspace(request.workspace),
+        deployment_mode_value=_deployment_mode(),
+        process_backend=resolved_process_backend(effective_process_sandbox_mode()),
+        session_factory=CodexExecutionSession,
+    ) as prepared:
+        session = prepared.session
         try:
             await session.start()
         except CodexBackendUnavailable:
             if session.turn_started or _deployment_mode() in _PRODUCTION_MODES:
                 raise
-            from runtime.sensing.gateway.realtime_local_partner import drive_local_partner
-
-            _logger.info("Codex App Server unavailable before turn/start; using hardened exec")
-            await drive_local_partner(
-                runtime,
-                turn,
-                log,
-                emitter,
-                intent,
-                agent,
-                provider,
-                text=text,
-            )
-            return False
+            # Keep one execution and security model.  The retired one-shot CLI
+            # bridge must not be resurrected as a silent fallback.
+            raise
 
         bridge_state = runtime._make_bridge_state(turn.thread_id, turn.id, agent=agent)
         event_state = CodexEventState()
@@ -438,8 +482,6 @@ async def drive_codex_app_server(
                 answer,
             )
         return True
-    finally:
-        await session.close()
 
 
 __all__ = ["agent_is_codex_app_server_partner", "drive_codex_app_server"]

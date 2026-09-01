@@ -86,9 +86,9 @@ class WorkbenchActivationStore:
                 raw = None
         else:
             raw = read_json_with_backup(activation, default=None)
-        descriptor_exists = activation.exists() or activation.with_suffix(
-            activation.suffix + ".bak"
-        ).exists()
+        descriptor_exists = (
+            activation.exists() or activation.with_suffix(activation.suffix + ".bak").exists()
+        )
         error = None
         if not isinstance(raw, dict) or raw.get("schema") != ACTIVATION_SCHEMA:
             available = self.factory_path(plugin_id).is_dir()
@@ -275,9 +275,7 @@ class WorkbenchActivationStore:
             return {"status": "absent", "path": str(source)}
         if source.is_symlink():
             raise ValueError(f"refusing to trash symlinked workbench data: {source}")
-        recovery_id = (
-            datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
-        )
+        recovery_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
         recovery = self.trash_root / plugin_id / recovery_id
         recovery.mkdir(parents=True, exist_ok=False)
         target = recovery / FACTORY_WORKBENCHES[plugin_id]["data_dir_name"]
@@ -338,5 +336,6 @@ class WorkbenchActivationStore:
             return FACTORY_WORKBENCHES[plugin_id]
         except KeyError as exc:
             raise KeyError(f"unknown factory workbench: {plugin_id}") from exc
+
 
 __all__ = ["ACTIVATION_SCHEMA", "FACTORY_WORKBENCHES", "WorkbenchActivationStore"]

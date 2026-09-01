@@ -76,7 +76,9 @@ def test_connection_cap_disabled_when_zero():
     ("offered", "expected"),
     [
         ("bearer, token-value", "bearer"),
-        ("Bearer, token-value", "bearer"),
+        # RFC 6455 subprotocol selection is case-sensitive: acknowledge the
+        # exact non-secret marker the client offered.
+        ("Bearer, token-value", "Bearer"),
         ("chat, bearer, token-value", "bearer"),
         ("chat", None),
         ("", None),

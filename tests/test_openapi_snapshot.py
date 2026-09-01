@@ -45,28 +45,75 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
+
+SNAPSHOT_PATH = Path(__file__).resolve().parent.parent / "docs" / "openapi-snapshot.json"
+_REPOSITORY_ROOT = SNAPSHOT_PATH.parent.parent
+_SCHEMA_OUTPUT_ENV = "OCTOPUS_OPENAPI_SCHEMA_OUTPUT"
+_SCHEMA_SCRIPT = f"""
+import json
+import os
+from pathlib import Path
 
 from runtime.platform.ui.app import create_app
 
-SNAPSHOT_PATH = Path(__file__).resolve().parent.parent / "docs" / "openapi-snapshot.json"
+schema = create_app().openapi()
+Path(os.environ[{_SCHEMA_OUTPUT_ENV!r}]).write_text(
+    json.dumps(schema, ensure_ascii=False),
+    encoding="utf-8",
+)
+"""
 
 
 def _current_schema() -> dict:
-    """Fetch the live OpenAPI schema from a freshly built app.
+    """Build the live schema in a hermetic child process.
 
     We intentionally build with NO stack / registry so the snapshot
     reflects the base surface area · adding a stack-conditional
-    endpoint shouldn't shift the baseline.
+    endpoint shouldn't shift the baseline.  The fresh interpreter and
+    temporary HOME/data roots are also important: connector modules cache
+    default paths at import time, and an unrelated local master key must not
+    decide whether connector/capability routes appear in this contract.
     """
-    app = create_app()
-    client = TestClient(app)
-    resp = client.get("/openapi.json")
-    assert resp.status_code == 200, f"openapi.json did not return 200: {resp.status_code}"
-    return resp.json()
+    with tempfile.TemporaryDirectory(prefix="octopus-openapi-") as temporary:
+        isolated_root = Path(temporary)
+        schema_path = isolated_root / "openapi.json"
+        environment = {
+            key: value for key, value in os.environ.items() if not key.startswith("OCTOPUS_")
+        }
+        environment.update(
+            {
+                "HOME": str(isolated_root / "home"),
+                "XDG_CACHE_HOME": str(isolated_root / "cache"),
+                "XDG_CONFIG_HOME": str(isolated_root / "config"),
+                "XDG_DATA_HOME": str(isolated_root / "share"),
+                "OCTOPUS_DATA_DIR": str(isolated_root / "data"),
+                "OCTOPUS_HOME": str(isolated_root / "octopus-home"),
+                "OCTOPUS_RESOURCES_DIR": str(_REPOSITORY_ROOT),
+                _SCHEMA_OUTPUT_ENV: str(schema_path),
+            }
+        )
+        completed = subprocess.run(
+            [sys.executable, "-c", _SCHEMA_SCRIPT],
+            cwd=_REPOSITORY_ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=90,
+            check=False,
+        )
+        assert completed.returncode == 0, (
+            "isolated OpenAPI app failed to build:\n"
+            f"stdout:\n{completed.stdout}\n"
+            f"stderr:\n{completed.stderr}"
+        )
+        assert schema_path.is_file(), "isolated OpenAPI builder did not write a schema"
+        return json.loads(schema_path.read_text(encoding="utf-8"))
 
 
 def _normalize(schema: dict) -> dict:
@@ -183,3 +230,30 @@ def test_openapi_response_models_on_config_endpoints() -> None:
             f"got ref={ref!r}. If the model was renamed intentionally, "
             "update both the check above and regenerate the snapshot."
         )
+
+
+def test_device_flow_generation_contract_is_typed() -> None:
+    """Device-flow cancellation must be generation-scoped on both public surfaces."""
+    schema = _current_schema()
+    for path in (
+        "/api/connectors/{connector_id}/device-flow",
+        "/api/capabilities/{cid}/device-flow",
+    ):
+        delete = schema["paths"][path]["delete"]
+        generation = next(
+            parameter
+            for parameter in delete["parameters"]
+            if parameter["name"] == "expected_flow_id"
+        )
+        assert generation["in"] == "query"
+        assert generation["required"] is True
+        assert delete["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith(
+            "/DeviceFlowCancelResponse"
+        )
+        assert schema["paths"][path]["get"]["responses"]["200"]["content"]["application/json"][
+            "schema"
+        ]["$ref"].endswith("/DeviceFlowResponse")
+
+    payload = schema["components"]["schemas"]["DeviceFlowPayload"]
+    assert "flow_id" in payload["required"]
+    assert payload["properties"]["flow_id"]["minLength"] == 1

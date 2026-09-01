@@ -77,6 +77,7 @@ def _browser_get(
     max_bytes: int = MAX_TEXT_BYTES,
     allow_private: bool = False,
     page: Any = None,
+    _background_only: bool = False,
     **_kw: Any,
 ) -> dict[str, Any]:
     if page is None:
@@ -91,10 +92,45 @@ def _browser_get(
             if not _has_agent_browser_session():
                 return {"error": "missing url", "blocked": False}
 
-    return _with_page(
+    result = _with_page(
         page,
         lambda current: _navigate_and_read(current, url, timeout_ms, wait_ms, max_bytes),
+        verb="extract",
+        payload={},
+        url=url,
+        allow_higher_track=not _background_only,
     )
+    # Live Electron/extension tracks expose extracted body text as ``text``;
+    # keep browser_get's established ``content`` contract regardless of which
+    # browser served the request.
+    live_text = result.get("content")
+    if not isinstance(live_text, str):
+        live_text = result.get("text")
+    if isinstance(live_text, str):
+        truncated = len(live_text) > max_bytes
+        result["content"] = live_text[:max_bytes]
+        result["length"] = len(result["content"])
+        result["truncated"] = bool(result.get("truncated")) or truncated
+    error = str(result.get("error") or "").lower()
+    if (
+        page is None
+        and url
+        and ("executable doesn't exist" in error or "playwright not installed" in error)
+    ):
+        from runtime.execution.suckers.web_skills import _fetch_url
+
+        fetched = _fetch_url(
+            url,
+            timeout_ms=min(timeout_ms, 8_000),
+            max_bytes=max_bytes,
+            allow_private=allow_private,
+            extract=True,
+        )
+        if not fetched.get("error"):
+            fetched["browser_fallback"] = "http_extract"
+            fetched["fallback_reason"] = "playwright_executable_missing"
+            return fetched
+    return result
 
 
 # ═══════════════════════════════════════════════════════════
@@ -244,6 +280,7 @@ def _with_page(
     verb: str | None = None,
     payload: dict[str, Any] | None = None,
     url: str = "",
+    allow_higher_track: bool = True,
 ) -> dict[str, Any]:
     if page is not None:
         from runtime.execution.suckers.browser_backend import Track
@@ -254,7 +291,7 @@ def _with_page(
     # live; fall back to headless Playwright. Unavailable tracks (the common
     # case — no desktop app running) resolve to None, so the PW path below is
     # unchanged. Only verbs the higher tracks implement pass ``verb``.
-    if verb is not None:
+    if allow_higher_track and verb is not None:
         routed = _dispatch_higher_track(verb, payload or {}, url=url)
         if routed is not None:
             return routed

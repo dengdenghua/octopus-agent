@@ -31,6 +31,56 @@ class CodexEventState:
     streamed_agent_items: set[str] = field(default_factory=set)
     streamed_reasoning_items: set[str] = field(default_factory=set)
     started_tool_items: set[str] = field(default_factory=set)
+    # Kept after the original fields so positional construction by an older
+    # embedding retains its pre-existing argument order.
+    agent_message_phases: dict[str, str] = field(default_factory=dict)
+
+
+def _agent_message_phase(item: dict[str, Any]) -> str:
+    """Return the stable App Server lane for an agent message, if known.
+
+    Newer App Server versions classify every assistant message structurally
+    as ``commentary`` or ``final_answer`` on the item lifecycle snapshot.  The
+    delta notification intentionally carries only the item id, so remember the
+    phase from ``item/started`` instead of making downstream clients infer it
+    later from whichever tool happens to follow the prose.
+
+    ``phase`` was absent on older peers.  Unknown values deliberately retain
+    the legacy answer-lane behavior for protocol compatibility.
+    """
+
+    phase = str(item.get("phase") or "").strip().casefold()
+    return phase if phase in {"commentary", "final_answer"} else ""
+
+
+def _remember_agent_message_phase(
+    state: CodexEventState,
+    item_id: str,
+    item: dict[str, Any],
+) -> str:
+    phase = _agent_message_phase(item)
+    if item_id and phase:
+        # A message phase is immutable in the App Server protocol.  Keeping
+        # the first observed value also prevents a malformed completion
+        # snapshot from changing lanes after deltas have already streamed.
+        state.agent_message_phases.setdefault(item_id, phase)
+    return state.agent_message_phases.get(item_id, phase)
+
+
+def _agent_message_delta(
+    delta: str,
+    *,
+    phase: str,
+    start_new_segment: bool,
+) -> dict[str, Any]:
+    if phase == "commentary":
+        return {
+            "type": "commentary_delta",
+            "delta": delta,
+            "public_status": True,
+            "start_new_segment": start_new_segment,
+        }
+    return {"type": "text_delta", "delta": delta}
 
 
 def _text(value: Any, *, limit: int = _MAX_PREVIEW_CHARS) -> str:
@@ -188,9 +238,18 @@ def translate_notification(
     if method == "item/agentMessage/delta":
         delta = _text(params.get("delta"))
         item_id = str(params.get("itemId") or "")
+        if not delta:
+            return []
+        first_delta = bool(item_id and item_id not in state.streamed_agent_items)
         if item_id:
             state.streamed_agent_items.add(item_id)
-        return [{"type": "text_delta", "delta": delta}] if delta else []
+        return [
+            _agent_message_delta(
+                delta,
+                phase=state.agent_message_phases.get(item_id, ""),
+                start_new_segment=first_delta,
+            )
+        ]
 
     if method in {"item/reasoning/textDelta", "item/reasoning/summaryTextDelta"}:
         delta = _text(params.get("delta"))
@@ -231,11 +290,22 @@ def translate_notification(
         item_id = str(item.get("id") or "")
         item_type = str(item.get("type") or "")
 
+        if item_type == "agentMessage" and method == "item/started":
+            _remember_agent_message_phase(state, item_id, item)
+            return []
+
         if item_type == "agentMessage" and method == "item/completed":
             events: list[dict[str, Any]] = []
             text = _text(item.get("text"))
+            phase = _remember_agent_message_phase(state, item_id, item)
             if text and item_id not in state.streamed_agent_items:
-                events.append({"type": "text_delta", "delta": text})
+                events.append(
+                    _agent_message_delta(
+                        text,
+                        phase=phase,
+                        start_new_segment=True,
+                    )
+                )
             events.append({"type": "react_step_complete"})
             return events
 
@@ -348,7 +418,7 @@ def translate_notification(
             return [
                 {
                     "type": "commentary_delta",
-                    "delta": "Codex 遇到暂时性错误，正在自动重试。",
+                    "delta": "当前模型服务遇到暂时性错误，正在自动重试。",
                     "public_status": True,
                     "start_new_segment": True,
                 }

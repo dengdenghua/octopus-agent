@@ -1,9 +1,9 @@
-"""SSE auth-gap fix: `_resolve_actor` accepts the bearer via a `?token=` query.
+"""SSE credentials stay out of URLs.
 
-EventSource cannot set request headers, so under `require_auth` every SSE
-endpoint 401'd while the chat WebSocket (which already uses `?token=`) worked.
-The frontend now appends `?token=` (`authedEventSource`) and the backend reads
-it. The Authorization header still takes precedence when both are present.
+The frontend uses fetch + ReadableStream, which can carry the session cookie or
+Authorization header.  Query-string tokens leak into browser history, access
+logs, and referrers, so the shared principal resolver deliberately ignores
+them.  Header/cookie authentication remains the supported transport.
 """
 
 from __future__ import annotations
@@ -27,9 +27,9 @@ def _req(headers: dict | None = None, query: dict | None = None) -> SimpleNamesp
     return SimpleNamespace(headers=headers or {}, query_params=query or {})
 
 
-def test_query_token_resolves_actor() -> None:
-    actor = _resolve_actor(_req(query={"token": "sk-alice"}), _store(), True)
-    assert actor == "alice"
+def test_query_token_is_rejected_when_auth_is_required() -> None:
+    with pytest.raises(HTTPException):
+        _resolve_actor(_req(query={"token": "sk-alice"}), _store(), True)
 
 
 def test_header_takes_precedence_over_query() -> None:
@@ -51,5 +51,6 @@ def test_invalid_query_token_raises_when_required() -> None:
         _resolve_actor(_req(query={"token": "sk-nope"}), _store(), True)
 
 
-def test_bad_query_token_returns_none_when_not_required() -> None:
+def test_query_token_is_ignored_when_auth_is_optional() -> None:
+    assert _resolve_actor(_req(query={"token": "sk-alice"}), _store(), False) is None
     assert _resolve_actor(_req(query={"token": "sk-nope"}), _store(), False) is None

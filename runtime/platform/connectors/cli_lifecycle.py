@@ -17,8 +17,10 @@ import os
 import platform
 import re
 import shlex
+import shutil
 import subprocess
 import urllib.parse
+from pathlib import Path
 from typing import Any
 
 _LOGGER = __import__("logging").getLogger(__name__)
@@ -44,6 +46,42 @@ def resolve_cmd(cmd_spec: Any) -> str | None:
     if isinstance(cmd_spec, dict):
         return pick_platform(cmd_spec)
     return cmd_spec if cmd_spec else None
+
+
+def detect_command(conn: Any) -> dict[str, Any]:
+    """Resolve a declared CLI only when an install/status action asks us to.
+
+    Connector catalog listing remains metadata-only.  This is intentionally
+    separate from registry discovery so opening the plugin market never scans
+    PATH or a provider-owned home directory.
+    """
+    raw = (conn.cli or {}).get("detect") or {}
+    commands = raw.get("commands") if isinstance(raw, dict) else raw
+    if isinstance(commands, dict):
+        commands = commands.get(platform_key()) or commands.get("darwin") or commands.get("linux")
+    if isinstance(commands, str):
+        commands = [commands]
+    if not isinstance(commands, list):
+        commands = []
+    for value in commands:
+        command = str(value or "").strip()
+        if not command:
+            continue
+        expanded = Path(command).expanduser()
+        if expanded != Path(command) or "/" in command or "\\" in command:
+            try:
+                if expanded.is_file() and os.access(expanded, os.X_OK):
+                    return {
+                        "found": True,
+                        "command": command,
+                        "executable": str(expanded.resolve()),
+                    }
+            except OSError:
+                continue
+        executable = shutil.which(command)
+        if executable:
+            return {"found": True, "command": command, "executable": executable}
+    return {"found": False, "command": "", "executable": ""}
 
 
 def _version_tuple(v: str) -> tuple[int, ...]:
@@ -91,8 +129,17 @@ def check_version(conn: Any, *, env: dict[str, str] | None = None) -> dict[str, 
     if not cmd:
         return {"ok": True, "version": "", "min_version": min_v}
     try:
+        argv = shlex.split(cmd)
+        if argv:
+            first = Path(argv[0]).expanduser()
+            if first != Path(argv[0]) and first.is_file():
+                argv[0] = str(first)
+            elif shutil.which(argv[0]) is None:
+                detected = detect_command(conn)
+                if detected.get("found"):
+                    argv[0] = str(detected["executable"])
         r = subprocess.run(
-            shlex.split(cmd),
+            argv,
             capture_output=True,
             text=True,
             timeout=30,
@@ -123,6 +170,9 @@ def run_init(conn: Any, *, env: dict[str, str] | None = None, timeout: int = 300
     init_cmd = (conn.cli or {}).get("init")
     if not init_cmd:
         return {"ok": True, "skipped": True}
+    before = detect_command(conn)
+    if (conn.cli or {}).get("initIfMissing") and before.get("found"):
+        return {"ok": True, "skipped": True, "reason": "already_installed", "detection": before}
     cmd = resolve_cmd(init_cmd)
     if not cmd:
         return {"ok": False, "error": "当前平台无 init 命令"}
@@ -135,11 +185,13 @@ def run_init(conn: Any, *, env: dict[str, str] | None = None, timeout: int = 300
             env={**os.environ, **(env or {})},
         )
         out = (r.stdout or "") + (r.stderr or "")
+        after = detect_command(conn)
         return {
             "ok": r.returncode == 0,
             "exit_code": r.returncode,
             "output": out[:800],
             "error": None if r.returncode == 0 else f"init 退出码 {r.returncode}",
+            "detection": after,
         }
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": f"init 超时(>{timeout}s),可在终端手动执行: {cmd[:120]}"}
@@ -179,6 +231,7 @@ def extract_device_flow(output: str, spec: dict[str, Any]) -> dict[str, Any]:
 __all__ = [
     "check_runtime",
     "check_version",
+    "detect_command",
     "extract_device_flow",
     "pick_platform",
     "platform_key",

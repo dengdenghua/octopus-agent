@@ -6,7 +6,6 @@ transport, and invitation security boundaries remain independently reviewable.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -22,6 +21,7 @@ from runtime.memory.cowork.team_invitation_store import (
     JoinRequestNotFound,
     TeamInvitationStore,
 )
+from runtime.platform.io import JsonMutation, TransactionalFileError, mutate_json_file
 
 from .team_rooms_models import (
     CreateTeamInviteRequest,
@@ -159,6 +159,7 @@ def register_team_invitation_routes(
     room_payload: Callable[[TeamRoomWire], dict[str, Any]],
     join_policy_for: Callable[[TeamRoomWire], str],
     project_id_for: Callable[[TeamRoomWire], str | None],
+    refresh_rooms: Callable[[], None],
 ) -> None:
     """Attach create/list/revoke/preview/join routes to a Team Room router."""
 
@@ -341,7 +342,11 @@ def register_team_invitation_routes(
             )
             if existing_actor is not None and existing_actor.status == "removed":
                 raise HTTPException(409, "removed participant cannot be approved")
-            if existing_actor is not None:
+            has_reservation = store.has_consumption_reservation(
+                invite_id=str(application["invite_id"]),
+                actor_id=str(application["actor_id"]),
+            )
+            if existing_actor is not None and not has_reservation:
                 try:
                     approved, changed = store.approve_existing_membership(
                         request_id,
@@ -367,18 +372,35 @@ def register_team_invitation_routes(
                 consumed: dict[str, Any],
                 approved: dict[str, Any],
             ) -> tuple[TeamRoomWire, TeamParticipantWire]:
+                current_team = teams.get(team_id) or before_team
+                reserved_participant_id = str(consumed["reservation_participant_id"])
+                current_participant = next(
+                    (
+                        participant
+                        for participant in current_team.participants
+                        if participant.actor_id == approved["actor_id"]
+                    ),
+                    None,
+                )
+                if current_participant is not None:
+                    if (
+                        current_participant.id != reserved_participant_id
+                        or current_participant.status == "removed"
+                    ):
+                        raise HTTPException(409, "reserved membership is no longer active")
+                    return current_team, current_participant
                 now = _now()
                 participant = TeamParticipantWire(
-                    id=participant_id,
+                    id=reserved_participant_id,
                     display_name=str(approved["display_name"]),
                     role=str(consumed["role"]),
                     actor_id=str(approved["actor_id"]),
                     joined_at=now,
                     last_seen_at=now,
                 )
-                updated_team = before_team.model_copy(
+                updated_team = current_team.model_copy(
                     update={
-                        "participants": [*before_team.participants, participant],
+                        "participants": [*current_team.participants, participant],
                         "updated_at": now,
                     }
                 )
@@ -386,7 +408,7 @@ def register_team_invitation_routes(
                 try:
                     save_rooms()
                 except Exception:
-                    teams[team_id] = before_team
+                    teams[team_id] = current_team
                     raise
                 return updated_team, participant
 
@@ -403,6 +425,7 @@ def register_team_invitation_routes(
                         else uuid4().hex
                     ),
                     apply=_apply_membership,
+                    membership_already_applied=existing_actor is not None,
                 )
             except (InvitationError, ValueError) as exc:
                 raise _request_failure(exc) from exc
@@ -437,6 +460,7 @@ def register_team_invitation_routes(
 
     @router.get("/api/team-invites/{token}")
     def inspect_invite(request: Request, token: str) -> dict[str, Any]:
+        refresh_rooms()
         principal = principal_for(request)
         actor = principal.actor_id if principal is not None else None
         tenant_id = tenant_for(request)
@@ -482,6 +506,7 @@ def register_team_invitation_routes(
         body: JoinInviteRequest,
         response: Response,
     ) -> dict[str, Any]:
+        refresh_rooms()
         principal = principal_for(request)
         actor = principal.actor_id if principal is not None else None
         tenant_id = principal.tenant_id if principal is not None else "local"
@@ -529,7 +554,12 @@ def register_team_invitation_routes(
                 )
             if existing_actor is not None and existing_actor.status == "removed":
                 raise HTTPException(403, "participant was removed from this team")
-            if existing_actor is not None:
+            reservation_actor_id = actor or participant_id
+            has_reservation = store.has_consumption_reservation(
+                invite_id=str(invitation["id"]),
+                actor_id=reservation_actor_id,
+            )
+            if existing_actor is not None and not has_reservation:
                 return {
                     "outcome": "joined",
                     "join_policy": join_policy_for(current_team),
@@ -578,24 +608,54 @@ def register_team_invitation_routes(
                     "thread_id": None,
                 }
 
-            invitation = _usable_invitation(store, token, tenant_id)
+            if not has_reservation:
+                invitation = _usable_invitation(store, token, tenant_id)
             before_team = current_team
 
             def _apply_membership(
                 consumed: dict[str, Any],
             ) -> tuple[TeamRoomWire, TeamParticipantWire]:
+                latest_team = teams.get(room_id) or before_team
+                reserved_participant_id = str(consumed["reservation_participant_id"])
+                current_participant = next(
+                    (
+                        participant
+                        for participant in latest_team.participants
+                        if (
+                            participant.actor_id == actor
+                            and participant.id == reserved_participant_id
+                            if actor is not None
+                            else participant.id == reserved_participant_id
+                        )
+                    ),
+                    None,
+                )
+                if current_participant is not None:
+                    if current_participant.status == "removed":
+                        raise HTTPException(403, "participant was removed from this team")
+                    return latest_team, current_participant
+                conflicting_actor = next(
+                    (
+                        participant
+                        for participant in latest_team.participants
+                        if actor is not None and participant.actor_id == actor
+                    ),
+                    None,
+                )
+                if conflicting_actor is not None:
+                    raise HTTPException(409, "reserved membership identity changed")
                 now = _now()
                 participant = TeamParticipantWire(
-                    id=participant_id,
+                    id=reserved_participant_id,
                     display_name=display_name,
                     role=str(consumed["role"]),
                     actor_id=actor,
                     joined_at=now,
                     last_seen_at=now,
                 )
-                updated_team = before_team.model_copy(
+                updated_team = latest_team.model_copy(
                     update={
-                        "participants": [*before_team.participants, participant],
+                        "participants": [*latest_team.participants, participant],
                         "updated_at": now,
                     }
                 )
@@ -603,12 +663,12 @@ def register_team_invitation_routes(
                 try:
                     save_rooms()
                 except Exception:
-                    teams[room_id] = before_team
+                    teams[room_id] = latest_team
                     raise
                 return updated_team, participant
 
             try:
-                consumed, (updated_team, participant) = store.consume_with(
+                consumed, result = store.consume_with(
                     token,
                     tenant_id=tenant_id,
                     room_id=room_id,
@@ -616,11 +676,29 @@ def register_team_invitation_routes(
                     request_id=principal.request_id if principal is not None else uuid4().hex,
                     apply=_apply_membership,
                     participant_id=participant_id,
+                    membership_already_applied=existing_actor is not None,
                 )
-            except InvitationNotFound as exc:
-                raise HTTPException(404, "invite not found") from exc
-            except (InvitationExpired, InvitationRevoked, InvitationExhausted) as exc:
-                raise HTTPException(410, str(exc)) from exc
+            except (InvitationError, ValueError) as exc:
+                raise _request_failure(exc) from exc
+            if result is None:
+                updated_team = teams.get(room_id) or before_team
+                participant = next(
+                    (
+                        item
+                        for item in updated_team.participants
+                        if (
+                            item.actor_id == actor
+                            if actor is not None
+                            else item.id == consumed["reservation_participant_id"]
+                        )
+                        and item.status != "removed"
+                    ),
+                    None,
+                )
+                if participant is None:
+                    raise HTTPException(409, "joined membership is no longer active")
+            else:
+                updated_team, participant = result
             return {
                 "outcome": "joined",
                 "join_policy": join_policy,
@@ -632,6 +710,7 @@ def register_team_invitation_routes(
 
     @router.get("/api/team-invites/{token}/join-request")
     def get_own_join_request(request: Request, token: str) -> dict[str, Any]:
+        refresh_rooms()
         principal = principal_for(request)
         if principal is None or not principal.actor_id:
             raise HTTPException(401, "authentication required")
@@ -695,28 +774,32 @@ def register_team_invitation_routes(
 def scrub_legacy_room_invites(path: Path) -> None:
     """Remove plaintext invite fields from old room snapshots in place."""
 
-    if not path.exists():
-        return
+    def _scrub(raw: Any) -> JsonMutation[None]:
+        items = raw.get("teams") if isinstance(raw, dict) else raw
+        if not isinstance(items, list):
+            return JsonMutation(None, changed=False)
+        changed = False
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            for field in ("invite_token", "invite_role", "invite_created_at"):
+                if field in item:
+                    item.pop(field, None)
+                    changed = True
+        return JsonMutation(None, changed=changed)
+
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        mutate_json_file(
+            path,
+            default_factory=dict,
+            validate=lambda _raw: None,
+            mutate=_scrub,
+            indent=2,
+        )
+    except TransactionalFileError:
+        # Preserve the prior tolerant startup behavior for corrupt/unreadable
+        # legacy files. The strict room loader remains the runtime authority.
         return
-    items = raw.get("teams") if isinstance(raw, dict) else raw
-    if not isinstance(items, list):
-        return
-    changed = False
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        for field in ("invite_token", "invite_role", "invite_created_at"):
-            if field in item:
-                item.pop(field, None)
-                changed = True
-    if not changed:
-        return
-    tmp = path.with_suffix(path.suffix + ".invite-migration.tmp")
-    tmp.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(path)
 
 
 __all__ = ["register_team_invitation_routes", "scrub_legacy_room_invites"]

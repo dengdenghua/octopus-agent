@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import logging
 import os
 import re
@@ -108,11 +109,20 @@ class ConnectorTokenRefresher:
 
     def __init__(self, credentials: CredentialStore) -> None:
         self._credentials = credentials
-        self._entries: dict[str, _TokenRefreshEntry] = {}
+        self._entries: dict[str | tuple[str, str], _TokenRefreshEntry] = {}
         self._lock = threading.Lock()
 
     def _supervisor_key(self, connector_id: str) -> tuple[str, str]:
         return self._credentials.storage_identity, connector_id
+
+    def _entry_key(self, connector_id: str) -> str | tuple[str, str]:
+        from runtime.platform.capabilities.tenant_context import (
+            current_capability_scope,
+        )
+
+        if current_capability_scope() is None:
+            return connector_id
+        return self._supervisor_key(connector_id)
 
     @staticmethod
     def _spec(conn: ConnectorDefinition) -> dict[str, Any]:
@@ -120,7 +130,7 @@ class ConnectorTokenRefresher:
 
     def is_scheduled(self, connector_id: str) -> bool:
         with self._lock:
-            return connector_id in self._entries
+            return self._entry_key(connector_id) in self._entries
 
     def schedule(
         self,
@@ -143,14 +153,16 @@ class ConnectorTokenRefresher:
             cancellation = self._cancel_under_lifecycle(conn.id)
             self._wait_for_lease(cancellation.connector_id, cancellation.lease)
             entry = _TokenRefreshEntry(generation=canonical_generation)
-            key = self._supervisor_key(conn.id)
+            local_key = self._entry_key(conn.id)
+            supervisor_key = self._supervisor_key(conn.id)
             with _refresh_supervisor_lock:
-                _refresh_supervisor_entries[key] = entry
+                _refresh_supervisor_entries[supervisor_key] = entry
             with self._lock:
-                self._entries[conn.id] = entry
+                self._entries[local_key] = entry
+            context = contextvars.copy_context()
             worker = threading.Thread(
-                target=self._run_loop,
-                args=(conn, entry, initial_token),
+                target=context.run,
+                args=(self._run_loop, conn, entry, initial_token),
                 daemon=True,
             )
             entry.worker = worker
@@ -173,7 +185,12 @@ class ConnectorTokenRefresher:
                 if storage_identity == scope
             }
         with self._lock:
-            connector_ids.update(self._entries)
+            for key in self._entries:
+                if isinstance(key, str):
+                    if self._entry_key(key) == key:
+                        connector_ids.add(key)
+                elif key[0] == scope:
+                    connector_ids.add(key[1])
         for connector_id in connector_ids:
             self.stop(connector_id)
 
@@ -197,7 +214,7 @@ class ConnectorTokenRefresher:
         if shared_entry is not None:
             entries.append(shared_entry)
         with self._lock:
-            local_entry = self._entries.get(connector_id)
+            local_entry = self._entries.get(self._entry_key(connector_id))
         if local_entry is not None and all(local_entry is not item for item in entries):
             entries.append(local_entry)
         for entry in entries:
@@ -270,29 +287,30 @@ class ConnectorTokenRefresher:
         entry: _TokenRefreshEntry,
         initial_token: str | None,
     ) -> None:
+        local_key = self._entry_key(conn.id)
+        supervisor_key = self._supervisor_key(conn.id)
         try:
             delay = self._refresh_once(conn, entry, initial_token=initial_token)
             while delay is not None:
                 with self._lock:
-                    if self._entries.get(conn.id) is not entry or entry.cancelled.is_set():
+                    if self._entries.get(local_key) is not entry or entry.cancelled.is_set():
                         return
                     timer = threading.Timer(delay, self._fire)
                     entry.timer = timer
                 timer.start()
                 timer.join()
                 with self._lock:
-                    if self._entries.get(conn.id) is not entry or entry.cancelled.is_set():
+                    if self._entries.get(local_key) is not entry or entry.cancelled.is_set():
                         return
                     entry.timer = None
                 delay = self._refresh_once(conn, entry)
         finally:
             with self._lock:
-                if self._entries.get(conn.id) is entry:
-                    self._entries.pop(conn.id, None)
-            key = self._supervisor_key(conn.id)
+                if self._entries.get(local_key) is entry:
+                    self._entries.pop(local_key, None)
             with _refresh_supervisor_lock:
-                if _refresh_supervisor_entries.get(key) is entry:
-                    _refresh_supervisor_entries.pop(key, None)
+                if _refresh_supervisor_entries.get(supervisor_key) is entry:
+                    _refresh_supervisor_entries.pop(supervisor_key, None)
 
     @staticmethod
     def _fire() -> None:

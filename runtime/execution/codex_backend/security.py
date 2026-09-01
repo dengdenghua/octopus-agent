@@ -687,6 +687,12 @@ def _build_launch_env(
             "XDG_CACHE_HOME": str(app_home / "cache"),
             "XDG_CONFIG_HOME": str(app_home / "config"),
             "XDG_DATA_HOME": str(app_home / "data"),
+            # The scoped Responses bridge is always loopback-only. Some HTTP
+            # stacks still consult the OS proxy configuration even when no
+            # proxy variables were inherited, so make the bypass explicit.
+            # This is a fixed host policy value, never ambient user input.
+            "NO_PROXY": "127.0.0.1,localhost,::1",
+            "no_proxy": "127.0.0.1,localhost,::1",
         }
     )
     return result

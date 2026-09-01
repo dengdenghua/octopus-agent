@@ -133,6 +133,9 @@ tier: "core"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
+| func | `def authentication_error(detail)` | Return a host-session 401 distinguishable from downstream 401s. |
+| func | `def set_session_cookie(response, request, token, max_age)` | Persist a browser session without exposing the JWT to JavaScript. |
+| func | `def clear_session_cookie(response, request)` | Expire the browser session cookie using the same transport policy. |
 | class | `class CurrentPrincipal` | Verified request identity used by authorization decisions. |
 | func | `def resolve_principal(request, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, jwt_leeway_seconds)` | Resolve a principal from a known API key or a registered JWT subject. |
 | func | `def require_roles(request, identity_store, require_auth, allowed_roles, jwt_secret, jwt_issuer, jwt_audience, jwt_leeway_seconds)` | Require one of *allowed_roles* when shared authentication is active. |
@@ -188,7 +191,7 @@ tier: "core"
 
 ## Who imports this
 
-**130** file(s) reference this package:
+**144** file(s) reference this package:
 
 - **`runtime/adapters/`** · 5 file(s)
   - `runtime/adapters/integrations/local_auth/router.py`
@@ -213,20 +216,20 @@ tier: "core"
   - `runtime/execution/misc/parallel_runner.py`
   - `runtime/execution/subagents/bridge.py`
   - _… and 14 more_
-- **`runtime/memory/`** · 9 file(s)
+- **`runtime/memory/`** · 10 file(s)
   - `runtime/memory/diagnostics/_trace_store_replay_storage.py`
   - `runtime/memory/diagnostics/_trace_store_storage.py`
   - `runtime/memory/journal/_journal_base.py`
   - `runtime/memory/journal/journal.py`
   - `runtime/memory/learning/experience_ledger.py`
-  - _… and 4 more_
-- **`runtime/platform/`** · 15 file(s)
+  - _… and 5 more_
+- **`runtime/platform/`** · 20 file(s)
+  - `runtime/platform/capabilities/permission_grants.py`
+  - `runtime/platform/capabilities/service.py`
+  - `runtime/platform/capabilities/tenant_context.py`
   - `runtime/platform/config/builder.py`
-  - `runtime/platform/io/lease.py`
-  - `runtime/platform/plugins/_secure_fetch.py`
-  - `runtime/platform/plugins/bundled/_office_io.py`
-  - `runtime/platform/plugins/bundled/whale_eye/service.py`
-  - _… and 10 more_
+  - `runtime/platform/connectors/credential_store.py`
+  - _… and 15 more_
 - **`runtime/projectos/`** · 6 file(s)
   - `runtime/projectos/_store_message_actions.py`
   - `runtime/projectos/_store_project_deletion.py`
@@ -234,17 +237,20 @@ tier: "core"
   - `runtime/projectos/_store_thread_bindings.py`
   - `runtime/projectos/engine.py`
   - `runtime/projectos/store.py`
-- **`runtime/safety/`** · 3 file(s)
+- **`runtime/safety/`** · 8 file(s)
+  - `runtime/safety/evolution/auto_trigger.py`
   - `runtime/safety/evolution/candidate_registry.py`
+  - `runtime/safety/evolution/drift_monitor.py`
+  - `runtime/safety/evolution/fitness.py`
   - `runtime/safety/evolution/proposal_ledger.py`
-  - `runtime/safety/recovery/tenant_scope.py`
-- **`runtime/sensing/`** · 63 file(s)
+  - _… and 3 more_
+- **`runtime/sensing/`** · 66 file(s)
   - `runtime/sensing/gateway/_agent_trace_router_stores.py`
   - `runtime/sensing/gateway/_config_endpoints_codex.py`
   - `runtime/sensing/gateway/_config_endpoints_local_models.py`
   - `runtime/sensing/gateway/_config_endpoints_security.py`
   - `runtime/sensing/gateway/_cowork_group_access.py`
-  - _… and 58 more_
+  - _… and 61 more_
 - **`runtime/tentacle/`** · 2 file(s)
   - `runtime/tentacle/coordinator.py`
   - `runtime/tentacle/dashboard.py`

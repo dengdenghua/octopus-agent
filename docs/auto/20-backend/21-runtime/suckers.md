@@ -696,7 +696,7 @@ Suckers = skill pool.
 
 ## Who imports this
 
-**86** file(s) reference this package:
+**88** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
@@ -738,13 +738,13 @@ Suckers = skill pool.
 - **`runtime/research/`** · 2 file(s)
   - `runtime/research/pipeline.py`
   - `runtime/research/prefetch.py`
-- **`runtime/safety/`** · 6 file(s)
+- **`runtime/safety/`** · 8 file(s)
   - `runtime/safety/evolution/_recipes_evidence.py`
   - `runtime/safety/evolution/auto_trigger.py`
+  - `runtime/safety/evolution/auto_verifier.py`
   - `runtime/safety/evolution/browser_desktop_quality.py`
-  - `runtime/safety/hooks/tool_edge_hooks.py`
-  - `runtime/safety/recovery/intel_collector.py`
-  - `runtime/safety/recovery/skill_forge.py`
+  - `runtime/safety/evolution/runtime_deployment.py`
+  - _… and 3 more_
 - **`runtime/sensing/`** · 24 file(s)
   - `runtime/sensing/gateway/_agent_world_helpers.py`
   - `runtime/sensing/gateway/_computer_appshot_routes.py`

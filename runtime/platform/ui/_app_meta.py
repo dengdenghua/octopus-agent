@@ -16,7 +16,6 @@ from ._app_context import AppContext
 def mount_meta(
     ctx: AppContext,
     *,
-    molili_config: object,
     oct_config: object,
 ) -> None:
     """Mount the meta / mcp / config routers."""
@@ -42,12 +41,14 @@ def mount_meta(
             registry=state.registry,
             tool_registry=get_tool_registry(),
             skill_library_dirs=list(dict.fromkeys(_skill_library_dirs)),
-            include_default_skill_library=(state.registry is None or stack is not None),
-            molili_config=molili_config,
+            # Always merge the packaged file-backed catalog.  A runtime
+            # registry may contain executable tools, but it is not a complete
+            # inventory of domain workflow skills (for example ``pdf``).
+            include_default_skill_library=True,
             oct_config=oct_config,
             local_auth_config=ctx.local_auth_runtime_config,
             identity_store=ctx.identity_store,
-            molili_jwt_secret=ctx.jwt_secret,
+            jwt_secret=ctx.jwt_secret,
             jwt_issuer=ctx.jwt_issuer,
             jwt_audience=ctx.jwt_audience,
             require_auth=ctx.require_auth,
@@ -56,7 +57,7 @@ def mount_meta(
 
     # ─── MCP router · declare/enable/disable MCP servers ─────────
     # The entire 220-line block of helpers + endpoints that used to
-    # live here (preset dict, _resolve_molili_bridge_env,
+    # live here (preset dict, account bridge resolution,
     # _register_runtime_mcp, _unregister_runtime_mcp, GET+PUT
     # /api/mcp/config) is now ``runtime/sensing/siphon/mcp_router.py``.
     # The returned bundle carries the live state dicts so future
@@ -95,6 +96,8 @@ def mount_meta(
         jwt_issuer=ctx.jwt_issuer,
         jwt_audience=ctx.jwt_audience,
     )
+    app.state.codex_account_service = _config_bundle.codex_accounts
+    app.state.model_provider_plugins = _config_bundle.model_provider_plugins
     app.include_router(_config_bundle.router)
 
     # ``/api/llm-models`` (Octopus-native presets + custom models)

@@ -9,10 +9,12 @@
    已缓存的 JWT,导致每次都要重新登录。同源代理后即可在 ``<head>`` 注入
    ``localStorage.userInfo``,免去重复登录。
 
-**为什么默认关闭**
+**启用边界**
 
 同源代理意味着原站的 JS 以**我们 origin 的权限**运行，可访问父页面会话并以当前
-用户身份调用 API。因此插件层要求两个独立的显式开关，且本模块拒绝非 HTTPS 上游。
+用户身份调用 API。因此认证/多用户宿主仍会禁用它，调用方也保留两个可显式关闭的
+布尔开关。当前平台只提供 HTTP，本模块接受经过严格规范化的 HTTP(S) origin；
+实时行情和自动交易则继续在 ``live.py`` / 插件生命周期层严格要求 HTTPS。
 
 结构照 ``runtime/sensing/gateway/storage_proxy_router.py``:头白名单(而非盲转)、
 路径前缀白名单、请求体上限、``follow_redirects=False``、流式转发且 ``aclose()``
@@ -35,7 +37,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request, Response, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
-from .upstream_url import secure_upstream_origin
+from .upstream_url import upstream_origin
 
 _logger = logging.getLogger(__name__)
 
@@ -152,7 +154,14 @@ def _session_bootstrap(state_dir: Path, credentials_file: Path) -> str:
     # platform 的对齐不在这里做 —— 页面 <body> 里的内联脚本会执行
     # ``window.platform = 'PC'`` 覆盖掉 <head> 的注入,所以改的是那处赋值本身,
     # 见 :func:`rewrite_html`。
-    return f"<script>try{{localStorage.setItem('userInfo',{payload});}}catch(e){{}}</script>"
+    # Never overwrite a fresher session created by the embedded login page.
+    # The parent page synchronises that browser token back to the private
+    # server-side token file after the upstream accepts it.
+    return (
+        "<script>try{if(!localStorage.getItem('userInfo')){"
+        f"localStorage.setItem('userInfo',{payload});"
+        "}}catch(e){}</script>"
+    )
 
 
 # 原站 bundle 里计算 API 基址的唯一一处表达式。浏览器模式下它返回**绝对路径**
@@ -266,12 +275,12 @@ def register_origin_proxy(
     ``/api/plugins/*/assets/*`` 的 GET/HEAD,取名 ``assets`` 会造出一个
     永久免鉴权的开放代理。
 
-    返回是否挂载成功。``base_url`` 不可解析或不是 HTTPS 时不挂；这是底层的
-    纵深防护，即使调用方遗漏插件配置校验也不会把明文第三方脚本引入应用同源。
+    返回是否挂载成功。``base_url`` 必须能严格规范化为 HTTP(S) origin；用户信息、
+    非法端口、query/fragment 和畸形主机名都会在底层被拒绝。
     """
-    origin = secure_upstream_origin(base_url)
+    origin = upstream_origin(base_url)
     if not origin:
-        _logger.warning("paper_trading proxy: 上游 URL 无效或不是 HTTPS,代理未挂载")
+        _logger.warning("paper_trading proxy: 上游 URL 不是有效 HTTP(S) 地址,代理未挂载")
         return False
 
     state_path = Path(state_dir).expanduser()

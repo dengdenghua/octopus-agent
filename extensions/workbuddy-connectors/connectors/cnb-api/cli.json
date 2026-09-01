@@ -41,5 +41,16 @@
         "defaultExpiresInSeconds": 300,
         "codeEmbeddedInUri": true
     },
+    "tokenRefresh": {
+        "command": {
+            "darwin": "cnb auth status --json",
+            "linux": "cnb auth status --json",
+            "win32": "cnb.cmd auth status --json"
+        },
+        "storeKey": "access_token",
+        "tokenPattern": "\"access_token\"\\s*:\\s*\"([A-Za-z0-9._-]+)\"",
+        "expiresInPattern": "\"expires_in\"\\s*:\\s*(\\d+)",
+        "defaultExpiresInSeconds": 3600
+    },
     "userProvidedData": []
 }

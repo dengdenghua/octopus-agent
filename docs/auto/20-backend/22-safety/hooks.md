@@ -137,7 +137,7 @@ Agent runtime hooks · lifecycle events for the agent loop.
 
 ## Who imports this
 
-**11** file(s) reference this package:
+**10** file(s) reference this package:
 
 - **`runtime/core/`** · 1 file(s)
   - `runtime/core/cerebrum/_react_execution_phase6d.py`
@@ -146,8 +146,7 @@ Agent runtime hooks · lifecycle events for the agent loop.
   - `runtime/execution/suckers/plan_mode.py`
   - `runtime/execution/tool_engine/_executor_helpers.py`
   - `runtime/execution/tool_engine/executor.py`
-- **`runtime/platform/`** · 2 file(s)
-  - `runtime/platform/ui/_app_routers_extra.py`
+- **`runtime/platform/`** · 1 file(s)
   - `runtime/platform/ui/app.py`
 - **`runtime/safety/`** · 1 file(s)
   - `runtime/safety/approval/approval_gate.py`

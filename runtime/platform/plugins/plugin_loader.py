@@ -26,6 +26,22 @@ class PluginState(StrEnum):
     ERROR = "error"
 
 
+class PluginLifecycleState(StrEnum):
+    """User-facing package/runtime lifecycle shared by every plugin kind."""
+
+    AVAILABLE = "available"
+    DOWNLOADING = "downloading"
+    INSTALLED = "installed"
+    ENABLING = "enabling"
+    ENABLED = "enabled"
+    DISABLING = "disabling"
+    DISABLED = "disabled"
+    UNINSTALLING = "uninstalling"
+    UPDATE_AVAILABLE = "update_available"
+    BROKEN = "broken"
+    INCOMPATIBLE = "incompatible"
+
+
 class PluginManifest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -37,6 +53,9 @@ class PluginManifest(BaseModel):
     provides: list[str] = Field(default_factory=list)
     subscribes: list[str] = Field(default_factory=list)
     config_schema: dict[str, Any] = Field(default_factory=dict)
+    contributes: dict[str, Any] = Field(default_factory=dict)
+    permissions: list[str] = Field(default_factory=list)
+    host_api: str | None = None
     priority: int = 0
 
 

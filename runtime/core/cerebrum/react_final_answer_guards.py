@@ -14,6 +14,9 @@ import re
 from collections.abc import Callable, Generator
 from typing import Any
 
+from runtime.core.cerebrum.react_auto_inspect import (
+    _try_auto_project_inspection_salvage,
+)
 from runtime.core.cerebrum.react_convergence import evidence_answer_conflicts_with_goal
 from runtime.core.cerebrum.react_explicit_reads import _explicit_read_only_goal
 from runtime.core.cerebrum.react_guards import (
@@ -147,6 +150,10 @@ def _looks_like_observation_echo(text: str) -> bool:
         # so only flag it when an Action block is also present.
         or bool(_REACT_ACTION_CALL_RE.search(stripped))
         or bool(_REACT_THOUGHT_LINE_RE.search(stripped) and _REACT_ACTION_CALL_RE.search(stripped))
+        # A few providers omit the Action label entirely and return only the
+        # function-call expression.  Treat a standalone known-tool call as
+        # protocol text so it is retried/parsed, never shown as a final reply.
+        or bool(_STANDALONE_INLINE_TOOL_CALL_RE.fullmatch(stripped))
     )
 
 
@@ -446,6 +453,50 @@ _ENVIRONMENTAL_FAILURE_MARKERS: tuple[str, ...] = (
     "network request",
 )
 
+_VERIFIER_CAPABILITY_MARKERS: tuple[str, ...] = (
+    "pytest",
+    "unittest",
+    "ruff",
+    "mypy",
+    "pyright",
+    "typecheck",
+    "tsc",
+    "eslint",
+    "vitest",
+    "jest",
+    "cargo test",
+    "cargo check",
+    "cargo clippy",
+    "go test",
+    "go vet",
+    "dotnet test",
+    "dotnet build",
+    "mvn test",
+    "gradle test",
+    "npm test",
+    "pnpm test",
+    "pnpm check",
+    "pnpm build",
+    "yarn test",
+)
+
+
+def _targets_verifier_capability(action: str) -> bool:
+    """Recognize a trusted verifier availability probe.
+
+    ``tool --version`` must not satisfy the code-verification gate, but a
+    trusted "command not found" receipt still proves that dynamic validation
+    is unavailable. Keeping these two meanings separate prevents both fake
+    greens and endless retries in a degraded environment.
+    """
+
+    parsed = _parse_action(action or "")
+    if parsed is None:
+        return False
+    _name, args = parsed
+    command = str(args.get("command") or args.get("cmd") or "").lower()
+    return any(marker in command for marker in _VERIFIER_CAPABILITY_MARKERS)
+
 
 def _trusted_execution_failure(
     action: str,
@@ -468,7 +519,7 @@ def _trusted_execution_failure(
     # trusted action is itself a verifier. A file, webpage, or MCP result may
     # quote the same words but cannot flip runtime state through this path.
     verifier_step = ReActStep(iteration=0, action=action, actions=[action])
-    if not _has_code_verification([verifier_step]):
+    if not _has_code_verification([verifier_step]) and not _targets_verifier_capability(action):
         return False
     from runtime.execution.suckers.verify_skills import classify_environment_gap
 
@@ -603,6 +654,7 @@ def _try_clean_downgrade(final_answer: str) -> str | None:
 # the user never sees raw tool protocol in the transcript.
 _INLINE_TOOL_CALL_NAMES = (
     "todo_write",
+    "todo_update",
     "exec_shell",
     "shell_command",
     "run_command",
@@ -610,11 +662,22 @@ _INLINE_TOOL_CALL_NAMES = (
     "fetch_url",
     "web_fetch",
     "read_file",
+    "read_text_file",
     "glob_files",
     "find_files",
+    "grep_text",
+    "list_cwd",
+    "search_capabilities",
+    "query_skill",
+    "browser_open",
+    "browser_get_content",
+    "artifact",
+    "present_files",
     "apply_patch",
     "write_file",
+    "write_text_file",
     "edit_file",
+    "edit_text_file",
     "str_replace",
     "run_tests",
     "lint_check",
@@ -622,6 +685,10 @@ _INLINE_TOOL_CALL_NAMES = (
 _INLINE_TOOL_CALL_RE = re.compile(
     rf"(?<![\w.])(?:{'|'.join(_INLINE_TOOL_CALL_NAMES)})\s*\(",
     re.IGNORECASE,
+)
+_STANDALONE_INLINE_TOOL_CALL_RE = re.compile(
+    rf"^\s*(?:{'|'.join(_INLINE_TOOL_CALL_NAMES)})\s*\(\s*\{{.*\}}\s*\)\s*$",
+    re.IGNORECASE | re.DOTALL,
 )
 
 
@@ -708,7 +775,7 @@ def _guard_impasse_actionable_hint(
     msg_lower = (message or "").lower()
     if "path_blocked" in msg_lower or "escapes_sandbox" in msg_lower:
         return (
-            "如何解决：该路径在当前工作区沙箱之外。\n"
+            "如何解决：该路径不在当前任务获准的工作区内；这不代表执行沙箱已开启。\n"
             "1) 确认路径是否正确；\n"
             "2) 切换到 project workspace 模式以扩大工作区范围；\n"
             "3) 使用 CLI code 模式（python -m runtime.cli code --cwd <项目根目录>）运行任务。"
@@ -785,7 +852,25 @@ def _guard_reason_for_user(label: str, message: str) -> str:
         "unsafe-deser guard",
     }:
         return "安全检查拒绝了候选答复；具体片段已隐藏，避免再次暴露。"
-    return message
+    # Guard feedback is written for the next model round and may contain
+    # protocol labels, English imperatives, tool names, and rejected content.
+    # It is never suitable as terminal user copy.  Map known classes to short,
+    # factual Chinese explanations and keep the original ``message`` only in
+    # logs/telemetry at the call site.
+    del message
+    reasons = {
+        "final-answer completeness guard": "回复停留在准备或承诺阶段，没有交付实际结果。",
+        "inspection-evidence guard": "需要的读取或检索没有产生可用证据。",
+        "research-source-display guard": "检索已经返回来源，但回复没有展示可核验链接。",
+        "citation-grounding guard": "回复中的来源链接不在实际检索结果中。",
+        "fact-grounding guard": "回复包含无法从实际检索结果确认的外部事实。",
+        "research-evidence-quality guard": "现有搜索结果相关性或完整性不足，不能支撑结论。",
+        "implementation-write guard": "任务要求修改内容，但没有记录到实际改动。",
+        "tool-result guard": "回复声称完成了工具操作，但执行记录无法确认。",
+        "false-verification guard": "回复声称验证通过，但没有对应的成功验证记录。",
+        "red-verification guard": "最近一次验证失败，任务还不能标记为完成。",
+    }
+    return reasons.get(label, "系统未能确认本轮已经形成可交付且可验证的结果。")
 
 
 def _phase_6e_guards_and_step_emit(
@@ -908,6 +993,21 @@ def _phase_6e_guards_and_step_emit(
                     steps.append(step)
                     return _LoopControl.BREAK
                 _guard_label, _guard_message = _guard_hit
+                _auto_inspect_step = _try_auto_project_inspection_salvage(
+                    _guard_label,
+                    maybe_final,
+                    steps,
+                    iteration=i + 1,
+                    tools_active=tools_active,
+                )
+                if _auto_inspect_step is not None:
+                    step.thought = _auto_inspect_step.thought
+                    step.public_update = _auto_inspect_step.public_update
+                    step.action = _auto_inspect_step.action
+                    step.actions = _auto_inspect_step.actions
+                    _final_stream_started = False
+                    maybe_final = None
+                    return _LoopControl.CONTINUE
                 _guard_outcome = _guard_rejection_outcome(_guard_impasse_state, _guard_label, steps)
                 if _guard_outcome == "hard_stop":
                     # Same guard, repeated rejections, zero new action-bearing

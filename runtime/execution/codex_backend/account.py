@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 import os
 import stat
 import threading
@@ -41,6 +42,10 @@ from .types import (
     RequestTimeoutError,
     TransportClosedError,
 )
+
+_LOG = logging.getLogger(__name__)
+_LEGACY_MARKETPLACE_MAX_BYTES = 16 * 1024 * 1024
+_LEGACY_PLUGIN_MANIFEST_MAX_BYTES = 2 * 1024 * 1024
 
 
 class CodexAccountConflict(RuntimeError):
@@ -121,6 +126,7 @@ class _ControlRuntime:
     model_catalog_cache: dict[bool, tuple[float, list[dict[str, object]]]] = field(
         default_factory=dict
     )
+    plugin_catalog_cache: tuple[float, list[dict[str, object]]] | None = None
     last_used: float = field(default_factory=time.monotonic)
     closed: bool = False
 
@@ -139,6 +145,7 @@ class CodexAccountService:
         client_factory: ClientFactory | None = None,
         process_factory: ProcessFactory | None = None,
         legacy_source_home: str | Path | None = None,
+        allow_local_principal_inheritance: bool = False,
         max_sessions: int = 16,
         idle_timeout_s: float = 15 * 60,
         login_timeout_s: float = 20 * 60,
@@ -170,6 +177,11 @@ class CodexAccountService:
             if legacy_source_home is not None
             else None
         )
+        # Local desktop may still have an authenticated Octopus principal even
+        # though one OS user owns the whole installation.  Opting in lets that
+        # principal reuse the machine owner's ChatGPT login without copying it
+        # to the renderer.  Shared/server construction never enables this.
+        self._allow_local_principal_inheritance = bool(allow_local_principal_inheritance)
         self._max_sessions = max_sessions
         self._idle_timeout_s = idle_timeout_s
         self._login_timeout_s = login_timeout_s
@@ -190,20 +202,24 @@ class CodexAccountService:
         return codex_account_home(self._state_root, scope)
 
     def resolve_execution_auth_home(self, scope: TenantScope | None) -> Path | None:
-        """Prefer the scoped control home; local-only legacy login is fallback."""
+        """Prefer scoped auth; optionally inherit host auth on local desktop."""
 
         scoped_home = self.account_home(scope)
         if _valid_auth_file(scoped_home / "auth.json", required=False):
             return scoped_home
-        # An authenticated/shared principal must never inherit the OS user's
-        # ambient Codex account.  That fallback exists only for legacy local UI.
-        if (
-            scope is None
-            and self._legacy_source_home is not None
-            and _valid_auth_file(self._legacy_source_home / "auth.json", required=False)
+        # Shared principals never inherit the OS user's ambient Codex account.
+        # Local desktop can opt in because the OS user is the installation's
+        # trust boundary even when the UI itself has an authenticated actor.
+        if self._may_inherit_local_auth(scope) and _valid_auth_file(
+            self._legacy_source_home / "auth.json", required=False
         ):
             return self._legacy_source_home
         return None
+
+    def _may_inherit_local_auth(self, scope: TenantScope | None) -> bool:
+        return self._legacy_source_home is not None and (
+            scope is None or self._allow_local_principal_inheritance
+        )
 
     def cached_models(
         self,
@@ -220,6 +236,28 @@ class CodexAccountService:
         if cached is None:
             return None
         return [dict(model) for model in cached[1]]
+
+    async def run_on_runtime_loop(
+        self,
+        scope: TenantScope | None,
+        operation: Callable[[], Any],
+    ) -> Any:
+        """Run a control operation on the loop that owns its App Server client.
+
+        Native model credential refresh can initialize a principal runtime from
+        a worker thread.  Later HTTP requests arrive on the ASGI loop; directly
+        awaiting the existing client's queues there raises ``bound to a
+        different event loop`` and makes a valid login look disconnected.
+        """
+
+        runtime = self._runtimes.get(self._scope_key(scope))
+        current_loop = asyncio.get_running_loop()
+        if runtime is None or runtime.loop is current_loop:
+            return await operation()
+        if not runtime.loop.is_running():
+            raise TransportClosedError("Codex account control loop is unavailable")
+        future = asyncio.run_coroutine_threadsafe(operation(), runtime.loop)
+        return await asyncio.wrap_future(future)
 
     async def read_account(
         self,
@@ -448,6 +486,162 @@ class CodexAccountService:
             runtime.last_used = time.monotonic()
             return apps
 
+    async def list_plugins(
+        self,
+        scope: TenantScope | None,
+        *,
+        force_refetch: bool = False,
+    ) -> list[dict[str, object]]:
+        """List Codex marketplace plugins as Octopus capability rows."""
+
+        runtime = await self._runtime(scope)
+        async with runtime.lock:
+            await self._drain_notifications(runtime)
+            if not force_refetch and runtime.plugin_catalog_cache is not None:
+                runtime.last_used = time.monotonic()
+                return [dict(item) for item in runtime.plugin_catalog_cache[1]]
+            try:
+                response = await runtime.client.list_plugins(
+                    force_refetch=force_refetch,
+                    marketplace_kinds=(
+                        "local",
+                        "vertical",
+                        "workspace-directory",
+                        "shared-with-me",
+                        "created-by-me-remote",
+                    ),
+                )
+            except Exception as exc:
+                # The official remote catalog is independently rate limited.  A local
+                # desktop user may safely fall back to their already-downloaded Codex
+                # marketplace checkout; authenticated/shared principals must never
+                # inherit that OS-user cache.
+                if scope is not None or self._legacy_source_home is None:
+                    raise
+                response = _legacy_plugin_catalog_response(
+                    self._legacy_source_home,
+                    install_home=runtime.home,
+                )
+                _LOG.warning(
+                    "Codex remote plugin catalog unavailable; using local official cache: %s",
+                    exc,
+                )
+            rows = _normalize_plugin_catalog(response)
+            if scope is None and self._legacy_source_home is not None:
+                # App Server may return a successful but partial response while the
+                # remote marketplace is throttled. Merge the local official checkout
+                # as a stale-while-revalidate source; live rows win on matching ids so
+                # their current install/auth state is preserved.
+                try:
+                    cached_rows = _normalize_plugin_catalog(
+                        _legacy_plugin_catalog_response(
+                            self._legacy_source_home,
+                            install_home=runtime.home,
+                        )
+                    )
+                except (ConfigurationError, ProtocolError):
+                    cached_rows = []
+                live_ids = {str(item.get("id") or "") for item in rows}
+                rows.extend(item for item in cached_rows if item.get("id") not in live_ids)
+            runtime.last_used = time.monotonic()
+            runtime.plugin_catalog_cache = (runtime.last_used, [dict(item) for item in rows])
+            return rows
+
+    async def plugin_icon_path(
+        self,
+        scope: TenantScope | None,
+        *,
+        catalog_id: str,
+    ) -> Path | None:
+        """Resolve a catalog icon without exposing marketplace filesystem paths."""
+
+        entry = await self._plugin_catalog_entry(scope, catalog_id)
+        raw_path = entry.get("_icon_path")
+        if not isinstance(raw_path, str) or not raw_path:
+            return None
+        path = Path(raw_path).resolve(strict=False)
+        if scope is not None or self._legacy_source_home is None:
+            return None
+        try:
+            path.relative_to(self._legacy_source_home)
+        except ValueError:
+            return None
+        return path if path.is_file() else None
+
+    async def install_plugin(
+        self,
+        scope: TenantScope | None,
+        *,
+        catalog_id: str,
+        install_attempt_id: str | None = None,
+    ) -> dict[str, object]:
+        """Install one catalog row through the principal-scoped App Server."""
+
+        entry = await self._plugin_catalog_entry(scope, catalog_id)
+        runtime = await self._runtime(scope)
+        async with runtime.lock:
+            response = await runtime.client.install_plugin(
+                str(entry["plugin_name"]),
+                marketplace_path=(
+                    str(entry["_marketplace_path"])
+                    if isinstance(entry.get("_marketplace_path"), str)
+                    else None
+                ),
+                remote_marketplace_name=(
+                    str(entry["remote_marketplace_name"])
+                    if isinstance(entry.get("remote_marketplace_name"), str)
+                    else None
+                ),
+                install_attempt_id=install_attempt_id,
+            )
+            runtime.plugin_catalog_cache = None
+            runtime.last_used = time.monotonic()
+        apps = response.get("appsNeedingAuth")
+        return {
+            "installed": True,
+            "enabled": True,
+            "capability_id": catalog_id,
+            "source": "codex_plugin",
+            "auth_policy": response.get("authPolicy"),
+            "apps_needing_auth": apps if isinstance(apps, list) else [],
+            "message": "Codex 插件已按需安装。",
+        }
+
+    async def uninstall_plugin(
+        self,
+        scope: TenantScope | None,
+        *,
+        catalog_id: str,
+    ) -> dict[str, object]:
+        """Uninstall one catalog row through the principal-scoped App Server."""
+
+        entry = await self._plugin_catalog_entry(scope, catalog_id)
+        plugin_id = entry.get("codex_plugin_id")
+        if not isinstance(plugin_id, str) or not plugin_id:
+            raise ProtocolError("plugin catalog row is missing its Codex plugin id")
+        runtime = await self._runtime(scope)
+        async with runtime.lock:
+            await runtime.client.uninstall_plugin(plugin_id)
+            runtime.plugin_catalog_cache = None
+            runtime.last_used = time.monotonic()
+        return {"installed": False, "capability_id": catalog_id}
+
+    async def _plugin_catalog_entry(
+        self,
+        scope: TenantScope | None,
+        catalog_id: str,
+    ) -> dict[str, object]:
+        if not isinstance(catalog_id, str) or not catalog_id.startswith("codex-marketplace:"):
+            raise ConfigurationError("Codex plugin catalog id is invalid")
+        rows = await self.list_plugins(scope)
+        match = next((item for item in rows if item.get("id") == catalog_id), None)
+        if match is None:
+            rows = await self.list_plugins(scope, force_refetch=True)
+            match = next((item for item in rows if item.get("id") == catalog_id), None)
+        if match is None:
+            raise ConfigurationError("Codex marketplace plugin was not found")
+        return match
+
     async def close_all(self) -> None:
         """Reap every control child; safe and idempotent at app shutdown."""
 
@@ -529,7 +723,7 @@ class CodexAccountService:
             _ensure_private_directory(directory, root=self._state_root)
         lease = _acquire_control_lease(home.parent / ".control-runtime.lock")
         try:
-            if scope is None and self._legacy_source_home is not None:
+            if self._may_inherit_local_auth(scope):
                 _seed_legacy_auth(home, self._legacy_source_home)
             _atomic_write_private(home / "config.toml", _control_config().encode("utf-8"))
             environment = {
@@ -733,6 +927,256 @@ def _normalize_app_entry(raw: Mapping[str, Any]) -> dict[str, object]:
     }
 
 
+def _legacy_plugin_catalog_response(
+    source_home: Path,
+    *,
+    install_home: Path,
+) -> dict[str, object]:
+    """Project the official on-disk marketplace into the App Server wire shape."""
+
+    source_root = source_home.expanduser().resolve(strict=False)
+    catalog_path = source_root / ".tmp" / "plugins" / ".agents" / "plugins" / "marketplace.json"
+    payload = _read_bounded_json_object(
+        catalog_path,
+        root=source_root,
+        max_bytes=_LEGACY_MARKETPLACE_MAX_BYTES,
+    )
+    raw_plugins = payload.get("plugins")
+    if not isinstance(raw_plugins, list) or len(raw_plugins) > 5000:
+        raise ProtocolError("cached Codex marketplace plugins must be a bounded array")
+
+    # Marketplace source paths are relative to the checkout root, two levels
+    # above `.agents/plugins/marketplace.json`.
+    checkout_root = catalog_path.parent.parent.parent
+    plugins: list[dict[str, object]] = []
+    for raw in raw_plugins:
+        if not isinstance(raw, Mapping):
+            continue
+        name = raw.get("name")
+        if (
+            not isinstance(name, str)
+            or not name.strip()
+            or len(name) > 128
+            or any(char in name for char in "/\\\x00\r\n")
+        ):
+            continue
+        name = name.strip()
+        raw_source = raw.get("source")
+        raw_source = raw_source if isinstance(raw_source, Mapping) else {}
+        relative_source = raw_source.get("path")
+        if not isinstance(relative_source, str) or not relative_source.strip():
+            continue
+        plugin_root = (checkout_root / relative_source).resolve(strict=False)
+        try:
+            plugin_root.relative_to(checkout_root)
+        except ValueError:
+            continue
+        manifest_path = plugin_root / ".codex-plugin" / "plugin.json"
+        try:
+            manifest = _read_bounded_json_object(
+                manifest_path,
+                root=checkout_root,
+                max_bytes=_LEGACY_PLUGIN_MANIFEST_MAX_BYTES,
+            )
+        except (ConfigurationError, ProtocolError):
+            continue
+        interface = manifest.get("interface")
+        interface = dict(interface) if isinstance(interface, Mapping) else {}
+        icon_value = interface.get("composerIcon") or interface.get("logo")
+        icon_path: Path | None = None
+        if isinstance(icon_value, str) and icon_value.strip():
+            candidate = (plugin_root / icon_value).resolve(strict=False)
+            try:
+                candidate.relative_to(plugin_root)
+            except ValueError:
+                candidate = plugin_root / "__invalid__"
+            if candidate.is_file():
+                icon_path = candidate
+                interface["composerIconUrl"] = icon_value
+        policy = raw.get("policy")
+        policy = policy if isinstance(policy, Mapping) else {}
+        author = manifest.get("author")
+        author = author if isinstance(author, Mapping) else {}
+        if not interface.get("developerName") and isinstance(author.get("name"), str):
+            interface["developerName"] = author["name"]
+        if not interface.get("category") and isinstance(raw.get("category"), str):
+            interface["category"] = raw["category"]
+        if not interface.get("shortDescription") and isinstance(manifest.get("description"), str):
+            interface["shortDescription"] = manifest["description"]
+        installed = _legacy_plugin_is_installed(install_home, name)
+        plugins.append(
+            {
+                "id": f"{name}@openai-curated",
+                "name": name,
+                "version": manifest.get("version"),
+                "interface": interface,
+                "source": {"type": "local"},
+                "installPolicy": policy.get("installation"),
+                "installed": installed,
+                "enabled": installed,
+                "_iconPath": str(icon_path) if icon_path is not None else None,
+            }
+        )
+    if not plugins:
+        raise ProtocolError("cached Codex marketplace contains no usable plugins")
+    return {
+        "marketplaces": [
+            {
+                "name": "openai-curated",
+                "path": str(catalog_path),
+                "plugins": plugins,
+            }
+        ],
+        "featuredPluginIds": [],
+    }
+
+
+def _read_bounded_json_object(path: Path, *, root: Path, max_bytes: int) -> dict[str, Any]:
+    resolved = path.resolve(strict=False)
+    try:
+        resolved.relative_to(root.resolve(strict=False))
+    except ValueError as exc:
+        raise ConfigurationError("cached Codex marketplace escaped its source root") from exc
+    try:
+        metadata = resolved.stat()
+    except OSError as exc:
+        raise ConfigurationError("cached Codex marketplace is unavailable") from exc
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > max_bytes:
+        raise ConfigurationError("cached Codex marketplace file is invalid")
+    try:
+        parsed = json.loads(resolved.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise ProtocolError("cached Codex marketplace JSON is invalid") from exc
+    if not isinstance(parsed, dict):
+        raise ProtocolError("cached Codex marketplace JSON must contain an object")
+    return parsed
+
+
+def _legacy_plugin_is_installed(install_home: Path, plugin_name: str) -> bool:
+    cache_root = install_home / "plugins" / "cache"
+    if not cache_root.is_dir():
+        return False
+    try:
+        marketplaces = list(cache_root.iterdir())[:256]
+    except OSError:
+        return False
+    for marketplace in marketplaces:
+        plugin_root = marketplace / plugin_name
+        if plugin_root.is_dir():
+            return True
+    return False
+
+
+def _normalize_plugin_catalog(response: Mapping[str, Any]) -> list[dict[str, object]]:
+    raw_marketplaces = response.get("marketplaces")
+    if not isinstance(raw_marketplaces, list):
+        raise ProtocolError("plugin/list marketplaces must be an array")
+    featured = {value for value in response.get("featuredPluginIds", []) if isinstance(value, str)}
+    rows: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for raw_marketplace in raw_marketplaces:
+        if not isinstance(raw_marketplace, Mapping):
+            continue
+        marketplace_name = raw_marketplace.get("name")
+        if not isinstance(marketplace_name, str) or not marketplace_name.strip():
+            continue
+        marketplace_name = marketplace_name.strip()
+        marketplace_path = raw_marketplace.get("path")
+        if not isinstance(marketplace_path, str) or not Path(marketplace_path).is_absolute():
+            marketplace_path = None
+        raw_plugins = raw_marketplace.get("plugins")
+        if not isinstance(raw_plugins, list):
+            continue
+        for raw_plugin in raw_plugins:
+            if not isinstance(raw_plugin, Mapping):
+                continue
+            plugin_name = raw_plugin.get("name")
+            codex_plugin_id = raw_plugin.get("id")
+            if not isinstance(plugin_name, str) or not plugin_name.strip():
+                continue
+            if not isinstance(codex_plugin_id, str) or not codex_plugin_id.strip():
+                codex_plugin_id = f"{plugin_name.strip()}@{marketplace_name}"
+            catalog_id = f"codex-marketplace:{codex_plugin_id.strip()}"
+            if catalog_id in seen:
+                continue
+            seen.add(catalog_id)
+            interface = raw_plugin.get("interface")
+            interface = interface if isinstance(interface, Mapping) else {}
+            source = raw_plugin.get("source")
+            source = source if isinstance(source, Mapping) else {}
+            remote_marketplace_name = (
+                marketplace_name
+                if source.get("type") == "remote" or marketplace_path is None
+                else None
+            )
+            display_name = interface.get("displayName")
+            short_description = interface.get("shortDescription")
+            logo_url = interface.get("logoUrl") or interface.get("composerIconUrl")
+            category = interface.get("category")
+            developer_name = interface.get("developerName")
+            capabilities = interface.get("capabilities")
+            capability_names = (
+                [value for value in capabilities if isinstance(value, str)]
+                if isinstance(capabilities, list)
+                else []
+            )
+            install_policy = raw_plugin.get("installPolicy")
+            availability = raw_plugin.get("availability")
+            installable = install_policy != "NOT_AVAILABLE" and availability != "DISABLED_BY_ADMIN"
+            rows.append(
+                {
+                    "id": catalog_id,
+                    "name": (
+                        display_name.strip()
+                        if isinstance(display_name, str) and display_name.strip()
+                        else plugin_name.strip()
+                    ),
+                    "name_zh": (
+                        display_name.strip()
+                        if isinstance(display_name, str) and display_name.strip()
+                        else plugin_name.strip()
+                    ),
+                    "description": (
+                        short_description if isinstance(short_description, str) else ""
+                    ),
+                    "description_zh": (
+                        short_description if isinstance(short_description, str) else ""
+                    ),
+                    "type": "plugin",
+                    "auth_mode": "none",
+                    "source": "codex_plugin",
+                    "provider_id": plugin_name.strip(),
+                    "author": developer_name if isinstance(developer_name, str) else "",
+                    "category": category if isinstance(category, str) else "plugin",
+                    "icon": logo_url if isinstance(logo_url, str) else "",
+                    "surface_capabilities": capability_names,
+                    "mcp_servers": [],
+                    "skill_count": 0,
+                    "examples_zh": [],
+                    "installed": raw_plugin.get("installed") is True,
+                    "enabled": raw_plugin.get("enabled") is True,
+                    "connected": False,
+                    "version": (
+                        str(raw_plugin.get("version") or raw_plugin.get("localVersion") or "")
+                    ),
+                    "featured": codex_plugin_id in featured or plugin_name in featured,
+                    "installable": installable,
+                    "marketplace_name": marketplace_name,
+                    "_marketplace_path": marketplace_path,
+                    "remote_marketplace_name": remote_marketplace_name,
+                    "plugin_name": plugin_name.strip(),
+                    "codex_plugin_id": codex_plugin_id.strip(),
+                    "is_codex_marketplace": True,
+                    "_icon_path": (
+                        raw_plugin.get("_iconPath")
+                        if isinstance(raw_plugin.get("_iconPath"), str)
+                        else None
+                    ),
+                }
+            )
+    return rows
+
+
 def _normalize_rate_bucket(raw: Any) -> dict[str, object]:
     if not isinstance(raw, Mapping):
         raise ProtocolError("account/rateLimits/read bucket must be an object")
@@ -903,19 +1347,25 @@ def resolve_codex_execution_auth_home(
     scope: TenantScope | None,
     deployment_mode: str,
     legacy_source_home: str | Path | None = None,
+    allow_local_principal_inheritance: bool = False,
 ) -> Path | None:
     """Select the only auth source an execution sidecar may inherit.
 
     A principal-scoped managed login always wins. The OS user's legacy
-    ``~/.codex`` is eligible only for unauthenticated local mode, never for a
-    shared/authenticated tenant even when both happen to run as one Unix user.
+    ``~/.codex`` is eligible for unauthenticated local mode and, when the
+    caller explicitly opts in, authenticated principals in the single-user
+    desktop trust boundary. Shared/server deployments never inherit it.
     """
 
     managed = codex_account_home(state_root, scope)
     if _valid_auth_file(managed / "auth.json", required=False):
         return managed
     normalized_mode = str(deployment_mode or "local").strip().casefold()
-    if scope is None and normalized_mode == "local" and legacy_source_home is not None:
+    if (
+        normalized_mode == "local"
+        and legacy_source_home is not None
+        and (scope is None or allow_local_principal_inheritance)
+    ):
         legacy = Path(legacy_source_home).expanduser().resolve(strict=False)
         if _valid_auth_file(legacy / "auth.json", required=False):
             return legacy

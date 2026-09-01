@@ -29,7 +29,8 @@
 - 媒体：`import_media`、`add_clip`
 - 片段：`move_clip`、`trim_clip`、`split_clip`、`duplicate_clip`、`remove_clip`（可带 `ripple`）、`remove_range`、`close_gap`、`cut_silences`、`set_clip`、`set_speed`
 - 文字：`add_text`、`set_text`、`remove_text_clip`、`import_srt`、`set_subtitle_style`
-- 外观：`add_transition`、`remove_transition`、`add_effect`、`remove_effect`、`set_color_grading`
+- 外观：`add_transition`、`remove_transition`、`add_effect`、`remove_effect`、`set_color_grading`、`set_clip_transform`
+- 关键帧：`set_keyframe`、`remove_keyframe`。片段属性支持 `x/y/scale/rotation/opacity`；效果参数使用 `effect:{effectId}:{parameter}`。缓动支持 `linear`、`hold`、`ease-in`、`ease-out`、`ease-in-out`。
 - 标记：`add_marker`、`remove_marker`
 
 一次请求最多 50 个操作。任一操作失败时 `rolledBack=true`，此前操作不会落盘。
@@ -52,9 +53,21 @@
 ```
 
 也可传 `fromSec`、`toSec`、`count` 均匀采样，最多 8 帧。返回的 `frames[].path`
-是本地 PNG，必须实际查看图片后才能下视觉结论。当前渲染覆盖媒体裁切/速度、亮度、
-对比度、饱和度、模糊、锐化、颗粒、色温/色调和字幕；尚未合成的效果或转场会出现在
-`warnings[]`，不能忽略后宣称完全一致。
+是本地 PNG，必须实际查看图片后才能下视觉结论。当前渲染覆盖可见多层、独奏/隐藏、
+位置/缩放/旋转/不透明度、四种混合模式、关键帧、媒体裁切/速度、15 类效果、7 类转场、
+调色和字幕；尚未合成的类型会出现在 `warnings[]`，不能忽略后宣称完全一致。
+
+## 成片导出
+
+`POST /export` 将同一合成器的结果编码为 MP4：
+
+```json
+{"maxDim": 1280, "includeAudio": true}
+```
+
+导出会混合视频和音频轨上可读取的本地音源并编码 AAC，最长 120 秒。返回的 `path`
+是本地文件；界面通过 `GET /export/file` 下载。调用方必须检查 `warnings[]`，特别是
+`audio_export_failed`，不能把仅有画面的文件描述成带声音成片。
 
 ## 诊断
 

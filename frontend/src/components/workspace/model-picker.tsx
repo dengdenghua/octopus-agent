@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales/types";
+import { DEFAULT_CONTEXT_WINDOW_TOKENS } from "@/core/models/context-window";
 import type { ReasoningEffort } from "@/core/threads";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,7 @@ export interface PickerModel {
   id?: string | null;
   name: string;
   display_name?: string | null;
+  source_display_name?: string | null;
   description?: string | null;
   entry_id?: string | null;
   selection_id?: string | null;
@@ -23,6 +25,7 @@ export interface PickerModel {
   supports_thinking?: boolean;
   supports_vision?: boolean;
   supports_tool_use?: boolean;
+  is_free?: boolean;
   supports_reasoning_effort?: boolean;
   /** UI effort tiers this model genuinely accepts. undefined/null = full
    *  default set; [] = no meaningful effort control (picker hides it). */
@@ -36,6 +39,23 @@ function selectionValue(model: PickerModel): string {
   return model.selection_id || model.entry_id || model.name;
 }
 
+export function isFreePickerModel(model: PickerModel | undefined): boolean {
+  // ``is_free`` is provider-owned metadata. Keep the legacy Zen fallback so
+  // already-persisted entries become green before their next reconnect.
+  return model?.is_free === true || model?.entry_id === "opencode-zen";
+}
+
+function deduplicatePickerModels(models: PickerModel[]): PickerModel[] {
+  const seen = new Set<string>();
+  return models.filter((model) => {
+    if (model.context_profile === "1m") return false;
+    const key = selectionValue(model);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function longContextSelectionValue(model: PickerModel): string {
   // Older catalogs have no selection_id; their routable 1M alias is the
   // ``variant::1m`` name, not the entry id (which means the default profile).
@@ -47,6 +67,149 @@ function modelFamilyKey(model: PickerModel): string {
     return `${model.entry_id}\u0000${model.model}`;
   }
   return model.name.replace(/::1m$/, "");
+}
+
+function modelMatchesValue(
+  model: PickerModel,
+  value: string | null | undefined,
+): boolean {
+  if (!value) return false;
+  return [
+    model.selection_id,
+    model.entry_id,
+    model.name,
+    model.model,
+    model.id,
+  ].includes(value);
+}
+
+function contextSelectionValue(model: PickerModel): string {
+  return model.context_profile === "1m"
+    ? longContextSelectionValue(model)
+    : selectionValue(model);
+}
+
+function contextWindowTokens(model: PickerModel): number {
+  const explicit = Number(model.context_window);
+  if (Number.isFinite(explicit) && explicit > 0) return Math.floor(explicit);
+  return model.context_profile === "1m"
+    ? 1_000_000
+    : DEFAULT_CONTEXT_WINDOW_TOKENS;
+}
+
+function formatContextWindow(tokens: number): string {
+  if (tokens >= 1_000_000) {
+    const millions = tokens / 1_000_000;
+    return `${Number.isInteger(millions) ? millions : millions.toFixed(1)}M`;
+  }
+  if (tokens >= 1_000) return `${Math.round(tokens / 1_000)}K`;
+  return tokens.toLocaleString();
+}
+
+export function ModelContextSetting({
+  models,
+  selected,
+  value,
+  disabled,
+  onChange,
+  className,
+}: {
+  models: PickerModel[];
+  selected: PickerModel | undefined;
+  value?: string | null;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  const { t } = useI18n();
+  const options = useMemo(() => {
+    if (!selected) return [];
+    const family = modelFamilyKey(selected);
+    const seen = new Set<string>();
+    return models
+      .filter((model) => modelFamilyKey(model) === family)
+      .filter((model) => {
+        const key = contextSelectionValue(model);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .sort(
+        (left, right) => contextWindowTokens(left) - contextWindowTokens(right),
+      );
+  }, [models, selected]);
+
+  // This is a quick *choice*, not a model-spec readout. Keep the existing
+  // picker unchanged for models that only expose one context window.
+  if (!selected || options.length < 2) return null;
+
+  const current =
+    options.find((model) => modelMatchesValue(model, value)) ??
+    options.find(
+      (model) => model.context_profile === selected.context_profile,
+    ) ??
+    options[0]!;
+  const currentTokens = contextWindowTokens(current);
+  return (
+    <section
+      data-testid="model-context-setting"
+      className={cn("space-y-1", className)}
+    >
+      <div className="flex items-center justify-between gap-2 text-xs">
+        <span className="font-medium text-muted-foreground/80">
+          {t.modelPicker.contextLength}
+        </span>
+        <span className="tabular-nums text-foreground/80">
+          {formatContextWindow(currentTokens)}
+        </span>
+      </div>
+      <div
+        role="radiogroup"
+        aria-label={t.modelPicker.contextLength}
+        className="grid gap-0.5 rounded-md bg-muted/40 p-0.5"
+        style={{
+          gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))`,
+        }}
+      >
+        {options.map((model) => {
+          const optionValue = contextSelectionValue(model);
+          const optionTokens = contextWindowTokens(model);
+          const optionExpanded = model.context_profile === "1m";
+          const optionSelected = model === current;
+          const profileLabel = optionExpanded
+            ? t.modelPicker.contextMax
+            : t.modelPicker.contextStandard;
+          const formatted = formatContextWindow(optionTokens);
+          return (
+            <button
+              key={optionValue}
+              type="button"
+              role="radio"
+              aria-label={`${profileLabel} · ${formatted}`}
+              aria-checked={optionSelected}
+              disabled={disabled}
+              onClick={(event) => {
+                event.preventDefault();
+                if (!optionSelected) onChange(optionValue);
+              }}
+              className={cn(
+                "flex h-7 min-w-0 items-center justify-center gap-1 rounded px-1.5 text-xs transition-colors",
+                optionSelected
+                  ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
+                  : "text-muted-foreground hover:text-foreground",
+                "disabled:cursor-not-allowed disabled:opacity-45",
+              )}
+            >
+              <span className="truncate">{profileLabel}</span>
+              <span className="shrink-0 tabular-nums text-[11px] opacity-70">
+                {formatted}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 interface OfficialMeta {
@@ -377,28 +540,10 @@ export function ModelPicker({
    * they are a settings concern, and a column of unclickable placeholders is
    * the bulk of what made this panel feel heavy.
    *
-   * ``::1m`` variants are folded into their base row (see longContextFor) so
-   * one model occupies one line.
+   * ``::1m`` variants are folded into the selected model's context-length
+   * control, so one model still occupies one line without hiding Max mode.
    */
-  const flatEntries = useMemo(
-    () => models.filter((m) => m.context_profile !== "1m"),
-    [models],
-  );
-
-  /**
-   * Map base model name → its ``::1m`` sibling, so a row can offer the
-   * long-context variant inline instead of as a second, near-identical entry.
-   */
-  const longContextFor = useMemo(() => {
-    const map = new Map<string, PickerModel>();
-    for (const m of models) {
-      if (m.context_profile !== "1m") continue;
-      // A long-context sibling belongs to one endpoint+variant pair. entry_id
-      // alone is insufficient because one endpoint may expose cheap/pro rows.
-      map.set(modelFamilyKey(m), m);
-    }
-    return map;
-  }, [models]);
+  const flatEntries = useMemo(() => deduplicatePickerModels(models), [models]);
 
   const handleSelect = (name: string) => {
     onChange(name);
@@ -416,6 +561,13 @@ export function ModelPicker({
   // red-box duplicates that got removed). The Auto toggle now lives
   // exclusively on the Auto row at the top of the dropdown panel
   // — one control, one backing state, two visible surfaces.
+  const selectedDisplayLabel = isAutoMode
+    ? t.modelPicker.autoModelLabel
+    : cleanModelName(selectedMeta?.displayName) ||
+      cleanModelName(selected?.display_name) ||
+      cleanModelName(selected?.name) ||
+      t.modelPicker.selectModel;
+
   const triggerButton = (
     <button
       type="button"
@@ -427,16 +579,18 @@ export function ModelPicker({
         "data-[state=open]:bg-muted data-[state=open]:text-foreground",
       )}
       aria-label={t.modelPicker.selectModel}
-      title={t.modelPicker.selectModel}
+      title={selectedDisplayLabel}
     >
       {isAutoMode && <SparklesIcon className="size-3 shrink-0 text-info" />}
       <span className="truncate max-w-[var(--text-truncate-md)]">
-        {isAutoMode
-          ? t.modelPicker.autoModelLabel
-          : cleanModelName(selectedMeta?.displayName) ||
-            cleanModelName(selected?.display_name) ||
-            cleanModelName(selected?.name) ||
-            t.modelPicker.selectModel}
+        <span
+          className={cn(
+            isFreePickerModel(selected) &&
+              "text-emerald-600 dark:text-emerald-400",
+          )}
+        >
+          {selectedDisplayLabel}
+        </span>
       </span>
       <ChevronDownIcon className="size-3 opacity-60" />
     </button>
@@ -498,6 +652,14 @@ export function ModelPicker({
             onChange={onReasoningEffortChange}
           />
         )}
+        <ModelContextSetting
+          models={models}
+          selected={selected}
+          value={value}
+          disabled={reasoningEffortDisabled}
+          onChange={onChange}
+          className="mx-1 mt-1 border-t border-border-default px-0.5 pt-1"
+        />
 
         <div className="p-1 pt-0.5">
           <div className="flex flex-col gap-0.5">
@@ -510,41 +672,24 @@ export function ModelPicker({
                 // selection_id identifies endpoint + upstream variant +
                 // context profile. Legacy catalogs fall back to entry/name.
                 const selectKey = selectionValue(m);
-                const long = longContextFor.get(modelFamilyKey(m));
-                const longSelectKey = long
-                  ? longContextSelectionValue(long)
-                  : undefined;
+                const selectedFamily =
+                  !isAutoMode &&
+                  selected &&
+                  modelFamilyKey(m) === modelFamilyKey(selected);
                 return (
                   <PickerRow
                     key={selectKey}
-                    label={m.display_name || m.name}
-                    trailingAction={
-                      long ? (
-                        <button
-                          type="button"
-                          data-testid={`model-picker-1m-${selectKey}`}
-                          aria-label={`${m.display_name || m.name} · ${t.modelPicker.longContextHint}`}
-                          aria-pressed={longSelectKey === value}
-                          title={t.modelPicker.longContextHint}
-                          onClick={() => {
-                            // The row itself selects the default context
-                            // window; this affordance is the only way to
-                            // reach the 1M variant now that it no longer
-                            // occupies its own row.
-                            handleSelect(longSelectKey!);
-                          }}
-                          className={cn(
-                            "mr-1 self-center rounded border px-1 text-xs transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                            longSelectKey === value
-                              ? "border-primary/60 text-foreground"
-                              : "border-border-default/60 text-muted-foreground hover:text-foreground",
-                          )}
-                        >
-                          1M
-                        </button>
-                      ) : undefined
+                    label={
+                      <span
+                        className={cn(
+                          isFreePickerModel(m) &&
+                            "text-emerald-600 dark:text-emerald-400",
+                        )}
+                      >
+                        {m.display_name || m.name}
+                      </span>
                     }
-                    selected={selectKey === value}
+                    selected={Boolean(selectedFamily)}
                     onSelect={() => handleSelect(selectKey)}
                   />
                 );

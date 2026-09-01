@@ -8,9 +8,11 @@ import html
 import json
 import math
 import re
+import shutil
 import time
 import urllib.error
 import uuid
+from pathlib import Path
 from typing import Any
 
 from fastapi import (
@@ -47,6 +49,13 @@ __all__ = [
     "mark_session_closed",
     "secure_profile_dir",
 ]
+
+# Leave two seconds for the HTTP polling fallback after the server declares a
+# relay offline, so the visible status still meets the ten-second SLA even
+# when the read-only status WebSocket is unavailable.
+_RELAY_HEARTBEAT_FRESH_SECONDS = 6
+_RELAY_OFFLINE_SECONDS = 8
+_RELAY_PUSH_PING_SECONDS = 3
 
 
 def create_browser_router(
@@ -315,6 +324,53 @@ def create_browser_router(
             "ok": True,
             "status": "closed",
             "session": backend.browser_session_center.missing_snapshot(session_id),
+        }
+
+    @router.post("/api/browser/data/clear")
+    def api_browser_data_clear(request: Request) -> dict[str, Any]:
+        """Clear persistent Octopus browser profiles owned by this principal.
+
+        In single-user local mode all Octopus-managed profiles are in scope.
+        Authenticated deployments only remove profiles attached to the caller's
+        live sessions; profiles owned by another actor are never traversed.
+        """
+
+        principal = _principal(request)
+        sessions = list(backend.browser_sessions.items())
+        if require_auth:
+            sessions = [
+                (session_id, session)
+                for session_id, session in sessions
+                if principal is not None and session.get("owner_actor_id") == principal.actor_id
+            ]
+
+        profile_root = Path("data/browser_sessions/profiles").resolve()
+        profile_dirs: set[Path] = set()
+        for session_id, _session in sessions:
+            removed = backend.browser_session_center.pop(session_id)
+            if removed is None:
+                continue
+            backend._close_real_browser_session(removed)
+            raw_profile_dir = str(removed.get("profile_dir") or "").strip()
+            if raw_profile_dir:
+                profile_dirs.add(Path(raw_profile_dir).resolve())
+
+        if not require_auth and profile_root.exists():
+            profile_dirs.update(path.resolve() for path in profile_root.iterdir())
+
+        removed_profiles = 0
+        for profile_dir in profile_dirs:
+            if profile_dir == profile_root or profile_root not in profile_dir.parents:
+                continue
+            if not profile_dir.exists() or not profile_dir.is_dir():
+                continue
+            shutil.rmtree(profile_dir)
+            removed_profiles += 1
+
+        return {
+            "ok": True,
+            "closed_sessions": len(sessions),
+            "removed_profiles": removed_profiles,
         }
 
     @router.post("/api/browser/navigate")
@@ -731,18 +787,43 @@ def create_browser_router(
         extension_path = backend._resolve_browser_extension_path()
         manifest = extension_path / "manifest.json"
         last_seen = int(backend.browser_relay_state.get("last_seen") or 0)
-        connected = bool(manifest.exists() and last_seen and (backend._now_ts() - last_seen) <= 15)
+        push_connected = int(backend.browser_relay_state.get("push_connections") or 0) > 0
+        last_seen_age = max(0, backend._now_ts() - last_seen) if last_seen else None
+        # The settings UI polls every two seconds. A socket count alone is not
+        # proof of liveness: a laptop sleep, cable pull, or dead extension can
+        # leave a half-open TCP connection behind. Only a recent application
+        # heartbeat is authoritative; the server pings frequently enough for
+        # a healthy push client to refresh it inside the ten-second budget.
+        # A heartbeat is authoritative even when the extension was installed
+        # from Chrome's own profile rather than this checkout's suggested
+        # unpacked path. ``manifest_exists`` is installation guidance only.
+        connected = bool(
+            last_seen_age is not None and last_seen_age <= _RELAY_HEARTBEAT_FRESH_SECONDS
+        )
+        connection_state = (
+            "online"
+            if connected
+            else (
+                "reconnecting"
+                if last_seen_age is not None and last_seen_age < _RELAY_OFFLINE_SECONDS
+                else "offline"
+            )
+        )
         backend.browser_relay_state["connected"] = connected
         return {
             "connected": connected,
+            "connection_state": connection_state,
             "extension_version": str(
                 backend.browser_relay_state.get("extension_version")
                 or ("local-dev" if manifest.exists() else "")
             ),
             "pending_commands": len(backend.browser_relay_state.get("pending_commands") or []),
-            "push_connected": int(backend.browser_relay_state.get("push_connections") or 0) > 0,
+            "push_connected": push_connected,
             "last_seen": last_seen,
             "active_tab": backend.browser_relay_state.get("active_tab"),
+            "recent_human_activity": list(
+                backend.browser_relay_state.get("recent_human_activity") or []
+            ),
             "extension_path": str(extension_path),
             "manifest_exists": manifest.exists(),
             "site_policy": backend._relay_policy_snapshot(),
@@ -798,7 +879,7 @@ def create_browser_router(
         except HTTPException as exc:
             await websocket.close(code=4403 if exc.status_code == 404 else 4401)
             return
-        await websocket.accept()
+        await websocket.accept(subprotocol=accepted_auth_subprotocol(websocket))
         with backend.browser_relay_queue_lock:
             backend.browser_relay_state["push_connections"] = (
                 int(backend.browser_relay_state.get("push_connections") or 0) + 1
@@ -837,7 +918,7 @@ def create_browser_router(
                 # Chrome 116+ keeps an extension service worker alive when a
                 # WebSocket exchanges traffic inside the 30-second window.
                 now = time.monotonic()
-                if now - last_keepalive >= 15:
+                if now - last_keepalive >= _RELAY_PUSH_PING_SECONDS:
                     await websocket.send_json({"type": "ping", "at": backend._now_ts()})
                     last_keepalive = now
         except WebSocketDisconnect:

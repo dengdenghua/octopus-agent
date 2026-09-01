@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -133,6 +134,46 @@ def _invite(
     )
     assert response.status_code == 200, response.json()
     return response.json()
+
+
+def _raise_once_after_commit(
+    monkeypatch: pytest.MonkeyPatch,
+    store: TeamInvitationStore,
+    boundary: str,
+) -> None:
+    if boundary == "json":
+        from runtime.sensing.gateway import _team_room_persistence as persistence
+
+        original = persistence._save_state
+
+        def save_then_raise(path: Path, teams: dict[str, Any]) -> None:
+            original(path, teams)
+            monkeypatch.setattr(persistence, "_save_state", original)
+            raise RuntimeError("json committed before response failure")
+
+        monkeypatch.setattr(persistence, "_save_state", save_then_raise)
+        return
+
+    original_finalize = store._finalize_reservation
+
+    def finalize_then_raise(reservation_id: str) -> None:
+        original_finalize(reservation_id)
+        monkeypatch.setattr(store, "_finalize_reservation", original_finalize)
+        raise RuntimeError("sqlite finalized before response failure")
+
+    monkeypatch.setattr(store, "_finalize_reservation", finalize_then_raise)
+
+
+def _fail_once_before_membership_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    from runtime.sensing.gateway import _team_room_persistence as persistence
+
+    original = persistence._save_state
+
+    def fail_before_save(_path: Path, _teams: dict[str, Any]) -> None:
+        monkeypatch.setattr(persistence, "_save_state", original)
+        raise RuntimeError("membership failed before durable commit")
+
+    monkeypatch.setattr(persistence, "_save_state", fail_before_save)
 
 
 def test_ordinary_room_stays_direct_while_project_room_defaults_to_approval(
@@ -604,7 +645,7 @@ def test_internal_agent_roster_projection_preserves_humans_and_thread(tmp_path: 
     assert denied.value.status_code == 403
 
 
-def test_failed_approval_membership_write_rolls_back_request_and_invite(tmp_path: Path) -> None:
+def test_failed_approval_membership_write_retains_capacity_for_retry(tmp_path: Path) -> None:
     store = TeamInvitationStore(tmp_path / "approval-rollback.db")
     invitation, token = store.create(
         tenant_id="tenant-acme",
@@ -620,6 +661,13 @@ def test_failed_approval_membership_write_rolls_back_request_and_invite(tmp_path
         room_id="room-one",
         actor_id="bob",
         display_name="Bob",
+    )
+    _invite_row, other_application, _created = store.create_join_request(
+        token,
+        tenant_id="tenant-acme",
+        room_id="room-one",
+        actor_id="carol",
+        display_name="Carol",
     )
 
     def fail(_consumed: dict[str, Any], _approved: dict[str, Any]) -> None:
@@ -641,8 +689,161 @@ def test_failed_approval_membership_write_rolls_back_request_and_invite(tmp_path
         room_id="room-one",
     )
     assert current is not None and current["status"] == "pending"
-    assert store.find_by_token(token, tenant_id="tenant-acme")["use_count"] == 0
+    assert store.find_by_token(token, tenant_id="tenant-acme")["use_count"] == 1
     assert store.acceptances(invite_id=invitation["id"]) == []
+    with pytest.raises(InvitationError, match="approval is in progress"):
+        store.withdraw_join_request(
+            token,
+            tenant_id="tenant-acme",
+            actor_id="bob",
+        )
+    with pytest.raises(InvitationError):
+        store.approve_join_request_with(
+            other_application["id"],
+            tenant_id="tenant-acme",
+            room_id="room-one",
+            decided_by="alice",
+            participant_id="actor-carol",
+            audit_request_id="approval-carol",
+            apply=lambda _invite, _request: "carol",
+        )
+
+    consumed, approved, result, changed = store.approve_join_request_with(
+        application["id"],
+        tenant_id="tenant-acme",
+        room_id="room-one",
+        decided_by="alice",
+        participant_id="actor-bob",
+        audit_request_id="approval-retry",
+        apply=lambda _invite, _request: "bob",
+    )
+    assert (approved["status"], result, changed) == ("approved", "bob", True)
+    assert consumed["use_count"] == 1
+    assert [item["actor_id"] for item in store.acceptances(invite_id=invitation["id"])] == ["bob"]
+
+
+@pytest.mark.parametrize("boundary", ["json", "sqlite"])
+def test_approval_commit_then_raise_cannot_oversell_and_replays(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    boundary: str,
+) -> None:
+    client, keys, store, router, projects = _build_app(tmp_path)
+    _create_project_room(keys, router, projects)
+    invite = _invite(client, keys, "project-room", max_uses=1)
+    token = invite["invite_token"]
+    applications: dict[str, str] = {}
+    for actor in ("bob", "carol"):
+        joined = client.post(
+            f"/api/team-invites/{token}/join",
+            headers=_bearer(keys, actor),
+            json={"display_name": actor.title()},
+        )
+        assert joined.status_code == 202
+        applications[actor] = joined.json()["join_request"]["id"]
+
+    _raise_once_after_commit(monkeypatch, store, boundary)
+    with pytest.raises(RuntimeError, match=f"{boundary} .* before response failure"):
+        client.post(
+            f"/api/teams/project-room/join-requests/{applications['bob']}/approve",
+            headers=_bearer(keys, "alice"),
+        )
+    durable = json.loads((tmp_path / "rooms.json").read_text(encoding="utf-8"))
+    room = next(item for item in durable["teams"] if item["id"] == "project-room")
+    assert len([item for item in room["participants"] if item.get("actor_id") == "bob"]) == 1
+    assert store.find_by_token(token, tenant_id="tenant-acme")["use_count"] == 1
+    revoked = client.delete(
+        f"/api/teams/project-room/invites/{invite['invite_id']}",
+        headers=_bearer(keys, "alice"),
+    )
+    assert revoked.status_code == 200
+    denied = client.post(
+        f"/api/teams/project-room/join-requests/{applications['carol']}/approve",
+        headers=_bearer(keys, "alice"),
+    )
+    assert denied.status_code == 409
+
+    replay = client.post(
+        f"/api/teams/project-room/join-requests/{applications['bob']}/approve",
+        headers=_bearer(keys, "alice"),
+    )
+    assert replay.status_code == 200, replay.json()
+    bob = [item for item in replay.json()["team"]["participants"] if item.get("actor_id") == "bob"]
+    assert len(bob) == 1
+    assert len(store.acceptances(invite_id=invite["invite_id"])) == 1
+
+
+@pytest.mark.parametrize("terminal_state", ["revoked", "expired"])
+def test_reserved_approval_without_membership_stays_blocked_after_restart(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    terminal_state: str,
+) -> None:
+    current = [datetime(2026, 1, 1, tzinfo=UTC)]
+
+    def clock() -> datetime:
+        return current[0]
+
+    client, keys, store, router, projects = _build_app(tmp_path, clock=clock)
+    _create_project_room(keys, router, projects)
+    invite = _invite(
+        client,
+        keys,
+        "project-room",
+        max_uses=1,
+        expires_in_seconds=1 if terminal_state == "expired" else 3600,
+    )
+    token = invite["invite_token"]
+    joined = client.post(
+        f"/api/team-invites/{token}/join",
+        headers=_bearer(keys, "bob"),
+        json={"display_name": "Bob"},
+    )
+    assert joined.status_code == 202
+    request_id = joined.json()["join_request"]["id"]
+    _fail_once_before_membership_commit(monkeypatch)
+
+    with pytest.raises(RuntimeError, match="before durable commit"):
+        client.post(
+            f"/api/teams/project-room/join-requests/{request_id}/approve",
+            headers=_bearer(keys, "alice"),
+        )
+    assert store.find_by_token(token, tenant_id="tenant-acme")["use_count"] == 1
+    assert store.acceptances(invite_id=invite["invite_id"]) == []
+    durable = json.loads((tmp_path / "rooms.json").read_text(encoding="utf-8"))
+    room = next(item for item in durable["teams"] if item["id"] == "project-room")
+    assert not [
+        item
+        for item in room["participants"]
+        if item.get("actor_id") == "bob" and item["status"] != "removed"
+    ]
+    if terminal_state == "revoked":
+        revoked = client.delete(
+            f"/api/teams/project-room/invites/{invite['invite_id']}",
+            headers=_bearer(keys, "alice"),
+        )
+        assert revoked.status_code == 200
+    else:
+        current[0] += timedelta(seconds=2)
+    client.close()
+
+    restarted, restarted_keys, restarted_store, _router, _projects = _build_app(
+        tmp_path,
+        clock=clock,
+    )
+    retry = restarted.post(
+        f"/api/teams/project-room/join-requests/{request_id}/approve",
+        headers=_bearer(restarted_keys, "alice"),
+    )
+    assert retry.status_code == 410, retry.json()
+    durable = json.loads((tmp_path / "rooms.json").read_text(encoding="utf-8"))
+    room = next(item for item in durable["teams"] if item["id"] == "project-room")
+    assert not [
+        item
+        for item in room["participants"]
+        if item.get("actor_id") == "bob" and item["status"] != "removed"
+    ]
+    assert restarted_store.acceptances(invite_id=invite["invite_id"]) == []
 
 
 def test_concurrent_approvals_cannot_exceed_invitation_capacity(tmp_path: Path) -> None:

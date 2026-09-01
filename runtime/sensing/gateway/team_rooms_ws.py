@@ -69,6 +69,10 @@ _TEAM_WS_MSG_PER_SEC = 30
 _PERSIST_POOL: ThreadPoolExecutor | None = None
 
 
+def _noop_refresh() -> None:
+    return
+
+
 def _persist_pool() -> ThreadPoolExecutor:
     global _PERSIST_POOL
     if _PERSIST_POOL is None:
@@ -77,6 +81,92 @@ def _persist_pool() -> ThreadPoolExecutor:
             thread_name_prefix="room-persist",
         )
     return _PERSIST_POOL
+
+
+async def broadcast_authorized_team_sockets(
+    *,
+    team_id: str,
+    payload: dict[str, Any] | Callable[[], dict[str, Any]],
+    teams: dict[str, TeamRoomWire],
+    lock: Lock,
+    live_sockets: dict[str, dict[str, WebSocket]],
+    socket_loops: dict[str, dict[str, asyncio.AbstractEventLoop]],
+    refresh: Callable[[], None],
+    exclude: str | None = None,
+    include: str | None = None,
+) -> None:
+    """Broadcast only to participants authorized by the durable roster.
+
+    A router process may retain a socket after another worker removes its
+    participant.  Refresh before every server push, evict and close those
+    sockets before sending the payload, and schedule each operation on the
+    event loop that accepted the socket.
+    """
+
+    refresh()
+    with lock:
+        team = teams.get(team_id)
+        authorized_ids = {
+            participant.id
+            for participant in (team.participants if team is not None else [])
+            if participant.status != "removed"
+        }
+        room = live_sockets.get(team_id, {})
+        loops = socket_loops.get(team_id, {})
+        authorized = [
+            (participant_id, socket, loops.get(participant_id))
+            for participant_id, socket in room.items()
+            if participant_id in authorized_ids
+        ]
+        revoked = [
+            (participant_id, socket, loops.get(participant_id))
+            for participant_id, socket in room.items()
+            if participant_id not in authorized_ids
+        ]
+        for participant_id, _socket, _owner_loop in revoked:
+            room.pop(participant_id, None)
+            loops.pop(participant_id, None)
+        resolved_payload = payload() if callable(payload) else payload
+
+    current_loop = asyncio.get_running_loop()
+
+    async def _dispatch(
+        socket: WebSocket,
+        owner_loop: asyncio.AbstractEventLoop | None,
+        *,
+        close: bool,
+    ) -> None:
+        operation = socket.close(code=4403) if close else socket.send_json(resolved_payload)
+        if owner_loop is None or owner_loop is current_loop:
+            await operation
+        elif not owner_loop.is_closed():
+            dispatched = asyncio.run_coroutine_threadsafe(operation, owner_loop)
+            await asyncio.wrap_future(dispatched)
+        else:
+            operation.close()
+            raise RuntimeError("WebSocket owner loop is closed")
+
+    for _participant_id, socket, owner_loop in revoked:
+        with contextlib.suppress(ConnectionError, TimeoutError, OSError, RuntimeError):
+            await _dispatch(socket, owner_loop, close=True)
+
+    dead: list[str] = []
+    for participant_id, socket, owner_loop in authorized:
+        if (exclude and participant_id == exclude) or (include and participant_id != include):
+            continue
+        try:
+            await _dispatch(socket, owner_loop, close=False)
+        except (ConnectionError, TimeoutError, OSError, RuntimeError):
+            dead.append(participant_id)
+    if dead:
+        with lock:
+            current_room = live_sockets.get(team_id)
+            current_loops = socket_loops.get(team_id)
+            if current_room:
+                for participant_id in dead:
+                    current_room.pop(participant_id, None)
+                    if current_loops:
+                        current_loops.pop(participant_id, None)
 
 
 @dataclass
@@ -94,6 +184,7 @@ class TeamRoomWsContext:
     broadcast_presence: Callable[[str], Awaitable[None]]
     broadcast_floor: Callable[[str, TeamRoomWire], Awaitable[None]]
     active_participant: Callable[[str, str], TeamParticipantWire | None]
+    refresh: Callable[[], None] = _noop_refresh
     require_auth: bool = False
     # A TestClient connection, embedded server, or multi-loop host may own
     # different sockets from different event loops. Broadcasts must schedule
@@ -286,7 +377,7 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
         with lock:
             has_peer = any(pid != participant_id for pid in live_sockets.get(team_id, {}))
         if not has_peer:
-            await ws.send_json(payload)
+            await _broadcast(team_id, payload, include=participant_id)
 
     actor: str | None = None
     auth_error: str | None = None
@@ -301,6 +392,7 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
         await ws.close(code=4401)
         return
 
+    ctx.refresh()
     participant_id = ws.query_params.get("participant_id") or f"guest-{uuid4().hex[:10]}"
     display_name = ws.query_params.get("display_name") or "Guest"
     thread_id = (ws.query_params.get("thread_id") or "").strip() or None
@@ -392,7 +484,7 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
         await ws.close(code=4403 if reject_reason else 4404)
         return
 
-    await ws.send_json(ready_payload)
+    await _broadcast(team_id, ready_payload, include=participant_id)
     await _broadcast_presence(team_id)
 
     # Per-connection anti-flood limiter. Local to the handler, so it's
@@ -402,6 +494,7 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
     try:
         while True:
             raw = await ws.receive_text()
+            ctx.refresh()
             # Drop oversized or over-rate frames before parsing/broadcast so
             # one client can't amplify a flood across the whole room.
             if len(raw) > _TEAM_WS_MAX_MSG_BYTES:
@@ -417,8 +510,11 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                 active_participant = _active_participant(team_id, participant_id)
                 current_team = teams.get(team_id)
             if active_participant is None:
-                await ws.send_json({"type": "error", "message": "participant removed"})
-                await ws.close(code=4403)
+                # A cross-worker broadcast may already have sent the 4403
+                # close while this handler was blocked in receive_text().
+                with contextlib.suppress(Exception):
+                    await ws.send_json({"type": "error", "message": "participant removed"})
+                    await ws.close(code=4403)
                 return
             if msg_type in {"ping", "presence:ping"}:
                 with lock:
@@ -443,7 +539,11 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                             }
                         )
                         _save()
-                await ws.send_json({"type": "pong", "server_time": _now()})
+                await _broadcast(
+                    team_id,
+                    {"type": "pong", "server_time": _now()},
+                    include=participant_id,
+                )
                 await _broadcast_presence(team_id)
             elif msg_type == "cursor":
                 msg_thread_id = str(msg.get("thread_id") or thread_id or "").strip() or None
@@ -482,12 +582,14 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                         else None
                     )
                     if target is None or not _authorized_to_speak_for(active_participant, target):
-                        await ws.send_json(
+                        await _broadcast(
+                            team_id,
                             {
                                 "type": "error",
                                 "code": "delegation_denied",
                                 "message": f"not authorized to speak for {on_behalf_of}",
-                            }
+                            },
+                            include=participant_id,
                         )
                         continue
                     speaker = target
@@ -502,8 +604,10 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                 else:
                     allowed, reason = _participant_can_speak(current_team, speaker)
                 if not allowed:
-                    await ws.send_json(
-                        {"type": "error", "code": "speech_denied", "message": reason}
+                    await _broadcast(
+                        team_id,
+                        {"type": "error", "code": "speech_denied", "message": reason},
+                        include=participant_id,
                     )
                     continue
                 msg_thread_id = str(msg.get("thread_id") or thread_id or "").strip() or None
@@ -596,12 +700,14 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                     ):
                         not_moderator = True
                 if not_moderator:
-                    await ws.send_json(
+                    await _broadcast(
+                        team_id,
                         {
                             "type": "error",
                             "code": "not_moderator",
                             "message": "only the moderator can move the floor",
-                        }
+                        },
+                        include=participant_id,
                     )
                 elif floor_team is not None:
                     await _broadcast_floor(team_id, floor_team)
@@ -641,7 +747,7 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                             "status": "offline",
                         }
                     )
-                    if p.id == participant_id
+                    if p.id == participant_id and p.status != "removed"
                     else p
                     for p in current.participants
                 ]

@@ -602,29 +602,6 @@ function backendConfigPath() {
   return path.join(app.getPath("userData"), "config.yaml");
 }
 
-function migrateDesktopConfig(configPath) {
-  if (isDev || !fs.existsSync(configPath)) return;
-  try {
-    const raw = fs.readFileSync(configPath, "utf8");
-    if (
-      !/name:\s*octopus-desktop\b/.test(raw) ||
-      !/planner:\s*\r?\n\s*type:\s*static\b/.test(raw)
-    ) {
-      return;
-    }
-    const migrated = raw.replace(
-      /planner:\s*\r?\n\s*type:\s*static\s*(?:\r?\n\s*model:\s*.*)?\r?\n(\s*max_nodes:\s*\d+)/,
-      "planner:\n  type: llm\n  model: molili\n$1",
-    );
-    if (migrated !== raw) {
-      fs.writeFileSync(configPath, migrated);
-      console.log("[backend] migrated desktop config planner to llm/molili");
-    }
-  } catch (e) {
-    console.warn("[backend] desktop config migration failed:", e?.message || e);
-  }
-}
-
 function backendRuntimeStatePath() {
   return path.join(app.getPath("userData"), "backend-runtime.json");
 }
@@ -699,7 +676,6 @@ function prepareDesktopRuntime() {
     }
     fs.copyFileSync(templatePath, configPath);
   }
-  migrateDesktopConfig(configPath);
   return { configPath, dataDir, agentsRoot };
 }
 

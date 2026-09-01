@@ -101,7 +101,7 @@ def _fanout_member_context(ctx: dict[str, Any]) -> tuple[dict[str, Any], str]:
     made a member silently fall back to its default mode even when the user had
     selected research/build/audit for this turn.  Keep the structured context
     for runtimes that consume it and a compact prompt addendum for lightweight
-    persona/local-partner lanes that only consume text.
+    persona lanes that only consume text.
     """
 
     member_context = dict(ctx)
@@ -175,12 +175,40 @@ async def _drive_group_fanout(
     """
     ctx = getattr(intent, "user_context", None) or {}
     try:
-        from runtime.platform.process.session import current_session
+        from runtime.platform.process.session import Session, current_session
 
         parent_session = current_session()
+        if parent_session is None:
+            # ``TurnParams.owner_actor_id`` / ``tenant_id`` are server-only
+            # fields stamped by RealtimeGateway. This gives worker-thread
+            # members a trusted principal without trusting user_context.
+            params = getattr(turn, "params", None)
+            actor = str(getattr(params, "owner_actor_id", None) or "").strip()
+            tenant = str(getattr(params, "tenant_id", None) or "").strip()
+            if actor and tenant:
+                metadata = dict(ctx)
+                metadata["tenant_id"] = tenant
+                parent_session = Session(
+                    actor=actor,
+                    thread_id=turn.thread_id,
+                    conversation_id=turn.thread_id,
+                    turn_id=turn.id,
+                    metadata=metadata,
+                )
     except (ImportError, LookupError):
         parent_session = None
     member_context, member_policy_prompt = _fanout_member_context(ctx)
+    # Standard Coder members execute on worker threads, but approvals must
+    # still round-trip through this parent realtime turn.  This object is
+    # server-created and deliberately replaces any similarly named client key.
+    group_gateway_provider = GatewayApprovalProvider(
+        emitter,
+        asyncio.get_running_loop(),
+        thread_id=str(ctx.get("thread_id") or turn.thread_id),
+        turn_id=turn.id,
+        trace_store=runtime._trace_store,
+    )
+    member_context["_codex_approval_provider"] = runtime._wrap_with_policy(group_gateway_provider)
     roster = ctx.get("agent_roster") or []
     members = [
         {
@@ -457,7 +485,9 @@ async def _drive_group_fanout(
         parts = [
             f"协作汇总: {len(distinct_answered)} 位成员已回应",
         ]
-        rounds = int(result.get("debate", {}).get("rounds") or arbitration.get("rounds") or 1)
+        debate = result.get("debate")
+        debate_rounds = debate.get("rounds") if isinstance(debate, dict) else None
+        rounds = int(debate_rounds or arbitration.get("rounds") or 1)
         if rounds > 1:
             parts.append(f"共 {rounds} 轮成员互见辩论")
         if primary:
@@ -486,65 +516,13 @@ async def _drive_group_fanout(
         return
 
     try:
-        import os
-
-        from runtime.execution.agents.cli_team import (
-            detect_installed_partners,
-            run_cli_team,
-        )
         from runtime.execution.agents.group_fanout import run_group_fanout
-        from runtime.execution.agents.local_partner_bridge import run_local_partner
         from runtime.execution.suckers.delegation_skills import _call_agent
-
-        # agent_id → {partner_id, command} for the CLIs actually on this machine.
-        detected = {d["agent_id"]: d for d in detect_installed_partners()}
 
         def _mentioned(display: str) -> bool:
             parts = display.split()
             cands = {display, parts[0] if parts else display, display.replace(" ", "")}
             return any(c and ("@" + c) in text for c in cands)
-
-        # Cheap cue that the user wants a CLI partner to actually DO work (run
-        # in a worktree) rather than just chime in. Conservative — defaults to
-        # chat so a casual "@Codex 在么" never fires a heavyweight run.
-        task_cues = (
-            "改",
-            "写",
-            "修",
-            "实现",
-            "重构",
-            "添加",
-            "新增",
-            "删",
-            "创建",
-            "生成",
-            "优化",
-            "修复",
-            "测试",
-            "运行",
-            "跑",
-            "重命名",
-            "替换",
-            "集成",
-            "接入",
-            "fix",
-            "add",
-            "implement",
-            "refactor",
-            "write",
-            "create",
-            "run",
-            "test",
-            "build",
-            "rename",
-            "replace",
-            "update",
-            "bug",
-        )
-
-        def _looks_like_task(t: str) -> bool:
-            low = t.lower()
-            return len(t.strip()) >= 6 and any(cue in low for cue in task_cues)
 
         # 辩论意图检测：消息含辩论 cue（辩论/反驳/挑战/谁不同意/互怼/打擂台等）
         # 或上下文显式传 swarm_debate_rounds/debate_rounds（>=2 强制多轮）。
@@ -595,56 +573,15 @@ async def _drive_group_fanout(
                     found.append(display)
             return found
 
-        # Split: local partners @-mentioned WITH a task → real worktree run;
-        # everyone else (persona agents + partners just chatting) → group bubble.
-        work_members = (
-            []
-            if member_context.get("tool_allowlist_read_only") is True
-            else [
-                m
-                for m in members
-                if m["name"] in detected
-                and _mentioned(m["display_name"])
-                and _looks_like_task(text)
-            ]
-        )
-        work_ids = {m["name"] for m in work_members}
-        chat_members = [m for m in members if m["name"] not in work_ids]
+        chat_members = list(members)
         # @-mentioned chat members first so a small fan-out cap never drops them.
         chat_members.sort(key=lambda m: 0 if _mentioned(m["display_name"]) else 1)
 
         def _member_caller(agent_id: str, prompt: str, timeout_s: int = 90) -> dict[str, Any]:
-            """Persona agents run in-process; local CLI partners bridge to their
-            real CLI for a short, conversational group-chat bubble."""
+            """Run every group member through the in-process agent boundary."""
             effective_prompt = (
                 member_policy_prompt + "\n\n" + prompt if member_policy_prompt else prompt
             )
-            info = detected.get(agent_id)
-            if info is not None:
-                if member_context.get("tool_allowlist_read_only") is True:
-                    # The local-partner bridge has no enforceable read-only
-                    # filesystem sandbox. Prompt guidance is not a security
-                    # boundary, so audit fails closed instead of launching an
-                    # external CLI that could mutate the checkout.
-                    return {
-                        "success": False,
-                        "output": "",
-                        "error": (
-                            "audit read-only policy blocked the external local partner; "
-                            "use an in-process read-only member or switch to develop"
-                        ),
-                    }
-                r = run_local_partner(
-                    partner_id=info["partner_id"],
-                    command=info["command"],
-                    prompt=effective_prompt,
-                    timeout=min(int(timeout_s), 60),
-                )
-                return {
-                    "success": bool(r.ok),
-                    "output": r.output or "",
-                    "error": r.error,
-                }
             return _call_agent(
                 agent_id=agent_id,
                 prompt=effective_prompt,
@@ -690,8 +627,8 @@ async def _drive_group_fanout(
                 text,
                 chat_members,
                 agent_caller=_member_caller,
-                # Cover the whole roster (was hard-capped at 5, which silently
-                # dropped members ordered last — e.g. the local CLI partners).
+                # Cover the whole roster (a small hard cap would silently drop
+                # members ordered last).
                 max_members=fanout_limit,
                 max_concurrency=fanout_concurrency,
                 scale_mode=scale_mode,
@@ -758,53 +695,6 @@ async def _drive_group_fanout(
             summary = _group_summary(result)
             if summary:
                 await _emit(summary)
-
-        # Each @-mentioned partner with a task runs it in its OWN git worktree
-        # (no collision with the live tree) and reports the diff for review.
-        for wm in work_members:
-            disp = wm["display_name"]
-            info = detected[wm["name"]]
-            await _emit(
-                "收到，正在独立 worktree 里处理这个任务，"
-                "完成后把 diff 给你 review（不会自动合并）……",
-                display_name=disp,
-                agent_id=wm["name"],
-            )
-            try:
-                cli = await asyncio.to_thread(
-                    run_cli_team, text, [info], repo_root=os.getcwd(), turn_id=turn.id
-                )
-                mem = (cli.get("members") or [{}])[0]
-                diff = str(mem.get("diff") or "").strip()
-                if mem.get("ok") and diff:
-                    files = mem.get("files") or []
-                    flist = "、".join(files[:8]) + ("…" if len(files) > 8 else "")
-                    shown = (
-                        diff
-                        if len(diff) <= 1500
-                        else diff[:1500] + "\n…(diff 截断，完整在 worktree)"
-                    )
-                    await _emit(
-                        f"✅ 已在隔离 worktree 完成 · 改动 {len(files)} 个文件"
-                        + (f"：{flist}" if files else "")
-                        + f"。diff 待 review：\n\n```diff\n{shown}\n```",
-                        display_name=disp,
-                        agent_id=wm["name"],
-                    )
-                else:
-                    err = str(mem.get("error") or "没有产生改动")
-                    await _emit(
-                        f"⚠️ 这次没能完成：{_friendly_member_error(err)}",
-                        display_name=disp,
-                        agent_id=wm["name"],
-                    )
-                spoke += 1
-            except Exception as exc:  # noqa: BLE001 — isolate one partner's failure
-                await _emit(
-                    f"⚠️ 运行出错：{type(exc).__name__}: {exc}",
-                    display_name=disp,
-                    agent_id=wm["name"],
-                )
 
         if spoke == 0:
             _record_fallback_audit("no_member_response")

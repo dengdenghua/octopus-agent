@@ -3,11 +3,39 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
-from runtime.execution.agents.local_partner_discovery import resolve_local_command
+from runtime.execution.agents.login_shell_path import login_shell_path
 
 from .types import ConfigurationError
+
+
+def _resolve_codex_command(command: str) -> str | None:
+    path = shutil.which(command)
+    if path:
+        return path
+    if os.path.sep in command or (os.path.altsep and os.path.altsep in command):
+        return None
+    candidates: list[str] = []
+    for raw in (os.environ.get("PATH", ""), login_shell_path()):
+        candidates.extend(raw.split(os.pathsep))
+    candidates.extend(
+        (
+            str(Path.home() / ".local" / "bin"),
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/Applications/ChatGPT.app/Contents/Resources",
+        )
+    )
+    for directory in dict.fromkeys(item.strip() for item in candidates if item.strip()):
+        candidate = Path(directory).expanduser() / command
+        try:
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return str(candidate.resolve())
+        except OSError:
+            continue
+    return None
 
 
 def resolve_codex_app_server_command(executable: str | None = None) -> tuple[str, ...]:
@@ -39,7 +67,7 @@ def resolve_codex_app_server_command(executable: str | None = None) -> tuple[str
         except OSError:
             resolved = None
     else:
-        resolved = resolve_local_command(candidate)
+        resolved = _resolve_codex_command(candidate)
     if resolved is None:
         raise ConfigurationError("Codex executable is unavailable")
     return (resolved, "app-server", "--strict-config", "--listen", "stdio://")

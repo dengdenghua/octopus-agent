@@ -199,12 +199,15 @@ def test_todo_write_emits_plan_update_and_resume_snapshot(gateway: Any) -> None:
     assert phases[1]["status"] == "running"
     assert phases[1]["activeItemId"] == "todo-1"
     assert updates[0].params["workspaceFocus"]["view"] == "trace"
-    assert updates[0].params["workbenchSnapshot"]["schemaVersion"] == 2
-    assert updates[0].params["workbenchSnapshot"]["currentItemId"] == "todo-1"
+    # The canonical snapshot ships on the dedicated notification; duplicating
+    # it in every plan update wastes bandwidth and can drift between clients.
+    assert "workbenchSnapshot" not in updates[0].params
 
     snapshots = [n for n in out["notifications"] if n.method == "workbench/snapshot"]
     assert snapshots
     assert snapshots[0].params["snapshot"]["version"] == 1
+    assert snapshots[0].params["snapshot"]["schemaVersion"] == 2
+    assert snapshots[0].params["snapshot"]["currentItemId"] == "todo-1"
     assert snapshots[0].params["snapshot"]["workspaceFocus"]["view"] == "trace"
     final_snapshot = snapshots[-1].params["snapshot"]
     assert final_snapshot["version"] == 3

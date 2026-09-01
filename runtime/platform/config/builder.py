@@ -107,6 +107,14 @@ def build_from_config(config: AgentConfig) -> BuiltStack:
         register_all(registry)
     else:
         register_local(registry)
+    try:
+        from runtime.safety.evolution.runtime_deployment import (
+            load_governed_candidate_skills,
+        )
+
+        load_governed_candidate_skills(registry)
+    except Exception:  # noqa: BLE001 - governed candidates fail closed
+        pass
 
     # 2. MCP servers: connect configured servers one by one. Each server gets
     #    a persistent client to avoid spawning a new process per tool call.
@@ -279,7 +287,7 @@ def _build_planner(
             # Self-configured model (custom_models.json) is the fallback so
             # unresolved / guest requests run a real model. When none is
             # configured, a clear "no model configured" error beats the old
-            # Molili fallback's confusing login gate.
+            # account fallback's confusing login gate.
             self_fallback = build_fallback_router_from_custom_models(p.model)
             router = ModelDispatchRouter(fallback=self_fallback or UnconfiguredModelRouter())
         else:
@@ -314,6 +322,18 @@ def _build_planner(
                     default_model=p.model,
                 )
                 router = ModelDispatchRouter(fallback=_base_router)
+        # Keep execution engine and model source independent.  The dispatcher
+        # prefix makes ``chatgpt/<model>`` use the principal's ChatGPT login
+        # while the surrounding LLMPlanner/ReAct loop remains Octopus-native.
+        # Registration itself is keyless and side-effect free; credentials are
+        # resolved only when that route is actually selected.
+        from runtime.sensing.model_router.chatgpt_subscription_router import (
+            ChatGPTSubscriptionModelRouter,
+        )
+        from runtime.sensing.model_router.dispatch_router import ModelDispatchRouter
+
+        if isinstance(router, ModelDispatchRouter):
+            router.register("chatgpt", ChatGPTSubscriptionModelRouter())
         from runtime.core.hearts.gill_pump import GillCache, retrieval_gill_enabled
 
         gill_cache = None

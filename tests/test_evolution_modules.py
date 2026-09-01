@@ -736,22 +736,24 @@ class TestAgentCompetitorScorecard:
             and link["href"] == "/api/evolution/agent-loop-quality"
             for link in general["operator_drilldown"]["links"]
         )
-        local_cli = next(
-            row for row in report["dimensions"] if row["id"] == "local_cli_partner_interop"
+        provider_plugin = next(
+            row
+            for row in report["dimensions"]
+            if row["id"] == "model_provider_plugin_interop"
         )
-        assert local_cli["scores"] == {
+        assert provider_plugin["scores"] == {
             "codex": 94,
             "claude_code": 82,
             "openclaw": 78,
             "hermes": 82,
             "octopus": 98,
         }
-        assert local_cli["octopus_evidence_readiness"] == 1.0
-        assert local_cli["octopus_missing_evidence_count"] == 0
+        assert provider_plugin["octopus_evidence_readiness"] == 1.0
+        assert provider_plugin["octopus_missing_evidence_count"] == 0
         assert any(
-            link["id"] == "cli_partner_probe"
-            and link["href"] == "/api/agents/local-partners/{partner_id}/probe"
-            for link in local_cli["operator_drilldown"]["links"]
+            link["id"] == "opencode_zen_connect"
+            and link["href"] == "/api/capabilities/opencode-zen/connect"
+            for link in provider_plugin["operator_drilldown"]["links"]
         )
         employee = next(
             row for row in report["dimensions"] if row["id"] == "digital_employee_workflows"
@@ -1001,7 +1003,7 @@ class TestAgentCompetitorScorecard:
         assert coverage["multi_agent_digital_employee"]["scorecard_dimension_ids"] == [
             "digital_employee_workflows",
             "subagents_parallelism",
-            "local_cli_partner_interop",
+            "model_provider_plugin_interop",
             "differentiated_agent_os",
         ]
         static_checks = [

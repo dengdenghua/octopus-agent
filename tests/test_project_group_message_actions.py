@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from threading import Event
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -45,6 +48,12 @@ def _project_group_client(tmp_path):
             "name": "Launch project",
             "metadata": {"source": "projectos", "project_id": project.id},
         },
+    )
+    _bound, binding_generation = project_store.binding_snapshot("thread-1")
+    collaboration_store.set_room_project_metadata(
+        "thread-1",
+        project.id,
+        generation=binding_generation,
     )
     app = FastAPI()
     app.include_router(
@@ -219,6 +228,175 @@ def test_create_item_writes_project_os_then_projects_to_group_idempotently(tmp_p
     ]
 
 
+@pytest.mark.parametrize(
+    "action_payload",
+    [
+        {
+            "action": "create_item",
+            "milestone_id": "MS-1",
+            "title": "Must stay on the observed project",
+        },
+        {"action": "record_decision", "decision": "Must stay on the observed project"},
+    ],
+)
+def test_message_action_source_write_rejects_a_stale_binding_generation(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+    action_payload: dict,
+) -> None:
+    client, project_store, collaboration_store = _project_group_client(tmp_path)
+    source = client.post(
+        "/api/collab/thread-1/room-message",
+        json={"text": "Apply this only to the current project"},
+    ).json()["message"]
+    winner = Project(id="PROJ-2", name="New winner", goal="Own later actions")
+    project_store.save_project(winner)
+    snapshot_read = Event()
+    release_snapshot = Event()
+    real_snapshot = project_store.binding_snapshot
+    first_snapshot = True
+
+    def pause_after_binding_read(thread_id: str, **kwargs):
+        nonlocal first_snapshot
+        result = real_snapshot(thread_id, **kwargs)
+        if first_snapshot and thread_id == "thread-1":
+            first_snapshot = False
+            snapshot_read.set()
+            assert release_snapshot.wait(timeout=5)
+        return result
+
+    monkeypatch.setattr(project_store, "binding_snapshot", pause_after_binding_read)
+    endpoint = f"/api/collab/thread-1/room-messages/{source['seq']}/project-actions"
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        response_future = pool.submit(client.post, endpoint, json=action_payload)
+        assert snapshot_read.wait(timeout=5)
+        detached, clear_generation = project_store.unbind_thread_versioned(
+            "thread-1",
+            expected_project_id="PROJ-1",
+        )
+        assert detached is not None and clear_generation == 2
+        canonical, winner_generation = project_store.bind_thread_versioned(
+            "thread-1",
+            winner.id,
+        )
+        assert canonical.id == winner.id and winner_generation == 3
+        release_snapshot.set()
+        response = response_future.result(timeout=5)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "PROJECT_BINDING_CHANGED",
+        "message": "thread project binding changed while the message action was applied",
+        "thread_id": "thread-1",
+        "project_id": "PROJ-1",
+        "binding_generation": 1,
+    }
+    assert project_store.tasks_for_milestone("MS-1") == []
+    assert project_store.events_for_project("PROJ-1") == []
+    assert collaboration_store.project_tasks_for_project("PROJ-1") == []
+    assert len(collaboration_store.messages_for_session("thread-1")) == 1
+
+
+def test_message_action_late_projection_is_atomic_and_reports_recovery(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, project_store, collaboration_store = _project_group_client(tmp_path)
+    source = client.post(
+        "/api/collab/thread-1/room-message",
+        json={"text": "Commit this task before the room binding changes"},
+    ).json()["message"]
+    projection_started = Event()
+    release_projection = Event()
+    real_commit = collaboration_store.commit_project_message_action
+
+    def pause_projection(**kwargs):
+        projection_started.set()
+        assert release_projection.wait(timeout=5)
+        return real_commit(**kwargs)
+
+    monkeypatch.setattr(
+        collaboration_store,
+        "commit_project_message_action",
+        pause_projection,
+    )
+    endpoint = f"/api/collab/thread-1/room-messages/{source['seq']}/project-actions"
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        response_future = pool.submit(
+            client.post,
+            endpoint,
+            json={
+                "action": "create_item",
+                "milestone_id": "MS-1",
+                "title": "Atomically audited task",
+            },
+        )
+        assert projection_started.wait(timeout=5)
+
+        # The authoritative task and its audit/outbox event are one commit:
+        # neither can be observed without the other.
+        tasks = project_store.tasks_for_milestone("MS-1")
+        events = project_store.events_for_project("PROJ-1")
+        assert len(tasks) == len(events) == 1
+        assert collaboration_store.project_tasks_for_project("PROJ-1") == []
+
+        winner = Project(id="PROJ-2", name="New winner", goal="Own later actions")
+        project_store.save_project(winner)
+        detached, clear_generation = project_store.unbind_thread_versioned(
+            "thread-1",
+            expected_project_id="PROJ-1",
+        )
+        assert detached is not None and clear_generation == 2
+        canonical, winner_generation = project_store.bind_thread_versioned(
+            "thread-1",
+            winner.id,
+        )
+        assert canonical.id == winner.id and winner_generation == 3
+        collaboration_store.upsert_project_room(
+            session_id="thread-1",
+            room={"id": "room-1", "name": "New winner"},
+            project_id=winner.id,
+            generation=winner_generation,
+        )
+        release_projection.set()
+        response = response_future.result(timeout=5)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["projection_pending"] is True
+    assert body["recovery"]["code"] == "PROJECT_BINDING_CHANGED"
+    assert body["event"]["id"] == body["recovery"]["event_id"]
+    assert collaboration_store.project_tasks_for_project("PROJ-1") == []
+    enriched = collaboration_store.message_for_session("thread-1", source["seq"])
+    assert enriched["metadata"].get("project_actions") in (None, [])
+    assert len(collaboration_store.messages_for_session("thread-1")) == 1
+
+
+def test_link_room_cannot_replace_a_project_owned_session_room(tmp_path) -> None:
+    client, _project_store, collaboration_store = _project_group_client(tmp_path)
+    collaboration_store.append_message(
+        "thread-1",
+        room_id="room-1",
+        text="Keep the project transcript anchored",
+    )
+
+    response = client.post(
+        "/api/collab/thread-1/link-room",
+        json={"room_id": "room-replacement"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "ROOM_LINK_CONFLICT"
+    room = collaboration_store.room_for_session("thread-1")
+    assert room is not None
+    assert room["id"] == "room-1"
+    assert room["project_id"] == "PROJ-1"
+    assert [item["text"] for item in collaboration_store.messages_for_session("thread-1")] == [
+        "Keep the project transcript anchored"
+    ]
+    assert collaboration_store.room_by_id("room-replacement") is None
+
+
 def test_link_decision_and_artifact_actions_enrich_one_source_message(tmp_path) -> None:
     client, project_store, collaboration_store = _project_group_client(tmp_path)
     source = client.post(
@@ -371,3 +549,56 @@ def test_moving_project_to_thread_promotes_project_room_to_group_session(tmp_pat
         message["text"]
         for message in collaboration_store.messages_for_session("thread-project-group")
     ] == ["project kickoff"]
+
+    # A late generation-zero standalone writer cannot steal the promoted room
+    # back from its bound session.
+    stale = CollaborationStore(base_dir=tmp_path / "cowork")
+    with pytest.raises(RuntimeError, match="versioned project API"):
+        stale.upsert_room(
+            f"project:{project_id}",
+            {"id": room_id, "name": "Late generic standalone projection"},
+        )
+    with pytest.raises(RuntimeError, match="superseded|stale|conflict"):
+        stale.upsert_project_room(
+            session_id=f"project:{project_id}",
+            room={"id": room_id, "name": "Late standalone projection"},
+            project_id=project_id,
+            generation=0,
+        )
+    assert collaboration_store.session_id_for_room(room_id) == "thread-project-group"
+
+    _bound, generation = project_store.binding_snapshot("thread-project-group")
+    collaboration_store.upsert_project_task(
+        session_id="thread-project-group",
+        room_id=room_id,
+        project_id=project_id,
+        milestone_id=planned["milestones"][0]["id"],
+        task={"id": "TASK-anchored", "title": "Stay in the canonical session"},
+        binding_generation=generation,
+    )
+
+    # A Project OS project has one canonical collaboration thread. A second
+    # move must explicitly detach the first instead of stealing its read model.
+    second = client.post(
+        "/api/projects/move",
+        json={"thread_id": "thread-project-group-2", "project_id": project_id},
+    )
+    assert second.status_code == 409
+    assert second.json()["detail"] == {
+        "code": "PROJECT_ALREADY_BOUND",
+        "message": "project is already bound to another thread; detach it first",
+        "project_id": project_id,
+        "canonical_thread_id": "thread-project-group",
+        "requested_thread_id": "thread-project-group-2",
+    }
+    assert collaboration_store.room_for_session("thread-project-group-2") is None
+    assert collaboration_store.room_for_session("thread-project-group")["id"] == room_id
+    assert [
+        message["text"]
+        for message in collaboration_store.messages_for_session("thread-project-group")
+    ] == ["project kickoff"]
+    assert [
+        task["id"] for task in collaboration_store.tasks_for_session("thread-project-group")
+    ] == ["TASK-anchored"]
+    assert collaboration_store.tasks_for_session("thread-project-group-2") == []
+    assert project_store.thread_project_map() == {"thread-project-group": project_id}

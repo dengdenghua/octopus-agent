@@ -24,7 +24,6 @@ from __future__ import annotations
 import time
 from collections.abc import Iterator
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -124,6 +123,8 @@ def _jwt_secured_app_client(
     *,
     require_auth: bool,
 ) -> TestClient:
+    from runtime.adapters.integrations.local_auth.config import LocalAuthConfig
+
     store = IdentityStore()
     store.add(Identity(actor_id="alice", roles=("admin",)))
     app = create_app(
@@ -132,12 +133,13 @@ def _jwt_secured_app_client(
         stack=obs_stack,
         cocoloop_require_auth=require_auth,
         cocoloop_identity_store=store,
-        molili_config=SimpleNamespace(
-            enabled=False,
+        local_auth_config=LocalAuthConfig(
+            enabled=True,
+            allow_any_username=True,
+            jwt_secret=_JWT_SECRET,
             jwt_issuer=_JWT_ISSUER,
             jwt_audience=_JWT_AUDIENCE,
         ),
-        molili_jwt_secret=_JWT_SECRET,
     )
     return TestClient(app)
 
@@ -373,7 +375,6 @@ def test_legacy_control_plane_requires_auth_when_enabled(
         "/api/plugin-hub/plugins",
         "/api/prompts",
         "/api/remote-backends",
-        "/api/cli-team/status",
         "/api/team/role-models",
         "/api/computer/status",
         "/api/skills/market/installed",
@@ -395,7 +396,6 @@ def test_legacy_control_plane_open_in_dev_mode(
     assert client.get("/api/memory").status_code == 200
     assert client.get("/api/meta-skills").status_code == 200
     assert client.get("/api/plugins").status_code == 200
-    assert client.get("/api/cli-team/status").status_code == 200
     assert client.get("/api/prompts").status_code == 200
     assert client.get("/api/remote-backends").status_code == 200
     assert client.get("/api/team/role-models").status_code == 200

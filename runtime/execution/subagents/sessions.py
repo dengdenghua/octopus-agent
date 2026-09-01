@@ -205,6 +205,21 @@ class SubagentSessionStore:
         # budget, mirroring dsh ``spentWakes`` keyed by the exact Agent.
         self._memory: OrderedDict[str, SubagentSession] = OrderedDict()
         self._lock = threading.RLock()
+        # Wake/injection callbacks are live routing metadata, independent of
+        # the durable session cache.  Keeping them on the session-store lock
+        # let a cold ``pending_thread_reports`` disk scan stall turn startup
+        # before ``turn/started`` was even visible.  A dedicated lock keeps
+        # active-turn registration O(1) while preserving thread-safe handler
+        # replacement and lookup.
+        self._handlers_lock = threading.Lock()
+        # Ephemeral scheduler state must never share the durable-session lock.
+        # A cold ``pending_thread_reports`` scan may hold ``_lock`` while it
+        # parses every session file; ReAct turn entry/exit still needs to mark
+        # its owner busy/idle immediately so cancellation and terminal events
+        # are not delayed behind that scan.  When both locks are needed the
+        # only permitted order is ``_lock`` -> ``_live_lock``.  Live-only
+        # methods never acquire ``_lock``.
+        self._live_lock = threading.Lock()
         # Optional wakeup hook (dsh ``reportDelivery: 'wakeup'``): called with
         # (session_id, report) after a report lands so a parent scheduler can
         # plan a turn. Best-effort — a failing hook never breaks the report.
@@ -292,7 +307,10 @@ class SubagentSessionStore:
         self._memory.move_to_end(session.session_id)
         while len(self._memory) > self._max_cached_sessions:
             oldest_id, _ = self._memory.popitem(last=False)
-            self._spent_wakes.pop(oldest_id, None)
+            # ``_store_locked`` is always called under the durable lock, so
+            # this follows the class-wide durable -> live lock order.
+            with self._live_lock:
+                self._spent_wakes.pop(oldest_id, None)
 
     def _disk_sessions_locked(self) -> list[SubagentSession]:
         """Durable sessions on disk that are not currently cached.
@@ -388,8 +406,9 @@ class SubagentSessionStore:
         )
         with self._lock:
             self._store_locked(session)
-            self._spent_wakes.pop(session.session_id, None)
-            self._owner_busy.discard(session.session_id)
+            with self._live_lock:
+                self._spent_wakes.pop(session.session_id, None)
+                self._owner_busy.discard(session.session_id)
             self._write_locked(session)
         return session
 
@@ -564,7 +583,7 @@ class SubagentSessionStore:
         (use :meth:`unregister_thread_wake_handler`). Idempotent and
         thread-safe.
         """
-        with self._lock:
+        with self._handlers_lock:
             self._thread_wake_handlers[thread_id] = handler
 
     def register_thread_injector(
@@ -579,28 +598,28 @@ class SubagentSessionStore:
         the next step boundary. Inverting the dependency this way keeps the
         execution layer free of sensing imports (import-direction ratchet).
         """
-        with self._lock:
+        with self._handlers_lock:
             self._thread_injectors[thread_id] = injector
 
     def unregister_thread_injector(self, thread_id: str) -> None:
         """Drop the thread's live-injection hook (no-op when not registered)."""
-        with self._lock:
+        with self._handlers_lock:
             self._thread_injectors.pop(thread_id, None)
 
     def registered_thread_injector(self, thread_id: str) -> Callable[[str], bool] | None:
-        with self._lock:
+        with self._handlers_lock:
             return self._thread_injectors.get(thread_id)
 
     def unregister_thread_wake_handler(self, thread_id: str) -> None:
         """Drop the thread's wakeup hook (no-op when not registered)."""
-        with self._lock:
+        with self._handlers_lock:
             self._thread_wake_handlers.pop(thread_id, None)
 
     def registered_thread_wake_handler(
         self, thread_id: str
     ) -> Callable[[str, SubagentReport], None] | None:
         """Return the thread's registered wakeup hook, or ``None``."""
-        with self._lock:
+        with self._handlers_lock:
             return self._thread_wake_handlers.get(thread_id)
 
     def append_report(
@@ -631,21 +650,22 @@ class SubagentSessionStore:
                 return None
             effective_delivery = "wakeup" if delivery != "quiet" else "quiet"
             if effective_delivery == "wakeup":
-                owner_busy = session_id in self._owner_busy or bool(
-                    session.thread_id and self._busy_threads.get(session.thread_id, 0) > 0
-                )
-                if owner_busy:
-                    # dsh ``inject``: a busy owner must not be woken mid-turn;
-                    # the report waits in the running turn's queue and neither
-                    # fires the hook nor spends the wake budget.
-                    effective_delivery = "queued"
-                elif self._spent_wakes.get(session_id, 0) >= self._max_consecutive_wakes:
-                    effective_delivery = "quiet"
-                else:
-                    # The budget is spent the moment we decide to wake — a
-                    # concurrent or repeated report must not re-wake the parent.
-                    # Mirrors dsh ``spentWakes.set(owner, spent + 1)``.
-                    self._spent_wakes[session_id] = self._spent_wakes.get(session_id, 0) + 1
+                with self._live_lock:
+                    owner_busy = session_id in self._owner_busy or bool(
+                        session.thread_id and self._busy_threads.get(session.thread_id, 0) > 0
+                    )
+                    if owner_busy:
+                        # dsh ``inject``: a busy owner must not be woken mid-turn;
+                        # the report waits in the running turn's queue and neither
+                        # fires the hook nor spends the wake budget.
+                        effective_delivery = "queued"
+                    elif self._spent_wakes.get(session_id, 0) >= self._max_consecutive_wakes:
+                        effective_delivery = "quiet"
+                    else:
+                        # The budget is spent the moment we decide to wake — a
+                        # concurrent or repeated report must not re-wake the parent.
+                        # Mirrors dsh ``spentWakes.set(owner, spent + 1)``.
+                        self._spent_wakes[session_id] = self._spent_wakes.get(session_id, 0) + 1
             report = SubagentReport(
                 content=content.strip(),
                 delivery=effective_delivery,
@@ -684,9 +704,10 @@ class SubagentSessionStore:
         waking a second turn over an in-flight one. Live state only: a store
         restart starts every owner idle. Unknown sessions are a no-op.
         """
-        with self._lock:
-            if session_id in self._memory or self._path_for(session_id) is not None:
-                self._owner_busy.add(session_id)
+        if not _VALID_SESSION_ID_RE.fullmatch(session_id):
+            return
+        with self._live_lock:
+            self._owner_busy.add(session_id)
 
     def mark_owner_idle(self, session_id: str) -> None:
         """Mark the parent owner idle again (dsh ``agent.status === 'idle'``).
@@ -696,7 +717,7 @@ class SubagentSessionStore:
         wake or in-turn read), they are consumed via ``pending_reports`` /
         ``reports_prompt``. No-op for unknown sessions.
         """
-        with self._lock:
+        with self._live_lock:
             self._owner_busy.discard(session_id)
 
     def mark_thread_busy(self, thread_id: str) -> None:
@@ -709,7 +730,7 @@ class SubagentSessionStore:
         """
         if not thread_id:
             return
-        with self._lock:
+        with self._live_lock:
             self._busy_threads[thread_id] = self._busy_threads.get(thread_id, 0) + 1
 
     def mark_thread_idle(self, thread_id: str) -> None:
@@ -722,7 +743,7 @@ class SubagentSessionStore:
         """
         if not thread_id:
             return
-        with self._lock:
+        with self._live_lock:
             remaining = self._busy_threads.get(thread_id, 0) - 1
             if remaining > 0:
                 self._busy_threads[thread_id] = remaining
@@ -739,10 +760,17 @@ class SubagentSessionStore:
         """
         if not thread_id:
             return
+        # Snapshot durable/cache membership first, release that lock, then
+        # mutate live state.  Never acquire the durable lock while live is held.
         with self._lock:
-            for session in list(self._memory.values()):
-                if session.thread_id == thread_id:
-                    self._spent_wakes.pop(session.session_id, None)
+            session_ids = [
+                session.session_id
+                for session in self._memory.values()
+                if session.thread_id == thread_id
+            ]
+        with self._live_lock:
+            for session_id in session_ids:
+                self._spent_wakes.pop(session_id, None)
 
     def refill_wake_budget(self, session_id: str) -> None:
         """Refill the consecutive-wake budget when the parent claims a human turn.
@@ -751,9 +779,10 @@ class SubagentSessionStore:
         ``user`` message: a parent that just took real input may be woken again
         a fresh budget's worth of times. No-op for unknown sessions.
         """
-        with self._lock:
-            if session_id in self._memory or self._path_for(session_id) is not None:
-                self._spent_wakes.pop(session_id, None)
+        if not _VALID_SESSION_ID_RE.fullmatch(session_id):
+            return
+        with self._live_lock:
+            self._spent_wakes.pop(session_id, None)
 
     def pending_reports(
         self,

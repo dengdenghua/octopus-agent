@@ -14,7 +14,6 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from runtime.projectos.cowork_bridge import (
     full_project_state,
-    project_task_to_collaboration,
     run_project_from_group,
 )
 from runtime.projectos.engine import (
@@ -24,10 +23,17 @@ from runtime.projectos.engine import (
     stub_decompose_tasks,
     stub_generate_milestones,
 )
-from runtime.projectos.store import ProjectStore
+from runtime.projectos.store import (
+    ProjectBindingActiveError,
+    ProjectClaimActiveError,
+    ProjectStore,
+)
 from runtime.projectos.timeline import project_process_timeline
 from runtime.safety.auth.principal import CurrentPrincipal, resolve_principal
 from runtime.safety.auth.scope import TenantScope, scope_from_principal
+from runtime.sensing.gateway._projects_group_projections import (
+    ProjectGroupProjectionContext,
+)
 from runtime.sensing.gateway.thread_access import ThreadAccessResolver
 
 
@@ -99,6 +105,29 @@ class FromGroupBody(BaseModel):
     max_ticks: int = Field(default=DEFAULT_RUN_MAX_TICKS, ge=1, le=HARD_MAX_RUN_TICKS)
 
 
+class DetachFromGroupBody(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    force: bool = False
+    expected_project_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("expected_project_id", "expectedProjectId"),
+    )
+
+
+def _claim_active(exc: ProjectClaimActiveError) -> HTTPException:
+    return HTTPException(
+        409,
+        {
+            "code": "CLAIM_ACTIVE",
+            "message": "a worker claim is active; wait for it to finish",
+            "project_id": exc.project.id,
+            "task_ids": list(exc.task_ids),
+            "milestone_ids": list(exc.milestone_ids),
+        },
+    )
+
+
 def create_projects_router(
     *,
     store: ProjectStore | None = None,
@@ -117,6 +146,9 @@ def create_projects_router(
 ) -> APIRouter:
     """Create the ``/api/projects/*`` router."""
     project_store = store or ProjectStore()
+    bind_team_project_store = getattr(team_rooms_router, "bind_project_store", None)
+    if callable(bind_team_project_store):
+        bind_team_project_store(project_store)
 
     def _group_store():
         if group_store is not None:
@@ -346,67 +378,17 @@ def create_projects_router(
             raise HTTPException(404, "project not found")
         return state
 
-    def _project_to_collaboration(
-        request: Request, project_id: str, *, thread_id: str = ""
-    ) -> None:
-        if collaboration_store is None:
-            return
-        try:
-            state = full_project_state(_scoped_store(request), project_id)
-            if state is None:
-                return
-            raw_project = state.get("project")
-            project = raw_project if isinstance(raw_project, dict) else {}
-            session_id = thread_id or f"project:{project_id}"
-            room_id = f"project:{project_id}"
-            if thread_id:
-                try:
-                    group_state = _group_store().state(thread_id)
-                    linked_room = getattr(group_state, "room_id", "") or ""
-                    if linked_room:
-                        room_id = str(linked_room)
-                except Exception:  # noqa: BLE001
-                    room_id = f"project:{project_id}"
-            upsert_room = getattr(collaboration_store, "upsert_room", None)
-            if callable(upsert_room):
-                upsert_room(
-                    session_id,
-                    {
-                        "id": room_id,
-                        "name": project.get("name") or f"Project {project_id}",
-                        "metadata": {
-                            "source": "projectos",
-                            "project_id": project_id,
-                            "tenant_id": project.get("tenant_id") or "",
-                            **({"thread_id": thread_id} if thread_id else {}),
-                        },
-                    },
-                )
-            raw_milestones = state.get("milestones")
-            milestones = raw_milestones if isinstance(raw_milestones, list) else []
-            raw_tasks = state.get("tasks")
-            tasks_by_ms = raw_tasks if isinstance(raw_tasks, dict) else {}
-            for milestone in milestones:
-                if not isinstance(milestone, dict):
-                    continue
-                milestone_id = str(milestone.get("id") or "")
-                tasks = tasks_by_ms.get(milestone_id) if isinstance(tasks_by_ms, dict) else []
-                if not isinstance(tasks, list):
-                    continue
-                for task in tasks:
-                    if not isinstance(task, dict):
-                        continue
-                    project_task_to_collaboration(
-                        collaboration_store,
-                        session_id=session_id,
-                        room_id=room_id,
-                        project_id=project_id,
-                        milestone_id=milestone_id,
-                        task=task,
-                        tenant_id=str(project.get("tenant_id") or ""),
-                    )
-        except Exception:  # noqa: BLE001 - projection must not block Project OS writes
-            return
+    projections = ProjectGroupProjectionContext(
+        collaboration_store=collaboration_store,
+        group_store=_group_store,
+        scoped_store=_scoped_store,
+        thread_store=thread_store,
+        team_rooms_router=team_rooms_router,
+        require_auth=require_auth,
+    )
+    _project_to_collaboration = projections.project_to_bound_collaboration
+    _project_group_projections = projections.project_group_projections
+    _clear_project_group_projections = projections.clear_project_group_projections
 
     @router.get("/api/projects")
     def list_projects(request: Request) -> dict[str, Any]:
@@ -594,7 +576,11 @@ def create_projects_router(
         manage those surfaces independently.
         """
 
-        from runtime.projectos.group_service import ProjectGroupCreationService
+        from runtime.projectos.group_service import (
+            ProjectGroupBindingChanged,
+            ProjectGroupCreationRecoveryPending,
+            ProjectGroupCreationService,
+        )
 
         principal = _principal(request)
         normalized_agents: list[dict[str, Any]] = []
@@ -635,11 +621,14 @@ def create_projects_router(
                 agents=normalized_agents,
                 actor_id=actor_id,
                 tenant_id=tenant_id,
-                plan_project=lambda: _engine(principal).plan(
+                plan_project=lambda project_id: _engine(principal).plan(
                     body.name.strip(),
                     (body.goal or "").strip() or body.name.strip(),
+                    project_id=project_id,
                 ),
             )
+        except (ProjectGroupBindingChanged, ProjectGroupCreationRecoveryPending) as exc:
+            raise HTTPException(409, detail=exc.detail()) from exc
         except HTTPException:
             raise
         except ValueError as exc:
@@ -664,19 +653,31 @@ def create_projects_router(
         project = _project_or_404(request, body.project_id)
         _thread_access(request, body.thread_id, write=True)
         try:
-            _scoped_store(request).bind_thread(body.thread_id, project.id)
+            scoped = _scoped_store(request)
+            projections.move_project_to_thread(
+                request,
+                body.thread_id,
+                project.id,
+                scoped,
+            )
         except ValueError as exc:
             raise _bad_request(exc) from exc
-        _project_to_collaboration(request, project.id, thread_id=body.thread_id)
+        except PermissionError as exc:
+            raise HTTPException(404, "project not found") from exc
         return {"ok": True, "thread_id": body.thread_id, "project_id": project.id}
 
     @router.delete("/api/projects/{project_id}", dependencies=[Depends(_auth_dep)])
     def delete_project(request: Request, project_id: str) -> dict[str, Any]:
-        _project_or_404(request, project_id)
+        scoped = _scoped_store(request)
         try:
-            _scoped_store(request).delete_project(project_id)
-        except ValueError as exc:
-            raise _bad_request(exc) from exc
+            _project_or_404(request, project_id)
+        except HTTPException as exc:
+            if exc.status_code != 404 or not projections.finalize_deleted_project_projections(
+                project_id, scoped
+            ):
+                raise
+            return {"ok": True, "project_id": project_id, "recovered": True}
+        projections.delete_project(request, project_id, scoped)
         return {"ok": True, "project_id": project_id}
 
     @router.post("/api/projects/from-group/{thread_id}", dependencies=[Depends(_auth_dep)])
@@ -716,17 +717,166 @@ def create_projects_router(
                 subagent_runner=subagent_runner,
                 owner_id=principal.actor_id if principal is not None else "",
                 tenant_id=principal.tenant_id if principal is not None else "",
+                reuse_active=True,
             )
+            if result.get("recovery_pending"):
+                raise HTTPException(409, result.get("recovery") or result)
+            # `run_project_from_group` only returns after `engine.run` has
+            # crossed its external execution boundary. Projection
+            # compensation must therefore retain this project on run=True.
+            result["run_requested"] = body.run
+            result["execution_started"] = body.run
             raw_project = result.get("project")
             project = raw_project if isinstance(raw_project, dict) else {}
             project_id = str(project.get("id") or "")
             if project_id:
-                _project_to_collaboration(request, project_id, thread_id=thread_id)
+                projections.project_group_projections_or_compensate(
+                    request,
+                    thread_id,
+                    project_id,
+                    result,
+                )
             return result
         except ValueError as exc:
             raise _bad_request(exc) from exc
+        except HTTPException:
+            raise
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(500, "project run failed") from exc
+
+    @router.delete("/api/projects/from-group/{thread_id}", dependencies=[Depends(_auth_dep)])
+    def detach_from_group(
+        request: Request,
+        thread_id: str,
+        body: DetachFromGroupBody | None = None,
+    ) -> dict[str, Any]:
+        """Close a group's project capability without deleting the group.
+
+        The project record and all project/chat history remain inspectable.
+        Running or blocked work is protected unless the owner explicitly uses
+        ``force``. The optional expected id makes UI retries safe against a
+        concurrent rebind.
+        """
+
+        principal = _thread_access(request, thread_id, write=True)
+        options = body or DetachFromGroupBody()
+        scoped = _scoped_store(request)
+        try:
+            project, binding_generation = scoped.binding_snapshot(thread_id)
+        except ValueError as exc:
+            raise _bad_request(exc) from exc
+        if project is None:
+            prior_project = None
+            if options.expected_project_id:
+                try:
+                    prior_project = scoped.get_project(options.expected_project_id)
+                except ValueError as exc:
+                    raise _bad_request(exc) from exc
+                if prior_project is not None:
+                    try:
+                        _clear_project_group_projections(
+                            thread_id,
+                            options.expected_project_id,
+                            generation=binding_generation,
+                        )
+                    except Exception as exc:  # noqa: BLE001 - retryable cross-store cleanup
+                        raise HTTPException(500, "project detach failed") from exc
+            return {
+                "ok": True,
+                "thread_id": thread_id,
+                "project_id": options.expected_project_id or "",
+                "detached": False,
+                "project": prior_project.to_dict() if prior_project is not None else None,
+            }
+        if options.expected_project_id and project.id != options.expected_project_id:
+            raise HTTPException(
+                409,
+                {
+                    "code": "PROJECT_BINDING_CHANGED",
+                    "message": "thread project binding changed",
+                    "project_id": project.id,
+                },
+            )
+        # Legacy plans are persisted as ``running`` before the first tick even
+        # though no work has started. ``started_at`` is the durable execution
+        # boundary; blocked work is always considered active/recoverable.
+        project_is_active = project.status == "blocked" or (
+            project.status == "running" and bool(project.started_at)
+        )
+        if project_is_active and not options.force:
+            raise HTTPException(
+                409,
+                {
+                    "code": "PROJECT_ACTIVE",
+                    "message": "project is still active; complete it or explicitly detach with force=true",
+                    "project_id": project.id,
+                    "status": project.status,
+                    "force_required": True,
+                },
+            )
+
+        try:
+            detached, generation = scoped.unbind_thread_versioned(
+                thread_id,
+                expected_project_id=project.id,
+                event_kind="project.detached_from_group",
+                event_payload={
+                    "thread_id": thread_id,
+                    "actor": principal.actor_id if principal is not None else "local",
+                    "force": options.force,
+                    "status_at_detach": project.status,
+                },
+                reject_active=not options.force,
+            )
+            if detached is None:
+                return {
+                    "ok": True,
+                    "thread_id": thread_id,
+                    "project_id": project.id,
+                    "detached": False,
+                    "project": project.to_dict(),
+                }
+            try:
+                _clear_project_group_projections(
+                    thread_id,
+                    project.id,
+                    generation=generation,
+                )
+            except Exception as projection_error:
+                projections.compensate_detach_projection_failure(
+                    request,
+                    thread_id,
+                    project,
+                    projection_error,
+                )
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except ProjectBindingActiveError as exc:
+            raise HTTPException(
+                409,
+                {
+                    "code": "PROJECT_ACTIVE",
+                    "message": "project is still active; complete it or explicitly detach with force=true",
+                    "project_id": exc.project.id,
+                    "status": exc.project.status,
+                    "force_required": True,
+                },
+            ) from exc
+        except PermissionError as exc:
+            raise HTTPException(404, "project not found") from exc
+        except HTTPException:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(500, "project detach failed") from exc
+
+        refreshed = scoped.get_project(project.id)
+        return {
+            "ok": True,
+            "thread_id": thread_id,
+            "project_id": project.id,
+            "detached": True,
+            "project": (refreshed or detached).to_dict(),
+        }
 
     @router.post("/api/projects/{project_id}/tick", dependencies=[Depends(_auth_dep)])
     def tick(request: Request, project_id: str) -> dict[str, Any]:
@@ -766,6 +916,8 @@ def create_projects_router(
                 reset_attempts=body.reset_attempts,
                 clear_outputs=body.clear_outputs,
             )
+        except ProjectClaimActiveError as exc:
+            raise _claim_active(exc) from exc
         except ValueError as exc:
             raise _bad_request(exc) from exc
         if body.run:
@@ -811,6 +963,8 @@ def create_projects_router(
                 reset_attempts=body.reset_attempts,
                 cascade=body.cascade,
             )
+        except ProjectClaimActiveError as exc:
+            raise _claim_active(exc) from exc
         except ValueError as exc:
             raise _bad_request(exc) from exc
         if any(str(event).startswith("task_not_found:") for event in intervention["events"]):

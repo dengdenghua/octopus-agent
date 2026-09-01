@@ -22,6 +22,7 @@ from typing import Any
 
 from fastapi import Request
 
+from runtime.sensing.gateway._config_endpoints_codex import _register_coder_codex
 from runtime.sensing.gateway._config_endpoints_custom_models import (
     _register_custom_models,
 )
@@ -47,6 +48,7 @@ class _ConfigCtx:
 
     router: Any
     custom_models: dict[str, dict[str, Any]]
+    custom_models_snapshot: Callable[[], dict[str, dict[str, Any]]]
     # ``save(*model_ids)`` merges over the file on disk rather than
     # overwriting it with our snapshot, so callers must name the ids they
     # mutated. An id held in memory but not named is left as-is on disk;
@@ -59,6 +61,9 @@ class _ConfigCtx:
     serialize_custom_models: Callable[[Callable[..., Any]], Callable[..., Any]]
     require_admin: Callable[[Request], None]
     stack: Any
+    codex_accounts: Any
+    codex_preferences: Any
+    codex_updates: Any
 
 
 def _build_endpoints(ctx: _ConfigCtx) -> None:
@@ -71,6 +76,7 @@ def _build_endpoints(ctx: _ConfigCtx) -> None:
     _register_custom_models(router, ctx)
     _register_local_models(router, ctx)
     _register_system(router, ctx)
+    _register_coder_codex(router, ctx)
 
 
 __all__ = ["_ConfigCtx", "_build_endpoints"]

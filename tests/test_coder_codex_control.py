@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from runtime.execution.codex_backend.account import (
     CodexAccountLeaseError,
     CodexAccountService,
+    codex_account_home,
     refresh_codex_execution_auth_home,
     resolve_codex_execution_auth_home,
 )
@@ -371,6 +372,47 @@ def test_preference_store_and_execution_auth_are_principal_scoped(tmp_path: Path
     assert seeded == {"marker": "alice"}
 
 
+def test_local_execution_can_inherit_host_login_before_principal_is_seeded(
+    tmp_path: Path,
+) -> None:
+    state_root = tmp_path / "codex-state"
+    legacy_home = tmp_path / "legacy-codex"
+    scope = TenantScope("legacy:oct:alice@example.com", "oct:alice@example.com")
+    _private_auth(legacy_home, "host-chatgpt")
+
+    assert not (codex_account_home(state_root, scope) / "auth.json").exists()
+    assert (
+        resolve_codex_execution_auth_home(
+            state_root=state_root,
+            scope=scope,
+            deployment_mode="local",
+            legacy_source_home=legacy_home,
+            allow_local_principal_inheritance=True,
+        )
+        == legacy_home
+    )
+
+
+def test_shared_execution_never_inherits_host_login_even_when_requested(
+    tmp_path: Path,
+) -> None:
+    state_root = tmp_path / "codex-state"
+    legacy_home = tmp_path / "legacy-codex"
+    scope = TenantScope("tenant", "alice")
+    _private_auth(legacy_home, "host-chatgpt")
+
+    assert (
+        resolve_codex_execution_auth_home(
+            state_root=state_root,
+            scope=scope,
+            deployment_mode="shared",
+            legacy_source_home=legacy_home,
+            allow_local_principal_inheritance=True,
+        )
+        is None
+    )
+
+
 def test_two_preference_store_instances_serialize_cross_thread_writes(tmp_path: Path) -> None:
     path = tmp_path / "profile.json"
     scope = TenantScope("tenant", "alice")
@@ -472,6 +514,48 @@ async def test_login_survives_poll_cancel_and_two_principals_are_isolated(tmp_pa
 
     await service.close_all()
     assert all(client.closed for client in factory.clients)
+
+
+@pytest.mark.asyncio
+async def test_local_desktop_can_seed_host_chatgpt_login_for_authenticated_principal(
+    tmp_path: Path,
+) -> None:
+    legacy_home = tmp_path / "legacy-codex"
+    _private_auth(legacy_home, "host-chatgpt")
+    factory = _ControlFactory()
+    service = CodexAccountService(
+        tmp_path / "state",
+        command=_FAKE_COMMAND,
+        client_factory=factory,
+        legacy_source_home=legacy_home,
+        allow_local_principal_inheritance=True,
+    )
+    scope = TenantScope("local-tenant", "desktop-user")
+
+    await service.read_account(scope)
+
+    seeded = json.loads((service.account_home(scope) / "auth.json").read_text(encoding="utf-8"))
+    assert seeded == {"marker": "host-chatgpt"}
+    assert (service.account_home(scope) / "auth.json").stat().st_mode & 0o077 == 0
+    await service.close_all()
+
+
+@pytest.mark.asyncio
+async def test_shared_principal_never_inherits_host_chatgpt_login(tmp_path: Path) -> None:
+    legacy_home = tmp_path / "legacy-codex"
+    _private_auth(legacy_home, "host-chatgpt")
+    service = CodexAccountService(
+        tmp_path / "state",
+        command=_FAKE_COMMAND,
+        client_factory=_ControlFactory(),
+        legacy_source_home=legacy_home,
+    )
+    scope = TenantScope("shared-tenant", "alice")
+
+    await service.read_account(scope)
+
+    assert not (service.account_home(scope) / "auth.json").exists()
+    await service.close_all()
 
 
 @pytest.mark.asyncio
@@ -824,7 +908,7 @@ def test_shared_command_resolver_finds_packaged_chatgpt_binary(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from runtime.execution.agents import local_partner_discovery
+    from runtime.execution.codex_backend import command as command_module
 
     resources = tmp_path / "ChatGPT.app" / "Contents" / "Resources"
     resources.mkdir(parents=True)
@@ -833,11 +917,7 @@ def test_shared_command_resolver_finds_packaged_chatgpt_binary(
     bundled.chmod(0o755)
     monkeypatch.delenv("OCTOPUS_CODEX_EXECUTABLE", raising=False)
     monkeypatch.setenv("PATH", str(tmp_path / "empty-path"))
-    monkeypatch.setattr(
-        local_partner_discovery,
-        "_common_local_bin_entries",
-        lambda: [str(resources)],
-    )
+    monkeypatch.setattr(command_module, "login_shell_path", lambda: str(resources))
 
     command = resolve_codex_app_server_command()
 
@@ -894,3 +974,72 @@ def test_default_codex_state_root_stays_outside_source_checkout(
     monkeypatch.setattr(codex_paths, "_platform_codex_state_root", lambda: external)
 
     assert codex_paths.resolve_codex_state_root() == external.resolve(strict=False)
+
+
+@pytest.mark.asyncio
+async def test_plugin_catalog_uses_local_official_cache_when_remote_is_unavailable(
+    tmp_path: Path,
+) -> None:
+    legacy_home = tmp_path / "legacy-codex"
+    checkout = legacy_home / ".tmp" / "plugins"
+    marketplace = checkout / ".agents" / "plugins" / "marketplace.json"
+    plugin_root = checkout / "plugins" / "linear"
+    manifest = plugin_root / ".codex-plugin" / "plugin.json"
+    icon = plugin_root / "assets" / "linear.svg"
+    marketplace.parent.mkdir(parents=True)
+    manifest.parent.mkdir(parents=True)
+    icon.parent.mkdir(parents=True)
+    marketplace.write_text(
+        json.dumps(
+            {
+                "name": "Codex official",
+                "plugins": [
+                    {
+                        "name": "linear",
+                        "source": {"source": "local", "path": "./plugins/linear"},
+                        "policy": {"installation": "AVAILABLE"},
+                        "category": "Productivity",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest.write_text(
+        json.dumps(
+            {
+                "name": "linear",
+                "version": "1.2.3",
+                "description": "Manage Linear projects.",
+                "author": {"name": "OpenAI"},
+                "interface": {
+                    "displayName": "Linear",
+                    "composerIcon": "./assets/linear.svg",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    icon.write_text("<svg xmlns='http://www.w3.org/2000/svg'/>", encoding="utf-8")
+
+    service = CodexAccountService(
+        tmp_path / "state",
+        command=_FAKE_COMMAND,
+        client_factory=_ControlFactory(),
+        legacy_source_home=legacy_home,
+    )
+    try:
+        rows = await service.list_plugins(None, force_refetch=True)
+        resolved_icon = await service.plugin_icon_path(
+            None,
+            catalog_id="codex-marketplace:linear@openai-curated",
+        )
+    finally:
+        await service.close_all()
+
+    assert len(rows) == 1
+    assert rows[0]["name"] == "Linear"
+    assert rows[0]["author"] == "OpenAI"
+    assert rows[0]["category"] == "Productivity"
+    assert rows[0]["_marketplace_path"] == str(marketplace)
+    assert resolved_icon == icon

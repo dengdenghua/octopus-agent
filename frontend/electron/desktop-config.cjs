@@ -9,7 +9,9 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
-const LOCAL_AUTH_SECRET_MARKER = "__OCTOPUS_DESKTOP_LOCAL_AUTH_JWT_SECRET__";
+const ACCOUNT_SECRET_MARKER = "__OCTOPUS_DESKTOP_ACCOUNT_JWT_SECRET__";
+const LEGACY_LOCAL_AUTH_SECRET_MARKER =
+  "__OCTOPUS_DESKTOP_LOCAL_AUTH_JWT_SECRET__";
 const LEGACY_WEAK_SECRETS = new Set([
   "octopus-desktop-local-jwt-secret-change-me",
   "dev-secret-key-32-chars-minimum-required",
@@ -40,7 +42,12 @@ function yamlScalarValue(raw) {
 }
 
 function secretNeedsRotation(value) {
-  if (!value || value === LOCAL_AUTH_SECRET_MARKER) return true;
+  if (
+    !value ||
+    value === ACCOUNT_SECRET_MARKER ||
+    value === LEGACY_LOCAL_AUTH_SECRET_MARKER
+  )
+    return true;
   if (/^\$\{[A-Z_][A-Z0-9_]*\}$/.test(value)) return false;
   if (LEGACY_WEAK_SECRETS.has(value)) return true;
   if (/change[-_ ]?me|replace[-_ ]?me|development[-_ ]?secret/i.test(value)) {
@@ -56,9 +63,9 @@ function secretNeedsRotation(value) {
   return classes < 3;
 }
 
-function localAuthRange(lines) {
+function configSectionRange(lines, section) {
   const start = lines.findIndex((line) =>
-    /^local_auth\s*:\s*(?:#.*)?$/.test(line),
+    new RegExp(`^${section}\\s*:\\s*(?:#.*)?$`).test(line),
   );
   if (start < 0) return null;
   let end = lines.length;
@@ -73,33 +80,44 @@ function localAuthRange(lines) {
   return { start, end };
 }
 
-function withLocalAuthSecret(source, { forceRotate = false } = {}) {
+function withAccountSecrets(source, { forceRotate = false } = {}) {
   const newline = source.includes("\r\n") ? "\r\n" : "\n";
   const hadTrailingNewline = source.endsWith("\n");
   const lines = source.split(/\r?\n/);
   if (hadTrailingNewline) lines.pop();
-  const range = localAuthRange(lines);
-  if (!range) {
-    throw new Error("desktop config is missing the required local_auth block");
+  const sections = ["oct", "local_auth"];
+  const targets = sections.map((section) => {
+    const range = configSectionRange(lines, section);
+    if (!range) return null;
+    let secretIndex = -1;
+    let currentValue = "";
+    for (let index = range.start + 1; index < range.end; index += 1) {
+      const match = lines[index].match(/^\s+jwt_secret\s*:\s*(.*)$/);
+      if (!match) continue;
+      secretIndex = index;
+      currentValue = yamlScalarValue(match[1]);
+      break;
+    }
+    return { section, range, secretIndex, currentValue };
+  });
+  if (!targets.some(Boolean)) {
+    throw new Error("desktop config is missing an account auth block");
   }
-
-  let secretIndex = -1;
-  let currentValue = "";
-  for (let index = range.start + 1; index < range.end; index += 1) {
-    const match = lines[index].match(/^\s+jwt_secret\s*:\s*(.*)$/);
-    if (!match) continue;
-    secretIndex = index;
-    currentValue = yamlScalarValue(match[1]);
-    break;
-  }
-  if (!forceRotate && secretIndex >= 0 && !secretNeedsRotation(currentValue)) {
-    return { text: source, changed: false };
-  }
+  const needsChange = targets.some(
+    (target) =>
+      target &&
+      (forceRotate ||
+        target.secretIndex < 0 ||
+        secretNeedsRotation(target.currentValue)),
+  );
+  if (!needsChange) return { text: source, changed: false };
 
   const secret = generateDesktopJwtSecret();
   const replacement = `  jwt_secret: ${JSON.stringify(secret)}`;
-  if (secretIndex >= 0) lines[secretIndex] = replacement;
-  else lines.splice(range.start + 1, 0, replacement);
+  for (const target of targets.filter(Boolean).reverse()) {
+    if (target.secretIndex >= 0) lines[target.secretIndex] = replacement;
+    else lines.splice(target.range.start + 1, 0, replacement);
+  }
   return {
     text: lines.join(newline) + (hadTrailingNewline ? newline : ""),
     changed: true,
@@ -138,7 +156,7 @@ function ensureDesktopConfigFile({ bundledPath, targetPath }) {
     throw new Error(`desktop config source is missing: ${sourcePath}`);
   }
   const source = fs.readFileSync(sourcePath, "utf8");
-  const materialized = withLocalAuthSecret(source, {
+  const materialized = withAccountSecrets(source, {
     // Even if a future template accidentally contains a strong literal,
     // first launch must rotate it so installations never share a key.
     forceRotate: !targetExists,
@@ -206,10 +224,10 @@ function ensureDesktopResources({ bundledRoot, targetRoot }) {
 }
 
 module.exports = {
-  LOCAL_AUTH_SECRET_MARKER,
+  ACCOUNT_SECRET_MARKER,
   ensureDesktopConfigFile,
   ensureDesktopResources,
   generateDesktopJwtSecret,
   secretNeedsRotation,
-  withLocalAuthSecret,
+  withAccountSecrets,
 };

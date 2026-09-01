@@ -86,9 +86,7 @@ def build_dual_helix_evidence(
         "octopus_wins": octopus_wins,
         "codex_wins": codex_wins,
         "ties": ties,
-        "octopus_win_rate": (
-            round(octopus_wins / decisive_count, 3) if decisive_count else None
-        ),
+        "octopus_win_rate": (round(octopus_wins / decisive_count, 3) if decisive_count else None),
         "strands": strand_stats,
         "pairs": pairs[: max(1, limit)],
     }

@@ -772,6 +772,17 @@
      "defaultExpiresInSeconds": 300,
      "codeEmbeddedInUri": true
     },
+    "tokenRefresh": {
+     "command": {
+      "darwin": "cnb auth status --json",
+      "linux": "cnb auth status --json",
+      "win32": "cnb.cmd auth status --json"
+     },
+     "storeKey": "access_token",
+     "tokenPattern": "\"access_token\"\\s*:\\s*\"([A-Za-z0-9._-]+)\"",
+     "expiresInPattern": "\"expires_in\"\\s*:\\s*(\\d+)",
+     "defaultExpiresInSeconds": 3600
+    },
     "userProvidedData": []
    },
    "skill_count": 1,
@@ -2057,7 +2068,7 @@
    "description": "Manage Issues, projects, documents, and releases in Linear. Create and update issues with assignees and labels, comment and reply in threads, create projects with milestones and status updates, manage documents and attachments, view sprint cycles and team statuses, search and review PR diffs.",
    "description_zh": "管理 Linear 中的 Issues、项目、文档和发布。支持创建和更新 Issue 并指派负责人与标签，评论与讨论串回复，创建项目和里程碑及进度报告，管理文档和附件，查看 Sprint 周期与团队状态，搜索和 Code Review PR 变更。",
    "type": "mcp",
-   "auth_mode": "server-side",
+   "auth_mode": "oauth",
    "source": "linear-mcp",
    "provider_id": "linear",
    "mcp_servers": [
@@ -3361,7 +3372,7 @@
    "description": "Query global stock data via Tongdaxin MCP, with screening and research support.",
    "description_zh": "通过通达信 MCP 查询全球股票行情数据、条件选股、研究报告、公告资讯和宏观信息。支持个股基本面分析、同行业对比和智能选股筛查。",
    "type": "mcp",
-   "auth_mode": "server-side",
+   "auth_mode": "oauth",
    "source": "tdx-connector",
    "provider_id": "",
    "mcp_servers": [

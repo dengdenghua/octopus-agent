@@ -12,6 +12,7 @@
 
 from runtime.platform.connectors.auth_orchestrator import (
     AuthOrchestrator,
+    RefreshCleanupRequiredError,
     mcp_injection_for_server,
 )
 from runtime.platform.connectors.connector_registry import (
@@ -25,5 +26,6 @@ __all__ = [
     "ConnectorRegistry",
     "ConnectorDefinition",
     "AuthOrchestrator",
+    "RefreshCleanupRequiredError",
     "mcp_injection_for_server",
 ]

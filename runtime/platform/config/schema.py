@@ -38,10 +38,15 @@ class BudgetConfig(BaseModel):
     # Forced-convergence max_tokens cap for normal (non research/swarm) mode.
     # Default 2000; research/swarm convergence stays fixed at 5000.
     convergence_max_tokens: int = Field(default=2000, gt=0)
-    # Elastic budget: when a task passes the token/usd threshold, auto-pause
-    # and ask the user instead of only logging a warning. Pause is non-lossy
-    # (user can add budget and continue), so long tasks are not blocked.
+    # Elastic budget: pause on the hard USD spend ceiling when the threshold is
+    # reached. Cumulative tokens are accounting telemetry by default because a
+    # multi-step task resends prompt tokens on every model call; treating that
+    # cumulative counter as context pressure prematurely interrupts long jobs.
     budget_auto_pause: bool = False
+    # Legacy/strict accounting mode. Only when BOTH flags are true may the
+    # cumulative token counter auto-pause a task. Current context pressure is
+    # tracked separately and handled by compaction.
+    cumulative_token_auto_pause: bool = False
 
 
 class ImmunityConfig(BaseModel):
@@ -322,7 +327,7 @@ class OctConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     enabled: bool = False
-    base_url: str = "https://api.octoapk.com"
+    base_url: str = "https://api.echo-age.com"
     default_model: str = "qwen3.5-flash"
     request_timeout_seconds: float = Field(default=15.0, ge=1.0, le=600.0)
     llm_timeout_seconds: float = Field(default=120.0, ge=1.0, le=600.0)

@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from runtime.execution.agents.local_partner_bridge import partner_identity
 from runtime.execution.misc.skill_policy import is_audit_read_only_context
 from runtime.platform.process.paths import app_paths
 from runtime.platform.process.session import Session, current_session
@@ -55,6 +54,7 @@ from .responses_proxy import (
     CodexResponsesScope,
     ResponsesProxyError,
     ScopedResponsesProxy,
+    load_or_create_compaction_key,
 )
 from .role_context import compose_codex_role_instructions
 from .security import (
@@ -112,15 +112,13 @@ def _explicit_feature_flag() -> bool | None:
 
 
 def agent_uses_codex_execution_backend(agent: Any) -> bool:
-    """Recognize both the standard role backend and legacy Codex partner."""
+    """Return whether the role explicitly selects embedded Codex App Server."""
 
     capabilities = getattr(agent, "capabilities", None)
     if not isinstance(capabilities, dict):
         return False
     standard = str(capabilities.get("execution_backend") or "").strip().casefold()
-    identity = partner_identity(capabilities)
-    legacy = identity is not None and identity[0] == "codex-cli"
-    if standard != "codex_app_server" and not legacy:
+    if standard != "codex_app_server":
         return False
     if capabilities.get("codex_app_server") is False:
         return deployment_mode() in _PRODUCTION_MODES
@@ -137,11 +135,8 @@ def require_codex_backend_enabled() -> None:
 
 def codex_app_server_command(agent: Any) -> tuple[str, ...]:
     capabilities = getattr(agent, "capabilities", None)
-    identity = partner_identity(capabilities)
     command = ""
-    if identity is not None and identity[0] == "codex-cli":
-        command = str(identity[1] or "").strip()
-    elif isinstance(capabilities, dict):
+    if isinstance(capabilities, dict):
         command = str(
             capabilities.get("codex_app_server_executable")
             or capabilities.get("codex_executable")
@@ -350,14 +345,6 @@ def _server_model_override(
             return None, None
         return override.model, override.reasoning_effort
 
-    # The legacy, separately installed Codex CLI partner retains its explicit
-    # per-turn UI model switch for compatibility.  It is not the standard
-    # Coder role and does not consume the principal model-profile API.
-    identity = partner_identity(capabilities)
-    if identity is not None and identity[0] == "codex-cli":
-        model = str(context.get("partner_model") or context.get("model_name") or "").strip()
-        effort = str(context.get("reasoning_effort") or "").strip()
-        return model or None, effort or None
     return None, None
 
 
@@ -463,6 +450,7 @@ def build_codex_role_request(
             scope=scope,
             deployment_mode=mode,
             legacy_source_home=source_codex_home(),
+            allow_local_principal_inheritance=mode == "local",
         )
     connector_instructions = ""
     if requested_app_id:
@@ -547,6 +535,12 @@ async def codex_execution_lifecycle(
                         model=request.model,
                     ),
                     trusted_session=trusted_session,
+                    compaction_key=load_or_create_compaction_key(
+                        resolved_state_root,
+                        tenant_id=request.tenant_id,
+                        principal_id=request.principal_id,
+                        thread_id=request.outer_thread_id,
+                    ),
                     ttl_s=max(
                         1.0,
                         min(4.0 * 60.0 * 60.0 + 120.0, float(timeout_s) + 60.0),

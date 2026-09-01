@@ -372,6 +372,94 @@ class CodexAppServerClient:
             raise ProtocolError("app/list nextCursor must be a string or null")
         return response
 
+    async def list_plugins(
+        self,
+        *,
+        cwds: Sequence[str] | None = None,
+        force_refetch: bool = False,
+        marketplace_kinds: Sequence[str] | None = None,
+        timeout_s: float | None = None,
+    ) -> JsonObject:
+        """Return the discovered Codex plugin marketplaces.
+
+        ``plugin/list`` is still marked under development upstream, so this
+        wrapper deliberately validates only the small response surface used by
+        Octopus and keeps the raw protocol behind one adapter boundary.
+        """
+
+        params: JsonObject = {"forceRefetch": bool(force_refetch)}
+        if cwds is not None:
+            normalized_cwds: list[str] = []
+            for cwd in cwds:
+                validate_absolute_path(cwd, "cwd")
+                normalized_cwds.append(cwd)
+            params["cwds"] = normalized_cwds
+        if marketplace_kinds is not None:
+            allowed = {
+                "local",
+                "vertical",
+                "workspace-directory",
+                "shared-with-me",
+                "created-by-me-remote",
+            }
+            kinds = list(dict.fromkeys(marketplace_kinds))
+            if any(kind not in allowed for kind in kinds):
+                raise ConfigurationError("plugin marketplace kind is invalid")
+            params["marketplaceKinds"] = kinds
+        result = await self.request("plugin/list", params, timeout_s=timeout_s)
+        response = _require_object_result(result, "plugin/list")
+        if not isinstance(response.get("marketplaces"), list):
+            raise ProtocolError("plugin/list response must contain a marketplaces array")
+        return response
+
+    async def install_plugin(
+        self,
+        plugin_name: str,
+        *,
+        marketplace_path: str | None = None,
+        remote_marketplace_name: str | None = None,
+        install_attempt_id: str | None = None,
+        timeout_s: float | None = None,
+    ) -> JsonObject:
+        """Install one plugin from exactly one App Server marketplace source."""
+
+        validate_identifier(plugin_name, "plugin_name")
+        if (marketplace_path is None) == (remote_marketplace_name is None):
+            raise ConfigurationError(
+                "exactly one of marketplace_path or remote_marketplace_name is required"
+            )
+        params: JsonObject = {"pluginName": plugin_name}
+        if marketplace_path is not None:
+            validate_absolute_path(marketplace_path, "marketplace_path")
+            params["marketplacePath"] = marketplace_path
+        if remote_marketplace_name is not None:
+            validate_identifier(remote_marketplace_name, "remote_marketplace_name")
+            params["remoteMarketplaceName"] = remote_marketplace_name
+        if install_attempt_id is not None:
+            validate_identifier(install_attempt_id, "install_attempt_id")
+            params["installAttemptId"] = install_attempt_id
+        result = await self.request("plugin/install", params, timeout_s=timeout_s)
+        response = _require_object_result(result, "plugin/install")
+        if not isinstance(response.get("appsNeedingAuth"), list):
+            raise ProtocolError("plugin/install response must contain an appsNeedingAuth array")
+        return response
+
+    async def uninstall_plugin(
+        self,
+        plugin_id: str,
+        *,
+        timeout_s: float | None = None,
+    ) -> JsonObject:
+        """Uninstall one App Server plugin by its catalog id."""
+
+        validate_identifier(plugin_id, "plugin_id")
+        result = await self.request(
+            "plugin/uninstall",
+            {"pluginId": plugin_id},
+            timeout_s=timeout_s,
+        )
+        return _require_object_result(result, "plugin/uninstall")
+
     async def list_models(
         self,
         *,

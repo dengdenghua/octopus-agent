@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Literal, cast
@@ -232,9 +232,11 @@ class _Factory:
         config: CodexAppServerConfig,
         *,
         approval_handler: ApprovalHandler | None = None,
+        dynamic_tool_handler: ApprovalHandler | None = None,
     ) -> _FakeClient:
         self.client.config = config
         self.client.approval_handler = approval_handler
+        self.client.dynamic_tool_handler = dynamic_tool_handler
         return self.client
 
 
@@ -281,6 +283,8 @@ def _make_session(
     source_auth: bool = False,
     require_hard: bool = False,
     process_backend: BackendChoice | None = None,
+    selected_app_ids: tuple[str, ...] = (),
+    app_mentions: tuple[tuple[str, str], ...] = (),
 ) -> tuple[CodexExecutionSession, _FakeSecurity, _FakeContext, _Factory, _FakeClient]:
     workspace = tmp_path / "workspace"
     workspace.mkdir(exist_ok=True)
@@ -319,6 +323,8 @@ def _make_session(
         model="gpt-test",
         effort="high",
         host_env={"PATH": "/host/bin", "SECRET": "must-not-pass"},
+        selected_app_ids=selected_app_ids,
+        app_mentions=app_mentions,
     )
     session = CodexExecutionSession(
         request,
@@ -329,6 +335,27 @@ def _make_session(
         process_backend=process_backend,
     )
     return session, security, context, factory, factory.client
+
+
+@pytest.mark.asyncio
+async def test_app_mention_is_sent_as_typed_turn_input(tmp_path: Path) -> None:
+    session, _security, _context, _factory, client = _make_session(
+        tmp_path,
+        selected_app_ids=("google_drive",),
+        app_mentions=(("google_drive", "Google Drive"),),
+    )
+
+    await session.start()
+
+    turn_call = next(value for name, value in client.calls if name == "turn/start")
+    assert turn_call[1] == [
+        {"type": "text", "text": "Inspect the project"},
+        {
+            "type": "mention",
+            "name": "Google Drive",
+            "path": "app://google_drive",
+        },
+    ]
 
 
 @pytest.mark.asyncio
@@ -621,8 +648,45 @@ async def test_existing_binding_resumes_without_rewriting(tmp_path: Path) -> Non
     assert resume[1]["exclude_turns"] is True
     assert resume[1]["sandbox"] is None
     assert resume[1]["permissions"] == "octopus-sidecar"
-    assert resume[1]["extra_params"] == {"runtimeWorkspaceRoots": [str(tmp_path / "workspace")]}
+    assert resume[1]["extra_params"] == {
+        "runtimeWorkspaceRoots": [str(tmp_path / "workspace")],
+        "dynamicTools": [],
+        "selectedCapabilityRoots": [],
+    }
     assert not any(name == "thread/start" for name, _value in client.calls)
+    await session.close()
+
+
+@pytest.mark.asyncio
+async def test_resume_reasserts_the_exact_current_dynamic_tool_catalog(tmp_path: Path) -> None:
+    session, _security, _context, _factory, client = _make_session(
+        tmp_path,
+        binding=_binding(),
+    )
+    spec = {
+        "type": "function",
+        "name": "read_file",
+        "description": "Read one allowed file.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"],
+            "additionalProperties": False,
+        },
+    }
+    session.request = replace(
+        session.request,
+        dynamic_tools=(spec,),
+        dynamic_tool_handler=lambda _request: {
+            "contentItems": [{"type": "inputText", "text": "ok"}],
+            "success": True,
+        },
+    )
+
+    await session.start()
+
+    resume = next(value for name, value in client.calls if name == "thread/resume")
+    assert resume[1]["extra_params"]["dynamicTools"] == [spec]
     await session.close()
 
 

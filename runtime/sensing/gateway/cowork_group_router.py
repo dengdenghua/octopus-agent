@@ -19,8 +19,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from runtime.memory.cowork.group import (
+    LEGACY_PROJECT_MODE,
     ContextGrant,
     MemberEvent,
+    MemberKind,
     responders,
 )
 from runtime.memory.cowork.group_store import GroupStore
@@ -43,6 +45,7 @@ from ._cowork_group_models import (
     ReadBody,
     RoomMessageBody,
     RosterBody,
+    response_mode,
 )
 from ._cowork_group_models import GrantBody as GrantBody
 from ._cowork_group_session import CoworkGroupSessionView
@@ -69,12 +72,17 @@ def create_cowork_group_router(
 ) -> APIRouter:
     """Create the ``/api/cowork/*`` thread-group router."""
     group_store = store or GroupStore()
+    bind_team_group_store = getattr(team_rooms_router, "bind_group_store", None)
+    if callable(bind_team_group_store):
+        bind_team_group_store(group_store)
 
     def _ensure_project_for_thread(thread_id: str, request: Request) -> str | None:
         """Bind a Project OS project to the thread if none exists yet.
 
-        Fails soft: a project-mode switch must never fail the whole request
-        just because planning is unavailable."""
+        This compatibility path lets an old client that still submits
+        ``mode=project`` attach project state without turning project into a
+        response strategy or running any project work. It fails soft when
+        planning is unavailable."""
         try:
             from runtime.projectos.cowork_bridge import ensure_project_for_thread
 
@@ -90,16 +98,37 @@ def create_cowork_group_router(
                         name = title.strip()
                 except Exception:  # noqa: BLE001
                     name = ""
+            principal = _principal(request)
+            scoped_project_store = _project_store()
+            owner_id = ""
+            tenant_id = ""
+            if principal is not None:
+                from runtime.safety.auth.scope import scope_from_principal
+
+                scope = scope_from_principal(
+                    principal,
+                    allow_cross_tenant=bool(principal.roles.intersection({"admin", "operator"})),
+                )
+                with_scope = getattr(scoped_project_store, "with_scope", None)
+                if not callable(with_scope):
+                    raise RuntimeError("scoped project store is unavailable")
+                scoped_project_store = with_scope(scope)
+                owner_id = principal.actor_id
+                tenant_id = principal.tenant_id
+            elif require_auth:
+                raise RuntimeError("authenticated project principal is unavailable")
             return ensure_project_for_thread(
-                _project_store(),
+                scoped_project_store,
                 group_store,
                 thread_id,
                 name=name,
                 goal=name,
+                owner_id=owner_id,
+                tenant_id=tenant_id,
             )
         except Exception as exc:  # noqa: BLE001
             _logger = __import__("logging").getLogger("octopus.cowork")
-            _logger.warning("project-mode auto-bind failed for %s: %s", thread_id, exc)
+            _logger.warning("legacy project attach failed for %s: %s", thread_id, exc)
             return None
 
     def _require_thread_path(thread_id: str) -> None:
@@ -206,84 +235,25 @@ def create_cowork_group_router(
         body: EnsureRoomBody,
         request: Request,
     ) -> tuple[dict[str, Any], bool]:
-        """Ensure the collaboration session has one persistent room.
+        from runtime.sensing.gateway._cowork_group_room_ensure import (
+            ensure_session_room_fail_safe,
+        )
 
-        This is the write-side half of the unified path: a thread remains the
-        canonical session, while the former Team Room becomes the session's
-        persistent surface for humans, invite links, room tasks, and WS.
-        """
-        from runtime.memory.cowork.session import link_room
-
-        state = group_store.state(thread_id)
-        if state.room_id:
-            _require_room_member(state.room_id, request)
-            binder = getattr(team_rooms_router, "bind_team_thread", None)
-            if callable(binder):
-                room = await _maybe_await(binder(request, state.room_id, thread_id))
-            else:
-                room = (await asyncio.to_thread(_room_snapshot, state.room_id)) or {
-                    "id": state.room_id
-                }
-            roster_projector = getattr(team_rooms_router, "replace_team_agent_members", None)
-            if callable(roster_projector):
-                room = await _maybe_await(
-                    roster_projector(
-                        request,
-                        state.room_id,
-                        _room_members_for_projection(
-                            thread_id,
-                            existing=(room or {}).get("members") or [],
-                            preferred=body.members,
-                        ),
-                        body.leaderId or (room or {}).get("leaderId"),
-                    )
-                )
-            await asyncio.to_thread(_collaboration_store().upsert_room, thread_id, dict(room))
-            return room, False
-
-        # Creating the persistent surface is an administrative binding. A
-        # room member may collaborate once linked, but cannot mint a room for
-        # somebody else's canonical thread.
-        _require_owned_thread(thread_id, request)
-
-        creator = getattr(team_rooms_router, "create_team_from_payload", None)
-        if not callable(creator):
-            raise HTTPException(501, "collab room creation is not wired")
-
-        members = [m for m in body.members if str(m.get("name") or "").strip()]
-        if not members:
-            members = await asyncio.to_thread(_room_members_from_group, thread_id)
-        if not members:
-            raise HTTPException(
-                400,
-                "collab room needs at least one agent member; invite a collaborator first",
-            )
-
-        leader_id = body.leaderId or str(members[0].get("name") or "")
-        if leader_id not in {str(m.get("name") or "") for m in members}:
-            leader_id = str(members[0].get("name") or "")
-        payload = {
-            "id": body.id or f"collab-{thread_id}",
-            "name": body.name.strip() or f"Collaboration · {thread_id}",
-            "members": members,
-            "leaderId": leader_id,
-            "thread_id": thread_id,
-        }
-        room = await _maybe_await(creator(request, payload))
-        room_id = str((room or {}).get("id") or "")
-        if not room_id:
-            raise HTTPException(502, "team room creator returned no id")
-        room = await asyncio.to_thread(_collaboration_store().upsert_room, thread_id, dict(room))
-        await asyncio.to_thread(link_room, group_store, thread_id, room_id, actor=_actor(request))
-        if body.mode:
-            if body.mode not in ("chat", "cluster", "swarm", "project"):
-                raise HTTPException(400, "mode must be chat | cluster | swarm | project")
-            await asyncio.to_thread(
-                group_store.append,
-                thread_id,
-                MemberEvent(action="mode", actor=_actor(request), mode=body.mode),  # type: ignore[arg-type]
-            )
-        return room, True
+        return await ensure_session_room_fail_safe(
+            thread_id=thread_id,
+            body=body,
+            request=request,
+            group_store=group_store,
+            team_rooms_router=team_rooms_router,
+            room_snapshot=_room_snapshot,
+            require_room_member=_require_room_member,
+            require_owned_thread=_require_owned_thread,
+            room_members_for_projection=_room_members_for_projection,
+            room_members_from_group=_room_members_from_group,
+            collaboration_store=_collaboration_store,
+            actor=_actor,
+            ensure_project_for_thread=_ensure_project_for_thread,
+        )
 
     _actor = access.actor
 
@@ -294,7 +264,7 @@ def create_cowork_group_router(
     ) -> dict[str, Any] | None:
         """Keep the optional Team Room read model aligned with GroupStore."""
 
-        room_id = state.room_id
+        room_id = str(getattr(state, "room_id", None) or "").strip()
         if not room_id:
             return None
         roster_projector = getattr(team_rooms_router, "replace_team_agent_members", None)
@@ -463,7 +433,9 @@ def create_cowork_group_router(
     ) -> dict[str, Any]:
         """Link a Team Room to this session (event-sourced) so the two surfaces
         stop drifting as separate sources of truth."""
-        from runtime.memory.cowork.session import link_room
+        from runtime.sensing.gateway._cowork_group_room_link import (
+            link_session_room_fail_safe,
+        )
 
         _require_room_member(body.room_id, request)
         current_state = group_store.state(thread_id)
@@ -473,49 +445,22 @@ def create_cowork_group_router(
             if current_room_thread == thread_id:
                 raise HTTPException(409, "collaboration thread is already linked to another room")
 
-        binder = getattr(team_rooms_router, "bind_team_thread", None)
         collaboration = _collaboration_store()
         prior_room = _room_snapshot(body.room_id)
         prior_thread_id = str((prior_room or {}).get("thread_id") or "").strip()
-        prior_session_id = collaboration.session_id_for_room(body.room_id)
         if prior_thread_id and prior_thread_id != thread_id:
             raise HTTPException(409, "team room is already bound to another thread")
-        try:
-            # TeamRoom is the authority for the room->thread edge.  It rejects
-            # a room already claimed by another canonical thread before the
-            # GroupStore event or collaboration projection becomes visible.
-            # Router-less local/test deployments retain the legacy link-only
-            # behavior because there is no mutable TeamRoom authority to bind.
-            room = (
-                await _maybe_await(binder(request, body.room_id, thread_id))
-                if callable(binder)
-                else (prior_room or {"id": body.room_id})
-            )
-            collaboration.upsert_room(thread_id, dict(room))
-            state = (
-                current_state
-                if current_state.room_id == body.room_id
-                else link_room(
-                    group_store,
-                    thread_id,
-                    body.room_id,
-                    actor=_actor(request),
-                )
-            )
-        except Exception:
-            # Restore the prior projection and undo only the binding minted by
-            # this request.  Existing same-thread bindings remain untouched.
-            with suppress(Exception):
-                if prior_room is not None and prior_session_id:
-                    collaboration.upsert_room(prior_session_id, prior_room)
-                else:
-                    collaboration.delete_room_by_id(body.room_id)
-            if not prior_thread_id:
-                unbinder = getattr(team_rooms_router, "unbind_team_thread", None)
-                if callable(unbinder):
-                    with suppress(Exception):
-                        await _maybe_await(unbinder(request, body.room_id, thread_id))
-            raise
+        state = await link_session_room_fail_safe(
+            thread_id=thread_id,
+            room_id=body.room_id,
+            request=request,
+            actor=_actor(request),
+            prior_room=prior_room,
+            room_snapshot=_room_snapshot,
+            group_store=group_store,
+            collaboration=collaboration,
+            team_rooms_router=team_rooms_router,
+        )
         return {
             "ok": True,
             "state": state.to_dict(),
@@ -897,12 +842,17 @@ def create_cowork_group_router(
 
     @router.post("/api/cowork/{thread_id}/members", dependencies=[Depends(_owner_dep)])
     def invite_member(thread_id: str, body: InviteBody, request: Request) -> dict[str, Any]:
-        """Pull a member (agent or human) into the thread, with a context grant."""
+        """Reference a canonical agent (or human) from this thread.
+
+        Retrying the same add is a successful no-op.  The group stores only the
+        canonical id; it does not clone a role, home, memory, or owner lane.
+        """
+        target_kind: MemberKind = "human" if body.kind == "human" else "agent"
         ev = MemberEvent(
             action="invite",
             actor=_actor(request),
             target_id=body.target_id,
-            target_kind="human" if body.kind == "human" else "agent",
+            target_kind=target_kind,
             role="observer" if body.role == "observer" else "participant",
             grant=ContextGrant.from_dict(body.grant.model_dump()),
             at_message=body.at_message,
@@ -946,20 +896,19 @@ def create_cowork_group_router(
 
     @router.post("/api/cowork/{thread_id}/mode", dependencies=[Depends(_owner_dep)])
     def set_mode(thread_id: str, body: ModeBody, request: Request) -> dict[str, Any]:
-        """Switch the collaboration mode (chat/cluster/swarm/project) —
-        non-destructive. 'project' runs the milestone-driven Project OS over the
-        group. Entering project mode also ensures a real Project OS project is
-        bound to the thread (created deterministically if missing) so the
-        workbench 项目 tab has something to render; execution itself stays
-        user-triggered via Run/Tick."""
-        if body.mode not in ("chat", "cluster", "swarm", "project"):
-            raise HTTPException(400, "mode must be chat | cluster | swarm | project")
+        """Switch how AI participants respond: chat, cluster, or swarm.
+
+        ``project`` is accepted only as a deprecated client wire value. It is
+        projected to ``chat`` and may attach an idle Project for continuity;
+        it is never stored as a fourth response mode and never starts work.
+        """
+        canonical_mode = response_mode(body.mode)
         group_store.append(
             thread_id,
-            MemberEvent(action="mode", actor=_actor(request), mode=body.mode),  # type: ignore[arg-type]
+            MemberEvent(action="mode", actor=_actor(request), mode=canonical_mode),
         )
         bound_project_id: str | None = None
-        if body.mode == "project":
+        if body.mode == LEGACY_PROJECT_MODE:
             bound_project_id = _ensure_project_for_thread(thread_id, request)
         state = group_store.state(thread_id).to_dict()
         if bound_project_id is not None:
@@ -975,20 +924,19 @@ def create_cowork_group_router(
         necessary leave/invite/mode events, and returns the canonical fold.
         """
 
-        if body.mode not in ("chat", "cluster", "swarm", "project"):
-            raise HTTPException(400, "mode must be chat | cluster | swarm | project")
+        canonical_mode = response_mode(body.mode)
         try:
             changed, state = group_store.replace_agent_roster(
                 thread_id,
                 actor=_actor(request),
                 agent_ids=body.agent_ids,
-                mode=body.mode,
+                mode=canonical_mode,
             )
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         payload = state.to_dict()
         room_projection = _project_linked_room_roster(thread_id, request, state)
-        if body.mode == "project":
+        if body.mode == LEGACY_PROJECT_MODE:
             bound_project_id = _ensure_project_for_thread(thread_id, request)
             if bound_project_id is not None:
                 payload["bound_project_id"] = bound_project_id

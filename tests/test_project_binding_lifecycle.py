@@ -2602,8 +2602,11 @@ def test_per_agent_projection_ignores_touched_stale_copy(tmp_path: Path) -> None
             thread["metadata"]["agent"] = "beta"
             thread["values"]["title"] = "Old"
             thread["values"]["messages"] = []
-            record["state"]["metadata"]["agent"] = "beta"
-            record["state"]["values"] = thread["values"]
+            # Legacy snapshots duplicated these fields in ``state``. Compact
+            # snapshots inherit them from ``thread`` and need no second edit.
+            if record.get("state_from_thread") is not True:
+                record["state"]["metadata"]["agent"] = "beta"
+                record["state"]["values"] = thread["values"]
         records.append(json.dumps(record, ensure_ascii=False))
     beta.write_text("\n".join(records) + "\n", encoding="utf-8")
     future = time.time() + 60

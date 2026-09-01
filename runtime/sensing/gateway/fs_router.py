@@ -18,9 +18,10 @@ Scope note
 
 In local single-user mode the file browser can keep its historical
 user-chosen-directory behaviour, bounded by ``OCTOPUS_FS_ALLOWED_ROOTS``.
-In authenticated/shared mode every local operation is bound to an owned
-thread workspace and remains inside the configured allowed roots. Remote
-workspaces use their own membership ACL.
+An authenticated UI bound to loopback can explicitly retain that same local
+behaviour. In authenticated shared deployments every local operation is bound
+to an owned thread workspace and remains inside the configured allowed roots.
+Remote workspaces use their own membership ACL.
 
 If that separation ever changes, add a ``scope`` parameter to
 ``create_fs_router`` and route through ``resolve_write_scope`` at
@@ -114,6 +115,7 @@ def create_fs_router(
     *,
     identity_store: Any = None,
     require_auth: bool = False,
+    allow_local_workspace_access: bool = False,
     jwt_secret: str | None = None,
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
@@ -177,6 +179,7 @@ def create_fs_router(
         thread_store=thread_store,
         identity_store=identity_store,
         require_auth=require_auth,
+        allow_local_workspace_access=allow_local_workspace_access,
         jwt_secret=jwt_secret,
         jwt_issuer=jwt_issuer,
         jwt_audience=jwt_audience,

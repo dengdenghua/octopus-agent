@@ -14,12 +14,16 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+
+from runtime.platform.io import JsonMutation, mutate_json_file, read_json_file
 
 CONNECTOR_ROOT = Path(os.path.expanduser("~/.octopus/connectors"))
 STATE_FILE = CONNECTOR_ROOT / "state.json"
@@ -28,6 +32,16 @@ _SLUG_RE = re.compile(r"[^a-z0-9_-]+", re.I)
 
 def _slug(value: str) -> str:
     return _SLUG_RE.sub("-", value.strip()).strip("-").lower()
+
+
+def _validate_state(data: Any) -> None:
+    if not isinstance(data, dict):
+        raise RuntimeError("connector state file must contain a JSON object")
+
+
+def _validate_skill_registry(data: Any) -> None:
+    if not isinstance(data, list) or not all(isinstance(item, dict) for item in data):
+        raise RuntimeError("skill registry file must contain a JSON array of objects")
 
 
 class ConnectorDefinition:
@@ -41,12 +55,13 @@ class ConnectorDefinition:
         name_zh: str = "",
         description: str = "",
         description_zh: str = "",
-        type: str = "mcp",  # mcp | cli | skill-only | other
+        type: str = "mcp",  # mcp | cli | plugin | skill-only | other
         auth_mode: str = "token",  # token | oauth | server-side | oneid-token | none
         source: str = "workbuddy",
         provider_id: str = "",
         mcp_servers: dict[str, Any] | None = None,
         cli: dict[str, Any] | None = None,
+        model_provider: dict[str, Any] | None = None,
         skills_dir: Path | None = None,
         examples_zh: list[str] | None = None,
         examples_en: list[str] | None = None,
@@ -65,6 +80,7 @@ class ConnectorDefinition:
         self.provider_id = provider_id
         self.mcp_servers = mcp_servers or {}
         self.cli = cli or {}
+        self.model_provider = model_provider or {}
         self.skills_dir = skills_dir
         self.examples_zh = examples_zh or []
         self.examples_en = examples_en or []
@@ -90,6 +106,7 @@ class ConnectorDefinition:
                 }
                 for name, cfg in self.mcp_servers.items()
             ],
+            "model_provider": dict(self.model_provider) if self.model_provider else None,
             "skill_count": self.skill_count(),
             "examples_zh": self.examples_zh[:3],
             "installed": installed,
@@ -115,6 +132,7 @@ class ConnectorRegistry:
         marketplace_root: str | Path | None = None,
         skills_root: str | Path | None = None,
         state_file: str | Path | None = None,
+        permission_store: Any = None,
     ) -> None:
         # 默认指向仓库内 fork: extensions/workbuddy-connectors/
         if marketplace_root is None:
@@ -123,6 +141,62 @@ class ConnectorRegistry:
         self._root = Path(marketplace_root)
         self._skills_root = Path(skills_root or Path(os.path.expanduser("~/.octopus/skills")))
         self._state_file = Path(state_file or STATE_FILE)
+        if permission_store is None:
+            from runtime.platform.capabilities.permission_grants import (
+                CapabilityPermissionStore,
+            )
+
+            permission_path = (
+                self._state_file.parent / "permission-grants.json"
+                if state_file is not None
+                else None
+            )
+            permission_store = CapabilityPermissionStore(permission_path)
+        self._permissions = permission_store
+
+    def _requirements(self, connector_id: str) -> dict[str, Any]:
+        conn = self.get(connector_id)
+        if conn is None:
+            raise KeyError(f"connector not found: {connector_id}")
+        from runtime.platform.plugins.marketplace_package import (
+            derive_connector_package_requirements,
+        )
+
+        return derive_connector_package_requirements(
+            {
+                "type": conn.type,
+                "auth_mode": conn.auth_mode,
+            },
+            package_dir=self._connector_dir(connector_id),
+        )
+
+    @staticmethod
+    def _runtime_sources(conn: ConnectorDefinition) -> list[str]:
+        return [f"mcp://{name}/" for name in sorted(conn.mcp_servers)]
+
+    def _permission_projection(
+        self,
+        connector_id: str,
+        *,
+        installed: bool = False,
+        required: Any = (),
+    ) -> dict[str, Any]:
+        record = self._permissions.get(connector_id)
+        if not isinstance(record, dict) or not self._permissions.generation_current(connector_id):
+            return {
+                "permissions_granted": [],
+                "permission_review_required": bool(installed and list(required)),
+                "permission_active": False,
+            }
+        required = list(record.get("required") or [])
+        granted = list(record.get("granted") or [])
+        return {
+            "permissions_granted": granted,
+            "permission_review_required": bool(
+                record.get("installed") and set(required) != set(granted)
+            ),
+            "permission_active": record.get("active") is True,
+        }
 
     # ── 定义加载 ──────────────────────────────────────────────
     def _manifest(self) -> dict[str, Any]:
@@ -144,6 +218,7 @@ class ConnectorRegistry:
         cdir = self._connector_dir(cid)
         mcp: dict[str, Any] = {}
         cli: dict[str, Any] = {}
+        model_provider: dict[str, Any] = {}
         if (cdir / "mcp.json").exists():
             try:
                 mcp = json.loads((cdir / "mcp.json").read_text(encoding="utf-8")).get(
@@ -156,6 +231,12 @@ class ConnectorRegistry:
                 cli = json.loads((cdir / "cli.json").read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):  # noqa: BLE001
                 cli = {}
+        if (cdir / "model-provider.json").exists():
+            try:
+                loaded = json.loads((cdir / "model-provider.json").read_text(encoding="utf-8"))
+                model_provider = loaded if isinstance(loaded, dict) else {}
+            except (OSError, json.JSONDecodeError):  # noqa: BLE001
+                model_provider = {}
         ctype = str(meta.get("type") or "")
         if not ctype:
             if cli:
@@ -176,6 +257,7 @@ class ConnectorRegistry:
             provider_id=str(meta.get("provider_id") or ""),
             mcp_servers=mcp,
             cli=cli,
+            model_provider=model_provider,
             skills_dir=cdir / "skills" if (cdir / "skills").exists() else None,
             examples_zh=meta.get("examples_zh") or [],
             examples_en=meta.get("examples_en") or [],
@@ -185,6 +267,10 @@ class ConnectorRegistry:
         )
 
     def list(self) -> list[dict[str, Any]]:
+        from runtime.platform.capabilities.tenant_context import (
+            current_capability_scope,
+        )
+
         state = self._state()
         out = []
         for meta in self._manifest().get("connectors", []):
@@ -192,12 +278,21 @@ class ConnectorRegistry:
             if conn is None:
                 continue
             st = state.get(conn.id) or {}
-            out.append(
-                conn.to_dict(
-                    installed=bool(st.get("installed")),
-                    enabled=bool(st.get("enabled")),
-                )
+            item = conn.to_dict(
+                installed=bool(st.get("installed")),
+                enabled=bool(st.get("enabled")),
             )
+            item.update(self._requirements(conn.id))
+            projection = self._permission_projection(
+                conn.id,
+                installed=bool(st.get("installed")),
+                required=item.get("permissions") or [],
+            )
+            item.update(projection)
+            if current_capability_scope() is not None:
+                item["runtime_enabled"] = bool(st.get("enabled"))
+                item["enabled"] = bool(st.get("enabled")) and bool(projection["permission_active"])
+            out.append(item)
         return out
 
     def get(self, connector_id: str) -> ConnectorDefinition | None:
@@ -208,22 +303,30 @@ class ConnectorRegistry:
 
     # ── 状态 ──────────────────────────────────────────────────
     def _state(self) -> dict[str, Any]:
-        if not self._state_file.exists():
-            return {}
-        try:
-            return json.loads(self._state_file.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):  # noqa: BLE001
-            return {}
+        return read_json_file(
+            self._state_file,
+            default_factory=dict,
+            validate=_validate_state,
+        )
 
-    def _write_state(self, state: dict[str, Any]) -> None:
-        self._state_file.parent.mkdir(parents=True, exist_ok=True)
-        self._state_file.write_text(json.dumps(state, ensure_ascii=False, indent=1), "utf-8")
+    def _mutate_state(
+        self,
+        mutate: Callable[[dict[str, Any]], JsonMutation[Any]],
+    ) -> Any:
+        return mutate_json_file(
+            self._state_file,
+            default_factory=dict,
+            validate=_validate_state,
+            mutate=mutate,
+        )
 
     def _set_state(self, connector_id: str, **fields: Any) -> None:
-        state = self._state()
-        state.setdefault(connector_id, {})["id"] = connector_id
-        state[connector_id].update(fields)
-        self._write_state(state)
+        def update(state: dict[str, Any]) -> JsonMutation[None]:
+            state.setdefault(connector_id, {})["id"] = connector_id
+            state[connector_id].update(fields)
+            return JsonMutation(None)
+
+        self._mutate_state(update)
 
     # ── 安装 / 卸载 / 启停 ────────────────────────────────────
     def install(self, connector_id: str) -> dict[str, Any]:
@@ -232,37 +335,31 @@ class ConnectorRegistry:
             raise KeyError(f"connector not found: {connector_id}")
         copied = self._install_skills(conn)
 
-        # CLI 生命周期(对齐 WorkBuddy cli.json):runtime 检查 → init 装工具 →
-        # versionCheck 版本校验。任何失败只降级返回,不阻断安装。
+        # Installation is filesystem-only. CLI detection/init/version checks may
+        # execute local processes, so they are deferred until explicit grant.
         cli_life: dict[str, Any] = {"has_cli": bool(conn.cli)}
         if conn.cli:
-            from runtime.platform.connectors import cli_lifecycle
-
-            runtime_res = cli_lifecycle.check_runtime(conn)
-            init_res = cli_lifecycle.run_init(conn, env=None)
-            version_res = cli_lifecycle.check_version(conn)
-            cli_life = {
-                "has_cli": True,
-                "runtime": runtime_res,
-                "init": init_res,
-                "version": version_res,
-                "auth_device_flow": bool(conn.cli.get("authDeviceFlow")),
-                "min_version": str(conn.cli.get("versionCheck") or {}).strip()
-                and ((conn.cli.get("versionCheck") or {}).get("minVersion") or ""),
-            }
+            cli_life["deferred"] = True
+        # Filesystem/CLI setup is the forward phase of this small saga.  The
+        # authoritative state commit comes last and propagates any failure, so
+        # callers can never receive an installed=true result without that state.
         self._set_state(connector_id, installed=True, enabled=False, installed_at=None)
-        msg = (
-            "已安装技能与 MCP 定义。MCP 默认禁用,连接后(connect)按需启用。"
-            if conn.mcp_servers
-            else "已安装技能(纯技能连接器无需 MCP)。"
+        requirements = self._requirements(connector_id)
+        permission = self._permissions.stage(
+            connector_id,
+            kind="connector",
+            required=requirements["permissions"],
+            manifest_digest=conn.version,
+            runtime_sources=self._runtime_sources(conn),
         )
-        if cli_life.get("has_cli"):
-            if cli_life.get("init", {}).get("ok"):
-                msg = "CLI 工具已安装。" + msg
-            elif cli_life.get("init", {}).get("error"):
-                msg = f"CLI init 未完成({cli_life['init']['error']});请先安装工具。" + msg
-            if cli_life.get("version", {}).get("error"):
-                msg = msg + f" 版本提示:{cli_life['version']['error']}"
+        if conn.model_provider:
+            msg = "模型适配器已安装；填写服务商 API Key 后才会连接并检测可用模型。"
+        elif conn.mcp_servers:
+            msg = "已安装技能与 MCP 定义。MCP 默认禁用,连接后(connect)按需启用。"
+        else:
+            msg = "已安装技能(纯技能连接器无需 MCP)。"
+        if cli_life.get("deferred"):
+            msg = "CLI 准备将在确认本机进程权限后执行。" + msg
         return {
             "installed": True,
             "connector_id": connector_id,
@@ -273,7 +370,78 @@ class ConnectorRegistry:
             "cli_lifecycle": cli_life,
             "min_version": conn.min_version,
             "enabled": False,
+            "permissions": list(permission["required"]),
+            "permission_review_required": bool(permission["required"]),
             "message": msg,
+        }
+
+    def grant_permissions(self, connector_id: str, permissions: Any) -> dict[str, Any]:
+        if connector_id not in self.installed_ids():
+            raise KeyError(f"connector not installed: {connector_id}")
+        if not self._permissions.generation_current(connector_id):
+            try:
+                self._permissions.stage_principal(connector_id)
+            except KeyError:
+                conn = self.get(connector_id)
+                if conn is None:
+                    raise KeyError(f"connector not found: {connector_id}") from None
+                requirements = self._requirements(connector_id)
+                self._permissions.stage(
+                    connector_id,
+                    kind="connector",
+                    required=requirements["permissions"],
+                    manifest_digest=conn.version,
+                    runtime_sources=self._runtime_sources(conn),
+                )
+        return self._permissions.grant(connector_id, permissions)
+
+    def require_permissions(
+        self,
+        connector_id: str,
+        permissions: Any = (),
+        *,
+        require_active: bool = False,
+    ) -> dict[str, Any]:
+        return self._permissions.require_granted(
+            connector_id,
+            permissions,
+            require_active=require_active,
+        )
+
+    def prepare_runtime(self, connector_id: str) -> dict[str, Any]:
+        conn = self.get(connector_id)
+        if conn is None:
+            raise KeyError(f"connector not found: {connector_id}")
+        if not conn.cli:
+            return {"has_cli": False, "deferred": False}
+        from runtime.platform.capabilities.tenant_context import (
+            current_capability_scope,
+        )
+
+        if current_capability_scope() is not None:
+            raise ValueError(
+                "共享部署暂不允许启动使用主机级 HOME 的 CLI 连接器；"
+                "请使用令牌/OAuth 连接器或管理员设备级连接。"
+            )
+        self.require_permissions(connector_id, ["process.local"])
+        from runtime.platform.connectors import cli_lifecycle
+
+        detection_before = cli_lifecycle.detect_command(conn)
+        runtime_res = cli_lifecycle.check_runtime(conn)
+        init_res = cli_lifecycle.run_init(conn, env=None)
+        detection_after = cli_lifecycle.detect_command(conn)
+        version_res = cli_lifecycle.check_version(conn)
+        return {
+            "has_cli": True,
+            "deferred": False,
+            "detection_before": detection_before,
+            "detection": detection_after,
+            "runtime": runtime_res,
+            "init": init_res,
+            "version": version_res,
+            "auth_device_flow": bool(conn.cli.get("authDeviceFlow")),
+            "min_version": str(conn.cli.get("versionCheck") or {}).strip()
+            and ((conn.cli.get("versionCheck") or {}).get("minVersion") or ""),
         }
 
     def _install_skills(self, conn: ConnectorDefinition) -> list[str]:
@@ -282,25 +450,20 @@ class ConnectorRegistry:
         self._skills_root.mkdir(parents=True, exist_ok=True)
         copied: list[str] = []
         registry_path = self._skills_root / "registry.json"
-        registry = []
-        if registry_path.exists():
-            try:
-                registry = json.loads(registry_path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):  # noqa: BLE001
-                registry = []
-        by_name = {e.get("name"): e for e in registry}
+        additions: dict[str, dict[str, Any]] = {}
 
         for skill_md in sorted(conn.skills_dir.rglob("SKILL.md")):
             slug = _slug(f"{conn.id}__{skill_md.parent.name}")
             dest = self._skills_root / slug
-            if dest.exists():
-                copied.append(slug)
-                continue
-            shutil.copytree(skill_md.parent, dest)
-            # 补 meta.json
             meta = {"name": slug, "author": f"workbuddy-connector:{conn.id}", "source": "connector"}
-            (dest / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), "utf-8")
-            by_name[slug] = {
+            if not dest.exists():
+                shutil.copytree(skill_md.parent, dest)
+                # A state-commit failure can leave this directory as a safe,
+                # discoverable orphan; retrying install converges it forward.
+                (dest / "meta.json").write_text(
+                    json.dumps(meta, ensure_ascii=False, indent=1), "utf-8"
+                )
+            additions[slug] = {
                 "name": slug,
                 "version": "0.1.0",
                 "author": meta["author"],
@@ -310,47 +473,93 @@ class ConnectorRegistry:
             }
             copied.append(slug)
 
-        registry_path.write_text(
-            json.dumps(list(by_name.values()), ensure_ascii=False, indent=1), "utf-8"
+        def merge(registry: list[dict[str, Any]]) -> JsonMutation[None]:
+            by_name = {entry.get("name"): entry for entry in registry}
+            by_name.update(additions)
+            registry[:] = list(by_name.values())
+            return JsonMutation(None)
+
+        mutate_json_file(
+            registry_path,
+            default_factory=list,
+            validate=_validate_skill_registry,
+            mutate=merge,
         )
         return copied
 
     def uninstall(self, connector_id: str) -> bool:
         conn = self.get(connector_id)
-        state = self._state()
-        if connector_id not in state:
-            return False
-        if conn is not None and conn.skills_dir:
-            for skill_md in conn.skills_dir.rglob("SKILL.md"):
-                slug = _slug(f"{conn.id}__{skill_md.parent.name}")
-                dest = self._skills_root / slug
-                if dest.exists():
-                    shutil.rmtree(dest, ignore_errors=True)
-            self._rebuild_registry(conn.id)
-        del state[connector_id]
-        self._write_state(state)
-        return True
+
+        def remove(state: dict[str, Any]) -> JsonMutation[bool]:
+            if connector_id not in state:
+                return JsonMutation(False, changed=False)
+            # Cleanup happens before the authoritative state deletion and errors
+            # propagate.  Partial filesystem cleanup remains recoverable by a
+            # later install; it is never reported as a successful uninstall.
+            if conn is not None and conn.skills_dir:
+                for skill_md in conn.skills_dir.rglob("SKILL.md"):
+                    slug = _slug(f"{conn.id}__{skill_md.parent.name}")
+                    dest = self._skills_root / slug
+                    if dest.exists():
+                        shutil.rmtree(dest)
+                self._rebuild_registry(conn.id)
+            del state[connector_id]
+            return JsonMutation(True)
+
+        removed = bool(self._mutate_state(remove))
+        if removed:
+            self._permissions.mark_uninstalled(connector_id)
+        return removed
 
     def _rebuild_registry(self, removed_connector: str) -> None:
         registry_path = self._skills_root / "registry.json"
-        if not registry_path.exists():
-            return
-        try:
-            registry = json.loads(registry_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):  # noqa: BLE001
-            return
-        registry = [
-            e for e in registry if e.get("author") != f"workbuddy-connector:{removed_connector}"
-        ]
-        registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=1), "utf-8")
+
+        def remove(registry: list[dict[str, Any]]) -> JsonMutation[None]:
+            retained = [
+                entry
+                for entry in registry
+                if entry.get("author") != f"workbuddy-connector:{removed_connector}"
+            ]
+            if len(retained) == len(registry):
+                return JsonMutation(None, changed=False)
+            registry[:] = retained
+            return JsonMutation(None)
+
+        mutate_json_file(
+            registry_path,
+            default_factory=list,
+            validate=_validate_skill_registry,
+            mutate=remove,
+        )
 
     def set_enabled(self, connector_id: str, enabled: bool) -> bool:
-        state = self._state()
-        if connector_id not in state:
-            return False
-        state[connector_id]["enabled"] = bool(enabled)
-        self._write_state(state)
-        return True
+        from runtime.platform.capabilities.tenant_context import (
+            current_capability_scope,
+        )
+
+        if not enabled and current_capability_scope() is not None:
+            if connector_id not in self.installed_ids():
+                return False
+            with contextlib.suppress(KeyError):
+                self._permissions.set_active(connector_id, False)
+            return True
+        if enabled:
+            self.require_permissions(connector_id)
+            self.prepare_runtime(connector_id)
+        else:
+            with contextlib.suppress(KeyError):
+                self._permissions.set_active(connector_id, False)
+
+        def update(state: dict[str, Any]) -> JsonMutation[bool]:
+            if connector_id not in state:
+                return JsonMutation(False, changed=False)
+            state[connector_id]["enabled"] = bool(enabled)
+            return JsonMutation(True)
+
+        changed = bool(self._mutate_state(update))
+        if changed and enabled:
+            self._permissions.set_active(connector_id, True)
+        return changed
 
     def installed_ids(self) -> set[str]:
         return {cid for cid, st in self._state().items() if st.get("installed")}

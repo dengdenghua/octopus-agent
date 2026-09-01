@@ -21,6 +21,7 @@ class TeamRoomAccess:
         principal: Callable[[Any], Any],
         tenant: Callable[[Any], str],
         http_exception: Any,
+        refresh: Callable[[], None],
     ) -> None:
         self._teams = teams
         self._lock = lock
@@ -28,41 +29,14 @@ class TeamRoomAccess:
         self._principal = principal
         self._tenant = tenant
         self._http_exception = http_exception
+        self._refresh = refresh
 
-    def list_room_members(self, team_id: str) -> list[str]:
-        """Return actor ids allowed to operate on ``team_id``."""
-
-        with self._lock:
-            team = self._teams.get(team_id)
-            if team is None:
-                return []
-            actors: list[str] = []
-            owner = getattr(team, "owner_id", None)
-            if owner:
-                actors.append(owner)
-            for participant in team.participants:
-                if participant.status == "removed":
-                    continue
-                actor_id = getattr(participant, "actor_id", None)
-                if not actor_id and not self._require_auth:
-                    # Local rooms historically used participant ids as their
-                    # only identity. Shared mode never treats that as proof.
-                    actor_id = participant.id
-                if actor_id and actor_id not in actors:
-                    actors.append(actor_id)
-            return actors
-
-    def get_room_participant(
+    def _current_participant(
         self,
         room_id: str,
         actor_id: str,
-        tenant_id: str | None = None,
+        tenant_id: str | None,
     ) -> dict[str, Any] | None:
-        """Resolve durable membership; transient presence is not authorization."""
-
-        actor_id = str(actor_id or "").strip()
-        if not actor_id:
-            return None
         with self._lock:
             team = self._teams.get(room_id)
             if team is None or (tenant_id is not None and team.tenant_id != tenant_id):
@@ -95,6 +69,44 @@ class TeamRoomAccess:
                 "tenant_id": team.tenant_id,
             }
 
+    def list_room_members(self, team_id: str) -> list[str]:
+        """Return actor ids allowed to operate on ``team_id``."""
+
+        self._refresh()
+        with self._lock:
+            team = self._teams.get(team_id)
+            if team is None:
+                return []
+            actors: list[str] = []
+            owner = getattr(team, "owner_id", None)
+            if owner:
+                actors.append(owner)
+            for participant in team.participants:
+                if participant.status == "removed":
+                    continue
+                actor_id = getattr(participant, "actor_id", None)
+                if not actor_id and not self._require_auth:
+                    # Local rooms historically used participant ids as their
+                    # only identity. Shared mode never treats that as proof.
+                    actor_id = participant.id
+                if actor_id and actor_id not in actors:
+                    actors.append(actor_id)
+            return actors
+
+    def get_room_participant(
+        self,
+        room_id: str,
+        actor_id: str,
+        tenant_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Resolve durable membership; transient presence is not authorization."""
+
+        actor_id = str(actor_id or "").strip()
+        if not actor_id:
+            return None
+        self._refresh()
+        return self._current_participant(room_id, actor_id, tenant_id)
+
     def can_access_room(
         self,
         room_id: str,
@@ -104,17 +116,19 @@ class TeamRoomAccess:
         return self.get_room_participant(room_id, actor_id, tenant_id) is not None
 
     def require_member(self, request: Any, team_id: str) -> str | None:
+        self._refresh()
         principal = self._principal(request)
         actor = principal.actor_id if principal is not None else None
         if not self._require_auth:
             return actor
         if principal is None or not actor:
             raise self._http_exception(401, "authentication required")
-        if not self.can_access_room(team_id, actor, principal.tenant_id):
+        if self._current_participant(team_id, actor, principal.tenant_id) is None:
             raise self._http_exception(403, f"not a member of team {team_id}")
         return actor
 
     def require_owner(self, request: Any, team_id: str) -> str | None:
+        self._refresh()
         principal = self._principal(request)
         actor = principal.actor_id if principal is not None else None
         if not self._require_auth:
@@ -153,7 +167,7 @@ class TeamRoomAccess:
             return actor
         principal = self._principal(request)
         participant = (
-            self.get_room_participant(team_id, actor or "", principal.tenant_id)
+            self._current_participant(team_id, actor or "", principal.tenant_id)
             if principal is not None
             else None
         )

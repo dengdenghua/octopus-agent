@@ -121,6 +121,7 @@ function setupAutoUpdater() {
 }
 
 let mainWindow = null;
+const auxiliaryWindows = new Map();
 const BROWSER_PARTITION = "persist:octopus-browser";
 
 function browserProfileSession() {
@@ -779,6 +780,9 @@ function registerIpc() {
     mainWindow?.webContents.openDevTools({ mode: "detach" });
     return { ok: true };
   });
+  handle("window:isFullScreen", () => {
+    return { ok: true, fullScreen: mainWindow?.isFullScreen() ?? false };
+  });
 
   // pet sidecar (Godot desktop pet)
   const petEnabled = () => process.env.OCTOPUS_PET_DISABLED !== "1";
@@ -1405,18 +1409,34 @@ function isTrustedMainWindowURL(rawURL, useBuiltRenderer) {
   }
 }
 
-function openDesktopAuxiliaryWindow(rawURL) {
+function openDesktopAuxiliaryWindow(rawURL, windowName = "octopus-app") {
   if (!desktopProtocol.isDesktopAppURL(rawURL)) return;
+  const existing = auxiliaryWindows.get(windowName);
+  if (existing && !existing.isDestroyed()) {
+    existing.show();
+    existing.focus();
+    return;
+  }
   const child = new BrowserWindow({
     width: 1180,
     height: 800,
     parent: mainWindow || undefined,
     webPreferences: {
+      // Auxiliary app windows use the same trusted renderer as the main
+      // window. Keep the preload bridge here so media/workbench apps retain
+      // backend discovery, WebSocket transport, and native file actions.
+      preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
       webviewTag: false,
     },
+  });
+  auxiliaryWindows.set(windowName, child);
+  child.on("closed", () => {
+    if (auxiliaryWindows.get(windowName) === child) {
+      auxiliaryWindows.delete(windowName);
+    }
   });
   child.webContents.setWindowOpenHandler(({ url }) => {
     openSafeExternalURL(url);
@@ -1443,7 +1463,9 @@ function createMainWindow() {
     show: false,
     ...(process.platform === "win32"
       ? { titleBarStyle: "hidden", titleBarOverlay: { height: 36 } }
-      : {}),
+      : process.platform === "darwin"
+        ? { titleBarStyle: "hiddenInset" }
+        : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -1453,6 +1475,12 @@ function createMainWindow() {
   });
 
   win.once("ready-to-show", () => win.show());
+  win.on("enter-full-screen", () => {
+    win.webContents.send("window:fullscreen-changed", { fullScreen: true });
+  });
+  win.on("leave-full-screen", () => {
+    win.webContents.send("window:fullscreen-changed", { fullScreen: false });
+  });
   win.webContents.setWindowOpenHandler(({ url, frameName }) => {
     if (
       frameName === "octopus-mcp-oauth" &&
@@ -1475,7 +1503,7 @@ function createMainWindow() {
       };
     }
     if (useBuiltRenderer && desktopProtocol.isDesktopAppURL(url)) {
-      openDesktopAuxiliaryWindow(url);
+      openDesktopAuxiliaryWindow(url, frameName || "octopus-app");
     } else {
       openSafeExternalURL(url);
     }

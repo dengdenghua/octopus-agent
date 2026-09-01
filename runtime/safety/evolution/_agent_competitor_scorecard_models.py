@@ -208,12 +208,12 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         ),
     ),
     ScoreDimension(
-        id="local_cli_partner_interop",
-        title="Local third-party CLI partner interoperability",
+        id="model_provider_plugin_interop",
+        title="Explicit model-provider plugin interoperability",
         weight=5,
         why=(
-            "Detect, register, probe, diagnose, and team-run external coding CLIs "
-            "without forcing users to abandon their native CLI subscriptions or muscle memory."
+            "Install, validate, and hot-register external model gateways without "
+            "handing orchestration, tools, memory, or secrets to an opaque local CLI."
         ),
         scores={
             "codex": 94,
@@ -222,10 +222,10 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
             "hermes": 82,
             "octopus": 98,
         },
-        octopus_evidence_ids=("local_cli_partner_interop", "subagents_parallel_work"),
+        octopus_evidence_ids=("model_provider_plugin_interop", "skills_plugins_hooks"),
         octopus_next_actions=(
-            "Keep CodeBuddy/Codex/Claude/Trae probes release-gated with auth, model, permission, network, and launcher-only failures.",
-            "Add retained health-check receipts and per-provider setup history in the local partner UI.",
+            "Keep credential references, provider probes, and live route teardown release-gated.",
+            "Add retained health-check receipts and setup history in the provider plugin UI.",
         ),
     ),
     ScoreDimension(

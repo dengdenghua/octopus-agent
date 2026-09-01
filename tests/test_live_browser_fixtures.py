@@ -1,16 +1,37 @@
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 from urllib.request import urlopen
 
+import pytest
 from playwright.sync_api import expect, sync_playwright
 
 from benchmarks.eval_harness import Trajectory
 from benchmarks.fixed_suite_fixtures import prepare_fixture_suite
 from benchmarks.fixture_grading import LiveIsolatedFixture
+from benchmarks.verifier_sandbox import HARDENED_RUNNER_ENV
 from tests.conftest import chromium_launch_kwargs, requires_chromium
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _requires_hardened_verifier_runner() -> None:
+    """Skip only when the fail-closed hidden-verifier service cannot exist.
+
+    Browser interaction itself is portable, but these two satisfiability tests
+    finish by executing evaluator-owned hidden verification against an
+    untrusted trial workspace.  Production intentionally authorizes that step
+    only through the root-attested Linux runner.  A configured runner that is
+    invalid must still fail loudly; only an unsupported platform or an ordinary
+    developer environment with no runner configured is a legitimate skip.
+    """
+
+    if not sys.platform.startswith("linux"):
+        pytest.skip("hidden fixture verification requires the hardened Linux runner")
+    if not os.environ.get(HARDENED_RUNNER_ENV, "").strip():
+        pytest.skip(f"set {HARDENED_RUNNER_ENV} to run hidden fixture verification")
 
 
 def test_frontend_fixtures_have_isolated_live_previews(tmp_path) -> None:
@@ -82,6 +103,7 @@ def test_dynamic_crud_fixture_is_live_and_satisfiable(tmp_path) -> None:
             trajectory.append("tool_start", tool_name="browser_click")
             page.locator('[data-customer-id="customer-1"]').wait_for(state="detached")
             browser.close()
+        _requires_hardened_verifier_runner()
         verdict = case.grader(trajectory)
     finally:
         case.teardown()
@@ -120,6 +142,7 @@ def test_rich_editor_upload_fixture_is_live_and_satisfiable(tmp_path) -> None:
             frame.locator("#confirmed").wait_for()
             trajectory.append("tool_start", tool_name="browser_wait")
             browser.close()
+        _requires_hardened_verifier_runner()
         verdict = case.grader(trajectory)
     finally:
         case.teardown()

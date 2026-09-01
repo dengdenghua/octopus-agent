@@ -24,12 +24,13 @@ from ._team_rooms_access import TeamRoomAccess
 from ._team_rooms_state import (
     _load_state,
     _room_payload,
-    _save_state,
-    _slug_id,
-    _unique_team_id,
+    _team_project_helpers,
 )
 from ._team_rooms_state import (
     _room_storage_payload as _room_storage_payload,
+)
+from ._team_rooms_state import (
+    _save_state as _save_state,
 )
 from .team_invitations_router import (
     register_team_invitation_routes,
@@ -48,7 +49,11 @@ from .team_rooms_models import (
     UpdateTeamJoinPolicyRequest,
     UpdateTeamParticipantRequest,
 )
-from .team_rooms_ws import TeamRoomWsContext, team_room_ws
+from .team_rooms_ws import (
+    TeamRoomWsContext,
+    broadcast_authorized_team_sockets,
+    team_room_ws,
+)
 from .team_speaker_policy import (
     _authorized_to_speak_for,
     _caller_is_team_admin,
@@ -95,6 +100,7 @@ def create_team_rooms_router(
     room_message_provider: Callable[[str, int, int, str], list[dict[str, Any]]] | None = None,
     invitation_store: TeamInvitationStore | None = None,
     project_store: Any = None,
+    group_store: Any = None,
     twin_responder: (
         Callable[
             [TeamRoomWire, TeamParticipantWire, list[dict[str, Any]]],
@@ -131,10 +137,12 @@ def create_team_rooms_router(
         path,
         legacy_tenant_for_owner=_legacy_tenant_for_owner,
     )
+    persisted_teams: dict[str, TeamRoomWire] = dict(teams)
     invite_store = invitation_store or TeamInvitationStore(
         path.parent / "team_invitations.db" if state_path is not None else None
     )
     project_store_holder: dict[str, Any] = {"store": project_store}
+    group_store_holder: dict[str, Any] = {"store": group_store}
     live_sockets: dict[str, dict[str, WebSocket]] = {}
     socket_loops: dict[str, dict[str, asyncio.AbstractEventLoop]] = {}
 
@@ -206,6 +214,38 @@ def create_team_rooms_router(
         principal = _principal(request)
         return principal.tenant_id if principal is not None else "local"
 
+    def _refresh_state() -> None:
+        nonlocal persisted_teams
+
+        from ._team_room_persistence import refresh_team_room_state
+
+        with lock:
+            durable = refresh_team_room_state(
+                path=path,
+                legacy_tenant_for_owner=_legacy_tenant_for_owner,
+            )
+            teams.clear()
+            teams.update(durable)
+            persisted_teams = dict(durable)
+
+    def _assert_room_creatable(team_id: str, tenant_id: str, owner_id: str) -> None:
+        del tenant_id, owner_id
+        bound_group_store = group_store_holder.get("store")
+        if bound_group_store is None:
+            return
+        lease = bound_group_store.room_delete_lease(team_id)
+        if lease is None:
+            return
+        code = "TEAM_ROOM_DELETED" if lease.finalized else "TEAM_ROOM_DELETE_IN_PROGRESS"
+        raise HTTPException(
+            409,
+            {
+                "code": code,
+                "message": "a deleted Team Room id cannot be reused",
+                "team_id": team_id,
+            },
+        )
+
     room_access = TeamRoomAccess(
         teams=teams,
         lock=lock,
@@ -213,6 +253,7 @@ def create_team_rooms_router(
         principal=_principal,
         tenant=_tenant,
         http_exception=HTTPException,
+        refresh=_refresh_state,
     )
     _list_room_members = room_access.list_room_members
     _get_room_participant = room_access.get_room_participant
@@ -223,9 +264,21 @@ def create_team_rooms_router(
     _require_room_editor = room_access.require_room_editor
 
     def _save() -> None:
-        _save_state(path, teams)
+        nonlocal persisted_teams
+
+        from ._team_room_persistence import merge_team_room_state
+
+        merged = merge_team_room_state(
+            path=path,
+            local=dict(teams),
+            baseline=dict(persisted_teams),
+            legacy_tenant_for_owner=_legacy_tenant_for_owner,
+        )
+        teams.clear()
+        teams.update(merged)
+        persisted_teams = dict(merged)
         if room_projection is not None:
-            for team in list(teams.values()):
+            for team in list(merged.values()):
                 try:
                     room_projection(_public_room_payload(team))
                 except Exception:  # noqa: BLE001 - projection must not block room writes
@@ -234,10 +287,28 @@ def create_team_rooms_router(
     def _project_room_delete(room_id: str) -> None:
         if room_delete_projection is None:
             return
-        try:
-            room_delete_projection(room_id)
-        except Exception:  # noqa: BLE001 - projection must not block room deletion
-            _LOG.warning("team room delete projection failed for %s", room_id, exc_info=True)
+        room_delete_projection(room_id)
+
+    def _delete_reserved_team_state(
+        team_id: str,
+        tenant_id: str,
+        owner_id: str,
+    ) -> TeamRoomWire | None:
+        nonlocal persisted_teams
+
+        from ._team_room_persistence import delete_reserved_team_room_state
+
+        merged, deleted = delete_reserved_team_room_state(
+            path=path,
+            team_id=team_id,
+            tenant_id=tenant_id,
+            owner_id=owner_id,
+            legacy_tenant_for_owner=_legacy_tenant_for_owner,
+        )
+        teams.clear()
+        teams.update(merged)
+        persisted_teams = dict(merged)
+        return deleted
 
     def _reset_state() -> None:
         with lock:
@@ -251,52 +322,22 @@ def create_team_rooms_router(
         actor: str | None,
         tenant_id: str,
         body: CreateTeamRoomRequest,
+        *,
+        exact_id: bool = False,
     ) -> TeamRoomWire:
-        name = body.name.strip()
-        if not name:
-            raise HTTPException(400, "name is required")
-        members = [m for m in body.members if m.name.strip()]
-        if not members:
-            raise HTTPException(400, "members must include at least one agent")
-        leader_id = body.leaderId or members[0].name
-        if leader_id not in {m.name for m in members}:
-            leader_id = members[0].name
-        now = _now()
-        team_id = _unique_team_id(body.id or _slug_id(name), teams)
-        owner = actor or "local"
-        team = TeamRoomWire(
-            id=team_id,
-            name=name,
-            members=members,
-            leaderId=leader_id,
-            owner_id=owner,
+        from ._team_room_creation import create_team_for_actor
+
+        _refresh_state()
+        return create_team_for_actor(
+            actor=actor,
             tenant_id=tenant_id,
-            thread_id=(body.thread_id or "").strip() or None,
-            created_at=now,
-            updated_at=now,
-            participants=[
-                TeamParticipantWire(
-                    id=f"owner-{owner}",
-                    display_name=owner,
-                    role="owner",
-                    actor_id=actor,
-                    joined_at=now,
-                    last_seen_at=now,
-                ),
-            ],
+            body=body,
+            exact_id=exact_id,
+            lock=lock,
+            teams=teams,
+            save=_save,
+            assert_creatable=_assert_room_creatable,
         )
-        with lock:
-            teams[team.id] = team
-            try:
-                _save()
-            except Exception:
-                # Creation is an all-or-nothing boundary for callers such as
-                # the project-group orchestrator.  Do not leave an in-memory
-                # room that the durable snapshot rejected.
-                if teams.get(team.id) is team:
-                    teams.pop(team.id, None)
-                raise
-        return team
 
     def _create_team_from_payload(
         request: Request,
@@ -308,69 +349,27 @@ def create_team_rooms_router(
         tenant_id = principal.tenant_id if principal is not None else "local"
         return _public_room_payload(_create_team_for_actor(actor, tenant_id, body))
 
-    def _bind_team_thread(
+    def _create_team_from_payload_exact(
         request: Request,
-        team_id: str,
-        thread_id: str,
+        payload: dict[str, Any],
     ) -> dict[str, Any]:
-        """Attach a legacy room to its canonical cowork thread exactly once.
+        body = CreateTeamRoomRequest.model_validate(payload)
+        principal = _principal(request)
+        actor = principal.actor_id if principal is not None else None
+        tenant_id = principal.tenant_id if principal is not None else "local"
+        return _public_room_payload(_create_team_for_actor(actor, tenant_id, body, exact_id=True))
 
-        The public Team Room API deliberately cannot choose ``thread_id``.
-        This internal bridge is called only by the owner-gated cowork ensure
-        route, so invite links can recover the canonical destination for rooms
-        created before server-owned thread bindings were persisted.
-        """
+    from ._team_room_binding import team_thread_binding_helpers
 
-        _require_invite_admin(request, team_id)
-        canonical_thread_id = str(thread_id or "").strip()
-        if not canonical_thread_id:
-            raise HTTPException(400, "thread_id is required")
-        with lock:
-            current = teams.get(team_id)
-            if current is None:
-                raise HTTPException(404, f"team not found: {team_id}")
-            existing_thread_id = str(current.thread_id or "").strip()
-            if existing_thread_id and existing_thread_id != canonical_thread_id:
-                raise HTTPException(409, "team room is already bound to another thread")
-            if existing_thread_id == canonical_thread_id:
-                return _public_room_payload(current)
-            updated = current.model_copy(
-                update={
-                    "thread_id": canonical_thread_id,
-                    "updated_at": _now(),
-                }
-            )
-            teams[team_id] = updated
-            try:
-                _save()
-            except Exception:
-                teams[team_id] = current
-                raise
-            return _public_room_payload(updated)
-
-    def _unbind_team_thread(
-        request: Request,
-        team_id: str,
-        thread_id: str,
-    ) -> dict[str, Any]:
-        """Compensate a binding only while it still points at ``thread_id``."""
-
-        _require_invite_admin(request, team_id)
-        expected_thread_id = str(thread_id or "").strip()
-        with lock:
-            current = teams.get(team_id)
-            if current is None:
-                raise HTTPException(404, f"team not found: {team_id}")
-            if str(current.thread_id or "").strip() != expected_thread_id:
-                return _public_room_payload(current)
-            updated = current.model_copy(update={"thread_id": None, "updated_at": _now()})
-            teams[team_id] = updated
-            try:
-                _save()
-            except Exception:
-                teams[team_id] = current
-                raise
-            return _public_room_payload(updated)
+    _bind_team_thread, _unbind_team_thread = team_thread_binding_helpers(
+        lock=lock,
+        teams=teams,
+        require_admin=_require_invite_admin,
+        group_store=lambda: group_store_holder.get("store"),
+        save=_save,
+        room_payload=_public_room_payload,
+        http_exception=HTTPException,
+    )
 
     async def _update_team_from_payload(
         request: Request,
@@ -417,48 +416,25 @@ def create_team_rooms_router(
 
     async def _broadcast(
         team_id: str,
-        payload: dict[str, Any],
+        payload: dict[str, Any] | Callable[[], dict[str, Any]],
         *,
         exclude: str | None = None,
+        include: str | None = None,
     ) -> None:
-        with lock:
-            sockets = [
-                (
-                    participant_id,
-                    socket,
-                    socket_loops.get(team_id, {}).get(participant_id),
-                )
-                for participant_id, socket in live_sockets.get(team_id, {}).items()
-            ]
-        dead: list[str] = []
-        current_loop = asyncio.get_running_loop()
-        for participant_id, socket, owner_loop in sockets:
-            if exclude and participant_id == exclude:
-                continue
-            try:
-                if owner_loop is None or owner_loop is current_loop:
-                    await socket.send_json(payload)
-                elif owner_loop.is_closed():
-                    dead.append(participant_id)
-                else:
-                    sent = asyncio.run_coroutine_threadsafe(socket.send_json(payload), owner_loop)
-                    await asyncio.wrap_future(sent)
-            except (ConnectionError, TimeoutError, OSError, RuntimeError):
-                dead.append(participant_id)
-        if dead:
-            with lock:
-                room = live_sockets.get(team_id)
-                loops = socket_loops.get(team_id)
-                if room:
-                    for participant_id in dead:
-                        room.pop(participant_id, None)
-                        if loops:
-                            loops.pop(participant_id, None)
+        await broadcast_authorized_team_sockets(
+            team_id=team_id,
+            payload=payload,
+            teams=teams,
+            lock=lock,
+            live_sockets=live_sockets,
+            socket_loops=socket_loops,
+            refresh=_refresh_state,
+            exclude=exclude,
+            include=include,
+        )
 
     async def _broadcast_presence(team_id: str) -> None:
-        with lock:
-            payload = _presence_payload(team_id)
-        await _broadcast(team_id, payload)
+        await _broadcast(team_id, lambda: _presence_payload(team_id))
 
     async def _broadcast_team_update(team_id: str, team: TeamRoomWire) -> None:
         await _broadcast(
@@ -498,6 +474,7 @@ def create_team_rooms_router(
 
     @router.get("/api/teams")
     def list_teams(request: Request) -> dict[str, Any]:
+        _refresh_state()
         principal = _principal(request)
         actor = principal.actor_id if principal is not None else None
         with lock:
@@ -584,24 +561,31 @@ def create_team_rooms_router(
 
     @router.delete("/api/teams/{team_id}")
     def delete_team(request: Request, team_id: str) -> dict[str, Any]:
-        actor = _require_owner(request, team_id)
-        with lock:
-            existed = teams.get(team_id)
-            if existed is not None:
-                invite_store.revoke_room(
-                    tenant_id=existed.tenant_id,
-                    room_id=existed.id,
-                    revoked_by=actor or "local",
-                )
-                teams.pop(team_id, None)
-                _save()
-                _project_room_delete(existed.id)
-            return {"ok": True, "deleted": existed is not None, "team_id": team_id}
+        from ._team_room_delete import delete_team_room_fail_safe
+
+        return delete_team_room_fail_safe(
+            request=request,
+            team_id=team_id,
+            teams=teams,
+            lock=lock,
+            group_store=group_store_holder.get("store"),
+            principal=_principal,
+            require_owner=_require_owner,
+            invite_store=invite_store,
+            save=_save,
+            delete_reserved_state=_delete_reserved_team_state,
+            delete_projection=_project_room_delete,
+        )
 
     def _bind_project_store(bound_store: Any) -> None:
         """Late-bind the ProjectStore created after this router at app boot."""
 
         project_store_holder["store"] = bound_store
+
+    def _bind_group_store(bound_store: Any) -> None:
+        """Late-bind the canonical GroupStore used by collaboration routes."""
+
+        group_store_holder["store"] = bound_store
 
     def _replace_team_agent_members(
         request: Any,
@@ -658,6 +642,7 @@ def create_team_rooms_router(
 
     router.broadcast = _broadcast
     router.create_team_from_payload = _create_team_from_payload
+    router.create_team_from_payload_exact = _create_team_from_payload_exact
     router.delete_team_from_payload = delete_team
     router.bind_team_thread = _bind_team_thread
     router.unbind_team_thread = _unbind_team_thread
@@ -666,6 +651,14 @@ def create_team_rooms_router(
     router.get_room_participant = _get_room_participant
     router.can_access_room = _can_access_room
     router.bind_project_store = _bind_project_store
+    router.bind_group_store = _bind_group_store
+    router.refresh_project_binding, router.team_snapshot = _team_project_helpers(
+        lock=lock,
+        teams=teams,
+        public_room_payload=_public_room_payload,
+        room_projection=room_projection,
+        refresh=_refresh_state,
+    )
     router.replace_team_agent_members = _replace_team_agent_members
     router.join_policy_for_room = _join_policy_for_room
     router.reset_state = _reset_state
@@ -903,6 +896,7 @@ def create_team_rooms_router(
         room_payload=_public_room_payload,
         join_policy_for=_join_policy_for_room,
         project_id_for=_project_id_for_room,
+        refresh_rooms=_refresh_state,
     )
     if room_message_store is None:
         from runtime.memory.cowork.room_messages import RoomMessageStore
@@ -922,6 +916,7 @@ def create_team_rooms_router(
         broadcast_presence=_broadcast_presence,
         broadcast_floor=_broadcast_floor,
         active_participant=_active_participant,
+        refresh=_refresh_state,
         require_auth=require_auth,
         twin_responder=twin_responder,
         message_store=room_message_store,
@@ -975,9 +970,7 @@ __all__ = [
     "UpdateSpeakerPolicyRequest",
     "UpdateTeamParticipantRequest",
     "create_team_rooms_router",
-    # Re-exported from team_speaker_policy so existing
-    # ``from team_rooms_router import _participant_can_speak`` call sites
-    # (the unit tests) keep working after the split.
+    # Preserve existing speaker-policy imports after the split.
     "_authorized_to_speak_for",
     "_next_speaker",
     "_participant_can_speak",

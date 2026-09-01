@@ -26,9 +26,8 @@ Design notes
 
 * **State ownership moves with the routes.** The ``custom_models``
   dict used to be a local in ``create_app``; now it's owned by the
-  router. app.py reads it through the returned wrapper to merge with
-  molili's built-in preset list (that merge stays in app.py for now
-  — it also pulls from the molili gateway which is wired there).
+  router. app.py reads it through the returned wrapper when composing
+  the model catalog.
 * **Disk format unchanged.** Path and JSON shape stay the same so an
   in-place deploy doesn't lose user config. Integration tests in
   ``tests/test_app_config_endpoints.py`` pin this contract.
@@ -45,11 +44,16 @@ import logging
 import os
 import tempfile
 import threading
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
 from typing import Any
 
+from runtime.execution.codex_backend.account import CodexAccountService
+from runtime.execution.codex_backend.model_profile import CodexModelPreferenceStore
+from runtime.execution.codex_backend.paths import resolve_codex_state_root
+from runtime.execution.codex_backend.upstream_update import CodexUpstreamUpdateService
 from runtime.platform.models.custom_model_selection import selections_for_entry
 from runtime.platform.process.paths import app_paths
 
@@ -123,6 +127,10 @@ class ConfigRouter:
 
     router: Any
     custom_models: dict[str, dict[str, Any]]
+    codex_accounts: CodexAccountService
+    codex_preferences: CodexModelPreferenceStore
+    codex_updates: CodexUpstreamUpdateService
+    model_provider_plugins: Any
 
 
 # ═══════════════════════════════════════════════════════════
@@ -139,6 +147,14 @@ def create_config_router(
     jwt_secret: str | None = None,
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
+    codex_account_service: CodexAccountService | None = None,
+    codex_preference_store: CodexModelPreferenceStore | None = None,
+    codex_update_service: CodexUpstreamUpdateService | None = None,
+    codex_state_root: Path | str | None = None,
+    codex_preferences_path: Path | str | None = None,
+    codex_legacy_source_home: Path | str | None = None,
+    deployment_mode: str | None = None,
+    credential_store: Any = None,
 ) -> ConfigRouter:
     """Build the FastAPI router + state bundle.
 
@@ -210,7 +226,6 @@ def create_config_router(
         if "admin" not in {str(r).lower() for r in roles}:
             raise HTTPException(403, "admin role required")
 
-    router = APIRouter(tags=["config"], dependencies=[Depends(_auth_dep)])
     path = (
         Path(custom_models_path)
         if custom_models_path is not None
@@ -223,6 +238,58 @@ def create_config_router(
     # partially rebuilt dispatch table to listing endpoints.
     custom_models_lock = threading.RLock()
 
+    resolved_codex_root = resolve_codex_state_root(codex_state_root)
+    resolved_deployment = (
+        str(deployment_mode or os.environ.get("OCTOPUS_DEPLOYMENT_MODE") or "local")
+        .strip()
+        .casefold()
+    )
+    legacy_codex_home: Path | str | None = None
+    if resolved_deployment == "local":
+        legacy_codex_home = (
+            codex_legacy_source_home
+            if codex_legacy_source_home is not None
+            else os.environ.get("OCTOPUS_CODEX_SOURCE_HOME") or Path.home() / ".codex"
+        )
+    codex_accounts = codex_account_service or CodexAccountService(
+        resolved_codex_root,
+        legacy_source_home=legacy_codex_home,
+        # Local desktop is one OS-user trust boundary even when Octopus login
+        # supplies a non-null principal. Shared/server modes keep strict
+        # principal-scoped ChatGPT credentials and never inherit host auth.
+        allow_local_principal_inheritance=resolved_deployment == "local",
+    )
+    codex_preferences = codex_preference_store or CodexModelPreferenceStore(
+        Path(codex_preferences_path).expanduser().resolve(strict=False)
+        if codex_preferences_path is not None
+        else resolved_codex_root / "model_profile.json"
+    )
+    codex_updates = codex_update_service or CodexUpstreamUpdateService(
+        resolved_codex_root / "upstream_update.json",
+        check_interval_seconds=float(
+            os.environ.get("OCTOPUS_CODEX_UPDATE_CHECK_INTERVAL_SECONDS") or 6 * 60 * 60
+        ),
+        initial_check_delay_seconds=float(
+            os.environ.get("OCTOPUS_CODEX_UPDATE_INITIAL_DELAY_SECONDS") or 15
+        ),
+    )
+
+    @asynccontextmanager
+    async def _config_lifespan(_app: Any):
+        codex_accounts.start_idle_reaper()
+        codex_updates.start()
+        try:
+            yield
+        finally:
+            await codex_updates.close()
+            await codex_accounts.close_all()
+
+    router = APIRouter(
+        tags=["config"],
+        dependencies=[Depends(_auth_dep)],
+        lifespan=_config_lifespan,
+    )
+
     def _serialize_custom_models(handler: Any) -> Any:
         @wraps(handler)
         def _locked(*args: Any, **kwargs: Any) -> Any:
@@ -230,6 +297,10 @@ def create_config_router(
                 return handler(*args, **kwargs)
 
         return _locked
+
+    def _custom_models_snapshot() -> dict[str, dict[str, Any]]:
+        with custom_models_lock:
+            return {model_id: dict(entry) for model_id, entry in custom_models_state.items()}
 
     # ─── Persistence helpers ────────────────────────────────
     # These used to be nested inside create_app; moving them here
@@ -375,10 +446,25 @@ def create_config_router(
         provider = (entry.get("provider") or "openai").lower()
         base_url = entry.get("base_url") or ""
         api_key = entry.get("api_key") or ""
+        if not api_key and entry.get("credential_ref"):
+            from runtime.platform.models.model_provider_plugin import (
+                resolve_model_provider_api_key,
+            )
+
+            api_key = resolve_model_provider_api_key(
+                entry,
+                credential_store=credential_store,
+            )
         upstreams = _entry_upstreams(entry, model_id)
         if not upstreams:
             return {"ok": False, "error": "models list is empty"}
         primary_model = upstreams[0]
+        responses_models = {
+            str(model).strip()
+            for model in (entry.get("responses_models") or [])
+            if str(model or "").strip() in upstreams
+        }
+        responses_router: Any | None = None
         default_headers = entry.get("default_headers") or {}
         if not isinstance(default_headers, dict):
             default_headers = {}
@@ -421,6 +507,18 @@ def create_config_router(
                     extra_headers=default_headers,
                     custom_model_entry=entry,
                 )
+                if responses_models:
+                    from runtime.sensing.model_router.openai_responses_router import (
+                        OpenAIResponsesModelRouter,
+                    )
+
+                    responses_router = OpenAIResponsesModelRouter(
+                        base_url=base_url,
+                        api_key=api_key or "dummy",
+                        default_model=next(iter(responses_models)),
+                        extra_headers=default_headers,
+                        provider_name=str(entry.get("compat_profile") or model_id),
+                    )
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "error": f"router init failed: {e}"}
 
@@ -456,8 +554,12 @@ def create_config_router(
                 inner: _MRR,
                 upstreams: list[str],
                 selection_models: dict[str, str],
+                responses_inner: _MRR | None = None,
+                responses_models: set[str] | None = None,
             ) -> None:
                 self._inner = inner
+                self._responses_inner = responses_inner
+                self._responses_models = set(responses_models or ())
                 self._upstreams = list(upstreams)
                 self._selection_models = dict(selection_models)
                 self._default = self._upstreams[0] if self._upstreams else ""
@@ -472,10 +574,14 @@ def create_config_router(
                 return self._default
 
             def call(self, request: _MR):
-                rewritten = request.model_copy(
-                    update={"model": self._resolve(request)},
+                resolved = self._resolve(request)
+                rewritten = request.model_copy(update={"model": resolved})
+                inner = (
+                    self._responses_inner
+                    if self._responses_inner is not None and resolved in self._responses_models
+                    else self._inner
                 )
-                return self._inner.call(rewritten)
+                return inner.call(rewritten)
 
             def call_stream(self, request: _MR):
                 # Mirror ``call`` · route to the right upstream slot,
@@ -484,10 +590,14 @@ def create_config_router(
                 # with ``[gpt-4o-mini, gpt-4o]``) to emit real deltas
                 # from the chosen slot instead of always-defaulting
                 # to the cheap one.
-                rewritten = request.model_copy(
-                    update={"model": self._resolve(request)},
+                resolved = self._resolve(request)
+                rewritten = request.model_copy(update={"model": resolved})
+                inner = (
+                    self._responses_inner
+                    if self._responses_inner is not None and resolved in self._responses_models
+                    else self._inner
                 )
-                yield from self._inner.call_stream(rewritten)
+                yield from inner.call_stream(rewritten)
 
             @property
             def default_model(self) -> str:
@@ -501,6 +611,8 @@ def create_config_router(
             sub_router,
             upstreams,
             selection_models,
+            responses_inner=responses_router,
+            responses_models=responses_models,
         )
         for route_id in _entry_route_ids(entry, model_id):
             dispatcher.register(route_id, wrapper)
@@ -523,6 +635,19 @@ def create_config_router(
         """
         return {model_id: _register(entry) for model_id, entry in custom_models_state.items()}
 
+    from runtime.platform.models.model_provider_plugin import (
+        ModelProviderPluginManager,
+    )
+
+    model_provider_plugins = ModelProviderPluginManager(
+        custom_models=custom_models_state,
+        lock=custom_models_lock,
+        save=_save,
+        unregister_entry=_unregister_entry,
+        rebuild_routes=_rebuild_routes,
+        credential_store=credential_store,
+    )
+
     # Hydrate from disk + re-register each entry so the dispatcher
     # sees them on the first request.
     _load()
@@ -533,6 +658,7 @@ def create_config_router(
         _ConfigCtx(
             router=router,
             custom_models=custom_models_state,
+            custom_models_snapshot=_custom_models_snapshot,
             save=_save,
             load=_load,
             register=_register,
@@ -541,10 +667,20 @@ def create_config_router(
             serialize_custom_models=_serialize_custom_models,
             require_admin=_require_admin,
             stack=stack,
+            codex_accounts=codex_accounts,
+            codex_preferences=codex_preferences,
+            codex_updates=codex_updates,
         )
     )
 
-    return ConfigRouter(router=router, custom_models=custom_models_state)
+    return ConfigRouter(
+        router=router,
+        custom_models=custom_models_state,
+        codex_accounts=codex_accounts,
+        codex_preferences=codex_preferences,
+        codex_updates=codex_updates,
+        model_provider_plugins=model_provider_plugins,
+    )
 
 
 __all__ = [

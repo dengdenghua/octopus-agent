@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -342,6 +343,32 @@ def test_collab_room_endpoint_creates_and_links_persistent_room(tmp_path) -> Non
     assert any(item["display_name"] == "Bob" for item in projected["participants"])
     assert c.get(f"/api/team-invites/{invite['invite_token']}").json()["team"]["member_count"] == 2
 
+    # Plugin-style single-member add/remove uses the same canonical projection
+    # as bulk roster replacement and remains idempotent on retries.
+    invited = c.post(
+        "/api/cowork/t1/members",
+        json={"target_id": "reviewer", "kind": "agent"},
+    )
+    assert invited.status_code == 200, invited.json()
+    assert invited.json()["added"] is True
+    assert invited.json()["room_projection"] == {
+        "ok": True,
+        "room_id": body["room"]["id"],
+    }
+    projected = c.get(f"/api/teams/{body['room']['id']}").json()
+    assert [member["name"] for member in projected["members"]] == [
+        "alice",
+        "critic",
+        "reviewer",
+    ]
+
+    removed = c.delete("/api/cowork/t1/members/critic")
+    assert removed.status_code == 200, removed.json()
+    assert removed.json()["removed"] is True
+    assert [
+        member["name"] for member in c.get(f"/api/teams/{body['room']['id']}").json()["members"]
+    ] == ["alice", "reviewer"]
+
 
 def test_collab_room_endpoint_backfills_legacy_thread_binding(tmp_path) -> None:
     from runtime.memory.cowork.collaboration_store import CollaborationStore
@@ -391,11 +418,13 @@ def test_collab_room_endpoint_backfills_legacy_thread_binding(tmp_path) -> None:
     preview = client.get(f"/api/team-invites/{invite['invite_token']}").json()
     assert preview["thread_id"] == "t1"
 
-    # A corrupt second group link cannot silently move an established room.
-    link_room(store, "t2", legacy_room["id"])
-    conflict = client.post("/api/collab/t2/room", json={"name": "ignored"})
-    assert conflict.status_code == 409
-    assert "already bound" in conflict.json()["detail"]
+    # The durable room reservation rejects a corrupt second group link before
+    # any Team/Collaboration projection can move the established room.
+    from runtime.memory.cowork.group_store import GroupRoomLinkConflict
+
+    with pytest.raises(GroupRoomLinkConflict):
+        link_room(store, "t2", legacy_room["id"])
+    assert store.state("t2").room_id is None
 
 
 def test_collab_task_endpoint_auto_creates_room_and_folds_task(tmp_path) -> None:
@@ -601,9 +630,9 @@ def test_team_room_projection_can_promote_to_thread_session(tmp_path) -> None:
         {
             "id": "room-1",
             "name": "Thread linked",
-            "metadata": {"source": "projectos", "project_id": "P-1"},
         },
     )
+    collab_store.set_room_project_metadata("thread-1", "P-1", generation=1)
 
     assert collab_store.session_id_for_room("room-1") == "thread-1"
     assert collab_store.room_for_session("team:room-1") is None

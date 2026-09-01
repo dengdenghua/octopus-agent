@@ -321,18 +321,17 @@ def test_stages_clamped_to_4(mock_subagent, unlimited_budget, mock_builtins):
 # ── Registration count ─────────────────────────────────────────────────────
 
 
-def test_register_delegation_skills_returns_9():
-    """register_delegation_skills must register exactly 9 skills.
+def test_register_delegation_skills_returns_8():
+    """register_delegation_skills exposes only the eight native tools.
 
     call_agent, call_agent_parallel, call_agent_vote, run_orchestration,
-    verdict_repair, tournament, cli_team, run_pipeline, call_agent_graph. The
-    return value had drifted to a stale 5 while 8 were actually registered, so
-    the count and the call count are both asserted.
+    verdict_repair, tournament, run_pipeline, call_agent_graph. External CLI
+    auto-detection is intentionally not a registered capability.
     """
 
     from runtime.execution.suckers.delegation_skills import register_delegation_skills
 
     registry = MagicMock()
     count = register_delegation_skills(registry)
-    assert count == 9
-    assert registry.register.call_count == 9
+    assert count == 8
+    assert registry.register.call_count == 8

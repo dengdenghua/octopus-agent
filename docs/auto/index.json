@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "generated_at": "2026-09-01T10:57:04+00:00",
+  "generated_at": "2026-09-01T16:29:29+00:00",
   "files_analyzed": 170,
   "tree": [
     {
@@ -1136,6 +1136,11 @@
     {
       "from": "20-backend/24-sensing/gateway.md",
       "to": "20-backend/25-adapters/mcp.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/24-sensing/model-router.md",
+      "to": "20-backend/22-safety/auth.md",
       "type": "imports"
     },
     {

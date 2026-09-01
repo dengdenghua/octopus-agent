@@ -229,7 +229,6 @@ def test_standard_coder_ignores_ordinary_model_context_and_accepts_only_opaque_o
         coder,
         {
             "model_name": "deepseek-from-realtime",
-            "partner_model": "deepseek-from-partner-control",
             "reasoning_effort": "max",
         },
         preference=preference,
@@ -260,23 +259,21 @@ def test_standard_coder_ignores_ordinary_model_context_and_accepts_only_opaque_o
     assert overridden.effective_model == "gpt-server-override"
     assert overridden.reasoning_effort == "xhigh"
 
-    legacy = SimpleNamespace(
-        agent_id="local_codex_cli",
+    embedded = SimpleNamespace(
+        agent_id="coder",
         model=None,
         capabilities={
-            "local_partner": True,
-            "local_partner_id": "codex-cli",
-            "local_partner_command": "codex",
+            "execution_backend": "codex_app_server",
         },
     )
-    legacy_profile = role_runner._execution_profile(
+    embedded_profile = role_runner._execution_profile(
         stack,
-        legacy,
-        {"partner_model": "gpt-legacy-choice", "reasoning_effort": "low"},
+        embedded,
+        {"model_name": "gpt-ignored", "reasoning_effort": "low"},
         preference=preference,
     )
-    assert legacy_profile.effective_model == "gpt-legacy-choice"
-    assert legacy_profile.reasoning_effort == "low"
+    assert embedded_profile.effective_model == "gpt-account-choice"
+    assert embedded_profile.reasoning_effort == "high"
 
 
 def test_connector_bridge_requires_principal_selection_and_removes_octopus_tools(
@@ -538,7 +535,6 @@ async def test_builtin_coder_unavailable_fails_closed_without_legacy_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from runtime.sensing.gateway import realtime_codex_backend as mod
-    from runtime.sensing.gateway import realtime_local_partner
     from tests.test_drive_codex_app_server import (
         _agent,
         _FakeEmitter,
@@ -554,12 +550,6 @@ async def test_builtin_coder_unavailable_fails_closed_without_legacy_fallback(
         monkeypatch,
         start_error=CodexBackendUnavailable("unsupported API"),
     )
-    legacy_calls: list[object] = []
-
-    async def legacy(*args: Any, **kwargs: Any) -> None:
-        legacy_calls.append((args, kwargs))
-
-    monkeypatch.setattr(realtime_local_partner, "drive_local_partner", legacy)
     coder = SimpleNamespace(
         agent_id="coder",
         display_name="Kane",
@@ -578,7 +568,6 @@ async def test_builtin_coder_unavailable_fails_closed_without_legacy_fallback(
             text="do it",
         )
 
-    assert legacy_calls == []
     assert operations == ["start", "close"]
 
 

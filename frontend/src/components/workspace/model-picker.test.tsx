@@ -64,6 +64,49 @@ describe("<ModelPicker />", () => {
     );
   });
 
+  it("renders OpenCode Zen free model names in green without a duplicate badge", async () => {
+    const user = userEvent.setup();
+    render(
+      withRouter(
+        <ModelPicker
+          models={[
+            {
+              name: "big-pickle",
+              display_name: "big-pickle",
+              model: "big-pickle",
+              entry_id: "opencode-zen",
+              selection_id: "zen-big-pickle",
+            },
+            {
+              name: "mimo-v2.5-free",
+              display_name: "mimo-v2.5-free",
+              model: "mimo-v2.5-free",
+              entry_id: "opencode-zen",
+              selection_id: "zen-mimo-v2.5-free",
+            },
+          ]}
+          value="zen-big-pickle"
+          onChange={vi.fn()}
+        />,
+      ),
+    );
+
+    const trigger = screen.getByTestId("model-picker-trigger");
+    expect(within(trigger).getByText("big-pickle")).toHaveClass(
+      "text-emerald-600",
+    );
+
+    await user.click(trigger);
+    const menu = await screen.findByTestId("model-picker-menu");
+    expect(within(menu).getByText("big-pickle")).toHaveClass(
+      "text-emerald-600",
+    );
+    expect(within(menu).getByText("mimo-v2.5-free")).toHaveClass(
+      "text-emerald-600",
+    );
+    expect(within(menu).queryByText("FREE")).not.toBeInTheDocument();
+  });
+
   it("lists every model in one flat list, no tabs", async () => {
     const user = userEvent.setup();
     setup();
@@ -94,12 +137,14 @@ describe("<ModelPicker />", () => {
               name: "deepseek-v4-pro",
               model: "deepseek-v4-pro",
               display_name: "DeepSeek V4 Pro",
+              context_window: 256_000,
               context_profile: "default",
             },
             {
               name: "deepseek-v4-pro::1m",
               model: "deepseek-v4-pro",
               display_name: "DeepSeek V4 Pro",
+              context_window: 1_000_000,
               context_profile: "1m",
             },
           ]}
@@ -111,14 +156,22 @@ describe("<ModelPicker />", () => {
 
     await user.click(screen.getByTestId("model-picker-trigger"));
     const menu = await screen.findByTestId("model-picker-menu");
+    expect(menu).toHaveClass("w-56");
     expect(menu.querySelector("button button")).toBeNull();
     // One row for the model, not two near-identical ones. Scoped to the menu
     // because the trigger also renders the selected model's label.
     expect(within(menu).getAllByText("DeepSeek V4 Pro")).toHaveLength(1);
-    // The long-context variant is still reachable, as an inline affordance.
-    await user.click(screen.getByTestId("model-picker-1m-deepseek-v4-pro"));
+    // Context length is a first-class quick setting instead of a tiny row badge.
+    const context = within(menu).getByRole("radiogroup", {
+      name: "上下文长度",
+    });
+    expect(
+      within(context).getByRole("radio", { name: "标准 · 256K" }),
+    ).toHaveAttribute("aria-checked", "true");
+    await user.click(within(context).getByRole("radio", { name: "Max · 1M" }));
     expect(onChange).toHaveBeenCalledOnce();
     expect(onChange).toHaveBeenLastCalledWith("deepseek-v4-pro::1m");
+    expect(menu).toBeVisible();
   });
 
   it("selecting the row itself keeps the default context window", async () => {
@@ -227,6 +280,29 @@ describe("<ModelPicker />", () => {
     );
   });
 
+  it("collapses exact duplicate catalog rows without hiding distinct endpoints", async () => {
+    const user = userEvent.setup();
+    const duplicate: PickerModel = {
+      name: "deepseek-v4-flash",
+      display_name: "DeepSeek V4 Flash",
+      entry_id: "deepseek-v4-flash",
+      context_profile: "default",
+    };
+    render(
+      withRouter(
+        <ModelPicker
+          models={[duplicate, { ...duplicate }]}
+          value="deepseek-v4-flash"
+          onChange={vi.fn()}
+        />,
+      ),
+    );
+
+    await user.click(screen.getByTestId("model-picker-trigger"));
+    const menu = await screen.findByTestId("model-picker-menu");
+    expect(within(menu).getAllByText("DeepSeek V4 Flash")).toHaveLength(1);
+  });
+
   it("uses row selection ids for variants, duplicate endpoints, and 1M siblings", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
@@ -313,9 +389,7 @@ describe("<ModelPicker />", () => {
       ),
     );
     await user.click(screen.getByTestId("model-picker-trigger"));
-    const primaryLong = screen.getByTestId(
-      "model-picker-1m-selection-primary-shared-default",
-    );
+    const primaryLong = screen.getByRole("radio", { name: "Max · 1M" });
     primaryLong.focus();
     expect(primaryLong).toHaveFocus();
     await user.keyboard(" ");
@@ -332,10 +406,7 @@ describe("<ModelPicker />", () => {
         />,
       ),
     );
-    await user.click(screen.getByTestId("model-picker-trigger"));
-    await user.click(
-      screen.getByTestId("model-picker-1m-selection-backup-shared-default"),
-    );
+    await user.click(screen.getByRole("radio", { name: "Max · 1M" }));
     expect(onChange).toHaveBeenLastCalledWith("selection-backup-shared-1m");
     expect(onChange).toHaveBeenCalledOnce();
   });

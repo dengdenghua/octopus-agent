@@ -78,6 +78,26 @@ class _PlatformStockIn(BaseModel):
     stock_code: str = ""
 
 
+class _CheckInRequest(BaseModel):
+    """手动触发平台每日签到；页面必须明确传入 confirm。"""
+
+    confirm: bool = False
+
+
+class _CheckInScheduleIn(BaseModel):
+    """自动签到开关与上海时区执行时刻。"""
+
+    enabled: bool = False
+    hour: int = 8
+    minute: int = 5
+
+
+class _PlatformSessionIn(BaseModel):
+    """Platform JWT copied from the same-origin embedded login page."""
+
+    token: str = ""
+
+
 def _proxy_disabled_page(base_url: str) -> str:
     """Explain why the optional same-origin upstream proxy is unavailable."""
     origin = upstream_origin(base_url) or "http://114.66.32.152:58868"
@@ -98,11 +118,13 @@ def _proxy_disabled_page(base_url: str) -> str:
   a{{color:#f0b90b;}}
 </style></head><body><div class="box">
 <h1>平台原站接入未开启</h1>
-<p>本页通过同源反向代理嵌入平台原站。该功能默认关闭；只有同时设置
-   <code>proxy_origin: true</code>、
-   <code>allow_same_origin_third_party_scripts: true</code>，并使用 HTTPS 上游后才会启用。</p>
+<p>本页通过同源反向代理嵌入平台原站，在可信的单用户本地实例中默认开启。
+   若看到此页，请确认 <code>proxy_origin</code> 与
+   <code>allow_same_origin_third_party_scripts</code> 未被显式关闭，且上游是格式有效的
+   HTTP 或 HTTPS 地址。</p>
 <p><b>开启前请了解代价</b>:同源代理会让原站脚本以本应用的 origin 权限运行,
-   可能访问父页面会话并以当前用户身份调用 API。生产或多用户部署不得开启。</p>
+   可能访问父页面会话并以当前用户身份调用 API；HTTP 上游的传输也未加密。
+   生产或多用户部署不得开启。</p>
 <p>也可以直接在新窗口打开原站(不共享登录态):
    <a href="{safe_origin}/trade/#/transaction" target="_blank" rel="noreferrer noopener">
    {safe_origin}/trade ↗</a></p>

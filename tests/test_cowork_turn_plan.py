@@ -123,20 +123,22 @@ def test_cluster_routes_to_leader() -> None:
     assert "cluster" in plan.reason
 
 
-def test_project_mode_hands_off_to_project_os() -> None:
+def test_legacy_project_mode_normalizes_to_group_chat() -> None:
     state = GroupState(roster=_agents("lead", "helper"), mode="project")
     plan = plan_turn(state, "ship the roadmap")
+    assert plan.mode == "chat"
     assert plan.responders == []
     assert plan.is_multi is False
-    assert "milestone engine" in plan.reason
+    assert "waiting for an @mention" in plan.reason
 
 
-def test_project_mode_ignores_chat_mentions() -> None:
+def test_legacy_project_mode_keeps_normal_chat_mentions() -> None:
     state = GroupState(roster=_agents("lead", "helper"), mode="project")
     plan = plan_turn(state, "@agent:helper quick answer")
+    assert plan.mode == "chat"
     assert plan.addressed == ["helper"]
-    assert plan.responders == []
-    assert "milestone engine" in plan.reason
+    assert plan.responders == ["helper"]
+    assert "@addressed" in plan.reason
 
 
 def test_mention_overrides_mode() -> None:
@@ -265,7 +267,7 @@ def test_realtime_intent_treats_bound_project_as_persistent_group(tmp_path) -> N
     assert intent.user_context["cowork_responders"] == []
 
 
-def test_realtime_intent_marks_project_mode_without_responders(tmp_path) -> None:
+def test_realtime_intent_normalizes_legacy_project_mode_to_chat(tmp_path) -> None:
     store = GroupStore(base_dir=tmp_path)
     invite_member(store, "thread-1", actor="u", target_id="db-agent", kind="agent")
     invite_member(store, "thread-1", actor="u", target_id="ui-agent", kind="agent")
@@ -285,7 +287,8 @@ def test_realtime_intent_marks_project_mode_without_responders(tmp_path) -> None
         intent=intent,
     )
 
-    assert intent.user_context["cowork_mode"] == "project"
+    assert store.state("thread-1").mode == "chat"
+    assert intent.user_context["cowork_mode"] == "chat"
     assert intent.user_context["cowork_is_multi"] is False
     assert intent.user_context["cowork_responders"] == []
-    assert "milestone engine" in intent.user_context["cowork_plan"]["reason"]
+    assert "waiting for an @mention" in intent.user_context["cowork_plan"]["reason"]

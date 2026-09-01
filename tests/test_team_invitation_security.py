@@ -121,6 +121,46 @@ def _create_invite(
     return response.json()
 
 
+def _raise_once_after_commit(
+    monkeypatch: pytest.MonkeyPatch,
+    store: TeamInvitationStore,
+    boundary: str,
+) -> None:
+    if boundary == "json":
+        from runtime.sensing.gateway import _team_room_persistence as persistence
+
+        original = persistence._save_state
+
+        def save_then_raise(path: Path, teams: dict[str, Any]) -> None:
+            original(path, teams)
+            monkeypatch.setattr(persistence, "_save_state", original)
+            raise RuntimeError("json committed before response failure")
+
+        monkeypatch.setattr(persistence, "_save_state", save_then_raise)
+        return
+
+    original_finalize = store._finalize_reservation
+
+    def finalize_then_raise(reservation_id: str) -> None:
+        original_finalize(reservation_id)
+        monkeypatch.setattr(store, "_finalize_reservation", original_finalize)
+        raise RuntimeError("sqlite finalized before response failure")
+
+    monkeypatch.setattr(store, "_finalize_reservation", finalize_then_raise)
+
+
+def _fail_once_before_membership_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    from runtime.sensing.gateway import _team_room_persistence as persistence
+
+    original = persistence._save_state
+
+    def fail_before_save(_path: Path, _teams: dict[str, Any]) -> None:
+        monkeypatch.setattr(persistence, "_save_state", original)
+        raise RuntimeError("membership failed before durable commit")
+
+    monkeypatch.setattr(persistence, "_save_state", fail_before_save)
+
+
 def test_create_is_backwards_compatible_but_secret_is_not_projected_or_persisted(
     tmp_path: Path,
 ) -> None:
@@ -389,7 +429,7 @@ def test_max_uses_are_consumed_atomically_and_audited(tmp_path: Path) -> None:
     assert len(store.acceptances(invite_id=invitation["id"])) == 1
 
 
-def test_failed_room_mutation_rolls_back_token_consumption(tmp_path: Path) -> None:
+def test_failed_room_mutation_retains_capacity_for_same_actor_retry(tmp_path: Path) -> None:
     store = TeamInvitationStore(tmp_path / "rollback.db")
     invitation, token = store.create(
         tenant_id="tenant-acme",
@@ -412,8 +452,209 @@ def test_failed_room_mutation_rolls_back_token_consumption(tmp_path: Path) -> No
             request_id="request-failed",
             apply=fail,
         )
-    assert store.find_by_token(token, tenant_id="tenant-acme")["use_count"] == 0
+    assert store.find_by_token(token, tenant_id="tenant-acme")["use_count"] == 1
     assert store.acceptances(invite_id=invitation["id"]) == []
+    with pytest.raises(InvitationExhausted):
+        store.consume_with(
+            token,
+            tenant_id="tenant-acme",
+            room_id="room-one",
+            actor_id="carol",
+            request_id="request-carol",
+            apply=lambda _invite: "carol",
+        )
+
+    consumed, result = store.consume_with(
+        token,
+        tenant_id="tenant-acme",
+        room_id="room-one",
+        actor_id="bob",
+        request_id="request-retry",
+        apply=lambda _invite: "bob",
+    )
+    assert result == "bob"
+    assert consumed["status"] == "exhausted"
+    assert [item["actor_id"] for item in store.acceptances(invite_id=invitation["id"])] == ["bob"]
+
+
+@pytest.mark.parametrize("boundary", ["json", "sqlite"])
+def test_direct_join_commit_then_raise_cannot_oversell_and_replays(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    boundary: str,
+) -> None:
+    client, keys, store, _router = _build_app(tmp_path)
+    _create_room(client, keys)
+    invite = _create_invite(client, keys, max_uses=1)
+    token = invite["invite_token"]
+    _raise_once_after_commit(monkeypatch, store, boundary)
+
+    with pytest.raises(RuntimeError, match=f"{boundary} .* before response failure"):
+        client.post(
+            f"/api/team-invites/{token}/join",
+            headers=_bearer(keys, "bob"),
+            json={"display_name": "Bob"},
+        )
+    durable = json.loads((tmp_path / "rooms.json").read_text(encoding="utf-8"))
+    room = next(item for item in durable["teams"] if item["id"] == "secure-room")
+    assert len([item for item in room["participants"] if item.get("actor_id") == "bob"]) == 1
+    assert store.find_by_token(token, tenant_id="tenant-acme")["use_count"] == 1
+    revoked = client.delete(
+        f"/api/teams/secure-room/invites/{invite['invite_id']}",
+        headers=_bearer(keys, "alice"),
+    )
+    assert revoked.status_code == 200
+    denied = client.post(
+        f"/api/team-invites/{token}/join",
+        headers=_bearer(keys, "carol"),
+        json={"display_name": "Carol"},
+    )
+    assert denied.status_code == 410
+
+    replay = client.post(
+        f"/api/team-invites/{token}/join",
+        headers=_bearer(keys, "bob"),
+        json={"display_name": "Bob retry"},
+    )
+    assert replay.status_code == 200, replay.json()
+    bob = [item for item in replay.json()["team"]["participants"] if item.get("actor_id") == "bob"]
+    assert len(bob) == 1
+    assert len(store.acceptances(invite_id=invite["invite_id"])) == 1
+
+
+@pytest.mark.parametrize("terminal_state", ["revoked", "expired"])
+def test_reserved_direct_join_without_membership_stays_blocked_after_restart(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    terminal_state: str,
+) -> None:
+    current = [datetime(2026, 1, 1, tzinfo=UTC)]
+
+    def clock() -> datetime:
+        return current[0]
+
+    client, keys, store, _router = _build_app(tmp_path, clock=clock)
+    _create_room(client, keys)
+    invite = _create_invite(
+        client,
+        keys,
+        max_uses=1,
+        expires_in_seconds=1 if terminal_state == "expired" else 3600,
+    )
+    token = invite["invite_token"]
+    _fail_once_before_membership_commit(monkeypatch)
+
+    with pytest.raises(RuntimeError, match="before durable commit"):
+        client.post(
+            f"/api/team-invites/{token}/join",
+            headers=_bearer(keys, "bob"),
+            json={"display_name": "Bob"},
+        )
+    assert store.find_by_token(token, tenant_id="tenant-acme")["use_count"] == 1
+    assert store.acceptances(invite_id=invite["invite_id"]) == []
+    if terminal_state == "revoked":
+        revoked = client.delete(
+            f"/api/teams/secure-room/invites/{invite['invite_id']}",
+            headers=_bearer(keys, "alice"),
+        )
+        assert revoked.status_code == 200
+    else:
+        current[0] += timedelta(seconds=2)
+    client.close()
+
+    restarted, restarted_keys, restarted_store, _router = _build_app(tmp_path, clock=clock)
+    retry = restarted.post(
+        f"/api/team-invites/{token}/join",
+        headers=_bearer(restarted_keys, "bob"),
+        json={"display_name": "Bob retry"},
+    )
+    assert retry.status_code == 410, retry.json()
+    durable = json.loads((tmp_path / "rooms.json").read_text(encoding="utf-8"))
+    room = next(item for item in durable["teams"] if item["id"] == "secure-room")
+    assert not [
+        item
+        for item in room["participants"]
+        if item.get("actor_id") == "bob" and item["status"] != "removed"
+    ]
+    assert restarted_store.acceptances(invite_id=invite["invite_id"]) == []
+
+
+def test_removed_member_with_pending_direct_reservation_is_not_resurrected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, keys, store, _router = _build_app(tmp_path)
+    _create_room(client, keys)
+    invite = _create_invite(client, keys, max_uses=1)
+    token = invite["invite_token"]
+    _raise_once_after_commit(monkeypatch, store, "json")
+    with pytest.raises(RuntimeError, match="json committed"):
+        client.post(
+            f"/api/team-invites/{token}/join",
+            headers=_bearer(keys, "bob"),
+            json={},
+        )
+
+    removed = client.delete(
+        "/api/teams/secure-room/participants/actor-bob",
+        headers=_bearer(keys, "alice"),
+    )
+    assert removed.status_code == 200
+    replay = client.post(
+        f"/api/team-invites/{token}/join",
+        headers=_bearer(keys, "bob"),
+        json={},
+    )
+    assert replay.status_code == 403
+    assert store.acceptances(invite_id=invite["invite_id"]) == []
+    participants = removed.json()["team"]["participants"]
+    assert not [
+        item
+        for item in participants
+        if item.get("actor_id") == "bob" and item["status"] != "removed"
+    ]
+
+
+def test_direct_join_stable_participant_conflict_returns_409(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, keys, store, _router = _build_app(tmp_path)
+    _create_room(client, keys)
+    invite = _create_invite(client, keys, max_uses=1)
+    token = invite["invite_token"]
+    _fail_once_before_membership_commit(monkeypatch)
+    with pytest.raises(RuntimeError, match="before durable commit"):
+        client.post(
+            f"/api/team-invites/{token}/join",
+            headers=_bearer(keys, "bob"),
+            json={},
+        )
+
+    state_path = tmp_path / "rooms.json"
+    durable = json.loads(state_path.read_text(encoding="utf-8"))
+    room = next(item for item in durable["teams"] if item["id"] == "secure-room")
+    owner = room["participants"][0]
+    room["participants"].append(
+        {
+            **owner,
+            "id": "legacy-bob",
+            "actor_id": "bob",
+            "display_name": "Bob legacy",
+        }
+    )
+    state_path.write_text(json.dumps(durable), encoding="utf-8")
+    client.close()
+
+    restarted, restarted_keys, restarted_store, _router = _build_app(tmp_path)
+    retry = restarted.post(
+        f"/api/team-invites/{token}/join",
+        headers=_bearer(restarted_keys, "bob"),
+        json={},
+    )
+    assert retry.status_code == 409, retry.json()
+    assert restarted_store.acceptances(invite_id=invite["invite_id"]) == []
+    assert restarted_store.find_by_token(token, tenant_id="tenant-acme")["use_count"] == 1
 
 
 def test_internal_room_binding_returns_canonical_thread_on_preview_and_join(

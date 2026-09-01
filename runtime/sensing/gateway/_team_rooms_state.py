@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -57,15 +58,20 @@ def _load_state(
     path: Path,
     *,
     legacy_tenant_for_owner: Callable[[str | None], str] | None = None,
+    strict: bool = False,
 ) -> dict[str, TeamRoomWire]:
     if not path.exists():
         return {}
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, json.JSONDecodeError) as exc:
+        if strict:
+            raise RuntimeError(f"invalid Team Room state: {path}") from exc
         return {}
     items = raw.get("teams") if isinstance(raw, dict) else raw
     if not isinstance(items, list):
+        if strict:
+            raise RuntimeError(f"invalid Team Room state payload: {path}")
         return {}
     out: dict[str, TeamRoomWire] = {}
     for item in items:
@@ -90,7 +96,9 @@ def _load_state(
             )
         try:
             team = TeamRoomWire.model_validate(clean)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as exc:
+            if strict:
+                raise RuntimeError(f"invalid Team Room entry in {path}") from exc
             continue
         out[team.id] = team
     return out
@@ -108,3 +116,75 @@ def _save_state(path: Path, teams: dict[str, TeamRoomWire]) -> None:
         encoding="utf-8",
     )
     tmp.replace(path)
+
+
+def _refresh_project_room_bindings(
+    thread_id: str,
+    *,
+    lock: Any,
+    teams: dict[str, TeamRoomWire],
+    public_room_payload: Callable[[TeamRoomWire], dict[str, Any]],
+    room_projection: Callable[[dict[str, Any]], None] | None,
+    refresh: Callable[[], None],
+) -> list[dict[str, Any]]:
+    """Refresh computed project fields without mutating canonical room state."""
+
+    canonical_thread_id = str(thread_id or "").strip()
+    if not canonical_thread_id:
+        raise ValueError("thread_id is required")
+    refresh()
+    with lock:
+        snapshots = [
+            public_room_payload(team)
+            for team in teams.values()
+            if str(team.thread_id or "").strip() == canonical_thread_id
+        ]
+    if room_projection is not None:
+        for snapshot in snapshots:
+            room_projection(dict(snapshot))
+    return snapshots
+
+
+def _team_snapshot(
+    team_id: str,
+    *,
+    lock: Any,
+    teams: dict[str, TeamRoomWire],
+    public_room_payload: Callable[[TeamRoomWire], dict[str, Any]],
+    refresh: Callable[[], None],
+) -> dict[str, Any] | None:
+    """Return one exact current room payload for saga recovery decisions."""
+
+    refresh()
+    with lock:
+        current = teams.get(team_id)
+        return public_room_payload(current) if current is not None else None
+
+
+def _team_project_helpers(
+    *,
+    lock: Any,
+    teams: dict[str, TeamRoomWire],
+    public_room_payload: Callable[[TeamRoomWire], dict[str, Any]],
+    room_projection: Callable[[dict[str, Any]], None] | None,
+    refresh: Callable[[], None],
+) -> tuple[Callable[[str], list[dict[str, Any]]], Callable[[str], dict[str, Any] | None]]:
+    """Bind project recovery helpers to one router's in-memory room state."""
+
+    return (
+        partial(
+            _refresh_project_room_bindings,
+            lock=lock,
+            teams=teams,
+            public_room_payload=public_room_payload,
+            room_projection=room_projection,
+            refresh=refresh,
+        ),
+        partial(
+            _team_snapshot,
+            lock=lock,
+            teams=teams,
+            public_room_payload=public_room_payload,
+            refresh=refresh,
+        ),
+    )

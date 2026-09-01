@@ -103,6 +103,14 @@ if FASTAPI_AVAILABLE:
         workspace_path: str = Field(default="", max_length=4_096)
         source_thread_id: str = Field(default="", max_length=512)
         source_message_id: str = Field(default="", max_length=512)
+        candidate_id: str = Field(default="", max_length=512)
+        experiment_id: str = Field(default="", max_length=512)
+
+    class CandidateCanaryOutcomeBody(BaseModel):
+        success: bool
+
+    class CandidateRollbackBody(BaseModel):
+        reason: str = Field(default="operator rollback", min_length=1, max_length=500)
 
 
 __all__ = [
@@ -112,6 +120,8 @@ __all__ = [
     "BrowserDesktopRepairRecipeRerunBatchBody",
     "BrowserDesktopRepairRecipeRerunBody",
     "BrowserDesktopStaleArtifactRejectionBody",
+    "CandidateCanaryOutcomeBody",
+    "CandidateRollbackBody",
     "DualHelixShadowRunBody",
     "DualHelixShadowSettingsBody",
     "FASTAPI_AVAILABLE",

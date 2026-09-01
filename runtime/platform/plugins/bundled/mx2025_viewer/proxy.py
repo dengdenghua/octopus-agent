@@ -7,22 +7,44 @@ the route behind two explicit local-only configuration switches as well.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import ipaddress
+import json
 import logging
 import re
 from collections.abc import AsyncIterator
 from urllib.parse import unquote, urlsplit, urlunsplit
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import APIRouter, HTTPException, Request, WebSocket
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 _logger = logging.getLogger(__name__)
 
 _REQUEST_BODY_LIMIT = 1024 * 1024
 _BODY_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
-_ALLOWED_PATH_ROOTS = frozenset({"pages", "assets", "static", "api", "img", "uni"})
+_ALLOWED_PATH_ROOTS = frozenset(
+    {"pages", "assets", "static", "api", "img", "uni", "socket.io", "3", "5"}
+)
 _ALLOWED_ROOT_FILES = frozenset({"favicon.ico", "index.html", "manifest.json"})
+_PROXY_PUBLIC_PREFIX = "/api/plugins/mx2025_viewer/origin"
+_PROXY_ASSET_VERSION = "7"
+_REWRITABLE_CONTENT_TYPES = (
+    "text/html",
+    "text/css",
+    "application/javascript",
+    "text/javascript",
+)
+_ROOT_PATH_RE = re.compile(
+    r"(?P<lead>[\"'(=:,\s])(?P<slash>/?)"
+    r"(?P<root>assets|static|api|img|uni|pages|socket\.io|3|5)"
+    r"(?P<tail>/|(?=[\"']))"
+)
+_REWRITTEN_ASSET_RE = re.compile(
+    re.escape(f"{_PROXY_PUBLIC_PREFIX.lstrip('/')}/assets/") + r"[^\"'\s>,\]]+"
+)
+_RELATIVE_JS_MODULE_RE = re.compile(r"(?P<quote>[\"'])\./(?P<path>[^\"'?\s]+\.js)(?P=quote)")
 
 _FORWARDED_REQUEST_HEADERS = frozenset(
     {
@@ -34,6 +56,12 @@ _FORWARDED_REQUEST_HEADERS = frozenset(
         "if-modified-since",
         "if-none-match",
         "range",
+        # MX application headers. ``authorization`` and ``cookie`` remain
+        # forbidden so Octopus host credentials can never cross this boundary.
+        "token",
+        "ad",
+        "version",
+        "i",
         "user-agent",
     }
 )
@@ -151,6 +179,11 @@ def _safe_upstream_path(raw: str) -> str | None:
     clean = decoded.strip().lstrip("/")
     if not clean:
         return ""
+    trailing_slash = clean.endswith("/")
+    if trailing_slash:
+        clean = clean.rstrip("/")
+        if not clean:
+            return ""
     if "\\" in clean or "?" in clean or "#" in clean:
         return None
     if any(ord(ch) < 32 for ch in clean):
@@ -160,8 +193,8 @@ def _safe_upstream_path(raw: str) -> str | None:
         return None
     root = segments[0]
     if len(segments) == 1 and root in _ALLOWED_ROOT_FILES:
-        return clean
-    return clean if root in _ALLOWED_PATH_ROOTS else None
+        return clean + ("/" if trailing_slash else "")
+    return clean + ("/" if trailing_slash else "") if root in _ALLOWED_PATH_ROOTS else None
 
 
 async def _bounded_request_body(request: Request) -> bytes:
@@ -213,6 +246,75 @@ def _response_headers(response: httpx.Response) -> dict[str, str]:
     return headers
 
 
+def _rewrite_proxy_root_paths(body: bytes, content_type: str) -> bytes:
+    """Keep root-relative upstream assets/API calls inside the proxy prefix.
+
+    MX's SPA emits absolute paths such as ``/assets/app.js`` and ``/3/api``.
+    Without rewriting, a nested plugin page sends those requests to Octopus's
+    root and the application renders blank. Only executable/style documents
+    are transformed; encrypted API payloads and user content remain untouched.
+    """
+    if not any(kind in content_type.lower() for kind in _REWRITABLE_CONTENT_TYPES):
+        return body
+    try:
+        text = body.decode("utf-8")
+    except UnicodeDecodeError:
+        return body
+
+    lowered_type = content_type.lower()
+    allowed_roots = {"assets", "static", "img", "uni"}
+    if "javascript" in lowered_type:
+        # /api/* and /pages/* are route arguments joined onto Ex/kx or handled
+        # by uni-app's client router. Only the API host prefixes are external.
+        allowed_roots.update({"socket.io", "3", "5"})
+
+    def replace(match: re.Match[str]) -> str:
+        if match.group("root") not in allowed_roots:
+            return match.group(0)
+        # Vite's preload table stores relative ``assets/*`` entries and adds
+        # its own leading slash at runtime. Preserve that contract to avoid a
+        # protocol-relative ``//api/...`` URL; true root paths remain absolute.
+        public_prefix = _PROXY_PUBLIC_PREFIX
+        if "javascript" in lowered_type and not match.group("slash"):
+            public_prefix = public_prefix.lstrip("/")
+        return f"{match.group('lead')}{public_prefix}/{match.group('root')}{match.group('tail')}"
+
+    rewritten = _ROOT_PATH_RE.sub(replace, text)
+    if "javascript" in lowered_type:
+        rewritten = _RELATIVE_JS_MODULE_RE.sub(
+            lambda match: (
+                f"{match.group('quote')}./{match.group('path')}"
+                f"?octopus_proxy={_PROXY_ASSET_VERSION}{match.group('quote')}"
+            ),
+            rewritten,
+        )
+    if "text/html" in lowered_type or "javascript" in lowered_type:
+        rewritten = _REWRITTEN_ASSET_RE.sub(
+            lambda match: (
+                match.group(0)
+                if "?" in match.group(0)
+                else f"{match.group(0)}?octopus_proxy={_PROXY_ASSET_VERSION}"
+            ),
+            rewritten,
+        )
+    return rewritten.encode("utf-8")
+
+
+def _rewrite_login_host(body: bytes) -> bytes:
+    """Route the post-login shard (usually ``/5``) back through the proxy."""
+    try:
+        payload = json.loads(body)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return body
+    if not isinstance(payload, dict):
+        return body
+    host = payload.get("hosturl")
+    if host not in {"/3", "/5"}:
+        return body
+    payload["hosturl"] = f"{_PROXY_PUBLIC_PREFIX}{host}"
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+
 def register_origin_proxy(
     router: APIRouter,
     *,
@@ -224,6 +326,80 @@ def register_origin_proxy(
     if not origin:
         _logger.warning("mx2025_viewer proxy rejected: upstream must be a valid HTTPS URL")
         return False
+
+    @router.websocket("/origin/socket.io/")
+    async def proxy_websocket(websocket: WebSocket) -> None:
+        """Bridge the upstream Socket.IO transport without exposing host auth."""
+        local_origin = websocket.headers.get("origin", "")
+        local_host = websocket.headers.get("host", "")
+        if local_origin not in {f"http://{local_host}", f"https://{local_host}"}:
+            await websocket.close(code=1008)
+            return
+
+        parsed = urlsplit(origin)
+        upstream_ws = urlunsplit(
+            (
+                "wss",
+                parsed.netloc,
+                f"{parsed.path}/socket.io/" if parsed.path else "/socket.io/",
+                str(websocket.query_params),
+                "",
+            )
+        )
+        upstream_origin = urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+
+        try:
+            import websockets
+
+            upstream = await websockets.connect(
+                upstream_ws,
+                origin=upstream_origin,
+                compression=None,
+                proxy=None,
+                ping_interval=None,
+                open_timeout=10,
+            )
+        except Exception as exc:  # noqa: BLE001 — fail closed at the WS boundary
+            _logger.warning("mx2025_viewer websocket unavailable (%s)", type(exc).__name__)
+            await websocket.close(code=1013)
+            return
+
+        await websocket.accept()
+
+        async def browser_to_upstream() -> None:
+            while True:
+                packet = await websocket.receive()
+                if packet.get("type") == "websocket.disconnect":
+                    return
+                if packet.get("text") is not None:
+                    await upstream.send(packet["text"])
+                elif packet.get("bytes") is not None:
+                    await upstream.send(packet["bytes"])
+
+        async def upstream_to_browser() -> None:
+            async for packet in upstream:
+                if isinstance(packet, bytes):
+                    await websocket.send_bytes(packet)
+                else:
+                    await websocket.send_text(packet)
+
+        tasks = {
+            asyncio.create_task(browser_to_upstream()),
+            asyncio.create_task(upstream_to_browser()),
+        }
+        try:
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in pending:
+                task.cancel()
+            for task in done:
+                with contextlib.suppress(Exception):
+                    task.result()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+        finally:
+            await upstream.close()
+            with contextlib.suppress(RuntimeError):
+                await websocket.close(code=1000)
 
     async def proxy_http(request: Request, upstream_path: str):
         safe_path = _safe_upstream_path(upstream_path)
@@ -260,6 +436,48 @@ def register_origin_proxy(
                 {"detail": "MX upstream temporarily unavailable"},
                 status_code=503,
                 headers={"Retry-After": "10", **_SECURITY_RESPONSE_HEADERS},
+            )
+
+        content_type = upstream_resp.headers.get("content-type", "")
+        if "application/json" in content_type.lower() and safe_path in {
+            "api/login",
+            "3/api/login",
+            "5/api/login",
+        }:
+            try:
+                login_body = _rewrite_login_host(await upstream_resp.aread())
+            finally:
+                await upstream_resp.aclose()
+                if owns_client:
+                    await client.aclose()
+            login_headers = _response_headers(upstream_resp)
+            login_headers.pop("content-encoding", None)
+            login_headers.pop("content-length", None)
+            return Response(
+                login_body,
+                status_code=upstream_resp.status_code,
+                headers=login_headers,
+                media_type=None,
+            )
+        if any(kind in content_type.lower() for kind in _REWRITABLE_CONTENT_TYPES):
+            try:
+                rewritten_body = _rewrite_proxy_root_paths(
+                    await upstream_resp.aread(),
+                    content_type,
+                )
+            finally:
+                await upstream_resp.aclose()
+                if owns_client:
+                    await client.aclose()
+            rewritten_headers = _response_headers(upstream_resp)
+            rewritten_headers.pop("content-encoding", None)
+            rewritten_headers.pop("content-length", None)
+            rewritten_headers["Cache-Control"] = "no-store"
+            return Response(
+                rewritten_body,
+                status_code=upstream_resp.status_code,
+                headers=rewritten_headers,
+                media_type=None,
             )
 
         # Mock/custom transports may return an already-buffered response even

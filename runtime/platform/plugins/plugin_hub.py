@@ -22,6 +22,7 @@ compatibility with legacy ``OctopusPlugin``-based plugins.
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import json
 import logging
 import sys
@@ -30,6 +31,8 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
+from runtime.platform.io import atomic_write_json
+from runtime.platform.plugins.contribution_registry import ContributionRegistry
 from runtime.platform.plugins.plugin_base import ModuleContext, ModulePlugin
 from runtime.platform.plugins.workbench_activation import WorkbenchActivationStore
 
@@ -49,6 +52,26 @@ _LOG = logging.getLogger("octopus.platform.plugin_hub")
 # Default plugin directory
 _DEFAULT_PLUGIN_DIR = Path.home() / ".octopus" / "plugins"
 _DEFAULT_BUNDLED_PLUGIN_DIR = Path(__file__).resolve().parent / "bundled"
+_EXTERNAL_STATE_SCHEMA = "octopus.external_plugin_runtime_state.v1"
+
+
+def _normalize_manifest_identity(data: dict[str, Any]) -> dict[str, Any]:
+    """Return a public manifest using current Octopus contribution names.
+
+    Early plugin builds used ``contributes.dsh``. Accept that key as an input
+    alias so installed plugins remain loadable, but never expose it through the
+    current PluginHub API. When both keys exist, the explicit current
+    ``octopus`` declaration wins.
+    """
+
+    normalized = dict(data)
+    contributes = normalized.get("contributes")
+    if isinstance(contributes, dict) and "dsh" in contributes:
+        current = dict(contributes)
+        legacy = current.pop("dsh")
+        current.setdefault("octopus", legacy)
+        normalized["contributes"] = current
+    return normalized
 
 
 class PluginHub:
@@ -84,6 +107,11 @@ class PluginHub:
         fastapi_app: Any = None,
         event_bus: Any = None,
         service_bus: Any = None,
+        tool_registry: Any = None,
+        prompt_registry: Any = None,
+        hook_registry: Any = None,
+        jobs_registry: Any = None,
+        contribution_registry: ContributionRegistry | None = None,
         activation_root: str | Path | None = None,
         data_root: str | Path | None = None,
     ) -> None:
@@ -107,11 +135,17 @@ class PluginHub:
         self._fastapi_app = fastapi_app
         self._event_bus = event_bus
         self._service_bus = service_bus
+        self._tool_registry = tool_registry
+        self._prompt_registry = prompt_registry
+        self._hook_registry = hook_registry
+        self._jobs_registry = jobs_registry
+        self._contribution_registry = contribution_registry or ContributionRegistry()
         self._activation_store = WorkbenchActivationStore(
             root=activation_root,
             data_root=data_root,
             factory_root=self._bundled_dir or _DEFAULT_BUNDLED_PLUGIN_DIR,
         )
+        self._external_state_path = self._dir / "workbench" / ".runtime-state.json"
 
         # Loaded plugin instances: name -> ModulePlugin
         self._plugins: dict[str, ModulePlugin] = {}
@@ -124,6 +158,10 @@ class PluginHub:
         self._plugin_routes: dict[str, list[Any]] = {}
         # Plugins whose on_start hook completed.
         self._started: set[str] = set()
+        # External plugins use top-level import names for backward
+        # compatibility. Track them so disable/reload never reuses stale code
+        # from ``sys.modules`` (or a same-named plugin from another root).
+        self._external_module_names: set[str] = set()
         # Internal lock for thread safety
         self._lock_internal = threading.RLock()
 
@@ -145,6 +183,12 @@ class PluginHub:
                 manifest_data = self._read_manifest_file(item)
                 if manifest_data is None:
                     continue
+                # Remote-only source trees remain available to the content-pack
+                # builder but must never execute from the immutable host build.
+                # Once installed under plugins/workbench they are ordinary
+                # external plugins and are discovered normally.
+                if bundled and manifest_data.get("delivery") == "remote":
+                    continue
                 pname = manifest_data.get("name", item.name)
                 if pname in seen:
                     continue
@@ -154,11 +198,13 @@ class PluginHub:
                 display = str(manifest_data.get("display_name") or "").strip()
                 if bundled and self._activation_store.is_factory(pname):
                     activation = self._activation_store.state(pname)
+                elif not bundled:
+                    activation = self._external_activation(pname)
                 else:
                     activation = {
                         "installed": True,
                         "enabled": True,
-                        "source": "bundled" if bundled else "external",
+                        "source": "bundled",
                         "activation_path": None,
                         "data_path": None,
                         "recoveries": [],
@@ -264,10 +310,27 @@ class PluginHub:
                     if not init_file.exists():
                         _LOG.warning("Plugin %s missing __init__.py", name)
                         return None
-                    import_root = str(plugin_dir.parent)
-                    if import_root not in sys.path:
-                        sys.path.insert(0, import_root)
-                    mod = importlib.import_module(name)
+                    self._evict_external_module(name)
+                    # Package ids are user-facing archive/directory names and
+                    # may legitimately contain a dash (for example
+                    # ``paper-trading``), while Python runtime ids cannot.
+                    # Load the package from its validated manifest path under
+                    # the runtime id instead of assuming both ids are equal.
+                    external_spec = importlib.util.spec_from_file_location(
+                        name,
+                        init_file,
+                        submodule_search_locations=[str(plugin_dir)],
+                    )
+                    if external_spec is None or external_spec.loader is None:
+                        raise ImportError(f"cannot create import spec for plugin: {name}")
+                    mod = importlib.util.module_from_spec(external_spec)
+                    sys.modules[name] = mod
+                    self._external_module_names.add(name)
+                    try:
+                        external_spec.loader.exec_module(mod)
+                    except Exception:
+                        self._evict_external_module(name)
+                        raise
             except Exception as exc:
                 _LOG.error("Failed to import plugin %s: %s", name, exc)
                 return None
@@ -299,6 +362,9 @@ class PluginHub:
                 config_schema=manifest_data.get("config_schema", {}),
                 subscribes=manifest_data.get("subscribes", []),
                 provides=manifest_data.get("provides", []),
+                contributes=manifest_data.get("contributes", {}),
+                permissions=manifest_data.get("permissions", []),
+                host_api=manifest_data.get("host_api"),
                 # Composition layer: a plugin may declare the services it
                 # consumes. ``consumes`` is the canonical new key; legacy
                 # ``requires`` is accepted for compatibility.
@@ -331,6 +397,11 @@ class PluginHub:
                 fastapi_app=self._fastapi_app,
                 event_bus=self._event_bus,
                 service_bus=self._service_bus,
+                tool_registry=self._tool_registry,
+                prompt_registry=self._prompt_registry,
+                hook_registry=self._hook_registry,
+                jobs_registry=self._jobs_registry,
+                contribution_registry=self._contribution_registry,
                 config=effective_config,
             )
 
@@ -426,11 +497,7 @@ class PluginHub:
             resolve_load_order,
         )
 
-        discovered = [
-            item
-            for item in self.discover()
-            if item["installed"] and item["enabled"]
-        ]
+        discovered = [item for item in self.discover() if item["installed"] and item["enabled"]]
         manifests: list[BlockManifest] = []
         for item in discovered:
             manifest_data = self._read_manifest_file(Path(item["dir"]))
@@ -444,6 +511,9 @@ class PluginHub:
                 config_schema=manifest_data.get("config_schema", {}),
                 subscribes=manifest_data.get("subscribes", []),
                 provides=manifest_data.get("provides", []),
+                contributes=manifest_data.get("contributes", {}),
+                permissions=manifest_data.get("permissions", []),
+                host_api=manifest_data.get("host_api"),
                 requires=manifest_data.get("consumes", manifest_data.get("requires", [])),
             )
             try:
@@ -516,6 +586,7 @@ class PluginHub:
             self._routers.pop(name, None)
             self._remove_plugin_routes(name)
             self._started.discard(name)
+            self._evict_external_module(name)
 
         _LOG.info("Plugin unloaded: %s", name)
         return True
@@ -635,6 +706,16 @@ class PluginHub:
         """Persist enablement and make the plugin live without a restart."""
 
         with self._lock_internal:
+            # A source checkout may contain a legacy factory activation entry
+            # for a workbench whose reviewed package is delivered remotely.
+            # Once that package is installed under the external plugin root,
+            # its manifest is authoritative and it must use the external
+            # lifecycle instead of the immutable factory lifecycle.
+            candidate = next((item for item in self.discover() if item["id"] == name), None)
+            if candidate is not None and not candidate.get("bundled"):
+                return self._enable_external_plugin(name)
+            if not self._activation_store.is_factory(name):
+                return self._enable_external_plugin(name)
             self._require_factory_plugin(name)
             previous = self._activation_store.state(name)
             result = self._activation_store.enable(name)
@@ -650,6 +731,13 @@ class PluginHub:
         """Stop/unload a plugin and persist its disabled state."""
 
         with self._lock_internal:
+            # See ``enable_plugin``: an installed remote package wins over a
+            # stale bundled factory registration with the same runtime id.
+            candidate = next((item for item in self.discover() if item["id"] == name), None)
+            if candidate is not None and not candidate.get("bundled"):
+                return self._disable_external_plugin(name)
+            if not self._activation_store.is_factory(name):
+                return self._disable_external_plugin(name)
             self._require_factory_plugin(name)
             state = self._activation_store.state(name)
             if not state["installed"]:
@@ -667,6 +755,106 @@ class PluginHub:
                         self.start(name)
                 raise
             return self._lifecycle_result(name, result)
+
+    def _enable_external_plugin(self, name: str) -> dict[str, Any]:
+        candidate = next(
+            (item for item in self.discover() if item["id"] == name and not item["bundled"]),
+            None,
+        )
+        if candidate is None:
+            raise KeyError(f"external plugin is unavailable: {name}")
+        previous = self._external_activation(name)
+        self._write_external_enabled(name, True)
+        try:
+            self._activate_runtime(name)
+        except Exception:
+            self.unload(name)
+            self._write_external_enabled(name, bool(previous["enabled"]))
+            raise
+        return self._external_lifecycle_result(name)
+
+    def _disable_external_plugin(self, name: str) -> dict[str, Any]:
+        candidate = next(
+            (item for item in self.discover() if item["id"] == name and not item["bundled"]),
+            None,
+        )
+        if candidate is None:
+            raise KeyError(f"external plugin is unavailable: {name}")
+        previous = self._external_activation(name)
+        was_loaded = name in self._plugins
+        was_started = name in self._started
+        if was_loaded:
+            self.unload(name)
+        try:
+            self._write_external_enabled(name, False)
+        except Exception:
+            self._write_external_enabled(name, bool(previous["enabled"]))
+            if was_loaded:
+                self.load(name)
+                if was_started:
+                    self.start(name)
+            raise
+        return self._external_lifecycle_result(name)
+
+    def _external_lifecycle_result(self, name: str) -> dict[str, Any]:
+        state = self._external_activation(name)
+        return {
+            "ok": True,
+            "plugin_id": name,
+            "installed": True,
+            "enabled": bool(state["enabled"]),
+            "loaded": name in self._plugins,
+            "started": name in self._started,
+            "source": "external",
+            "activation_path": str(self._external_state_path),
+            "recoveries": [],
+            "restart_required": False,
+        }
+
+    def _external_activation(self, name: str) -> dict[str, Any]:
+        enabled = True
+        error = None
+        if self._external_state_path.exists():
+            try:
+                payload = json.loads(self._external_state_path.read_text(encoding="utf-8"))
+                if (
+                    not isinstance(payload, dict)
+                    or payload.get("schema") != _EXTERNAL_STATE_SCHEMA
+                    or not isinstance(payload.get("plugins"), dict)
+                ):
+                    raise ValueError("unsupported state schema")
+                row = payload["plugins"].get(name)
+                if isinstance(row, dict) and "enabled" in row:
+                    enabled = row.get("enabled") is True
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+                enabled = False
+                error = "invalid_external_runtime_state"
+        return {
+            "installed": True,
+            "enabled": enabled,
+            "source": "external",
+            "activation_path": str(self._external_state_path),
+            "data_path": None,
+            "recoveries": [],
+            "error": error,
+        }
+
+    def _write_external_enabled(self, name: str, enabled: bool) -> None:
+        payload: dict[str, Any] = {"schema": _EXTERNAL_STATE_SCHEMA, "plugins": {}}
+        if self._external_state_path.exists():
+            try:
+                current = json.loads(self._external_state_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                current = None
+            if (
+                isinstance(current, dict)
+                and current.get("schema") == _EXTERNAL_STATE_SCHEMA
+                and isinstance(current.get("plugins"), dict)
+            ):
+                payload = current
+        payload["plugins"][name] = {"enabled": bool(enabled)}
+        self._external_state_path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(self._external_state_path, payload, sort_keys=True)
 
     def uninstall_plugin(
         self,
@@ -778,6 +966,13 @@ class PluginHub:
     def get_plugin(self, name: str) -> ModulePlugin | None:
         return self._plugins.get(name)
 
+    def is_started(self, name: str) -> bool:
+        return name in self._started
+
+    @property
+    def contribution_registry(self) -> ContributionRegistry:
+        return self._contribution_registry
+
     def list_plugins(self) -> list[dict[str, Any]]:
         """Return discovered plugins, including unloaded lifecycle state."""
         result: list[dict[str, Any]] = []
@@ -791,12 +986,19 @@ class PluginHub:
                     caps.append({"type": c.type, "name": c.name, "description": c.description})
             if not discovered["installed"]:
                 lifecycle_state = "uninstalled"
+                unified_lifecycle_state = "available"
             elif not discovered["enabled"]:
                 lifecycle_state = "disabled"
+                unified_lifecycle_state = "disabled"
             elif instance is None:
                 lifecycle_state = "installed"
+                unified_lifecycle_state = "installed"
             else:
                 lifecycle_state = "active"
+                unified_lifecycle_state = "enabled"
+            if discovered.get("activation_error"):
+                unified_lifecycle_state = "broken"
+            manifest_data = self._read_manifest_file(Path(discovered["dir"])) or {}
             result.append(
                 {
                     **discovered,
@@ -828,9 +1030,9 @@ class PluginHub:
                     "config_schema": (
                         ctx.manifest.config_schema
                         if ctx
-                        else (
-                            self._read_manifest_file(Path(discovered["dir"])) or {}
-                        ).get("config_schema", {})
+                        else (self._read_manifest_file(Path(discovered["dir"])) or {}).get(
+                            "config_schema", {}
+                        )
                     ),
                     "config_ui": instance.config_ui_component if instance else None,
                     "loaded": instance is not None,
@@ -839,6 +1041,17 @@ class PluginHub:
                     "dir": ctx.plugin_dir if ctx else discovered["dir"],
                     "dependencies": getattr(instance, "dependencies", []) if instance else [],
                     "state": lifecycle_state,
+                    "lifecycle_state": unified_lifecycle_state,
+                    "contributes": (
+                        ctx.manifest.contributes if ctx else manifest_data.get("contributes", {})
+                    ),
+                    "permissions": (
+                        ctx.manifest.permissions if ctx else manifest_data.get("permissions", [])
+                    ),
+                    "host_api": (ctx.manifest.host_api if ctx else manifest_data.get("host_api")),
+                    "runtime_contributions": [
+                        row.to_public() for row in self._contribution_registry.list(owner=pname)
+                    ],
                 }
             )
         return result
@@ -899,13 +1112,30 @@ class PluginHub:
         self._contexts.pop(name, None)
         self._plugins.pop(name, None)
         self._started.discard(name)
+        self._evict_external_module(name)
 
     def _plugin_roots(self) -> list[tuple[Path, bool]]:
         roots: list[tuple[Path, bool]] = []
+        roots.append((self._dir / "workbench", False))
+        roots.append((self._dir, False))
         if self._bundled_dir is not None:
             roots.append((self._bundled_dir, True))
-        roots.append((self._dir, False))
         return roots
+
+    def _evict_external_module(self, name: str) -> None:
+        """Forget one external plugin generation and all its submodules."""
+
+        if name not in self._external_module_names and name not in sys.modules:
+            return
+        prefix = f"{name}."
+        for module_name in [
+            module_name
+            for module_name in sys.modules
+            if module_name == name or module_name.startswith(prefix)
+        ]:
+            sys.modules.pop(module_name, None)
+        self._external_module_names.discard(name)
+        importlib.invalidate_caches()
 
     def _resolve_plugin_dir(self, name: str) -> Path | None:
         for item in self.discover():
@@ -927,7 +1157,7 @@ class PluginHub:
                     else:
                         data = json.loads(raw)
                     if isinstance(data, dict):
-                        return data
+                        return _normalize_manifest_identity(data)
                 except Exception as exc:
                     _LOG.debug("Failed to parse %s: %s", path, exc)
         return None

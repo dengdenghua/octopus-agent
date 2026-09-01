@@ -22,6 +22,9 @@ import logging
 from collections.abc import Callable, Generator
 from typing import Any
 
+from runtime.core.cerebrum.react_auto_inspect import (
+    _try_auto_project_inspection_salvage,
+)
 from runtime.core.cerebrum.react_auto_verify import (
     _try_auto_verification_salvage,
 )
@@ -434,6 +437,21 @@ def _phase_6c_parse_and_guard(
                     steps.append(step)
                     return _LoopControl.BREAK
                 _guard_label, _guard_message = _guard_hit
+                _auto_inspect_step = _try_auto_project_inspection_salvage(
+                    _guard_label,
+                    text,
+                    steps,
+                    iteration=i + 1,
+                    tools_active=tools_active,
+                )
+                if _auto_inspect_step is not None:
+                    step.thought = _auto_inspect_step.thought
+                    step.public_update = _auto_inspect_step.public_update
+                    step.action = _auto_inspect_step.action
+                    step.actions = _auto_inspect_step.actions
+                    _final_stream_started = False
+                    maybe_final = None
+                    return _LoopControl.CONTINUE
                 _guard_outcome = _guard_rejection_outcome(_guard_impasse_state, _guard_label, steps)
                 if _guard_outcome == "hard_stop":
                     _auto_verify_step = _try_auto_verification_salvage(
@@ -618,6 +636,21 @@ def _phase_6c_parse_and_guard(
                             steps.append(step)
                             return _LoopControl.BREAK
                         _guard_label, _guard_message = _guard_hit
+                        _auto_inspect_step = _try_auto_project_inspection_salvage(
+                            _guard_label,
+                            text,
+                            steps,
+                            iteration=i + 1,
+                            tools_active=tools_active,
+                        )
+                        if _auto_inspect_step is not None:
+                            step.thought = _auto_inspect_step.thought
+                            step.public_update = _auto_inspect_step.public_update
+                            step.action = _auto_inspect_step.action
+                            step.actions = _auto_inspect_step.actions
+                            _final_stream_started = False
+                            maybe_final = None
+                            return _LoopControl.CONTINUE
                         _guard_outcome = _guard_rejection_outcome(
                             _guard_impasse_state, _guard_label, steps
                         )

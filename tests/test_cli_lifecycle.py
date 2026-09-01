@@ -97,6 +97,51 @@ def test_run_init_executes(monkeypatch):
     assert captured["cmd"][-1] == "xparse-cli"
 
 
+def test_detect_command_uses_declared_executable_only_when_called(tmp_path):
+    executable = tmp_path / "opencode"
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    executable.chmod(0o755)
+
+    result = cli_lifecycle.detect_command(
+        _conn({"detect": {"commands": [str(executable), "opencode"]}})
+    )
+
+    assert result == {
+        "found": True,
+        "command": str(executable),
+        "executable": str(executable.resolve()),
+    }
+
+
+def test_run_init_skips_install_when_declared_cli_already_exists(monkeypatch):
+    monkeypatch.setattr(
+        cli_lifecycle,
+        "detect_command",
+        lambda conn: {
+            "found": True,
+            "command": "opencode",
+            "executable": "/tmp/bin/opencode",
+        },
+    )
+
+    def unexpected_run(*args, **kwargs):  # noqa: ARG001
+        raise AssertionError("init command should not run")
+
+    monkeypatch.setattr(cli_lifecycle.subprocess, "run", unexpected_run)
+    result = cli_lifecycle.run_init(
+        _conn(
+            {
+                "detect": {"commands": ["opencode"]},
+                "initIfMissing": True,
+                "init": "npm install -g opencode-ai@latest",
+            }
+        )
+    )
+
+    assert result["ok"] is True
+    assert result["reason"] == "already_installed"
+
+
 def test_runtime_node_missing(monkeypatch):
     def fake_run(cmd, *a, **k):  # noqa: ARG001
         raise FileNotFoundError("node")
@@ -171,8 +216,9 @@ def test_start_device_flow_returns_uri(monkeypatch, tmp_path):
     assert df["verification_uri"] == "https://api.textin.com/auth?code=ABCD-EFGH"
     assert df["user_code"] == "ABCD-EFGH"
     assert df["code_embedded_in_uri"] is True
+    assert df["flow_id"]
     # cancel 清理
-    orch.cancel_device_flow(conn)
+    orch.cancel_device_flow(conn, expected_flow_id=df["flow_id"])
     assert orch.device_flow_status(conn)["active"] is False
 
 

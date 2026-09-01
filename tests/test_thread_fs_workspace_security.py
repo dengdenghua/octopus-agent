@@ -392,7 +392,10 @@ def test_authenticated_thread_delete_removes_verified_managed_workspace(
     deleted = client.delete(f"/api/threads/{thread_id}", headers=headers)
 
     assert deleted.status_code == 204, deleted.text
-    assert store.get(thread_id) is None
+    from runtime.memory.threads import ThreadPermanentlyDeletedError
+
+    with pytest.raises(ThreadPermanentlyDeletedError):
+        store.get(thread_id)
     assert not workspace.exists()
     assert list_threads(logs_root)[0].archived is True
 
@@ -472,7 +475,9 @@ def test_authenticated_thread_workspace_cleanup_failure_is_retryable(
     failed = client.delete(f"/api/threads/{thread_id}", headers=headers)
 
     assert failed.status_code == 503
-    persisted = store.get(thread_id)
+    lease = store.thread_delete_lease(thread_id)
+    assert lease is not None
+    persisted = store.thread_for_permanent_delete(thread_id, lease.token)
     assert persisted is not None
     assert persisted["metadata"][MANAGED_WORKSPACE_DELETION_KEY] == (
         MANAGED_WORKSPACE_DELETION_MARKER
@@ -495,7 +500,10 @@ def test_authenticated_thread_workspace_cleanup_failure_is_retryable(
 
     retried = client.delete(f"/api/threads/{thread_id}", headers=headers)
     assert retried.status_code == 204, retried.text
-    assert store.get(thread_id) is None
+    from runtime.memory.threads import ThreadPermanentlyDeletedError
+
+    with pytest.raises(ThreadPermanentlyDeletedError):
+        store.get(thread_id)
     assert not workspace.exists()
     assert not list((workspace_root / ".trash").glob("*/*/*/workspace"))
 
@@ -504,11 +512,11 @@ def test_authenticated_thread_state_delete_failure_is_retryable(tmp_path: Path) 
     class _FailOnceDeleteStore(ThreadStateStore):
         failures = 1
 
-        def delete_if_unchanged(self, thread_id: str, expected: dict) -> bool:
+        def finalize_permanent_delete(self, thread_id: str, token: str) -> bool:
             if self.failures:
                 self.failures -= 1
                 raise OSError("injected durable delete failure")
-            return super().delete_if_unchanged(thread_id, expected)
+            return super().finalize_permanent_delete(thread_id, token)
 
     store = _FailOnceDeleteStore()
     client, _workspace_root, headers = _auth_thread_client(tmp_path, store)
@@ -520,7 +528,9 @@ def test_authenticated_thread_state_delete_failure_is_retryable(tmp_path: Path) 
 
     failed = client.delete(f"/api/threads/{thread_id}", headers=headers)
     assert failed.status_code == 503
-    persisted = store.get(thread_id)
+    lease = store.thread_delete_lease(thread_id)
+    assert lease is not None
+    persisted = store.thread_for_permanent_delete(thread_id, lease.token)
     assert persisted is not None
     assert persisted["metadata"][MANAGED_WORKSPACE_DELETION_KEY] == (
         MANAGED_WORKSPACE_DELETION_MARKER
@@ -529,7 +539,10 @@ def test_authenticated_thread_state_delete_failure_is_retryable(tmp_path: Path) 
 
     retried = client.delete(f"/api/threads/{thread_id}", headers=headers)
     assert retried.status_code == 204, retried.text
-    assert store.get(thread_id) is None
+    from runtime.memory.threads import ThreadPermanentlyDeletedError
+
+    with pytest.raises(ThreadPermanentlyDeletedError):
+        store.get(thread_id)
 
 
 def test_authenticated_fs_rejects_forged_managed_marker(
@@ -580,6 +593,185 @@ def test_anonymous_local_thread_keeps_user_selected_workspace(tmp_path: Path) ->
     )
     assert read.status_code == 200
     assert read.json()["content"] == "local"
+
+
+def test_authenticated_loopback_thread_keeps_owned_user_workspace(tmp_path: Path) -> None:
+    identities = IdentityStore()
+    identities.add(
+        Identity(actor_id="alice", metadata={"tenant_id": "tenant-a"}),
+        api_key_plaintext="sk-alice",
+    )
+    identities.add(
+        Identity(actor_id="bob", metadata={"tenant_id": "tenant-a"}),
+        api_key_plaintext="sk-bob",
+    )
+    store = ThreadStateStore()
+    app = FastAPI()
+    app.include_router(
+        create_thread_state_router(
+            store=store,
+            identity_store=identities,
+            require_auth=True,
+            allow_local_workspace_access=True,
+        )
+    )
+    app.include_router(
+        create_fs_router(
+            thread_store=store,
+            identity_store=identities,
+            require_auth=True,
+            allow_local_workspace_access=True,
+        )
+    )
+    client = TestClient(app)
+    local_file = tmp_path / "local-auth.txt"
+    local_file.write_text("owned local workspace", encoding="utf-8")
+
+    created = client.post(
+        "/api/threads",
+        headers={"Authorization": "Bearer sk-alice"},
+        json={"metadata": {"workspace_path": str(tmp_path)}},
+    )
+
+    assert created.status_code == 200
+    thread_id = created.json()["thread_id"]
+    metadata = created.json()["metadata"]
+    assert metadata["workspace_path"] == str(tmp_path)
+    assert metadata["owner_actor_id"] == "alice"
+    assert metadata["tenant_id"] == "tenant-a"
+    assert MANAGED_WORKSPACE_METADATA_KEY not in metadata
+
+    owned_read = client.get(
+        "/api/fs/read",
+        headers={"Authorization": "Bearer sk-alice"},
+        params={"thread_id": thread_id, "path": str(local_file)},
+    )
+    foreign_read = client.get(
+        "/api/fs/read",
+        headers={"Authorization": "Bearer sk-bob"},
+        params={"thread_id": thread_id, "path": str(local_file)},
+    )
+
+    assert owned_read.status_code == 200
+    assert owned_read.json()["content"] == "owned local workspace"
+    assert foreign_read.status_code == 404
+
+
+def test_authenticated_loopback_realtime_preserves_selected_workspace(tmp_path: Path) -> None:
+    from runtime.platform.runtime_policy.workspaces import WorkspaceManager
+    from runtime.protocol import TurnParams
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+    from runtime.sensing.gateway.realtime_turn_input import _build_intent
+
+    selected = tmp_path / "selected"
+    selected.mkdir()
+    manager = WorkspaceManager(tmp_path / "managed")
+    store = ThreadStateStore()
+    gateway = RealtimeGateway(
+        runtime=SimpleNamespace(),
+        allow_local_workspace_access=True,
+    )
+    raw = gateway._sanitize_turn_params(
+        {
+            "threadId": "local-realtime-thread",
+            "cwd": str(selected),
+            "input": [
+                {
+                    "type": "text",
+                    "text": "inspect the project",
+                    "metadata": {
+                        "context": {
+                            "mode": "code",
+                            "workspace_path": str(selected),
+                            "allowed_write_paths": ["/etc"],
+                            "attachment_read_roots": ["/etc"],
+                        }
+                    },
+                }
+            ],
+        },
+        SimpleNamespace(actor_id="alice", tenant_id="tenant-a"),
+    )
+    params = TurnParams.model_validate(raw)
+
+    intent = _build_intent(
+        "inspect the project",
+        params,
+        workspaces=manager,
+        thread_store=store,
+        allow_local_workspace_access=True,
+    )
+
+    context = intent.user_context
+    assert context["cwd"] == str(selected)
+    assert context["workspace_path"] == str(selected)
+    assert context["workspace_scope"] == "project"
+    assert context["owner_actor_id"] == "alice"
+    assert context["tenant_id"] == "tenant-a"
+    assert "allowed_write_paths" not in context
+    assert "attachment_read_roots" not in context
+    assert store.get("local-realtime-thread") is None
+
+
+def test_authenticated_loopback_realtime_recovers_context_only_workspace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Current/legacy browsers may carry the picker result only in context.
+
+    An authenticated loopback desktop selection is still authoritative for
+    this local process, even when the selected repository is outside the
+    backend checkout and process-wide anonymous filesystem roots.
+    """
+
+    from runtime.platform.runtime_policy.workspaces import WorkspaceManager
+    from runtime.protocol import TurnParams
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+    from runtime.sensing.gateway.realtime_turn_input import _build_intent
+
+    selected = tmp_path / "sibling-project"
+    selected.mkdir()
+    unrelated_allowed_root = tmp_path / "anonymous-root"
+    unrelated_allowed_root.mkdir()
+    monkeypatch.setenv("OCTOPUS_FS_ALLOWED_ROOTS", str(unrelated_allowed_root))
+
+    manager = WorkspaceManager(tmp_path / "managed")
+    store = ThreadStateStore()
+    gateway = RealtimeGateway(
+        runtime=SimpleNamespace(),
+        allow_local_workspace_access=True,
+    )
+    raw = gateway._sanitize_turn_params(
+        {
+            "threadId": "context-workspace-thread",
+            "input": [
+                {
+                    "type": "text",
+                    "text": "inspect the selected project",
+                    "metadata": {
+                        "context": {
+                            "mode": "code",
+                            "workspace_path": str(selected),
+                            "workspace_scope": "project",
+                        }
+                    },
+                }
+            ],
+        },
+        SimpleNamespace(actor_id="alice", tenant_id="tenant-a"),
+    )
+
+    intent = _build_intent(
+        "inspect the selected project",
+        TurnParams.model_validate(raw),
+        workspaces=manager,
+        thread_store=store,
+        allow_local_workspace_access=True,
+    )
+
+    assert intent.user_context["cwd"] == str(selected.resolve())
+    assert intent.user_context["workspace_path"] == str(selected.resolve())
+    assert intent.user_context["workspace_scope"] == "project"
 
 
 def test_authenticated_realtime_new_thread_ignores_all_client_path_authority(

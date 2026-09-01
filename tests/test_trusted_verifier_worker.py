@@ -591,7 +591,10 @@ def test_candidate_process_frame_walk_cannot_find_outer_scope_or_outer_fd(
                 frame = frame.f_back
 
             socket_fds = []
-            for descriptor in range(3, 256):
+            # Long-running suites can allocate the inherited protocol socket
+            # above 255. Scan a production-realistic descriptor range so the
+            # isolation assertion does not depend on test execution order.
+            for descriptor in range(3, 4096):
                 try:
                     observed = os.fstat(descriptor)
                 except OSError:
@@ -666,7 +669,9 @@ def test_candidate_process_direct_aggregate_write_is_scored_failure(
                 sort_keys=True,
                 separators=(",", ":"),
             ).encode()
-            for descriptor in range(3, 256):
+            # Do not assume the candidate protocol descriptor is below 256;
+            # prior process-heavy tests can legitimately raise its number.
+            for descriptor in range(3, 4096):
                 try:
                     observed = os.fstat(descriptor)
                 except OSError:

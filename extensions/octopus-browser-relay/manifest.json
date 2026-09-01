@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Octopus Agent",
-  "description": "Open the Octopus Chrome sidecar and connect the active tab to local automation.",
-  "version": "0.2.0",
+  "name": "EchoAI Browser Relay",
+  "description": "Connect the active browser tab to EchoOS automation.",
+  "version": "0.2.2",
   "permissions": ["tabs", "activeTab", "scripting", "sidePanel", "storage"],
   "host_permissions": ["http://127.0.0.1:8000/*", "http://localhost:8000/*"],
   "content_security_policy": {
@@ -16,9 +16,19 @@
     "default_path": "sidepanel.html"
   },
   "action": {
-    "default_title": "Open Octopus Agent Sidecar"
+    "default_title": "Open EchoAI Browser Relay"
   },
   "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["cursor-overlay.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://auth.tdx.com.cn/tdx-oauth/*"],
+      "js": ["oauth-deep-link-core.js", "oauth-deep-link-bridge.js"],
+      "run_at": "document_start"
+    },
     {
       "matches": ["<all_urls>"],
       "js": ["content.js"],

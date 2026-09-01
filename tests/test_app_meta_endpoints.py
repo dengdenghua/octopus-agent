@@ -26,7 +26,7 @@ Hermetic isolation
 * ``chdir(tmp_path)`` isolates the ``Path("data/feedback.jsonl")``
   that the feedback handler appends to (otherwise real feedback
   would end up in repo-root ``data/``)
-* No ``molili_config`` / ``local_auth_config`` injected ·
+* No account or ``local_auth_config`` injected ·
   ``auth_providers`` returns an empty list · pinning the "nothing
   configured" behavior
 """
@@ -162,6 +162,19 @@ def test_auth_me_uses_real_identity_store(secured_meta_client) -> None:
         "is_active": True,
     }
     assert client.get("/api/auth/me").status_code == 401
+
+
+def test_auth_me_accepts_session_cookie_and_logout_expires_it(secured_meta_client) -> None:
+    client, _, _registry = secured_meta_client
+
+    client.cookies.set("octopus_session", "sk-alice")
+    assert client.get("/api/auth/me").status_code == 200
+
+    response = client.post("/api/auth/logout")
+    assert response.status_code == 204
+    cookie = response.headers["set-cookie"]
+    assert "octopus_session=" in cookie
+    assert "Max-Age=0" in cookie
 
 
 def test_auth_me_keeps_development_stub_when_auth_is_disabled(client) -> None:
@@ -705,7 +718,7 @@ class TestAuthProviders:
         self,
         client: TestClient,
     ) -> None:
-        """Neither molili_config nor local_auth_config injected →
+        """Neither account nor local auth config injected →
         empty list. The frontend Login page hides all tabs in this
         case; adding a spurious default here would show a broken
         login form."""
@@ -713,35 +726,22 @@ class TestAuthProviders:
         assert r.status_code == 200
         assert r.json() == {"providers": []}
 
-    def test_molili_provider_when_configured(
+    def test_oct_provider_when_configured(
         self,
         isolated_cwd: Path,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """The molili auth router pokes many attributes on the config
-        (jwt_secret, jwt_issuer, api, ...). Rather than stub every
-        one, skip gracefully when a full Config isn't available in
-        the test env · this test exercises the ``enabled`` flag
-        conditional · not the downstream router."""
-        try:
-            from runtime.adapters.integrations.molili.config import (
-                MoliliConfig,
-            )
-        except ImportError:
-            pytest.skip("molili config not importable in test env")
+        from runtime.adapters.integrations.oct.config import OctConfig
 
-        # Use the real config with minimal settings · still hits the
-        # auth_providers endpoint's enabled-check path.
-        try:
-            cfg = MoliliConfig(enabled=True)
-        except Exception:  # noqa: BLE001
-            pytest.skip("molili config requires fields we don't have")
-
-        app = create_app(molili_config=cfg)
+        cfg = OctConfig(
+            enabled=True,
+            jwt_secret="0123456789abcdef0123456789ABCDEF!",
+        )
+        app = create_app(oct_config=cfg)
         c = TestClient(app)
         data = c.get("/api/auth/providers").json()
         ids = {p["id"] for p in data["providers"]}
-        assert "molili" in ids
+        assert "oct" in ids
+        assert c.get("/api/auth/status").json()["enabled"] is True
 
     def test_local_provider_when_configured(
         self,
@@ -820,6 +820,21 @@ class TestAdminMetaMutations:
         )
         assert enabled.status_code == 200
         assert registry.is_enabled("demo_skill") is True
+
+    def test_skill_market_can_load_bundled_design_skill_on_demand(
+        self,
+        secured_meta_client: tuple[TestClient, dict[str, dict[str, str]], SkillRegistry],
+    ) -> None:
+        client, headers, registry = secured_meta_client
+
+        response = client.post(
+            "/api/skills-market/creative-3d-animation/enable",
+            headers=headers["admin"],
+        )
+
+        assert response.status_code == 200
+        assert registry.has("creative-3d-animation")
+        assert registry.is_enabled("creative-3d-animation") is True
 
     def test_skill_uninstall_requires_admin(
         self,

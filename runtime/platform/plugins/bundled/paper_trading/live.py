@@ -670,6 +670,10 @@ class PlatformClient:
         data = self._maybe_gunzip(resp.get("data"))
         if isinstance(data, list):
             return data
+        # The upstream returns one quote object for a single symbol and a list
+        # for multiple symbols.  Keep the public contract stable for callers.
+        if isinstance(data, dict) and data.get("stockCode"):
+            return [data]
         return []
 
 

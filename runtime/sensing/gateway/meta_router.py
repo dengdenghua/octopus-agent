@@ -55,7 +55,7 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from fastapi import APIRouter, HTTPException, Query, Request
+    from fastapi import APIRouter, HTTPException, Query, Request, Response
 
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
@@ -64,6 +64,7 @@ except ImportError:  # pragma: no cover
     HTTPException = None  # type: ignore[assignment, misc]
     Query = None  # type: ignore[assignment, misc]
     Request = None  # type: ignore[assignment, misc]
+    Response = None  # type: ignore[assignment, misc]
 
 from runtime.sensing._fastapi_guard import require_fastapi
 from runtime.sensing.gateway._meta_mentions import _build_mentions_autocomplete
@@ -108,11 +109,10 @@ def create_meta_router(
     feedback_path: Path | str = "data/feedback.jsonl",
     skill_library_dirs: Sequence[Path | str] | None = None,
     include_default_skill_library: bool = False,
-    molili_config: Any = None,
     oct_config: Any = None,
     local_auth_config: Any = None,
     identity_store: Any = None,
-    molili_jwt_secret: str | None = None,
+    jwt_secret: str | None = None,
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
     require_auth: bool = False,
@@ -145,11 +145,11 @@ def create_meta_router(
         Optional file-backed SKILL.md catalogs to merge into the
         skill browser. These are read-only catalog entries; they do
         not register executable handlers in ``SkillRegistry``.
-    molili_config / local_auth_config :
+    oct_config / local_auth_config :
         Optional auth configs. Each is probed by the
         ``auth_providers`` handler for ``enabled`` and the fields
         it surfaces to the UI.
-    identity_store / molili_jwt_secret :
+    identity_store / jwt_secret :
         Passed through to ``_resolve_actor`` when tagging feedback
         with the submitting user. Both being ``None`` means
         anonymous feedback still records (tagged ``actor=None``).
@@ -173,29 +173,41 @@ def create_meta_router(
                 request,
                 identity_store,
                 True,
-                jwt_secret=molili_jwt_secret,
+                jwt_secret=jwt_secret,
                 jwt_issuer=jwt_issuer,
                 jwt_audience=jwt_audience,
             )
         except HTTPException:
             raise
         except Exception as exc:  # noqa: BLE001
-            raise HTTPException(401, "auth required") from exc
+            raise HTTPException(
+                401,
+                "auth required",
+                headers={"X-Octopus-Auth-Expired": "1"},
+            ) from exc
 
         if identity_store is None or not actor:
-            raise HTTPException(401, "auth required")
+            raise HTTPException(
+                401,
+                "auth required",
+                headers={"X-Octopus-Auth-Expired": "1"},
+            )
 
         auth_header = request.headers.get("Authorization") or ""
         if not auth_header.lower().startswith("bearer "):
-            raise HTTPException(401, "missing Authorization: Bearer <token>")
+            raise HTTPException(
+                401,
+                "missing Authorization: Bearer <token>",
+                headers={"X-Octopus-Auth-Expired": "1"},
+            )
 
         token = auth_header[7:].strip()
         identity = None
-        if molili_jwt_secret and token.count(".") == 2:
+        if jwt_secret and token.count(".") == 2:
             with suppress(Exception):
                 identity = identity_store.verify_jwt(
                     token,
-                    secret=molili_jwt_secret,
+                    secret=jwt_secret,
                     required_issuer=jwt_issuer,
                     required_audience=jwt_audience,
                 )
@@ -229,7 +241,7 @@ def create_meta_router(
                     request,
                     identity_store,
                     False,
-                    jwt_secret=molili_jwt_secret,
+                    jwt_secret=jwt_secret,
                     jwt_issuer=jwt_issuer,
                     jwt_audience=jwt_audience,
                 )
@@ -666,15 +678,15 @@ def create_meta_router(
 
     # ─── Auth status ────────────────────────────────────────
 
-    _molili_enabled = bool(molili_config is not None and getattr(molili_config, "enabled", False))
+    _oct_enabled = bool(oct_config is not None and getattr(oct_config, "enabled", False))
     _local_auth_enabled = bool(
         local_auth_config is not None and getattr(local_auth_config, "enabled", False)
     )
-    _any_auth_enabled = _molili_enabled or _local_auth_enabled
+    _any_auth_enabled = _oct_enabled or _local_auth_enabled
 
     @router.get("/api/auth/status")
     def auth_status() -> dict[str, Any]:
-        has_jwt = _molili_enabled or _local_auth_enabled
+        has_jwt = _oct_enabled or _local_auth_enabled
         return {
             "enabled": _any_auth_enabled,
             "jwt_available": has_jwt,
@@ -690,7 +702,11 @@ def create_meta_router(
         request on every reload even though the bearer token was valid.
         """
         if identity_store is None:
-            raise HTTPException(401, "authentication required")
+            raise HTTPException(
+                401,
+                "authentication required",
+                headers={"X-Octopus-Auth-Expired": "1"},
+            )
 
         from runtime.sensing.gateway.openai_gateway import _resolve_actor
 
@@ -698,12 +714,16 @@ def create_meta_router(
             request,
             identity_store,
             True,
-            jwt_secret=molili_jwt_secret,
+            jwt_secret=jwt_secret,
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
         )
         if not actor:
-            raise HTTPException(401, "authentication required")
+            raise HTTPException(
+                401,
+                "authentication required",
+                headers={"X-Octopus-Auth-Expired": "1"},
+            )
 
         identity = identity_store.get(actor) if hasattr(identity_store, "get") else None
         metadata = dict(getattr(identity, "metadata", None) or {})
@@ -737,6 +757,14 @@ def create_meta_router(
                 response[key] = value.strip()
         return response
 
+    def auth_logout(request: Request, response: Response) -> None:
+        """Clear the durable browser session even when its JWT has expired."""
+
+        from runtime.safety.auth.principal import clear_session_cookie
+
+        clear_session_cookie(response, request)
+        response.status_code = 204
+
     # Leave the route to the compatibility stub when auth is disabled
     # (require_auth=False). The stub returns anonymous on bad/missing JWT
     # instead of 401, which is the desired behavior in dev mode. Only
@@ -744,6 +772,12 @@ def create_meta_router(
     # at that point stub_router is disabled, so there's no route conflict.
     if identity_store is not None and require_auth:
         router.add_api_route("/api/auth/me", auth_me, methods=["GET"])
+        router.add_api_route(
+            "/api/auth/logout",
+            auth_logout,
+            methods=["POST"],
+            status_code=204,
+        )
 
     # ─── Auth providers ─────────────────────────────────────
 
@@ -767,26 +801,6 @@ def create_meta_router(
                     "mock_mode": bool(getattr(oct_config, "mock_mode", False)),
                     "endpoint_send": "/api/auth/oct/email/send",
                     "endpoint_verify": "/api/auth/oct/email/login",
-                }
-            )
-        if molili_config is not None and getattr(
-            molili_config,
-            "enabled",
-            False,
-        ):
-            providers.append(
-                {
-                    "id": "molili",
-                    "label": "手机号登录",
-                    "mock_mode": bool(
-                        getattr(
-                            getattr(molili_config, "auth", None),
-                            "mock_mode",
-                            False,
-                        ),
-                    ),
-                    "endpoint_send": "/api/auth/molili/sms/send",
-                    "endpoint_verify": "/api/auth/molili/sms/verify",
                 }
             )
         if local_auth_config is not None and getattr(

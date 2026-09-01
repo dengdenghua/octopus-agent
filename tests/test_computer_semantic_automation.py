@@ -132,10 +132,14 @@ def test_plan_actions_prefers_macos_semantic_control(monkeypatch):
         },
     )
 
-    data = _client().post(
-        "/api/computer/actions/plan",
-        json={"goal": "click Save", "capture": False},
-    ).json()
+    data = (
+        _client()
+        .post(
+            "/api/computer/actions/plan",
+            json={"goal": "click Save", "capture": False},
+        )
+        .json()
+    )
 
     action = data["suggestions"][0]["action"]
     assert action["source"] == "macos-accessibility"

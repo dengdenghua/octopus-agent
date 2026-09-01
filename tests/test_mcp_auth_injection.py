@@ -48,12 +48,13 @@ class TestMcpInjectionResolver:
             "env": {},
         }
 
-        reg.install("westock-mcp")  # installed + enabled=False
+        install = reg.install("westock-mcp")  # installed + enabled=False
         assert mcp_injection_for_server("westock-mcp", registry=reg, orchestrator=orch) == {
             "headers": {},
             "env": {},
         }
 
+        reg.grant_permissions("westock-mcp", install["permissions"])
         reg.set_enabled("westock-mcp", True)  # enabled, 但未连接
         assert mcp_injection_for_server("westock-mcp", registry=reg, orchestrator=orch) == {
             "headers": {},
@@ -67,7 +68,8 @@ class TestMcpInjectionResolver:
 
     def test_no_match_for_unknown_server(self, tmp_path):
         reg, orch = _setup(tmp_path)
-        reg.install("westock-mcp")
+        install = reg.install("westock-mcp")
+        reg.grant_permissions("westock-mcp", install["permissions"])
         reg.set_enabled("westock-mcp", True)
         assert mcp_injection_for_server("totally-unknown", registry=reg, orchestrator=orch) == {
             "headers": {},

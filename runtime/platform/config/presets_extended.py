@@ -1,6 +1,6 @@
 """Task-oriented presets and conversation personas.
 
-DSH P2 feature parity: preset/persona system extension.
+Octopus Native preset/persona system extension.
 
 Presets define tool configurations and constraints for specific tasks:
 - code-reviewer: Code review tools, strict validation

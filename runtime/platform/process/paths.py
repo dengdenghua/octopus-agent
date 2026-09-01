@@ -104,6 +104,30 @@ class AppPaths:
         return self.data_dir / "proposal_ledger.jsonl"
 
     @property
+    def evolution_experiments_path(self) -> Path:
+        """Controlled same-task engine and genome experiment trials."""
+
+        return self.data_dir / "evolution_experiments.jsonl"
+
+    @property
+    def evolution_candidates_path(self) -> Path:
+        """Append-only typed candidate lineage events."""
+
+        return self.data_dir / "evolution_candidates.jsonl"
+
+    @property
+    def candidate_canary_state_dir(self) -> Path:
+        """Per-candidate staged rollout state."""
+
+        return self.data_dir / "candidate_canary_states"
+
+    @property
+    def candidate_runtime_outcomes_path(self) -> Path:
+        """Durable governed-candidate turn activation inbox."""
+
+        return self.data_dir / "candidate_runtime_outcomes.json"
+
+    @property
     def auto_verifier_metrics_path(self) -> Path:
         return self.data_dir / "auto_verifier_metrics.jsonl"
 

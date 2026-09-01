@@ -26,8 +26,14 @@ def wire_stack(
     *,
     journal_path: Any,
     subagent_registry: Any,
+    agent_registry: Any = None,
 ) -> None:
     """Populate ctx.thread_store / cowork / subagent / mcp-servers."""
+    # ``create_app`` owns the public assembly contract and passes the registry
+    # here before ``mount_agents`` runs.  Keep accepting it even though the
+    # compatibility stack wiring does not consume it yet; otherwise every app
+    # construction fails before any router can be mounted.
+    del agent_registry
     stack = ctx.stack
     state = ctx.state
     _paths = ctx.paths

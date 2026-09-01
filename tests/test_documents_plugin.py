@@ -2,7 +2,7 @@
 
 覆盖:
   1. 插件可发现、可加载(bundled)
-  2. 注册 4 个技能进 SkillRegistry
+  2. 注册 5 个技能进 SkillRegistry
   3. create_docx -> extract_text / to_markdown / docx_info 的真实本地文件流
   4. create_docx 写操作安全门:文件已存在且未传 overwrite 时拒绝
   5. 缺失文件返回干净错误
@@ -10,7 +10,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock
+
+import pytest
 
 from runtime.platform.plugins.bundled import documents as documents_module
 from runtime.platform.plugins.bundled.documents import DocumentsPlugin
@@ -18,6 +21,10 @@ from runtime.platform.plugins.plugin_base import ModuleContext
 from runtime.platform.plugins.plugin_hub import PluginHub
 
 PLUGIN_ID = "documents"
+REQUIRES_DOCX = pytest.mark.skipif(
+    not documents_module._DOCX_OK,
+    reason="python-docx optional dependency not installed",
+)
 
 
 def test_bundled_documents_is_discoverable_and_loadable() -> None:
@@ -29,7 +36,7 @@ def test_bundled_documents_is_discoverable_and_loadable() -> None:
     assert hub.load(PLUGIN_ID) is not None
 
 
-def test_documents_registers_four_skills() -> None:
+def test_documents_registers_five_skills() -> None:
     plugin = DocumentsPlugin()
     registered: list[str] = []
     plugin.ctx = ModuleContext(
@@ -42,10 +49,70 @@ def test_documents_registers_four_skills() -> None:
 
     assert set(registered) == {
         "documents.create_docx",
+        "documents.replace_text",
         "documents.extract_text",
         "documents.to_markdown",
         "documents.docx_info",
     }
+
+
+@REQUIRES_DOCX
+def test_replace_text_edits_paragraphs_and_tables_with_backup(tmp_path) -> None:
+    plugin = DocumentsPlugin()
+    out = tmp_path / "editable.docx"
+    assert plugin._create_docx(path=str(out), sections=_sample_sections())["ok"]
+
+    edited = plugin._replace_text(
+        path=str(out),
+        replacements=[
+            {"old": "本季度整体进展顺利。", "new": "本季度已完成交付。"},
+            {"old": "100", "new": "120"},
+        ],
+    )
+
+    assert edited["ok"], edited
+    assert edited["total_replacements"] == 2
+    assert Path(edited["backup_path"]).is_file()
+    extracted = plugin._extract_text(path=str(out))
+    assert any(p["text"] == "本季度已完成交付。" for p in extracted["paragraphs"])
+    assert extracted["tables"][0]["data"][1][1] == "120"
+
+
+@REQUIRES_DOCX
+def test_replace_text_preserves_unaffected_run_formatting(tmp_path) -> None:
+    out = tmp_path / "formatted.docx"
+    doc = documents_module.Document()
+    paragraph = doc.add_paragraph()
+    lead = paragraph.add_run("Revenue")
+    lead.bold = True
+    amount = paragraph.add_run(" 100")
+    amount.italic = True
+    doc.save(out)
+
+    edited = DocumentsPlugin()._replace_text(
+        path=str(out),
+        replacements=[{"old": "Revenue", "new": "Income"}],
+    )
+
+    assert edited["ok"], edited
+    reopened = documents_module.Document(out)
+    runs = reopened.paragraphs[0].runs
+    assert reopened.paragraphs[0].text == "Income 100"
+    assert runs[0].text == "Income" and runs[0].bold is True
+    assert runs[1].text == " 100" and runs[1].italic is True
+
+
+@REQUIRES_DOCX
+def test_replace_text_no_match_does_not_touch_file(tmp_path) -> None:
+    plugin = DocumentsPlugin()
+    out = tmp_path / "unchanged.docx"
+    assert plugin._create_docx(path=str(out), sections=_sample_sections())["ok"]
+    before = out.read_bytes()
+
+    result = plugin._replace_text(path=str(out), replacements=[{"old": "不存在的文字", "new": "x"}])
+
+    assert result["ok"] is False
+    assert out.read_bytes() == before
 
 
 def _sample_sections() -> list[dict]:
@@ -61,6 +128,7 @@ def _sample_sections() -> list[dict]:
     ]
 
 
+@REQUIRES_DOCX
 def test_create_then_extract_roundtrip(tmp_path) -> None:
     plugin = DocumentsPlugin()
     out = tmp_path / "report.docx"
@@ -81,6 +149,7 @@ def test_create_then_extract_roundtrip(tmp_path) -> None:
     assert "季度总结" in texts and "完成 A" in texts
 
 
+@REQUIRES_DOCX
 def test_create_docx_requires_overwrite_for_existing_file(tmp_path) -> None:
     plugin = DocumentsPlugin()
     out = tmp_path / "exists.docx"
@@ -101,6 +170,7 @@ def test_create_docx_requires_overwrite_for_existing_file(tmp_path) -> None:
     assert any(p["text"] == "v2" for p in extracted["paragraphs"])
 
 
+@REQUIRES_DOCX
 def test_to_markdown_preserves_structure(tmp_path) -> None:
     plugin = DocumentsPlugin()
     out = tmp_path / "doc.md.docx"
@@ -114,6 +184,7 @@ def test_to_markdown_preserves_structure(tmp_path) -> None:
     assert "| 指标" in md and "|---|---|" in md
 
 
+@REQUIRES_DOCX
 def test_docx_info_counts(tmp_path) -> None:
     plugin = DocumentsPlugin()
     out = tmp_path / "info.docx"
@@ -127,29 +198,69 @@ def test_docx_info_counts(tmp_path) -> None:
     assert info["tables"][0]["rows"] == 3  # 表头 + 2 行
 
 
-def test_missing_file_returns_clean_error(tmp_path) -> None:
+def test_missing_file_returns_clean_error(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(documents_module, "_DOCX_OK", False)
     plugin = DocumentsPlugin()
     missing = tmp_path / "nope.docx"
-    assert plugin._extract_text(path=str(missing))["ok"] is False
-    assert plugin._to_markdown(path=str(missing))["ok"] is False
-    assert plugin._docx_info(path=str(missing))["ok"] is False
+    for operation in (plugin._extract_text, plugin._to_markdown, plugin._docx_info):
+        out = operation(path=str(missing))
+        assert out["ok"] is False
+        assert "文件不存在" in out["error"]
 
 
-def test_non_docx_path_rejected(tmp_path) -> None:
+def test_non_docx_path_rejected_without_optional_dependency(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(documents_module, "_DOCX_OK", False)
     plugin = DocumentsPlugin()
     txt = tmp_path / "a.txt"
     txt.write_text("hi")
-    out = plugin._extract_text(path=str(txt))
-    assert out["ok"] is False
-    assert ".docx" in out["error"]
+    for operation in (
+        plugin._create_docx,
+        plugin._extract_text,
+        plugin._to_markdown,
+        plugin._docx_info,
+    ):
+        out = operation(path=str(txt))
+        assert out["ok"] is False
+        assert ".docx" in out["error"]
 
 
-def test_python_docx_is_an_optional_runtime_capability(monkeypatch) -> None:
+def test_create_existing_file_requires_overwrite_without_optional_dependency(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(documents_module, "_DOCX_OK", False)
+    out = tmp_path / "exists.docx"
+    out.write_bytes(b"not a real docx")
+
+    rejected = DocumentsPlugin()._create_docx(path=str(out), sections=[])
+
+    assert rejected["ok"] is False
+    assert "overwrite" in rejected["error"]
+
+
+@REQUIRES_DOCX
+def test_create_docx_rejects_malformed_structured_blocks(tmp_path) -> None:
+    plugin = DocumentsPlugin()
+    malformed_section = plugin._create_docx(
+        path=str(tmp_path / "bad-section.docx"),
+        sections=["not an object"],
+    )
+    malformed_table = plugin._create_docx(
+        path=str(tmp_path / "bad-table.docx"),
+        sections=[{"type": "table", "rows": ["not a row"]}],
+    )
+
+    assert malformed_section["ok"] is False
+    assert "sections[0]" in malformed_section["error"]
+    assert malformed_table["ok"] is False
+    assert "二维数组" in malformed_table["error"]
+
+
+def test_python_docx_is_an_optional_runtime_capability(tmp_path, monkeypatch) -> None:
     """The core wheel remains usable when the optional document library is absent."""
 
     monkeypatch.setattr(documents_module, "_DOCX_OK", False)
 
-    out = DocumentsPlugin()._create_docx(path="report.docx", sections=[])
+    out = DocumentsPlugin()._create_docx(path=str(tmp_path / "report.docx"), sections=[])
 
     assert out["ok"] is False
     assert "python-docx" in out["error"]

@@ -1,6 +1,6 @@
 # WorkBuddy 连接器 → octopus 插件索引
 
-共 **108** 个连接器: mcp 84 / cli 22 / skill-only 2。
+共 **111** 个插件: mcp 84 / cli 23 / model-provider 2 / skill-only 2。
 
 - `77ircloud` **铱云AI供应链** · ⌨️CLI · auth=token · skills=2
 - `agentkey` **AgentKey** · 🔌MCP · auth=token · skills=1
@@ -30,6 +30,8 @@
 - `feishu` **飞书** · ⌨️CLI · auth=token · skills=27
 - `finenter` **进门投研** · 🔌MCP · auth=token · skills=1
 - `flova` **Flova** · 🔌MCP · auth=oauth · skills=1
+- `freebuff-cli` **Freebuff 本地 Agent** · ⌨️CLI · auth=token · skills=1
+- `freebuff2api-community` **Freebuff2API 社区适配器** · 🧠MODEL · auth=token · CLI=无
 - `fyopen-lawsearch` **法研·法律法规检索** · 🔌MCP · auth=token · skills=1
 - `gangtise-mcp` **Gangtise投研** · 🔌MCP · auth=token · skills=1
 - `gildata` **恒生聚源 MCP** · 🔌MCP · auth=token · skills=3
@@ -46,7 +48,7 @@
 - `kuaicha-search` **同花顺快查企业数据** · 🔌MCP · auth=token · skills=1
 - `lemonclaw` **柠檬云** · ⌨️CLI · auth=token · skills=1
 - `lexiang` **乐享知识库** · 🔌MCP · auth=token · skills=8
-- `linear-mcp` **Linear** · 🔌MCP · auth=server-side · skills=0
+- `linear-mcp` **Linear** · 🔌MCP · auth=oauth · skills=0
 - `lingxing-mcp` **领星ERP** · 🔌MCP · auth=token · skills=1
 - `linkfox-product-selection` **Linkfox 选品** · 🔌MCP · auth=token · skills=66
 - `lovrabet-cli` **Lovrabet CLI** · ⌨️CLI · auth=token · skills=1
@@ -61,6 +63,7 @@
 - `netease-mail` **网易邮箱** · 🧩SKILL · auth=token · skills=1
 - `notion` **Notion** · 🔌MCP · auth=token · skills=4
 - `opendata` **及刻智能·时空数据MCP** · 🔌MCP · auth=token · skills=1
+- `opencode-zen` **OpenCode Zen 模型适配器** · 🧠MODEL · auth=token · CLI=无
 - `pandadata` **PandaData 金融数据** · 🔌MCP · auth=token · skills=1
 - `patsnap-search` **智慧芽专利&文献融合检索** · 🔌MCP · auth=token · skills=1
 - `picset-commerce-images` **Picset AI 电商图片** · 🔌MCP · auth=token · skills=2
@@ -79,7 +82,7 @@
 - `sq-company-dynamic` **上奇产业通-企业动态追踪** · 🔌MCP · auth=token · skills=1
 - `tapd` **TAPD** · 🔌MCP · auth=token · skills=1
 - `tc-chengxin` **同程程心** · ⌨️CLI · auth=token · skills=1
-- `tdx-connector` **通达信** · 🔌MCP · auth=server-side · skills=1
+- `tdx-connector` **通达信** · 🔌MCP · auth=oauth · skills=1
 - `teacher-assistant` **企鹅教师助手** · 🔌MCP · auth=token · skills=0
 - `tec-do` **Tec-Do 2.0 广告与增长情报** · 🔌MCP · auth=token · skills=1
 - `tencent-docs` **腾讯文档** · 🔌MCP · auth=token · skills=0

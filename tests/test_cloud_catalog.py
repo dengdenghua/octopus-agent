@@ -12,6 +12,7 @@ import tarfile
 
 import pytest
 
+from runtime.platform.plugins import cloud_catalog
 from runtime.platform.plugins.cloud_catalog import CloudCatalog
 
 
@@ -35,8 +36,15 @@ def _make_plugin_pack() -> bytes:
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tf:
         entries = [
-            ("plugins/codex/figma/.codex-plugin/plugin.json", b'{"name":"figma"}\n'),
+            (
+                "plugins/codex/figma/.codex-plugin/plugin.json",
+                b'{"name":"figma","version":"1.0.0"}\n',
+            ),
             ("plugins/codex/figma/skills/figma-use/SKILL.md", b"# Figma Use\n"),
+            (
+                "plugins/connector/wecom/.octopus-connector/manifest.json",
+                b'{"schema":"octopus.connector_package.v1","id":"wecom","version":"1.0.0"}\n',
+            ),
             ("plugins/connector/wecom/cli.json", b'{"command":"wecom"}\n'),
             ("plugins/connector/wecom/skills/wecomcli-calendar/SKILL.md", b"# WeCom Calendar\n"),
         ]
@@ -56,6 +64,29 @@ class TestExtractMember:
         assert out.name == "api-doc-gen"
         assert (out / "SKILL.md").exists()
         assert (out / "scripts" / "gen.py").exists()
+
+    def test_normalizes_archive_file_modes(self, tmp_path):
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+            for name, mode in (("run.sh", 0o4777), ("config.json", 0o666)):
+                content = b"content"
+                info = tarfile.TarInfo(f"skills/modes/{name}")
+                info.mode = mode
+                info.size = len(content)
+                tf.addfile(info, io.BytesIO(content))
+        pack = tmp_path / "modes.tar.gz"
+        pack.write_bytes(buf.getvalue())
+
+        out = CloudCatalog("skills", use_remote=False, use_cache=False)._extract_member(
+            pack,
+            "skills",
+            tmp_path / "x",
+            "modes",
+        )
+
+        assert out is not None
+        assert (out / "run.sh").stat().st_mode & 0o7777 == 0o755
+        assert (out / "config.json").stat().st_mode & 0o7777 == 0o644
 
     def test_missing_member_returns_none(self, tmp_path):
         pack = tmp_path / "pack.tar.gz"
@@ -93,6 +124,48 @@ class TestExtractMember:
         cat = CloudCatalog("skills", use_remote=False, use_cache=False)
         with pytest.raises(ValueError, match="unsupported tar member"):
             cat._extract_member(pack, "skills", tmp_path / "x", "evil")
+
+    def test_late_invalid_member_removes_partial_tree(self, tmp_path):
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+            safe = b"partial"
+            safe_info = tarfile.TarInfo("skills/evil/SAFE.txt")
+            safe_info.size = len(safe)
+            tf.addfile(safe_info, io.BytesIO(safe))
+            link = tarfile.TarInfo("skills/evil/link")
+            link.type = tarfile.SYMTYPE
+            link.linkname = "../../outside"
+            tf.addfile(link)
+        pack = tmp_path / "late-symlink.tar.gz"
+        pack.write_bytes(buf.getvalue())
+
+        cat = CloudCatalog("skills", use_remote=False, use_cache=False)
+        out = tmp_path / "x" / "evil"
+
+        with pytest.raises(ValueError, match="unsupported tar member"):
+            cat._extract_member(pack, "skills", tmp_path / "x", "evil")
+        assert not out.exists()
+
+
+class TestArchiveDownload:
+    def test_plugin_archive_allows_current_first_party_pack_with_bounded_headroom(
+        self, tmp_path, monkeypatch
+    ):
+        observed: dict[str, int] = {}
+
+        def _download(_url: str, *, timeout: float, max_bytes: int) -> bytes:
+            assert timeout == 180
+            observed["max_bytes"] = max_bytes
+            return b"archive"
+
+        monkeypatch.setattr(cloud_catalog, "CACHE_DIR", tmp_path)
+        monkeypatch.setattr(cloud_catalog, "fetch_public_https_bytes", _download)
+
+        path = CloudCatalog("plugins", use_remote=False, use_cache=False)._archive_path()
+
+        assert path.read_bytes() == b"archive"
+        assert observed["max_bytes"] == 192 * 1024 * 1024
+        assert observed["max_bytes"] < cloud_catalog._MAX_EXTRACTED_BYTES
 
 
 class TestInstallSkill:
@@ -152,12 +225,60 @@ class TestInstalledPlugins:
         assert "tencent-docs" not in got  # 未安装的连接器不标
         assert got == sorted(got)
 
+    def test_cloud_catalog_exposes_workbench_apps(self):
+        cat = CloudCatalog("plugins", use_remote=False, use_cache=False)
+        ids = {item["id"] for item in cat.items()}
+        assert {
+            "workbench_paper-trading",
+            "workbench_design",
+            "workbench_intelligence",
+            "workbench_community",
+        }.issubset(ids)
+
+    def test_catalog_adds_honest_distribution_notes_without_claiming_original_authorship(self):
+        cat = CloudCatalog("plugins", use_remote=False, use_cache=False)
+        cat._store = {
+            "items": [
+                {
+                    "id": "codex_documents",
+                    "plugin": "documents",
+                    "kind": "plugin",
+                    "version": "2.0.0",
+                    "author": "OpenAI",
+                },
+                {
+                    "id": "wb_wecom",
+                    "plugin": "wecom",
+                    "kind": "connector",
+                    "version": "1.0.0",
+                    "author": "WorkBuddy",
+                },
+            ]
+        }
+
+        projected = {item["plugin"]: item for item in cat.items() if "plugin" in item}
+
+        assert projected["documents"]["author"] == "OpenAI"
+        assert projected["documents"]["release_summary"].startswith("2.0.0：由 Echo")
+        assert projected["wecom"]["author"] == "WorkBuddy"
+        assert projected["wecom"]["release_summary"].startswith("1.0.0：首次纳入")
+
 
 class TestInstallPlugin:
     def test_connector_lands_and_copies_skills(self, tmp_path, monkeypatch):
         pack = tmp_path / "pack.tar.gz"
         pack.write_bytes(_make_plugin_pack())
         cat = CloudCatalog("plugins", use_remote=False, use_cache=False)
+        cat._store = {
+            "items": [
+                {
+                    "id": "wb_wecom",
+                    "plugin": "wecom",
+                    "kind": "connector",
+                    "version": "1.0.0",
+                }
+            ]
+        }
         monkeypatch.setattr(cat, "_archive_path", lambda: pack)
         monkeypatch.setattr(
             "runtime.platform.plugins.cloud_catalog.CloudCatalog.PLUGIN_INSTALL_ROOT",
@@ -184,6 +305,16 @@ class TestInstallPlugin:
         pack = tmp_path / "pack.tar.gz"
         pack.write_bytes(_make_plugin_pack())
         cat = CloudCatalog("plugins", use_remote=False, use_cache=False)
+        cat._store = {
+            "items": [
+                {
+                    "id": "codex_figma",
+                    "plugin": "figma",
+                    "kind": "plugin",
+                    "version": "1.0.0",
+                }
+            ]
+        }
         monkeypatch.setattr(cat, "_archive_path", lambda: pack)
         monkeypatch.setattr(
             "runtime.platform.plugins.cloud_catalog.CloudCatalog.PLUGIN_INSTALL_ROOT",
@@ -193,9 +324,45 @@ class TestInstallPlugin:
             "runtime.platform.plugins.cloud_catalog.CloudCatalog.SKILLS_ROOT",
             tmp_path / "skills",
         )
+        monkeypatch.setattr(
+            "runtime.platform.plugins.cloud_catalog.CloudCatalog.CAPABILITY_STATE_FILE",
+            tmp_path / "capabilities" / "state.json",
+        )
         res = cat.install_plugin("figma", plugin_kind="codex")
         assert (tmp_path / "plugins" / "codex" / "figma" / ".codex-plugin" / "plugin.json").exists()
         assert res["kind"] == "codex"
+
+    def test_uninstalls_only_mutable_package_and_copied_skills(self, tmp_path, monkeypatch):
+        cat = CloudCatalog("plugins", use_remote=False, use_cache=False)
+        plugins_root = tmp_path / "plugins"
+        skills_root = tmp_path / "skills"
+        target = plugins_root / "workbench" / "design"
+        target.mkdir(parents=True)
+        (target / "app.json").write_text("{}", encoding="utf-8")
+        copied = skills_root / "design__helper"
+        copied.mkdir(parents=True)
+        (copied / "SKILL.md").write_text("# helper", encoding="utf-8")
+        skills_root.mkdir(parents=True, exist_ok=True)
+        (skills_root / "registry.json").write_text(
+            json.dumps([{"name": "design__helper"}, {"name": "keep"}]),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            "runtime.platform.plugins.cloud_catalog.CloudCatalog.PLUGIN_INSTALL_ROOT",
+            plugins_root,
+        )
+        monkeypatch.setattr(
+            "runtime.platform.plugins.cloud_catalog.CloudCatalog.SKILLS_ROOT",
+            skills_root,
+        )
+
+        result = cat.uninstall_plugin("design", plugin_kind="workbench")
+
+        assert result["uninstalled"] is True
+        assert not target.exists()
+        assert not copied.exists()
+        registry = json.loads((skills_root / "registry.json").read_text("utf-8"))
+        assert registry == [{"name": "keep"}]
 
 
 class TestSyncCodexCache:

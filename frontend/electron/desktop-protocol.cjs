@@ -17,6 +17,10 @@ const BACKEND_ROUTE_PREFIXES = Object.freeze([
   "/media",
   "/.well-known",
   "/.a2a",
+  // K8s-style process health endpoints live at the backend root; the
+  // bootstrap overlay polls /readyz until the bundled backend is up.
+  "/readyz",
+  "/livez",
 ]);
 
 const FORBIDDEN_PROXY_HEADERS = Object.freeze([

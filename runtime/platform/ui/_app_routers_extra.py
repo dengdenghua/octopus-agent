@@ -260,21 +260,10 @@ def mount_routers_b(
             create_agent_trace_router,
         )
 
-        _trace_registry = None
-        if stack is not None:
-            _trace_registry = getattr(
-                getattr(stack, "executor", None),
-                "registry",
-                None,
-            )
-        _trace_registry = _trace_registry or getattr(state, "registry", None)
         app.include_router(
             create_agent_trace_router(
                 store=getattr(state, "trace_store", None),
                 db_path=ctx.trace_store_path,
-                journal=getattr(state, "journal", None),
-                registry=_trace_registry,
-                auto_persist_dir=app_paths().data_dir / "forged_skills",
                 identity_store=ctx.identity_store,
                 require_auth=ctx.require_auth,
                 jwt_secret=ctx.jwt_secret,
@@ -605,11 +594,8 @@ def mount_routers_b(
     # Each plugin can register skills, channels, routes, and a
     # frontend config UI via plugin.yaml + ModulePlugin subclass.
     try:
-        from runtime.execution.arms.tool_registry import get_tool_registry
-        from runtime.execution.suckers.jobs_skills import get_jobs_registry
         from runtime.platform.plugins.plugin_hub import PluginHub
         from runtime.platform.process.composition import build_default_service_bus
-        from runtime.safety.hooks import get_global_registry
         from runtime.sensing.gateway.plugin_hub_router import (
             create_plugin_hub_router,
         )
@@ -636,10 +622,6 @@ def mount_routers_b(
             channel_manager=ctx.channel_manager,
             fastapi_app=app,
             service_bus=_service_bus,
-            tool_registry=get_tool_registry(),
-            prompt_registry=getattr(app.state, "prompt_registry", None),
-            hook_registry=get_global_registry(),
-            jobs_registry=get_jobs_registry(),
         )
         _loaded = _hub.load_all()
         if _loaded:
@@ -753,14 +735,10 @@ def mount_routers_b(
     if stack is not None:
         _tr_registry = getattr(getattr(stack, "executor", None), "registry", None)
     _tr_registry = _tr_registry or getattr(state, "registry", None)
-    from runtime.platform.capabilities.capability_registry import CapabilityRegistry
-
     app.include_router(
         create_teach_repeat_router(
             journal=getattr(state, "journal", None),
             registry=_tr_registry,
-            auto_persist_dir=app_paths().data_dir / "forged_skills",
-            capability_registry=CapabilityRegistry(),
             identity_store=ctx.identity_store,
             require_auth=ctx.require_auth,
             jwt_secret=ctx.jwt_secret,

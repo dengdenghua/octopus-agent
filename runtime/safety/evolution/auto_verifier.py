@@ -76,6 +76,10 @@ def run_verification_plan(
         items.append(item)
         if item.status != ItemStatus.COMPLETED or len(items) >= limit:
             break
+    if not items:
+        fallback = _run_project_fallback(plan, workspace)
+        if fallback is not None:
+            items.append(fallback)
     if items:
         passed_count = sum(item.status == ItemStatus.COMPLETED for item in items)
         stop_reason = (
@@ -220,7 +224,13 @@ def build_agent_verification_request(
 def _sandbox_allows_auto_verification(policy: dict[str, Any] | None) -> bool:
     if not isinstance(policy, dict):
         return False
-    return str(policy.get("type") or "") == "workspaceWrite"
+    # The verifier always creates its own workspace-confined SandboxRunner
+    # below.  ``dangerFullAccess`` describes the agent's outer permission
+    # envelope; it must not paradoxically disable this narrower, safe check.
+    return str(policy.get("type") or "") in {
+        "workspaceWrite",
+        "dangerFullAccess",
+    }
 
 
 def _workspace(plan: dict[str, Any]) -> Path | None:
@@ -301,6 +311,91 @@ def _run_command(
         stdout_tail=output[:_OUTPUT_CAP] if output else None,
         stderr_tail=error[:_OUTPUT_CAP] if error else None,
         related_files=[target] if target else [],
+    )
+
+
+def _run_project_fallback(
+    plan: dict[str, Any],
+    workspace: Path,
+) -> VerificationItem | None:
+    """Run one sandboxed project check when no targeted command matched.
+
+    Path-specific matrices intentionally cover the common Python and
+    TypeScript cases.  Other code surfaces (Go/Rust, new extensions, or a
+    temporarily stale matrix) must not fall through to a model-only reminder.
+    Project detection already exposes argv-based, shell-free checks; select one
+    cheap representative and execute it through the same workspace sandbox.
+    """
+
+    try:
+        from runtime.execution.suckers.verify_skills import detect_project, run_checks
+
+        profile = detect_project(str(workspace))
+        if profile.kind == "unknown":
+            return None
+        priorities = {
+            "python": ("syntax", "typecheck", "test"),
+            "node": ("typecheck", "lint", "test", "build"),
+            "node-ts": ("typecheck", "lint", "test", "build"),
+            "rust": ("check", "test", "clippy"),
+            "go": ("build", "vet", "test"),
+        }.get(profile.kind, ("typecheck", "check", "lint", "test", "build", "syntax"))
+        selected = next(
+            (
+                check
+                for name in priorities
+                for check in profile.checks
+                if str(check.get("name") or "") == name
+            ),
+            None,
+        )
+        if selected is None:
+            return None
+        fallback_profile = profile.__class__(
+            kind=profile.kind,
+            root=profile.root,
+            checks=[selected],
+        )
+        results = run_checks(
+            fallback_profile,
+            timeout_per_check=_TIMEOUT_S,
+            max_output=_OUTPUT_CAP,
+            sandbox_dir=str(workspace),
+        )
+        if not results:
+            return None
+        result = results[0]
+    except Exception:  # noqa: BLE001 - fallback verification is best-effort
+        return None
+
+    targets = [
+        str(target)
+        for target in (plan.get("targets") or [])
+        if isinstance(target, str) and target.strip()
+    ]
+    kind_by_name = {
+        "test": "test",
+        "lint": "lint",
+        "clippy": "lint",
+        "typecheck": "typecheck",
+        "check": "typecheck",
+        "vet": "typecheck",
+        "build": "build",
+        "syntax": "diagnostic",
+    }
+    return VerificationItem(
+        command=result.command,
+        kind=kind_by_name.get(result.name, "diagnostic"),
+        status=ItemStatus.COMPLETED if result.passed else ItemStatus.FAILED,
+        exit_code=result.exit_code,
+        summary=(
+            "Automatic project verification passed."
+            if result.passed
+            else "Automatic project verification failed."
+        ),
+        stdout_tail=(result.stdout or "")[:_OUTPUT_CAP] or None,
+        stderr_tail=(result.stderr or "")[:_OUTPUT_CAP] or None,
+        related_files=targets,
     )
 
 

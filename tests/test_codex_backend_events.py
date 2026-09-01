@@ -52,6 +52,148 @@ def test_completed_agent_message_recovers_when_delta_was_not_observed() -> None:
     ]
 
 
+def test_agent_message_phase_routes_commentary_from_first_delta() -> None:
+    state = CodexEventState()
+
+    assert (
+        translate_notification(
+            _notification(
+                "item/started",
+                threadId="thread-1",
+                turnId="turn-1",
+                item={
+                    "id": "message-1",
+                    "type": "agentMessage",
+                    "text": "",
+                    "phase": "commentary",
+                },
+            ),
+            state,
+        )
+        == []
+    )
+    assert (
+        translate_notification(
+            _notification(
+                "item/agentMessage/delta",
+                threadId="thread-1",
+                turnId="turn-1",
+                itemId="message-1",
+                delta="",
+            ),
+            state,
+        )
+        == []
+    )
+    assert translate_notification(
+        _notification(
+            "item/agentMessage/delta",
+            threadId="thread-1",
+            turnId="turn-1",
+            itemId="message-1",
+            delta="先检查入口",
+        ),
+        state,
+    ) == [
+        {
+            "type": "commentary_delta",
+            "delta": "先检查入口",
+            "public_status": True,
+            "start_new_segment": True,
+        }
+    ]
+    assert translate_notification(
+        _notification(
+            "item/agentMessage/delta",
+            threadId="thread-1",
+            turnId="turn-1",
+            itemId="message-1",
+            delta="，再调用工具。",
+        ),
+        state,
+    ) == [
+        {
+            "type": "commentary_delta",
+            "delta": "，再调用工具。",
+            "public_status": True,
+            "start_new_segment": False,
+        }
+    ]
+    assert translate_notification(
+        _notification(
+            "item/completed",
+            threadId="thread-1",
+            turnId="turn-1",
+            item={
+                "id": "message-1",
+                "type": "agentMessage",
+                "text": "先检查入口，再调用工具。",
+                "phase": "commentary",
+            },
+        ),
+        state,
+    ) == [{"type": "react_step_complete"}]
+
+
+def test_agent_message_phase_keeps_final_answer_in_answer_lane() -> None:
+    state = CodexEventState()
+
+    assert (
+        translate_notification(
+            _notification(
+                "item/started",
+                threadId="thread-1",
+                turnId="turn-1",
+                item={
+                    "id": "message-final",
+                    "type": "agentMessage",
+                    "text": "",
+                    "phase": "final_answer",
+                },
+            ),
+            state,
+        )
+        == []
+    )
+    assert translate_notification(
+        _notification(
+            "item/agentMessage/delta",
+            threadId="thread-1",
+            turnId="turn-1",
+            itemId="message-final",
+            delta="最终结论",
+        ),
+        state,
+    ) == [{"type": "text_delta", "delta": "最终结论"}]
+
+
+def test_completed_commentary_recovers_phase_when_start_and_delta_were_missed() -> None:
+    state = CodexEventState()
+
+    assert translate_notification(
+        _notification(
+            "item/completed",
+            threadId="thread-1",
+            turnId="turn-1",
+            item={
+                "id": "message-1",
+                "type": "agentMessage",
+                "text": "继续核对证据。",
+                "phase": "commentary",
+            },
+        ),
+        state,
+    ) == [
+        {
+            "type": "commentary_delta",
+            "delta": "继续核对证据。",
+            "public_status": True,
+            "start_new_segment": True,
+        },
+        {"type": "react_step_complete"},
+    ]
+
+
 def test_command_execution_projects_to_native_tool_lifecycle() -> None:
     state = CodexEventState()
     started = _notification(
@@ -195,7 +337,7 @@ def test_retryable_error_is_status_only_but_terminal_error_fails() -> None:
     ) == [
         {
             "type": "commentary_delta",
-            "delta": "Codex 遇到暂时性错误，正在自动重试。",
+            "delta": "当前模型服务遇到暂时性错误，正在自动重试。",
             "public_status": True,
             "start_new_segment": True,
         }

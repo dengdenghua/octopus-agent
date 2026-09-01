@@ -64,6 +64,7 @@ tier: "core"
 | `plugin_auto_load.py` | Auto-activate pinned plugins/skill-packs from user mentions. |
 | `prompt_persistence.py` | — |
 | `react_action_outcomes.py` | Action outcome bookkeeping for the ReAct loop. |
+| `react_auto_inspect.py` | Runtime-side salvage for announce-only project inspection turns. |
 | `react_auto_verify.py` | Runtime-side auto-verification salvage for final-answer guard deadlocks. |
 | `react_browser_guards.py` | Browser-interaction and mixed-mode completion guards. |
 | `react_browser_iteration.py` | Browser-surface gating and per-task iteration limits for the ReAct loop. |
@@ -98,6 +99,7 @@ tier: "core"
 | `react_resume.py` | Resume/checkpoint-rebuild helpers for the ReAct loop. |
 | `react_security_detectors.py` | Security + quality detectors for ReAct trajectory steps. |
 | `react_security_guards.py` | Security + quality guards (post-step / pre-Final-Answer gates). |
+| `react_step_evaluator.py` | Deterministic, bounded repair hints for production ReAct turns. |
 | `react_terminal.py` | Post-loop terminal handling + finalization for the ReAct loop. |
 | `react_test_quality_guards.py` | Test-quality guards: cheats that satisfy coverage letter, not spirit. |
 | `react_timeout_guards.py` | Tool timeout detection and policy guards. |
@@ -391,6 +393,14 @@ tier: "core"
 | func | `def require_public_update_on_tool_specs(specs, evidence_round)` | Require one model-authored public sentence on every native tool round. |
 | func | `def step_from_tool_calls(tool_calls, text, thinking, iteration, evidence_round)` | Synthesise a ``ReActStep`` from native ``tool_calls``. |
 | func | `def trim_text_protocol_for_native(system_prompt)` | Phase 1: drop the redundant text-protocol scaffolding for native mode. |
+
+### `react_step_evaluator.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class StepEvaluation` | One advisory repair decision; it never authorizes tool execution. |
+| class | `class RuntimeStepEvaluator` | Turn-local evaluator with bounded, digest-only deduplication. |
+| func | `def build_runtime_step_evaluator()` | Return fresh turn-local evaluator state for one ReAct invocation. |
 
 ### `react_types.py`
 

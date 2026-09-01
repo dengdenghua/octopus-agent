@@ -4,7 +4,19 @@ from __future__ import annotations
 
 from typing import Any
 
+from fastapi import HTTPException
 from pydantic import BaseModel, Field
+
+from runtime.memory.cowork.group import GroupMode, normalize_group_mode
+
+
+def response_mode(raw_mode: str) -> GroupMode:
+    """Canonicalize the legacy ``project`` wire value for HTTP callers."""
+
+    mode = normalize_group_mode(raw_mode)
+    if mode is None:
+        raise HTTPException(400, "mode must be chat | cluster | swarm")
+    return mode
 
 
 class GrantBody(BaseModel):
@@ -22,12 +34,14 @@ class InviteBody(BaseModel):
 
 
 class ModeBody(BaseModel):
-    mode: str  # chat | cluster | swarm | project
+    # Canonical values: chat | cluster | swarm. ``project`` is accepted by the
+    # router only as a deprecated compatibility value and normalized to chat.
+    mode: str
 
 
 class RosterBody(BaseModel):
     agent_ids: list[str] = Field(default_factory=list, max_length=64)
-    mode: str  # chat | cluster | swarm | project
+    mode: str  # chat | cluster | swarm (legacy project normalizes to chat)
 
 
 class BoardBody(BaseModel):
@@ -136,4 +150,5 @@ __all__ = [
     "ReadBody",
     "RosterBody",
     "RoomMessageBody",
+    "response_mode",
 ]

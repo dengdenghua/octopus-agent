@@ -95,7 +95,7 @@ def test_ast_search_validation(tmp_path: Path) -> None:
         max_matches=10,
     )
     # tree-sitter is absent in CI, so the dependency check reports first.
-    assert no_root["error"] in {"root not found", "ast_unavailable"}
+    assert no_root["error"] == "ast_unavailable" or no_root["error"].startswith("root not found")
 
 
 # ── _code_find_symbol ────────────────────────────────────────

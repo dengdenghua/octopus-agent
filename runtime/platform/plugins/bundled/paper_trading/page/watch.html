@@ -8,6 +8,7 @@
   :root{
     --bg:#10131f; --bar:#1a1d33; --card:#181c30; --line:#2a3050; --gold:#f0b90b;
     --text:#e6e9f0; --muted:#9aa4b8; --up:#ef4444; --down:#22c55e; --flat:#9aa4b8;
+    --danger:#fb7185;
   }
   *{margin:0; padding:0; box-sizing:border-box;}
   html,body{height:100%; background:var(--bg); color:var(--text);
@@ -56,6 +57,9 @@
   .code{color:var(--muted); font-size:11px; margin-left:6px;}
   tr.warn td{background:rgba(240,185,11,0.08);}
   tr.warn .tick{color:var(--gold);}
+  tr.stale{opacity:.48;}
+  tr.stale .tick{color:var(--danger);}
+  #positions,#watchlist{overflow-x:auto; border-radius:10px;}
 
   /* 提醒横幅 */
   .alert-banner{display:none; margin-bottom:12px; background:rgba(240,185,11,0.10);
@@ -66,6 +70,7 @@
   .foot{color:var(--flat); font-size:11px; text-align:center; margin-top:22px;}
   #feedMode.live{color:var(--down); font-weight:600;}
   #feedMode.fallback{color:var(--gold); font-weight:600;}
+  #feedMode.stale{color:var(--danger); font-weight:600;}
 </style>
 </head>
 <body>
@@ -93,11 +98,13 @@
   <div id="positions"></div>
   <h2>⭐ 平台自选 <span class="cnt" id="wlCnt"></span><span class="hint">自选在平台原版页面管理</span></h2>
   <div id="watchlist"></div>
-  <div class="foot">数据源：平台实时行情推送（只读）· <span id="feedMode">连接中…</span> · 提醒仅本地高亮，不构成投资建议</div>
+  <div class="foot">数据源：统一行情中心（只读）· <span id="feedMode">等待订阅…</span> · 过期行情不触发提醒或自动信号，不构成投资建议</div>
 </div>
 
+<script src="/api/plugins/paper-trading/watch.js"></script>
 <script>
 (function(){
+  if(window.__quoteHubV2) return;
   var TH = 3;
   var timer = null, es = null;
   var latestQuotes = {};   // code -> normalized quote (来自 kLineRealTime 推送)

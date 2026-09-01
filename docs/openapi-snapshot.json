@@ -753,6 +753,52 @@
         "title": "CancelLoopRunRequest",
         "type": "object"
       },
+      "CandidateCanaryOutcomeBody": {
+        "properties": {
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "CandidateCanaryOutcomeBody",
+        "type": "object"
+      },
+      "CandidateRollbackBody": {
+        "properties": {
+          "reason": {
+            "default": "operator rollback",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "title": "CandidateRollbackBody",
+        "type": "object"
+      },
+      "CanvasSave": {
+        "properties": {
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "expected_revision": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "document"
+        ],
+        "title": "CanvasSave",
+        "type": "object"
+      },
       "CapabilitiesWire": {
         "properties": {
           "browser_automation": {
@@ -836,6 +882,863 @@
           }
         },
         "title": "CliTeamRunRequest",
+        "type": "object"
+      },
+      "CodexAccountResponse": {
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CodexAccountWire"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "login_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Login Error"
+          },
+          "login_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Login Id"
+          },
+          "login_pending": {
+            "title": "Login Pending",
+            "type": "boolean"
+          },
+          "requires_openai_auth": {
+            "title": "Requires Openai Auth",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "requires_openai_auth",
+          "login_pending"
+        ],
+        "title": "CodexAccountResponse",
+        "type": "object"
+      },
+      "CodexAccountWire": {
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "plan_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Type"
+          },
+          "type": {
+            "enum": [
+              "apiKey",
+              "chatgpt",
+              "amazonBedrock"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "CodexAccountWire",
+        "type": "object"
+      },
+      "CodexAppWire": {
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "install_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Install Url"
+          },
+          "is_accessible": {
+            "title": "Is Accessible",
+            "type": "boolean"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "selected": {
+            "default": false,
+            "title": "Selected",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "is_accessible",
+          "is_enabled"
+        ],
+        "title": "CodexAppWire",
+        "type": "object"
+      },
+      "CodexAppsPutBody": {
+        "additionalProperties": false,
+        "properties": {
+          "app_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "App Ids",
+            "type": "array"
+          }
+        },
+        "title": "CodexAppsPutBody",
+        "type": "object"
+      },
+      "CodexAppsResponse": {
+        "properties": {
+          "apps": {
+            "items": {
+              "$ref": "#/components/schemas/CodexAppWire"
+            },
+            "title": "Apps",
+            "type": "array"
+          }
+        },
+        "title": "CodexAppsResponse",
+        "type": "object"
+      },
+      "CodexCancelLoginResponse": {
+        "properties": {
+          "cancelled": {
+            "title": "Cancelled",
+            "type": "boolean"
+          },
+          "login_id": {
+            "title": "Login Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "cancelled",
+          "login_id"
+        ],
+        "title": "CodexCancelLoginResponse",
+        "type": "object"
+      },
+      "CodexDailyUsageBucket": {
+        "properties": {
+          "start_date": {
+            "title": "Start Date",
+            "type": "string"
+          },
+          "tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokens"
+          }
+        },
+        "required": [
+          "start_date"
+        ],
+        "title": "CodexDailyUsageBucket",
+        "type": "object"
+      },
+      "CodexLoginResponse": {
+        "properties": {
+          "auth_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Url"
+          },
+          "login_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Login Id"
+          },
+          "type": {
+            "enum": [
+              "chatgpt",
+              "chatgptDeviceCode",
+              "apiKey"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "user_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Code"
+          },
+          "verification_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Url"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "CodexLoginResponse",
+        "type": "object"
+      },
+      "CodexLogoutResponse": {
+        "properties": {
+          "logged_out": {
+            "title": "Logged Out",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "logged_out"
+        ],
+        "title": "CodexLogoutResponse",
+        "type": "object"
+      },
+      "CodexModelProfilePutBody": {
+        "additionalProperties": false,
+        "description": "Full replacement of the principal's Coder model preference.",
+        "properties": {
+          "mode": {
+            "default": "follow_system",
+            "enum": [
+              "follow_system",
+              "chatgpt"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          }
+        },
+        "title": "CodexModelProfilePutBody",
+        "type": "object"
+      },
+      "CodexModelProfileResponse": {
+        "properties": {
+          "compatibility_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compatibility Reason"
+          },
+          "compatible": {
+            "title": "Compatible",
+            "type": "boolean"
+          },
+          "effective_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Model"
+          },
+          "mode": {
+            "enum": [
+              "follow_system",
+              "chatgpt"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "model_source": {
+            "enum": [
+              "turn",
+              "role",
+              "system",
+              "codex_default"
+            ],
+            "title": "Model Source",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "proxy_required": {
+            "default": false,
+            "title": "Proxy Required",
+            "type": "boolean"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
+          "selected_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Model"
+          },
+          "system_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Model"
+          }
+        },
+        "required": [
+          "mode",
+          "model_source",
+          "provider",
+          "compatible"
+        ],
+        "title": "CodexModelProfileResponse",
+        "type": "object"
+      },
+      "CodexModelWire": {
+        "properties": {
+          "default_reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Reasoning Effort"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "hidden": {
+            "default": false,
+            "title": "Hidden",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "input_modalities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Input Modalities",
+            "type": "array"
+          },
+          "is_default": {
+            "default": false,
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "reasoning_efforts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasoning Efforts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "display_name"
+        ],
+        "title": "CodexModelWire",
+        "type": "object"
+      },
+      "CodexModelsResponse": {
+        "properties": {
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/CodexModelWire"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "source": {
+            "const": "codex_account",
+            "default": "codex_account",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "models"
+        ],
+        "title": "CodexModelsResponse",
+        "type": "object"
+      },
+      "CodexRateLimitBucket": {
+        "properties": {
+          "limit_id": {
+            "title": "Limit Id",
+            "type": "string"
+          },
+          "limit_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit Name"
+          },
+          "plan_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Type"
+          },
+          "primary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CodexRateLimitWindow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rate_limit_reached_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate Limit Reached Type"
+          },
+          "secondary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CodexRateLimitWindow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "limit_id"
+        ],
+        "title": "CodexRateLimitBucket",
+        "type": "object"
+      },
+      "CodexRateLimitWindow": {
+        "properties": {
+          "remaining_percent": {
+            "title": "Remaining Percent",
+            "type": "number"
+          },
+          "resets_at": {
+            "title": "Resets At",
+            "type": "integer"
+          },
+          "used_percent": {
+            "title": "Used Percent",
+            "type": "number"
+          },
+          "window_duration_mins": {
+            "title": "Window Duration Mins",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "used_percent",
+          "remaining_percent",
+          "window_duration_mins",
+          "resets_at"
+        ],
+        "title": "CodexRateLimitWindow",
+        "type": "object"
+      },
+      "CodexRateLimitsResponse": {
+        "properties": {
+          "buckets": {
+            "items": {
+              "$ref": "#/components/schemas/CodexRateLimitBucket"
+            },
+            "title": "Buckets",
+            "type": "array"
+          },
+          "reset_credits_available": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reset Credits Available"
+          }
+        },
+        "title": "CodexRateLimitsResponse",
+        "type": "object"
+      },
+      "CodexUpdateApprovalBody": {
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "CodexUpdateApprovalBody",
+        "type": "object"
+      },
+      "CodexUpdateStatusResponse": {
+        "properties": {
+          "approval_status": {
+            "default": "none",
+            "enum": [
+              "none",
+              "pending",
+              "approved_for_next_release"
+            ],
+            "title": "Approval Status",
+            "type": "string"
+          },
+          "approved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          },
+          "approved_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved Version"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "current_version": {
+            "title": "Current Version",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "integrity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Integrity"
+          },
+          "latest_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Version"
+          },
+          "package": {
+            "title": "Package",
+            "type": "string"
+          },
+          "release_url": {
+            "title": "Release Url",
+            "type": "string"
+          },
+          "source_url": {
+            "title": "Source Url",
+            "type": "string"
+          },
+          "tarball_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tarball Url"
+          },
+          "update_available": {
+            "default": false,
+            "title": "Update Available",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "package",
+          "current_version",
+          "source_url",
+          "release_url"
+        ],
+        "title": "CodexUpdateStatusResponse",
+        "type": "object"
+      },
+      "CodexUsageResponse": {
+        "properties": {
+          "daily_usage_buckets": {
+            "items": {
+              "$ref": "#/components/schemas/CodexDailyUsageBucket"
+            },
+            "title": "Daily Usage Buckets",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/CodexUsageSummary"
+          }
+        },
+        "required": [
+          "summary"
+        ],
+        "title": "CodexUsageResponse",
+        "type": "object"
+      },
+      "CodexUsageSummary": {
+        "properties": {
+          "current_streak_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Streak Days"
+          },
+          "lifetime_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifetime Tokens"
+          },
+          "longest_running_turn_sec": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longest Running Turn Sec"
+          },
+          "longest_streak_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longest Streak Days"
+          },
+          "peak_daily_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peak Daily Tokens"
+          }
+        },
+        "title": "CodexUsageSummary",
         "type": "object"
       },
       "CollabTaskBody": {
@@ -1530,6 +2433,18 @@
             "title": "Base Url",
             "type": "string"
           },
+          "codex_wire_api": {
+            "anyOf": [
+              {
+                "const": "responses",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Codex Wire Api"
+          },
           "compat_profile": {
             "anyOf": [
               {
@@ -1602,6 +2517,22 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "is_free": {
+            "default": false,
+            "title": "Is Free",
+            "type": "boolean"
+          },
+          "managed_by_plugin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Managed By Plugin"
           },
           "max_temperature": {
             "anyOf": [
@@ -1984,6 +2915,28 @@
         "title": "DeepResearchRequest",
         "type": "object"
       },
+      "DetachFromGroupBody": {
+        "properties": {
+          "expected_project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Project Id"
+          },
+          "force": {
+            "default": false,
+            "title": "Force",
+            "type": "boolean"
+          }
+        },
+        "title": "DetachFromGroupBody",
+        "type": "object"
+      },
       "DetectResponse": {
         "properties": {
           "confidence": {
@@ -2111,6 +3064,195 @@
         "title": "DetectionSignals",
         "type": "object"
       },
+      "DeviceFlowCancelResponse": {
+        "description": "Idempotent generation-scoped cancellation result.",
+        "properties": {
+          "cancelled": {
+            "title": "Cancelled",
+            "type": "boolean"
+          },
+          "connector_id": {
+            "title": "Connector Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "cancelled",
+          "connector_id"
+        ],
+        "title": "DeviceFlowCancelResponse",
+        "type": "object"
+      },
+      "DeviceFlowPayload": {
+        "description": "One server-owned device authorization generation.",
+        "properties": {
+          "code_embedded_in_uri": {
+            "title": "Code Embedded In Uri",
+            "type": "boolean"
+          },
+          "connector_id": {
+            "title": "Connector Id",
+            "type": "string"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "flow_id": {
+            "description": "Opaque server-generated generation id; echo it when cancelling.",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Flow Id",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "user_code": {
+            "title": "User Code",
+            "type": "string"
+          },
+          "verification_uri": {
+            "title": "Verification Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "flow_id",
+          "connector_id",
+          "verification_uri",
+          "user_code",
+          "expires_in",
+          "code_embedded_in_uri"
+        ],
+        "title": "DeviceFlowPayload",
+        "type": "object"
+      },
+      "DeviceFlowResponse": {
+        "additionalProperties": true,
+        "description": "Shared connect/status envelope while preserving connector-specific fields.",
+        "properties": {
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "auth_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Mode"
+          },
+          "capability_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability Id"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "connected": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connected"
+          },
+          "connector_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connector Id"
+          },
+          "device_flow": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeviceFlowPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "next_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Action"
+          }
+        },
+        "title": "DeviceFlowResponse",
+        "type": "object"
+      },
       "DispatchRequest": {
         "description": "POST /api/agents/parallel/dispatch body.",
         "properties": {
@@ -2229,6 +3371,74 @@
           "description"
         ],
         "title": "DispatchTaskInput",
+        "type": "object"
+      },
+      "DualHelixShadowRunBody": {
+        "properties": {
+          "candidate_id": {
+            "default": "",
+            "maxLength": 512,
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "experiment_id": {
+            "default": "",
+            "maxLength": 512,
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "goal": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Goal",
+            "type": "string"
+          },
+          "primary_engine": {
+            "pattern": "^(octopus|codex)$",
+            "title": "Primary Engine",
+            "type": "string"
+          },
+          "primary_output": {
+            "default": "",
+            "maxLength": 50000,
+            "title": "Primary Output",
+            "type": "string"
+          },
+          "source_message_id": {
+            "default": "",
+            "maxLength": 512,
+            "title": "Source Message Id",
+            "type": "string"
+          },
+          "source_thread_id": {
+            "default": "",
+            "maxLength": 512,
+            "title": "Source Thread Id",
+            "type": "string"
+          },
+          "workspace_path": {
+            "default": "",
+            "maxLength": 4096,
+            "title": "Workspace Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "goal",
+          "primary_engine"
+        ],
+        "title": "DualHelixShadowRunBody",
+        "type": "object"
+      },
+      "DualHelixShadowSettingsBody": {
+        "properties": {
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "title": "DualHelixShadowSettingsBody",
         "type": "object"
       },
       "EnsureRoomBody": {
@@ -4613,6 +5823,48 @@
         "title": "PullRequest",
         "type": "object"
       },
+      "QueueRequest": {
+        "properties": {
+          "client_id": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "workflow_id": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Id"
+          }
+        },
+        "title": "QueueRequest",
+        "type": "object"
+      },
       "RankRequest": {
         "properties": {
           "candidates": {
@@ -6685,6 +7937,64 @@
         "title": "VideoWatchRequest",
         "type": "object"
       },
+      "WorkflowImport": {
+        "properties": {
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "ui": {
+            "additionalProperties": true,
+            "title": "Ui",
+            "type": "object"
+          },
+          "workflow": {
+            "additionalProperties": true,
+            "title": "Workflow",
+            "type": "object"
+          }
+        },
+        "required": [
+          "name",
+          "workflow"
+        ],
+        "title": "WorkflowImport",
+        "type": "object"
+      },
+      "WorkflowSave": {
+        "properties": {
+          "expected_revision": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "ui": {
+            "additionalProperties": true,
+            "title": "Ui",
+            "type": "object"
+          },
+          "workflow": {
+            "additionalProperties": true,
+            "title": "Workflow",
+            "type": "object"
+          }
+        },
+        "required": [
+          "name",
+          "workflow"
+        ],
+        "title": "WorkflowSave",
+        "type": "object"
+      },
       "WorkspaceDirEntry": {
         "properties": {
           "exists": {
@@ -6822,44 +8132,6 @@
         "title": "WorkspaceOutputsResponse",
         "type": "object"
       },
-      "_CredentialsIn": {
-        "properties": {
-          "password": {
-            "default": "",
-            "title": "Password",
-            "type": "string"
-          },
-          "phone": {
-            "default": "",
-            "title": "Phone",
-            "type": "string"
-          }
-        },
-        "title": "_CredentialsIn",
-        "type": "object"
-      },
-      "_FavIn": {
-        "properties": {
-          "code": {
-            "default": "",
-            "title": "Code",
-            "type": "string"
-          }
-        },
-        "title": "_FavIn",
-        "type": "object"
-      },
-      "_GroupIn": {
-        "properties": {
-          "name": {
-            "default": "",
-            "title": "Name",
-            "type": "string"
-          }
-        },
-        "title": "_GroupIn",
-        "type": "object"
-      },
       "_MoveIn": {
         "properties": {
           "to": {
@@ -6872,164 +8144,6 @@
           "to"
         ],
         "title": "_MoveIn",
-        "type": "object"
-      },
-      "_OrderIn": {
-        "properties": {
-          "code": {
-            "title": "Code",
-            "type": "string"
-          },
-          "order_type": {
-            "default": "market",
-            "title": "Order Type",
-            "type": "string"
-          },
-          "price": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Price"
-          },
-          "qty": {
-            "default": 100,
-            "title": "Qty",
-            "type": "integer"
-          },
-          "side": {
-            "default": "buy",
-            "title": "Side",
-            "type": "string"
-          }
-        },
-        "required": [
-          "code"
-        ],
-        "title": "_OrderIn",
-        "type": "object"
-      },
-      "_PlatformApplyIn": {
-        "description": "申请/扩大配资合约(真实操作,需 confirm)。",
-        "properties": {
-          "confirm": {
-            "default": false,
-            "title": "Confirm",
-            "type": "boolean"
-          },
-          "contract_type": {
-            "default": 1,
-            "title": "Contract Type",
-            "type": "integer"
-          },
-          "multiple": {
-            "default": 10,
-            "title": "Multiple",
-            "type": "integer"
-          },
-          "principal": {
-            "default": 1000.0,
-            "title": "Principal",
-            "type": "number"
-          }
-        },
-        "title": "_PlatformApplyIn",
-        "type": "object"
-      },
-      "_PlatformCancelIn": {
-        "description": "撤单(需 confirm)。",
-        "properties": {
-          "confirm": {
-            "default": false,
-            "title": "Confirm",
-            "type": "boolean"
-          },
-          "contract_id": {
-            "default": "",
-            "title": "Contract Id",
-            "type": "string"
-          },
-          "order_id": {
-            "default": "",
-            "title": "Order Id",
-            "type": "string"
-          }
-        },
-        "title": "_PlatformCancelIn",
-        "type": "object"
-      },
-      "_PlatformMoneyIn": {
-        "description": "追加资金 / 提盈(需 confirm)。",
-        "properties": {
-          "confirm": {
-            "default": false,
-            "title": "Confirm",
-            "type": "boolean"
-          },
-          "contract_id": {
-            "default": "",
-            "title": "Contract Id",
-            "type": "string"
-          },
-          "money": {
-            "default": 0.0,
-            "title": "Money",
-            "type": "number"
-          }
-        },
-        "title": "_PlatformMoneyIn",
-        "type": "object"
-      },
-      "_PlatformOrderIn": {
-        "description": "平台真实买卖委托(需 confirm)。entrust_type: 0限价 1市价。",
-        "properties": {
-          "confirm": {
-            "default": false,
-            "title": "Confirm",
-            "type": "boolean"
-          },
-          "contract_id": {
-            "default": "",
-            "title": "Contract Id",
-            "type": "string"
-          },
-          "entrust_type": {
-            "default": 0,
-            "title": "Entrust Type",
-            "type": "integer"
-          },
-          "price": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Price"
-          },
-          "qty": {
-            "default": 100,
-            "title": "Qty",
-            "type": "integer"
-          },
-          "stock_code": {
-            "default": "",
-            "title": "Stock Code",
-            "type": "string"
-          },
-          "stock_name": {
-            "default": "",
-            "title": "Stock Name",
-            "type": "string"
-          }
-        },
-        "title": "_PlatformOrderIn",
         "type": "object"
       },
       "_PolicyOut": {
@@ -7111,17 +8225,6 @@
           "tool"
         ],
         "title": "_RuleOut",
-        "type": "object"
-      },
-      "_StockIn": {
-        "properties": {
-          "code": {
-            "default": "",
-            "title": "Code",
-            "type": "string"
-          }
-        },
-        "title": "_StockIn",
         "type": "object"
       }
     }
@@ -8100,6 +9203,69 @@
       }
     },
     "/api/agent-market/cloud/plugins/{plugin_id}/install": {
+      "delete": {
+        "operationId": "api_agent_market_cloud_plugin_uninstall_api_agent_market_cloud_plugins__plugin_id__install_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "title": "Plugin Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "data_policy",
+            "required": false,
+            "schema": {
+              "default": "keep",
+              "pattern": "^(keep|trash)$",
+              "title": "Data Policy",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "confirm_data_move",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Confirm Data Move",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Market Cloud Plugin Uninstall Api Agent Market Cloud Plugins  Plugin Id  Install Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Market Cloud Plugin Uninstall",
+        "tags": [
+          "agent-market"
+        ]
+      },
       "post": {
         "operationId": "api_agent_market_cloud_plugin_install_api_agent_market_cloud_plugins__plugin_id__install_post",
         "parameters": [
@@ -8113,6 +9279,24 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -14688,6 +15872,30 @@
         ]
       }
     },
+    "/api/browser/data/clear": {
+      "post": {
+        "description": "Clear persistent Octopus browser profiles owned by this principal.\n\nIn single-user local mode all Octopus-managed profiles are in scope.\nAuthenticated deployments only remove profiles attached to the caller's\nlive sessions; profiles owned by another actor are never traversed.",
+        "operationId": "api_browser_data_clear_api_browser_data_clear_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Browser Data Clear Api Browser Data Clear Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Browser Data Clear",
+        "tags": [
+          "browser"
+        ]
+      }
+    },
     "/api/browser/extension-path": {
       "get": {
         "operationId": "api_browser_extension_path_api_browser_extension_path_get",
@@ -15771,6 +16979,17 @@
             }
           },
           {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
             "description": "默认隐藏只能手动填 token 的插件;传 true 全部返回。",
             "in": "query",
             "name": "include_manual",
@@ -15779,6 +16998,16 @@
               "default": false,
               "description": "默认隐藏只能手动填 token 的插件;传 true 全部返回。",
               "title": "Include Manual",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "force_refetch",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Force Refetch",
               "type": "boolean"
             }
           }
@@ -15922,9 +17151,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Capability Connect Api Capabilities  Cid  Connect Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/DeviceFlowResponse"
                 }
               }
             },
@@ -15942,6 +17169,99 @@
           }
         },
         "summary": "Capability Connect",
+        "tags": [
+          "capabilities"
+        ]
+      }
+    },
+    "/api/capabilities/{cid}/device-flow": {
+      "delete": {
+        "operationId": "capability_device_flow_cancel_api_capabilities__cid__device_flow_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cid",
+            "required": true,
+            "schema": {
+              "title": "Cid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_flow_id",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Expected Flow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceFlowCancelResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capability Device Flow Cancel",
+        "tags": [
+          "capabilities"
+        ]
+      },
+      "get": {
+        "operationId": "capability_device_flow_api_capabilities__cid__device_flow_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cid",
+            "required": true,
+            "schema": {
+              "title": "Cid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceFlowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capability Device Flow",
         "tags": [
           "capabilities"
         ]
@@ -16123,6 +17443,48 @@
         ]
       }
     },
+    "/api/capabilities/{cid}/icon": {
+      "get": {
+        "operationId": "capability_icon_api_capabilities__cid__icon_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cid",
+            "required": true,
+            "schema": {
+              "title": "Cid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Capability Icon Api Capabilities  Cid  Icon Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capability Icon",
+        "tags": [
+          "capabilities"
+        ]
+      }
+    },
     "/api/capabilities/{cid}/install": {
       "delete": {
         "operationId": "capability_uninstall_api_capabilities__cid__install_delete",
@@ -16204,6 +17566,50 @@
           }
         },
         "summary": "Capability Install",
+        "tags": [
+          "capabilities"
+        ]
+      }
+    },
+    "/api/capabilities/{cid}/install-plan": {
+      "get": {
+        "operationId": "capability_install_plan_api_capabilities__cid__install_plan_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cid",
+            "required": true,
+            "schema": {
+              "title": "Cid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Capability Install Plan Api Capabilities  Cid  Install Plan Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capability Install Plan",
         "tags": [
           "capabilities"
         ]
@@ -17315,6 +18721,471 @@
         ]
       }
     },
+    "/api/coder/codex/account": {
+      "get": {
+        "operationId": "api_coder_codex_account_api_coder_codex_account_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexAccountResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Coder Codex Account",
+        "tags": [
+          "config",
+          "coder"
+        ]
+      }
+    },
+    "/api/coder/codex/apps": {
+      "get": {
+        "operationId": "api_coder_codex_apps_api_coder_codex_apps_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "force_refetch",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Force Refetch",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexAppsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Coder Codex Apps",
+        "tags": [
+          "config",
+          "coder"
+        ]
+      },
+      "put": {
+        "operationId": "api_put_coder_codex_apps_api_coder_codex_apps_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodexAppsPutBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexAppsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Put Coder Codex Apps",
+        "tags": [
+          "config",
+          "coder"
+        ]
+      }
+    },
+    "/api/coder/codex/login": {
+      "post": {
+        "operationId": "api_coder_codex_login_api_coder_codex_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "api_key": {
+                    "anyOf": [
+                      {
+                        "format": "password",
+                        "type": "string",
+                        "writeOnly": true
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "enum": [
+                      "chatgpt",
+                      "chatgptDeviceCode",
+                      "apiKey"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexLoginResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Coder Codex Login",
+        "tags": [
+          "config",
+          "coder"
+        ]
+      }
+    },
+    "/api/coder/codex/login/{login_id}/cancel": {
+      "post": {
+        "operationId": "api_coder_codex_cancel_login_api_coder_codex_login__login_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "login_id",
+            "required": true,
+            "schema": {
+              "title": "Login Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexCancelLoginResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Coder Codex Cancel Login",
+        "tags": [
+          "config",
+          "coder"
+        ]
+      }
+    },
+    "/api/coder/codex/logout": {
+      "post": {
+        "operationId": "api_coder_codex_logout_api_coder_codex_logout_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexLogoutResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Coder Codex Logout",
+        "tags": [
+          "config",
+          "coder"
+        ]
+      }
+    },
+    "/api/coder/codex/model-profile": {
+      "get": {
+        "operationId": "api_coder_codex_model_profile_api_coder_codex_model_profile_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexModelProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Coder Codex Model Profile",
+        "tags": [
+          "config",
+          "coder"
+        ]
+      },
+      "put": {
+        "operationId": "api_put_coder_codex_model_profile_api_coder_codex_model_profile_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodexModelProfilePutBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexModelProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Put Coder Codex Model Profile",
+        "tags": [
+          "config",
+          "coder"
+        ]
+      }
+    },
+    "/api/coder/codex/models": {
+      "get": {
+        "operationId": "api_coder_codex_models_api_coder_codex_models_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_hidden",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Hidden",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexModelsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Coder Codex Models",
+        "tags": [
+          "config",
+          "coder"
+        ]
+      }
+    },
+    "/api/coder/codex/rate-limits": {
+      "get": {
+        "operationId": "api_coder_codex_rate_limits_api_coder_codex_rate_limits_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexRateLimitsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Coder Codex Rate Limits",
+        "tags": [
+          "config",
+          "coder"
+        ]
+      }
+    },
+    "/api/coder/codex/upstream-update": {
+      "get": {
+        "operationId": "api_coder_codex_upstream_update_api_coder_codex_upstream_update_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexUpdateStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Coder Codex Upstream Update",
+        "tags": [
+          "config",
+          "coder"
+        ]
+      }
+    },
+    "/api/coder/codex/upstream-update/approve": {
+      "post": {
+        "operationId": "api_approve_coder_codex_upstream_update_api_coder_codex_upstream_update_approve_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodexUpdateApprovalBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexUpdateStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Approve Coder Codex Upstream Update",
+        "tags": [
+          "config",
+          "coder"
+        ]
+      }
+    },
+    "/api/coder/codex/upstream-update/check": {
+      "post": {
+        "operationId": "api_check_coder_codex_upstream_update_api_coder_codex_upstream_update_check_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexUpdateStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Check Coder Codex Upstream Update",
+        "tags": [
+          "config",
+          "coder"
+        ]
+      }
+    },
+    "/api/coder/codex/usage": {
+      "get": {
+        "operationId": "api_coder_codex_usage_api_coder_codex_usage_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexUsageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Coder Codex Usage",
+        "tags": [
+          "config",
+          "coder"
+        ]
+      }
+    },
     "/api/collab/{thread_id}": {
       "get": {
         "description": "Unified collaboration session — one read over roster/mode/room link,\nshared blackboard, async tasks, and presence (instead of stitching the\nper-surface endpoints). The cowork thread is the canonical session; a\nTeam Room is its optional linked surface.",
@@ -18102,6 +19973,128 @@
         ]
       }
     },
+    "/api/computer/appshot": {
+      "post": {
+        "operationId": "appshot_api_computer_appshot_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Appshot Api Computer Appshot Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Appshot",
+        "tags": [
+          "computer"
+        ]
+      }
+    },
+    "/api/computer/appshots/{snapshot_id}/elements/{element_index}/preview": {
+      "post": {
+        "operationId": "preview_appshot_element_api_computer_appshots__snapshot_id__elements__element_index__preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "snapshot_id",
+            "required": true,
+            "schema": {
+              "title": "Snapshot Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "element_index",
+            "required": true,
+            "schema": {
+              "title": "Element Index",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Preview Appshot Element Api Computer Appshots  Snapshot Id  Elements  Element Index  Preview Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Appshot Element",
+        "tags": [
+          "computer"
+        ]
+      }
+    },
     "/api/computer/lease/release": {
       "post": {
         "operationId": "release_lease_api_computer_lease_release_post",
@@ -18222,6 +20215,29 @@
           }
         },
         "summary": "Status",
+        "tags": [
+          "computer"
+        ]
+      }
+    },
+    "/api/computer/targets": {
+      "get": {
+        "operationId": "targets_api_computer_targets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Targets Api Computer Targets Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Targets",
         "tags": [
           "computer"
         ]
@@ -18996,9 +21012,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Connector Connect Api Connectors  Connector Id  Connect Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/DeviceFlowResponse"
                 }
               }
             },
@@ -19016,6 +21030,101 @@
           }
         },
         "summary": "Connector Connect",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/api/connectors/{connector_id}/device-flow": {
+      "delete": {
+        "description": "取消指定代际的设备流，迟到的旧弹窗不影响新授权。",
+        "operationId": "connector_device_flow_cancel_api_connectors__connector_id__device_flow_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "title": "Connector Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_flow_id",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Expected Flow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceFlowCancelResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connector Device Flow Cancel",
+        "tags": [
+          "connectors"
+        ]
+      },
+      "get": {
+        "description": "查询进行中的设备流授权(verification_uri / user_code / 剩余时效)。\n\n前端弹窗被刷新/重开后靠这个接口恢复授权态,不必重新起一次 CLI 登录。",
+        "operationId": "connector_device_flow_api_connectors__connector_id__device_flow_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "title": "Connector Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceFlowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connector Device Flow",
         "tags": [
           "connectors"
         ]
@@ -20704,7 +22813,7 @@
     },
     "/api/cowork/{thread_id}/members": {
       "post": {
-        "description": "Pull a member (agent or human) into the thread, with a context grant.",
+        "description": "Reference a canonical agent (or human) from this thread.\n\nRetrying the same add is a successful no-op.  The group stores only the\ncanonical id; it does not clone a role, home, memory, or owner lane.",
         "operationId": "invite_member_api_cowork__thread_id__members_post",
         "parameters": [
           {
@@ -20759,7 +22868,7 @@
     },
     "/api/cowork/{thread_id}/members/{member_id}": {
       "delete": {
-        "description": "Remove a member. Their past blackboard writes stay (attributed).",
+        "description": "Remove a session reference idempotently; attributed history stays.",
         "operationId": "remove_member_api_cowork__thread_id__members__member_id__delete",
         "parameters": [
           {
@@ -20813,7 +22922,7 @@
     },
     "/api/cowork/{thread_id}/mode": {
       "post": {
-        "description": "Switch the collaboration mode (chat/cluster/swarm/project) —\nnon-destructive. 'project' runs the milestone-driven Project OS over the\ngroup. Entering project mode also ensures a real Project OS project is\nbound to the thread (created deterministically if missing) so the\nworkbench 项目 tab has something to render; execution itself stays\nuser-triggered via Run/Tick.",
+        "description": "Switch how AI participants respond: chat, cluster, or swarm.\n\n``project`` is accepted only as a deprecated client wire value. It is\nprojected to ``chat`` and may attach an idle Project for continuity;\nit is never stored as a fourth response mode and never starts work.",
         "operationId": "set_mode_api_cowork__thread_id__mode_post",
         "parameters": [
           {
@@ -22080,6 +24189,467 @@
         ]
       }
     },
+    "/api/design/comfyui/dependencies": {
+      "get": {
+        "operationId": "comfyui_dependencies_api_design_comfyui_dependencies_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comfyui Dependencies Api Design Comfyui Dependencies Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Comfyui Dependencies",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/history/{prompt_id}": {
+      "get": {
+        "operationId": "comfyui_history_api_design_comfyui_history__prompt_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "prompt_id",
+            "required": true,
+            "schema": {
+              "title": "Prompt Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comfyui History Api Design Comfyui History  Prompt Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Comfyui History",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/object-info": {
+      "get": {
+        "description": "Return a compact, UI-safe view of locally installed ComfyUI nodes.",
+        "operationId": "comfyui_object_info_api_design_comfyui_object_info_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comfyui Object Info Api Design Comfyui Object Info Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Comfyui Object Info",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/queue": {
+      "post": {
+        "operationId": "queue_workflow_api_design_comfyui_queue_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Queue Workflow Api Design Comfyui Queue Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Queue Workflow",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/start": {
+      "post": {
+        "operationId": "comfyui_start_api_design_comfyui_start_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comfyui Start Api Design Comfyui Start Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Comfyui Start",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/status": {
+      "get": {
+        "operationId": "comfyui_status_api_design_comfyui_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comfyui Status Api Design Comfyui Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Comfyui Status",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/stop": {
+      "post": {
+        "operationId": "comfyui_stop_api_design_comfyui_stop_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comfyui Stop Api Design Comfyui Stop Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Comfyui Stop",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/workflows": {
+      "get": {
+        "operationId": "list_workflows_api_design_comfyui_workflows_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Workflows Api Design Comfyui Workflows Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Workflows",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/workflows/import": {
+      "post": {
+        "operationId": "import_workflow_api_design_comfyui_workflows_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowImport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Import Workflow Api Design Comfyui Workflows Import Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Workflow",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/workflows/{workflow_id}": {
+      "get": {
+        "operationId": "get_workflow_api_design_comfyui_workflows__workflow_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Workflow Api Design Comfyui Workflows  Workflow Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Workflow",
+        "tags": [
+          "design-studio"
+        ]
+      },
+      "put": {
+        "operationId": "save_workflow_api_design_comfyui_workflows__workflow_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Save Workflow Api Design Comfyui Workflows  Workflow Id  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Workflow",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/projects/{project_id}/canvas": {
+      "get": {
+        "operationId": "get_project_canvas_api_design_projects__project_id__canvas_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Project Canvas Api Design Projects  Project Id  Canvas Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Project Canvas",
+        "tags": [
+          "design-studio"
+        ]
+      },
+      "put": {
+        "operationId": "save_project_canvas_api_design_projects__project_id__canvas_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CanvasSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Save Project Canvas Api Design Projects  Project Id  Canvas Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Project Canvas",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
     "/api/evolution/agent-benchmark": {
       "get": {
         "operationId": "get_agent_benchmark_api_evolution_agent_benchmark_get",
@@ -23013,6 +25583,299 @@
         ]
       }
     },
+    "/api/evolution/candidates": {
+      "get": {
+        "operationId": "get_evolution_candidates_api_evolution_candidates_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Evolution Candidates Api Evolution Candidates Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Evolution Candidates",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/candidates/{candidate_id}/canary": {
+      "get": {
+        "operationId": "get_candidate_canary_api_evolution_candidates__candidate_id__canary_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Candidate Canary Api Evolution Candidates  Candidate Id  Canary Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Candidate Canary",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/candidates/{candidate_id}/canary/outcome": {
+      "post": {
+        "operationId": "record_candidate_canary_outcome_api_evolution_candidates__candidate_id__canary_outcome_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateCanaryOutcomeBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Record Candidate Canary Outcome Api Evolution Candidates  Candidate Id  Canary Outcome Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Candidate Canary Outcome",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/candidates/{candidate_id}/canary/register": {
+      "post": {
+        "operationId": "register_candidate_canary_api_evolution_candidates__candidate_id__canary_register_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Register Candidate Canary Api Evolution Candidates  Candidate Id  Canary Register Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register Candidate Canary",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/candidates/{candidate_id}/rollback": {
+      "post": {
+        "operationId": "rollback_candidate_api_evolution_candidates__candidate_id__rollback_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateRollbackBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rollback Candidate Api Evolution Candidates  Candidate Id  Rollback Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rollback Candidate",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
     "/api/evolution/codex-gap": {
       "get": {
         "operationId": "get_codex_gap_api_evolution_codex_gap_get",
@@ -23222,6 +26085,16 @@
               "title": "Agent Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -23249,6 +26122,162 @@
           }
         },
         "summary": "Get Drift",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/dual-helix/evidence": {
+      "get": {
+        "operationId": "get_dual_helix_evidence_api_evolution_dual_helix_evidence_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Dual Helix Evidence Api Evolution Dual Helix Evidence Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Dual Helix Evidence",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/dual-helix/shadow/run": {
+      "post": {
+        "operationId": "run_dual_helix_shadow_api_evolution_dual_helix_shadow_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DualHelixShadowRunBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Dual Helix Shadow Api Evolution Dual Helix Shadow Run Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Dual Helix Shadow",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/dual-helix/shadow/settings": {
+      "post": {
+        "operationId": "set_dual_helix_shadow_settings_api_evolution_dual_helix_shadow_settings_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DualHelixShadowSettingsBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Dual Helix Shadow Settings Api Evolution Dual Helix Shadow Settings Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Dual Helix Shadow Settings",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/dual-helix/shadow/status": {
+      "get": {
+        "operationId": "get_dual_helix_shadow_status_api_evolution_dual_helix_shadow_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Dual Helix Shadow Status Api Evolution Dual Helix Shadow Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Dual Helix Shadow Status",
         "tags": [
           "evolution"
         ]
@@ -23301,6 +26330,65 @@
         ]
       }
     },
+    "/api/evolution/experiments/evidence": {
+      "get": {
+        "operationId": "get_controlled_experiment_evidence_api_evolution_experiments_evidence_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "primary_metric",
+            "required": false,
+            "schema": {
+              "default": "quality",
+              "maxLength": 80,
+              "minLength": 1,
+              "title": "Primary Metric",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Controlled Experiment Evidence Api Evolution Experiments Evidence Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Controlled Experiment Evidence",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
     "/api/evolution/fitness/{agent_id}": {
       "get": {
         "operationId": "get_fitness_api_evolution_fitness__agent_id__get",
@@ -23324,6 +26412,16 @@
               "minimum": 5,
               "title": "Window",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
             }
           }
         ],
@@ -32261,6 +35359,204 @@
         ]
       }
     },
+    "/api/plugin-hub/plugins/{name}/disable": {
+      "post": {
+        "operationId": "disable_plugin_api_plugin_hub_plugins__name__disable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Disable Plugin",
+        "tags": [
+          "plugin-hub"
+        ]
+      }
+    },
+    "/api/plugin-hub/plugins/{name}/enable": {
+      "post": {
+        "operationId": "enable_plugin_api_plugin_hub_plugins__name__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable Plugin",
+        "tags": [
+          "plugin-hub"
+        ]
+      }
+    },
+    "/api/plugin-hub/plugins/{name}/install": {
+      "delete": {
+        "operationId": "uninstall_persisted_plugin_api_plugin_hub_plugins__name__install_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "data_policy",
+            "required": false,
+            "schema": {
+              "default": "keep",
+              "pattern": "^(keep|trash)$",
+              "title": "Data Policy",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "confirm_data_move",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Confirm Data Move",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Uninstall Persisted Plugin",
+        "tags": [
+          "plugin-hub"
+        ]
+      },
+      "post": {
+        "description": "Activate a factory workbench and optionally restore trashed works.",
+        "operationId": "install_plugin_api_plugin_hub_plugins__name__install_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Install Plugin",
+        "tags": [
+          "plugin-hub"
+        ]
+      }
+    },
     "/api/plugin-hub/plugins/{name}/load": {
       "post": {
         "description": "Load a discovered plugin by name.",
@@ -32641,1744 +35937,6 @@
         ]
       }
     },
-    "/api/plugins/mx2025_viewer/page": {
-      "get": {
-        "operationId": "viewer_page_api_plugins_mx2025_viewer_page_get",
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Viewer Page",
-        "tags": [
-          "mx2025_viewer"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading-replica/health": {
-      "get": {
-        "operationId": "health_api_plugins_paper_trading_replica_health_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Health Api Plugins Paper Trading Replica Health Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Health",
-        "tags": [
-          "paper_trading_replica"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading-replica/page": {
-      "get": {
-        "operationId": "serve_page_api_plugins_paper_trading_replica_page_get",
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Serve Page",
-        "tags": [
-          "paper_trading_replica"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/account": {
-      "get": {
-        "operationId": "account_api_plugins_paper_trading_account_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Account Api Plugins Paper Trading Account Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Account",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/kline/{code}": {
-      "get": {
-        "operationId": "kline_api_plugins_paper_trading_kline__code__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "code",
-            "required": true,
-            "schema": {
-              "title": "Code",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "days",
-            "required": false,
-            "schema": {
-              "default": 60,
-              "title": "Days",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Kline Api Plugins Paper Trading Kline  Code  Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Kline",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/live/credentials": {
-      "post": {
-        "operationId": "set_credentials_api_plugins_paper_trading_live_credentials_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/_CredentialsIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Set Credentials Api Plugins Paper Trading Live Credentials Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Set Credentials",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/live/credentials/clear": {
-      "post": {
-        "operationId": "clear_credentials_api_plugins_paper_trading_live_credentials_clear_post",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Clear Credentials Api Plugins Paper Trading Live Credentials Clear Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Clear Credentials",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/live/overview": {
-      "get": {
-        "operationId": "live_overview_api_plugins_paper_trading_live_overview_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Live Overview Api Plugins Paper Trading Live Overview Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Live Overview",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/live/push/latest": {
-      "get": {
-        "description": "查询某个推送事件的当前最新快照(已解码)。\n\n- ``event``: kLineRealTime / todayStock / stockPosition 等;\n- ``light=true``: kLineRealTime 返回紧凑字段(默认,省流量)。\n供量化策略/页面按需取当前状态,无需订阅。",
-        "operationId": "live_push_latest_api_plugins_paper_trading_live_push_latest_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "event",
-            "required": false,
-            "schema": {
-              "default": "kLineRealTime",
-              "title": "Event",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "light",
-            "required": false,
-            "schema": {
-              "default": true,
-              "title": "Light",
-              "type": "boolean"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Live Push Latest Api Plugins Paper Trading Live Push Latest Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Live Push Latest",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/live/push/status": {
-      "get": {
-        "description": "实时推送连接状态(WS 是否在连、各事件订阅与最近推送时间)。",
-        "operationId": "live_push_status_api_plugins_paper_trading_live_push_status_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Live Push Status Api Plugins Paper Trading Live Push Status Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Live Push Status",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/live/push/stream": {
-      "get": {
-        "description": "SSE 实时推送流:把平台 WS 推送逐条转发给浏览器(替代轮询)。\n\n事件格式(每行一个):\n    event: <event_name>\n    data: <JSON>\n心跳每 15s 发一次 comment 保活。",
-        "operationId": "live_push_stream_api_plugins_paper_trading_live_push_stream_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "light",
-            "required": false,
-            "schema": {
-              "default": true,
-              "title": "Light",
-              "type": "boolean"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "title": "Response Live Push Stream Api Plugins Paper Trading Live Push Stream Get"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Live Push Stream",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/live/push/subscribe": {
-      "get": {
-        "description": "订阅某个推送事件并返回其最新(已解码)快照。\n\n- ``event``: kLineRealTime(个股实时+十档盘口+分时) / todayStock(大盘) /\n  stockPosition(持仓) / itemByStepDetailsV3(分时详情) 等;\n- ``codes``: 逗号分隔的代码列表,如 \"605080.sh,003032.sz\"(仅个股类事件需要)。\n订阅后该事件会持续推送到本地;可通过 /live/push/stream 或 Python 回调消费。",
-        "operationId": "live_push_subscribe_api_plugins_paper_trading_live_push_subscribe_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "event",
-            "required": false,
-            "schema": {
-              "default": "kLineRealTime",
-              "title": "Event",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "codes",
-            "required": false,
-            "schema": {
-              "default": "",
-              "title": "Codes",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Live Push Subscribe Api Plugins Paper Trading Live Push Subscribe Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Live Push Subscribe",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/live/refresh": {
-      "post": {
-        "operationId": "refresh_live_api_plugins_paper_trading_live_refresh_post",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Refresh Live Api Plugins Paper Trading Live Refresh Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Refresh Live",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/live/status": {
-      "get": {
-        "operationId": "live_status_api_plugins_paper_trading_live_status_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Live Status Api Plugins Paper Trading Live Status Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Live Status",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/live/watch": {
-      "get": {
-        "operationId": "live_watch_api_plugins_paper_trading_live_watch_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "force",
-            "required": false,
-            "schema": {
-              "default": false,
-              "title": "Force",
-              "type": "boolean"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Live Watch Api Plugins Paper Trading Live Watch Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Live Watch",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/orderbook/{code}": {
-      "get": {
-        "operationId": "orderbook_api_plugins_paper_trading_orderbook__code__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "code",
-            "required": true,
-            "schema": {
-              "title": "Code",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "levels",
-            "required": false,
-            "schema": {
-              "default": 10,
-              "title": "Levels",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Orderbook Api Plugins Paper Trading Orderbook  Code  Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Orderbook",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/orders": {
-      "get": {
-        "operationId": "orders_api_plugins_paper_trading_orders_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 100,
-              "title": "Limit",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Orders Api Plugins Paper Trading Orders Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Orders",
-        "tags": [
-          "paper_trading"
-        ]
-      },
-      "post": {
-        "operationId": "create_order_api_plugins_paper_trading_orders_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/_OrderIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Create Order Api Plugins Paper Trading Orders Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Order",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/page": {
-      "get": {
-        "operationId": "serve_page_api_plugins_paper_trading_page_get",
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Serve Page",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/platform/add-capital": {
-      "post": {
-        "operationId": "platform_add_capital_api_plugins_paper_trading_platform_add_capital_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/_PlatformMoneyIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Platform Add Capital Api Plugins Paper Trading Platform Add Capital Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Platform Add Capital",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/platform/apply-contract": {
-      "post": {
-        "operationId": "platform_apply_contract_api_plugins_paper_trading_platform_apply_contract_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/_PlatformApplyIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Platform Apply Contract Api Plugins Paper Trading Platform Apply Contract Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Platform Apply Contract",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/platform/apply-options": {
-      "get": {
-        "operationId": "platform_apply_options_api_plugins_paper_trading_platform_apply_options_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Platform Apply Options Api Plugins Paper Trading Platform Apply Options Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Platform Apply Options",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/platform/buy": {
-      "post": {
-        "operationId": "platform_buy_api_plugins_paper_trading_platform_buy_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/_PlatformOrderIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Platform Buy Api Plugins Paper Trading Platform Buy Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Platform Buy",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/platform/cancel-order": {
-      "post": {
-        "operationId": "platform_cancel_order_api_plugins_paper_trading_platform_cancel_order_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/_PlatformCancelIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Platform Cancel Order Api Plugins Paper Trading Platform Cancel Order Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Platform Cancel Order",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/platform/contract-details": {
-      "get": {
-        "operationId": "platform_contract_details_api_plugins_paper_trading_platform_contract_details_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Platform Contract Details Api Plugins Paper Trading Platform Contract Details Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Platform Contract Details",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/platform/contracts": {
-      "get": {
-        "operationId": "platform_contracts_api_plugins_paper_trading_platform_contracts_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Platform Contracts Api Plugins Paper Trading Platform Contracts Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Platform Contracts",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/platform/money-records": {
-      "get": {
-        "operationId": "platform_money_records_api_plugins_paper_trading_platform_money_records_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "contract_id",
-            "required": false,
-            "schema": {
-              "default": "",
-              "title": "Contract Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "type_",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "string"
-                }
-              ],
-              "default": "",
-              "title": "Type "
-            }
-          },
-          {
-            "in": "query",
-            "name": "date",
-            "required": false,
-            "schema": {
-              "default": "",
-              "title": "Date",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "current",
-            "required": false,
-            "schema": {
-              "default": 1,
-              "title": "Current",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "size",
-            "required": false,
-            "schema": {
-              "default": 20,
-              "title": "Size",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Platform Money Records Api Plugins Paper Trading Platform Money Records Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Platform Money Records",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/platform/orders": {
-      "get": {
-        "operationId": "platform_orders_api_plugins_paper_trading_platform_orders_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "type_",
-            "required": false,
-            "schema": {
-              "default": 1,
-              "title": "Type ",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "current",
-            "required": false,
-            "schema": {
-              "default": 1,
-              "title": "Current",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "size",
-            "required": false,
-            "schema": {
-              "default": 20,
-              "title": "Size",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Platform Orders Api Plugins Paper Trading Platform Orders Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Platform Orders",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/platform/overview": {
-      "get": {
-        "operationId": "platform_overview_api_plugins_paper_trading_platform_overview_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Platform Overview Api Plugins Paper Trading Platform Overview Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Platform Overview",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/platform/positions": {
-      "get": {
-        "operationId": "platform_positions_api_plugins_paper_trading_platform_positions_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Platform Positions Api Plugins Paper Trading Platform Positions Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Platform Positions",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/platform/rate-table": {
-      "get": {
-        "operationId": "platform_rate_table_api_plugins_paper_trading_platform_rate_table_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Platform Rate Table Api Plugins Paper Trading Platform Rate Table Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Platform Rate Table",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/platform/sell": {
-      "post": {
-        "operationId": "platform_sell_api_plugins_paper_trading_platform_sell_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/_PlatformOrderIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Platform Sell Api Plugins Paper Trading Platform Sell Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Platform Sell",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/platform/sell-panel": {
-      "get": {
-        "operationId": "platform_sell_panel_api_plugins_paper_trading_platform_sell_panel_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "contract_id",
-            "required": false,
-            "schema": {
-              "default": "",
-              "title": "Contract Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "stock_code",
-            "required": false,
-            "schema": {
-              "default": "",
-              "title": "Stock Code",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Platform Sell Panel Api Plugins Paper Trading Platform Sell Panel Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Platform Sell Panel",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/platform/status": {
-      "get": {
-        "operationId": "platform_status_api_plugins_paper_trading_platform_status_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Platform Status Api Plugins Paper Trading Platform Status Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Platform Status",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/platform/withdraw-profit": {
-      "post": {
-        "operationId": "platform_withdraw_profit_api_plugins_paper_trading_platform_withdraw_profit_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/_PlatformMoneyIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Platform Withdraw Profit Api Plugins Paper Trading Platform Withdraw Profit Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Platform Withdraw Profit",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/quote/{code}": {
-      "get": {
-        "operationId": "quote_api_plugins_paper_trading_quote__code__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "code",
-            "required": true,
-            "schema": {
-              "title": "Code",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Quote Api Plugins Paper Trading Quote  Code  Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Quote",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/quotes": {
-      "get": {
-        "operationId": "quotes_api_plugins_paper_trading_quotes_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Quotes Api Plugins Paper Trading Quotes Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Quotes",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/reset": {
-      "post": {
-        "operationId": "reset_api_plugins_paper_trading_reset_post",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Reset Api Plugins Paper Trading Reset Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Reset",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/symbols": {
-      "get": {
-        "operationId": "symbols_api_plugins_paper_trading_symbols_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Symbols Api Plugins Paper Trading Symbols Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Symbols",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/watch": {
-      "get": {
-        "operationId": "serve_watch_page_api_plugins_paper_trading_watch_get",
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Serve Watch Page",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/watchlists": {
-      "get": {
-        "operationId": "watchlists_api_plugins_paper_trading_watchlists_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Watchlists Api Plugins Paper Trading Watchlists Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Watchlists",
-        "tags": [
-          "paper_trading"
-        ]
-      },
-      "post": {
-        "operationId": "create_group_api_plugins_paper_trading_watchlists_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/_GroupIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Create Group Api Plugins Paper Trading Watchlists Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Group",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/watchlists/fav": {
-      "post": {
-        "operationId": "toggle_fav_api_plugins_paper_trading_watchlists_fav_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/_FavIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Toggle Fav Api Plugins Paper Trading Watchlists Fav Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Toggle Fav",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/watchlists/{group_id}": {
-      "delete": {
-        "operationId": "delete_group_api_plugins_paper_trading_watchlists__group_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "group_id",
-            "required": true,
-            "schema": {
-              "title": "Group Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Delete Group Api Plugins Paper Trading Watchlists  Group Id  Delete",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Delete Group",
-        "tags": [
-          "paper_trading"
-        ]
-      },
-      "patch": {
-        "operationId": "rename_group_api_plugins_paper_trading_watchlists__group_id__patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "group_id",
-            "required": true,
-            "schema": {
-              "title": "Group Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/_GroupIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rename Group Api Plugins Paper Trading Watchlists  Group Id  Patch",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Rename Group",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/watchlists/{group_id}/stocks": {
-      "post": {
-        "operationId": "add_stock_api_plugins_paper_trading_watchlists__group_id__stocks_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "group_id",
-            "required": true,
-            "schema": {
-              "title": "Group Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/_StockIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Add Stock Api Plugins Paper Trading Watchlists  Group Id  Stocks Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Add Stock",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
-    "/api/plugins/paper-trading/watchlists/{group_id}/stocks/{code}": {
-      "delete": {
-        "operationId": "remove_stock_api_plugins_paper_trading_watchlists__group_id__stocks__code__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "group_id",
-            "required": true,
-            "schema": {
-              "title": "Group Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "code",
-            "required": true,
-            "schema": {
-              "title": "Code",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Remove Stock Api Plugins Paper Trading Watchlists  Group Id  Stocks  Code  Delete",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Remove Stock",
-        "tags": [
-          "paper_trading"
-        ]
-      }
-    },
     "/api/plugins/permission-rule-drafts": {
       "get": {
         "operationId": "_plugin_permission_rule_drafts_api_plugins_permission_rule_drafts_get",
@@ -34450,29 +36008,6 @@
         "summary": " Plugin Permission Rule Draft Install",
         "tags": [
           "plugins"
-        ]
-      }
-    },
-    "/api/plugins/project-wiki/contract": {
-      "get": {
-        "operationId": "api_project_wiki_contract_api_plugins_project_wiki_contract_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Api Project Wiki Contract Api Plugins Project Wiki Contract Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Api Project Wiki Contract",
-        "tags": [
-          "project-wiki"
         ]
       }
     },
@@ -35061,6 +36596,66 @@
       }
     },
     "/api/projects/from-group/{thread_id}": {
+      "delete": {
+        "description": "Close a group's project capability without deleting the group.\n\nThe project record and all project/chat history remain inspectable.\nRunning or blocked work is protected unless the owner explicitly uses\n``force``. The optional expected id makes UI retries safe against a\nconcurrent rebind.",
+        "operationId": "detach_from_group_api_projects_from_group__thread_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DetachFromGroupBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Detach From Group Api Projects From Group  Thread Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Detach From Group",
+        "tags": [
+          "projectos"
+        ]
+      },
       "post": {
         "description": "Attach Project OS to a cowork group and optionally start execution.\n\nThe group remains a normal conversation surface. Its chat/cluster/swarm\nresponse strategy is independent from the persistent project binding.\nProject work starts only when the caller explicitly requests ``run``.",
         "operationId": "from_group_api_projects_from_group__thread_id__post",
@@ -43710,6 +45305,99 @@
         "summary": "Api Wiki Update",
         "tags": [
           "wiki"
+        ]
+      }
+    },
+    "/api/workbench-packages/{plugin_id}/assets/{asset_path}": {
+      "get": {
+        "operationId": "get_asset_api_workbench_packages__plugin_id__assets__asset_path__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "title": "Plugin Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "asset_path",
+            "required": true,
+            "schema": {
+              "title": "Asset Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Asset",
+        "tags": [
+          "workbench-packages"
+        ]
+      }
+    },
+    "/api/workbench-packages/{plugin_id}/manifest": {
+      "get": {
+        "operationId": "get_manifest_api_workbench_packages__plugin_id__manifest_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "title": "Plugin Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Manifest Api Workbench Packages  Plugin Id  Manifest Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Manifest",
+        "tags": [
+          "workbench-packages"
         ]
       }
     },

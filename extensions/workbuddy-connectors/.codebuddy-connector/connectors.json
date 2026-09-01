@@ -49,7 +49,7 @@
       "description_zh": "管理 Linear 中的 Issues、项目、文档和发布。支持创建和更新 Issue 并指派负责人与标签，评论与讨论串回复，创建项目和里程碑及进度报告，管理文档和附件，查看 Sprint 周期与团队状态，搜索和 Code Review PR 变更。",
       "description_en": "Manage Issues, projects, documents, and releases in Linear. Create and update issues with assignees and labels, comment and reply in threads, create projects with milestones and status updates, manage documents and attachments, view sprint cycles and team statuses, search and review PR diffs.",
       "source": "linear-mcp",
-      "auth_mode": "server-side",
+      "auth_mode": "oauth",
       "provider_id": "linear",
       "examples_zh": [
         "在我的团队创建一个高优 Bug：「用户登录后页面白屏」，指派给我，打上 Bug 标签，关联到本周的 Sprint 周期",
@@ -104,7 +104,7 @@
       "description_zh": "通过通达信 MCP 查询全球股票行情数据、条件选股、研究报告、公告资讯和宏观信息。支持个股基本面分析、同行业对比和智能选股筛查。",
       "description_en": "Query global stock data via Tongdaxin MCP. Supports screening, reports, and macro analysis.",
       "source": "tdx-connector",
-      "auth_mode": "server-side",
+      "auth_mode": "oauth",
       "type": "mcp",
       "examples_zh": [
         "帮我查询贵州茅台(600519)最近的研究报告",
@@ -3167,6 +3167,90 @@
         "internal",
         "iOA",
         "cloudhosted",
+        "selfhosted"
+      ]
+    },
+    {
+      "id": "freebuff-cli",
+      "name": "Freebuff CLI",
+      "name_zh": "Freebuff 本地 Agent",
+      "name_en": "Freebuff CLI",
+      "description": "Install and sign in to the official Freebuff CLI as a local interactive coding-agent companion. This connector does not emulate private APIs or expose Freebuff as an OpenAI-compatible model provider.",
+      "description_zh": "安装并登录官方 Freebuff CLI，作为本地交互式编程 Agent 伙伴使用。不模拟私有 API，也不把 Freebuff 伪装成 OpenAI 兼容模型服务。Freebuff 会处理你交给它的对话、代码和工作区文件。",
+      "description_en": "Install and sign in to the official Freebuff CLI as a local interactive coding-agent companion. This connector does not emulate private APIs or expose Freebuff as an OpenAI-compatible model provider.",
+      "source": "octopus",
+      "provider_id": "freebuff",
+      "type": "cli",
+      "auth_mode": "token",
+      "version": "1.0.0",
+      "examples_zh": [
+        "安装 Freebuff 本地 Agent 插件",
+        "登录 Freebuff 账号",
+        "在当前工作区启动 Freebuff"
+      ],
+      "examples_en": [
+        "Install the Freebuff local-agent plugin",
+        "Sign in to my Freebuff account",
+        "Launch Freebuff in the current workspace"
+      ],
+      "visible_in": [
+        "internal",
+        "selfhosted"
+      ]
+    },
+    {
+      "id": "opencode-zen",
+      "name": "OpenCode Zen Models",
+      "name_zh": "OpenCode Zen 模型适配器",
+      "name_en": "OpenCode Zen Models",
+      "description": "Connect OpenCode Zen directly as an OpenAI-compatible model provider. No OpenCode CLI is installed or detected.",
+      "description_zh": "通过 OpenAI 兼容 API 直连 OpenCode Zen；不安装、不检测 OpenCode CLI，流式输出、工具和记忆继续使用 Octopus 原生能力。",
+      "description_en": "Connect OpenCode Zen directly as an OpenAI-compatible model provider. No OpenCode CLI is installed or detected.",
+      "source": "octopus",
+      "provider_id": "opencode",
+      "type": "plugin",
+      "auth_mode": "token",
+      "version": "2.0.0",
+      "examples_zh": [
+        "安装 OpenCode Zen 模型适配器",
+        "使用 Zen 免费模型完成带工具调用的工程任务",
+        "在模型设置中切换 OpenCode Zen 免费模型"
+      ],
+      "examples_en": [
+        "Install the OpenCode Zen model adapter",
+        "Use a Zen free model with Octopus tools",
+        "Switch between available Zen free models"
+      ],
+      "visible_in": [
+        "internal",
+        "selfhosted"
+      ]
+    },
+    {
+      "id": "freebuff2api-community",
+      "name": "Freebuff2API Community Adapter",
+      "name_zh": "Freebuff2API 社区适配器",
+      "name_en": "Freebuff2API Community Adapter",
+      "description": "Connect a third-party Freebuff2API deployment as an OpenAI-compatible model provider. This is a community adapter and is not affiliated with or endorsed by Freebuff.",
+      "description_zh": "把第三方 Freebuff2API 服务接入为 OpenAI 兼容模型提供方；不安装 Freebuff CLI。社区适配器，非 Freebuff 官方服务或官方插件，可使用默认公共地址或填写自托管地址。",
+      "description_en": "Connect a third-party Freebuff2API deployment as an OpenAI-compatible model provider. This is a community adapter and is not affiliated with or endorsed by Freebuff.",
+      "source": "octopus",
+      "provider_id": "freebuff2api-community",
+      "type": "plugin",
+      "auth_mode": "token",
+      "version": "1.0.0",
+      "examples_zh": [
+        "安装 Freebuff2API 社区适配器",
+        "使用社区网关提供的模型完成带工具调用的任务",
+        "连接我自托管的 Freebuff2API 服务"
+      ],
+      "examples_en": [
+        "Install the Freebuff2API community adapter",
+        "Use a community gateway model with Octopus tools",
+        "Connect my self-hosted Freebuff2API service"
+      ],
+      "visible_in": [
+        "internal",
         "selfhosted"
       ]
     }

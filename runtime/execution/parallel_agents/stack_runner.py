@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from runtime.core.cerebrum.planner import PlannerError
 from runtime.platform.models import (
@@ -13,7 +13,7 @@ from runtime.platform.models import (
     ParsedIntent,
     Trajectory,
 )
-from runtime.platform.process.session import Session, session_scope
+from runtime.platform.process.session import Session, current_session, session_scope
 
 from .orchestrator import TaskRunner
 
@@ -175,6 +175,26 @@ def make_stack_subagent_runner(
                     subagent_name,
                 )
 
+        ctx: dict[str, Any] = context if isinstance(context, dict) else {}
+        if agent is not None:
+            from runtime.execution.codex_backend.role_runner import (
+                agent_uses_codex_execution_backend,
+                run_agent_role_sync,
+            )
+
+            if agent_uses_codex_execution_backend(agent):
+                result = run_agent_role_sync(
+                    stack,
+                    agent,
+                    description,
+                    context=ctx,
+                    is_interrupted=lambda: bool(cancel_event is not None and cancel_event.is_set()),
+                )
+                if not result.success:
+                    detail = result.output or result.status
+                    raise RuntimeError(f"Codex role execution failed: {detail}")
+                return result.output or f"[{agent.display_name} completed via Codex]"
+
         plan_kwargs: dict[str, Any] = {}
         if agent is not None:
             plan_kwargs["allowed_skills"] = agent.allowed_skill_union() or None
@@ -186,53 +206,45 @@ def make_stack_subagent_runner(
                 runtime_soul = agent.soul
             if runtime_soul:
                 plan_kwargs["soul"] = runtime_soul
-        ctx = context or {}
-        model = ctx.get("model_name") if isinstance(ctx, dict) else None
+        model = ctx.get("model_name")
         if not model and agent is not None:
             model = agent.model
         if model and model not in ("octopus-agent", ""):
             plan_kwargs["model"] = model
 
-        actor = ctx.get("actor") or ctx.get("file_write_owner") if isinstance(ctx, dict) else None
-        runtime_metadata = (
-            ctx.get("runtime_session_metadata")
-            if isinstance(ctx, dict) and isinstance(ctx.get("runtime_session_metadata"), dict)
+        actor = ctx.get("actor") or ctx.get("file_write_owner")
+        runtime_metadata: dict[str, Any] = (
+            cast(dict[str, Any], ctx.get("runtime_session_metadata"))
+            if isinstance(ctx.get("runtime_session_metadata"), dict)
             else {}
         )
         emit_tool_event = (
-            ctx.get("emit_tool_event")
-            if isinstance(ctx, dict) and callable(ctx.get("emit_tool_event"))
-            else None
+            ctx.get("emit_tool_event") if callable(ctx.get("emit_tool_event")) else None
         )
-        thread_id = ctx.get("thread_id") if isinstance(ctx, dict) else None
+        thread_id = ctx.get("thread_id")
 
         # 3. Intent
         user_context = {
             "subagent_name": subagent_name,
             "parallel": True,
-            **(
-                {"thread_id": ctx["thread_id"]}
-                if isinstance(ctx, dict) and ctx.get("thread_id")
-                else {}
-            ),
+            **({"thread_id": ctx["thread_id"]} if ctx.get("thread_id") else {}),
         }
-        if isinstance(ctx, dict):
-            for key in (
-                "lead_agent_name",
-                "research_job_id",
-                "research_ephemeral_workers",
-                "research_sources",
-                "research_materials",
-                "research_roles",
-                "research_prefetch_logs",
-                # Security: carry the spawning parent's prompt-injection taint
-                # into the sub-agent so a tainted parent can't launder a risky
-                # action through delegation. Honored at the sub-agent's
-                # react-loop start (stream_react_loop). MUST stay in this list.
-                "_inherited_injection_taint",
-            ):
-                if key in ctx:
-                    user_context[key] = ctx[key]
+        for key in (
+            "lead_agent_name",
+            "research_job_id",
+            "research_ephemeral_workers",
+            "research_sources",
+            "research_materials",
+            "research_roles",
+            "research_prefetch_logs",
+            # Security: carry the spawning parent's prompt-injection taint
+            # into the sub-agent so a tainted parent can't launder a risky
+            # action through delegation. Honored at the sub-agent's
+            # react-loop start (stream_react_loop). MUST stay in this list.
+            "_inherited_injection_taint",
+        ):
+            if key in ctx:
+                user_context[key] = ctx[key]
 
         intent = ParsedIntent(
             raw=description,
@@ -249,6 +261,21 @@ def make_stack_subagent_runner(
                 metadata=runtime_metadata,
             )
         ):
+            # A delegated task without an explicitly selected project is
+            # confined to its thread artifact directory.  That directory is
+            # normally created by the realtime workspace lifecycle, but
+            # persistent/background delegation can arrive first.  Materialize
+            # only this internal fallback root so an initial read/list probe
+            # observes an empty workspace instead of failing the whole task.
+            if not runtime_metadata.get("workspace_path"):
+                try:
+                    from runtime.platform.process.scope import resolve_execution_scope
+
+                    fallback_root = resolve_execution_scope(current_session()).primary_read
+                    if fallback_root is not None:
+                        fallback_root.mkdir(parents=True, exist_ok=True)
+                except OSError as exc:
+                    _log.warning("subagent fallback workspace unavailable: %s", exc)
             try:
                 graph = planner.plan(intent, **safe_kwargs)
             except PlannerError as e:
@@ -282,4 +309,9 @@ def make_stack_subagent_runner(
 
         return summ(traj)
 
+    # Delegation visibility uses the same concrete AgentRegistry as dispatch.
+    # Function attributes keep the bridge API backward compatible while
+    # avoiding a second process-global registry.
+    runner.agent_registry = agent_registry  # type: ignore[attr-defined]
+    runner.execution_stack = stack  # type: ignore[attr-defined]
     return runner

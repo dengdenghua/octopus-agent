@@ -13,8 +13,10 @@ parent module to preserve patch visibility.
 
 from __future__ import annotations
 
+import copy
 import json
 import re
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +30,21 @@ _SAFE_SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 _AGENCY_AGENTS_ROOT = Path(__file__).with_name("agent_market_sources") / "agency-agents"
 _FINANCIAL_SERVICES_ROOT = Path(__file__).with_name("agent_market_sources") / "financial-services"
 _HARDWARE_STARTUP_ROOT = Path(__file__).with_name("agent_market_sources") / "hardware-startup"
+_AGENT_AVATAR_FILENAMES = tuple(f"avatar.{ext}" for ext in ("png", "webp", "jpg", "jpeg", "svg"))
+_AGENT_VISUAL_FILENAMES = tuple(
+    f"{view}.{ext}"
+    for view in ("front", "side", "back")
+    for ext in ("png", "jpg", "jpeg", "webp", "svg")
+) + ("reference.png",)
+_LOCAL_AGENTS_CACHE_LOCK = threading.RLock()
+_LOCAL_AGENTS_CACHE: (
+    tuple[
+        Path,
+        tuple[Any, ...],
+        list[dict[str, Any]],
+    ]
+    | None
+) = None
 _AGENCY_AGENT_DIRS = {
     "academic": "researcher",
     "design": "creative",
@@ -557,6 +574,55 @@ def _model_name_for_wire(value: Any) -> str | None:
     return None
 
 
+def _path_stamp(path: Path) -> tuple[int, int, int, int] | None:
+    """Return the inexpensive metadata used to invalidate file-backed caches."""
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return (stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size, stat.st_ino)
+
+
+def _local_agents_signature(root: Path) -> tuple[Any, ...]:
+    """Fingerprint every file that contributes to the local market projection.
+
+    Directory names make new/deleted agents visible immediately. Individual
+    file stamps catch in-place profile, tool registry, avatar, and visual edits
+    without rereading and reparsing every profile on every HTTP request.
+    """
+    entries: list[tuple[Any, ...]] = []
+    try:
+        agent_dirs = sorted(
+            (path for path in root.iterdir() if path.is_dir() and not path.name.startswith("_")),
+            key=lambda path: path.name,
+        )
+    except OSError:
+        agent_dirs = []
+
+    for agent_dir in agent_dirs:
+        visuals_dir = agent_dir / "visuals"
+        visuals_stamp = _path_stamp(visuals_dir)
+        entries.append(
+            (
+                agent_dir.name,
+                _path_stamp(agent_dir / "profile.jsonc"),
+                _path_stamp(agent_dir / "agent-core" / "tool-registry.jsonc"),
+                tuple(
+                    (filename, _path_stamp(agent_dir / filename))
+                    for filename in _AGENT_AVATAR_FILENAMES
+                ),
+                visuals_stamp,
+                tuple(
+                    (filename, _path_stamp(visuals_dir / filename))
+                    for filename in _AGENT_VISUAL_FILENAMES
+                )
+                if visuals_stamp is not None
+                else (),
+            )
+        )
+    return (_path_stamp(root), tuple(entries))
+
+
 def _template_by_id(agent_id: str) -> dict[str, Any] | None:
     if not _is_safe_agent_id(agent_id):
         return None
@@ -653,8 +719,7 @@ def _agent_visual_urls_for(agent_id: str, agent_dir: Path) -> dict[str, str]:
     return urls
 
 
-def _list_local_agents() -> list[dict[str, Any]]:
-    root = default_agents_root()
+def _scan_local_agents(root: Path) -> list[dict[str, Any]]:
     agents: list[dict[str, Any]] = []
     seen: set[str] = set()
     if root.is_dir():
@@ -710,6 +775,7 @@ def _list_local_agents() -> list[dict[str, Any]]:
                     in {"general", "coder", "ecommerce_mind", "vibe_selling"},
                     "is_official": is_official,
                     "is_installed": is_installed,
+                    "source_kind": str(profile.get("source_kind") or profile.get("source") or ""),
                     "created_at": str(mtime),
                     "key_skills": private_skills or profile.get("key_skills") or [],
                     "available_skills": profile.get("available_skills")
@@ -726,3 +792,24 @@ def _list_local_agents() -> list[dict[str, Any]]:
     # registry_consumer_router 的 /api/registry/roles,role+twin-role 304 条,
     # 是模板目录的超集),改走「云端角色」浏览安装,母本本地只默认这 9(+系统)个。
     return agents
+
+
+def _list_local_agents() -> list[dict[str, Any]]:
+    """Return local market agents, reusing parsed profiles until inputs change."""
+    global _LOCAL_AGENTS_CACHE
+
+    root = default_agents_root()
+    root_key = root.absolute()
+    with _LOCAL_AGENTS_CACHE_LOCK:
+        signature = _local_agents_signature(root)
+        cached = _LOCAL_AGENTS_CACHE
+        if cached is not None and cached[0] == root_key and cached[1] == signature:
+            return copy.deepcopy(cached[2])
+
+        agents = _scan_local_agents(root)
+        # Do not retain a potentially mixed snapshot if files changed while
+        # they were being parsed. The current request still gets its result;
+        # the next request will perform a clean rescan.
+        if _local_agents_signature(root) == signature:
+            _LOCAL_AGENTS_CACHE = (root_key, signature, agents)
+        return copy.deepcopy(agents)

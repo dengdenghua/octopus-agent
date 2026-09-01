@@ -134,9 +134,7 @@ class CodexUpstreamUpdateService:
         self._registry_url = registry_url
         self._fetcher = fetcher or _fetch_registry_metadata
         self._check_interval_seconds = max(60.0, float(check_interval_seconds))
-        self._initial_check_delay_seconds = max(
-            0.0, float(initial_check_delay_seconds)
-        )
+        self._initial_check_delay_seconds = max(0.0, float(initial_check_delay_seconds))
         self._lock = threading.RLock()
         self._task: asyncio.Task[None] | None = None
 
@@ -167,9 +165,7 @@ class CodexUpstreamUpdateService:
                     raise ValueError("Codex package integrity is missing")
                 if not tarball.startswith("https://"):
                     raise ValueError("Codex package tarball must use HTTPS")
-                update_available = _version_parts(latest) > _version_parts(
-                    self._current_version
-                )
+                update_available = _version_parts(latest) > _version_parts(self._current_version)
                 approval_status = previous.approval_status
                 approved_version = previous.approved_version
                 approved_at = previous.approved_at

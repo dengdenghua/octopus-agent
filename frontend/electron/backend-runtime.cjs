@@ -150,7 +150,8 @@ const CODEX_PROFILE = IS_WINDOWS
         { relative: "codex-package.json" },
         ...SHARED_LICENSE_FILES,
         {
-          relative: "third-party/codex-rust/THIRD_PARTY_LICENSES-codex-cli.html",
+          relative:
+            "third-party/codex-rust/THIRD_PARTY_LICENSES-codex-cli.html",
           expectedSha256:
             "085bfd0627d8011777788beb1c74a7399c5acba157bac3eb766e0562f58a432b",
         },
@@ -199,7 +200,8 @@ const CODEX_PROFILE = IS_WINDOWS
             { relative: "codex-package.json" },
             ...SHARED_LICENSE_FILES,
             {
-              relative: "third-party/codex-rust/THIRD_PARTY_LICENSES-codex-cli.html",
+              relative:
+                "third-party/codex-rust/THIRD_PARTY_LICENSES-codex-cli.html",
               expectedSha256:
                 "085bfd0627d8011777788beb1c74a7399c5acba157bac3eb766e0562f58a432b",
             },
@@ -221,7 +223,8 @@ const CODEX_PROFILE = IS_WINDOWS
             { relative: "codex-package.json" },
             ...SHARED_LICENSE_FILES,
             {
-              relative: "third-party/codex-rust/THIRD_PARTY_LICENSES-codex-cli.html",
+              relative:
+                "third-party/codex-rust/THIRD_PARTY_LICENSES-codex-cli.html",
               expectedSha256:
                 "085bfd0627d8011777788beb1c74a7399c5acba157bac3eb766e0562f58a432b",
             },
@@ -276,7 +279,12 @@ function requirePackagedBackendExecutable() {
 }
 
 function packagedCodexExecutable() {
-  return path.join(resourcesPath(), "codex", "bin", CODEX_PROFILE.executableName);
+  return path.join(
+    resourcesPath(),
+    "codex",
+    "bin",
+    CODEX_PROFILE.executableName,
+  );
 }
 
 function sha256File(file) {
@@ -382,7 +390,8 @@ function requirePackagedCodexBundle() {
     manifest?.licenses?.ripgrep?.version !== RIPGREP_VERSION ||
     manifest?.licenses?.ripgrep?.sourceTag !== RIPGREP_VERSION ||
     manifest?.licenses?.ripgrep?.sourceCommit !== RIPGREP_SOURCE_COMMIT ||
-    manifest?.licenses?.ripgrep?.cargoLockSha256 !== RIPGREP_CARGO_LOCK_SHA256 ||
+    manifest?.licenses?.ripgrep?.cargoLockSha256 !==
+      RIPGREP_CARGO_LOCK_SHA256 ||
     manifest?.licenses?.ripgrep?.cargoAboutVersion !== "0.9.2" ||
     JSON.stringify(manifest?.licenses?.ripgrep?.releaseFeatures) !==
       '["pcre2"]' ||
@@ -399,8 +408,7 @@ function requirePackagedCodexBundle() {
   // its rg binary is covered by the manifest file map below.
   if (IS_WINDOWS) {
     if (
-      manifest?.licenses?.native?.schemaVersion !==
-        "codex-native-notices.v1" ||
+      manifest?.licenses?.native?.schemaVersion !== "codex-native-notices.v1" ||
       manifest?.licenses?.native?.provenanceSha256 !==
         "65e2c0c7f7b239ee758133ce17cfb680bc38aec84876ca81015458c41a988c7a" ||
       manifest?.licenses?.native?.noticeSha256 !==
@@ -476,6 +484,7 @@ function developmentUvCmd() {
 // the `desktop-core` extra in pyproject.toml; released installers use the
 // PyInstaller dependency graph instead.
 const CORE_DEPS = [
+  "cryptography>=50.0.0",
   "fastapi>=0.115,<1.0",
   "starlette>=1.3.1",
   "uvicorn[standard]>=0.32",
@@ -483,12 +492,19 @@ const CORE_DEPS = [
   "python-multipart>=0.0.31",
   "httpx>=0.27",
   "python-dotenv>=1.0",
+  "ddgs>=9.0",
   "pydantic>=2.12.0",
+  "packaging>=24.0",
   // anthropic is required at boot: the default desktop config routes the
   // planner through AnthropicModelRouter, which is constructed eagerly in
   // builder._build_planner. Small pure-Python SDK (~2-3MB), so it lives in
   // the core set instead of the lazy extras.
   "anthropic>=0.40,<1.0",
+  "python-docx>=1.2.0",
+  "openpyxl>=3.1.5",
+  "python-pptx>=1.0.2",
+  "pypdf>=6.15.0",
+  "reportlab>=4.4.4",
 ];
 
 // Heavy optional capability → pyproject extra. Installed lazily on first use.
@@ -511,6 +527,13 @@ const OPTIONAL_GROUPS = {
     "rapidocr-onnxruntime>=1.3.0",
   ],
   extract: ["trafilatura>=2.0", "pypdf>=6.15.0"],
+  office: [
+    "python-docx>=1.2.0",
+    "openpyxl>=3.1.5",
+    "python-pptx>=1.0.2",
+    "pypdf>=6.15.0",
+    "reportlab>=4.4.4",
+  ],
   mcp: [
     "mcp>=2.0.0,<3.0",
     "pydantic-settings>=2.14.2",

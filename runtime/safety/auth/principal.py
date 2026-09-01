@@ -18,16 +18,66 @@ try:
 except ImportError:  # pragma: no cover - keeps the core auth package optional
 
     class HTTPException(RuntimeError):  # type: ignore[no-redef]
-        def __init__(self, status_code: int, detail: str) -> None:
+        def __init__(
+            self,
+            status_code: int,
+            detail: str,
+            headers: dict[str, str] | None = None,
+        ) -> None:
             super().__init__(detail)
             self.status_code = status_code
             self.detail = detail
+            self.headers = headers
 
 
 from .identity import Identity, IdentityStore
 from .websocket import websocket_bearer_token
 
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
+SESSION_COOKIE_NAME = "octopus_session"
+AUTH_EXPIRED_HEADER = "X-Octopus-Auth-Expired"
+
+
+def authentication_error(detail: str) -> HTTPException:
+    """Return a host-session 401 distinguishable from downstream 401s."""
+
+    return HTTPException(401, detail, headers={AUTH_EXPIRED_HEADER: "1"})
+
+
+def set_session_cookie(
+    response: Any,
+    request: Any,
+    token: str,
+    *,
+    max_age: int,
+) -> None:
+    """Persist a browser session without exposing the JWT to JavaScript."""
+
+    url = getattr(request, "url", None)
+    secure = str(getattr(url, "scheme", "") or "").lower() == "https"
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=token,
+        max_age=max(1, int(max_age)),
+        path="/",
+        secure=secure,
+        httponly=True,
+        samesite="lax",
+    )
+
+
+def clear_session_cookie(response: Any, request: Any) -> None:
+    """Expire the browser session cookie using the same transport policy."""
+
+    url = getattr(request, "url", None)
+    secure = str(getattr(url, "scheme", "") or "").lower() == "https"
+    response.delete_cookie(
+        key=SESSION_COOKIE_NAME,
+        path="/",
+        secure=secure,
+        httponly=True,
+        samesite="lax",
+    )
 
 
 @dataclass(frozen=True)
@@ -53,8 +103,8 @@ def _request_token(request: Any) -> str:
     subprotocol_token = websocket_bearer_token(request)
     if subprotocol_token:
         return subprotocol_token
-    query_params = getattr(request, "query_params", {}) or {}
-    return str(query_params.get("token") or "").strip()
+    cookies = getattr(request, "cookies", {}) or {}
+    return str(cookies.get(SESSION_COOKIE_NAME) or "").strip()
 
 
 def _request_id(request: Any) -> str:
@@ -117,12 +167,12 @@ def resolve_principal(
     if not require_auth and identity_store is None:
         return None
     if identity_store is None:
-        raise HTTPException(401, "identity store required for authentication")
+        raise authentication_error("identity store required for authentication")
 
     token = _request_token(request)
     if not token:
         if require_auth:
-            raise HTTPException(401, "missing Authorization: Bearer <token>")
+            raise authentication_error("missing Authorization: Bearer <token>")
         return None
 
     identity: Identity | None = None
@@ -142,7 +192,7 @@ def resolve_principal(
         authn_method = "api_key"
     if identity is None:
         if require_auth:
-            raise HTTPException(401, "invalid token")
+            raise authentication_error("invalid token")
         return None
 
     principal = _principal_from_identity(request, identity, authn_method=authn_method)
@@ -207,7 +257,12 @@ def require_operator(
 
 __all__ = [
     "CurrentPrincipal",
+    "SESSION_COOKIE_NAME",
+    "AUTH_EXPIRED_HEADER",
+    "authentication_error",
+    "clear_session_cookie",
     "require_operator",
     "require_roles",
     "resolve_principal",
+    "set_session_cookie",
 ]

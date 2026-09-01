@@ -609,6 +609,10 @@ class Turn(BaseModel):
     # Trusted runtime-only execution strand used by the evolution ledger.
     # It is never accepted from or serialized back to the client.
     execution_engine: str | None = Field(default=None, exclude=True)
+    # Resolved cwd after authentication, local-workspace validation, and
+    # managed-workspace allocation. Task supervision consumes this trusted
+    # value instead of guessing from the client's raw TurnParams shape.
+    execution_workspace_path: str | None = Field(default=None, exclude=True)
     checkpoint_id: int | None = Field(default=None, alias="checkpointId")
     outcome_reason: str | None = Field(default=None, alias="outcomeReason")
     # Canonical semantic result emitted by the agent loop. ``status`` remains

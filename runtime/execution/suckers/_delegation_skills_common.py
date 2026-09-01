@@ -346,10 +346,10 @@ def _coerce_name_list(value: Any) -> list[str]:
             out.extend(_coerce_name_list(value.get(key)))
         return out
     if isinstance(value, (list, tuple, set)):
-        out: list[str] = []
+        items: list[str] = []
         for item in value:
-            out.extend(_coerce_name_list(item))
-        return out
+            items.extend(_coerce_name_list(item))
+        return items
     return [str(value).strip()] if str(value).strip() else []
 
 
@@ -527,7 +527,18 @@ def _format_role_catalog() -> str:
 
 
 def _display_name_for_agent_id(agent_id: str) -> str | None:
-    """Return the human-readable display name for a builtin role, if any."""
+    """Return the human-readable display name for any dispatchable role."""
+    try:
+        from runtime.execution.subagents import get_sub_agent_runner
+
+        runner = get_sub_agent_runner()
+        registry = getattr(runner, "agent_registry", None)
+        if registry is not None and registry.has(agent_id):
+            display = str(getattr(registry.get(agent_id), "display_name", "") or "").strip()
+            if display:
+                return display
+    except Exception:  # noqa: BLE001
+        pass
     try:
         from .ephemeral_agents import BUILTIN_ROLES
 
@@ -557,6 +568,17 @@ def _allowed_agent_ids() -> set[str]:
         reg = get_subagent_registry()
         if reg is not None:
             out.update(set(reg.all_names()) - _INTERNAL_AGENTS)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from runtime.execution.subagents import get_sub_agent_runner
+
+        runner = get_sub_agent_runner()
+        registry = getattr(runner, "agent_registry", None)
+        if registry is not None:
+            all_ids = getattr(registry, "all_ids", None)
+            if callable(all_ids):
+                out.update(set(all_ids()) - _INTERNAL_AGENTS)
     except Exception:  # noqa: BLE001
         pass
     return out

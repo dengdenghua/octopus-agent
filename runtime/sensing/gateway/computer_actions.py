@@ -423,10 +423,7 @@ def _macos_actions_for_goal(goal: str) -> list[dict[str, Any]]:
             ):
                 continue
             name = str(
-                element.get("title")
-                or element.get("description")
-                or element.get("value")
-                or ""
+                element.get("title") or element.get("description") or element.get("value") or ""
             ).strip()
             lowered = name.lower()
             if not needle or needle not in lowered:

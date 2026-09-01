@@ -201,7 +201,7 @@ tier: "core"
 
 ## Who imports this
 
-**10** file(s) reference this package:
+**9** file(s) reference this package:
 
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
@@ -213,9 +213,8 @@ tier: "core"
   - `runtime/execution/swarm/_runtime_helpers.py`
   - `runtime/execution/swarm/drive.py`
   - `runtime/execution/swarm/runtime.py`
-- **`runtime/platform/`** · 2 file(s)
+- **`runtime/platform/`** · 1 file(s)
   - `runtime/platform/ui/_app_meta.py`
-  - `runtime/platform/ui/_app_routers_extra.py`
 - **`runtime/sensing/`** · 1 file(s)
   - `runtime/sensing/gateway/terminal_router.py`
 

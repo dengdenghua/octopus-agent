@@ -374,7 +374,7 @@ BENCHMARK_CASES: tuple[AgentBenchmarkCase, ...] = (
             "tests/test_react_loop.py",
         ),
         required_terms=(
-            "_drive_local_partner",
+            "_drive_codex_app_server",
             "_drive_group_fanout",
             "_drive_swarm_mesh",
             "evaluate_guards",

@@ -41,7 +41,13 @@ class SqliteBlackboard:
     """A turn-scoped namespace inside a shared SQLite file. Interface-compatible
     with the in-memory ``Blackboard`` (write / read / keys / snapshot / audit)."""
 
-    def __init__(self, db_path: str | Path, turn_id: str) -> None:
+    def __init__(
+        self,
+        db_path: str | Path,
+        turn_id: str,
+        *,
+        journal_mode: str = "WAL",
+    ) -> None:
         self.turn_id = turn_id
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -52,9 +58,15 @@ class SqliteBlackboard:
             check_same_thread=False,  # guarded by self._lock
             timeout=5.0,
         )
-        self._conn.execute("PRAGMA journal_mode=WAL")
+        normalized_journal = str(journal_mode or "WAL").strip().upper()
+        if normalized_journal not in {"DELETE", "WAL"}:
+            raise ValueError("journal_mode must be DELETE or WAL")
+        self._conn.execute(f"PRAGMA journal_mode={normalized_journal}")  # nosec B608 - allowlist
         self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.executescript(_SCHEMA)
+
+    def _assert_write_allowed(self, conn: sqlite3.Connection) -> None:
+        """Subclass hook evaluated inside the same transaction as a write."""
 
     def write(self, key: str, value: Any, *, writer: str | None = None) -> None:
         payload = json.dumps(value, ensure_ascii=False, default=str)
@@ -63,6 +75,7 @@ class SqliteBlackboard:
             cur = self._conn
             cur.execute("BEGIN IMMEDIATE")
             try:
+                self._assert_write_allowed(cur)
                 row = cur.execute(
                     "SELECT writers_json FROM blackboard WHERE turn_id=? AND key=?",
                     (self.turn_id, key),

@@ -1039,7 +1039,7 @@ def generate_all() -> tuple[dict[str, str], DocNode]:
             "24-sensing/model-router.md",
             "Sensing · Model Router",
             "runtime/sensing/model_router",
-            "ModelRouter 抽象 · Anthropic / OpenAI / Molili / Mock / MultiModelRouter (multi-provider fallback)。",
+            "ModelRouter 抽象 · Anthropic / OpenAI / Oct / Mock / MultiModelRouter (multi-provider fallback)。",
         ),
         (
             "24-sensing/gateway.md",
@@ -1069,7 +1069,7 @@ def generate_all() -> tuple[dict[str, str], DocNode]:
             "25-adapters/integrations.md",
             "Adapters · Integrations",
             "runtime/adapters/integrations",
-            "Molili 桥接 · Local auth 路由 · 各家第三方集成的 router proxy。",
+            "Oct 桥接 · Local auth 路由 · 各家第三方集成的 router proxy。",
         ),
     ]
     for rel, title, pkg_rel, prelude in runtime_subs:
@@ -1307,7 +1307,22 @@ def main() -> int:
     for rel, content in outputs.items():
         path = OUT_DIR / rel
         current = path.read_text(encoding="utf-8") if path.exists() else None
-        if current != content:
+        matches = current == content
+        if args.check and rel == "index.json" and current is not None:
+            # ``generated_at`` intentionally records the real generation time,
+            # so a byte comparison would make ``--check`` fail immediately
+            # after every successful generation. Compare the manifest payload
+            # while ignoring only that volatile field; all structural drift is
+            # still reported.
+            try:
+                current_manifest = json.loads(current)
+                expected_manifest = json.loads(content)
+                current_manifest.pop("generated_at", None)
+                expected_manifest.pop("generated_at", None)
+                matches = current_manifest == expected_manifest
+            except json.JSONDecodeError:
+                matches = False
+        if not matches:
             drift = True
             if args.check:
                 print(f"[drift] {path.relative_to(ROOT)}", file=sys.stderr)

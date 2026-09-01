@@ -186,7 +186,7 @@ def _compat_diagnostic_for_entry(entry: dict[str, Any]) -> dict[str, Any]:
         "provider": provider,
         "base_url": base_url,
         "applicable": True,
-        "has_api_key": bool(entry.get("api_key")),
+        "has_api_key": _entry_has_api_key(entry),
         "default_header_names": header_names,
         "upstreams": rows,
     }
@@ -197,6 +197,18 @@ def _default_header_names(entry: dict[str, Any]) -> list[str]:
     if not isinstance(headers, dict):
         return []
     return sorted(str(name) for name in headers if str(name).strip())
+
+
+def _entry_has_api_key(entry: dict[str, Any]) -> bool:
+    if entry.get("api_key") or entry.get("credential_configured") is True:
+        return True
+    if not entry.get("credential_ref"):
+        return False
+    from runtime.platform.models.model_provider_plugin import (
+        model_provider_entry_has_key,
+    )
+
+    return model_provider_entry_has_key(entry)
 
 
 def _custom_model_wire_entry(entry: dict[str, Any]) -> dict[str, Any]:
@@ -212,7 +224,17 @@ def _custom_model_wire_entry(entry: dict[str, Any]) -> dict[str, Any]:
     This overrides any user-set value to prevent capability mismatches.
     """
     header_names = _default_header_names(entry)
-    safe = {k: v for k, v in entry.items() if k not in {"api_key", "default_headers"}}
+    safe = {
+        k: v
+        for k, v in entry.items()
+        if k
+        not in {
+            "api_key",
+            "credential_ref",
+            "credential_configured",
+            "default_headers",
+        }
+    }
     model_id = _entry_model_id(entry)
     upstreams = _entry_upstreams(entry, model_id)
     safe["context_window"] = _entry_context_window(
@@ -220,7 +242,7 @@ def _custom_model_wire_entry(entry: dict[str, Any]) -> dict[str, Any]:
         upstreams,
     )
     safe["enable_1m_context"] = _entry_1m_enabled(entry, upstreams)
-    safe["has_api_key"] = bool(entry.get("api_key"))
+    safe["has_api_key"] = _entry_has_api_key(entry)
     safe["default_header_names"] = header_names
     safe["has_default_headers"] = bool(header_names)
     safe["selection_ids"] = [

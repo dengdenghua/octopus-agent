@@ -1005,6 +1005,7 @@ def test_windows_artifact_workflow_is_signed_and_commit_bound() -> None:
     ]
     assert "win-unpacked/Octopus.exe" in signature_check
     assert "win-unpacked/resources/backend/octopus-backend.exe" in signature_check
+    assert "win-unpacked/resources/codex/bin/codex.exe" in signature_check
     assert "Get-AuthenticodeSignature" in signature_check
     assert "SignatureStatus]::Valid" in signature_check
     assert "TimeStamperCertificate" in signature_check
@@ -1024,6 +1025,7 @@ def test_windows_artifact_workflow_is_signed_and_commit_bound() -> None:
         (REPO_ROOT / "packaging" / "desktop" / "build.yml").read_text(encoding="utf-8")
     )
     assert build_config["win"]["forceCodeSigning"] is True
+    assert build_config["win"]["signExts"] == [".exe"]
     assert build_config["win"]["artifactName"] == (
         "${productName}-Setup-${version}-${env.GITHUB_SHA}.${ext}"
     )

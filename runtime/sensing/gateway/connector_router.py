@@ -9,8 +9,10 @@
   POST   /api/connectors/{id}/enable          启用 MCP(需已连接)
   POST   /api/connectors/{id}/disable         禁用
   GET    /api/connectors/{id}/status          认证状态
-  POST   /api/connectors/{id}/connect         认证编排(带 tokens / 返回 CLI 命令)
+  POST   /api/connectors/{id}/connect         认证编排(带 tokens / 起设备流 / 返回 CLI 命令)
   POST   /api/connectors/{id}/disconnect      断开并清除凭据
+  GET    /api/connectors/{id}/device-flow     查询进行中的官网授权(verification_uri/user_code)
+  DELETE /api/connectors/{id}/device-flow     取消官网授权(终止后台 CLI 登录进程)
   GET    /api/connectors/{id}/headers         解析出的 auth 注入头(供 MCP 代理用)
 
 后端实现: runtime/platform/connectors/{credential_store,connector_registry,auth_orchestrator}
@@ -19,6 +21,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
 from typing import Any
 
 try:
@@ -33,7 +37,13 @@ except ImportError:  # pragma: no cover
     Query = None  # type: ignore[assignment, misc]
     Request = None  # type: ignore[assignment, misc]
 
+from runtime.platform.connectors.auth_orchestrator import RefreshCleanupRequiredError
+from runtime.safety.auth.scope import scope_from_request
 from runtime.sensing._fastapi_guard import require_fastapi
+from runtime.sensing.gateway._device_flow_models import (
+    DeviceFlowCancelResponse,
+    DeviceFlowResponse,
+)
 
 
 def create_connector_router(
@@ -58,8 +68,11 @@ def create_connector_router(
 
         orchestrator = AuthOrchestrator(auth_injection_rules=auth_injection_rules)
 
-    def _auth_dep(request: Request) -> None:
+    async def _auth_dep(request: Request) -> AsyncIterator[None]:
         from runtime.adapters.web_auth import _resolve_actor
+        from runtime.platform.capabilities.tenant_context import (
+            use_capability_scope,
+        )
 
         _resolve_actor(
             request,
@@ -69,6 +82,8 @@ def create_connector_router(
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
         )
+        with use_capability_scope(scope_from_request(request)):
+            yield
 
     def _operator_dep(request: Request) -> None:
         from runtime.safety.auth.principal import require_roles
@@ -84,6 +99,9 @@ def create_connector_router(
         )
 
     router = APIRouter(tags=["connectors"], dependencies=[Depends(_auth_dep)])
+
+    def _refresh_cleanup_conflict(exc: RefreshCleanupRequiredError) -> Any:
+        return HTTPException(status_code=409, detail=exc.detail)
 
     def _get_connector(cid: str) -> Any:
         conn = registry.get(cid)
@@ -131,15 +149,27 @@ def create_connector_router(
         dependencies=[Depends(_operator_dep)],
     )
     def connector_install(connector_id: str) -> dict[str, Any]:
-        _get_connector(connector_id)
-        return registry.install(connector_id)
+        conn = _get_connector(connector_id)
+        return orchestrator.run_connector_lifecycle(
+            conn,
+            lambda: registry.install(connector_id),
+        )
 
     @router.delete(
         "/api/connectors/{connector_id}/install",
         dependencies=[Depends(_operator_dep)],
     )
     def connector_uninstall(connector_id: str) -> dict[str, Any]:
-        if not registry.uninstall(connector_id):
+        conn = _get_connector(connector_id)
+        try:
+            removed = orchestrator.run_connector_lifecycle(
+                conn,
+                lambda: registry.uninstall(connector_id),
+                cancel_device_flow=True,
+            )
+        except RefreshCleanupRequiredError as exc:
+            raise _refresh_cleanup_conflict(exc) from exc
+        if not removed:
             raise HTTPException(404, f"connector not installed: {connector_id}")
         return {"installed": False, "connector_id": connector_id}
 
@@ -147,8 +177,31 @@ def create_connector_router(
         "/api/connectors/{connector_id}/enable",
         dependencies=[Depends(_operator_dep)],
     )
-    def connector_enable(connector_id: str) -> dict[str, Any]:
-        if not registry.set_enabled(connector_id, True):
+    async def connector_enable(connector_id: str, request: Request) -> dict[str, Any]:
+        conn = _get_connector(connector_id)
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001 - an empty body means no grant supplied
+            body = {}
+        try:
+            if "grant_permissions" in body:
+                registry.grant_permissions(connector_id, body["grant_permissions"])
+            enabled = await asyncio.to_thread(
+                orchestrator.run_connector_lifecycle,
+                conn,
+                lambda: registry.set_enabled(connector_id, True),
+            )
+        except PermissionError as exc:
+            raise HTTPException(
+                409,
+                {
+                    "code": "PERMISSION_REVIEW_REQUIRED",
+                    "message": str(exc),
+                },
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        if not enabled:
             raise HTTPException(404, f"connector not installed: {connector_id}")
         return {"enabled": True, "connector_id": connector_id}
 
@@ -157,7 +210,16 @@ def create_connector_router(
         dependencies=[Depends(_operator_dep)],
     )
     def connector_disable(connector_id: str) -> dict[str, Any]:
-        if not registry.set_enabled(connector_id, False):
+        conn = _get_connector(connector_id)
+        try:
+            disabled = orchestrator.run_connector_lifecycle(
+                conn,
+                lambda: registry.set_enabled(connector_id, False),
+                cancel_device_flow=True,
+            )
+        except RefreshCleanupRequiredError as exc:
+            raise _refresh_cleanup_conflict(exc) from exc
+        if not disabled:
             raise HTTPException(404, f"connector not installed: {connector_id}")
         return {"enabled": False, "connector_id": connector_id}
 
@@ -169,6 +231,8 @@ def create_connector_router(
     @router.post(
         "/api/connectors/{connector_id}/connect",
         dependencies=[Depends(_operator_dep)],
+        response_model=DeviceFlowResponse,
+        response_model_exclude_unset=True,
     )
     async def connector_connect(connector_id: str, request: Request) -> dict[str, Any]:
         conn = _get_connector(connector_id)
@@ -179,7 +243,37 @@ def create_connector_router(
             body = {}
         tokens = body.get("tokens") or None
         run_cli = bool(body.get("run_cli"))
-        return orchestrator.connect(conn, tokens=tokens, run_cli=run_cli)
+
+        def connect_installed() -> dict[str, Any]:
+            if connector_id not in registry.installed_ids():
+                raise ValueError(f"connector not installed: {connector_id}")
+            if "grant_permissions" in body:
+                registry.grant_permissions(connector_id, body["grant_permissions"])
+            registry.require_permissions(connector_id)
+            return orchestrator.connect(
+                conn,
+                tokens=tokens,
+                run_cli=run_cli,
+            )
+
+        try:
+            return await asyncio.to_thread(
+                orchestrator.run_connector_lifecycle,
+                conn,
+                connect_installed,
+            )
+        except RefreshCleanupRequiredError as exc:
+            raise _refresh_cleanup_conflict(exc) from exc
+        except PermissionError as exc:
+            raise HTTPException(
+                409,
+                {
+                    "code": "PERMISSION_REVIEW_REQUIRED",
+                    "message": str(exc),
+                },
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
 
     @router.post(
         "/api/connectors/{connector_id}/disconnect",
@@ -187,7 +281,41 @@ def create_connector_router(
     )
     def connector_disconnect(connector_id: str) -> dict[str, Any]:
         conn = _get_connector(connector_id)
-        return orchestrator.disconnect(conn)
+        try:
+            return orchestrator.disconnect(conn)
+        except RefreshCleanupRequiredError as exc:
+            raise _refresh_cleanup_conflict(exc) from exc
+
+    @router.get(
+        "/api/connectors/{connector_id}/device-flow",
+        dependencies=[Depends(_operator_dep)],
+        response_model=DeviceFlowResponse,
+        response_model_exclude_unset=True,
+    )
+    def connector_device_flow(connector_id: str) -> dict[str, Any]:
+        """查询进行中的设备流授权(verification_uri / user_code / 剩余时效)。
+
+        前端弹窗被刷新/重开后靠这个接口恢复授权态,不必重新起一次 CLI 登录。
+        """
+        conn = _get_connector(connector_id)
+        return orchestrator.device_flow_status(conn)
+
+    @router.delete(
+        "/api/connectors/{connector_id}/device-flow",
+        dependencies=[Depends(_operator_dep)],
+        response_model=DeviceFlowCancelResponse,
+        response_model_exclude_unset=True,
+    )
+    def connector_device_flow_cancel(
+        connector_id: str,
+        expected_flow_id: str = Query(..., min_length=1, max_length=128),
+    ) -> dict[str, Any]:
+        """取消指定代际的设备流，迟到的旧弹窗不影响新授权。"""
+        conn = _get_connector(connector_id)
+        return orchestrator.cancel_device_flow(
+            conn,
+            expected_flow_id=expected_flow_id,
+        )
 
     @router.get(
         "/api/connectors/{connector_id}/headers",
@@ -195,6 +323,16 @@ def create_connector_router(
     )
     def connector_headers(connector_id: str) -> dict[str, Any]:
         conn = _get_connector(connector_id)
+        try:
+            registry.require_permissions(connector_id, ["account.credentials"])
+        except PermissionError as exc:
+            raise HTTPException(
+                409,
+                {
+                    "code": "PERMISSION_REVIEW_REQUIRED",
+                    "message": str(exc),
+                },
+            ) from exc
         headers = orchestrator.resolve_headers(conn)
         return {
             "configured": bool(headers),

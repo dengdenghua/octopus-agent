@@ -1,9 +1,21 @@
+import "./oauth-deep-link-core.js";
+
 const API_BASES = ["http://127.0.0.1:8000", "http://localhost:8000"];
 const EXTENSION_VERSION = chrome.runtime.getManifest().version;
 const AUTH_TOKEN_KEY = "octopus.gatewayToken";
-const READ_ONLY_ACTIONS = new Set(["extract", "aria", "state", "screenshot", "wait"]);
+const READ_ONLY_ACTIONS = new Set([
+  "extract",
+  "aria",
+  "state",
+  "screenshot",
+  "wait",
+]);
 const runningCommands = new Set();
 const recentHumanActivityByTab = new Map();
+// Content scripts are recreated on every navigation. Keep the active cursor
+// state in the extension service worker so the new document can recover the
+// operator-visible action instead of briefly losing it mid-command.
+const activeCursorOverlayByTab = new Map();
 let lastWorkingBase = API_BASES[0];
 let activeLease = null;
 let relaySocket = null;
@@ -13,10 +25,25 @@ let gatewayToken = "";
 let gatewayTokenLoaded = false;
 let gatewayTokenRevision = 0;
 
+function websocketAuthProtocols(token) {
+  const value = String(token || "");
+  if (!value) return [];
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  const encoded = btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+  return ["bearer.b64", encoded];
+}
+
 async function readGatewayToken() {
   if (gatewayTokenLoaded) return gatewayToken;
   const revision = gatewayTokenRevision;
-  const stored = await chrome.storage.local.get(AUTH_TOKEN_KEY).catch(() => ({}));
+  const stored = await chrome.storage.local
+    .get(AUTH_TOKEN_KEY)
+    .catch(() => ({}));
   // A side-panel save may finish while the initial storage read is pending.
   // Never let that stale read overwrite the newer in-memory credential.
   if (!gatewayTokenLoaded && revision === gatewayTokenRevision) {
@@ -45,7 +72,10 @@ async function updateGatewayToken(nextToken) {
 }
 
 async function activeTabInfo() {
-  const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  const tabs = await chrome.tabs.query({
+    active: true,
+    lastFocusedWindow: true,
+  });
   const tab = tabs[0];
   if (!tab) return null;
   return {
@@ -61,7 +91,10 @@ async function apiFetch(path, init) {
   if (token && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${token}`);
   }
-  const bases = [lastWorkingBase, ...API_BASES.filter((base) => base !== lastWorkingBase)];
+  const bases = [
+    lastWorkingBase,
+    ...API_BASES.filter((base) => base !== lastWorkingBase),
+  ];
   for (const base of bases) {
     try {
       const res = await fetch(`${base}${path}`, { ...init, headers });
@@ -123,10 +156,16 @@ function controlSessionIdFor(commandOrLease, tab) {
 }
 
 function controlActionIdFor(command) {
-  return String(command?.control_action_id || command?.id || `chrome-${Date.now()}`);
+  return String(
+    command?.control_action_id || command?.id || `chrome-${Date.now()}`,
+  );
 }
 
-async function ensureControlSessionForCommand(command, tab, status = "running") {
+async function ensureControlSessionForCommand(
+  command,
+  tab,
+  status = "running",
+) {
   const sessionId = controlSessionIdFor(command, tab);
   await controlJson("", {
     session_id: sessionId,
@@ -166,7 +205,13 @@ async function appendControlAction(command, tab, status = "running") {
   return { sessionId, actionId };
 }
 
-async function updateControlAction(command, tab, status, result = {}, error = "") {
+async function updateControlAction(
+  command,
+  tab,
+  status,
+  result = {},
+  error = "",
+) {
   const sessionId = controlSessionIdFor(command, tab);
   const actionId = controlActionIdFor(command);
   await controlJson(
@@ -209,6 +254,14 @@ function recordHumanActivity(tabId, activity = {}) {
     url: comparableUrl(activity.url),
     title: String(activity.title || ""),
     tabId,
+    target:
+      activity.target && typeof activity.target === "object"
+        ? activity.target
+        : undefined,
+    data:
+      activity.data && typeof activity.data === "object"
+        ? activity.data
+        : undefined,
   };
   recentHumanActivityByTab.set(String(tabId), event);
   if (activeLease && String(tabId) === leaseTabId(activeLease)) {
@@ -281,6 +334,35 @@ async function setPageControlIndicator(tabId, mode, detail = {}) {
     .catch(() => null);
 }
 
+async function setPageCursorOverlay(tabId, phase, action, params = {}) {
+  if (!tabId) return;
+  const selector = String(params.selector || "").trim();
+  const x = Number(params.x ?? params.clientX);
+  const y = Number(params.y ?? params.clientY);
+  const message = {
+    type: "octopus.cursorOverlay",
+    phase,
+    action,
+    ...(selector ? { selector } : {}),
+    ...(Number.isFinite(x) && Number.isFinite(y) ? { x, y } : {}),
+  };
+  const key = String(tabId);
+  if (phase === "end" || phase === "idle") {
+    activeCursorOverlayByTab.delete(key);
+  } else {
+    activeCursorOverlayByTab.set(key, message);
+  }
+  await chrome.tabs.sendMessage(tabId, message).catch(() => null);
+}
+
+async function restorePageCursorOverlay(tabId) {
+  const active = activeCursorOverlayByTab.get(String(tabId));
+  if (!active) return;
+  await chrome.tabs
+    .sendMessage(tabId, { ...active, phase: "active" })
+    .catch(() => null);
+}
+
 async function waitForTabComplete(tabId, timeoutMs = 10000) {
   const current = await chrome.tabs.get(tabId).catch(() => null);
   if (!current || current.status === "complete") return current;
@@ -289,7 +371,10 @@ async function waitForTabComplete(tabId, timeoutMs = 10000) {
     function done() {
       clearTimeout(timer);
       chrome.tabs.onUpdated.removeListener(listener);
-      chrome.tabs.get(tabId).then(resolve).catch(() => resolve(null));
+      chrome.tabs
+        .get(tabId)
+        .then(resolve)
+        .catch(() => resolve(null));
     }
     function listener(updatedTabId, changeInfo) {
       if (updatedTabId === tabId && changeInfo.status === "complete") {
@@ -337,7 +422,10 @@ function isExecutionContextLoss(error) {
 }
 
 async function currentTab() {
-  const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  const tabs = await chrome.tabs.query({
+    active: true,
+    lastFocusedWindow: true,
+  });
   const tab = tabs[0];
   if (!tab?.id) throw new Error("No active browser tab");
   return tab;
@@ -361,7 +449,7 @@ async function runDomActionInTab(tabId, action, params) {
     tabId,
     (nextAction, nextParams) => {
       if (!globalThis.__OCTOPUS_DOM_ACTIONS__?.run) {
-        throw new Error("Octopus DOM action runtime failed to load");
+        throw new Error("EchoAI DOM action runtime failed to load");
       }
       return globalThis.__OCTOPUS_DOM_ACTIONS__.run(nextAction, nextParams);
     },
@@ -370,12 +458,17 @@ async function runDomActionInTab(tabId, action, params) {
 }
 
 async function validateCommandLease(command) {
-  const lease = command.lease && typeof command.lease === "object" ? command.lease : null;
+  const lease =
+    command.lease && typeof command.lease === "object" ? command.lease : null;
   if (!lease) return null;
   const tab = await currentTab();
   const tabId = String(tab.id);
   const expectedTabId = leaseTabId(lease);
-  if (lease.require_same_tab !== false && expectedTabId && tabId !== expectedTabId) {
+  if (
+    lease.require_same_tab !== false &&
+    expectedTabId &&
+    tabId !== expectedTabId
+  ) {
     await setPageControlIndicator(tab.id, "paused", {
       reason: "active_tab_changed",
       lease,
@@ -399,7 +492,11 @@ async function validateCommandLease(command) {
   }
   const expectedUrl = leaseTabUrl(lease);
   const actualUrl = comparableUrl(tab.url);
-  if (lease.require_same_url !== false && expectedUrl && actualUrl !== expectedUrl) {
+  if (
+    lease.require_same_url !== false &&
+    expectedUrl &&
+    actualUrl !== expectedUrl
+  ) {
     await setPageControlIndicator(tab.id, "paused", {
       reason: "tab_url_changed",
       lease,
@@ -416,7 +513,10 @@ async function validateCommandLease(command) {
         actualUrl,
       },
     });
-    throw commandInterruptedError("tab_url_changed", { expectedUrl, actualUrl });
+    throw commandInterruptedError("tab_url_changed", {
+      expectedUrl,
+      actualUrl,
+    });
   }
   const recentActivity = recentHumanActivityByTab.get(tabId);
   const issuedAt = Number(lease.issued_at || 0);
@@ -436,7 +536,9 @@ async function validateCommandLease(command) {
       lease,
       activity: recentActivity,
     });
-    throw commandInterruptedError(recentActivity.kind, { activity: recentActivity });
+    throw commandInterruptedError(recentActivity.kind, {
+      activity: recentActivity,
+    });
   }
   return lease;
 }
@@ -451,7 +553,10 @@ async function executeCommand(command) {
   if (params.timeout == null && deadlineAt > 0) {
     // Leave a small margin for posting the result before the gateway's HTTP
     // waiter expires. This prevents a DOM auto-wait from outliving its command.
-    params.timeout = Math.max(0, Math.floor(deadlineAt * 1000 - Date.now() - 250));
+    params.timeout = Math.max(
+      0,
+      Math.floor(deadlineAt * 1000 - Date.now() - 250),
+    );
   }
   const control = await appendControlAction(command, tab, "running");
   let actionResult = null;
@@ -462,6 +567,7 @@ async function executeCommand(command) {
       action,
       lease,
     });
+    await setPageCursorOverlay(tabId, "start", action, params);
     if (action === "navigate") {
       const url = String(params.url || "");
       if (!url) throw new Error("url is required");
@@ -477,19 +583,30 @@ async function executeCommand(command) {
       await chrome.tabs.goForward(tabId);
       await waitForTabComplete(tabId);
     } else if (action === "screenshot") {
-      const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
-      return finishControlAction(command, tab, control, action, { ok: true, dataUrl });
+      const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
+        format: "png",
+      });
+      return finishControlAction(command, tab, control, action, {
+        ok: true,
+        dataUrl,
+      });
     } else {
-      const returnsDomPayload = action === "extract" || action === "aria" || action === "state";
-      const navigationWatch = returnsDomPayload ? null : watchTabNavigation(tabId);
+      const returnsDomPayload =
+        action === "extract" || action === "aria" || action === "state";
+      const navigationWatch = returnsDomPayload
+        ? null
+        : watchTabNavigation(tabId);
       let domResult = null;
       let navigationObserved = false;
       try {
         try {
           domResult = await runDomActionInTab(tabId, action, params);
         } catch (error) {
-          navigationObserved = navigationWatch ? await navigationWatch.wait(750) : false;
-          if (!navigationObserved || !isExecutionContextLoss(error)) throw error;
+          navigationObserved = navigationWatch
+            ? await navigationWatch.wait(750)
+            : false;
+          if (!navigationObserved || !isExecutionContextLoss(error))
+            throw error;
           domResult = { ok: true, recoveredByNavigation: true };
         }
         if (domResult && returnsDomPayload) {
@@ -499,7 +616,10 @@ async function executeCommand(command) {
           navigationObserved = await navigationWatch.wait(150);
         }
         if (navigationObserved) {
-          const remaining = Math.max(250, Math.min(5000, Number(params.timeout || 5000)));
+          const remaining = Math.max(
+            250,
+            Math.min(5000, Number(params.timeout || 5000)),
+          );
           await waitForTabComplete(tabId, remaining);
         }
       } finally {
@@ -536,6 +656,7 @@ async function executeCommand(command) {
     throw error;
   } finally {
     activeLease = null;
+    await setPageCursorOverlay(tabId, "end", action);
     await setPageControlIndicator(tabId, "idle", {
       action,
     });
@@ -589,7 +710,9 @@ async function relaySocketHeartbeat() {
       extension_version: EXTENSION_VERSION,
       active_tab: await activeTabInfo(),
       active_lease: activeLease,
-      recent_human_activity: Array.from(recentHumanActivityByTab.values()).slice(-5),
+      recent_human_activity: Array.from(
+        recentHumanActivityByTab.values(),
+      ).slice(-5),
     }),
   );
   return true;
@@ -606,9 +729,9 @@ function scheduleRelaySocketReconnect() {
 async function connectRelaySocket() {
   if (
     relaySocketConnecting ||
-    relaySocket &&
-    (relaySocket.readyState === WebSocket.OPEN ||
-      relaySocket.readyState === WebSocket.CONNECTING)
+    (relaySocket &&
+      (relaySocket.readyState === WebSocket.OPEN ||
+        relaySocket.readyState === WebSocket.CONNECTING))
   ) {
     return;
   }
@@ -616,13 +739,15 @@ async function connectRelaySocket() {
   let socket;
   try {
     const token = await readGatewayToken();
-    const query = token ? `?token=${encodeURIComponent(token)}` : "";
-    const wsUrl = `${lastWorkingBase.replace(/^http/, "ws")}/api/browser/relay/ws${query}`;
-    socket = new WebSocket(wsUrl);
+    const wsUrl = `${lastWorkingBase.replace(/^http/, "ws")}/api/browser/relay/ws`;
+    const protocols = websocketAuthProtocols(token);
+    socket = protocols.length
+      ? new WebSocket(wsUrl, protocols)
+      : new WebSocket(wsUrl);
     relaySocket = socket;
   } catch (error) {
     console.warn(
-      "Octopus Browser Relay: failed to create push connection",
+      "EchoAI Browser Relay: failed to create push connection",
       error instanceof Error ? error.message : String(error),
     );
     scheduleRelaySocketReconnect();
@@ -643,7 +768,9 @@ async function connectRelaySocket() {
       return;
     }
     if (message?.type === "commands") {
-      void processCommands(Array.isArray(message.commands) ? message.commands : []);
+      void processCommands(
+        Array.isArray(message.commands) ? message.commands : [],
+      );
     } else if (message?.type === "ping") {
       void relaySocketHeartbeat();
     }
@@ -670,7 +797,9 @@ async function postHeartbeat(forceSocket = false) {
       extension_version: EXTENSION_VERSION,
       active_tab: await activeTabInfo(),
       active_lease: activeLease,
-      recent_human_activity: Array.from(recentHumanActivityByTab.values()).slice(-5),
+      recent_human_activity: Array.from(
+        recentHumanActivityByTab.values(),
+      ).slice(-5),
     }),
   });
   if (!data) return false;
@@ -711,7 +840,7 @@ async function configureSidePanelBehavior() {
     await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
   } catch (error) {
     console.warn(
-      "Octopus Browser Relay: failed to enable side panel behavior",
+      "EchoAI Browser Relay: failed to enable side panel behavior",
       error instanceof Error ? error.message : error,
     );
   }
@@ -740,7 +869,7 @@ chrome.action.onClicked.addListener(async (tab) => {
     await postHeartbeat(true);
   } catch (error) {
     console.warn(
-      "Octopus Browser Relay: failed to open Agent Sidecar",
+      "EchoAI Browser Relay: failed to open side panel",
       error instanceof Error ? error.message : error,
     );
   }
@@ -753,6 +882,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       recordHumanActivity(_sender.tab?.id, message.activity || {});
       return { ok: true };
     }
+    if (type === "octopus.cursorOverlayReady") {
+      const tabId = _sender.tab?.id;
+      await restorePageCursorOverlay(tabId);
+      return { ok: true, restored: Boolean(tabId) };
+    }
+    if (type === "octopus.mcpOAuthDeepLink") {
+      const callbackUrl = globalThis.OctopusMcpOAuthDeepLink.buildCallbackURL({
+        sourceURL: String(_sender.tab?.url || ""),
+        deepLinkURL: String(message.deep_link_url || ""),
+        backendBaseURL: lastWorkingBase,
+      });
+      return {
+        ok: Boolean(callbackUrl),
+        callback_url: callbackUrl || "",
+      };
+    }
     if (type === "octopus.status") {
       return relayStatus();
     }
@@ -760,7 +905,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return { ok: await postHeartbeat(true), base_url: lastWorkingBase };
     }
     if (type === "octopus.control") {
-      return relayControl(String(message.action || ""), String(message.reason || ""));
+      return relayControl(
+        String(message.action || ""),
+        String(message.reason || ""),
+      );
     }
     if (type === "octopus.authChanged") {
       return updateGatewayToken(message.token);
@@ -814,10 +962,18 @@ chrome.tabs.onActivated.addListener(() => {
   void postHeartbeat(true);
 });
 
-chrome.tabs.onUpdated.addListener((_tabId, changeInfo) => {
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === "complete" || changeInfo.url) {
     void postHeartbeat(true);
   }
+  if (changeInfo.status === "complete") {
+    void restorePageCursorOverlay(tabId);
+  }
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  activeCursorOverlayByTab.delete(String(tabId));
+  recentHumanActivityByTab.delete(String(tabId));
 });
 
 setInterval(() => {

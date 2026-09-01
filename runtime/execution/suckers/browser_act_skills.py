@@ -18,6 +18,10 @@ from uuid import uuid4
 from .registry import Skill, SkillRegistry
 
 _BRIDGE_TIMEOUT = 30  # Implementation note.
+_BRIDGE_STATUS_TIMEOUT = 0.75
+_EXTENSION_FALLBACK_ACTIONS = frozenset(
+    {"click", "type", "scroll", "wait", "navigate", "extract", "screenshot", "state"}
+)
 
 # ContextVar holding the active artifact emitter callable. The SSE pump
 # in ``tool_bridge.stream_agentic_fallback`` sets this at session start
@@ -114,12 +118,139 @@ def _bridge_call(action: str, params: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "error": f"bridge timeout/error: {e}"}
 
 
+def _bridge_status() -> dict[str, Any] | None:
+    """Probe the Electron bridge without touching the current page.
+
+    ``bridge.json`` can outlive a crashed desktop process, and a running
+    desktop shell can legitimately have no browser webview selected. The
+    authenticated ``/status`` call distinguishes both cases before a live
+    action is dispatched, which makes an extension fallback safe: no
+    mutating Electron request has run yet, so click/type cannot be duplicated.
+    """
+
+    state = _load_bridge()
+    if not state:
+        return None
+    try:
+        port = int(state.get("port") or 0)
+    except (TypeError, ValueError):
+        return None
+    token = str(state.get("token") or "").strip()
+    if not 0 < port <= 65535 or not token:
+        return None
+    req = urllib_request.Request(
+        f"http://127.0.0.1:{port}/status",
+        data=b"{}",
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+    )
+    try:
+        with urllib_request.urlopen(req, timeout=_BRIDGE_STATUS_TIMEOUT) as resp:  # nosec B310 — fixed loopback bridge
+            payload = json.loads(resp.read().decode("utf-8"))
+            return payload if isinstance(payload, dict) else None
+    except (
+        urllib_error.HTTPError,
+        urllib_error.URLError,
+        TimeoutError,
+        OSError,
+        json.JSONDecodeError,
+        UnicodeDecodeError,
+    ):
+        return None
+
+
+def _electron_webview_available() -> bool:
+    status = _bridge_status()
+    return bool(
+        status and status.get("ok") is True and status.get("activeWebContentsId") is not None
+    )
+
+
+def _extension_result_payload(result: Any) -> dict[str, Any]:
+    payload = dict(result.raw or {}) if isinstance(result.raw, dict) else {}
+    payload.setdefault("ok", bool(result.ok))
+    payload.setdefault("track", str(getattr(result.track, "value", result.track)))
+    if not result.ok:
+        payload.setdefault("error", str(result.error or "extension browser action failed"))
+    payload["live_browser_fallback"] = {
+        "from": "electron",
+        "to": "extension",
+        "reason": "electron_webview_unavailable",
+    }
+    return payload
+
+
+def _extension_fallback_result(
+    action: str,
+    params: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Use the signed-in Chrome relay only when Electron cannot be targeted.
+
+    The outer ``live_browser_*`` execution capability gate remains unchanged;
+    the extension command then passes through the relay's site policy,
+    selected-tab lease and human-takeover checks. Arbitrary JS is intentionally
+    absent from the allow-list so this fallback cannot widen the authority of
+    ``live_browser_execute_js``.
+    """
+
+    if action not in _EXTENSION_FALLBACK_ACTIONS or _electron_webview_available():
+        return None
+    from runtime.execution.suckers.browser_backends import ExtensionBackend
+
+    backend = ExtensionBackend()
+    try:
+        if not backend.available():
+            return None
+        if action == "click":
+            result = backend.click(str(params.get("selector") or ""))
+        elif action == "type":
+            result = backend.type(
+                str(params.get("selector") or ""),
+                str(params.get("text") or ""),
+                clear=bool(params.get("clear")),
+            )
+        elif action == "scroll":
+            result = backend.scroll(
+                selector=str(params.get("selector") or "") or None,
+                delta_y=int(params.get("deltaY") or 0),
+            )
+        elif action == "wait":
+            result = backend.wait(
+                str(params.get("selector") or ""),
+                timeout_ms=int(params.get("timeout") or 10_000),
+            )
+        elif action == "navigate":
+            result = backend.navigate(str(params.get("url") or ""))
+        elif action == "extract":
+            result = backend.extract()
+        elif action == "screenshot":
+            result = backend.screenshot()
+        else:
+            result = backend.state(max_items=int(params.get("max_items") or 30))
+    except (OSError, TypeError, ValueError):
+        # Availability can change between the read-only probe and dispatch.
+        # Return to the legacy Electron error path rather than raising from a
+        # live-browser skill or attempting a second mutating action.
+        return None
+    return _extension_result_payload(result)
+
+
+def _live_browser_call(action: str, params: dict[str, Any]) -> dict[str, Any]:
+    extension_result = _extension_fallback_result(action, params)
+    if extension_result is not None:
+        return extension_result
+    return _bridge_call(action, params)
+
+
 def _h_click(selector: str) -> dict[str, Any]:
-    return _bridge_call("click", {"selector": selector})
+    return _live_browser_call("click", {"selector": selector})
 
 
 def _h_type(selector: str, text: str, clear: bool = False) -> dict[str, Any]:
-    return _bridge_call("type", {"selector": selector, "text": text, "clear": clear})
+    return _live_browser_call("type", {"selector": selector, "text": text, "clear": clear})
 
 
 def _h_scroll(
@@ -131,24 +262,24 @@ def _h_scroll(
         payload["selector"] = selector
     if delta_y:
         payload["deltaY"] = int(delta_y)
-    return _bridge_call("scroll", payload)
+    return _live_browser_call("scroll", payload)
 
 
 def _h_wait(selector: str, timeout: int = 10000) -> dict[str, Any]:
-    return _bridge_call("wait", {"selector": selector, "timeout": int(timeout)})
+    return _live_browser_call("wait", {"selector": selector, "timeout": int(timeout)})
 
 
 def _h_navigate(url: str) -> dict[str, Any]:
-    return _bridge_call("navigate", {"url": url})
+    return _live_browser_call("navigate", {"url": url})
 
 
 def _h_extract() -> dict[str, Any]:
-    return _bridge_call("extract", {})
+    return _live_browser_call("extract", {})
 
 
 def _h_screenshot() -> dict[str, Any]:
-    result = _bridge_call("screenshot", {})
-    if result.get("ok") and result.get("data"):
+    result = _live_browser_call("screenshot", {})
+    if result.get("ok") and (result.get("data") or result.get("dataUrl")):
         _emit_screenshot_artifact(result)
     return result
 
@@ -319,7 +450,7 @@ def _emit_screenshot_artifact(bridge_response: dict[str, Any]) -> None:
     a storage or stream failure must never surface as a skill error.
     """
     try:
-        raw_b64 = bridge_response.get("data") or ""
+        raw_b64 = bridge_response.get("data") or bridge_response.get("dataUrl") or ""
         if not raw_b64:
             return
         # Strip the optional data-URI prefix (data:image/png;base64,...)
@@ -471,6 +602,16 @@ def _h_execute_js(code: str) -> dict[str, Any]:
 
 
 def _h_current_url() -> dict[str, Any]:
+    extension_result = _extension_fallback_result("state", {"max_items": 1})
+    if extension_result is not None:
+        return {
+            "ok": bool(extension_result.get("ok")),
+            "url": extension_result.get("url", ""),
+            "title": extension_result.get("title", ""),
+            "track": extension_result.get("track", "extension"),
+            "live_browser_fallback": extension_result.get("live_browser_fallback"),
+            **({"error": extension_result.get("error")} if extension_result.get("error") else {}),
+        }
     return _bridge_call("current-url", {})
 
 
@@ -488,6 +629,39 @@ def _h_find(
         return {"ok": False, "error": "missing text", "matches": []}
     max_results = max(1, min(int(max_results), 100))
     context_chars = max(20, min(int(context_chars), 500))
+    extension_result = _extension_fallback_result("extract", {})
+    if extension_result is not None:
+        if not extension_result.get("ok"):
+            return {**extension_result, "matches": []}
+        body_text = str(extension_result.get("text") or "")
+        haystack = body_text if case_sensitive else body_text.lower()
+        target = needle if case_sensitive else needle.lower()
+        matches: list[dict[str, Any]] = []
+        start = 0
+        while len(matches) < max_results:
+            index = haystack.find(target, start)
+            if index < 0:
+                break
+            left = max(0, index - context_chars)
+            right = min(len(body_text), index + len(needle) + context_chars)
+            matches.append(
+                {
+                    "index": index,
+                    "snippet": " ".join(body_text[left:right].split()),
+                }
+            )
+            start = index + max(1, len(target))
+        return {
+            "ok": True,
+            "url": extension_result.get("url", ""),
+            "title": extension_result.get("title", ""),
+            "text": needle,
+            "count": len(matches),
+            "truncated": len(matches) >= max_results,
+            "matches": matches,
+            "track": extension_result.get("track", "extension"),
+            "live_browser_fallback": extension_result.get("live_browser_fallback"),
+        }
     code = f"""(() => {{
         const needle = {json.dumps(needle)};
         const caseSensitive = {json.dumps(bool(case_sensitive))};
@@ -526,6 +700,9 @@ def _h_find(
 
 def _h_state(max_items: int = 30, **_: Any) -> dict[str, Any]:
     max_items = max(1, min(int(max_items), 100))
+    extension_result = _extension_fallback_result("state", {"max_items": max_items})
+    if extension_result is not None:
+        return extension_result
     from runtime.execution.suckers.browser_dom_js import dom_state_iife_js
 
     result = _h_execute_js(dom_state_iife_js(max_items))
@@ -542,8 +719,8 @@ def register_browser_act_skills(registry: SkillRegistry) -> int:
             name="live_browser_click",
             description=(
                 "Click an element on the **current active browser tab** by "
-                "CSS selector. The agent's request is delivered via local "
-                "HTTP bridge to the desktop Octopus app's webview.\n"
+                "CSS selector. Octopus prefers its desktop webview and uses "
+                "the signed-in Chrome relay when no desktop webview is active.\n"
                 "Args: {selector: CSS selector, e.g. 'button[type=submit]' "
                 "or '#login'}.\n"
                 "Returns {ok, tag, text, error?}. Use `browser_extract` "

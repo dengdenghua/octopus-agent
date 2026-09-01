@@ -22,6 +22,7 @@ const EVENT_CHANNELS = [
   "desktop:organize-now",
   "desktop:items-changed",
   "backend:bootstrap-progress",
+  "window:fullscreen-changed",
 ];
 
 const api = {
@@ -108,6 +109,7 @@ const api = {
     setTitleBarOverlay: invoke("window:setTitleBarOverlay"),
     setMousePassthrough: invoke("window:setMousePassthrough"),
     openDevTools: invoke("window:openDevTools"),
+    isFullScreen: invoke("window:isFullScreen"),
   },
 
   pet: {

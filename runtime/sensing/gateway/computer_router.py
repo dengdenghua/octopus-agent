@@ -18,6 +18,7 @@ parameter instead of closure capture:
   computer_lease.py               exclusive-operator lease claim/release
   computer_control_session.py     ControlSessionStore bookkeeping + activity log
   computer_actions.py             action normalize/execute/preview + UIA planning
+  _computer_appshot_routes.py     screenshot-grounded target route registration
   computer_vision.py              vision-model config + OpenAI-compatible call
 """
 
@@ -34,6 +35,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from runtime.execution.suckers import computer_skills, computer_uia_skills
 from runtime.safety.replay.browser_desktop_replay import computer_activity_replay_identity
 
+from ._computer_appshot_routes import register_computer_appshot_routes
 from .computer_actions import (
     _actions_from_payload,
     _execute,
@@ -383,6 +385,14 @@ def create_computer_router(
             "lease": _public_lease(state),
             **preview,
         }
+
+    register_computer_appshot_routes(
+        router=router,
+        state=state,
+        screenshot=screenshot,
+        preview_action=preview_action,
+        auth_dependency=_auth_dep,
+    )
 
     @router.post("/actions/plan")
     def plan_actions(body: dict[str, Any]) -> dict[str, Any]:

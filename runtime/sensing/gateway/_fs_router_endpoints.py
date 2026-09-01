@@ -9,6 +9,8 @@ Extracted from ``fs_router.py`` (god-file reduction). All ``/api/fs`` and
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import os
 import re
 import shutil
@@ -58,13 +60,37 @@ from ._fs_router_models import (
 from ._fs_router_paths import _assert_within_allowed_roots, _safe_relative_parts
 
 
+def _content_sha256(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()
+
+
+def _assert_expected_content(current: bytes, expected_sha256: object) -> None:
+    """Reject a stale editor save instead of overwriting newer work."""
+    if expected_sha256 is None:
+        return
+    if not isinstance(expected_sha256, str) or not re.fullmatch(
+        r"[0-9a-fA-F]{64}", expected_sha256
+    ):
+        raise HTTPException(400, "expected_sha256 must be a 64-character hex digest")
+    observed = _content_sha256(current)
+    if not hmac.compare_digest(observed, expected_sha256.lower()):
+        raise HTTPException(
+            409,
+            {
+                "error": "file_changed",
+                "message": "文件已被其他编辑更新，请重新加载后再保存。",
+                "observed_sha256": observed,
+            },
+        )
+
+
 def register_endpoints(router: Any, ctx: _FsContext) -> None:
     @router.get("/api/fs/roots", response_model=FsRootsResponse)
     def api_fs_roots(
         request: Request,
         thread_id: str | None = Query(default=None),
     ) -> dict[str, Any]:
-        if ctx.require_auth:
+        if ctx.require_auth and not ctx.allow_local_workspace_access:
             roots = _require_local_thread_scope(
                 ctx,
                 request,
@@ -79,7 +105,7 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
         default_path: str | None = Query(default=None),
         thread_id: str | None = Query(default=None),
     ) -> dict[str, Any]:
-        if ctx.require_auth:
+        if ctx.require_auth and not ctx.allow_local_workspace_access:
             _require_local_thread_scope(
                 ctx,
                 request,
@@ -107,7 +133,7 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
             }
         if not path:
             return {"success": False, "path": None, "canceled": True, "error": None}
-        if ctx.require_auth:
+        if ctx.require_auth and not ctx.allow_local_workspace_access:
             path = str(
                 _assert_in_scope(
                     ctx,
@@ -141,7 +167,7 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
             raise HTTPException(413, f"too many files; maximum is {max_files}")
 
         scope_roots: list[Path] = []
-        if ctx.require_auth:
+        if ctx.require_auth and not ctx.allow_local_workspace_access:
             scope_roots = _require_local_thread_scope(
                 ctx,
                 request,
@@ -154,7 +180,7 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
         first_parts = _safe_relative_parts(first_rel)
         folder_name = first_parts[0] if len(first_parts) > 1 else "imported-workspace"
         slug = re.sub(r"[^A-Za-z0-9._-]+", "-", folder_name).strip(".-") or "workspace"
-        if ctx.require_auth:
+        if ctx.require_auth and not ctx.allow_local_workspace_access:
             base_root = Path(workspace_path).expanduser() if workspace_path else scope_roots[0]
             base_root = _assert_in_scope(
                 ctx,
@@ -376,6 +402,7 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
     ) -> dict[str, Any]:
         path_value = body.get("path")
         content = body.get("content", "")
+        expected_sha256 = body.get("expected_sha256")
         if not isinstance(path_value, str) or not path_value.strip():
             raise HTTPException(400, "path is required")
         if not isinstance(content, str):
@@ -414,7 +441,19 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
                 )
             payload = content.encode("utf-8")
             try:
+                try:
+                    current = await backend.read_file(rel_path)
+                except FileNotFoundError:
+                    current = b""
+                current_bytes = (
+                    bytes(current)
+                    if isinstance(current, (bytes, bytearray))
+                    else str(current).encode("utf-8")
+                )
+                _assert_expected_content(current_bytes, expected_sha256)
                 await backend.write_file(rel_path, payload)
+            except HTTPException:
+                raise
             except Exception as exc:  # noqa: BLE001 — backend error
                 raise HTTPException(500, f"backend write_file failed: {exc}") from exc
             # Task 6.4: broadcast file_written to the bound cowork group.
@@ -449,6 +488,8 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
         )
         try:
             await asyncio.to_thread(file_path.parent.mkdir, parents=True, exist_ok=True)
+            current = await asyncio.to_thread(file_path.read_bytes) if file_path.exists() else b""
+            _assert_expected_content(current, expected_sha256)
             await asyncio.to_thread(file_path.write_text, content, encoding="utf-8")
         except OSError as exc:
             raise HTTPException(

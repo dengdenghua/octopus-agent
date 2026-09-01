@@ -20,6 +20,7 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from runtime.core.cerebrum.react_loop import ReActResult, stream_react_loop
+from runtime.core.cerebrum.react_step_evaluator import build_runtime_step_evaluator
 from runtime.platform.models import ParsedIntent
 
 try:
@@ -219,6 +220,7 @@ def run_subagent_react_loop(
         thread_id=thread_id,
         max_iterations=max_iterations,
         approval_provider=provider,
+        step_evaluator=build_runtime_step_evaluator(),
     )
 
     result: ReActResult | None = None
