@@ -1102,11 +1102,14 @@ def test_process_isolation_hard_terminates_stuck_runner_and_reuses_capacity() ->
             ],
             context={
                 "subagent_worker_isolation": "process",
-                "subagent_task_timeout_s": 1.0,
-                "subagent_queue_timeout_s": 3.0,
+                # Keep the timeout below the stuck runner's five-second sleep,
+                # while leaving enough headroom for a cold ``spawn`` startup
+                # on loaded macOS CI hosts.
+                "subagent_task_timeout_s": 2.0,
+                "subagent_queue_timeout_s": 8.0,
             },
         )
-        for _ in range(400):
+        for _ in range(1200):
             snapshot = orchestrator.get_batch(batch.batch_id)
             assert snapshot is not None
             if snapshot.completed_at is not None:
@@ -1118,7 +1121,7 @@ def test_process_isolation_hard_terminates_stuck_runner_and_reuses_capacity() ->
         assert by_id["stuck-process"].status == "timed_out"
         assert by_id["stuck-process"].worker_isolation == "process"
         assert by_id["stuck-process"].worker_state == "process_terminated"
-        assert by_id["healthy-process"].status == "completed"
+        assert by_id["healthy-process"].status == "completed", by_id["healthy-process"].error
         assert by_id["healthy-process"].result == "isolated-healthy-result"
         assert by_id["healthy-process"].worker_isolation == "process"
         workers = snapshot.worker_observability
