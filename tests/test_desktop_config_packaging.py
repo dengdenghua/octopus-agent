@@ -396,6 +396,7 @@ def test_packaged_desktop_backend_has_no_uv_python_or_network_fallback() -> None
         for relative in (*CODEX_BUNDLE_EXECUTABLES, *CODEX_BUNDLE_LICENSE_SOURCES):
             assert f'"{relative}"' in source
     assert 'relative: "codex-package.json"' in source
+    assert "841d5072916479fc3d6fbe8c4b240b66d468de9f625a2fcb658c34fe1a4ec771" in source
     assert '"octopus-codex-bundle.json"' in source
     assert "required.expectedSha256 || sourceHash" in source
     assert "refusing PATH/network fallback" in source
@@ -845,6 +846,12 @@ def test_windows_codex_preparer_copies_only_the_locked_official_platform_package
     assert 'fileHashPhase: "pre-authenticode"' in source
     for relative in CODEX_BUNDLE_LICENSE_SOURCES:
         assert f'"{relative}"' in source
+    for report_hash in (
+        "841d5072916479fc3d6fbe8c4b240b66d468de9f625a2fcb658c34fe1a4ec771",
+        "6b562200ef39938051e8eca39ce61a4d032752e04e1d21ba0fe216bd0ad91434",
+        "8858ef427eb901498d06d12d14ce6c3ef53fdeb352251006276dac8ec53ac5e4",
+    ):
+        assert report_hash in source
     assert "bundled license text failed its source hash" in source
     assert "fs.copyFileSync(license.source, destination)" in source
     assert "fs.cpSync(sourceRoot, outputRoot" in source
@@ -1087,6 +1094,7 @@ def test_linux_codex_preparer_pins_only_the_locked_linux_packages() -> None:
     assert 'EXECUTABLE_MAGIC = "7f454c46"' in source
     assert 'schema: "octopus.codex_bundle.v1"' in source
     assert 'fileHashPhase: "pre-package"' in source
+    assert "841d5072916479fc3d6fbe8c4b240b66d468de9f625a2fcb658c34fe1a4ec771" in source
     # Linux binary is filtered from node_modules on every non-Linux host, so the
     # preparer must be able to fetch the registry tarball pinned by the lock's
     # integrity (verified byte-for-byte before extraction). Offline never applies
@@ -1095,6 +1103,18 @@ def test_linux_codex_preparer_pins_only_the_locked_linux_packages() -> None:
     assert "registry.npmjs.org/@openai/codex" in source
     assert "pnpm" in source
     assert "npm install" not in source
+
+
+def test_all_codex_preparers_pin_the_current_shared_license_report() -> None:
+    expected = "841d5072916479fc3d6fbe8c4b240b66d468de9f625a2fcb658c34fe1a4ec771"
+
+    for script_name in (
+        "prepare-codex-win.cjs",
+        "prepare-codex-mac.cjs",
+        "prepare-codex-linux.cjs",
+    ):
+        source = (ROOT / "extras/desktop" / script_name).read_text(encoding="utf-8")
+        assert expected in source
 
 
 def test_linux_backend_runtime_profile_is_selected_on_linux() -> None:
