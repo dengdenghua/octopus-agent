@@ -1984,8 +1984,12 @@ function LocalVisionSection() {
   const [model, setModel] = useState<NASModel | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [serviceState, setServiceState] = useState<
+    "checking" | "available" | "unavailable"
+  >("checking");
 
   const presentError = useCallback((error: unknown) => {
+    setServiceState("unavailable");
     const raw = error instanceof Error ? error.message : String(error);
     if (/403|admin\/operator role required/i.test(raw)) {
       setMessage("当前账号无权管理本地图片理解，请联系管理员。");
@@ -1995,12 +1999,29 @@ function LocalVisionSection() {
   }, []);
 
   const refresh = useCallback(async () => {
+    setServiceState("checking");
+    setMessage(null);
     try {
-      await startNASService();
+      const start = await startNASService();
+      if (!start.ok) {
+        setModel(null);
+        setServiceState("unavailable");
+        if (start.status === "not_found") {
+          setMessage(
+            "本地图片理解服务尚未安装。安装 octopus-storage 后可在这里下载并启用模型。",
+          );
+        } else if (start.status === "started") {
+          setMessage("本地图片理解服务正在启动，请稍后重新检查。");
+        } else {
+          setMessage("本地图片理解服务暂时不可用，请稍后重新检查。");
+        }
+        return;
+      }
       const models = await listNASModels();
       setModel(
         models.find((item) => item.model_id === "vision-default") ?? null,
       );
+      setServiceState("available");
     } catch (error) {
       presentError(error);
     }
@@ -2051,6 +2072,7 @@ function LocalVisionSection() {
 
   const downloaded = model?.provider === "local" && Boolean(model.endpoint);
   const enabled = model?.status === "running";
+  const serviceUnavailable = serviceState === "unavailable";
 
   return (
     <SettingsSection
@@ -2086,7 +2108,20 @@ function LocalVisionSection() {
           ) : null}
         </div>
         <div className="flex shrink-0 gap-2">
-          {!downloaded ? (
+          {serviceState === "checking" ? (
+            <Button size="sm" variant="outline" disabled>
+              检查中…
+            </Button>
+          ) : serviceUnavailable ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void refresh()}
+              disabled={busy || Boolean(message?.includes("无权"))}
+            >
+              重新检查
+            </Button>
+          ) : !downloaded ? (
             <Button
               size="sm"
               onClick={() =>

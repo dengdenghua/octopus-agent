@@ -24,6 +24,14 @@ class TestDockerfile:
         assert "pnpm install --frozen-lockfile" in text
         assert "--no-fund" not in text
         assert "frontend/pnpm-workspace.yaml" in text
+        assert (
+            "COPY pet-sidecar/models/octopus/octopus.fbx "
+            "/pet-sidecar/models/octopus/octopus.fbx"
+        ) in text
+        assert (
+            "COPY pet-sidecar/models/character_rigged_clean.glb "
+            "/pet-sidecar/models/character_rigged_clean.glb"
+        ) in text
 
     def test_full_stack_state_cleanup_runs_once_before_backend_start(self):
         config = (REPO / "frontend/playwright.full.config.ts").read_text(encoding="utf-8")

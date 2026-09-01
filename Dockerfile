@@ -32,6 +32,12 @@ RUN corepack enable && pnpm install --frozen-lockfile
 
 # 源码变更不影响依赖缓存层
 COPY frontend/ ./
+# The Vite closeBundle guard proves the historical public pet assets are byte
+# identical to their canonical Godot sources before omitting them from dist.
+# Copy only those two authoring sources into this throw-away builder stage;
+# they are not copied into the final runtime image.
+COPY pet-sidecar/models/octopus/octopus.fbx /pet-sidecar/models/octopus/octopus.fbx
+COPY pet-sidecar/models/character_rigged_clean.glb /pet-sidecar/models/character_rigged_clean.glb
 
 RUN pnpm run build
 # 产物在 /webui/dist · 运行时阶段复制到 /app/webui
