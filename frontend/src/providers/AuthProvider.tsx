@@ -21,6 +21,7 @@ import {
   _clearTokens,
 } from "@/core/auth/api";
 import { octAuthApi } from "@/core/oct/api";
+import { AUTH_EXPIRED_EVENT } from "@/core/auth/fetch-interceptor";
 
 import { swallow } from "@/core/utils/log";
 import type {
@@ -116,6 +117,7 @@ function normalizeUserIdentity(
 
 interface AuthContextType {
   isLoading: boolean;
+  authError: Error | null;
   authStatus: AuthStatus | null;
   user: User | null;
   isAuthenticated: boolean;
@@ -126,6 +128,7 @@ interface AuthContextType {
   register: (request: RegisterRequest) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
+  retryAuth: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -133,6 +136,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { t } = useI18n();
   const [isLoading, setIsLoading] = useState(true);
+  const [authError, setAuthError] = useState<Error | null>(null);
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const initializedRef = useRef(false);
@@ -141,6 +145,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     !!user && !isPlaceholderUserId(user.user_id) && !user.is_guest;
 
   const initAuth = useCallback(async () => {
+    setIsLoading(true);
+    setAuthError(null);
     const token = getToken();
     const storedUser = getStoredUser();
     const tokenUser = userFromJwt(token);
@@ -154,17 +160,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setUser(null);
       }
-      // These checks are independent. Running them serially made a cold app
-      // start wait for two network timeouts before any protected UI appeared.
-      const statusRequest = getAuthStatus().catch(() => null);
-      const userRequest =
-        token && token !== GUEST_USER_ID
-          ? getMe()
-              .then((currentUser) => ({ currentUser, error: null }))
-              .catch((error: unknown) => ({ currentUser: null, error }))
-          : Promise.resolve({ currentUser: null, error: null });
-      const [status, current] = await Promise.all([statusRequest, userRequest]);
-      if (status) setAuthStatus(status);
+      let status: AuthStatus;
+      try {
+        status = await getAuthStatus();
+        setAuthStatus(status);
+      } catch (error) {
+        const unavailable =
+          error instanceof Error
+            ? error
+            : new Error("Authentication service is unavailable");
+        swallow(unavailable);
+        setAuthStatus(null);
+        setAuthError(unavailable);
+        return;
+      }
+      // A browser restart intentionally has no sessionStorage JWT.  The
+      // HttpOnly cookie is the durable credential, so always ask the backend
+      // for the current actor when authentication is enabled.
+      const current = status.enabled
+        ? await getMe()
+            .then((currentUser) => ({ currentUser, error: null }))
+            .catch((error: unknown) => ({ currentUser: null, error }))
+        : { currentUser: null, error: null };
       if (current.currentUser) {
         setUser(
           normalizeUserIdentity(current.currentUser, storedUser || tokenUser),
@@ -189,6 +206,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initializedRef.current = true;
     initAuth();
   }, [initAuth]);
+
+  useEffect(() => {
+    const expire = () => {
+      _clearTokens();
+      setUser(null);
+      // HttpOnly cookies cannot be cleared from JavaScript.  The logout route
+      // is deliberately callable even when the old JWT has expired.
+      void fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      }).catch(() => undefined);
+    };
+    window.addEventListener(AUTH_EXPIRED_EVENT, expire);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, expire);
+  }, []);
 
   const login = useCallback(async (request: LoginRequest) => {
     const response = await loginApi(request);
@@ -245,6 +277,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(
     () => ({
       isLoading,
+      authError,
       authStatus,
       user,
       isAuthenticated,
@@ -254,9 +287,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       register,
       logout,
       refresh,
+      retryAuth: initAuth,
     }),
     [
       isLoading,
+      authError,
       authStatus,
       user,
       isAuthenticated,
@@ -266,6 +301,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       register,
       logout,
       refresh,
+      initAuth,
     ],
   );
 
@@ -278,4 +314,13 @@ export function useAuth() {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
+}
+
+/**
+ * Read authentication when a reusable leaf component may render outside the
+ * application shell (tests, stories, previews). Missing context means no
+ * control-plane privileges; it must never grant guest access implicitly.
+ */
+export function useOptionalAuth() {
+  return useContext(AuthContext);
 }

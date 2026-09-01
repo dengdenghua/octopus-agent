@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Streamdown } from "streamdown";
+import "katex/dist/katex.min.css";
 
 import type { StreamdownProps } from "streamdown";
 
@@ -30,7 +31,9 @@ function localizeStreamdownDom(root: HTMLElement) {
   root.querySelectorAll<HTMLButtonElement>("button[title]").forEach((btn) => {
     const originalTitle = btn.getAttribute("title");
     if (originalTitle) {
-      const newTitle = (TITLE_REPLACEMENTS as Record<string, string>)[originalTitle];
+      const newTitle = (TITLE_REPLACEMENTS as Record<string, string>)[
+        originalTitle
+      ];
       if (newTitle) btn.setAttribute("title", newTitle);
     }
   });
@@ -54,7 +57,9 @@ function localizeStreamdownDom(root: HTMLElement) {
     const text = node.textContent ?? "";
     const trimmed = text.trim();
     if (trimmed) {
-      const replacement = (TEXT_REPLACEMENTS as Record<string, string>)[trimmed];
+      const replacement = (TEXT_REPLACEMENTS as Record<string, string>)[
+        trimmed
+      ];
       if (replacement) {
         // Preserve surrounding whitespace
         const leading = text.startsWith(" ") ? " " : "";
@@ -75,9 +80,7 @@ function localizeStreamdownDom(root: HTMLElement) {
  */
 export function LocalizedStreamdown(props: StreamdownProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const isAnimating = Boolean(
-    (props as { isAnimating?: boolean }).isAnimating,
-  );
+  const isAnimating = Boolean((props as { isAnimating?: boolean }).isAnimating);
 
   useEffect(() => {
     const container = containerRef.current;

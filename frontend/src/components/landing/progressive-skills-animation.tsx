@@ -459,7 +459,7 @@ export default function ProgressiveSkillsAnimation() {
           <div className="border-b border-zinc-800 p-4">
             <div className="flex items-center gap-2">
               <div className="h-3 w-3 rounded-lg bg-success" />
-              <span className="text-sm text-zinc-400">Octopus Agent</span>
+              <span className="text-sm text-zinc-400">EchoAI</span>
             </div>
           </div>
 
@@ -689,7 +689,7 @@ export default function ProgressiveSkillsAnimation() {
           {/* Chat Input (decorative) */}
           <div className="border-t border-zinc-800 p-4">
             <div className="rounded-lg bg-zinc-800 px-4 py-3 text-sm text-zinc-500">
-              Ask Octopus anything...
+              Ask EchoAI anything...
             </div>
           </div>
         </div>

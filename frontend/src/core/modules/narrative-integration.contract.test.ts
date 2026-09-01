@@ -26,13 +26,14 @@ describe("narrative workbench integration", () => {
     expect(koKR.sidebar.navNarrative).toBe("스토리 공방");
   });
 
-  it("keeps the workspace page lazy-loaded behind its own route", () => {
+  it("keeps the workspace page behind the installed remote surface", () => {
     const routerSource = readFileSync(resolve("src/router.tsx"), "utf8");
+    expect(routerSource).toContain('remoteWorkbenchApp("narrative")');
     expect(routerSource).toContain(
-      'lazy(() => import("./app/workspace/narrative/page"))',
+      "<RemoteWorkbenchSurface app={NARRATIVE_APP}",
     );
-    expect(routerSource).toContain(
-      '<Route path="narrative" element={<NarrativePage />} />',
+    expect(routerSource).not.toContain(
+      'import("./app/workspace/narrative/page")',
     );
   });
 });

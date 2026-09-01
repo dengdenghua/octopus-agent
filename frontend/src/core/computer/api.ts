@@ -88,6 +88,47 @@ export type ComputerScreenshot = {
   error?: string;
 };
 
+export type AutomationTarget = {
+  kind: "browser_tab" | "desktop_window";
+  source: "browser_relay" | "computer" | string;
+  id: string;
+  title: string;
+  url?: string;
+  app_id?: string;
+  app_name?: string;
+};
+
+export type ComputerAutomationTarget = AutomationTarget & {
+  frontmost?: boolean;
+  position?: unknown;
+  size?: unknown;
+};
+
+export type ComputerTargetsResponse = {
+  schema: "octopus.automation_targets.v1" | string;
+  targets: ComputerAutomationTarget[];
+  count: number;
+  backend: string;
+  error?: string;
+};
+
+export type ComputerAppshot = {
+  schema: "octopus.appshot.v1" | string;
+  ok: boolean;
+  snapshot_id: string;
+  created_at: number;
+  target: AutomationTarget;
+  screenshot: ComputerScreenshot;
+  accessibility: {
+    available?: boolean;
+    backend?: string;
+    error?: string;
+    focused?: string;
+    elements?: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  };
+};
+
 export type ComputerMatchedControl = {
   id?: string | number | null;
   name?: string | null;
@@ -224,9 +265,67 @@ export async function captureComputerScreen(
   return (await res.json()) as ComputerScreenshot;
 }
 
+export async function captureComputerAppshot(
+  options: ComputerControlSessionOptions & { maxNodes?: number } = {},
+): Promise<ComputerAppshot> {
+  const res = await fetch(`${BASE()}/appshot`, {
+    method: "POST",
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify({
+      ...controlSessionBody(options),
+      max_nodes: options.maxNodes ?? 120,
+    }),
+  });
+  if (!res.ok) throw new Error(`Failed to capture appshot: ${res.statusText}`);
+  const payload = (await res.json()) as ComputerAppshot;
+  if (!payload.ok || !payload.screenshot?.data_url) {
+    throw new Error(payload.screenshot?.error || "Appshot capture failed");
+  }
+  return payload;
+}
+
+export async function listComputerTargets(): Promise<ComputerTargetsResponse> {
+  const res = await fetch(`${BASE()}/targets`, { headers: authHeaders() });
+  if (!res.ok) {
+    throw new Error(`Failed to list automation targets: ${res.statusText}`);
+  }
+  return (await res.json()) as ComputerTargetsResponse;
+}
+
+export async function previewAppshotElement(
+  snapshotId: string,
+  elementIndex: number,
+  options: {
+    action?: "click" | "move";
+    leaseOwner?: ComputerLeaseOwner | null;
+  } & ComputerControlSessionOptions = {},
+): Promise<ComputerPreview> {
+  const res = await fetch(
+    `${BASE()}/appshots/${encodeURIComponent(snapshotId)}/elements/${elementIndex}/preview`,
+    {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify({
+        action: options.action || "click",
+        ...leaseOwnerBody(options.leaseOwner),
+        ...controlSessionBody(options),
+      }),
+    },
+  );
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Failed to preview Appshot element: ${res.status}${text ? ` ${text}` : ""}`,
+    );
+  }
+  return (await res.json()) as ComputerPreview;
+}
+
 export async function previewComputerAction(
   action: ComputerAction,
-  options: { leaseOwner?: ComputerLeaseOwner | null } & ComputerControlSessionOptions = {},
+  options: {
+    leaseOwner?: ComputerLeaseOwner | null;
+  } & ComputerControlSessionOptions = {},
 ): Promise<ComputerPreview> {
   const res = await fetch(`${BASE()}/actions/preview`, {
     method: "POST",
@@ -303,7 +402,9 @@ export async function groundComputerActions(
 export async function askVisionModelForComputerActions(
   goal: string,
   modelId: string,
-  options: { leaseOwner?: ComputerLeaseOwner | null } & ComputerControlSessionOptions = {},
+  options: {
+    leaseOwner?: ComputerLeaseOwner | null;
+  } & ComputerControlSessionOptions = {},
 ): Promise<ComputerActionPlan> {
   const res = await fetch(`${BASE()}/actions/vision`, {
     method: "POST",
@@ -326,7 +427,9 @@ export async function askVisionModelForComputerActions(
 
 export async function executeComputerAction(
   token: string,
-  options: { leaseOwner?: ComputerLeaseOwner | null } & ComputerControlSessionOptions = {},
+  options: {
+    leaseOwner?: ComputerLeaseOwner | null;
+  } & ComputerControlSessionOptions = {},
 ): Promise<ComputerExecuteResult> {
   const res = await fetch(`${BASE()}/actions/execute`, {
     method: "POST",

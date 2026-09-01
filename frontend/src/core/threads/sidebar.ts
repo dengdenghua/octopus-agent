@@ -386,6 +386,11 @@ export function deriveThreadTitle(thread: {
     return truncateThreadTitle(metaTitle);
   }
 
+  const projectedTitle = threadTitleFromContent(
+    thread.values?.["sidebar_title_source"],
+  );
+  if (projectedTitle) return truncateThreadTitle(projectedTitle);
+
   const messages = thread.values?.["messages"];
   if (Array.isArray(messages)) {
     for (const m of messages) {

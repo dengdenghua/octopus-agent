@@ -283,11 +283,12 @@ export function UnifiedAssetsPanel({
   const [source, setSource] = useState<UnifiedAssetSource | "all">("all");
   const [summary, setSummary] = useState<UnifiedAssetsSummary | null>(null);
   const [items, setItems] = useState<UnifiedAsset[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<UnifiedAsset | null>(null);
-  const [visible, setVisible] = useState(PAGE_SIZE);
 
   useEffect(() => {
     if (!visibleKindTabs.some((tab) => tab.key === kind)) {
@@ -296,23 +297,34 @@ export function UnifiedAssetsPanel({
   }, [fallbackKind, kind, visibleKindTabs]);
 
   const load = useCallback(
-    async (k: AssetKindFilter, s: UnifiedAssetSource | "all", q: string) => {
-      setLoading(true);
+    async (
+      k: AssetKindFilter,
+      s: UnifiedAssetSource | "all",
+      q: string,
+      offset = 0,
+    ) => {
+      const append = offset > 0;
+      if (append) setLoadingMore(true);
+      else setLoading(true);
       setError(null);
-      setVisible(PAGE_SIZE);
       try {
         const res = await fetchUnifiedAssets({
           kind: k === "team" ? "team" : k,
           source: s === "all" ? undefined : s,
           search: q.trim() || undefined,
-          limit: 1000,
+          limit: PAGE_SIZE,
+          offset,
         });
-        setItems(res.items);
+        setItems((current) =>
+          append ? [...current, ...res.items] : res.items,
+        );
+        setTotal(res.total);
         setSummary(res.summary);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {
-        setLoading(false);
+        if (append) setLoadingMore(false);
+        else setLoading(false);
       }
     },
     [],
@@ -343,41 +355,52 @@ export function UnifiedAssetsPanel({
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Tabs value={kind} onValueChange={(v) => setKind(v as AssetKindFilter)}>
-          <TabsList variant="line" className="mb-0">
-            {visibleKindTabs.map((tab) => (
-              <TabsTrigger
-                key={tab.key}
-                value={tab.key}
-                className="h-8 gap-1.5 px-3 text-xs"
-              >
-                <tab.icon className="h-3.5 w-3.5" />
-                {tab.label}
-                {totalForKind != null && tab.key === kind ? (
-                  <span className="ml-0.5 rounded bg-primary/10 px-1.5 text-[11px] text-primary">
-                    {totalForKind}
-                  </span>
-                ) : null}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-        {showSyncAction ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void onSync()}
-            disabled={syncing}
-            className="shrink-0"
-          >
-            <RefreshCwIcon
-              className={cn("size-3.5", syncing && "animate-spin")}
-            />
-            重建索引
-          </Button>
-        ) : null}
-      </div>
+      {visibleKindTabs.length > 1 || showSyncAction ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {visibleKindTabs.length > 1 ? (
+            <Tabs
+              value={kind}
+              onValueChange={(v) => setKind(v as AssetKindFilter)}
+            >
+              <TabsList variant="line" className="mb-0">
+                {visibleKindTabs.map((tab) => (
+                  <TabsTrigger
+                    key={tab.key}
+                    value={tab.key}
+                    className="h-8 gap-1.5 px-3 text-xs"
+                  >
+                    <tab.icon className="h-3.5 w-3.5" />
+                    {tab.label}
+                    {totalForKind != null && tab.key === kind ? (
+                      <span className="ml-0.5 rounded bg-primary/10 px-1.5 text-[11px] text-primary">
+                        {totalForKind}
+                      </span>
+                    ) : null}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          ) : (
+            <span className="text-xs text-muted-foreground">
+              {totalForKind != null ? `${totalForKind} 项` : null}
+            </span>
+          )}
+          {showSyncAction ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void onSync()}
+              disabled={syncing}
+              className="shrink-0"
+            >
+              <RefreshCwIcon
+                className={cn("size-3.5", syncing && "animate-spin")}
+              />
+              重建索引
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-1.5">
         {SOURCE_FILTERS.map((f) => (
@@ -416,7 +439,7 @@ export function UnifiedAssetsPanel({
       ) : (
         <>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {items.slice(0, visible).map((asset) => (
+            {items.map((asset) => (
               <AssetCard
                 key={`${asset.kind}:${asset.source}:${asset.id}`}
                 asset={asset}
@@ -424,14 +447,15 @@ export function UnifiedAssetsPanel({
               />
             ))}
           </div>
-          {items.length > visible ? (
+          {items.length < total ? (
             <Button
               variant="ghost"
               size="sm"
               className="mx-auto"
-              onClick={() => setVisible((v) => v + PAGE_SIZE)}
+              disabled={loadingMore}
+              onClick={() => void load(kind, source, searchQuery, items.length)}
             >
-              加载更多({items.length - visible})
+              {loadingMore ? "加载中…" : `加载更多(${total - items.length})`}
             </Button>
           ) : null}
         </>

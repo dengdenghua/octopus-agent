@@ -30,10 +30,29 @@ export function deriveAgentTilesFromEvents(
 ): AgentTile[] {
   const byId = new Map<string, AgentTile>();
   const ordered = [...events].sort((a, b) => a.startedAt - b.startedAt);
+  const dispatchParentsWithSpecs = new Set(
+    ordered
+      .filter((event) => dispatchSpecsFromEvent(event).length > 0)
+      .map((event) => event.id),
+  );
   for (const event of ordered) {
     if (isInternalAutoParallelFailure(event)) continue;
     addDispatchSpecTiles(event, byId);
     addDispatchResultTiles(event, byId);
+    // Older journals could persist a truncated spawn payload containing only
+    // the parent dispatch id. The dispatch specs already provide the complete
+    // seat list, so rendering that identity-less marker creates a phantom
+    // extra worker that can never receive a matching finish event.
+    if (
+      event.lifecycle === "spawned" &&
+      !event.agentId &&
+      !event.subagentCodename &&
+      !event.subAgentRole &&
+      event.parentToolUseId &&
+      dispatchParentsWithSpecs.has(event.parentToolUseId)
+    ) {
+      continue;
+    }
     const id = agentEventGroupId(event);
     if (!id || id === "__main__") continue;
     const existing = byId.get(id);
@@ -53,7 +72,11 @@ export function deriveAgentTilesFromEvents(
       status = event.status === "error" ? "error" : "done";
     } else if (event.status === "waiting_approval") {
       status = "waiting_approval";
-    } else if (existing || event.status === "running" || event.status === "done") {
+    } else if (
+      existing ||
+      event.status === "running" ||
+      event.status === "done"
+    ) {
       status = "running";
     } else {
       status = "pending";

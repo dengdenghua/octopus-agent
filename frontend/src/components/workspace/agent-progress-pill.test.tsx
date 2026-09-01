@@ -59,6 +59,24 @@ describe("<AgentProgressPill />", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Thinking · 9s");
   });
 
+  test("keeps minute-long waits readable", () => {
+    renderWithProviders(
+      <AgentProgressPill
+        events={[]}
+        isLoading
+        vitals={vitals({ phase: "waiting", elapsedMs: 104_500 })}
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "First response is taking longer · 1m 44s",
+    );
+    expect(screen.getByRole("status")).toHaveAttribute(
+      "data-stream-first-response-delayed",
+      "true",
+    );
+  });
+
   test("lets a real stall override an earlier partial answer", () => {
     renderWithProviders(
       <AgentProgressPill

@@ -126,6 +126,7 @@ export function ReflexMonitorContent() {
   const [tiers, setTiers] = useState<TierInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [reloadMsg, setReloadMsg] = useState<string | null>(null);
+  const [reloadHasError, setReloadHasError] = useState(false);
   const [tickedAt, setTickedAt] = useState<Date | null>(null);
 
   const fetchAll = useCallback(async () => {
@@ -150,7 +151,7 @@ export function ReflexMonitorContent() {
       setTickedAt(new Date());
     } catch (e) {
       swallow(e);
-      setError(e instanceof Error ? e.message : t.reflexPage.fetchFailed);
+      setError(t.reflexPage.fetchFailed);
     }
   }, [t.reflexPage.fetchFailed]);
 
@@ -165,6 +166,7 @@ export function ReflexMonitorContent() {
   const reload = useCallback(
     async (resetStats: boolean) => {
       setReloadMsg(t.reflexPage.reloadingStatus);
+      setReloadHasError(false);
       try {
         const r = await reflexFetch<ReloadResp>(
           `/api/reflex/reload${resetStats ? "?reset_stats=true" : ""}`,
@@ -175,16 +177,19 @@ export function ReflexMonitorContent() {
             t.reflexPage.reloadLoaded(r.rules_loaded, r.stats_reset),
           );
         } else {
-          setReloadMsg(t.reflexPage.reloadError(r.error));
+          setReloadMsg(t.reflexPage.reloadFailed);
+          setReloadHasError(true);
         }
         void fetchAll();
       } catch (e) {
         swallow(e);
-        setReloadMsg(
-          e instanceof Error ? e.message : t.reflexPage.reloadFailed,
-        );
+        setReloadMsg(t.reflexPage.reloadFailed);
+        setReloadHasError(true);
       }
-      window.setTimeout(() => setReloadMsg(null), 4000);
+      window.setTimeout(() => {
+        setReloadMsg(null);
+        setReloadHasError(false);
+      }, 4000);
     },
     [fetchAll, t],
   );
@@ -201,6 +206,7 @@ export function ReflexMonitorContent() {
     () => [...rules].sort((a, b) => b.priority - a.priority),
     [rules],
   );
+  const hasReflexSnapshot = stats !== null && series !== null;
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -243,16 +249,39 @@ export function ReflexMonitorContent() {
           </div>
         </div>
         {(reloadMsg || error) && (
-          <div className="mt-3 text-xs">
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
             {reloadMsg && (
-              <span className="rounded-md bg-success/10 px-2 py-1 text-success">
+              <span
+                role={reloadHasError ? "alert" : "status"}
+                className={cn(
+                  "rounded-md px-2 py-1",
+                  reloadHasError
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-success/10 text-success",
+                )}
+              >
                 {reloadMsg}
               </span>
             )}
             {error && (
-              <span className="ml-2 rounded-md bg-destructive/10 px-2 py-1 text-destructive">
-                {error}
-              </span>
+              <div
+                role="alert"
+                className="flex items-center gap-2 rounded-md bg-destructive/10 px-2 py-1 text-destructive"
+              >
+                <span>
+                  {hasReflexSnapshot
+                    ? t.reflexPage.dataRefreshFailed
+                    : t.reflexPage.dataUnavailable}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => void fetchAll()}
+                >
+                  {t.reflexPage.retryButton}
+                </Button>
+              </div>
             )}
           </div>
         )}
@@ -263,35 +292,35 @@ export function ReflexMonitorContent() {
         <StatCard
           icon={<TargetIcon className="size-4" />}
           label={t.reflexPage.statTry}
-          value={stats?.try_count ?? 0}
+          value={stats?.try_count ?? "—"}
         />
         <StatCard
           icon={<ZapIcon className="size-4" />}
           label={t.reflexPage.statHit}
-          value={stats?.hit_count ?? 0}
+          value={stats?.hit_count ?? "—"}
           tone="good"
         />
         <StatCard
           icon={<BarChart3Icon className="size-4" />}
           label={t.reflexPage.statHitRate}
-          value={stats ? `${(stats.hit_rate * 100).toFixed(1)}%` : "0%"}
+          value={stats ? `${(stats.hit_rate * 100).toFixed(1)}%` : "—"}
           tone="good"
         />
         <StatCard
           icon={<ActivityIcon className="size-4" />}
           label={t.reflexPage.statRules}
-          value={rules.length}
+          value={stats ? rules.length : "—"}
         />
         <StatCard
           icon={<HourglassIcon className="size-4" />}
           label={t.reflexPage.statStale}
-          value={stats?.coverage?.stale.length ?? 0}
+          value={stats?.coverage?.stale.length ?? "—"}
           tone={(stats?.coverage?.stale.length ?? 0) > 0 ? "warn" : undefined}
         />
         <StatCard
           icon={<ClockIcon className="size-4" />}
           label={t.reflexPage.statLastHourHits}
-          value={series?.total_events ?? 0}
+          value={series?.total_events ?? "—"}
         />
       </div>
 
@@ -303,7 +332,17 @@ export function ReflexMonitorContent() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Sparkline buckets={series?.buckets ?? []} />
+          {series ? (
+            <Sparkline buckets={series.buckets ?? []} />
+          ) : (
+            <DataPlaceholder
+              text={
+                error
+                  ? t.reflexPage.sparklineUnavailable
+                  : t.reflexPage.dataLoading
+              }
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -403,7 +442,11 @@ export function ReflexMonitorContent() {
                     colSpan={8}
                     className="py-6 text-center text-xs text-muted-foreground"
                   >
-                    {t.reflexPage.noRulesLoaded}
+                    {error && !stats
+                      ? t.reflexPage.rulesUnavailable
+                      : !stats
+                        ? t.reflexPage.dataLoading
+                        : t.reflexPage.noRulesLoaded}
                   </td>
                 </tr>
               )}
@@ -451,6 +494,14 @@ function StatCard({
       >
         {value}
       </div>
+    </div>
+  );
+}
+
+function DataPlaceholder({ text }: { text: string }) {
+  return (
+    <div className="flex h-[60px] w-full items-center justify-center rounded-md border border-dashed border-border-default text-xs text-muted-foreground">
+      {text}
     </div>
   );
 }

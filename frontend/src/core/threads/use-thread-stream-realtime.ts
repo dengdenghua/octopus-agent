@@ -6,7 +6,14 @@
  * live tool events derived from realtime items.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 
 import {
   conversationIsLoading,
@@ -42,6 +49,7 @@ import type { BaseStream } from "@/core/api/use-stream-types";
 import type { LiveToolEvent } from "@/components/workspace/live-tool-timeline";
 import type { AgentThreadState, ReasoningEffort } from "@/core/threads/types";
 import type { ToolEndEvent } from "@/core/threads/hooks";
+import { getStreamErrorMessage } from "@/core/threads/errors";
 import {
   permissionRuntimeConfig,
   type ApprovalPolicy,
@@ -63,6 +71,14 @@ import {
   applyCodexComposerModeContext,
   parseCodexComposerModeMarker,
 } from "./codex-composer-mode";
+import {
+  RETRY_PENDING_MESSAGE_EVENT,
+  acknowledgedClientMessageIds,
+  mergeOptimisticHumanMessages,
+  optimisticMessageReducer,
+  type OptimisticMessageAction,
+  type PendingOutboundMessage,
+} from "./optimistic-messages";
 
 /** File payload accepted by `sendMessage`. */
 export interface FileInMessage {
@@ -80,6 +96,14 @@ type SendMessageFn = (
   message: PromptInputMessage,
   ...args: unknown[]
 ) => void;
+
+function newClientMessageId(): string {
+  const suffix =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  return `itm_user_${suffix}`;
+}
 
 export type UseThreadStreamRealtimeResult = readonly [
   ExposedRealtimeThread & { vitals: StreamVitals },
@@ -112,8 +136,12 @@ export interface UseThreadStreamRealtimeOptions {
 }
 
 function reasoningEffortValue(value: unknown): ReasoningEffort | undefined {
+  // `off` is a UI/provider capability value, not a valid public
+  // turn/start effort.  Preserve it in metadata so the selected provider can
+  // disable thinking, but never forward it as the protocol-level `effort`
+  // field (which only accepts concrete reasoning tiers).
+  if (value === "off") return undefined;
   if (
-    value === "off" ||
     value === "minimal" ||
     value === "low" ||
     value === "medium" ||
@@ -238,11 +266,15 @@ function canonicalSubagentId(
     stringValue(args.requested_agent_id) ??
     stringValue(args.requestedAgentId) ??
     requestedAgentIdFromPrompt(options.prompt);
-  if (requested) return requested;
+  // Legacy runs copied the resolved builtin role into requested_agent_id.
+  // That is not a distinct lane identity: child tool/progress rows from the
+  // same run use the unique codename. Prefer the codename in that case so a
+  // finish marker settles the existing tile instead of creating a duplicate.
+  if (requested && requested !== options.role) return requested;
 
   const raw = stringValue(args.agent_id) ?? stringValue(args.agentId);
   if (raw && raw !== options.role) return raw;
-  return options.codename ?? raw ?? options.role;
+  return options.codename ?? requested ?? raw ?? options.role;
 }
 
 function mcpItemToLiveEvent(
@@ -816,7 +848,15 @@ interface CachedEventScope {
   pendingApprovals: PendingApproval[];
   events: LiveToolEvent[];
 }
+interface CachedTurnEventScope {
+  turnIndex: number;
+  events: LiveToolEvent[];
+}
 const conversationEventScopeCache = new WeakMap<Turn[], CachedEventScope>();
+const conversationTurnEventScopeCache = new WeakMap<
+  Turn,
+  CachedTurnEventScope
+>();
 const lastTurnEventScopeCache = new WeakMap<Turn, CachedEventScope>();
 const lastTurnEmptyScopeCache = new WeakMap<Turn[], CachedEventScope>();
 
@@ -945,6 +985,35 @@ function normalizeTurnSubagentAliases(
   });
 }
 
+function liveToolEventsFromTurn(
+  turn: Turn,
+  turnIndex: number,
+): LiveToolEvent[] {
+  const cached = conversationTurnEventScopeCache.get(turn);
+  if (cached?.turnIndex === turnIndex) return cached.events;
+  const rawEvents = turn.items
+    .map((item, itemIndex) =>
+      cachedItemToLiveEvent(
+        conversationEventCache,
+        item,
+        turn,
+        turnIndex + itemIndex + 1,
+        turnIndex,
+      ),
+    )
+    .filter((event): event is LiveToolEvent => event !== null);
+  const itemEvents = normalizeTurnSubagentAliases(rawEvents);
+  const phaseEvent = cachedPhaseSnapshotsToLiveEvent(
+    conversationEventCache,
+    turn,
+    turnIndex + turn.items.length + 1,
+    turnIndex,
+  );
+  const events = phaseEvent ? [...itemEvents, phaseEvent] : itemEvents;
+  conversationTurnEventScopeCache.set(turn, { turnIndex, events });
+  return events;
+}
+
 export function liveToolEventsFromConversation(
   conv: Conversation,
 ): LiveToolEvent[] {
@@ -952,27 +1021,7 @@ export function liveToolEventsFromConversation(
   if (cached && cached.pendingApprovals === conv.pendingApprovals) {
     return cached.events;
   }
-  const itemEvents = conv.turns.flatMap((turn, turnIndex) => {
-    const rawEvents = turn.items
-      .map((item, itemIndex) =>
-        cachedItemToLiveEvent(
-          conversationEventCache,
-          item,
-          turn,
-          turnIndex + itemIndex + 1,
-          turnIndex,
-        ),
-      )
-      .filter((event): event is LiveToolEvent => event !== null);
-    const events = normalizeTurnSubagentAliases(rawEvents);
-    const phaseEvent = cachedPhaseSnapshotsToLiveEvent(
-      conversationEventCache,
-      turn,
-      turnIndex + turn.items.length + 1,
-      turnIndex,
-    );
-    return phaseEvent ? [...events, phaseEvent] : events;
-  });
+  const itemEvents = conv.turns.flatMap(liveToolEventsFromTurn);
   const events = [
     ...itemEvents,
     ...conv.pendingApprovals.map((approval, index) =>
@@ -1094,6 +1143,7 @@ export function useThreadStreamRealtime(
   const realtime = useRealtimeThread({ threadId });
   const {
     state,
+    connected,
     startTurn,
     steer,
     interrupt,
@@ -1105,6 +1155,24 @@ export function useThreadStreamRealtime(
   } = realtime;
   const [isUploading, setIsUploading] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [pendingOutboundMessages, dispatchOptimisticMessage] = useReducer(
+    optimisticMessageReducer,
+    [],
+  );
+  const pendingOutboundRef = useRef<PendingOutboundMessage[]>([]);
+  pendingOutboundRef.current = pendingOutboundMessages;
+  const updateOptimisticMessages = useCallback(
+    (action: OptimisticMessageAction) => {
+      // Keep an eager mirror so two submits in the same render frame cannot
+      // both believe they are the first unacknowledged turn/start.
+      pendingOutboundRef.current = optimisticMessageReducer(
+        pendingOutboundRef.current,
+        action,
+      );
+      dispatchOptimisticMessage(action);
+    },
+    [],
+  );
   const { t } = useI18n();
 
   // A thread change (e.g. starting a new conversation) must purge any stale
@@ -1114,7 +1182,30 @@ export function useThreadStreamRealtime(
   // fresh workspace until the next send.
   useEffect(() => {
     setSendError(null);
-  }, [threadId]);
+    updateOptimisticMessages({ type: "reset" });
+  }, [threadId, updateOptimisticMessages]);
+
+  // A transport failure belongs to the broken connection, not the recovered
+  // session. Clear its banner only after both layers are authoritative again:
+  // the socket is open and thread/resume has settled successfully. In
+  // particular, keep the error visible for needsResume (including an
+  // unknown/inaccessible historical thread) so reconnecting the socket alone
+  // cannot make a still-unsendable conversation look healthy.
+  useEffect(() => {
+    if (connected && state.resumeState === "resumed") {
+      setSendError(null);
+    }
+  }, [connected, state.resumeState]);
+
+  const transportReady = connected && state.resumeState === "resumed";
+  useEffect(() => {
+    // A disconnect can demote an in-flight optimistic row to queued. Becoming
+    // ready does not itself mean the row was sent; the delivery effect below
+    // promotes it only when startTurn is actually invoked.
+    if (!transportReady) {
+      updateOptimisticMessages({ type: "transport-ready", ready: false });
+    }
+  }, [transportReady, updateOptimisticMessages]);
   const permissionRuntime = useMemo(
     () =>
       permissionRuntimeConfig(
@@ -1139,6 +1230,21 @@ export function useThreadStreamRealtime(
   const mapped = useMemo<AgentThreadState>(
     () => conversationToAgentThreadState(state),
     [state],
+  );
+  const acknowledgedOutboundIds = useMemo(
+    () => acknowledgedClientMessageIds(mapped.messages),
+    [mapped.messages],
+  );
+  useEffect(() => {
+    updateOptimisticMessages({
+      type: "acknowledge",
+      clientMessageIds: acknowledgedOutboundIds,
+    });
+  }, [acknowledgedOutboundIds, updateOptimisticMessages]);
+  const visibleMessages = useMemo(
+    () =>
+      mergeOptimisticHumanMessages(mapped.messages, pendingOutboundMessages),
+    [mapped.messages, pendingOutboundMessages],
   );
   const liveToolEvents = useMemo(
     () => liveToolEventsFromConversation(state),
@@ -1166,6 +1272,19 @@ export function useThreadStreamRealtime(
   );
 
   const isLoading = useMemo(() => conversationIsLoading(state), [state]);
+  // The optimistic human bubble exists before turn/started is received. Treat
+  // an outbound start that is actively being delivered as UI loading so the
+  // assistant activity lane and composer state appear immediately after Send.
+  // Keep lifecycle callbacks bound to the server-authoritative isLoading
+  // below; this flag is presentation-only and never claims a turn started.
+  const isAwaitingTurnStart = pendingOutboundMessages.some(
+    (message) =>
+      message.intent === "start" && message.deliveryState === "sending",
+  );
+  const isUiLoading = isLoading || isAwaitingTurnStart;
+  const runningTurnId = isLoading
+    ? state.turns[state.turns.length - 1]?.id
+    : undefined;
   const realtimeError = useMemo(() => conversationLastError(state), [state]);
   // Send failures are tracked as strings; wrap them so the exposed
   // BaseStream.error honours its `Error | undefined` type. Consumers
@@ -1181,7 +1300,7 @@ export function useThreadStreamRealtime(
     [state],
   );
   const isThreadLoading =
-    state.resumeState === "resuming" && mapped.messages.length === 0;
+    state.resumeState === "resuming" && visibleMessages.length === 0;
   const activeThreadId = useMemo(
     () => activeConversationThreadId(state, threadId),
     [state, threadId],
@@ -1265,11 +1384,11 @@ export function useThreadStreamRealtime(
   const exposedThread = useMemo(
     () =>
       ({
-        messages: mapped.messages,
+        messages: visibleMessages,
         streamingMessage,
         subgraphStreams: {},
         values: mapped,
-        isLoading,
+        isLoading: isUiLoading,
         isThreadLoading,
         error,
         stop,
@@ -1290,8 +1409,9 @@ export function useThreadStreamRealtime(
       },
     [
       mapped,
+      visibleMessages,
       streamingMessage,
-      isLoading,
+      isUiLoading,
       isThreadLoading,
       error,
       stop,
@@ -1302,32 +1422,40 @@ export function useThreadStreamRealtime(
     ],
   );
 
-  const sendMessage = useCallback<SendMessageFn>(
-    (_threadId, message) => {
-      const rawText = (message?.text ?? "").trim();
+  const deliverOutbound = useCallback(
+    (outbound: PendingOutboundMessage) => {
+      const rawText = outbound.message.text.trim();
       const parsedComposerMode = parseCodexComposerModeMarker(rawText);
       const text = parsedComposerMode.text.trim();
-      const files = message.files ?? [];
-      if (!text && files.length === 0) return;
-      const effectiveThreadId =
-        _threadId && _threadId !== "new" ? _threadId : threadId;
+      const files = outbound.message.files;
       const hasFileUploads = files.length > 0;
+      updateOptimisticMessages({
+        type: "set-delivery",
+        clientMessageId: outbound.clientMessageId,
+        deliveryState: transportReady ? "sending" : "queued",
+      });
       void (async () => {
         setSendError(null);
-        if (isLoading) {
+        if (outbound.intent === "steer") {
+          if (!runningTurnId || runningTurnId !== outbound.targetTurnId) {
+            throw new Error(t.conversation.steeringTurnUnavailable);
+          }
           if (files.length > 0) {
             throw new Error(
               "Files cannot be added while the current task is running; send a text correction or stop first.",
             );
           }
-          await steer({ input: text });
+          await steer({ input: text, itemId: outbound.clientMessageId });
           return;
+        }
+        if (isLoading) {
+          throw new Error(t.conversation.previousMessagePending);
         }
         setIsUploading(hasFileUploads);
         try {
           const attachments =
-            effectiveThreadId && effectiveThreadId !== "new"
-              ? await uploadPromptInputFiles(effectiveThreadId, files)
+            outbound.threadId && outbound.threadId !== "new"
+              ? await uploadPromptInputFiles(outbound.threadId, files)
               : await fallbackFileAttachmentsAsync(files);
           // No upload toast here: the composer chip owns that signal now. A
           // floating "uploaded 1 file" popup fired at send time told the user
@@ -1368,9 +1496,12 @@ export function useThreadStreamRealtime(
           const metadataContext = reasoningEffort
             ? { ...runtimeContext, reasoning_effort: reasoningEffort }
             : runtimeContext;
+          const projectCwd = stringValue(metadataContext.workspace_path);
           setIsUploading(false);
           await startTurn({
             input: text,
+            ...(projectCwd ? { cwd: projectCwd } : {}),
+            clientItemId: outbound.clientMessageId,
             attachments,
             approvalPolicy: effectiveApprovalPolicy,
             sandboxPolicy: effectiveSandboxPolicy,
@@ -1395,16 +1526,24 @@ export function useThreadStreamRealtime(
         // turn/started notification was observed, so mid-turn
         // disconnects of an already-persisted message don't land in
         // this catch.
-        setSendError(
-          err instanceof Error ? err.message : "Failed to send message",
+        // JSON-RPC failures can cross the WebSocket boundary as plain objects,
+        // so `instanceof Error` loses their actionable `message` field.
+        const errorMessage = getStreamErrorMessage(
+          err,
+          t.streaming?.networkLost ?? "Connection unavailable.",
         );
+        setSendError(errorMessage);
+        updateOptimisticMessages({
+          type: "set-delivery",
+          clientMessageId: outbound.clientMessageId,
+          deliveryState: "failed",
+          error: errorMessage,
+        });
         if (hasFileUploads) {
           toast.error(t.chatInputBox.uploadFailed);
         }
-        // The input box clears its draft optimistically on submit, so a
-        // failed send (socket drop before turn/start lands) would eat
-        // the user's text. Hand it back — the box restores the draft
-        // when it is still empty.
+        // Keep the failed bubble in the timeline and also hand the original
+        // draft back to the composer so the user can edit before retrying.
         if (typeof window !== "undefined") {
           void extractImageFiles(files)
             .catch(() => [])
@@ -1412,7 +1551,8 @@ export function useThreadStreamRealtime(
               window.dispatchEvent(
                 new CustomEvent("octopus:send-failed", {
                   detail: {
-                    threadId: effectiveThreadId,
+                    threadId: outbound.threadId,
+                    clientMessageId: outbound.clientMessageId,
                     text: rawText,
                     images,
                   },
@@ -1426,6 +1566,7 @@ export function useThreadStreamRealtime(
       startTurn,
       steer,
       isLoading,
+      runningTurnId,
       effectiveApprovalPolicy,
       effectiveSandboxPolicy,
       model,
@@ -1434,8 +1575,145 @@ export function useThreadStreamRealtime(
       permissionRuntime.planningMode,
       permissionRuntime.sandbox_mode,
       permissionRuntime.execution_environment,
-      threadId,
+      transportReady,
       t.chatInputBox.uploadFailed,
+      t.conversation.previousMessagePending,
+      t.conversation.steeringTurnUnavailable,
+      t.streaming?.networkLost,
+      updateOptimisticMessages,
+    ],
+  );
+
+  useEffect(() => {
+    if (!transportReady) return;
+    const queued = pendingOutboundRef.current.filter(
+      (message) => message.deliveryState === "queued",
+    );
+    // Normal UI flow permits only one unacknowledged start. Keep this loop so
+    // restored steering rows still preserve FIFO if a reconnect races them.
+    for (const outbound of queued) {
+      deliverOutbound(outbound);
+    }
+  }, [deliverOutbound, transportReady]);
+
+  useEffect(() => {
+    const handleRetry = (
+      event: CustomEvent<{
+        threadId?: string | null;
+        clientMessageId?: string | null;
+      }>,
+    ) => {
+      const detail = event.detail;
+      if (detail?.threadId && detail.threadId !== threadId) return;
+      const clientMessageId = detail?.clientMessageId;
+      if (!clientMessageId) return;
+      const pending = pendingOutboundRef.current.find(
+        (message) =>
+          message.clientMessageId === clientMessageId &&
+          message.deliveryState === "failed",
+      );
+      if (!pending) return;
+      const waitingForFirstTurnReceipt = pendingOutboundRef.current.some(
+        (message) =>
+          message.clientMessageId !== clientMessageId &&
+          message.deliveryState !== "failed",
+      );
+      if (waitingForFirstTurnReceipt) {
+        setSendError(t.conversation.previousMessagePending);
+        return;
+      }
+      if (pending.intent === "start" && isLoading) {
+        setSendError(t.conversation.previousMessagePending);
+        return;
+      }
+      if (
+        pending.intent === "steer" &&
+        (!runningTurnId || runningTurnId !== pending.targetTurnId)
+      ) {
+        setSendError(t.conversation.steeringTurnUnavailable);
+        return;
+      }
+      deliverOutbound(pending);
+    };
+    window.addEventListener(
+      RETRY_PENDING_MESSAGE_EVENT,
+      handleRetry as EventListener,
+    );
+    return () => {
+      window.removeEventListener(
+        RETRY_PENDING_MESSAGE_EVENT,
+        handleRetry as EventListener,
+      );
+    };
+  }, [
+    deliverOutbound,
+    isLoading,
+    runningTurnId,
+    t.conversation.previousMessagePending,
+    t.conversation.steeringTurnUnavailable,
+    threadId,
+  ]);
+
+  const sendMessage = useCallback<SendMessageFn>(
+    (_threadId, message) => {
+      const rawText = (message?.text ?? "").trim();
+      const parsedComposerMode = parseCodexComposerModeMarker(rawText);
+      const displayText = parsedComposerMode.text.trim();
+      const files = message.files ?? [];
+      if (!displayText && files.length === 0) return;
+      const effectiveThreadId =
+        _threadId && _threadId !== "new" ? _threadId : threadId;
+      const outbound: PendingOutboundMessage = {
+        clientMessageId: newClientMessageId(),
+        threadId: effectiveThreadId,
+        intent: runningTurnId ? "steer" : "start",
+        ...(runningTurnId ? { targetTurnId: runningTurnId } : {}),
+        message: { text: rawText, files },
+        displayText,
+        createdAt: new Date().toISOString(),
+        deliveryState: transportReady ? "sending" : "queued",
+      };
+      const waitingForFirstTurnReceipt =
+        !isLoading &&
+        pendingOutboundRef.current.some(
+          (pending) => pending.deliveryState !== "failed",
+        );
+      if (waitingForFirstTurnReceipt) {
+        const errorMessage = t.conversation.previousMessagePending;
+        const failed = {
+          ...outbound,
+          deliveryState: "failed" as const,
+          error: errorMessage,
+        };
+        updateOptimisticMessages({ type: "enqueue", message: failed });
+        setSendError(errorMessage);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("octopus:send-failed", {
+              detail: {
+                threadId: effectiveThreadId,
+                clientMessageId: outbound.clientMessageId,
+                text: rawText,
+                images: [],
+              },
+            }),
+          );
+        }
+        return;
+      }
+      updateOptimisticMessages({ type: "enqueue", message: outbound });
+      if (transportReady) {
+        deliverOutbound(outbound);
+      }
+    },
+    [
+      deliverOutbound,
+      isLoading,
+      runningTurnId,
+      t.conversation.previousMessagePending,
+      threadId,
+      transportReady,
+      updateOptimisticMessages,
     ],
   );
 

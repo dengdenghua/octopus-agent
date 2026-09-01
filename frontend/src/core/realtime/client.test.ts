@@ -695,6 +695,21 @@ describe("RealtimeClient", () => {
     expect(FakeWebSocket.instances.length).toBe(1);
   });
 
+  it("rejects new requests after close instead of retaining an unflushable outbox", async () => {
+    const client = makeClient({});
+    client.connect();
+    const socket = FakeWebSocket.lastInstance!;
+    socket.open();
+
+    client.close();
+    client.notify("client/say", { text: "late" });
+
+    await expect(client.request("thread/resume", {})).rejects.toThrow(
+      "client closed",
+    );
+    expect(socket.sentRaw).toHaveLength(0);
+  });
+
   it("does NOT replay buffered requests after a reconnect (P0-5 outbox invariant)", async () => {
     // Regression guard: a turn/start (or any other request) issued
     // while the socket was closed used to live in the outbox AND

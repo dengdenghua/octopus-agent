@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { RoutedWebLink } from "@/components/ui/routed-web-link";
 import {
   Dialog,
   DialogContent,
@@ -671,10 +672,9 @@ function ChannelCard({
             <div className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
               {row.description}
               {row.help_url && !row.connected && (
-                <a
+                <RoutedWebLink
                   href={row.help_url}
-                  target="_blank"
-                  rel="noreferrer"
+                  openTargetSource="channel-help"
                   className="ml-1 text-primary underline underline-offset-2 hover:opacity-80 cursor-pointer"
                   onClick={(e) => {
                     if (!row.help_url || row.help_url === "#") {
@@ -684,7 +684,7 @@ function ChannelCard({
                   }}
                 >
                   {t.channels.howToSetup}
-                </a>
+                </RoutedWebLink>
               )}
             </div>
           </div>

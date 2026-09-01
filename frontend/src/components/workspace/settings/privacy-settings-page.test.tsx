@@ -292,7 +292,9 @@ describe("PrivacySettingsPage · path denylist section", () => {
     );
 
     // Click "新增" to open the dialog.
-    fireEvent.click(screen.getByRole("button", { name: /新增/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "添加不可读取文件夹" }),
+    );
 
     const dialog = await screen.findByRole("dialog");
     const input = within(dialog).getByLabelText(/路径/);
@@ -332,7 +334,9 @@ describe("PrivacySettingsPage · path denylist section", () => {
 
     renderWithProviders(<PrivacySettingsPage />, { locale: "zh-CN" });
     await screen.findByText("C:/Users/me/secrets");
-    fireEvent.click(screen.getByRole("button", { name: /新增/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "添加不可读取文件夹" }),
+    );
 
     const dialog = await screen.findByRole("dialog");
     const input = within(dialog).getByLabelText(/路径/);
@@ -408,7 +412,9 @@ describe("PrivacySettingsPage · recoverable loading states", () => {
     ).not.toBeInTheDocument();
     expect(within(denylistSection).getByRole("alert")).toBeInTheDocument();
     expect(
-      within(denylistSection).getByRole("button", { name: "新增" }),
+      within(denylistSection).getByRole("button", {
+        name: "添加不可读取文件夹",
+      }),
     ).toBeDisabled();
   });
 });

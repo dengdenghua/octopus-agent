@@ -219,6 +219,9 @@ export class RealtimeClient {
     method: string,
     params: Record<string, unknown> = {},
   ): Promise<R> {
+    if (this.closed) {
+      return Promise.reject(new Error("client closed"));
+    }
     const id = this.nextId++;
     const envelope: JsonRpcRequest = { jsonrpc: "2.0", id, method, params };
     return new Promise<R>((resolve, reject) => {
@@ -257,6 +260,9 @@ export class RealtimeClient {
   }
 
   private send(env: Envelope): void {
+    // A deliberately closed client never reconnects. Do not retain late
+    // approval replies/notifications in an outbox that can never flush.
+    if (this.closed) return;
     const text = JSON.stringify(env);
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(text);

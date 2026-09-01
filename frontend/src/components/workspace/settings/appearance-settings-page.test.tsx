@@ -52,7 +52,7 @@ describe("AppearanceSettingsPage · language selector", () => {
     ).toBeInTheDocument();
   });
 
-  it("exposes selected themes and the chat font selector accessibly", () => {
+  it("exposes selected themes without mixing conversation controls", () => {
     renderWithProviders(<AppearanceSettingsPage />, { locale: "zh-CN" });
 
     expect(screen.getByRole("button", { name: /跟随系统/ })).toHaveAttribute(
@@ -60,8 +60,8 @@ describe("AppearanceSettingsPage · language selector", () => {
       "true",
     );
     expect(
-      screen.getByLabelText(zhCN.settings.appearance.chatFontSizeTitle),
-    ).toHaveAttribute("role", "combobox");
+      screen.queryByLabelText(zhCN.settings.appearance.chatFontSizeTitle),
+    ).not.toBeInTheDocument();
   });
 
   it("does not leak English corner-style names into Chinese copy", () => {

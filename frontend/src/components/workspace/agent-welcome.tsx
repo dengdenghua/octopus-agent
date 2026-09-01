@@ -26,11 +26,11 @@ export function AgentWelcome({
 
   const displayName = isOctopus
     ? getAssistantDisplayName()
-    : agent?.display_name ?? agent?.name ?? (agentName === "general" ? "Octopus Agent" : agentName);
+    : (agent?.display_name ??
+      agent?.name ??
+      (agentName === "general" ? "EchoAI" : agentName));
   const description = agent?.description;
-  const isLocalPartner =
-    agentName.startsWith("local_") || (agent?.name ?? "").startsWith("local_");
-  const typeBadge = isLocalPartner ? "本地伙伴" : isOctopus ? "助手" : "Agent";
+  const typeBadge = isOctopus ? "助手" : "Agent";
 
   const commitRename = () => {
     setAssistantDisplayName(draft);
@@ -38,7 +38,8 @@ export function AgentWelcome({
   };
 
   // Check if agent has visual illustrations (for ECHO characters, etc.)
-  const hasVisuals = agent?.visual_urls && Object.keys(agent.visual_urls).length > 0;
+  const hasVisuals =
+    agent?.visual_urls && Object.keys(agent.visual_urls).length > 0;
 
   return (
     <div

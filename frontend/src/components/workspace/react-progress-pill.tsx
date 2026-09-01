@@ -45,13 +45,17 @@ export const ReactProgressPill = memo(function ReactProgressPill({
     }
   }
 
-  const tokenPct =
-    active.max_tokens > 0 ? (active.tokens_spent / active.max_tokens) * 100 : 0;
+  const contextPct =
+    active.context_capacity_tokens && active.context_capacity_tokens > 0
+      ? ((active.current_context_tokens ?? 0) /
+          active.context_capacity_tokens) *
+        100
+      : 0;
   const iterPct =
     active.max_iterations > 0
       ? (active.current_iteration / active.max_iterations) * 100
       : 0;
-  const hot = tokenPct >= 70 || iterPct >= 70;
+  const hot = contextPct >= 70 || iterPct >= 70;
 
   return (
     <div
@@ -74,10 +78,15 @@ export const ReactProgressPill = memo(function ReactProgressPill({
           iter {active.current_iteration}/{active.max_iterations}
         </span>
       )}
-      {active.max_tokens > 0 && (
+      {!!active.context_capacity_tokens && (
         <span className="font-mono text-muted-foreground">
-          · {(active.tokens_spent / 1000).toFixed(1)}k/
-          {(active.max_tokens / 1000).toFixed(0)}k
+          · ctx {((active.current_context_tokens ?? 0) / 1000).toFixed(1)}k/
+          {(active.context_capacity_tokens / 1000).toFixed(0)}k
+        </span>
+      )}
+      {active.tokens_spent > 0 && (
+        <span className="font-mono text-muted-foreground" title={b.tokensLabel}>
+          · Σ{(active.tokens_spent / 1000).toFixed(1)}k
         </span>
       )}
       <Button

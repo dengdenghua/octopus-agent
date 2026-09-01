@@ -1,5 +1,4 @@
 import {
-  BadgeCheckIcon,
   BotIcon,
   MessageSquareIcon,
   MoreHorizontalIcon,
@@ -10,7 +9,6 @@ import {
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -114,17 +112,17 @@ export function AgentCard({
 
   return (
     <>
-      <Card className="group flex min-h-44 flex-col overflow-hidden rounded-xl border-border-default bg-card py-0 shadow-[var(--shadow-xs)] transition-[border-color,box-shadow,transform] duration-base hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[var(--shadow-sm)]">
+      <Card className="group flex min-h-36 flex-col overflow-hidden rounded-xl border-border-subtle bg-card py-0 shadow-none transition-colors hover:border-border-default hover:bg-muted/10">
         <button
           type="button"
           disabled={!onSelect}
           aria-label={t.agentCard.profileAriaLabel(displayName)}
-          className="block w-full cursor-pointer rounded-t-xl text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-default"
+          className="block w-full cursor-pointer rounded-t-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-default"
           onClick={() => onSelect?.(agent)}
         >
-          <CardHeader className="px-4 pb-3 pt-4">
+          <CardHeader className="px-4 pb-2 pt-3.5">
             <div className="flex items-start gap-3">
-              <div className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border-default bg-muted text-lg leading-none">
+              <div className="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border-subtle bg-muted text-base leading-none">
                 {agent.avatar_url ? (
                   <AuthenticatedImage
                     src={withAgentAvatarVersion(agent.avatar_url)}
@@ -153,25 +151,11 @@ export function AgentCard({
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-2">
-                  <CardTitle className="truncate text-[15px] font-semibold leading-5">
-                    {displayName}
-                  </CardTitle>
-                  <Badge
-                    variant="secondary"
-                    className="h-5 shrink-0 gap-1 rounded-full px-2 text-[11px] font-medium"
-                  >
-                    {isDefault && (
-                      <BadgeCheckIcon
-                        className="size-3 text-primary"
-                        aria-hidden="true"
-                      />
-                    )}
-                    {t.agentWorld.agentInstalled}
-                  </Badge>
-                </div>
+                <CardTitle className="truncate text-sm font-semibold leading-5">
+                  {displayName}
+                </CardTitle>
                 <CardDescription
-                  className="mt-1 truncate text-xs leading-5 text-muted-foreground"
+                  className="mt-0.5 line-clamp-2 text-xs leading-5 text-muted-foreground"
                   title={agent.description}
                 >
                   {agent.description}
@@ -181,28 +165,27 @@ export function AgentCard({
 
             {talentTags.length > 0 && (
               <div
-                className="mt-3 flex min-h-5 flex-wrap gap-1.5"
+                className="mt-2.5 flex min-h-5 flex-wrap gap-1.5"
                 aria-label={talentTags.join(", ")}
               >
                 {talentTags.map((tag) => (
-                  <Badge
+                  <span
                     key={tag}
-                    variant="outline"
-                    className="max-w-32 truncate rounded-full border-border-subtle bg-muted/35 px-2 py-0 text-[11px] font-normal text-muted-foreground"
+                    className="max-w-32 truncate rounded-md bg-muted/60 px-2 py-0.5 text-[11px] font-normal text-muted-foreground"
                   >
                     {tag}
-                  </Badge>
+                  </span>
                 ))}
               </div>
             )}
           </CardHeader>
         </button>
 
-        <CardFooter className="mt-auto flex items-center gap-2 border-t border-border-subtle bg-muted/10 px-3 py-2.5">
+        <CardFooter className="mt-auto flex items-center gap-1 px-4 pb-3 pt-0">
           <Button
             size="sm"
-            variant="default"
-            className="min-h-10 flex-1 rounded-lg shadow-none sm:min-h-9"
+            variant="ghost"
+            className="h-7 flex-1 justify-start rounded-md px-0 text-xs font-medium text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
             onClick={(event) => {
               event.stopPropagation();
               handleChat();
@@ -221,13 +204,13 @@ export function AgentCard({
             )}
             {isPrimaryIdentity ? t.agentCard.chat : t.agentCard.addOnDemand}
           </Button>
-          {!isDefault && (
+          {(onSelect || !isDefault) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="size-10 shrink-0 rounded-lg text-muted-foreground sm:size-9"
+                  className="size-7 shrink-0 rounded-md text-muted-foreground"
                   onClick={(event) => {
                     event.stopPropagation();
                   }}
@@ -238,24 +221,35 @@ export function AgentCard({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-36">
-                <DropdownMenuItem
-                  variant="destructive"
-                  aria-label={t.agentCard.deleteAriaLabel(displayName)}
-                  onSelect={async () => {
-                    if (
-                      await confirm({
-                        title: t.agentCard.deleteTitle(displayName),
-                        description: t.agentCard.deleteConfirm(displayName),
-                        confirmLabel: t.common.delete,
-                      })
-                    ) {
-                      void handleDelete();
-                    }
-                  }}
-                >
-                  <Trash2Icon />
-                  {t.common.delete}
-                </DropdownMenuItem>
+                {onSelect ? (
+                  <DropdownMenuItem
+                    aria-label={t.agentCard.profileAriaLabel(displayName)}
+                    onSelect={() => onSelect(agent)}
+                  >
+                    <BotIcon />
+                    {t.agentCard.profile}
+                  </DropdownMenuItem>
+                ) : null}
+                {!isDefault ? (
+                  <DropdownMenuItem
+                    variant="destructive"
+                    aria-label={t.agentCard.deleteAriaLabel(displayName)}
+                    onSelect={async () => {
+                      if (
+                        await confirm({
+                          title: t.agentCard.deleteTitle(displayName),
+                          description: t.agentCard.deleteConfirm(displayName),
+                          confirmLabel: t.common.delete,
+                        })
+                      ) {
+                        void handleDelete();
+                      }
+                    }}
+                  >
+                    <Trash2Icon />
+                    {t.common.delete}
+                  </DropdownMenuItem>
+                ) : null}
               </DropdownMenuContent>
             </DropdownMenu>
           )}

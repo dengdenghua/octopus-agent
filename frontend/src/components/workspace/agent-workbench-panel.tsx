@@ -5,6 +5,7 @@ import {
   FolderKanbanIcon,
   GlobeIcon,
   PackageIcon,
+  PanelsTopLeftIcon,
   SparklesIcon,
   TerminalIcon,
 } from "lucide-react";
@@ -31,6 +32,11 @@ import type { GroundingSource } from "@/core/realtime/items";
 import { TerminalPanel } from "@/components/workspace/terminal-panel";
 import { ToolEffectDetailPanel } from "@/components/workspace/tool-effect-detail-panel";
 import { useArtifacts } from "@/components/workspace/artifacts/context";
+import {
+  HtmlPreview,
+  OfficePreview,
+} from "@/components/workspace/artifacts/artifact-file-detail";
+import { officeArtifactKind } from "@/components/workspace/artifacts/office-edit";
 import { ArtifactLink } from "@/components/workspace/citations/artifact-link";
 import { checkCodeFile, getFileIcon, getFileName } from "@/core/utils/files";
 import { useStreamdownPlugins } from "@/core/streamdown";
@@ -43,7 +49,6 @@ import type {
 import type { LiveToolEvent } from "./live-tool-timeline";
 import { cn } from "@/lib/utils";
 import { CoworkCollabBar } from "./cowork-collab-bar";
-import { CollaborationSessionPanel } from "./collaboration-session-view";
 import type { ExtractedCodeBlocks } from "@/lib/extract-code-blocks";
 import type { StreamdownProps } from "streamdown";
 import type { AgentWorkbenchTabId, DiffEntry } from "./agent-workbench-utils";
@@ -59,6 +64,7 @@ import {
   type WorkbenchTab,
 } from "./agent-workbench-panel/workbench-tab-header";
 import { BrowserTabPage } from "./agent-workbench-panel/browser-tab-page";
+import { PersonaWorkbenchHome } from "./agent-workbench-panel/persona-workbench-home";
 import { AgentKanbanView } from "./agent-workbench-panel/agent-kanban-view";
 import {
   ProjectOsTab,
@@ -69,6 +75,7 @@ import {
 import type { WorkbenchRosterSeat } from "./agent-workbench-panel/helpers";
 import { useWorkbenchSelection } from "./agent-workbench-panel/use-workbench-selection";
 import { WorkbenchSnapshotCache } from "@/core/cache/workbench-snapshot-cache";
+import { workspacePresetForAgent } from "@/core/workspace/workspace-presets";
 
 // Re-export items that were exported from the original file
 export { hasAgentWorkbenchContent, __testing } from "./agent-workbench-utils";
@@ -114,6 +121,10 @@ function AgentWorkbenchPanelImpl({
   isCompressingContext,
   onCompressContext,
   rosterSeats = [],
+  groupTitle,
+  currentThreadTitle,
+  personaId,
+  showMachineRosterRail = true,
 }: {
   activeTab?: AgentWorkbenchTabId;
   events: LiveToolEvent[];
@@ -174,12 +185,21 @@ function AgentWorkbenchPanelImpl({
   resultPreviewUrl?: string | null;
   /** Public identity shown above the main-agent evidence surface. */
   mainAgentName?: string | null;
+  /** Persona that owns this conversation and its workspace preset. */
+  personaId?: string | null;
   /** Current conversation-window usage, shared with the composer. */
   contextTokens?: number;
   maxContextTokens?: number;
   isCompressingContext?: boolean;
   onCompressContext?: () => void | Promise<void>;
   rosterSeats?: WorkbenchRosterSeat[];
+  /** Current group-room title, used to collapse a duplicated project heading. */
+  groupTitle?: string | null;
+  /** Current conversation title when no distinct group title is available. */
+  currentThreadTitle?: string | null;
+  /** Team-member avatars can be hosted below the composer. Runtime-spawned
+   * machine seats remain in the workbench rail either way. */
+  showMachineRosterRail?: boolean;
 }) {
   const { t } = useI18n();
   const { deriveAgentTiles, workbenchStatus } = useAgentWorkbenchI18n();
@@ -310,8 +330,8 @@ function AgentWorkbenchPanelImpl({
       },
     );
   }, [groundingSources, typedGroundingSources]);
-  // Visibility (capability routing / delegation / skill-catalog) decisions,
-  // surfaced as a de-emphasised collapsed section on the Agent kanban view.
+  // Keep visibility traces available for the workbench, while the kanban view
+  // surfaces only decisions that explicitly require user attention.
   const visibilityEvents = useMemo(
     () => events.filter((event) => event.name === "visibility"),
     [events],
@@ -462,9 +482,9 @@ function AgentWorkbenchPanelImpl({
   const machineRail = (
     <MachineScopeRail
       agents={agentTiles}
-      leaderSeat={leaderRosterSeat}
+      leaderSeat={showMachineRosterRail ? leaderRosterSeat : null}
       mainRunState={mainRunState}
-      rosterSeats={visibleRosterSeats}
+      rosterSeats={showMachineRosterRail ? visibleRosterSeats : []}
       selectedAgentId={selectedAgent?.id ?? selectedRosterSeat?.id ?? null}
       onSelectMain={openMainProcess}
       onSelectAgent={openSubagentProcess}
@@ -487,14 +507,22 @@ function AgentWorkbenchPanelImpl({
     | "terminal"
     | "browser"
     | "artifacts"
+    | "workspace"
     | "project" =
-    requestedActiveTab === "subagents" || requestedActiveTab === "plan"
+    requestedActiveTab === "subagents" ||
+    requestedActiveTab === "plan" ||
+    requestedActiveTab === "design"
       ? "agent"
       : requestedActiveTab === "project" && !projectTabVisible
         ? "agent"
         : requestedActiveTab;
   const workbenchTabs: WorkbenchTab[] = useMemo(
     () => [
+      {
+        id: "workspace",
+        label: workspacePresetForAgent(personaId).workbenchLabel,
+        Icon: PanelsTopLeftIcon,
+      },
       {
         id: "diff",
         label: t.agentWorkbenchPages.diffTab,
@@ -525,7 +553,7 @@ function AgentWorkbenchPanelImpl({
           ]
         : []),
     ],
-    [t.agentWorkbenchPages, t.conversation, projectTabVisible],
+    [t.agentWorkbenchPages, t.conversation, projectTabVisible, personaId],
   );
 
   // Auto-open a tab if it becomes the effective active tab
@@ -606,6 +634,7 @@ function AgentWorkbenchPanelImpl({
       browserPreviewBlocks={browserPreviewBlocks}
     />
   );
+  const personaWorkbenchPage = <PersonaWorkbenchHome personaId={personaId} />;
   // The main conversation owns the global execution narrative. A selected
   // sub-agent may still open its own computer: a complete, isolated streaming
   // conversation rather than a duplicate mixed activity trace.
@@ -643,10 +672,12 @@ function AgentWorkbenchPanelImpl({
         effectiveActiveTab={effectiveActiveTab}
         onTabClick={handleOpenTab}
         onTabClose={handleCloseTab}
+        onClose={onClose}
         visibleDiffEntries={visibleDiffEntries}
         threadId={threadId}
         inferredWorkDir={inferredWorkDir}
         browserTabPage={browserTabPage}
+        personaWorkbenchPage={personaWorkbenchPage}
         isLoading={isLoading}
         className={className}
         machineRail={machineRail}
@@ -715,6 +746,8 @@ function AgentWorkbenchPanelImpl({
       />
     ) : effectiveActiveTab === "browser" ? (
       browserTabPage
+    ) : effectiveActiveTab === "workspace" ? (
+      personaWorkbenchPage
     ) : effectiveActiveTab === "artifacts" && threadId ? (
       // Reuses the outer ArtifactsProvider (page-level) so the artifact list
       // synced from the backend stays visible. Wrapping in a fresh provider
@@ -732,6 +765,8 @@ function AgentWorkbenchPanelImpl({
         <ProjectOsTab
           state={boundProject}
           rosterSeats={rosterSeats}
+          groupTitle={groupTitle}
+          currentThreadTitle={currentThreadTitle}
           onOpenArtifact={onOpenArtifact}
           onInvitePeople={onInvitePeople}
           onRefetch={() => {
@@ -776,20 +811,16 @@ function AgentWorkbenchPanelImpl({
         effectiveActiveTab={effectiveActiveTab}
         onTabClick={handleOpenTab}
         onTabClose={handleCloseTab}
+        onClose={onClose}
         workspaceLabel={workspaceLabel}
         showWorkspaceLabel
         mainRunStatusLabel={mainRunStatus.label}
       />
 
-      {threadId && effectiveActiveTab !== "project" ? (
-        <>
-          <CoworkCollabBar threadId={threadId} rosterSeats={rosterSeats} />
-          <CollaborationSessionPanel
-            threadId={threadId}
-            onlyWhenRoomLinked
-            className="px-3 pb-2"
-          />
-        </>
+      {threadId &&
+      effectiveActiveTab !== "project" &&
+      effectiveActiveTab !== "workspace" ? (
+        <CoworkCollabBar threadId={threadId} rosterSeats={rosterSeats} />
       ) : null}
 
       <section
@@ -798,7 +829,9 @@ function AgentWorkbenchPanelImpl({
       >
         {effectiveEmbeddedPage}
       </section>
-      {machineRail}
+      {effectiveActiveTab === "project" || effectiveActiveTab === "workspace"
+        ? null
+        : machineRail}
     </div>
   );
 }
@@ -900,7 +933,7 @@ function ArtifactInlinePreviewEmbedded({
       : isLoading
         ? t.agentWorkbenchPanel.agentStatusRunning
         : runSettled
-          ? t.conversation.noPreviewArtifacts
+          ? t.livePreview.emptyHint
           : t.agentWorkbenchPanel.agentStatusPending;
     return (
       <div className="flex flex-1 items-center justify-center p-6">
@@ -985,7 +1018,7 @@ function FileListRow({
 
 /* ─────────────────────── Preview pane (full-screen) ─────────────────────── */
 
-function PreviewPane({
+export function PreviewPane({
   filepath,
   threadId,
   streamdownPlugins,
@@ -999,17 +1032,17 @@ function PreviewPane({
   const { t } = useI18n();
   const displayPath = artifactDisplayPath(filepath);
   const isWriteFile = filepath.startsWith("write-file:");
-  const { content, url, isLoading } = useArtifactContent({
+  const { content, url, isLoading, refetch } = useArtifactContent({
     filepath,
     threadId,
     enabled: !isWriteFile,
   });
   const effectiveContent = isWriteFile ? "" : (content ?? "");
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const lang = checkCodeFile(displayPath).language;
   const isHtml = lang === "html";
   const isMarkdown = lang === "markdown";
+  const officeKind = officeArtifactKind(displayPath);
 
   return (
     <div className="flex min-h-0 size-full flex-col">
@@ -1052,7 +1085,15 @@ function PreviewPane({
             {t.common.loading}…
           </div>
         )}
-        {isMarkdown ? (
+        {officeKind ? (
+          <OfficePreview
+            displayPath={displayPath}
+            filepath={filepath}
+            isMock={false}
+            kind={officeKind}
+            threadId={threadId}
+          />
+        ) : isMarkdown ? (
           <div className="size-full overflow-auto px-4 py-3">
             <Suspense
               fallback={
@@ -1071,12 +1112,13 @@ function PreviewPane({
             </Suspense>
           </div>
         ) : isHtml ? (
-          <iframe
-            ref={iframeRef}
-            className="size-full border-0"
-            sandbox="allow-scripts allow-forms"
-            title={`${getFileName(displayPath)} preview`}
-            {...(url ? { src: url } : { srcDoc: effectiveContent })}
+          <HtmlPreview
+            artifactRef={filepath}
+            content={effectiveContent}
+            filepath={displayPath}
+            onSaved={() => void refetch()}
+            threadId={threadId}
+            url={url}
           />
         ) : (
           <div className="flex size-full items-center justify-center p-4 text-xs text-muted-foreground">

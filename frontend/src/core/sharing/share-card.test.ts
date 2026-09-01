@@ -13,7 +13,7 @@ describe("buildShareCard", () => {
   it("applies defaults and trims", () => {
     const card = buildShareCard({ title: "  Build a landing page  " });
     expect(card.title).toBe("Build a landing page");
-    expect(card.brand).toBe("Octopus Agent");
+    expect(card.brand).toBe("EchoAI");
     expect(card.prompt).toBe("");
     expect(card.summary).toBe("");
     expect(card.footer).toBe("");
@@ -89,7 +89,7 @@ describe("renderShareCardSvg", () => {
   it("renders the title and brand", () => {
     const svg = renderShareCardSvg(base);
     expect(svg).toContain("Ship the share feature");
-    expect(svg).toContain("Octopus Agent");
+    expect(svg).toContain("EchoAI");
   });
 
   it("includes the prompt block only when a prompt is present", () => {

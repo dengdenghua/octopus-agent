@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 const sections = [
   {
     title: "服务范围",
-    body: "Octopus 提供本地与云端协同的智能体工作台，用于对话、自动化、知识管理、团队协作和可复用技能编排。具体可用能力会随账号权限、部署环境和已启用的插件而变化。",
+    body: "EchoAI 提供本地与云端协同的智能角色平台，用于对话、自动化、知识管理、团队协作和可复用技能编排。底层能力由 EchoOS 提供，具体可用范围会随账号权限、部署环境和已启用的插件而变化。",
   },
   {
     title: "账号与授权",
@@ -14,7 +14,7 @@ const sections = [
   },
   {
     title: "使用边界",
-    body: "请不要使用 Octopus 进行违法、侵权、绕过访问控制、批量骚扰、恶意爬取或破坏系统稳定性的行为。涉及敏感数据、外部提交、删除、购买或权限变更时，应在执行前确认目标和影响。",
+    body: "请不要使用 EchoAI 进行违法、侵权、绕过访问控制、批量骚扰、恶意爬取或破坏系统稳定性的行为。涉及敏感数据、外部提交、删除、购买或权限变更时，应在执行前确认目标和影响。",
   },
   {
     title: "输出与责任",
@@ -39,12 +39,12 @@ export default function TermsPage() {
 
         <article className="bg-card text-card-foreground rounded-2xl border border-border-default px-6 py-7 shadow-[var(--shadow-card)]">
           <p className="text-xs font-medium uppercase text-muted-foreground">
-            Octopus Agent OS
+            EchoAI · Powered by EchoOS
           </p>
           <h1 className="mt-2 text-2xl font-semibold">用户协议</h1>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">
             欢迎使用
-            Octopus。以下条款用于说明你与服务之间的基本权利、责任和使用边界。
+            EchoAI。以下条款用于说明你与服务之间的基本权利、责任和使用边界。
           </p>
 
           <div className="mt-6 space-y-5">

@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 describe("WorkspaceSurfaceSwitch", () => {
-  it("links directly to the standalone browser route", () => {
+  it("links directly to the desktop browser mode", () => {
     renderWithProviders(<WorkspaceSurfaceSwitch active="agent" />, {
       initialRoute: "/workspace/realtime/thread-7?mode=team",
     });

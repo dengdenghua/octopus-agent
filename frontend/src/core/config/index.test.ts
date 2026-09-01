@@ -4,6 +4,7 @@ import {
   getBackendBaseURL,
   getBackendTransportBaseURL,
   getBackendWebSocketBaseURL,
+  getControlPlaneBaseURL,
   getOctopusBaseURL,
   getPublicAssetURL,
 } from ".";
@@ -32,8 +33,16 @@ describe("backend base URL resolution", () => {
     setLocation("http://localhost:3000/#/workspace/agents");
 
     expect(getBackendBaseURL()).toBe("");
+    expect(getControlPlaneBaseURL()).toBe("");
     expect(getOctopusBaseURL()).toBe("/api");
     expect(getBackendWebSocketBaseURL()).toBe("ws://localhost:3000");
+  });
+
+  test("keeps authenticated control-plane requests on the current loopback origin", () => {
+    setLocation("http://127.0.0.1:3000/#/workspace/agents");
+
+    expect(getBackendBaseURL()).toBe("");
+    expect(getControlPlaneBaseURL()).toBe("");
   });
 
   test("lets runtime backend query param override dev proxy defaults", () => {
@@ -42,6 +51,7 @@ describe("backend base URL resolution", () => {
     );
 
     expect(getBackendBaseURL()).toBe("http://127.0.0.1:8000");
+    expect(getControlPlaneBaseURL()).toBe("http://127.0.0.1:8000");
     expect(getOctopusBaseURL()).toBe("http://127.0.0.1:8000/api");
     expect(window.sessionStorage.getItem("octopusBackend")).toBe(
       "http://127.0.0.1:8000",

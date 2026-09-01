@@ -11,6 +11,8 @@ import {
   hasVisibleMessageGroupContent,
   MessageGroup,
   convertToSteps,
+  getLiveStreamWindowHeight,
+  groupConsecutiveReasoningSteps,
   selectCompactTimelineItems,
   type TimelineItem,
 } from "./message-group";
@@ -37,6 +39,42 @@ vi.mock("../artifacts", () => ({
 }));
 
 describe("MessageGroup todo_write rendering", () => {
+  it("keeps short live output compact and caps long output", () => {
+    expect(getLiveStreamWindowHeight(36)).toBe(36);
+    expect(getLiveStreamWindowHeight(127.2)).toBe(128);
+    expect(getLiveStreamWindowHeight(260)).toBe(128);
+  });
+
+  it("keeps same-phase reasoning on both sides of a tool in causal order", () => {
+    const items = groupConsecutiveReasoningSteps([
+      {
+        id: "reason-before",
+        type: "reasoning",
+        reasoning: "先检查配置",
+        phaseId: "inspect",
+      },
+      {
+        id: "read-config",
+        type: "toolCall",
+        name: "read_file",
+        args: { path: "config.ts" },
+        phaseId: "inspect",
+      },
+      {
+        id: "reason-after",
+        type: "reasoning",
+        reasoning: "配置读取完成，继续核对引用",
+        phaseId: "inspect",
+      },
+    ]);
+
+    expect(items.map((item) => item.type)).toEqual([
+      "reasoningGroup",
+      "toolCall",
+      "reasoningGroup",
+    ]);
+  });
+
   it("removes recovery handoff text from public timeline steps", () => {
     const steps = convertToSteps([
       {
@@ -237,7 +275,7 @@ describe("MessageGroup todo_write rendering", () => {
 });
 
 describe("MessageGroup reasoning grouping", () => {
-  it("coalesces native and raw reasoning into one disclosure", () => {
+  it("keeps reasoning on both sides of a tool in separate causal disclosures", () => {
     const messages: AIMessage[] = [
       {
         id: "native-thinking",
@@ -278,18 +316,12 @@ describe("MessageGroup reasoning grouping", () => {
 
     expect(
       screen.getAllByTestId("process-timeline-event-thinking"),
-    ).toHaveLength(1);
-    expect(
-      screen.getByTestId("process-timeline-event-thinking"),
-    ).toHaveTextContent("深度思考");
+    ).toHaveLength(2);
     expect(screen.getByText("README.md")).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("thinking-row-toggle"));
     expect(screen.getByTestId("thinking-row-content")).toHaveTextContent(
       "深度思考摘要",
-    );
-    expect(screen.getByTestId("thinking-row-content")).toHaveTextContent(
-      "我需要继续深入，当前阶段信息还不足够。",
     );
   });
 
@@ -338,7 +370,7 @@ describe("MessageGroup reasoning grouping", () => {
     ).toHaveLength(2);
   });
 
-  it("keeps an expanded disclosure open when streamed reasoning joins the same phase", () => {
+  it("keeps the earlier disclosure open when later same-phase reasoning follows a tool", () => {
     const first: AIMessage = {
       id: "stable-thinking-first",
       type: "ai",
@@ -389,13 +421,10 @@ describe("MessageGroup reasoning grouping", () => {
 
     expect(
       screen.getAllByTestId("process-timeline-event-thinking"),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
     expect(screen.getByTestId("thinking-row-content")).toHaveAttribute(
       "data-state",
       "open",
-    );
-    expect(screen.getByTestId("thinking-row-content")).toHaveTextContent(
-      "再核对第二批证据。",
     );
   });
 
@@ -745,6 +774,12 @@ describe("MessageGroup reasoning grouping", () => {
     // text; the truncated row summary is hidden so text isn't duplicated.
     const stream = screen.getByTestId("live-thinking-stream");
     expect(stream).toHaveClass("live-thinking-window", "ml-4");
+    expect(stream).toHaveClass("max-h-32");
+    expect(stream).not.toHaveClass("h-32");
+    expect(stream).toHaveAttribute(
+      "data-height-policy",
+      "inner-content-capped-history-frozen",
+    );
     expect(stream).toHaveTextContent("Compare configuration evidence");
     expect(screen.getAllByText("Compare configuration evidence")).toHaveLength(
       1,
@@ -760,7 +795,7 @@ describe("MessageGroup reasoning grouping", () => {
     ).toHaveTextContent("Compare configuration evidence");
   });
 
-  it("caps long live thinking in a fixed-height waterfall window", () => {
+  it("caps long live thinking without forcing short thoughts to the cap", () => {
     const messages: AIMessage[] = [
       {
         id: "ai-live-thinking-scroll",
@@ -777,10 +812,51 @@ describe("MessageGroup reasoning grouping", () => {
       { locale: "zh-CN" },
     );
 
-    // 长思考不能把正文顶下去：窗口定高、内部瀑布流滚动。
+    // 长思考不能无限把正文顶下去；短思考也不能被强制撑到 128px。
     const stream = screen.getByTestId("live-thinking-stream");
     expect(stream).toHaveClass("overflow-y-auto", "max-h-32");
+    expect(stream).not.toHaveClass("h-32");
     expect(stream).toHaveTextContent("持续生成的深度思考内容");
+  });
+
+  it("shrinks a capped live window when its content becomes shorter", () => {
+    const scrollHeight = vi
+      .spyOn(HTMLElement.prototype, "scrollHeight", "get")
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.dataset.testid === "live-thinking-content") {
+          return (this.textContent?.length ?? 0) > 40 ? 260 : 36;
+        }
+        return 0;
+      });
+    const longMessage: AIMessage = {
+      id: "ai-live-thinking-shrink",
+      type: "ai",
+      content: "",
+      additional_kwargs: {
+        reasoning_content: "很长的实时推理内容".repeat(40),
+      },
+    };
+    const shortMessage: AIMessage = {
+      ...longMessage,
+      additional_kwargs: { reasoning_content: "简短结论" },
+    };
+
+    try {
+      const { rerender } = renderWithProviders(
+        <MessageGroup messages={[longMessage] as never} isLoading />,
+        { locale: "zh-CN" },
+      );
+      expect(screen.getByTestId("live-thinking-stream")).toHaveStyle({
+        height: "128px",
+      });
+
+      rerender(<MessageGroup messages={[shortMessage] as never} isLoading />);
+      expect(screen.getByTestId("live-thinking-stream")).toHaveStyle({
+        height: "36px",
+      });
+    } finally {
+      scrollHeight.mockRestore();
+    }
   });
 
   it("streams thinking expanded, then collapses it once the turn settles", () => {
@@ -1623,7 +1699,7 @@ describe("MessageGroup reasoning grouping", () => {
     );
     expect(executions).toHaveLength(1);
     expect(executions[0]).toHaveTextContent("app.tsx");
-    expect(executions[0]).toHaveTextContent("plan.md");
+    expect(executions[0]).not.toHaveTextContent("plan.md");
     const execution = executions[0]!;
 
     const opened: CustomEvent[] = [];
@@ -1642,6 +1718,29 @@ describe("MessageGroup reasoning grouping", () => {
     expect(screen.queryByText("已读取")).not.toBeInTheDocument();
     expect(opened.at(-1)?.detail.processEvent.detail).toContain("plan.md");
     window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+  });
+
+  it("keeps crawler transport files out of the conversation lane", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-crawler",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "grep-crawler-cache",
+            name: "grep_text",
+            args: { path: "working/US10792461B2-full.jsonl" },
+          },
+        ],
+      },
+    ];
+
+    renderWithProviders(<MessageGroup messages={messages as never} />, {
+      locale: "zh-CN",
+    });
+
+    expect(screen.queryByText("US10792461B2-full.jsonl")).toBeNull();
   });
 
   it("reduces shell workarounds to concrete evidence without leaking local paths", () => {
@@ -2523,10 +2622,20 @@ describe("MessageGroup 紧凑模式叙事保真", () => {
       locale: "zh-CN",
     });
 
+    // Long settled runs stay out of the DOM until the reader asks for replay.
+    expect(screen.queryByTestId("public-progress-event")).toBeNull();
+    expect(screen.getByTestId("process-replay-toggle")).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    fireEvent.click(screen.getByTestId("process-replay-toggle"));
+
     // 6 个事实 checkpoint 全部被语义保底（每轮兜底锚点 + 最新事实）
     expect(screen.getAllByTestId("public-progress-event")).toHaveLength(6);
     for (let round = 1; round <= 6; round += 1) {
-      expect(screen.getByText(`已确认第 ${round} 轮事实`)).toBeInTheDocument();
+      expect(
+        screen.getByLabelText(`已确认第 ${round} 轮事实`),
+      ).toBeInTheDocument();
     }
     // 思考是时间线事件而非状态挂件：每轮意图都留在它发生的位置，
     // 这样成绩单读起来是 思考 → 执行 → 事实 → 思考，而不是一个
@@ -2839,6 +2948,26 @@ describe("reasoning duration replay", () => {
     expect(thinkingRow).toHaveTextContent("思考了 3.5s");
   });
 
+  it("不把 provider 的英文计划标签当作公开思考展示", () => {
+    const message = {
+      id: "ai-provider-heading",
+      type: "ai",
+      content: "已完成核对。",
+      additional_kwargs: {
+        reasoning_content:
+          "**Planning patent analysis report****Creating detailed task list**",
+        public_progress: true,
+      },
+    } as AIMessage;
+
+    renderWithProviders(<MessageGroup messages={[message]} />, {
+      locale: "zh-CN",
+    });
+
+    expect(screen.getByText("已完成核对。")).toBeInTheDocument();
+    expect(screen.queryByText(/Planning patent analysis report/)).toBeNull();
+  });
+
   it("reasoning_duration_ms 为 0 时不显示耗时", () => {
     const message = {
       id: "ai-1",
@@ -3064,6 +3193,36 @@ describe("conversation detail level (对话细节级别)", () => {
     expect(
       screen.getByTestId("thinking-row-content").firstElementChild,
     ).toHaveClass("ml-4");
+  });
+
+  it("high still folds a large aggregate until the user expands it", () => {
+    seedDetailLevel("high");
+    const messages: Message[] = [
+      {
+        id: "ai-large-tool-run",
+        type: "ai",
+        content: "",
+        tool_calls: Array.from({ length: 9 }, (_, index) => ({
+          id: `read-${index + 1}`,
+          name: "read_file",
+          args: { path: `src/file-${index + 1}.ts` },
+        })),
+      } as AIMessage,
+    ];
+
+    renderWithProviders(<MessageGroup messages={messages} />, {
+      locale: "zh-CN",
+    });
+
+    expect(screen.getByTestId("aggregated-group-children")).toHaveAttribute(
+      "data-state",
+      "closed",
+    );
+    fireEvent.click(screen.getByTestId("aggregated-group-toggle"));
+    expect(screen.getByTestId("aggregated-group-children")).toHaveAttribute(
+      "data-state",
+      "open",
+    );
   });
 
   it("medium keeps rows visible but collapses the thinking detail (default)", () => {

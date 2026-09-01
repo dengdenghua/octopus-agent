@@ -3,6 +3,39 @@ import { describe, expect, test } from "vitest";
 import { __testing } from "./workspace-sidebar";
 
 describe("workspace sidebar route activation", () => {
+  test("projects thread searches down to sidebar-only state", () => {
+    expect(__testing.SIDEBAR_THREAD_QUERY_PARAMS).toEqual({
+      limit: 30,
+      sortBy: "updated_at",
+      sortOrder: "desc",
+      select: [
+        "thread_id",
+        "updated_at",
+        "metadata",
+        "values.title",
+        "values.sidebar_title_source",
+        "values.current_speaker",
+        "values.agent_name",
+        "values.agent_roster",
+        "values.team_members",
+        "values.mode",
+        "values.workspace_path",
+        "values.workspace_id",
+        "values.team_room_id",
+        "values.room_id",
+      ],
+    });
+    expect(__testing.SIDEBAR_THREAD_QUERY_PARAMS.select).not.toContain(
+      "values",
+    );
+    expect(__testing.SIDEBAR_THREAD_QUERY_PARAMS.select).not.toContain(
+      "values.messages",
+    );
+    expect(__testing.SIDEBAR_THREAD_QUERY_PARAMS.select).not.toContain(
+      "values.artifacts",
+    );
+  });
+
   test("uses a pending server route while a new realtime turn stays mounted", () => {
     expect(
       __testing.syncedSidebarPathname(
@@ -90,6 +123,34 @@ describe("workspace sidebar project grouping", () => {
     expect(__testing.isProjectThreadMode("team")).toBe(true);
     expect(__testing.isProjectThreadMode("code")).toBe(true);
     expect(__testing.isProjectThreadMode("chat")).toBe(false);
+  });
+
+  test("distinguishes local-folder projects from milestone-only projects", () => {
+    expect(
+      __testing.projectHasBoundFolder([
+        {
+          id: "local",
+          title: "octopus-agent",
+          updatedAt: "2026-08-24T00:00:00Z",
+          mode: "code",
+          href: "/workspace/realtime/local",
+          workspacePath: "/Users/example/Public/octopus-agent",
+          agents: [],
+        },
+      ]),
+    ).toBe(true);
+    expect(
+      __testing.projectHasBoundFolder([
+        {
+          id: "milestone",
+          title: "PM 演示",
+          updatedAt: "2026-08-24T00:00:00Z",
+          mode: "team",
+          href: "/workspace/realtime/milestone",
+          agents: [],
+        },
+      ]),
+    ).toBe(false);
   });
 
   test("queries team tasks only for actual team rooms", () => {
@@ -381,6 +442,20 @@ describe("workspace sidebar project grouping", () => {
     } as never);
 
     expect(summary.title).toBe("thread/legacy");
+  });
+
+  test("keeps the first-user-message title from compact sidebar projections", () => {
+    const summary = __testing.summarizeThreadForSidebar({
+      thread_id: "legacy-compact-title",
+      updated_at: "2026-06-29T00:00:00Z",
+      metadata: { mode: "chat" },
+      values: {
+        title: "New chat",
+        sidebar_title_source: "来自旧会话的可读标题",
+      },
+    } as never);
+
+    expect(summary.title).toBe("来自旧会话的可读标题");
   });
 
   test("hides bare legacy team labels even when mode metadata was lost", () => {

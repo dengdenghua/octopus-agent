@@ -12,6 +12,10 @@ export interface SaveCapabilitiesResponse {
   capabilities: Capabilities;
   restart_required: boolean;
   message: string;
+  registry?: {
+    registered: string[];
+    removed: string[];
+  };
 }
 
 export interface RestartBackendResponse {

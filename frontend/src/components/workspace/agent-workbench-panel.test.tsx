@@ -136,6 +136,41 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("等待开机")).not.toBeInTheDocument();
   });
 
+  test("keeps a visible close control in the workbench header", () => {
+    const onClose = vi.fn();
+    renderWorkbench(
+      <AgentWorkbenchPanel activeTab="agent" events={[]} onClose={onClose} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭工作台" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test("lets temporary workbench tabs close themselves", () => {
+    const onSelectTab = vi.fn();
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="diff"
+        onSelectTab={onSelectTab}
+        events={[
+          event({
+            id: "diff-tab-file",
+            name: "write_file",
+            input: {
+              changes: [{ path: "src/app.tsx", op: "update", diff: "+change" }],
+            },
+          }),
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭标签页：Diff" }));
+    expect(onSelectTab).toHaveBeenCalledWith("agent");
+    expect(
+      screen.queryByRole("button", { name: "关闭标签页：协作工作台" }),
+    ).not.toBeInTheDocument();
+  });
+
   test("hides capability decisions when the turn has no decision trace", () => {
     renderWorkbench(<AgentWorkbenchPanel activeTab="agent" events={[]} />);
 
@@ -143,7 +178,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("本轮暂无能力决策")).not.toBeInTheDocument();
   });
 
-  test("presents capability decisions without exposing internal trace keys", () => {
+  test("keeps explanatory capability decisions out of the persistent workbench UI", () => {
     renderWorkbench(
       <AgentWorkbenchPanel
         activeTab="agent"
@@ -177,18 +212,59 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
+    expect(
+      screen.queryByRole("button", { name: /能力决策/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("委派工具隐藏")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("技能目录 42 条（未截断）"),
+    ).not.toBeInTheDocument();
+  });
+
+  test("surfaces only capability decisions that need user attention", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        events={[
+          event({
+            id: "visibility-action-required",
+            name: "visibility",
+            input: {
+              summary: "本轮能力路由 / 权限决策",
+              steps: [
+                {
+                  decision_point: "context.skill_catalog",
+                  conclusion: "技能目录已加载",
+                  basis: "能力检查已完成",
+                },
+                {
+                  decision_point: "permission.browser",
+                  conclusion: "需要授权浏览器控制",
+                  basis: "当前浏览器控制权限未开启",
+                  details: {
+                    status: "permission_required",
+                    requires_user_action: true,
+                  },
+                },
+              ],
+            },
+          }),
+        ]}
+      />,
+    );
+
     const trigger = screen.getByRole("button", { name: /能力决策/ });
-    expect(trigger).toHaveTextContent("2");
+    expect(trigger).toHaveTextContent("需要处理");
+    expect(trigger).toHaveTextContent("1");
     fireEvent.click(trigger);
 
     expect(screen.getByText("决策 1")).toBeInTheDocument();
-    expect(screen.getByText("委派工具隐藏")).toBeInTheDocument();
-    expect(screen.getByText("未命中委派条件")).toBeInTheDocument();
+    expect(screen.getByText("需要授权浏览器控制")).toBeInTheDocument();
+    expect(screen.getByText("当前浏览器控制权限未开启")).toBeInTheDocument();
+    expect(screen.queryByText("技能目录已加载")).not.toBeInTheDocument();
+    expect(screen.queryByText("permission.browser")).not.toBeInTheDocument();
     expect(
-      screen.queryByText("context.delegation_cap"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("本轮能力路由 / 委派 / 技能目录决策"),
+      screen.queryByText("本轮能力路由 / 权限决策"),
     ).not.toBeInTheDocument();
   });
 
@@ -233,6 +309,50 @@ describe("<AgentWorkbenchPanel />", () => {
     ).getAllByRole("listitem");
     expect(todoRows[0]).toHaveAttribute("data-task-status", "done");
     expect(todoRows[1]).toHaveAttribute("data-task-status", "running");
+  });
+
+  test("keeps a planned active run focused on the task list", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        events={[
+          event({
+            id: "todo-focused-active",
+            name: "todo_write",
+            input: {
+              items: [
+                { content: "整理创作需求", status: "completed" },
+                { content: "生成主视觉", status: "in_progress" },
+                { content: "整理交付物", status: "pending" },
+              ],
+            },
+          }),
+          event({
+            id: "active-output",
+            name: "write_file",
+            input: {
+              changes: [
+                {
+                  path: "output/brief.md",
+                  op: "create",
+                  diff: "+# Brief",
+                },
+              ],
+            },
+          }),
+        ]}
+      />,
+    );
+
+    const progress = screen.getByRole("button", { name: /待办事项.*1\/3/ });
+    expect(progress).not.toHaveTextContent("产物");
+    expect(screen.queryByTestId("workbench-current-objective")).toBeNull();
+    expect(screen.queryByTestId("workbench-result-receipt")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "产物" })).toBeNull();
+    expect(screen.getByRole("button", { name: /^上下文/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
   });
 
   test("keeps the todo list visible after a transcript process event is focused", () => {
@@ -375,10 +495,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(
       screen.queryByRole("button", { name: "主电脑 · 已完成" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("最新一轮")).toHaveAttribute(
-      "title",
-      "工作台始终显示最新一轮任务状态，即使当前正在查看较早消息。",
-    );
+    expect(screen.queryByText("最新一轮")).not.toBeInTheDocument();
   });
 
   test("empty shell admits the turn is live before the first tool event", () => {
@@ -495,6 +612,45 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(
       screen.getByRole("button", { name: "Eve · 群主" }),
     ).toBeInTheDocument();
+  });
+
+  test("keeps human room participants out of the Agent machine rail", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        events={[]}
+        rosterSeats={[
+          { id: "general", name: "Eve", role: "tl", kind: "agent" },
+          { id: "coder", name: "Coder", role: "member", kind: "agent" },
+          { id: "local", name: "Local user", role: "群主", kind: "human" },
+        ]}
+      />,
+    );
+
+    const bottomRail = screen.getByTestId("workstation-bottom-rail");
+    expect(
+      within(bottomRail).getByRole("button", {
+        name: "Coder · 协作 · 在场",
+      }),
+    ).toBeInTheDocument();
+    expect(within(bottomRail).queryByText("Local user")).toBeNull();
+  });
+
+  test("can move team roster avatars out while retaining runtime machine seats", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        events={[]}
+        showMachineRosterRail={false}
+        rosterSeats={[
+          { id: "general", name: "Eve", role: "tl", kind: "agent" },
+          { id: "coder", name: "Coder", role: "member", kind: "agent" },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByTestId("workstation-bottom-rail")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Eve · 群主/ })).toBeNull();
   });
 
   test("uses the leader avatar for the main workstation in solo mode", () => {
@@ -619,6 +775,45 @@ describe("<AgentWorkbenchPanel />", () => {
       "Spark-4f6",
       "Aurora-108",
     ]);
+  });
+
+  test("ignores a legacy identity-less spawn when dispatch specs already define the seats", () => {
+    const tiles = deriveAgentTilesFromEvents([
+      event({
+        id: "parallel-call-legacy",
+        name: "call_agent_parallel",
+        status: "done",
+        input: {
+          specs: [
+            { agent_id: "reader", prompt: "read sources" },
+            { agent_id: "reviewer", prompt: "review risks" },
+            { agent_id: "writer", prompt: "write report" },
+          ],
+        },
+        output: {
+          successes: [
+            { agent_id: "reader", output: "done" },
+            { agent_id: "reviewer", output: "done" },
+            { agent_id: "writer", output: "done" },
+          ],
+        },
+      }),
+      event({
+        id: "truncated-spawn-marker",
+        name: "subagent",
+        lifecycle: "spawned",
+        status: "running",
+        parentToolUseId: "parallel-call-legacy",
+      }),
+    ]);
+
+    expect(tiles).toHaveLength(3);
+    expect(tiles.map((tile) => tile.id)).toEqual([
+      "reader",
+      "reviewer",
+      "writer",
+    ]);
+    expect(tiles.every((tile) => tile.status === "done")).toBe(true);
   });
 
   test("keeps an agent running when one of its child tools settles", () => {

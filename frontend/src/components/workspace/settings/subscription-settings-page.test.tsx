@@ -11,11 +11,15 @@ const subscriptionMocks = vi.hoisted(() => ({
   cancel: vi.fn(),
   refetchSubscription: vi.fn(),
   refetchLink: vi.fn(),
+  authUser: { user_id: "123", username: "123" } as {
+    user_id: string;
+    username?: string;
+  },
 }));
 
 vi.mock("@/providers/AuthProvider", () => ({
   useAuth: () => ({
-    user: { user_id: "123", username: "123" },
+    user: subscriptionMocks.authUser,
   }),
 }));
 
@@ -56,6 +60,7 @@ vi.mock("@/components/workspace/pay-order-dialog", () => ({
 describe("SubscriptionSettingsPage", () => {
   beforeEach(() => {
     subscriptionMocks.subscription = null;
+    subscriptionMocks.authUser = { user_id: "123", username: "123" };
     vi.clearAllMocks();
   });
 
@@ -67,6 +72,20 @@ describe("SubscriptionSettingsPage", () => {
     expect(screen.getByText(/计费服务尚未连接/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "重新连接套餐服务" }));
     expect(subscriptionMocks.refetchLink).toHaveBeenCalledOnce();
+  });
+
+  it("renders the current plan name only once", () => {
+    subscriptionMocks.subscription = { tier: "free" };
+    renderWithProviders(<SubscriptionSettingsPage />, { locale: "zh-CN" });
+
+    expect(screen.getAllByText("FREE")).toHaveLength(1);
+  });
+
+  it("does not repeat the fallback account label as a badge", () => {
+    subscriptionMocks.authUser = { user_id: "123" };
+    renderWithProviders(<SubscriptionSettingsPage />, { locale: "zh-CN" });
+
+    expect(screen.getAllByText("当前登录账号")).toHaveLength(1);
   });
 
   it("requires confirmation before cancelling a paid subscription", async () => {

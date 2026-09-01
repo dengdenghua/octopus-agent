@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 const sections = [
   {
     title: "我们处理的数据",
-    body: "Octopus 可能处理你的登录标识、对话内容、任务上下文、上传文件、操作记录、浏览器会话状态、工作区配置和错误日志。实际范围取决于你启用的功能和部署方式。",
+    body: "EchoAI 可能处理你的登录标识、对话内容、任务上下文、上传文件、操作记录、浏览器会话状态、工作区配置和错误日志。实际范围取决于你启用的功能和部署方式。",
   },
   {
     title: "处理目的",
@@ -22,7 +22,7 @@ const sections = [
   },
   {
     title: "安全措施",
-    body: "Octopus 会通过权限模式、工具确认、访问边界和运行日志降低误操作风险。你仍应避免在未确认目标的情况下输入密钥、验证码、身份证件、支付信息或其他敏感内容。",
+    body: "EchoAI 与 EchoOS 会通过权限模式、工具确认、访问边界和运行日志降低误操作风险。你仍应避免在未确认目标的情况下输入密钥、验证码、身份证件、支付信息或其他敏感内容。",
   },
 ];
 
@@ -39,11 +39,11 @@ export default function PrivacyPage() {
 
         <article className="bg-card text-card-foreground rounded-2xl border border-border-default px-6 py-7 shadow-[var(--shadow-card)]">
           <p className="text-xs font-medium uppercase text-muted-foreground">
-            Octopus Agent OS
+            EchoAI · Powered by EchoOS
           </p>
           <h1 className="mt-2 text-2xl font-semibold">隐私政策</h1>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            本政策说明 Octopus
+            本政策说明 EchoAI
             在产品运行中可能处理哪些数据，以及这些数据如何用于完成你的任务。
           </p>
 

@@ -237,7 +237,11 @@ describe("message-list: Subtask creation from tool_call", () => {
 describe("message-list: failureKind classification", () => {
   test("blocked_on_user disposition is always blocked, never a network loss", () => {
     expect(
-      failureKind("network is unreachable", "network_unavailable", "blocked_on_user"),
+      failureKind(
+        "network is unreachable",
+        "network_unavailable",
+        "blocked_on_user",
+      ),
     ).toBe("blocked");
     expect(
       failureKind(
@@ -251,7 +255,12 @@ describe("message-list: failureKind classification", () => {
 
   test("structured environment kind maps to environment even for network-like text", () => {
     expect(
-      failureKind("network is unreachable", "network_unavailable", "failed", "environment"),
+      failureKind(
+        "network is unreachable",
+        "network_unavailable",
+        "failed",
+        "environment",
+      ),
     ).toBe("environment");
   });
 
@@ -259,21 +268,50 @@ describe("message-list: failureKind classification", () => {
     expect(
       failureKind("Aborted removal of modules directory due to no TTY"),
     ).toBe("environment");
-    expect(
-      failureKind("zsh: command not found: pnpm"),
-    ).toBe("environment");
-    expect(
-      failureKind("Permission denied: /tmp/x"),
-    ).toBe("environment");
+    expect(failureKind("zsh: command not found: pnpm")).toBe("environment");
+    expect(failureKind("Permission denied: /tmp/x")).toBe("environment");
   });
 
   test("genuine network failures stay network", () => {
+    expect(failureKind("fetch failed: network error")).toBe("network");
+    expect(failureKind("econnrefused", "ECONNREFUSED")).toBe("network");
     expect(
-      failureKind("fetch failed: network error"),
+      failureKind(
+        "[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1010)",
+      ),
     ).toBe("network");
     expect(
-      failureKind("econnrefused", "ECONNREFUSED"),
+      failureKind(
+        "Server disconnected without sending a response",
+        "model_stream_disconnected",
+      ),
     ).toBe("network");
+  });
+
+  test("model authentication failures are actionable auth failures", () => {
+    expect(failureKind("当前账号尚未登录 ChatGPT")).toBe("auth");
+    expect(failureKind("credential refresh failed", "http_401")).toBe("auth");
+    expect(failureKind("invalid API key", "router")).toBe("auth");
+  });
+
+  test("provider throttling is not presented as a generic failure", () => {
+    expect(
+      failureKind(
+        "http_429: Error from provider: Rate limit exceeded. Please try again later.",
+      ),
+    ).toBe("rate-limit");
+    expect(failureKind("usage limit quota reached", "router")).toBe(
+      "rate-limit",
+    );
+  });
+
+  test("subagent capability mismatches explain why dispatch never ran", () => {
+    expect(
+      failureKind(
+        "subagent 'reviewer' lacks required capability: output_schema",
+        "missing_required_capability",
+      ),
+    ).toBe("capability");
   });
 
   test("ordinary guard / verification codes keep their kinds", () => {

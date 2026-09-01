@@ -19,6 +19,12 @@ interface TerminalPanelProps {
   onClose?: () => void;
 }
 
+function terminalShellLabel(platform: string): string {
+  if (/win/i.test(platform)) return "PowerShell";
+  if (/mac|iphone|ipad/i.test(platform)) return "zsh";
+  return "shell";
+}
+
 export function TerminalPanel({
   sessionId,
   cwd,
@@ -165,7 +171,9 @@ export function TerminalPanel({
           <span className="text-sm font-semibold text-foreground">
             {t.codeMode.terminal}
           </span>
-          <span className="font-medium">powershell</span>
+          <span className="font-medium">
+            {terminalShellLabel(navigator.platform || navigator.userAgent)}
+          </span>
           <span
             className={cn(
               "size-1.5 rounded-full",
@@ -209,3 +217,5 @@ export function TerminalPanel({
     </div>
   );
 }
+
+export const __testing = { terminalShellLabel };

@@ -168,8 +168,34 @@ export function useCoworkSearch(
   });
 }
 
-export function useCollabSession(threadId?: string | null) {
-  const enabled = Boolean(threadId && threadId !== "new");
+export type CollabSessionQueryOptions = {
+  /** Skip even the initial session lookup. */
+  enabled?: boolean;
+  /** Keep an explicitly visible collaboration surface live before a room exists. */
+  live?: boolean;
+  refetchInterval?: number;
+};
+
+export function collabSessionRefetchInterval(
+  session: CollaborationSession | undefined,
+  opts: CollabSessionQueryOptions = {},
+): number | false {
+  if (opts.enabled === false) return false;
+  const isCollaborativeSession = Boolean(
+    session?.room_id ||
+    (session && (session.roster.length > 1 || session.mode !== "chat")),
+  );
+  return opts.live || isCollaborativeSession
+    ? (opts.refetchInterval ?? 5_000)
+    : false;
+}
+
+export function useCollabSession(
+  threadId?: string | null,
+  opts: CollabSessionQueryOptions = {},
+) {
+  const enabled =
+    (opts.enabled ?? true) && Boolean(threadId && threadId !== "new");
   return useQuery({
     queryKey: coworkQueryKeys.session(threadId),
     queryFn: () => getCollabSession(threadId!),
@@ -177,7 +203,12 @@ export function useCollabSession(threadId?: string | null) {
     // Team Room messages can be written by another browser, a human member,
     // or a Project OS action. Keep the central group timeline moving even
     // when the agent stream itself is idle.
-    refetchInterval: enabled ? 5_000 : false,
+    // Direct chats need one lookup for persisted collaboration metadata, but
+    // they should not keep waking the backend forever. A linked room, a
+    // multi-member session, or an explicitly visible live surface keeps the
+    // five-second refresh behavior.
+    refetchInterval: (query) =>
+      enabled ? collabSessionRefetchInterval(query.state.data, opts) : false,
     refetchIntervalInBackground: false,
     staleTime: 2000,
   });

@@ -51,7 +51,7 @@ function getAccountDisplayName(user: {
     user.email ||
     (!isPlaceholderUsername(user.username) ? user.username : "") ||
     user.actor_id ||
-    "Octopus"
+    "EchoAI"
   );
 }
 

@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -89,7 +89,102 @@ afterEach(() => {
 });
 
 describe("CoderEngineControl", () => {
-  it("offers both Octopus and Codex model domains with system reasoning controls", async () => {
+  it("lets the Octopus kernel switch between system and ChatGPT subscription models without mutating the Codex profile", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const onEffectiveModelChange = vi.fn();
+    const onReasoningEffortChange = vi.fn();
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = urlOf(input);
+      if (url.includes("/model-profile")) return jsonResponse(systemProfile);
+      if (url.includes("/account")) {
+        return jsonResponse({
+          account: { type: "chatgpt", email: null, plan_type: "plus" },
+          requires_openai_auth: true,
+          login_pending: false,
+        });
+      }
+      if (url.includes("/models")) return jsonResponse(models);
+      return jsonResponse({});
+    });
+
+    renderWithProviders(
+      <CoderEngineControl
+        executionEngine="octopus"
+        value="octopus-custom-model:v1:deepseek-selection"
+        onChange={onChange}
+        onEffectiveModelChange={onEffectiveModelChange}
+        reasoningEffort="high"
+        onReasoningEffortChange={onReasoningEffortChange}
+        systemModels={[
+          {
+            name: "deepseek",
+            display_name: "DeepSeek",
+            source_display_name: "OpenCode Zen",
+            entry_id: "deepseek-endpoint",
+            selection_id: "octopus-custom-model:v1:deepseek-selection",
+            model: "deepseek-chat",
+            is_free: true,
+            reasoning_efforts: ["low", "high"],
+          },
+        ]}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(await screen.findByTestId("coder-engine-trigger")).toHaveAttribute(
+      "aria-label",
+      "OpenCode Zen · DeepSeek",
+    );
+    expect(
+      within(screen.getByTestId("coder-engine-trigger")).getByText("DeepSeek"),
+    ).toHaveClass("text-emerald-600");
+    fireEvent.pointerDown(screen.getByTestId("coder-engine-trigger"), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(screen.getByTestId("coder-engine-trigger"));
+    expect(await screen.findByRole("menu")).toHaveClass("w-72");
+    expect(screen.getByRole("button", { name: "DeepSeek" })).toHaveTextContent(
+      "DeepSeek",
+    );
+    expect(
+      within(screen.getByRole("button", { name: "DeepSeek" })).getByText(
+        "DeepSeek",
+      ),
+    ).toHaveClass("text-emerald-600");
+    expect(
+      screen.getByRole("button", { name: /自动.*按任务智能选择/ }),
+    ).toBeVisible();
+    await user.click(await screen.findByText("ChatGPT 订阅"));
+    await user.click(
+      await screen.findByRole("button", { name: "GPT-5.6 Codex" }),
+    );
+
+    expect(onChange).toHaveBeenCalledWith("chatgpt/gpt-5.6-codex");
+    expect(onEffectiveModelChange).toHaveBeenCalledWith("gpt-5.6-codex");
+    expect(
+      screen.queryByRole("radiogroup", { name: "上下文长度" }),
+    ).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          urlOf(input as RequestInfo | URL).includes("/model-profile") &&
+          (init as RequestInit | undefined)?.method === "PUT",
+      ),
+    ).toBe(false);
+
+    await user.click(screen.getByText("系统模型"));
+    await user.click(screen.getByRole("button", { name: "DeepSeek" }));
+    expect(onChange).toHaveBeenLastCalledWith(
+      "octopus-custom-model:v1:deepseek-selection",
+    );
+    expect(onEffectiveModelChange).toHaveBeenLastCalledWith("DeepSeek");
+    await user.click(screen.getByRole("button", { name: "高" }));
+    expect(onReasoningEffortChange).toHaveBeenCalledWith("high");
+  });
+
+  it("offers both system and Codex model domains with system reasoning controls", async () => {
     const user = userEvent.setup();
     fetchMock.mockImplementation(
       async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -128,6 +223,7 @@ describe("CoderEngineControl", () => {
             display_name: "DeepSeek",
             entry_id: "deepseek-endpoint",
             model: "deepseek-chat",
+            context_window: 256_000,
             reasoning_efforts: ["low", "high"],
           },
           {
@@ -135,6 +231,7 @@ describe("CoderEngineControl", () => {
             display_name: "DeepSeek",
             entry_id: "deepseek-endpoint",
             model: "deepseek-chat",
+            context_window: 1_000_000,
             context_profile: "1m",
             reasoning_efforts: ["low", "high"],
           },
@@ -143,20 +240,28 @@ describe("CoderEngineControl", () => {
       { locale: "zh-CN" },
     );
 
-    expect(await screen.findByText("跟随系统 · gpt-5.6")).toBeInTheDocument();
+    expect(await screen.findByText("gpt-5.6")).toBeInTheDocument();
+    expect(screen.getByTestId("coder-engine-trigger")).toHaveAttribute(
+      "aria-label",
+      "系统 · gpt-5.6",
+    );
+    await user.hover(screen.getByTestId("coder-engine-trigger"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "系统 · gpt-5.6",
+    );
+    await user.unhover(screen.getByTestId("coder-engine-trigger"));
     fireEvent.pointerDown(screen.getByTestId("coder-engine-trigger"), {
       button: 0,
       ctrlKey: false,
     });
     fireEvent.click(screen.getByTestId("coder-engine-trigger"));
 
-    expect(await screen.findByText("Octopus 模型")).toBeInTheDocument();
-    expect(screen.getByText("ChatGPT / Codex")).toBeInTheDocument();
+    expect(await screen.findByText("系统模型")).toBeInTheDocument();
+    expect(screen.getByText("ChatGPT 订阅")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "mix" }),
     ).not.toBeInTheDocument();
     expect(screen.getAllByText("DeepSeek")).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "DeepSeek · 1M" })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "DeepSeek" }));
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
@@ -166,6 +271,22 @@ describe("CoderEngineControl", () => {
           body: expect.stringContaining('"model":"deepseek-endpoint"'),
         }),
       ),
+    );
+    const context = await screen.findByRole("radiogroup", {
+      name: "上下文长度",
+    });
+    expect(
+      within(context).getByRole("radio", { name: "标准 · 256K" }),
+    ).toHaveAttribute("aria-checked", "true");
+    await user.click(within(context).getByRole("radio", { name: "Max · 1M" }));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([, init]) =>
+          String((init as RequestInit | undefined)?.body).includes(
+            '"model":"deepseek::1m"',
+          ),
+        ),
+      ).toBe(true),
     );
     expect(await screen.findByRole("button", { name: "高" })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "高" }));
@@ -231,6 +352,7 @@ describe("CoderEngineControl", () => {
 
   it("updates the selected model immediately while the save finishes", async () => {
     const user = userEvent.setup();
+    const onEffectiveModelChange = vi.fn();
     let finishSave:
       | ((response: ReturnType<typeof jsonResponse>) => void)
       | undefined;
@@ -257,32 +379,38 @@ describe("CoderEngineControl", () => {
         return jsonResponse({});
       },
     );
-    const view = renderWithProviders(<CoderEngineControl />, {
-      locale: "zh-CN",
-    });
+    const view = renderWithProviders(
+      <CoderEngineControl onEffectiveModelChange={onEffectiveModelChange} />,
+      { locale: "zh-CN" },
+    );
 
-    await screen.findByText("跟随系统 · gpt-5.6");
+    await screen.findByText("gpt-5.6");
     fireEvent.pointerDown(screen.getByTestId("coder-engine-trigger"), {
       button: 0,
       ctrlKey: false,
     });
     fireEvent.click(screen.getByTestId("coder-engine-trigger"));
-    await user.click(await screen.findByText("ChatGPT / Codex"));
+    await user.click(await screen.findByText("ChatGPT 订阅"));
     await user.click(
       await screen.findByRole("button", { name: "GPT-5.6 Codex" }),
     );
 
     expect(screen.getByTestId("coder-engine-trigger")).toHaveTextContent(
-      "Codex 账号 · gpt-5.6-codex",
+      "gpt-5.6-codex",
+    );
+    expect(screen.getByTestId("coder-engine-trigger")).toHaveAttribute(
+      "aria-label",
+      "ChatGPT 订阅 · gpt-5.6-codex",
     );
     expect(view.container.querySelector(".animate-spin")).toBeNull();
 
     finishSave?.(jsonResponse(accountProfile));
     await waitFor(() =>
       expect(screen.getByTestId("coder-engine-trigger")).toHaveTextContent(
-        "Codex 账号 · gpt-5.6-codex",
+        "gpt-5.6-codex",
       ),
     );
+    expect(onEffectiveModelChange).toHaveBeenCalledWith("gpt-5.6-codex");
   });
 
   it("explains when a system model controls reasoning automatically", async () => {
@@ -720,10 +848,15 @@ describe("CoderEngineSettings", () => {
 
     renderWithProviders(<CoderEngineSettings />, { locale: "en-US" });
 
-    expect(await screen.findByText("75% remaining")).toBeInTheDocument();
-    expect(await screen.findByText("1,234,567")).toBeInTheDocument();
-    expect(screen.getByText("45,678")).toBeInTheDocument();
-    expect(screen.getByText("2")).toBeInTheDocument();
+    const remaining = await screen.findByText("75% remaining");
+    expect(remaining).not.toBeVisible();
+    await user.click(
+      screen.getByText("Connectors and usage", { selector: "summary" }),
+    );
+    expect(remaining).toBeVisible();
+    expect(await screen.findByText("1,234,567")).toBeVisible();
+    expect(screen.getByText("45,678")).toBeVisible();
+    expect(screen.getByText("2")).toBeVisible();
     await user.click(
       await screen.findByRole("button", { name: /Google Drive/ }),
     );

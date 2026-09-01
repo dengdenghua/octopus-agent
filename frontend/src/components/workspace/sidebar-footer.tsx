@@ -1,7 +1,10 @@
 import {
+  AlertCircleIcon,
   CheckIcon,
   CoinsIcon,
+  LoaderCircleIcon,
   LogOutIcon,
+  RefreshCwIcon,
   SettingsIcon,
   UsersRoundIcon,
   UserCircleIcon,
@@ -33,6 +36,7 @@ import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
 import { agentHudHref } from "@/core/workspace/sidebar-routing";
 import { useOctLink } from "@/core/oct/hooks";
 import { useAuth } from "@/providers/AuthProvider";
+import { canAccessOperatorControlPlane } from "@/core/auth/control-plane-access";
 import { CreditsCenterDialog } from "@/components/workspace/credits-center";
 import { cn } from "@/lib/utils";
 import { useEvolutionOverview } from "@/core/evolution/hooks";
@@ -148,8 +152,14 @@ export function AgentAvatar({
 // ─── AgentFooter ─────────────────────────────────────────────────
 
 export function AgentFooter() {
-  const { agents } = useAgents();
-  const { user, logout } = useAuth();
+  const {
+    agents,
+    isLoading: agentsLoading,
+    isFetching: agentsFetching,
+    error: agentsError,
+    refetch: refetchAgents,
+  } = useAgents();
+  const { user, logout, authStatus } = useAuth();
   const _navigate = useNavigate();
   const { pathname, search } = useLocation();
   const octLink = useOctLink();
@@ -161,7 +171,9 @@ export function AgentFooter() {
   );
 
   // Fetch evolution data for the active agent (no agent filter, gets current user's data)
-  const { data: evolutionData } = useEvolutionOverview();
+  const { data: evolutionData } = useEvolutionOverview({
+    enabled: canAccessOperatorControlPlane(authStatus, user),
+  });
   useEffect(() => {
     return eventBus.on("agent:changed", ({ name, source }) => {
       if (isPrimaryPersonaAgentId(name)) {
@@ -192,7 +204,7 @@ export function AgentFooter() {
     agentHudHref({ surface: agentLibrarySurface, tab, agentName });
   const personaAgents = useMemo(() => {
     // Only the fixed White Ghost squad owns personal conversation identities.
-    // Installed experts, digital twins and local CLI partners are selected in
+    // Installed experts and digital twins are selected in
     // the task's member control and join that task on demand.
     return dedupePersonaAgentsByDisplayName(
       agents
@@ -299,6 +311,19 @@ export function AgentFooter() {
   };
 
   const displayAgent = lockedAgent ?? active;
+  const hasPersonaAgents = personaAgents.length > 0;
+  const showAgentLoading =
+    !hasPersonaAgents && (agentsLoading || agentsFetching);
+  const showAgentError =
+    !hasPersonaAgents && !showAgentLoading && Boolean(agentsError);
+  const agentTriggerLabel =
+    displayAgent?.display_name ||
+    displayAgent?.name ||
+    (showAgentLoading
+      ? t.sidebar.loadingAgents
+      : showAgentError
+        ? t.sidebar.agentsLoadFailed
+        : t.sidebar.noAgents);
   const accountName = user ? getAccountDisplayName(user) : "";
 
   // Calculate evolution level and stars
@@ -319,13 +344,9 @@ export function AgentFooter() {
                 ? t.sidebar.lockedAgentTooltip(
                     displayAgent?.display_name || displayAgent?.name || "",
                   )
-                : displayAgent?.description || t.sidebar.switchAgentLabel
+                : displayAgent?.description || agentTriggerLabel
             }
-            aria-label={
-              displayAgent?.display_name ||
-              displayAgent?.name ||
-              t.sidebar.switchAgentLabel
-            }
+            aria-label={agentTriggerLabel}
             className={cn(
               "group/agent flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left",
               "opacity-85 transition-[opacity,background-color] duration-fast",
@@ -333,9 +354,27 @@ export function AgentFooter() {
               "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0",
             )}
           >
-            <AgentAvatar agent={displayAgent} />
+            {displayAgent ? (
+              <AgentAvatar agent={displayAgent} />
+            ) : (
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "flex size-6 shrink-0 items-center justify-center rounded-md border border-border-default bg-muted text-muted-foreground",
+                  showAgentError && "text-destructive",
+                )}
+              >
+                {showAgentLoading ? (
+                  <LoaderCircleIcon className="size-3.5 animate-spin" />
+                ) : showAgentError ? (
+                  <AlertCircleIcon className="size-3.5" />
+                ) : (
+                  <UserCircleIcon className="size-3.5" />
+                )}
+              </span>
+            )}
             <span className="min-w-0 flex-1 truncate text-xs font-medium leading-tight group-data-[collapsible=icon]:hidden">
-              {displayAgent?.display_name || displayAgent?.name || "Octopus"}
+              {agentTriggerLabel}
               {level !== null && (
                 <span className="ml-1.5 text-2xs font-normal text-muted-foreground/80">
                   Lv.{level}
@@ -382,8 +421,27 @@ export function AgentFooter() {
             {t.sidebar.switchAgentMenuTitle}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {personaAgents.length > 0 ? (
+          {hasPersonaAgents ? (
             personaAgents.map(renderAgentItem)
+          ) : showAgentLoading ? (
+            <div className="flex items-center gap-2 px-2.5 py-2 text-xs text-muted-foreground">
+              <LoaderCircleIcon className="size-3.5 animate-spin" />
+              <span>{t.sidebar.loadingAgents}</span>
+            </div>
+          ) : showAgentError ? (
+            <>
+              <div className="flex items-center gap-2 px-2.5 py-2 text-xs text-destructive">
+                <AlertCircleIcon className="size-3.5 shrink-0" />
+                <span>{t.sidebar.agentsLoadFailed}</span>
+              </div>
+              <DropdownMenuItem
+                onSelect={() => void refetchAgents()}
+                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs focus:bg-muted/60 focus:text-foreground"
+              >
+                <RefreshCwIcon className="size-3.5 shrink-0" />
+                <span>{t.sidebar.retryAgents}</span>
+              </DropdownMenuItem>
+            </>
           ) : (
             <div className="px-2 py-2 text-xs text-muted-foreground">
               {t.sidebar.noAgents}

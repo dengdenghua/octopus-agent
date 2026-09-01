@@ -1117,7 +1117,7 @@ describe("useRealtimeThread cross-worker tail recovery", () => {
 });
 
 describe("useRealtimeThread detached active turn", () => {
-  it("keeps the socket alive across route unmount until the turn finishes", async () => {
+  it("releases the route socket while the server-resident turn keeps running", async () => {
     let emitNotification!: (note: {
       method: string;
       params: Record<string, unknown>;
@@ -1164,7 +1164,7 @@ describe("useRealtimeThread detached active turn", () => {
     });
 
     rendered.unmount();
-    expect(close).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledTimes(1);
 
     act(() => {
       emitNotification({
@@ -1199,10 +1199,11 @@ describe("useRealtimeThread turn/start delivery anchoring", () => {
       params: Record<string, unknown>;
     }) => void;
     rejectTurnStart: (err: Error) => void;
+    requests: Array<{ method: string; params: Record<string, unknown> }>;
   }
 
   function setupDelivery() {
-    const handles: Partial<DeliveryHandles> = {};
+    const handles: Partial<DeliveryHandles> = { requests: [] };
     const factory = (deps: {
       onIncomingRequest: IncomingRequestFn;
       onNotification: (n: {
@@ -1217,7 +1218,8 @@ describe("useRealtimeThread turn/start delivery anchoring", () => {
         connect: () => deps.onOpen?.(),
         close: () => {},
         notify: () => {},
-        request: (method: string) => {
+        request: (method: string, params: Record<string, unknown>) => {
+          handles.requests?.push({ method, params });
           if (method === "turn/start") {
             return new Promise((_resolve, reject) => {
               handles.rejectTurnStart = reject;
@@ -1245,6 +1247,63 @@ describe("useRealtimeThread turn/start delivery anchoring", () => {
     );
     return outcome;
   }
+
+  it("forwards the client item id as top-level turn/start userItemId", async () => {
+    const { rendered, handles } = setupDelivery();
+    await waitFor(() =>
+      expect(rendered.result.current.state.resumeState).toBe("resumed"),
+    );
+
+    let outcome!: ReturnType<typeof watchSettlement>;
+    act(() => {
+      outcome = watchSettlement(
+        rendered.result.current.startTurn({
+          input: "hello",
+          clientItemId: "itm_user_client_stable",
+          metadata: { context: { mode: "team" } },
+        }),
+      );
+    });
+
+    const request = handles.requests.find(
+      (entry) => entry.method === "turn/start",
+    );
+    expect(request?.params).toMatchObject({
+      threadId: "th",
+      userItemId: "itm_user_client_stable",
+      input: [
+        {
+          type: "text",
+          text: "hello",
+          metadata: { context: { mode: "team" } },
+        },
+      ],
+    });
+    const input = request?.params.input as
+      | Array<{ metadata?: Record<string, unknown> }>
+      | undefined;
+    expect(input?.[0]?.metadata).not.toHaveProperty("client_message_id");
+
+    act(() => {
+      handles.emitNotification({
+        method: "turn/started",
+        params: {
+          threadId: "th",
+          turn: {
+            id: "t-live",
+            threadId: "th",
+            status: "inProgress",
+            items: [],
+            startedAt: "2026-01-01T00:00:00.000Z",
+            completedAt: null,
+            error: null,
+          },
+        },
+      });
+      handles.rejectTurnStart(new Error("test cleanup"));
+    });
+    await waitFor(() => expect(outcome.value).toBe("resolved"));
+  });
 
   it("resolves startTurn when turn/started arrived before the socket-drop rejection", async () => {
     const { rendered, handles } = setupDelivery();
@@ -1277,6 +1336,42 @@ describe("useRealtimeThread turn/start delivery anchoring", () => {
       });
     });
     act(() => {
+      handles.rejectTurnStart(new Error("websocket closed (1006 no reason)"));
+    });
+
+    await waitFor(() => expect(outcome.value).toBe("resolved"));
+  });
+
+  it("treats a matching durable user item as delivered when turn/started was missed", async () => {
+    const { rendered, handles } = setupDelivery();
+    await waitFor(() =>
+      expect(rendered.result.current.state.resumeState).toBe("resumed"),
+    );
+
+    let outcome!: ReturnType<typeof watchSettlement>;
+    act(() => {
+      outcome = watchSettlement(
+        rendered.result.current.startTurn({
+          input: "hello",
+          clientItemId: "itm_user_durable",
+        }),
+      );
+    });
+
+    act(() => {
+      handles.emitNotification({
+        method: "item/started",
+        params: {
+          threadId: "th",
+          turnId: "t-live",
+          item: {
+            id: "itm_user_durable",
+            type: "userMessage",
+            status: "completed",
+            content: [{ type: "inputText", text: "hello" }],
+          },
+        },
+      });
       handles.rejectTurnStart(new Error("websocket closed (1006 no reason)"));
     });
 

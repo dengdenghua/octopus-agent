@@ -95,7 +95,7 @@ function WorkbenchTabHeaderImpl({
               <div
                 key={id}
                 className={cn(
-                  "inline-flex h-8 max-w-[11rem] shrink-0 items-center rounded-lg border border-transparent text-sm font-medium shadow-none transition-colors",
+                  "group inline-flex h-8 max-w-[11rem] shrink-0 items-center rounded-lg border border-transparent text-sm font-medium shadow-none transition-colors",
                   active
                     ? "border-border-subtle bg-background text-foreground"
                     : "text-muted-foreground hover:border-border-subtle hover:bg-background/45 hover:text-foreground",
@@ -107,11 +107,25 @@ function WorkbenchTabHeaderImpl({
                   aria-selected={active}
                   title={label}
                   onClick={() => onTabClick(id)}
-                  className="flex h-full min-w-0 items-center gap-1.5 px-2.5"
+                  className={cn(
+                    "flex h-full min-w-0 items-center gap-1.5 pl-2.5",
+                    id === "workspace" ? "pr-2.5" : "pr-1.5",
+                  )}
                 >
                   <Icon className="size-4 shrink-0" />
                   <span className="truncate">{label}</span>
                 </button>
+                {id !== "workspace" ? (
+                  <button
+                    type="button"
+                    aria-label={t.editorTabs.closeTabAria(label)}
+                    title={t.editorTabs.closeTabAria(label)}
+                    onClick={() => onTabClose(id)}
+                    className="mr-1 flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground/65 opacity-0 transition-[color,background-color,opacity] hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    <XIcon className="size-3" />
+                  </button>
+                ) : null}
               </div>
             );
           })}

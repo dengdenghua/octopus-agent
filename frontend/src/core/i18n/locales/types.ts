@@ -1,5 +1,4 @@
 import type { LucideIcon } from "lucide-react";
-
 export interface Translations {
   // Locale meta
   locale: {
@@ -58,7 +57,6 @@ export interface Translations {
     stubResponseTitle: string;
     stubResponseDescription: (method: string, path: string) => string;
     openSidebarMenu: string;
-    localPartnerModel: string;
     loadingWorkspace: string;
   };
 
@@ -208,6 +206,7 @@ export interface Translations {
     reviewAssigned: (label: string) => string;
     taskCompleted: string;
     taskFailed: string;
+    previousAttemptRecovered: string;
     taskOutputs: string;
     viewProcess: string;
     makeSimilar: string;
@@ -320,6 +319,23 @@ export interface Translations {
     groupTaskUxui: string;
     groupTaskActive: string;
     groupTaskClear: string;
+    projectFiles: string;
+    removeCapability: (name: string) => string;
+    uploadImages: string;
+    workspaceFiles: (name: string) => string;
+    noWorkspaceFiles: string;
+    uploadDeviceFiles: string;
+    commands: string;
+    plugins: string;
+    availablePlugins: string;
+    capabilityLoadFailed: string;
+    noAvailablePlugins: string;
+    managePlugins: string;
+    explorePlugins: string;
+    skills: string;
+    searchSkills: string;
+    noAvailableSkills: string;
+    manageSkills: string;
     addResearchMaterial: string;
     codexPlan: string;
     codexSpec: string;
@@ -380,6 +396,32 @@ export interface Translations {
     permissionAcceptEdits: string;
     permissionConfirm: string;
     addImage: string;
+    addAppshot: string;
+    capturingAppshot: string;
+    appshotHint: string;
+    appshotSource: string;
+    appshotFailed: string;
+    windowTools: string;
+    automationTarget: string;
+    chooseAutomationTarget: string;
+    currentChromeTab: string;
+    currentDesktopWindow: string;
+    loadingAutomationTargets: string;
+    noAutomationTargets: string;
+    clearAutomationTarget: string;
+    automationOnline: string;
+    automationOffline: string;
+    automationReconnecting: string;
+    automationDesktop: string;
+    automationIdle: string;
+    automationRunning: string;
+    automationPaused: string;
+    automationPause: string;
+    automationResume: string;
+    automationTakeover: string;
+    automationEvidence: string;
+    automationNoEvidence: string;
+    automationControlFailed: string;
     removeImage: string;
     readme: string;
   };
@@ -451,6 +493,29 @@ export interface Translations {
     submitting: string;
     success: string;
     failed: string;
+  };
+
+  projectCapability: {
+    enabled: string;
+    startPlan: string;
+    openWorkbench: string;
+    moreActions: string;
+    detach: string;
+    detachConfirmTitle: string;
+    detachConfirmDescription: string;
+    detachConfirmAction: string;
+    forceDetachConfirmTitle: string;
+    forceDetachConfirmDescription: string;
+    forceDetachConfirmAction: string;
+    detached: string;
+    detachCancelled: string;
+    detachFailed: string;
+    detachBindingChanged: string;
+    statusPlanning: string;
+    statusRunning: string;
+    statusBlocked: string;
+    statusDone: string;
+    statusFailed: string;
   };
 
   // Clarification Questionnaire
@@ -852,6 +917,7 @@ export interface Translations {
       close: string;
       open: string;
     };
+    viewActions: string;
     finalArtifact: {
       generated: string;
       view: string;
@@ -1211,6 +1277,7 @@ export interface Translations {
     computerViewEmpty: string;
     computerViewEmptyDesc: string;
     visibilityPanelTitle: string;
+    visibilityPanelAttention: string;
     visibilityPanelEmpty: string;
     visibilityStep: string;
     scrollToBottom: string;
@@ -1368,7 +1435,7 @@ export interface Translations {
     experimental: string;
   };
 
-  // Follow-up suggestions (Trae-style contextual bubbles)
+  // Follow-up suggestions (contextual bubbles)
   followUpSuggestions: {
     title: string;
     selectAria: (title: string) => string;
@@ -1511,6 +1578,39 @@ export interface Translations {
     emptyHint: string;
     showPanel: string;
     hidePanel: string;
+    inspectElement: string;
+    cancelInspect: string;
+    inspectHint: string;
+    aiEditTitle: string;
+    aiEditCancel: string;
+    aiEditPlaceholder: string;
+    aiEditSend: string;
+    aiEditQueued: string;
+    aiEditUnavailable: string;
+    officeEdit: string;
+    officeSelect: string;
+    officeCancelSelect: string;
+    officeSelected: string;
+    officeEditTitle: string;
+    officeEditPlaceholder: string;
+    officeEditHint: string;
+    previewError: string;
+    previewRetry: string;
+    officeFidelity: string;
+    humanEdit: string;
+    humanEditing: string;
+    humanUnsaved: string;
+    humanSave: string;
+    humanCancel: string;
+    humanSaved: string;
+    humanUndo: string;
+    humanRestored: string;
+    humanConflict: string;
+    humanReloadLatest: string;
+    humanUnavailable: string;
+    humanDiscardTitle: string;
+    humanDiscardDescription: string;
+    humanDiscardConfirm: string;
   };
 
   // Code Status
@@ -1582,6 +1682,7 @@ export interface Translations {
     navMcp: string;
     navEvolution: string;
     navProjects: string;
+    navDesign: string;
     navNarrative: string;
     navPlugins: string;
     navHR: string;
@@ -1596,6 +1697,9 @@ export interface Translations {
     groupSystem: string;
     // Agent / team footer
     noAgents: string;
+    loadingAgents: string;
+    agentsLoadFailed: string;
+    retryAgents: string;
     remainingCredits: string;
     logout: string;
     noTeams: string;
@@ -1611,7 +1715,6 @@ export interface Translations {
     openAgentHudFor: (name: string) => string;
     currentAgent: string;
     soloChat: string;
-    localCliPartners: string;
     oneOnOneTask: string;
     soloTasks: string;
     groupTasks: string;
@@ -2476,6 +2579,11 @@ export interface Translations {
     noChangesArtifacts: string;
     noPreviewArtifacts: string;
     retry: string;
+    messageQueued: string;
+    messageSending: string;
+    messageSendFailed: string;
+    previousMessagePending: string;
+    steeringTurnUnavailable: string;
     editResend: string;
     regenerateResponse: string;
     forkFromHere: string;
@@ -2560,11 +2668,19 @@ export interface Translations {
     thoughtProcess: string;
     connectionLost: string;
     networkLost: string;
+    modelAuthRequiredTitle: string;
+    modelAuthRequired: string;
+    subagentCapabilityMismatchTitle: string;
+    subagentCapabilityMismatch: string;
+    modelRateLimitedTitle: string;
+    modelRateLimited: string;
+    openModelSettings: string;
     turnFailed: string;
     guardBlocked: string;
     lifecycleFailed: string;
     workspaceWriteRequired: string;
     verificationRequired: string;
+    verificationRunFailed: string;
     environmentBlocked: string;
     environmentBlockedAuthorizeCommon: string;
     environmentBlockedAuthorizeFull: string;
@@ -2759,6 +2875,8 @@ export interface Translations {
       account: string;
       subscription: string;
       appearance: string;
+      general: string;
+      conversation: string;
       memory: string;
       tools: string;
       skills: string;
@@ -3761,13 +3879,6 @@ export interface Translations {
     createAgentCardDesc: string;
     addAgent: string;
     newAgent: string;
-    importAgentPack: string;
-    importAgentPackDesc: string;
-    importAgentPackPlaceholder: string;
-    previewAgentPack: string;
-    importSelectedAgent: string;
-    noImportableAgents: string;
-    importedAgent: (name: string, path: string) => string;
     discoverTagline: string;
     // AgentWorldCard extras
     toastInstalled: (name: string) => string;
@@ -3778,14 +3889,6 @@ export interface Translations {
     ratingAriaLabel: (rating: string, count: number) => string;
     downloadCountAriaLabel: (count: string) => string;
     authorPrefix: string;
-    packContentLabels: {
-      plugins: string;
-      apps: string;
-      agents: string;
-      skills: string;
-      commands: string;
-      mcp: string;
-    };
   };
 
   // Agent World Unified
@@ -3804,12 +3907,22 @@ export interface Translations {
     installSuccess: (installed: number) => string;
     installSuccessWithFailure: (installed: number, failed: number) => string;
     installFailed: string;
-    connectLocalPartner: string;
     enterprise: string;
     localTab: string;
     enabledTab: string;
     marketplaceTab: string;
     categoryFilterLabel: string;
+    domainFilterLabel: string;
+    domains: {
+      all: string;
+      general: string;
+      coding: string;
+      research: string;
+      creative: string;
+      automation: string;
+      ecommerce: string;
+      finance: string;
+    };
     loadingAgents: string;
     loadAgentsFailed: string;
     retryAgents: string;
@@ -3819,25 +3932,6 @@ export interface Translations {
   };
 
   // Local Agent Connect Dialog
-  localAgentConnect: {
-    title: string;
-    description: string;
-    detecting: string;
-    detectFailed: string;
-    retryDetect: string;
-    statusConnected: string;
-    statusDetected: string;
-    statusNotDetected: string;
-    availableCount: (count: number) => string;
-    cancel: string;
-    connectSelected: (count: number) => string;
-    noPartnerSelected: string;
-    registerSuccess: (count: number) => string;
-    alreadyExists: string;
-    noPartnersAvailable: string;
-    registerFailed: string;
-    partnerNameAria: (name: string) => string;
-  };
 
   // Agent World Card
   agentWorldCard: {};
@@ -4268,6 +4362,19 @@ export interface Translations {
     selectDevicePreset: string;
     continueInFullBrowser: string;
     takeoverButton: string;
+    switchToLivePreview: string;
+    switchToLivePreviewDescription: string;
+    switchToScreenshot: string;
+    switchToScreenshotDescription: string;
+    sessionHealthyLabel: string;
+    sessionAttentionLabel: string;
+    endSession: string;
+    annotateScreenshot: string;
+    annotationButton: string;
+    annotationPlaceholder: string;
+    annotationInputLabel: string;
+    sendAnnotation: string;
+    cancelAnnotation: string;
     sessionNeedsAttention: (issues: string) => string;
     reconnectButton: string;
     semanticSnapshotFallback: string;
@@ -4279,11 +4386,16 @@ export interface Translations {
     clickMode: string;
     doubleClickMode: string;
     localServices: string;
+    noLocalServices: string;
     scanButton: string;
     serviceTypeFrontend: string;
     serviceTypeBackend: string;
     serviceTypeOther: string;
     scanLocalServices: string;
+    localPreviewMode: string;
+    localPreviewRunning: (port: string) => string;
+    localPreviewRefresh: string;
+    localPreviewOpenExternal: string;
     selectedAction: (action: string) => string;
     locateActionTitle: string;
     deselectTitle: string;
@@ -5212,6 +5324,7 @@ export interface Translations {
   // Public Thinking Status
   publicThinkingStatus: {
     waitingForModel: string;
+    firstResponseSlow: string;
     modelWorking: string;
     thinkingCompleted: string;
     slowResponse: string;
@@ -5794,6 +5907,9 @@ export interface Translations {
     /** Compact badge for the picker row (e.g. "智能" / "Smart"). */
     autoModelBadge: string;
     longContextHint: string;
+    contextLength: string;
+    contextStandard: string;
+    contextMax: string;
   };
 
   // Account Settings
@@ -6255,6 +6371,10 @@ export interface Translations {
     reloadLoaded: (rules: number, statsReset: boolean) => string;
     reloadError: (error: string) => string;
     fetchFailed: string;
+    dataLoading: string;
+    dataUnavailable: string;
+    dataRefreshFailed: string;
+    retryButton: string;
     reloadFailed: string;
     statTry: string;
     statHit: string;
@@ -6264,6 +6384,7 @@ export interface Translations {
     statLastHourHits: string;
     sparklineTitle: string;
     sparklineEmpty: string;
+    sparklineUnavailable: string;
     rulesTableTitle: string;
     responseTiersTitle: string;
     colRule: string;
@@ -6275,6 +6396,7 @@ export interface Translations {
     colRate: string;
     colLast: string;
     noRulesLoaded: string;
+    rulesUnavailable: string;
     tierEnabled: string;
     tierDisabled: string;
     tierSize: string;
@@ -6366,6 +6488,9 @@ export interface Translations {
     addendumAppliedTitle: string;
     addendumLive: string;
     addendumNone: string;
+    stateLoading: string;
+    stateUnavailable: string;
+    addendumUnavailable: string;
     addendumClearButton: string;
     addendumBytes: (size: number) => string;
     knobIterations: string;
@@ -6386,6 +6511,8 @@ export interface Translations {
     canaryTitle: string;
     canaryRefresh: string;
     canaryEmpty: string;
+    canaryUnavailable: string;
+    canaryCountsUnavailable: string;
     canaryCounts: (active: number, rolledBack: number, total: number) => string;
     canaryPhase: (phase: string) => string;
     canaryRate: (rate: number) => string;
@@ -6492,6 +6619,66 @@ export interface Translations {
     defaultStrategy: string;
     journalRow: (task: string, arm: string) => string;
     subtitle: string;
+    shell: {
+      startTask: string;
+      runReviewTitle: string;
+      runReviewDescription: string;
+      liveEventsTitle: string;
+      liveEventsDescription: string;
+      resourcesTitle: string;
+      resourcesDescription: string;
+      systemTitle: string;
+      systemDescription: string;
+      overviewTab: string;
+      eventsTab: string;
+      resourcesTab: string;
+      systemTab: string;
+      overviewTitle: string;
+      overviewDescription: string;
+      openNewTask: string;
+      eventsEyebrow: string;
+      eventsTitle: string;
+      eventsDescription: string;
+      resourcesEyebrow: string;
+      resourcesGroupTitle: string;
+      resourcesGroupDescription: string;
+      systemEyebrow: string;
+      systemGroupTitle: string;
+      systemGroupDescription: string;
+    };
+    toolEffects: {
+      title: string;
+      description: string;
+      retryAuthorizedSuccess: string;
+      retryAuthorizationFailed: string;
+      pendingReview: (count: number) => string;
+      noPendingReview: string;
+      refreshAriaLabel: string;
+      backendLabel: string;
+      sharedAcrossHosts: string;
+      localCoordination: string;
+      committedLabel: string;
+      runningLabel: string;
+      loadFailed: (error: string) => string;
+      empty: string;
+      unknownTool: string;
+      receiptMeta: (task: string, step: number, token: number) => string;
+      reviewAndRetry: string;
+      collapsedHistory: string;
+      confirmTitle: string;
+      confirmDescription: string;
+      reasonPlaceholder: string;
+      cancel: string;
+      submitting: string;
+      confirmRetry: string;
+      states: {
+        claimed: string;
+        started: string;
+        committed: string;
+        indeterminate: string;
+        retryAuthorized: string;
+      };
+    };
     swarmCardTitle: string;
     noConcurrentTasks: string;
     noConcurrentTasksHint: string;
@@ -6563,6 +6750,7 @@ export interface Translations {
     // Regeneration panel
     loading: string;
     errorPrefix: string;
+    crossTenantAdminRequired: string;
     trajectoryTotal: string;
     failureCount: string;
     regenProducers: {
@@ -6887,6 +7075,9 @@ export interface Translations {
       sendFailed: string;
       fillRequired: string;
       emailFillRequired: string;
+      emailRequired: string;
+      codeRequired: string;
+      invalidCode: string;
       loginFailed: string;
       enterFailed: string;
       gatewayNotEnabled: string;
@@ -7220,11 +7411,27 @@ export interface Translations {
 
   share: {
     share: string;
-    saveImage: string;
-    copyImage: string;
-    imageSaved: string;
-    imageCopied: string;
-    imageFailed: string;
+    shareTask: string;
+    shareDescription: string;
+    wechat: string;
+    moments: string;
+    copyLink: string;
+    qrCode: string;
+    openInBrowser: string;
+    creatingLink: string;
+    linkCopied: string;
+    linkFailed: string;
+    wechatQrTitle: string;
+    momentsQrTitle: string;
+    qrTitle: string;
+    wechatQrHint: string;
+    momentsQrHint: string;
+    qrHint: string;
+    localOnlyHint: string;
+    stopSharing: string;
+    sharingStopped: string;
+    stopSharingFailed: string;
+    unavailable: string;
     exportReplay: string;
   };
 

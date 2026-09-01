@@ -45,8 +45,12 @@ export interface ReplayCacheStore {
   clear(threadId: string): Promise<void>;
 }
 
-/** Per-thread event cap (docs §4.4: ~20k events). */
-export const REPLAY_CACHE_MAX_EVENTS = 20_000;
+/**
+ * Per-thread event cap. Five thousand recent events comfortably cover active
+ * work while bounding cold-start JSON/IndexedDB memory. Older history remains
+ * authoritative on the server and pages in through thread/resume.
+ */
+export const REPLAY_CACHE_MAX_EVENTS = 5_000;
 
 // ── In-memory implementation (tests, SSR, no-IDB environments) ──
 
@@ -72,11 +76,16 @@ export function createMemoryReplayCache(
         (a, b) => a.sequence - b.sequence,
       );
       const trimmed =
-        merged.length > maxEvents ? merged.slice(merged.length - maxEvents) : merged;
+        merged.length > maxEvents
+          ? merged.slice(merged.length - maxEvents)
+          : merged;
       threads.set(threadId, {
         events: trimmed,
         streamId: meta.streamId,
-        cursor: Math.max(meta.cursor, trimmed[trimmed.length - 1]?.sequence ?? 0),
+        cursor: Math.max(
+          meta.cursor,
+          trimmed[trimmed.length - 1]?.sequence ?? 0,
+        ),
         partialFrom: trimmed[0]?.sequence ?? 1,
       });
       return Promise.resolve();
@@ -91,7 +100,10 @@ export function createMemoryReplayCache(
 // ── IndexedDB implementation ──────────────────────────────────
 
 const DB_NAME = "octopus-replay-cache";
-const DB_VERSION = 1;
+// v2 clears the old 20k-event cache once. It is a read-through optimization,
+// so dropping legacy rows is safer than loading a potentially renderer-sized
+// payload merely to trim it after hydration.
+const DB_VERSION = 2;
 const EVENTS_STORE = "events";
 const META_STORE = "meta";
 
@@ -102,12 +114,7 @@ function eventKey(threadId: string, sequence: number): string {
 }
 
 function threadRange(threadId: string): IDBKeyRange {
-  return IDBKeyRange.bound(
-    `${threadId}:`,
-    `${threadId}:\\uffff`,
-    false,
-    false,
-  );
+  return IDBKeyRange.bound(`${threadId}:`, `${threadId}:\\uffff`, false, false);
 }
 
 interface StoredEventRow {
@@ -124,7 +131,7 @@ interface StoredMetaRow extends ReplayCacheMeta {
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const db = request.result;
       if (!db.objectStoreNames.contains(EVENTS_STORE)) {
         db.createObjectStore(EVENTS_STORE, { keyPath: "key" });
@@ -132,24 +139,32 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(META_STORE)) {
         db.createObjectStore(META_STORE, { keyPath: "threadId" });
       }
+      if (event.oldVersion > 0 && event.oldVersion < DB_VERSION) {
+        request.transaction?.objectStore(EVENTS_STORE).clear();
+        request.transaction?.objectStore(META_STORE).clear();
+      }
     };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("indexedDB open failed"));
+    request.onerror = () =>
+      reject(request.error ?? new Error("indexedDB open failed"));
   });
 }
 
 function txDone(tx: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error ?? new Error("indexedDB transaction failed"));
-    tx.onabort = () => reject(tx.error ?? new Error("indexedDB transaction aborted"));
+    tx.onerror = () =>
+      reject(tx.error ?? new Error("indexedDB transaction failed"));
+    tx.onabort = () =>
+      reject(tx.error ?? new Error("indexedDB transaction aborted"));
   });
 }
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("indexedDB request failed"));
+    request.onerror = () =>
+      reject(request.error ?? new Error("indexedDB request failed"));
   });
 }
 
@@ -230,9 +245,9 @@ export function createIndexedDbReplayCache(
         typeof firstRemaining === "string"
           ? Number(firstRemaining.split(":").pop()) || 1
           : 1;
-      const existingMeta = (await requestToPromise(
-        metaStore.get(threadId),
-      )) as StoredMetaRow | undefined;
+      const existingMeta = (await requestToPromise(metaStore.get(threadId))) as
+        | StoredMetaRow
+        | undefined;
       const lastSequence = events[events.length - 1]?.sequence ?? 0;
       metaStore.put({
         threadId,

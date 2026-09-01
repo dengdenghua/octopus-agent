@@ -5,12 +5,22 @@ import {
   classifyVitals,
   DEFAULT_VITALS_THRESHOLDS,
   emptyVitalsMarks,
+  formatStreamElapsed,
   seedVitalsFromResumedTurn,
   type ClassifyInput,
   type VitalsMarks,
 } from "./stream-vitals";
 
 const T0 = 1_000_000; // arbitrary epoch-ms origin
+
+describe("formatStreamElapsed", () => {
+  it("keeps short waits compact and makes minute-long waits readable", () => {
+    expect(formatStreamElapsed(0)).toBe("0s");
+    expect(formatStreamElapsed(59_900)).toBe("59s");
+    expect(formatStreamElapsed(104_500)).toBe("1m 44s");
+    expect(formatStreamElapsed(3_905_000)).toBe("1h 05m");
+  });
+});
 
 function marksAtTurnStart(): VitalsMarks {
   const m = emptyVitalsMarks();

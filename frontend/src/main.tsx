@@ -1,27 +1,21 @@
 import { createRoot } from "react-dom/client";
 import { HashRouter } from "react-router-dom";
-import {
-  MutationCache,
-  QueryCache,
-  QueryClient,
-  QueryClientProvider,
-} from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { AppRouter } from "./router";
-import { swallow } from "./core/utils/log";
 import { ThemeProvider } from "./components/theme-provider";
 import { I18nProvider } from "./core/i18n/context";
 import { getLocaleFromCookie } from "./core/i18n/cookies";
 import { detectLocale, normalizeLocale } from "./core/i18n/locale";
-import { enUS } from "./core/i18n/locales/en-US";
+import type { Translations } from "./core/i18n/locales";
 import { AuthProvider } from "./providers/AuthProvider";
 import { AppearanceBootstrap } from "./hooks/use-appearance";
 import { BackendBootstrapOverlay } from "./components/workspace/backend-bootstrap-overlay";
+import { Toaster } from "./components/ui/sonner";
 import { installPageAgentBridge } from "./core/page-agent-bridge";
 import { installHashRouterShellUrlNormalizer } from "./core/router/hash-shell-url";
 import { normalizeLoopbackOrigin } from "./core/router/loopback-origin";
 import { installAuthFetchInterceptor } from "./core/auth/fetch-interceptor";
-import { getToken } from "./core/auth/api";
 
 import { loadTranslations } from "./core/i18n/translations";
 
@@ -31,72 +25,20 @@ import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "@fontsource/inter/700.css";
-import "katex/dist/katex.min.css";
 import "./styles/globals.css";
 
-// Auth-failure handling for the FE↔BE link. Two distinct cases:
-//  - 401 (unauthenticated): the token is missing/expired/invalid → clear it and
-//    bounce to login. This stops the request storm at its source: once the page
-//    reloads to the login screen, every polling hook unmounts.
-//  - 403 (forbidden): authenticated but not allowed → DO NOT log out; just don't
-//    retry (retrying a forbidden call never succeeds).
-const AUTH_TOKEN_KEYS = [
-  "octopus_auth_token",
-  "octopus_auth_ts",
-  "octopus_user",
-];
-let authBounced = false;
-
+// The fetch interceptor only expires the host session when the backend marks a
+// 401 with X-Octopus-Auth-Expired. A plugin, appliance capability, or downstream
+// account may return its own 401 without invalidating the EchoAI login, so query
+// errors must never clear the workspace session by message matching alone.
 function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err ?? "");
-}
-function isUnauthenticated(err: unknown): boolean {
-  return /\b401\b|unauthorized/i.test(errMessage(err));
 }
 function isAuthError(err: unknown): boolean {
   return /\b401\b|\b403\b|unauthorized|forbidden/i.test(errMessage(err));
 }
-function handleAuthFailure(): void {
-  if (authBounced) return; // fire once — avoid reload loops mid-storm
-  // Only bounce a REAL failing session. If the token is absent (already logged
-  // out / on the login screen) or the deliberate guest sentinel, do nothing —
-  // this is what makes the reload loop-safe: after we clear the token below, any
-  // further 401 sees no token and returns here.
-  let tok: string | null = null;
-  try {
-    tok = getToken();
-  } catch (e) {
-    swallow(e, "storage");
-    return;
-  }
-  if (!tok || tok === "__guest__") return;
-  authBounced = true;
-  try {
-    // Audit S-07: clear both storages (legacy localStorage leftovers too).
-    AUTH_TOKEN_KEYS.forEach((k) => {
-      localStorage.removeItem(k);
-      sessionStorage.removeItem(k);
-    });
-  } catch {
-    // storage may be unavailable; the reload still re-runs auth bootstrap.
-  }
-  // AuthProvider's bootstrap shows the login screen when no token is present.
-  window.location.reload();
-}
 
 const queryClient = new QueryClient({
-  // Any query/mutation that 401s clears auth and bounces to login once — kills
-  // the silent "shell rendered, panels empty, requests storming" dead-loop.
-  queryCache: new QueryCache({
-    onError: (err) => {
-      if (isUnauthenticated(err)) handleAuthFailure();
-    },
-  }),
-  mutationCache: new MutationCache({
-    onError: (err) => {
-      if (isUnauthenticated(err)) handleAuthFailure();
-    },
-  }),
   defaultOptions: {
     queries: {
       staleTime: 30_000,
@@ -124,17 +66,15 @@ async function bootstrap() {
 
   document.documentElement.lang = initialLocale.split("-")[0] ?? initialLocale;
 
-  // Mount with the target locale's pack already resolved, so no copy ever
-  // flashes en-US → target on refresh. en-US resolves synchronously (bundled);
-  // other packs are a ~120KB gzipped chunk fetched before first paint. If the
-  // chunk fails, fall back to the bundled en-US rather than blocking boot.
-  let initialTranslations = enUS;
-  if (initialLocale !== "en-US") {
-    try {
-      initialTranslations = await loadTranslations(initialLocale);
-    } catch {
-      initialTranslations = enUS;
-    }
+  // Resolve exactly one locale before mounting so copy never flashes between
+  // languages. Keeping en-US dynamic is important: otherwise every non-English
+  // user pays for the full English pack in the entry bundle as well as their
+  // selected locale. If the selected chunk fails, retry with the default pack.
+  let initialTranslations: Translations;
+  try {
+    initialTranslations = await loadTranslations(initialLocale);
+  } catch {
+    initialTranslations = await loadTranslations("en-US");
   }
 
   createRoot(document.getElementById("root")!).render(
@@ -149,6 +89,7 @@ async function bootstrap() {
               <AppearanceBootstrap />
               <AppRouter />
               <BackendBootstrapOverlay />
+              <Toaster position="top-center" />
             </AuthProvider>
           </I18nProvider>
         </ThemeProvider>

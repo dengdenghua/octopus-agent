@@ -52,6 +52,15 @@ export const MODULE_CATALOG: ModuleDescriptor[] = [
     removable: true,
   },
   {
+    // 设计创作平台：自由画布与工作流共用节点，角色、技能、插件可视化编排。
+    id: "design",
+    to: "/workspace/design",
+    labelKey: "navDesign",
+    group: "workspace",
+    section: "chatCapability",
+    removable: true,
+  },
+  {
     // 叙事工坊：角色、世界观、剧情线与叙事资产的统一创作工作台。
     id: "narrative",
     to: "/workspace/narrative",

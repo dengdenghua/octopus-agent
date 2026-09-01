@@ -17,18 +17,15 @@ import {
   FileTextIcon,
   FolderIcon,
   FolderInputIcon,
-  GlobeIcon,
   HardDriveIcon,
   ImageIcon,
   Loader2Icon,
-  MonitorIcon,
   RotateCcwIcon,
   SearchIcon,
   SettingsIcon,
   SlidersHorizontalIcon,
   SparklesIcon,
   StoreIcon,
-  TerminalSquareIcon,
   Trash2Icon,
   UserCircleIcon,
   WifiIcon,
@@ -40,15 +37,14 @@ import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 import { useDebounce } from "@/hooks";
 import { useI18n } from "@/core/i18n/hooks";
+import { BROWSER_WORKSPACE_ROUTE } from "@/core/workspace/sidebar-routing";
+import {
+  buildDesktopApps,
+  desktopWindowURL,
+  shouldOpenDesktopWindow,
+  type DesktopApp,
+} from "@/core/apps/desktop-apps";
 import type { NativeDesktopItem } from "@/types/electron";
-
-type DesktopApp = {
-  name: string;
-  subtitle: string;
-  route: string;
-  icon: typeof SparklesIcon;
-  color: string;
-};
 
 type DesktopCategory = {
   key: "all" | "folder" | "app" | "image" | "document" | "package" | "other";
@@ -166,84 +162,30 @@ export default function DesktopShellPage() {
     [t.desktop.categories],
   );
 
-  const desktopApps = useMemo<DesktopApp[]>(
-    () => [
-      {
-        name: t.desktop.apps.workspace.name,
-        subtitle: t.desktop.apps.workspace.subtitle,
-        route: "/workspace/realtime/new",
-        icon: MonitorIcon,
-        color: "from-sky-500 to-blue-600",
-      },
-      {
-        name: t.desktop.apps.aiBrowser.name,
-        subtitle: t.desktop.apps.aiBrowser.subtitle,
-        route: "/browser",
-        icon: GlobeIcon,
-        color: "from-indigo-500 to-cyan-500",
-      },
-      {
-        name: t.desktop.apps.localFiles.name,
-        subtitle: t.desktop.apps.localFiles.subtitle,
-        route: "/workspace/knowledge",
-        icon: FolderIcon,
-        color: "from-warning to-orange-500",
-      },
-      {
-        name: t.desktop.apps.localApps.name,
-        subtitle: t.desktop.apps.localApps.subtitle,
-        route: "/workspace/agents",
-        icon: AppWindowIcon,
-        color: "from-violet-500 to-fuchsia-500",
-      },
-      {
-        name: t.desktop.apps.terminalLogs.name,
-        subtitle: t.desktop.apps.terminalLogs.subtitle,
-        route: "/workspace/observability",
-        icon: TerminalSquareIcon,
-        color: "from-muted-foreground to-muted-foreground/70",
-      },
-      {
-        name: t.desktop.apps.settings.name,
-        subtitle: t.desktop.apps.settings.subtitle,
-        route: "/workspace",
-        icon: SettingsIcon,
-        color: "from-stone-500 to-neutral-700",
-      },
-    ],
-    [t.desktop.apps],
+  const desktopApps = useMemo(() => buildDesktopApps(t), [t]);
+  const dockApps = useMemo(
+    () => desktopApps.filter((app) => app.placement === "primary"),
+    [desktopApps],
+  );
+  const localApps = useMemo(
+    () => desktopApps.filter((app) => app.placement === "library"),
+    [desktopApps],
+  );
+  const desktopLaunchers = useMemo(
+    () => desktopApps.filter((app) => app.placement !== "system"),
+    [desktopApps],
   );
 
-  const dockApps = useMemo(() => desktopApps.slice(0, 3), [desktopApps]);
-
-  const localAppPlaceholders = useMemo<DesktopApp[]>(
-    () => [
-      {
-        name: t.desktop.placeholders.browser,
-        subtitle: t.desktop.placeholders.subtitle,
-        route: "/workspace/agents",
-        icon: GlobeIcon,
-        color: "from-white to-muted text-foreground",
-      },
-      {
-        name: t.desktop.placeholders.communication,
-        subtitle: t.desktop.placeholders.subtitle,
-        route: "/workspace/agents",
-        icon: AppWindowIcon,
-        color: "from-white to-muted text-foreground",
-      },
-      {
-        name: t.desktop.placeholders.notes,
-        subtitle: t.desktop.placeholders.subtitle,
-        route: "/workspace/agents",
-        icon: FileTextIcon,
-        color: "from-white to-muted text-foreground",
-      },
-    ],
-    [t.desktop.placeholders],
-  );
-
-  const openApp = (app: DesktopApp) => navigate(app.route);
+  const openApp = (app: DesktopApp) => {
+    // Packaged Electron routes are opened by the shell's existing auxiliary
+    // window handler. Browser/dev builds retain normal in-window navigation.
+    if (shouldOpenDesktopWindow()) {
+      const windowName = `octopus-app-${app.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+      window.open(desktopWindowURL(app.route), windowName);
+      return;
+    }
+    navigate(app.route);
+  };
 
   useEffect(() => {
     if (!organizerEnabled) return;
@@ -562,7 +504,9 @@ export default function DesktopShellPage() {
       openApp(app);
       return;
     }
-    navigate(`/browser?q=${encodeURIComponent(query.trim())}`);
+    navigate(
+      `${BROWSER_WORKSPACE_ROUTE}?q=${encodeURIComponent(query.trim())}`,
+    );
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -613,6 +557,37 @@ export default function DesktopShellPage() {
             >
               {t.desktop.backToWorkspaceButton}
             </button>
+          </div>
+          <div className="mt-6 border-t border-border pt-5">
+            <p className="mb-3 text-xs font-medium text-muted-foreground">
+              桌面应用
+            </p>
+            <div className="grid grid-cols-4 gap-3 sm:grid-cols-6">
+              {desktopLaunchers.map((app) => {
+                const Icon = app.icon;
+                return (
+                  <button
+                    key={app.id}
+                    type="button"
+                    onClick={() => openApp(app)}
+                    title={`${app.name} · ${app.subtitle}`}
+                    className="group flex min-w-0 flex-col items-center gap-1.5 rounded-xl p-2 text-center transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info"
+                  >
+                    <span
+                      className={cn(
+                        "grid size-10 place-items-center rounded-xl bg-gradient-to-br text-white shadow-sm ring-1 ring-white/30 transition group-hover:-translate-y-0.5",
+                        app.color,
+                      )}
+                    >
+                      <Icon className="size-5" />
+                    </span>
+                    <span className="line-clamp-2 max-w-20 text-[10px] font-medium leading-tight text-foreground">
+                      {app.name}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </section>
       </main>
@@ -729,6 +704,32 @@ export default function DesktopShellPage() {
           </div>
 
           <div className="mx-auto flex h-full max-w-[760px] flex-col items-center justify-center pb-12">
+            <div className="mb-8 grid w-full grid-cols-3 gap-x-3 gap-y-5 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7">
+              {desktopLaunchers.map((app) => {
+                const Icon = app.icon;
+                return (
+                  <button
+                    key={app.id}
+                    type="button"
+                    onClick={() => openApp(app)}
+                    title={`${app.name} · ${app.subtitle}`}
+                    className="group flex min-w-0 flex-col items-center gap-2 rounded-2xl px-1.5 py-2 text-center transition hover:bg-white/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                  >
+                    <span
+                      className={cn(
+                        "grid size-12 place-items-center rounded-2xl bg-gradient-to-br text-white shadow-[var(--shadow-md)] shadow-black/20 ring-1 ring-white/30 transition duration-fast group-hover:-translate-y-1 group-hover:scale-105",
+                        app.color,
+                      )}
+                    >
+                      <Icon className="size-6" />
+                    </span>
+                    <span className="line-clamp-2 max-w-24 text-[11px] font-medium leading-tight text-white/90">
+                      {app.name}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
             <div
               data-desktop-interactive
               className="flex h-12 w-full max-w-[620px] items-center gap-3 rounded-2xl border border-white/36 bg-card/70 px-4 text-foreground shadow-2xl shadow-black/12 "
@@ -907,8 +908,7 @@ export default function DesktopShellPage() {
                           const desktopPath = await window.octopus.desktop
                             .listItems()
                             .then((r) => r.desktopPath || "");
-                          const folderName =
-                            t.desktop.categories[category.key];
+                          const folderName = t.desktop.categories[category.key];
                           if (!folderName) return;
                           const destDir = desktopPath + "\\" + folderName;
                           const result = await window.octopus.desktop.moveItem(
@@ -1106,7 +1106,7 @@ export default function DesktopShellPage() {
             const Icon = app.icon;
             return (
               <button
-                key={app.name}
+                key={app.id}
                 type="button"
                 onClick={() => openApp(app)}
                 title={app.name}
@@ -1120,11 +1120,11 @@ export default function DesktopShellPage() {
             );
           })}
           <span className="mx-1 h-10 w-px bg-foreground/15" />
-          {localAppPlaceholders.map((app) => {
+          {localApps.map((app) => {
             const Icon = app.icon;
             return (
               <button
-                key={app.name}
+                key={app.id}
                 type="button"
                 onClick={() => openApp(app)}
                 title={`${app.name} · ${app.subtitle}`}

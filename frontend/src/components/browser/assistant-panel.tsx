@@ -31,6 +31,22 @@ import { useAgents } from "@/core/agents/hooks";
 import { isPrimaryPersonaAgentId } from "@/core/agents/persona-policy";
 import { copyTextToClipboard } from "@/core/clipboard";
 import { emitAgentChanged } from "@/core/events";
+import { useCapabilitySurface } from "@/core/plugins/use-capability-surface";
+import {
+  appendRecordingEvents,
+  getRecordingStatus,
+  startRecording,
+  stopRecording,
+} from "@/core/teach-repeat/api";
+import {
+  browserRecorderDrainScript,
+  normalizeBrowserRecordingEvents,
+} from "@/core/teach-repeat/browser-events";
+import {
+  subscribeBrowserRelayStatus,
+  type BrowserRelayStatus,
+} from "@/core/settings/automation-status-api";
+import type { RecordingEvent } from "@/core/teach-repeat/types";
 import {
   BROWSER_AGENT_POLICY_EVENT,
   browserHttpOrigin,
@@ -90,6 +106,7 @@ interface ResearchLogEntry {
 
 export function AssistantPanel({ webviewHandle }: Props) {
   const { t } = useI18n();
+  const recorderPluginEnabled = useCapabilitySurface("browser.recorder");
   const { activeTab, state, setCopilotOpen, setCopilotWidth } =
     useBrowserStore();
   const [input, setInput] = useState("");
@@ -105,6 +122,12 @@ export function AssistantPanel({ webviewHandle }: Props) {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("octopus:browser-recorder-mode") === "1";
   });
+  const [recorderProviderState, setRecorderProviderState] = useState<
+    "idle" | "embedded" | "relay" | "agent-only"
+  >("idle");
+  useEffect(() => {
+    if (!recorderPluginEnabled) setRecorderMode(false);
+  }, [recorderPluginEnabled]);
   const [researchGoal, setResearchGoal] = useState("");
   const [researchLog, setResearchLog] = useState<ResearchLogEntry[]>(() => {
     if (typeof window === "undefined") return [];
@@ -190,6 +213,107 @@ export function AssistantPanel({ webviewHandle }: Props) {
     context: { agent_name: agentName, mode: "chat" },
   });
 
+  useEffect(() => {
+    if (!recorderPluginEnabled) return;
+    let cancelled = false;
+    void getRecordingStatus(threadId)
+      .then((status) => {
+        if (!cancelled) setRecorderMode(status.recording);
+      })
+      .catch((error) => swallow(error, "browser-recorder-status"));
+    return () => {
+      cancelled = true;
+    };
+  }, [recorderPluginEnabled, threadId]);
+
+  useEffect(() => {
+    if (!recorderMode) {
+      setRecorderProviderState("idle");
+      return;
+    }
+
+    let disposed = false;
+    let flushing = false;
+    const queue: RecordingEvent[] = [];
+    const seenRelayEvents = new Set<string>();
+    const embeddedAvailable = Boolean(webviewHandle && window.octopus);
+    setRecorderProviderState(embeddedAvailable ? "embedded" : "agent-only");
+
+    const flush = async () => {
+      if (disposed || flushing || queue.length === 0) return;
+      flushing = true;
+      const batch = queue.splice(0, 100);
+      try {
+        await appendRecordingEvents(threadId, batch);
+      } catch (error) {
+        if (!disposed) {
+          queue.unshift(...batch);
+          if (queue.length > 300) queue.splice(0, queue.length - 300);
+          swallow(error, "browser-recorder-events");
+        }
+      } finally {
+        flushing = false;
+        if (!disposed && queue.length > 0) window.setTimeout(flush, 500);
+      }
+    };
+    const enqueue = (events: RecordingEvent[]) => {
+      if (disposed || events.length === 0) return;
+      queue.push(...events);
+      if (queue.length > 300) queue.splice(0, queue.length - 300);
+      void flush();
+    };
+
+    const drainWebview = async () => {
+      if (!webviewHandle || !embeddedAvailable || disposed) return;
+      const result = await webviewHandle.executeJS(
+        browserRecorderDrainScript(),
+      );
+      const events = normalizeBrowserRecordingEvents(result);
+      if (events.length > 0) enqueue(events);
+    };
+    void drainWebview();
+    const drainTimer = window.setInterval(() => void drainWebview(), 650);
+
+    const consumeRelay = (status: BrowserRelayStatus) => {
+      if (disposed) return;
+      if (status.connected) setRecorderProviderState("relay");
+      else if (!embeddedAvailable) setRecorderProviderState("agent-only");
+      const events: RecordingEvent[] = [];
+      for (const activity of status.recent_human_activity ?? []) {
+        const at = Number(activity.at || 0);
+        const key = [
+          at,
+          activity.kind || "activity",
+          activity.tabId ?? "",
+          activity.url || "",
+        ].join(":");
+        if (!at || seenRelayEvents.has(key)) continue;
+        seenRelayEvents.add(key);
+        events.push({
+          ts: new Date(at * 1000).toISOString(),
+          source: "browser",
+          kind: String(activity.kind || "activity"),
+          app: "Chrome",
+          window: String(activity.url || ""),
+          target: activity.target,
+          data: {
+            ...(activity.data ?? {}),
+            title: String(activity.title || ""),
+            tab_id: activity.tabId,
+          },
+        });
+      }
+      enqueue(events);
+    };
+    const unsubscribeRelay = subscribeBrowserRelayStatus(consumeRelay);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(drainTimer);
+      unsubscribeRelay();
+    };
+  }, [recorderMode, threadId, webviewHandle]);
+
   // Implementation note.
   useEffect(() => {
     const el = listRef.current;
@@ -202,6 +326,26 @@ export function AssistantPanel({ webviewHandle }: Props) {
   // Implementation note.
   // Implementation note.
   const [autoBrowse, setAutoBrowse] = useState(true);
+  const toggleRecorderMode = useCallback(async () => {
+    setErrorMsg(null);
+    try {
+      if (recorderMode) {
+        await stopRecording({ thread_id: threadId, use_llm: true });
+        setRecorderMode(false);
+        return;
+      }
+      await startRecording({
+        thread_id: threadId,
+        name: researchGoal.trim() || t.browser.assistant.recorderTitle,
+        description: "AI 浏览器中的真人示范与 Agent 操作轨迹。",
+        provider: "hybrid",
+      });
+      setRecorderMode(true);
+      setAutoBrowse(true);
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : "REC 操作失败");
+    }
+  }, [recorderMode, researchGoal, t, threadId]);
   const lastProcessedAiIdRef = useRef<string | null>(null);
   const protocolInjectedRef = useRef<Set<string>>(new Set());
   const loopCountRef = useRef(0);
@@ -920,18 +1064,20 @@ export function AssistantPanel({ webviewHandle }: Props) {
         >
           {autoBrowse ? "AUTO" : "READ"}
         </button>
-        <button
-          onClick={() => setRecorderMode((v) => !v)}
-          className={cn(
-            "shrink-0 rounded px-1.5 py-0.5 text-micro font-medium transition-colors",
-            recorderMode
-              ? "bg-success/10 text-success"
-              : "border border-white/28 text-muted-foreground hover:bg-white/18",
-          )}
-          title={t.browser.assistant.recorderTitle}
-        >
-          REC
-        </button>
+        {recorderPluginEnabled ? (
+          <button
+            onClick={() => void toggleRecorderMode()}
+            className={cn(
+              "shrink-0 rounded px-1.5 py-0.5 text-micro font-medium transition-colors",
+              recorderMode
+                ? "bg-success/10 text-success"
+                : "border border-white/28 text-muted-foreground hover:bg-white/18",
+            )}
+            title={t.browser.assistant.recorderTitle}
+          >
+            REC
+          </button>
+        ) : null}
         <button
           onClick={() => setCopilotOpen(false)}
           className="grid size-7 shrink-0 place-items-center rounded text-muted-foreground hover:bg-white/18 hover:text-foreground"
@@ -976,6 +1122,13 @@ export function AssistantPanel({ webviewHandle }: Props) {
               </div>
               <div className="truncate text-micro text-muted-foreground">
                 {t.browser.assistant.recorderDesc}
+              </div>
+              <div className="mt-0.5 text-micro text-muted-foreground">
+                {recorderProviderState === "embedded"
+                  ? "内置页面已接入"
+                  : recorderProviderState === "relay"
+                    ? "Chrome Relay 已接入"
+                    : "页面采集离线，仅记录 Agent 轨迹"}
               </div>
             </div>
           </div>

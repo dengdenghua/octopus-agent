@@ -42,6 +42,7 @@ import {
   type TaskResult,
 } from "@/core/parallel-agents/api";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
+import { RoutedWebLink } from "@/components/ui/routed-web-link";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
@@ -322,9 +323,7 @@ export function DeepResearchPanel({
           </div>
           <div className="mt-2 truncate text-xs text-muted-foreground">
             {currentJob.dispatch_batch_id
-              ? t.deepResearchPanel.batchIdLabel(
-                  currentJob.dispatch_batch_id,
-                )
+              ? t.deepResearchPanel.batchIdLabel(currentJob.dispatch_batch_id)
               : currentJob.status}
           </div>
         </div>
@@ -442,17 +441,16 @@ export function DeepResearchPanel({
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 text-xs font-medium">
                           {item.url ? (
-                            <a
+                            <RoutedWebLink
                               href={item.url}
-                              target="_blank"
-                              rel="noreferrer"
+                              openTargetSource="research-evidence"
                               className="inline-flex min-w-0 items-center gap-1 text-primary hover:underline"
                             >
                               <span className="truncate">
                                 {item.title || item.url}
                               </span>
                               <ExternalLinkIcon className="size-3 shrink-0" />
-                            </a>
+                            </RoutedWebLink>
                           ) : (
                             <span>
                               {item.title ||
@@ -557,15 +555,14 @@ function PrefetchLogRow({ item }: { item: ResearchPrefetchLog }) {
             </span>
             <span className="truncate text-xs font-medium">{subject}</span>
             {item.url && (
-              <a
+              <RoutedWebLink
                 href={item.url}
-                target="_blank"
-                rel="noreferrer"
+                openTargetSource="research-prefetch"
                 className="shrink-0 text-primary hover:opacity-80"
                 title={t.deepResearchPanel.openUrl}
               >
                 <ExternalLinkIcon className="size-3" />
-              </a>
+              </RoutedWebLink>
             )}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
@@ -641,9 +638,10 @@ function LiveResearchEventRow({ event }: { event: BatchStreamEvent }) {
     event.status === "timed_out" ||
     Boolean(event.error);
   const routeDecision = routeDecisionFromPayload(event.payload);
-  const fallbackStatus = event.type === "batch_complete"
-    ? t.deepResearchPanel.statusComplete
-    : t.deepResearchPanel.statusUpdated;
+  const fallbackStatus =
+    event.type === "batch_complete"
+      ? t.deepResearchPanel.statusComplete
+      : t.deepResearchPanel.statusUpdated;
   const title =
     event.message ||
     (event.type === "batch_complete"

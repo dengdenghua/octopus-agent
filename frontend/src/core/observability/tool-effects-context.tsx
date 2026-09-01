@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 
 import {
+  GlobalControlPlaneAccessError,
   getToolEffectsSnapshot,
   type ToolEffectReceipt,
   type ToolEffectsSnapshot,
@@ -48,9 +49,14 @@ export function toolEffectsRefetchInterval(
   receipts: readonly Pick<ToolEffectReceipt, "state">[],
 ): number | false {
   if (!active) return false;
-  return receipts.some((receipt) => receipt.state !== "committed")
-    ? 2_000
-    : 10_000;
+  return receipts.some(
+    (receipt) =>
+      receipt.state === "claimed" ||
+      receipt.state === "started" ||
+      receipt.state === "retry_authorized",
+  )
+    ? 3_000
+    : 5_000;
 }
 
 export function ToolEffectsProvider({
@@ -66,10 +72,22 @@ export function ToolEffectsProvider({
     queryKey: TOOL_EFFECTS_QUERY_KEY,
     queryFn: ({ signal }) => getToolEffectsSnapshot({ limit: 100, signal }),
     enabled,
-    staleTime: 1_000,
-    gcTime: 30_000,
-    refetchIntervalInBackground: true,
+    // This snapshot is global rather than thread-scoped and may require a
+    // database scan. Keep it warm across route changes, but only poll while a
+    // turn is active. React Query pauses the cadence for hidden tabs.
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: (current) =>
+      active && !(current.state.error instanceof GlobalControlPlaneAccessError),
+    refetchOnReconnect: (current) =>
+      active && !(current.state.error instanceof GlobalControlPlaneAccessError),
+    refetchIntervalInBackground: false,
+    retry: (failureCount, error) =>
+      !(error instanceof GlobalControlPlaneAccessError) && failureCount < 1,
     refetchInterval: (current) => {
+      if (current.state.error instanceof GlobalControlPlaneAccessError) {
+        return false;
+      }
       const receipts = current.state.data?.receipts ?? EMPTY_RECEIPTS;
       return toolEffectsRefetchInterval(active, receipts);
     },

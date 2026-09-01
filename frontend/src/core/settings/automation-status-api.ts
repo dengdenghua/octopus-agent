@@ -10,6 +10,20 @@ export interface BrowserRelayStatus {
   last_seen: number;
   manifest_exists: boolean;
   extension_path: string;
+  active_tab?: {
+    id?: number | string;
+    url?: string;
+    title?: string;
+  } | null;
+  recent_human_activity?: Array<{
+    kind?: string;
+    at?: number;
+    url?: string;
+    title?: string;
+    tabId?: number | string;
+    target?: Record<string, unknown>;
+    data?: Record<string, unknown>;
+  }>;
 }
 
 export interface DesktopAutomationPermissions {

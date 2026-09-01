@@ -449,7 +449,14 @@ export type ConversationEvent =
       params: {
         threadId: string;
         turnId?: string;
-        error: { message: string };
+        error: {
+          message: string;
+          code?: unknown;
+          additionalDetails?: unknown;
+          codexErrorInfo?: unknown;
+          info?: unknown;
+          [key: string]: unknown;
+        };
         willRetry: boolean;
       };
     };
@@ -477,6 +484,60 @@ export interface ReducerOutput {
 // replaying the same log twice yields identical state.
 export interface ReduceOptions {
   mode?: "live" | "replay";
+}
+
+function errorRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function parseEmbeddedError(message: string): Record<string, unknown> | null {
+  const trimmed = message.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return null;
+  try {
+    return errorRecord(JSON.parse(trimmed));
+  } catch {
+    return null;
+  }
+}
+
+function conciseErrorMessage(message: string): string {
+  return message
+    .replace(/(?:,?\s+url:)\s+https?:\/\/\S+/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function normalizeRealtimeError(error: {
+  message: string;
+  [key: string]: unknown;
+}): { message: string; info: Record<string, unknown> | null } {
+  const embedded = parseEmbeddedError(error.message);
+  const embeddedMessage =
+    typeof embedded?.message === "string" ? embedded.message : null;
+  const message =
+    conciseErrorMessage(embeddedMessage ?? error.message) || "turn failed";
+  const info: Record<string, unknown> = {};
+  const structuredInfo = errorRecord(error.info) ?? errorRecord(embedded?.info);
+  if (structuredInfo) Object.assign(info, structuredInfo);
+  for (const key of [
+    "code",
+    "codexErrorInfo",
+    "additionalDetails",
+    "status",
+  ] as const) {
+    const value = error[key] ?? embedded?.[key];
+    if (value !== undefined && value !== null && value !== "")
+      info[key] = value;
+  }
+  if (message !== error.message.trim()) {
+    info.rawMessage = error.message.slice(0, 8_000);
+  }
+  return {
+    message,
+    info: Object.keys(info).length > 0 ? info : null,
+  };
 }
 
 export function reduce(
@@ -805,14 +866,15 @@ export function reduce(
         evt.params.turnId ?? state.turns[state.turns.length - 1]?.id;
       if (!turnId)
         return { next: state, changedTurnIds: [], changedItemIds: [] };
+      const normalizedError = normalizeRealtimeError(evt.params.error);
       const errorItem: Item = {
         id: `err_${Date.now()}_${++errorItemSeq}`,
         type: "error",
         status: "failed",
         createdAt: new Date().toISOString(),
-        message: evt.params.error.message,
+        message: normalizedError.message,
         willRetry: evt.params.willRetry,
-        errorInfo: null,
+        errorInfo: normalizedError.info,
       };
       return upsertItem(state, turnId, errorItem, "started");
     }
@@ -1033,7 +1095,23 @@ function upsertItem(
   const idx = turn.items.findIndex((it) => it.id === item.id);
   let nextItems: Item[];
   if (idx === -1) {
-    nextItems = orderTimelineItems([...turn.items, item]);
+    // Avoid a full re-sort on every appended item. Items normally arrive in
+    // timeline order, so appending at the tail keeps the array sorted and the
+    // rendered cards stable (no position jump when a parallel command lands
+    // out of delivery order). Only re-sort when the new item's sequence
+    // actually precedes the current tail — a rare out-of-order arrival.
+    const next = [...turn.items, item];
+    const last = turn.items[turn.items.length - 1];
+    if (
+      Number.isFinite(item.timelineSequence) &&
+      last &&
+      Number.isFinite(last.timelineSequence) &&
+      Number(item.timelineSequence) < Number(last.timelineSequence)
+    ) {
+      nextItems = orderTimelineItems(next);
+    } else {
+      nextItems = next;
+    }
   } else {
     // ``completed`` snapshots replace; ``started`` after ``completed`` is
     // a no-op (out-of-order delivery from a buffered queue).

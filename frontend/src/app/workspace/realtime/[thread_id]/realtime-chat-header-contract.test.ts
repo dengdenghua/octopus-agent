@@ -27,7 +27,23 @@ describe("realtime compact chat header contract", () => {
       'className="absolute left-3 top-1/2 -translate-y-1/2 md:hidden"',
     );
     expect(pageSource).toContain(
-      'headerClassName={!isOctopusAssistant ? "md:pl-3" : undefined}',
+      'embeddedDesignChat\n                  ? "px-3"',
+    );
+    expect(header).toContain(
+      "members={embeddedDesignChat ? null : headerMemberSurface}",
+    );
+    expect(header).toContain(
+      "workbench={embeddedDesignChat ? null : headerActions}",
+    );
+    expect(pageSource).toContain('getAttribute("data-echo-design-chat")');
+    expect(pageSource).toContain(
+      "!embeddedDesignChat && selectedCollaborators.length > 0",
+    );
+    expect(pageSource).toContain(
+      "embeddedDesignChat ? null : automationTarget",
+    );
+    expect(pageSource).toContain(
+      "allToolEvents={embeddedDesignChat ? [] : allToolEvents}",
     );
   });
 
@@ -39,19 +55,28 @@ describe("realtime compact chat header contract", () => {
 
     expect(memberSurface).toContain("<RealtimeChatHeaderMemberSurface");
     expect(memberSurface).toContain("aiMembers={headerMemberControl}");
-    expect(memberSurface).toContain("humanInvite={headerHumanInvite}");
+    expect(pageSource).toContain("humanInviteAction={headerHumanInvite}");
   });
 
-  it("keeps active REC primary and sends idle REC plus sharing to More", () => {
+  it("uses the persisted header title for overflow sharing", () => {
+    const sharing = sourceBetween(
+      "const headerShareTitle",
+      "const headerWorkbench",
+    );
+
+    expect(sharing).toContain("headerThreadTitle");
+    expect(sharing).toContain("title: headerShareTitle");
+  });
+
+  it("keeps REC independent and mounts the explicit share affordance", () => {
     const actions = sourceBetween("const headerActions", "return (");
 
     expect(actions).toContain(
-      "recording={recIsRecording ? headerRecorder : null}",
+      "recording={recorderPluginEnabled ? headerRecorder : null}",
     );
-    expect(actions).toContain("<RealtimeChatHeaderOverflowMenu");
-    expect(actions).toContain(
-      "recIsRecording ? undefined : () => setRecOverlayOpen(true)",
-    );
-    expect(actions).toContain("share={headerShareOptions ?? undefined}");
+    expect(actions).toContain("share={");
+    expect(actions).toContain("<ShareMenu");
+    expect(actions).toContain("iconOnly");
+    expect(actions).not.toContain("RealtimeChatHeaderOverflowMenu");
   });
 });

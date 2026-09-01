@@ -119,4 +119,47 @@ describe("placeTimelineEntries", () => {
     expect(screen.queryByText("还没有消息")).not.toBeInTheDocument();
     expect(screen.getAllByRole("log")).toHaveLength(1);
   });
+
+  it("keeps the recoverable group empty state inside the single central timeline", () => {
+    const thread: BaseStream<AgentThreadState> = {
+      messages: [],
+      streamingMessage: null,
+      subgraphStreams: {},
+      values: { title: "发布讨论群", messages: [], artifacts: [] },
+      isLoading: false,
+      isThreadLoading: false,
+      error: undefined,
+      stop: vi.fn(),
+      refresh: vi.fn(),
+      submit: vi.fn(),
+      threadId: "thread-empty-work-group",
+    };
+
+    renderWithProviders(
+      <SubtasksProvider>
+        <ThreadProviders thread={thread}>
+          <MessageList
+            threadId="thread-empty-work-group"
+            thread={thread}
+            paddingBottom={0}
+            showSenderName
+            emptyState={<div role="status">还没有消息，可以直接开始讨论</div>}
+            timelineEntries={[]}
+          />
+        </ThreadProviders>
+      </SubtasksProvider>,
+      {
+        locale: "zh-CN",
+        initialRoute: "/workspace/realtime/thread-empty-work-group",
+      },
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "还没有消息，可以直接开始讨论",
+    );
+    expect(
+      document.querySelector('[data-density="compact"]'),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("log")).toHaveLength(1);
+  });
 });

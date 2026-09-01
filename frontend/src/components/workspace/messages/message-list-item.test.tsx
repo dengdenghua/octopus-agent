@@ -1,11 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { Message } from "@/core/api/types";
 import { describe, expect, it, vi } from "vitest";
+import { RETRY_PENDING_MESSAGE_EVENT } from "@/core/threads/optimistic-messages";
 
 import {
   containsProtocolMarkers,
+  HumanMessageDeliveryStatus,
   messageClipboardText,
-  MessageTimestamp,
   ShadowReviewAction,
   threadMessageToCoworkRoomMessage,
 } from "./message-list-item";
@@ -20,43 +21,78 @@ vi.mock("@/core/evolution/api", () => ({
   queueDualHelixShadowRun: evolutionMocks.queueRun,
 }));
 
-describe("MessageTimestamp", () => {
-  it("renders nothing when no timestamp is provided", () => {
-    const { container } = render(<MessageTimestamp />);
-    expect(container.firstChild).toBeNull();
-  });
+vi.mock("@/providers/AuthProvider", () => ({
+  useAuth: () => ({
+    authStatus: { enabled: false },
+    user: null,
+  }),
+  useOptionalAuth: () => ({
+    authStatus: { enabled: false },
+    user: null,
+  }),
+}));
 
-  it("renders nothing when the timestamp is unparseable", () => {
-    const { container } = render(<MessageTimestamp createdAt="not-a-date" />);
-    expect(container.firstChild).toBeNull();
-  });
+vi.mock("@/core/i18n/hooks", () => ({
+  useI18n: () => ({
+    t: {
+      conversation: {
+        messageQueued: "排队中",
+        messageSending: "发送中",
+        messageSendFailed: "发送失败",
+        retry: "重试",
+      },
+    },
+  }),
+}));
 
-  it("renders a local HH:mm label", () => {
-    render(<MessageTimestamp createdAt="2026-05-09T10:30:00Z" alwaysVisible />);
-    expect(screen.getByText(/\d{2}:\d{2}/)).toBeInTheDocument();
-  });
-
-  it("is always visible when alwaysVisible is set, otherwise hover-revealed", () => {
-    const { rerender } = render(
-      <MessageTimestamp createdAt="2026-05-09T10:30:00Z" alwaysVisible />,
-    );
-    expect(screen.getByText(/\d{2}:\d{2}/).className).toContain("opacity-100");
-
-    rerender(
-      <MessageTimestamp
-        createdAt="2026-05-09T10:30:00Z"
-        alwaysVisible={false}
+describe("HumanMessageDeliveryStatus", () => {
+  it("makes queued websocket delivery explicit", () => {
+    render(
+      <HumanMessageDeliveryStatus
+        threadId="thread-queued"
+        message={{
+          id: "itm_user_queued",
+          type: "human",
+          content: "等连接恢复",
+          additional_kwargs: { delivery_state: "queued" },
+        }}
       />,
     );
-    expect(screen.getByText(/\d{2}:\d{2}/).className).toContain("opacity-0");
-    expect(screen.getByText(/\d{2}:\d{2}/).className).toContain(
-      "group-hover/conversation-message:opacity-100",
+
+    expect(screen.getByRole("status")).toHaveAttribute(
+      "data-delivery-state",
+      "queued",
     );
+    expect(screen.getByText("排队中")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
   });
 
-  it("aligns to the end for user bubbles", () => {
-    render(<MessageTimestamp createdAt="2026-05-09T10:30:00Z" align="end" />);
-    expect(screen.getByText(/\d{2}:\d{2}/).className).toContain("self-end");
+  it("dispatches retry with the failed bubble's stable message id", () => {
+    const retryListener = vi.fn();
+    window.addEventListener(RETRY_PENDING_MESSAGE_EVENT, retryListener);
+    render(
+      <HumanMessageDeliveryStatus
+        threadId="thread-failed"
+        message={{
+          id: "itm_user_failed",
+          type: "human",
+          content: "保留这条消息",
+          additional_kwargs: {
+            delivery_state: "failed",
+            delivery_error: "socket dropped",
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+
+    expect(retryListener).toHaveBeenCalledTimes(1);
+    expect((retryListener.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({
+      threadId: "thread-failed",
+      clientMessageId: "itm_user_failed",
+    });
+    window.removeEventListener(RETRY_PENDING_MESSAGE_EVENT, retryListener);
   });
 });
 

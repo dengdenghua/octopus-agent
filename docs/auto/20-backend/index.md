@@ -89,6 +89,7 @@ graph LR
   projectos -- 3 --> memory
   projectos -- 3 --> platform
   sensing -- 3 --> workspace
+  tentacle -- 3 --> safety
   tour.py -- 3 --> core
   tour.py -- 3 --> safety
   workspace -- 3 --> platform

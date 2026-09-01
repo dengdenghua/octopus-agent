@@ -4,7 +4,10 @@ import type {
   CollaborationSession,
   CoworkMessageProjectActionResponse,
 } from "./types";
-import { mergeCoworkProjectActionIntoSession } from "./hooks";
+import {
+  collabSessionRefetchInterval,
+  mergeCoworkProjectActionIntoSession,
+} from "./hooks";
 
 const session: CollaborationSession = {
   session_id: "thread-1",
@@ -53,5 +56,41 @@ describe("cowork project action cache merge", () => {
 
     expect(merged?.room_messages.map((message) => message.seq)).toEqual([3, 4]);
     expect(merged?.room_messages[0].metadata?.entity_refs?.[0].id).toBe("EV-1");
+  });
+});
+
+describe("collaboration session polling", () => {
+  test("does not continuously poll an ordinary direct chat", () => {
+    const directSession: CollaborationSession = {
+      ...session,
+      room_id: null,
+      mode: "chat",
+      roster: [],
+    };
+
+    expect(collabSessionRefetchInterval(directSession)).toBe(false);
+  });
+
+  test("keeps linked rooms and visible collaboration surfaces live", () => {
+    expect(collabSessionRefetchInterval(session)).toBe(5_000);
+    expect(
+      collabSessionRefetchInterval({
+        ...session,
+        room_id: null,
+        mode: "cluster",
+      }),
+    ).toBe(5_000);
+    expect(
+      collabSessionRefetchInterval(undefined, {
+        live: true,
+        refetchInterval: 1_000,
+      }),
+    ).toBe(1_000);
+  });
+
+  test("respects an explicitly disabled query", () => {
+    expect(
+      collabSessionRefetchInterval(session, { enabled: false, live: true }),
+    ).toBe(false);
   });
 });

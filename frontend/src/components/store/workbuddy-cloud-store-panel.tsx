@@ -63,6 +63,10 @@ export interface WorkBuddyCloudStorePanelProps {
   kind?: WorkBuddyCloudStoreKind;
   /** 嵌入人才市场时隐藏重复标题/搜索，并采用更舒展的卡片密度。 */
   embedded?: boolean;
+  /** 聚合目录中可隐藏角色/角色团切换，让两者混排并只保留领域筛选。 */
+  showTypeFilter?: boolean;
+  /** 聚合目录可只提供一个专家团开关，避免恢复完整的类型筛选层。 */
+  showTeamFilter?: boolean;
   /** 安装成功后通知外层刷新“角色库”。 */
   onInstalled?: (expert: CloudExpertAgent) => void;
 }
@@ -296,6 +300,8 @@ export function WorkBuddyCloudStorePanel({
   searchQuery = "",
   kind,
   embedded = false,
+  showTypeFilter = true,
+  showTeamFilter = false,
   onInstalled,
 }: WorkBuddyCloudStorePanelProps = {}) {
   const { t } = useI18n();
@@ -361,7 +367,8 @@ export function WorkBuddyCloudStorePanel({
     void load();
   }, [load]);
 
-  const effectiveTypeFilter = kind ?? typeFilter;
+  const effectiveTypeFilter =
+    kind ?? (showTypeFilter || showTeamFilter ? typeFilter : "all");
   const categoryCounts = useMemo(() => {
     const typeScopedExperts =
       effectiveTypeFilter === "all"
@@ -480,15 +487,54 @@ export function WorkBuddyCloudStorePanel({
           <Button
             type="button"
             size="sm"
-            variant={activeCategory === "all" ? "secondary" : "outline"}
-            onClick={() => setActiveCategory("all")}
-            className="h-8 shrink-0 px-2.5 text-xs"
+            variant={
+              embedded
+                ? "ghost"
+                : activeCategory === "all"
+                  ? "secondary"
+                  : "outline"
+            }
+            onClick={() => {
+              setActiveCategory("all");
+              if (showTeamFilter) setTypeFilter("all");
+            }}
+            className={cn(
+              "h-8 shrink-0 px-2.5 text-xs",
+              embedded &&
+                "rounded-md font-normal text-muted-foreground shadow-none",
+              embedded &&
+                activeCategory === "all" &&
+                (!showTeamFilter || typeFilter !== "team") &&
+                "bg-muted font-medium text-foreground",
+            )}
           >
             {t.store.typeAll}
-            <span className="ml-1 text-xs text-muted-foreground">
-              {categoryCounts.get("all") ?? 0}
-            </span>
+            {!embedded || showTypeFilter ? (
+              <span className="ml-1 text-xs text-muted-foreground">
+                {categoryCounts.get("all") ?? 0}
+              </span>
+            ) : null}
           </Button>
+          {!kind && !showTypeFilter && showTeamFilter ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              aria-pressed={typeFilter === "team"}
+              onClick={() => {
+                setActiveCategory("all");
+                setTypeFilter((current) =>
+                  current === "team" ? "all" : "team",
+                );
+              }}
+              className={cn(
+                "h-8 shrink-0 rounded-md px-2.5 text-xs font-normal text-muted-foreground shadow-none",
+                typeFilter === "team" && "bg-muted font-medium text-foreground",
+              )}
+            >
+              {t.store.expertTypeTeam}
+            </Button>
+          ) : null}
           {categories
             .filter((c) => !kind || (categoryCounts.get(c.id) ?? 0) > 0)
             .map((c) => {
@@ -498,25 +544,42 @@ export function WorkBuddyCloudStorePanel({
                   key={c.id}
                   type="button"
                   size="sm"
-                  variant={activeCategory === c.id ? "secondary" : "outline"}
-                  onClick={() => setActiveCategory(c.id)}
+                  variant={
+                    embedded
+                      ? "ghost"
+                      : activeCategory === c.id
+                        ? "secondary"
+                        : "outline"
+                  }
+                  onClick={() => {
+                    setActiveCategory(c.id);
+                    if (showTeamFilter) setTypeFilter("all");
+                  }}
                   className={cn(
                     "h-8 shrink-0 px-2.5 text-xs",
-                    activeCategory === c.id &&
+                    embedded &&
+                      "rounded-md font-normal text-muted-foreground shadow-none",
+                    !embedded &&
+                      activeCategory === c.id &&
                       "border-primary/35 bg-primary/10 text-foreground",
+                    embedded &&
+                      activeCategory === c.id &&
+                      "bg-muted font-medium text-foreground",
                   )}
                 >
                   {zhName(c.name)}
-                  <span className="ml-1 text-xs text-muted-foreground">
-                    {count}
-                  </span>
+                  {!embedded || showTypeFilter ? (
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      {count}
+                    </span>
+                  ) : null}
                 </Button>
               );
             })}
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          {!kind ? (
+          {!kind && showTypeFilter ? (
             <div className="flex items-center gap-1">
               {(["all", "agent", "team"] as const).map((tp) => (
                 <Button

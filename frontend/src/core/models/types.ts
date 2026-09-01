@@ -6,6 +6,8 @@ export interface Model {
   /** Concrete wire-model id. Built-in virtual models may omit it. */
   model?: string | null;
   display_name: string;
+  /** Human-facing source entry, e.g. "OpenCode Zen 免费模型". */
+  source_display_name?: string | null;
   description?: string | null;
   /** Stable custom-model entry key; distinct endpoints may share `model`. */
   entry_id?: string | null;
@@ -14,6 +16,7 @@ export interface Model {
   supports_thinking?: boolean;
   supports_vision?: boolean;
   supports_tool_use?: boolean;
+  is_free?: boolean;
   supports_reasoning_effort?: boolean;
   reasoning_efforts?: ReasoningEffort[] | null;
   context_window?: number | null;

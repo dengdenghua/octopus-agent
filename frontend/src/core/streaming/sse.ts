@@ -138,6 +138,16 @@ export function openSseStream(options: OpenSseStreamOptions): () => void {
         signal: controller.signal,
         headers,
       });
+      // Authentication/authorization failures are terminal for the current
+      // page state. Retrying them forever created a background request storm
+      // after logout and when a signed-in user lacked an optional capability.
+      // A new authenticated mount will create a fresh subscription.
+      if (res.status === 401 || res.status === 403) {
+        lastError = new Error(`SSE HTTP ${res.status}`);
+        aborted = true;
+        options.onError?.(lastError);
+        return;
+      }
       if (!res.ok || !res.body) {
         throw new Error(`SSE HTTP ${res.status}`);
       }
@@ -152,8 +162,7 @@ export function openSseStream(options: OpenSseStreamOptions): () => void {
       scheduleRetry();
     } catch (err) {
       if (aborted) return;
-      const isAbort =
-        err instanceof DOMException && err.name === "AbortError";
+      const isAbort = err instanceof DOMException && err.name === "AbortError";
       if (isAbort) return;
       lastError = err instanceof Error ? err : new Error(String(err));
       swallow(lastError);

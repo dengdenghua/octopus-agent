@@ -1,4 +1,5 @@
 import { getBackendBaseURL } from "@/core/config";
+import { authHeaders } from "@/core/auth/api";
 
 import type {
   AgentWorldAgent,
@@ -11,40 +12,6 @@ import type {
 } from "./types";
 
 const AGENT_MARKET_API = "/api/agent-market";
-
-export interface AgentPackModule {
-  id: string;
-  kind: string;
-  name: string;
-  path: string;
-  description?: string;
-  source_plugin?: string | null;
-  metadata?: Record<string, unknown>;
-}
-
-export interface AgentPackPreview {
-  root: string;
-  marketplace?: Record<string, unknown> | null;
-  plugins: AgentPackModule[];
-  apps: AgentPackModule[];
-  agents: AgentPackModule[];
-  skills: AgentPackModule[];
-  commands: AgentPackModule[];
-  mcp_servers: AgentPackModule[];
-  managed_agents: AgentPackModule[];
-  subagents: AgentPackModule[];
-  warnings: string[];
-}
-
-export interface AgentPackImportResult {
-  agent_id: string;
-  agent_name: string;
-  agent_path: string;
-  copied_skills: string[];
-  skipped_skills: string[];
-  warnings: string[];
-  already_exists?: boolean;
-}
 
 export interface AgentInstallResult {
   installed: boolean;
@@ -160,11 +127,12 @@ export async function installCloudExpert(
   );
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    throw new Error(`WorkBuddy install failed: HTTP ${res.status} ${txt}`.trim());
+    throw new Error(
+      `WorkBuddy install failed: HTTP ${res.status} ${txt}`.trim(),
+    );
   }
   return res.json() as Promise<CloudStoreInstallResult>;
 }
-
 
 /** 云商城插件目录(我们发布到 GitHub Pages 的 plugin-store.json)。 */
 export interface CloudPluginItem {
@@ -185,19 +153,27 @@ export interface CloudPluginItem {
   auth_mode?: string;
   mcp_servers?: { name?: string; url?: string }[];
   examples_zh?: string[];
+  /** UI mount points contributed by an installed plugin. */
+  surface_capabilities?: string[];
 }
 
 export interface CloudPluginsResponse {
   items: CloudPluginItem[];
   total: number;
-  meta?: { count?: number; codex_plugins?: number; workbuddy_connectors?: number };
+  meta?: {
+    count?: number;
+    codex_plugins?: number;
+    workbuddy_connectors?: number;
+  };
 }
 
-export async function fetchCloudPlugins(opts: {
-  search?: string;
-  kind?: string;
-  limit?: number;
-} = {}): Promise<CloudPluginsResponse> {
+export async function fetchCloudPlugins(
+  opts: {
+    search?: string;
+    kind?: string;
+    limit?: number;
+  } = {},
+): Promise<CloudPluginsResponse> {
   const qs = new URLSearchParams();
   if (opts.search) qs.set("search", opts.search);
   if (opts.kind) qs.set("kind", opts.kind);
@@ -227,10 +203,12 @@ export interface CloudSkillsResponse {
   meta?: { count?: number; workbuddy_skills?: number; octopus_skills?: number };
 }
 
-export async function fetchCloudSkills(opts: {
-  search?: string;
-  limit?: number;
-} = {}): Promise<CloudSkillsResponse> {
+export async function fetchCloudSkills(
+  opts: {
+    search?: string;
+    limit?: number;
+  } = {},
+): Promise<CloudSkillsResponse> {
   const qs = new URLSearchParams();
   if (opts.search) qs.set("search", opts.search);
   qs.set("limit", String(opts.limit ?? 500));
@@ -246,6 +224,7 @@ export async function fetchCloudSkills(opts: {
 export interface CloudInstalledStatus {
   skills: string[];
   plugins: string[];
+  plugin_states?: Record<string, RuntimePluginStatus>;
 }
 
 export async function fetchCloudInstalled(): Promise<CloudInstalledStatus> {
@@ -253,7 +232,8 @@ export async function fetchCloudInstalled(): Promise<CloudInstalledStatus> {
     `${getBackendBaseURL()}${AGENT_MARKET_API}/cloud/installed`,
     { headers: authHeaders() },
   );
-  if (!res.ok) throw new Error(`Cloud installed status failed: HTTP ${res.status}`);
+  if (!res.ok)
+    throw new Error(`Cloud installed status failed: HTTP ${res.status}`);
   return res.json() as Promise<CloudInstalledStatus>;
 }
 
@@ -272,6 +252,11 @@ export interface CloudPluginInstallResult {
   path: string;
   copied_skills?: string[];
   source?: string;
+  operation?: "install" | "update" | string;
+  transaction_id?: string | null;
+  rollback_available?: boolean;
+  data?: CloudPluginUninstallResult["data"];
+  recoveries?: RuntimePluginStatus["recoveries"];
 }
 
 export interface CloudPluginUninstallResult {
@@ -288,6 +273,7 @@ export interface CloudPluginUninstallResult {
 }
 
 export interface RuntimePluginStatus {
+  id?: string;
   name?: string;
   plugin_id?: string;
   installed: boolean;
@@ -297,6 +283,24 @@ export interface RuntimePluginStatus {
   source?: "factory" | "external" | string;
   restart_required?: boolean;
   data_state?: string;
+  lifecycle_state?:
+    | "available"
+    | "downloading"
+    | "installed"
+    | "enabling"
+    | "enabled"
+    | "disabling"
+    | "disabled"
+    | "uninstalling"
+    | "update_available"
+    | "broken"
+    | "incompatible";
+  error?: string | null;
+  version?: string;
+  available_version?: string;
+  rollback_available?: boolean;
+  transaction_id?: string | null;
+  rollback_operation?: "install" | "update" | string | null;
   recoveries?: Array<{
     recovery_id: string;
     created_at?: string | number;
@@ -305,7 +309,9 @@ export interface RuntimePluginStatus {
 }
 
 /** 从云端安装技能(下载内容包 → 解包 → 落到 ~/.octopus/skills)。 */
-export async function installCloudSkill(name: string): Promise<CloudSkillInstallResult> {
+export async function installCloudSkill(
+  name: string,
+): Promise<CloudSkillInstallResult> {
   const res = await fetch(
     `${getBackendBaseURL()}${AGENT_MARKET_API}/cloud/skills/${encodeURIComponent(name)}/install`,
     { method: "POST", headers: authHeaders() },
@@ -315,6 +321,54 @@ export async function installCloudSkill(name: string): Promise<CloudSkillInstall
     throw new Error(`云技能安装失败: HTTP ${res.status} ${txt}`.trim());
   }
   return res.json() as Promise<CloudSkillInstallResult>;
+}
+
+export interface CloudSkillInstallProgress {
+  phase: "resolving" | "installing" | "indexing" | "completed" | "failed";
+  progress: number;
+  message: string;
+  result?: CloudSkillInstallResult;
+}
+
+/** Install a cloud skill while consuming observable NDJSON progress events. */
+export async function streamInstallCloudSkill(
+  name: string,
+  onProgress: (event: CloudSkillInstallProgress) => void,
+): Promise<CloudSkillInstallResult> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${AGENT_MARKET_API}/cloud/skills/${encodeURIComponent(name)}/install/stream`,
+    { method: "POST", headers: authHeaders() },
+  );
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`云技能安装失败: HTTP ${res.status} ${txt}`.trim());
+  }
+  if (!res.body) throw new Error("云技能安装流不可用");
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: CloudSkillInstallResult | undefined;
+
+  const consumeLine = (line: string) => {
+    if (!line.trim()) return;
+    const event = JSON.parse(line) as CloudSkillInstallProgress;
+    onProgress(event);
+    if (event.phase === "failed") throw new Error(event.message);
+    if (event.result) result = event.result;
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) consumeLine(line);
+    if (done) break;
+  }
+  consumeLine(buffer);
+  if (!result) throw new Error("云技能安装流未返回完成结果");
+  return result;
 }
 
 /** 从云端安装插件/连接器(下载内容包 → 解包 → 落地 + 复制捆绑技能)。 */
@@ -341,7 +395,7 @@ export async function installCloudPlugin(
   return res.json() as Promise<CloudPluginInstallResult>;
 }
 
-/** Remove a cloud-installed package or deactivate a removable factory workbench. */
+/** Remove only a mutable cloud-installed package; bundled/core code is never targeted. */
 export async function uninstallCloudPlugin(
   pluginId: string,
   options: { dataPolicy?: "keep" | "trash"; confirmDataMove?: boolean } = {},
@@ -375,6 +429,34 @@ export async function fetchRuntimePluginStatus(
   return res.json() as Promise<RuntimePluginStatus>;
 }
 
+/**
+ * Read every runtime plugin in one request.
+ *
+ * Workbench availability is an inventory view: probing each optional plugin
+ * with the detail endpoint turns a normal "not installed" state into one 404
+ * per app. The list endpoint already includes the same lifecycle fields and
+ * lets callers distinguish absence without using failed requests as control
+ * flow.
+ */
+export async function fetchRuntimePluginStatuses(): Promise<
+  Map<string, RuntimePluginStatus>
+> {
+  const res = await fetch(`${getBackendBaseURL()}/api/plugin-hub/plugins`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`插件状态清单读取失败: HTTP ${res.status} ${txt}`.trim());
+  }
+  const rows = (await res.json()) as RuntimePluginStatus[];
+  return new Map(
+    rows.flatMap((row) => {
+      const key = row.plugin_id ?? row.id ?? row.name;
+      return key ? [[key, row] as const] : [];
+    }),
+  );
+}
+
 export async function setRuntimePluginEnabled(
   pluginName: string,
   enabled: boolean,
@@ -393,34 +475,54 @@ export async function setRuntimePluginEnabled(
   return res.json() as Promise<RuntimePluginStatus>;
 }
 
-export async function previewAgentPack(
-  path: string,
-): Promise<AgentPackPreview> {
-  const qs = new URLSearchParams({ path });
+/** Activate/deactivate any remote workbench, including frontend-only packages. */
+export async function setCloudPluginEnabled(
+  pluginId: string,
+  enabled: boolean,
+): Promise<RuntimePluginStatus> {
+  const action = enabled ? "enable" : "disable";
   const res = await fetch(
-    `${getBackendBaseURL()}${AGENT_MARKET_API}/packs/preview?${qs.toString()}`,
-    { headers: authHeaders() },
+    `${getBackendBaseURL()}${AGENT_MARKET_API}/cloud/plugins/${encodeURIComponent(pluginId)}/${action}`,
+    { method: "POST", headers: authHeaders() },
   );
-  if (!res.ok)
-    throw new Error(`Failed to preview agent pack: ${res.statusText}`);
-  return res.json() as Promise<AgentPackPreview>;
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(
+      `应用${enabled ? "启用" : "停用"}失败: HTTP ${res.status} ${txt}`.trim(),
+    );
+  }
+  return res.json() as Promise<RuntimePluginStatus>;
 }
 
-export async function importAgentFromPack(args: {
-  path: string;
-  agentName: string;
-}): Promise<AgentPackImportResult> {
+export interface CloudPluginRollbackResult {
+  ok: boolean;
+  plugin_id: string;
+  installed: boolean;
+  operation: "restored_previous" | "removed_new_install" | string;
+  transaction_id: string;
+  restart_required?: boolean;
+}
+
+/** Restore the package generation replaced by the latest successful update. */
+export async function rollbackCloudPlugin(
+  pluginId: string,
+  transactionId?: string,
+): Promise<CloudPluginRollbackResult> {
   const res = await fetch(
-    `${getBackendBaseURL()}${AGENT_MARKET_API}/packs/import-agent`,
+    `${getBackendBaseURL()}${AGENT_MARKET_API}/cloud/plugins/${encodeURIComponent(pluginId)}/rollback`,
     {
       method: "POST",
-      headers: jsonAuthHeaders(),
-      body: JSON.stringify({ path: args.path, agent_name: args.agentName }),
+      headers: { ...authHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify(
+        transactionId ? { transaction_id: transactionId } : {},
+      ),
     },
   );
-  if (!res.ok)
-    throw new Error(`Failed to import agent pack: ${res.statusText}`);
-  return res.json() as Promise<AgentPackImportResult>;
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`应用回滚失败: HTTP ${res.status} ${txt}`.trim());
+  }
+  return res.json() as Promise<CloudPluginRollbackResult>;
 }
 
 // ---------------------------------------------------------------------------
@@ -697,7 +799,6 @@ export async function listAgentRelationships(
   return data.relationships;
 }
 
-
 // ---------------------------------------------------------------------------
 // 统一「能力包」市场 —— 连接器 + Codex 插件一个市场
 // 后端: runtime/sensing/gateway/capability_router.py
@@ -728,6 +829,26 @@ export interface CapabilityInfo {
   auth_mode: string;
   source: CapabilitySource;
   provider_id?: string;
+  model_provider?: {
+    schema?: string;
+    entry_id: string;
+    display_name?: string;
+    display_name_zh?: string;
+    protocol: "openai-compatible" | string;
+    base_url: string;
+    models_endpoint?: string;
+    dashboard_url?: string;
+    docs_url?: string;
+    configurable_base_url?: boolean;
+    api_key_label_zh?: string;
+    login_cta_zh?: string;
+    connection_note_zh?: string;
+    model_list_label_zh?: string;
+    free_models: string[];
+    privacy_notices_zh?: string[];
+    supports_tool_use?: boolean;
+    models_are_free?: boolean;
+  } | null;
   author?: string;
   category?: string;
   icon?: string;
@@ -743,15 +864,46 @@ export interface CapabilityInfo {
   manual_token_only?: boolean;
   skill_count: number;
   examples_zh?: string[];
+  /** Optional UI mount points contributed by this plugin. */
+  surface_capabilities?: string[];
   installed: boolean;
   enabled: boolean;
   connected?: boolean;
   version: string;
+  /** Codex App Server marketplace row (as opposed to an already-local plugin). */
+  is_codex_marketplace?: boolean;
+  marketplace_name?: string;
+  plugin_name?: string;
+  codex_plugin_id?: string;
+  featured?: boolean;
+  installable?: boolean;
+  /** Whether this account may install/uninstall the local capability package. */
+  lifecycle_manageable?: boolean;
+  /** Signed marketplace requirements and local grant state. */
+  host_api?: string | null;
+  permissions?: string[];
+  permissions_granted?: string[];
+  permission_review_required?: boolean;
+  permission_active?: boolean;
+  auth_modes?: string[];
+  dependencies?: string[];
+  runtime_dependencies?: string[];
 }
 
 export interface CapabilityListResponse {
   capabilities: CapabilityInfo[];
   total: number;
+}
+
+export interface CapabilityDeviceFlow {
+  /** 服务端生成的不透明会话代际；取消时必须原样回传。 */
+  flow_id: string;
+  connector_id: string;
+  verification_uri: string;
+  user_code: string;
+  expires_in: number;
+  code_embedded_in_uri: boolean;
+  message?: string;
 }
 
 export interface CapabilityConnectResult {
@@ -760,28 +912,72 @@ export interface CapabilityConnectResult {
   command?: string;
   capability_id?: string;
   /** CLI 设备流(WorkBuddy authDeviceFlow):verification_uri + user_code。 */
-  device_flow?: {
-    connector_id: string;
-    verification_uri: string;
-    user_code: string;
-    expires_in: number;
-    code_embedded_in_uri: boolean;
-    message?: string;
-  };
+  device_flow?: CapabilityDeviceFlow;
+}
+
+export interface CapabilityDeviceFlowStatus {
+  connector_id: string;
+  active: boolean;
+  connected?: boolean;
+  auth_mode?: string;
+  device_flow: CapabilityDeviceFlow | null;
+}
+
+export interface CapabilityInstallPlan {
+  schema: "octopus.capability_install_plan.v1";
+  capability_id: string;
+  kind: "connector" | "codex";
+  version: string;
+  host_api: string | null;
+  permissions: string[];
+  auth_modes: string[];
+  dependencies: Array<{
+    id: string;
+    required_by?: string;
+    ready: boolean;
+    will_install?: boolean;
+    state: string;
+  }>;
+  runtime_dependencies: Array<{ name: string; bundled: boolean }>;
+  changes: string[];
+  permission_review_required: boolean;
+  can_install: boolean;
+  blockers: string[];
+  plan_id: string;
+}
+
+/** Read-only preflight: no package, skill, state, process, or credential writes. */
+export async function getCapabilityInstallPlan(
+  capabilityId: string,
+): Promise<CapabilityInstallPlan> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${CAPABILITY_API}/${encodeURIComponent(
+      capabilityId,
+    )}/install-plan`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok) {
+    throw new Error(`Capability install plan failed: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<CapabilityInstallPlan>;
 }
 
 /** 统一插件市场列表(WorkBuddy MCP 服务 + Codex 插件)。 */
-export async function listCapabilities(opts: {
-  search?: string;
-  source?: CapabilitySource | "";
-  limit?: number;
-  /** 是否包含只能手动填 token 的插件(默认 false,后端已隐藏)。 */
-  includeManual?: boolean;
-} = {}): Promise<CapabilityListResponse> {
+export async function listCapabilities(
+  opts: {
+    search?: string;
+    source?: CapabilitySource | "";
+    limit?: number;
+    offset?: number;
+    /** 是否包含只能手动填 token 的插件(默认 false,后端已隐藏)。 */
+    includeManual?: boolean;
+  } = {},
+): Promise<CapabilityListResponse> {
   const qs = new URLSearchParams();
   if (opts.search) qs.set("search", opts.search);
   if (opts.source) qs.set("source", opts.source);
   qs.set("limit", String(opts.limit ?? 500));
+  if (opts.offset) qs.set("offset", String(opts.offset));
   qs.set("include_manual", opts.includeManual ? "true" : "false");
   const res = await fetch(
     `${getBackendBaseURL()}${CAPABILITY_API}?${qs.toString()}`,
@@ -791,16 +987,55 @@ export async function listCapabilities(opts: {
   return res.json() as Promise<CapabilityListResponse>;
 }
 
+/** Load a protected plugin asset and convert it into an image-safe data URL. */
+export async function loadCapabilityIcon(
+  url: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const res = await fetch(url, { headers: authHeaders(), signal });
+  if (!res.ok) {
+    throw new Error(`Capability icon failed: HTTP ${res.status}`);
+  }
+  const blob = await res.blob();
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () =>
+      reject(reader.error || new Error("Capability icon decode failed"));
+    reader.readAsDataURL(blob);
+  });
+}
+
 /** 安装插件(技能→~/.octopus/skills;带 MCP 的插件额外登记 MCP)。 */
 export async function installCapability(
   capabilityId: string,
+  planId?: string,
 ): Promise<{
   installed: boolean;
+  enabled?: boolean;
+  permissions?: string[];
+  permission_review_required?: boolean;
   copied_skills?: string[];
   cli_lifecycle?: {
     has_cli?: boolean;
+    deferred?: boolean;
+    detection?: {
+      found: boolean;
+      command?: string;
+      executable?: string;
+    };
+    detection_before?: {
+      found: boolean;
+      command?: string;
+      executable?: string;
+    };
     init?: { ok: boolean; error?: string; output?: string };
-    version?: { ok: boolean; error?: string; version?: string; min_version?: string };
+    version?: {
+      ok: boolean;
+      error?: string;
+      version?: string;
+      min_version?: string;
+    };
     runtime?: { ok: boolean; error?: string };
     auth_device_flow?: boolean;
     min_version?: string;
@@ -810,11 +1045,17 @@ export async function installCapability(
     `${getBackendBaseURL()}${CAPABILITY_API}/${encodeURIComponent(
       capabilityId,
     )}/install`,
-    { method: "POST", headers: authHeaders() },
+    {
+      method: "POST",
+      headers: planId ? jsonAuthHeaders() : authHeaders(),
+      body: planId ? JSON.stringify({ plan_id: planId }) : undefined,
+    },
   );
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    throw new Error(`Capability install failed: HTTP ${res.status} ${txt}`.trim());
+    throw new Error(
+      `Capability install failed: HTTP ${res.status} ${txt}`.trim(),
+    );
   }
   return res.json();
 }
@@ -827,21 +1068,50 @@ export async function uninstallCapability(capabilityId: string): Promise<void> {
     )}/install`,
     { method: "DELETE", headers: authHeaders() },
   );
-  if (!res.ok) throw new Error(`Capability uninstall failed: HTTP ${res.status}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    let detail = body.trim();
+    try {
+      const parsed = JSON.parse(body) as { detail?: unknown };
+      if (typeof parsed.detail === "string") detail = parsed.detail;
+    } catch {
+      // Plain-text gateway responses are already suitable for display.
+    }
+    throw new Error(
+      `Capability uninstall failed: HTTP ${res.status}${detail ? ` ${detail}` : ""}`,
+    );
+  }
 }
 
 /** 启用/禁用能力。 */
 export async function setCapabilityEnabled(
   capabilityId: string,
   enabled: boolean,
+  grantPermissions?: string[],
+  planId?: string,
 ): Promise<void> {
   const res = await fetch(
     `${getBackendBaseURL()}${CAPABILITY_API}/${encodeURIComponent(
       capabilityId,
     )}/${enabled ? "enable" : "disable"}`,
-    { method: "POST", headers: authHeaders() },
+    {
+      method: "POST",
+      headers: grantPermissions || planId ? jsonAuthHeaders() : authHeaders(),
+      body:
+        grantPermissions || planId
+          ? JSON.stringify({
+              ...(grantPermissions
+                ? { grant_permissions: grantPermissions }
+                : {}),
+              ...(planId ? { plan_id: planId } : {}),
+            })
+          : undefined,
+    },
   );
-  if (!res.ok) throw new Error(`Capability ${enabled ? "enable" : "disable"} failed: HTTP ${res.status}`);
+  if (!res.ok)
+    throw new Error(
+      `Capability ${enabled ? "enable" : "disable"} failed: HTTP ${res.status}`,
+    );
 }
 
 /** 能力认证/连接状态。 */
@@ -861,7 +1131,11 @@ export async function getCapabilityStatus(
 /** 认证编排:带认证的插件走 tokens / 其余直接就绪。 */
 export async function connectCapability(
   capabilityId: string,
-  body: { tokens?: Record<string, string>; run_cli?: boolean } = {},
+  body: {
+    tokens?: Record<string, string>;
+    run_cli?: boolean;
+    grant_permissions?: string[];
+  } = {},
 ): Promise<CapabilityConnectResult> {
   const res = await fetch(
     `${getBackendBaseURL()}${CAPABILITY_API}/${encodeURIComponent(
@@ -871,20 +1145,63 @@ export async function connectCapability(
   );
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    throw new Error(`Capability connect failed: HTTP ${res.status} ${txt}`.trim());
+    throw new Error(
+      `Capability connect failed: HTTP ${res.status} ${txt}`.trim(),
+    );
   }
   return res.json();
 }
 
+/** 恢复进行中的 CLI 设备流，供弹窗刷新/重开后继续轮询。 */
+export async function getCapabilityDeviceFlow(
+  capabilityId: string,
+): Promise<CapabilityDeviceFlowStatus> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${CAPABILITY_API}/${encodeURIComponent(
+      capabilityId,
+    )}/device-flow`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok) {
+    throw new Error(`Capability device flow failed: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<CapabilityDeviceFlowStatus>;
+}
+
+/** 幂等取消 CLI 设备流；关闭弹窗或卸载能力前必须先回收后台进程。 */
+export async function cancelCapabilityDeviceFlow(
+  capabilityId: string,
+  expectedFlowId: string,
+): Promise<{ cancelled: boolean; connector_id: string; reason?: string }> {
+  const query = new URLSearchParams({ expected_flow_id: expectedFlowId });
+  const res = await fetch(
+    `${getBackendBaseURL()}${CAPABILITY_API}/${encodeURIComponent(
+      capabilityId,
+    )}/device-flow?${query.toString()}`,
+    { method: "DELETE", headers: authHeaders() },
+  );
+  if (!res.ok) {
+    throw new Error(`Capability device flow cancel failed: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{
+    cancelled: boolean;
+    connector_id: string;
+    reason?: string;
+  }>;
+}
+
 /** 断开插件(清除已存凭据)。 */
-export async function disconnectCapability(capabilityId: string): Promise<void> {
+export async function disconnectCapability(
+  capabilityId: string,
+): Promise<void> {
   const res = await fetch(
     `${getBackendBaseURL()}${CAPABILITY_API}/${encodeURIComponent(
       capabilityId,
     )}/disconnect`,
     { method: "POST", headers: authHeaders() },
   );
-  if (!res.ok) throw new Error(`Capability disconnect failed: HTTP ${res.status}`);
+  if (!res.ok)
+    throw new Error(`Capability disconnect failed: HTTP ${res.status}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -897,7 +1214,12 @@ export async function disconnectCapability(capabilityId: string): Promise<void> 
 
 export type UnifiedAssetKind = "plugin" | "skill" | "agent" | "team";
 
-export type UnifiedAssetSource = "codex" | "workbuddy" | "local" | "builtin" | "imported";
+export type UnifiedAssetSource =
+  | "codex"
+  | "workbuddy"
+  | "local"
+  | "builtin"
+  | "imported";
 
 export interface UnifiedAsset {
   id: string;
@@ -937,22 +1259,27 @@ export interface UnifiedAssetsResponse {
 
 const ASSETS_API = "/api/assets";
 
-export async function fetchUnifiedAssets(params: {
-  kind?: UnifiedAssetKind;
-  source?: UnifiedAssetSource;
-  search?: string;
-  limit?: number;
-  offset?: number;
-} = {}): Promise<UnifiedAssetsResponse> {
+export async function fetchUnifiedAssets(
+  params: {
+    kind?: UnifiedAssetKind;
+    source?: UnifiedAssetSource;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
+): Promise<UnifiedAssetsResponse> {
   const qs = new URLSearchParams();
   if (params.kind) qs.set("kind", params.kind);
   if (params.source) qs.set("source", params.source);
   if (params.search) qs.set("search", params.search);
   qs.set("limit", String(params.limit ?? 500));
   if (params.offset) qs.set("offset", String(params.offset));
-  const res = await fetch(`${getBackendBaseURL()}${ASSETS_API}?${qs.toString()}`, {
-    headers: authHeaders(),
-  });
+  const res = await fetch(
+    `${getBackendBaseURL()}${ASSETS_API}?${qs.toString()}`,
+    {
+      headers: authHeaders(),
+    },
+  );
   if (!res.ok) throw new Error(`Unified assets failed: HTTP ${res.status}`);
   return res.json() as Promise<UnifiedAssetsResponse>;
 }
@@ -967,18 +1294,14 @@ export async function syncUnifiedAssets(): Promise<{
     method: "POST",
     headers: authHeaders(),
   });
-  if (!res.ok) throw new Error(`Unified assets sync failed: HTTP ${res.status}`);
+  if (!res.ok)
+    throw new Error(`Unified assets sync failed: HTTP ${res.status}`);
   return res.json();
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem("octopus:token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
 
 function jsonAuthHeaders(): Record<string, string> {
   return {

@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import WebSocket
 
+from runtime.safety.auth.websocket import websocket_auth_token
 from runtime.tentacle.mobile.vlm import VlmConfig
 
 
@@ -50,28 +51,7 @@ def resolve_websocket_actor(
             raise PermissionError("identity store required for tentacle auth")
         return None
 
-    token: str | None = None
-    try:
-        auth_header = websocket.headers.get("authorization") or ""
-    except Exception:  # noqa: BLE001
-        auth_header = ""
-    if auth_header.lower().startswith("bearer "):
-        token = auth_header[7:].strip()
-
-    if token is None:
-        try:
-            subprotocol = websocket.headers.get("sec-websocket-protocol") or ""
-        except Exception:  # noqa: BLE001
-            subprotocol = ""
-        parts = [part.strip() for part in subprotocol.split(",") if part.strip()]
-        if len(parts) >= 2 and parts[0].lower() == "bearer":
-            token = parts[1]
-
-    if token is None:
-        try:
-            token = websocket.query_params.get("token")
-        except Exception:  # noqa: BLE001
-            token = None
+    token = websocket_auth_token(websocket)
 
     if not token:
         if require_auth:

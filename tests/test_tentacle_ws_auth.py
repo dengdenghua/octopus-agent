@@ -83,6 +83,16 @@ def test_tentacle_pc_screen_ws_rejects_wrong_token_when_required() -> None:
     assert exc_info.value.code == 4401
 
 
+def test_tentacle_ws_rejects_valid_token_in_query_string() -> None:
+    client = _client(require_auth=True, store=_store())
+    with (
+        pytest.raises(WebSocketDisconnect) as exc_info,
+        client.websocket_connect("/api/tentacle/pc-screen/stream?token=sk-alice") as ws,
+    ):
+        ws.receive_text()
+    assert exc_info.value.code == 4401
+
+
 def test_tentacle_ws_require_auth_without_identity_store_rejects() -> None:
     client = _client(require_auth=True, store=None)
     with (
@@ -97,9 +107,7 @@ def test_tentacle_pc_screen_ws_accepts_base64url_subprotocol() -> None:
     store = IdentityStore()
     store.add(Identity(actor_id="encoded"), api_key_plaintext="令牌 with spaces/(test)")
     encoded = (
-        base64.urlsafe_b64encode("令牌 with spaces/(test)".encode())
-        .decode("ascii")
-        .rstrip("=")
+        base64.urlsafe_b64encode("令牌 with spaces/(test)".encode()).decode("ascii").rstrip("=")
     )
     client = _client(
         require_auth=True,

@@ -76,6 +76,8 @@ export type AgentWorkbenchTabId =
   | "diff"
   | "terminal"
   | "browser"
+  | "workspace"
+  | "design"
   | "project";
 
 export type JsonRecord = Record<string, unknown>;
@@ -117,6 +119,25 @@ export const BROWSER_TAB_LABEL = "浏览器";
 export const FINAL_OUTPUT_PATH_PATTERN = /(?:^|[\\/])output[\\/]final[\\/]/i;
 export const FINAL_DELIVERABLE_PATTERN =
   /report|docx|pptx|pdf|xlsx|html|报告|调研|总结|交付|文档|方案/i;
+/**
+ * Files agents use to coordinate their work. They are useful in the process
+ * trace, but are not user-facing deliverables even when written below
+ * output/final/.
+ */
+const INTERNAL_WORKING_FILE_BASENAMES = new Set([
+  "plan.md",
+  "todo.md",
+  "todos.md",
+  "note.md",
+  "notes.md",
+]);
+
+export function isInternalWorkingFilePath(path: string | null | undefined) {
+  if (!path) return false;
+  const normalized = normalizeSlashes(path).replace(/[\\/]+$/, "");
+  const basename = normalized.slice(normalized.lastIndexOf("/") + 1);
+  return INTERNAL_WORKING_FILE_BASENAMES.has(basename.toLowerCase());
+}
 const FINAL_DELIVERABLE_WRITE_OPS = new Set([
   "add",
   "added",
@@ -673,7 +694,7 @@ function changeRecordsFromUnknown(value: unknown): JsonRecord[] {
 }
 
 function isFinalOutputPath(path: string | null | undefined) {
-  if (!path) return false;
+  if (!path || isInternalWorkingFilePath(path)) return false;
   const normalized = normalizeSlashes(path).toLowerCase();
   return (
     normalized.includes("/output/final/") ||
@@ -797,7 +818,12 @@ export function diffEntriesFromBlocks(blocks: WorkBlock[]): DiffEntry[] {
 function isFinalDeliverableEntry(entry: DiffEntry) {
   const target = entry.path || entry.title;
   if (!target || entry.status === "error") return false;
-  if (FINAL_OUTPUT_PATH_PATTERN.test(target)) return true;
+  if (
+    FINAL_OUTPUT_PATH_PATTERN.test(target) &&
+    !isInternalWorkingFilePath(target)
+  ) {
+    return true;
+  }
   if (!FINAL_DELIVERABLE_PATTERN.test(target)) return false;
   if (entry.created) return true;
   const op = typeof entry.op === "string" ? entry.op.trim().toLowerCase() : "";

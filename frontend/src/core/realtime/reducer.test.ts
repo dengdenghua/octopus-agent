@@ -1218,6 +1218,41 @@ describe("reducer", () => {
     }
   });
 
+  it("unwraps JSON error envelopes and keeps raw diagnostics out of the title", () => {
+    const raw = JSON.stringify({
+      additionalDetails: null,
+      codexErrorInfo: "other",
+      message:
+        "unexpected status 409 Conflict: Responses request replay was rejected, url: http://127.0.0.1:58238/v1/responses",
+    });
+    const state = apply(
+      emptyConversation("th"),
+      {
+        method: "turn/started",
+        params: { threadId: "th", turn: blankTurn("trn-1", "th") },
+      },
+      {
+        method: "error",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          error: { message: raw },
+          willRetry: false,
+        },
+      },
+    );
+    const error = state.turns[0].items.find((item) => item.type === "error");
+    expect(error).toMatchObject({
+      type: "error",
+      message:
+        "unexpected status 409 Conflict: Responses request replay was rejected",
+      errorInfo: {
+        codexErrorInfo: "other",
+        rawMessage: raw,
+      },
+    });
+  });
+
   it("error item ids stay unique within the same millisecond", () => {
     const before = apply(emptyConversation("th"), {
       method: "turn/started",
@@ -1743,7 +1778,11 @@ describe("reducer · out-of-order event matrix", () => {
     text: "final answer",
     timelineSequence: 1,
   };
-  const INFLIGHT_ITEM = { ...FINAL_ITEM, status: "inProgress" as const, text: "" };
+  const INFLIGHT_ITEM = {
+    ...FINAL_ITEM,
+    status: "inProgress" as const,
+    text: "",
+  };
 
   const events = () => [
     {

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 
-import { getOctopusBaseURL } from "@/core/config";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 
@@ -45,7 +44,12 @@ export function isPackagedShell(
 
 async function backendReady(): Promise<boolean> {
   try {
-    const res = await fetch(`${getOctopusBaseURL()}/readyz`, {
+    // The packaged shell serves the renderer from octopus-app://app and
+    // reaches the loopback backend only through the protocol proxy's
+    // route prefixes. The readiness endpoint lives at the backend root
+    // (/readyz, NOT under /api), so request it same-origin relative:
+    // packaged → protocol proxy, dev → Vite dev-server proxy.
+    const res = await fetch("/readyz", {
       method: "GET",
       signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
     });

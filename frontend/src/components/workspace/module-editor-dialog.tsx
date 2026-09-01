@@ -29,6 +29,9 @@ import {
 } from "@/core/modules/enabled-modules";
 import type { ModuleGroup } from "@/core/modules/types";
 import { cn } from "@/lib/utils";
+import { useActiveAgentId } from "@/core/agents/active";
+import { DEFAULT_PRIMARY_AGENT_ID } from "@/core/agents/persona-policy";
+import { workspacePresetForAgent } from "@/core/workspace/workspace-presets";
 
 export function ModuleEditorDialog({
   open,
@@ -38,7 +41,9 @@ export function ModuleEditorDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const { t } = useI18n();
-  const enabledIds = useEnabledModuleIds();
+  const activeAgentId = useActiveAgentId() ?? DEFAULT_PRIMARY_AGENT_ID;
+  const preset = workspacePresetForAgent(activeAgentId);
+  const enabledIds = useEnabledModuleIds(activeAgentId);
   const enabled = new Set(enabledIds);
 
   const label = (key: string) =>
@@ -53,7 +58,7 @@ export function ModuleEditorDialog({
               {t.sidebar.editModules}
             </DialogTitle>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {t.sidebar.editModulesHint}
+              {t.sidebar.editModulesHint} · {preset.direction}
             </p>
           </div>
           <Button size="sm" onClick={() => onOpenChange(false)}>
@@ -67,6 +72,7 @@ export function ModuleEditorDialog({
               key={group}
               group={group}
               enabled={enabled}
+              activeAgentId={activeAgentId}
               label={label}
               pinnedLabel={t.sidebar.modulePinned}
             />
@@ -80,11 +86,13 @@ export function ModuleEditorDialog({
 function ModuleGroupSection({
   group,
   enabled,
+  activeAgentId,
   label,
   pinnedLabel,
 }: {
   group: ModuleGroup;
   enabled: Set<string>;
+  activeAgentId: string;
   label: (key: string) => string;
   pinnedLabel: string;
 }) {
@@ -106,7 +114,7 @@ function ModuleGroupSection({
                 enabled={isOn}
                 removable={m.removable}
                 pinnedLabel={pinnedLabel}
-                onToggle={() => setModuleEnabled(m.id, !isOn)}
+                onToggle={() => setModuleEnabled(m.id, !isOn, activeAgentId)}
               />
             </li>
           );

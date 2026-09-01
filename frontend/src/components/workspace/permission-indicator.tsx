@@ -88,7 +88,7 @@ export function PermissionIndicator({
             className={cn(
               "flex items-center gap-1.5 text-xs font-medium transition-colors duration-base",
               isBypassMode
-                ? "h-8 px-1.5 text-warning hover:text-warning dark:hover:text-warning"
+                ? "h-8 rounded-lg px-1.5 text-muted-foreground hover:bg-muted/55 hover:text-foreground"
                 : compact
                   ? "h-8 rounded-lg px-1.5 text-muted-foreground hover:bg-muted/55 hover:text-foreground"
                   : cn("h-8 rounded-lg px-2.5", PERMISSION_TRIGGER_TONE),
@@ -98,7 +98,7 @@ export function PermissionIndicator({
             aria-label={`${t.chatInputBox.permissionModeLabel}: ${current.label}`}
           >
             {isBypassMode ? (
-              <ShieldAlertIcon className="size-3.5" />
+              <ShieldAlertIcon className="size-3.5 text-warning" />
             ) : (
               <ShieldCheckIcon className="size-3 opacity-75" />
             )}

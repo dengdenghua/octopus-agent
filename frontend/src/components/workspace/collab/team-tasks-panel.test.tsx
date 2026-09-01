@@ -152,87 +152,25 @@ describe("<TeamTasksPanel /> process timeline", () => {
     );
   });
 
-  test("shows CLI recovery groups and failure labels for local partner task output", async () => {
-    const user = userEvent.setup();
-    fetchMock.mockImplementation((input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes("/api/team-tasks")) {
-        return Promise.resolve(
-          jsonResponse({
-            tasks: [
-              taskFixture({
-                id: "task-cli",
-                title: "local CLI recovery",
-                status: "failed",
-                produced_artifacts: [
-                  {
-                    id: "artifact-trae",
-                    type: "cli_team_diff",
-                    title: "local_trae_cli · no changes",
-                    content: "model access denied",
-                    ok: false,
-                    failure_kind: "entitlement",
-                    failure_label: "账号权益",
-                  },
-                  {
-                    id: "artifact-qoder",
-                    type: "cli_team_diff",
-                    title: "local_qoder_cli · no changes",
-                    content: "unknown option --output-format",
-                    ok: false,
-                    failure_kind: "version",
-                    failure_label: "版本不兼容",
-                  },
-                ],
-                metadata: {
-                  runner: {
-                    engine: "cli_team",
-                    recovery_groups: [
-                      {
-                        failure_kind: "entitlement",
-                        label: "账号权益",
-                        count: 1,
-                        members: [{ label: "local_trae_cli" }],
-                        fix_hints: ["确认 CLI 账号订阅/企业授权。"],
-                      },
-                      {
-                        failure_kind: "version",
-                        label: "版本不兼容",
-                        count: 1,
-                        members: [{ label: "local_qoder_cli" }],
-                        fix_hints: ["升级 CLI 后重试。"],
-                      },
-                    ],
-                  },
-                },
-              }),
-            ],
-            count: 1,
-          }),
-        );
-      }
-      return Promise.resolve(jsonResponse({}));
+  test("shows adaptive orchestration only for a real multi-agent team", async () => {
+    const team = teamFixture();
+    team.members.push({
+      name: "researcher",
+      display_name: "Researcher",
+      description: "Research specialist",
+      icon: null,
+      avatar_url: null,
+      model: null,
+      tool_groups: null,
     });
 
-    renderWithProviders(
-      <TeamTasksPanel roomId="room-1" team={teamFixture()} />,
-      { locale: "zh-CN" },
+    renderWithProviders(<TeamTasksPanel roomId="room-1" team={team} />, {
+      locale: "zh-CN",
+    });
+
+    expect(await screen.findByText("timeline evidence smoke")).toBeInTheDocument();
+    expect(screen.getByTestId("adaptive-orchestration-badge")).toHaveTextContent(
+      "动态编排",
     );
-
-    expect(await screen.findByText("local CLI recovery")).toBeInTheDocument();
-    expect(screen.getByText("CLI 恢复分组")).toBeInTheDocument();
-    expect(screen.getByText("账号权益")).toBeInTheDocument();
-    expect(screen.getByText("local_trae_cli")).toBeInTheDocument();
-    expect(screen.getByText("建议：确认 CLI 账号订阅/企业授权。")).toBeInTheDocument();
-    expect(screen.getByText("版本不兼容")).toBeInTheDocument();
-    expect(screen.getByText("local_qoder_cli")).toBeInTheDocument();
-    expect(screen.getByText("建议：升级 CLI 后重试。")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /2 个产物/ }));
-
-    expect(screen.getByText("model access denied")).toBeInTheDocument();
-    expect(screen.getAllByText("账号权益").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("unknown option --output-format")).toBeInTheDocument();
-    expect(screen.getAllByText("版本不兼容").length).toBeGreaterThanOrEqual(2);
   });
 });

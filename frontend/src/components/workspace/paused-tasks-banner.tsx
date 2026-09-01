@@ -36,8 +36,10 @@ export function PausedTasksBanner({ className }: Props) {
     user_request: b.reasonUserRequest,
     budget_near_limit: b.reasonBudgetNearLimit,
     iteration_near_limit: b.reasonIterationNearLimit,
+    model_spinning: b.reasonExternal,
     external: b.reasonExternal,
     client_disconnect: b.reasonExternal,
+    approval_required: t.toolApproval.requiresApproval,
   } as Record<PauseReason, string>;
   const tasks = useTasks("all");
   const resume = useResumeTask();
@@ -51,9 +53,9 @@ export function PausedTasksBanner({ className }: Props) {
   const [dismissedBudgetDialogs, setDismissedBudgetDialogs] = useState<
     Set<string>
   >(() => new Set());
-  const [extraTokensK, setExtraTokensK] = useState("250");
-  const [extraUsd, setExtraUsd] = useState("5");
-  const [extraIterations, setExtraIterations] = useState("80");
+  const [extraTokensK, setExtraTokensK] = useState("100");
+  const [extraUsd, setExtraUsd] = useState("0");
+  const [extraIterations, setExtraIterations] = useState("15");
 
   // Implementation note.
   // Implementation note.
@@ -204,16 +206,26 @@ export function PausedTasksBanner({ className }: Props) {
                 {t.task_id.slice(0, 10)}
               </span>
             </div>
-            {(t.max_tokens > 0 || t.max_usd > 0) && (
+            {(t.tokens_spent > 0 ||
+              (t.context_capacity_tokens ?? 0) > 0 ||
+              t.max_usd > 0) && (
               <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                {t.max_tokens > 0 && (
+                {(t.context_capacity_tokens ?? 0) > 0 && (
                   <span>
-                    {b.tokensLabel}{" "}
+                    ctx{" "}
                     <span className="font-mono">
-                      {(t.tokens_spent / 1000).toFixed(1)}k /
-                      {(t.max_tokens / 1000).toFixed(0)}k
+                      {((t.current_context_tokens ?? 0) / 1000).toFixed(1)}k /
+                      {((t.context_capacity_tokens ?? 0) / 1000).toFixed(0)}k
                     </span>
-                    {t.tokens_spent / t.max_tokens >= 0.7 ? " ⚠" : ""}
+                    {(t.context_utilization ?? 0) >= 0.7 ? " ⚠" : ""}
+                  </span>
+                )}
+                {t.tokens_spent > 0 && (
+                  <span title={b.tokensLabel}>
+                    Σ{" "}
+                    <span className="font-mono">
+                      {(t.tokens_spent / 1000).toFixed(1)}k
+                    </span>
                   </span>
                 )}
                 {t.max_usd > 0 && (

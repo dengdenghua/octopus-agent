@@ -42,14 +42,14 @@ describe("task collaborator presets", () => {
     expect(taskCollaboratorRouteForLeader("general")).toBe(
       "/workspace/realtime/new",
     );
-    expect(taskCollaboratorRouteForLeader("local codex")).toBe(
+    expect(taskCollaboratorRouteForLeader("installed expert")).toBe(
       "/workspace/realtime/new",
     );
   });
 
   test("normalizes a non-squad leader back to the fixed default identity", () => {
     writeTaskCollaboratorPreset({
-      leaderId: "local_opencode_cli",
+      leaderId: "installed_researcher",
       collaboratorIds: ["research-advisor"],
     });
 

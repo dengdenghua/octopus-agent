@@ -1,6 +1,5 @@
 import {
   ArrowLeftIcon,
-  AlertTriangleIcon,
   BotIcon,
   CheckCircle2Icon,
   ChevronDownIcon,
@@ -14,7 +13,6 @@ import {
   Loader2Icon,
   MonitorIcon,
   MoreHorizontalIcon,
-  TargetIcon,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -51,6 +49,7 @@ import {
   emitAgentWorkbenchFocus,
 } from "./agent-workbench-events";
 import { useSubtask } from "@/core/tasks/context";
+import { RoutedWebLink } from "@/components/ui/routed-web-link";
 import { SubtaskHoverPreview } from "./messages/parallel-subtasks-grid";
 import {
   Tooltip,
@@ -107,30 +106,6 @@ export function WorkbenchEmptyPage({
           {description}
         </p>
       </div>
-    </div>
-  );
-}
-
-function ReceiptMetric({
-  label,
-  tone,
-}: {
-  label: string;
-  tone: "success" | "warning" | "neutral" | "muted";
-}) {
-  return (
-    <div
-      className={cn(
-        "truncate rounded-md border px-2.5 py-2 text-xs",
-        tone === "success" && "border-success/20 bg-success/5 text-success",
-        tone === "warning" &&
-          "border-warning/25 bg-warning/5 text-warning-foreground",
-        tone === "neutral" && "border-border-subtle bg-muted/25 text-foreground",
-        tone === "muted" && "border-border-subtle bg-muted/15 text-muted-foreground",
-      )}
-      title={label}
-    >
-      {label}
     </div>
   );
 }
@@ -959,7 +934,7 @@ export function AgentSummaryPage({
   onCompressContext,
   onSelectTab,
   onOpenArtifact,
-  resultPreviewUrl,
+  resultPreviewUrl: _resultPreviewUrl,
 }: {
   phases: AgentPhase[];
   diffEntries: DiffEntry[];
@@ -1152,10 +1127,17 @@ export function AgentSummaryPage({
     0,
   );
   useEffect(() => {
-    if (runActive) return;
-
     setExpandedSections((previous) => {
       const next = new Set(previous);
+      if (runActive && hasTodoPlan) {
+        // During a planned run, the current task is the primary surface.
+        // Outputs and context remain one click away without competing for the
+        // same vertical space.
+        next.delete("artifacts");
+        next.delete("references");
+      } else if (runActive) {
+        return previous;
+      }
       // Progress section stays always expanded when workbench is open
       next.add("progress");
       if (diffEntries.length > 0) {
@@ -1169,7 +1151,7 @@ export function AgentSummaryPage({
       }
       return next;
     });
-  }, [diffEntries.length, runActive]);
+  }, [diffEntries.length, hasTodoPlan, runActive]);
   const agentHealth = useMemo(() => {
     const total = agentTiles.length;
     const done = agentTiles.filter((agent) => agent.status === "done").length;
@@ -1188,17 +1170,6 @@ export function AgentSummaryPage({
     return { done, failed, failedLabels, pending, running, total };
   }, [agentTiles]);
 
-  const currentObjective =
-    runningPhase ??
-    phases.find((phase) => phase.status === "error") ??
-    phases.find((phase) => phase.status === "pending") ??
-    phases[phases.length - 1] ??
-    null;
-  const objectiveStatus =
-    currentObjective && hasLiveAgents && !runningPhase
-      ? ("running" as const)
-      : currentObjective?.status;
-  const objectiveDetail = currentObjective?.detail || null;
   const recoveredCount = blocks.filter(
     (block) => block.status === "warning",
   ).length;
@@ -1214,18 +1185,10 @@ export function AgentSummaryPage({
   const unresolvedCount =
     errorPhaseCount +
     phases.filter((phase) => phase.status === "waiting_approval").length;
+  // The plan and artifact sections already describe normal progress. Keep the
+  // receipt for the exceptional information users may need to act on or audit.
   const showResultReceipt =
-    !runActive ||
-    diffEntries.length > 0 ||
-    recoveredCount > 0 ||
-    unresolvedCount > 0;
-  const objectiveHint =
-    objectiveDetail ||
-    (objectiveStatus === "done"
-      ? t.agentWorkbench.phaseCompleted
-      : objectiveStatus === "error"
-        ? t.agentWorkbenchPages.statusError
-        : t.agentWorkbenchPages.currentObjectiveHint);
+    !runActive && (recoveredCount > 0 || unresolvedCount > 0);
 
   // 上下文容量估算
   const contextStats = useMemo(() => {
@@ -1352,69 +1315,6 @@ export function AgentSummaryPage({
   return (
     <div className="stable-scroll-viewport flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
       <div className="mx-auto w-full max-w-2xl px-5 py-4 pb-8">
-        {currentObjective && (
-          <section
-            className={cn(
-              "mb-2 rounded-xl border px-4 py-3",
-              objectiveStatus === "error"
-                ? "border-destructive/25 bg-destructive/5"
-                : objectiveStatus === "waiting_approval"
-                  ? "border-warning/30 bg-warning/5"
-                  : objectiveStatus === "done"
-                    ? "border-success/20 bg-success/5"
-                    : "border-info/25 bg-info/5",
-            )}
-            data-testid="workbench-current-objective"
-          >
-            <div className="flex items-start gap-3">
-              {objectiveStatus === "error" ? (
-                <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
-              ) : objectiveStatus === "done" ? (
-                <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-success" />
-              ) : (
-                <TargetIcon className="mt-0.5 size-4 shrink-0 text-info" />
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-micro font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                    {t.agentWorkbenchPages.currentObjective}
-                  </span>
-                  <span className="ml-auto shrink-0 text-micro text-muted-foreground">
-                    {objectiveStatus === "running"
-                      ? t.agentWorkbenchPages.statusRunning
-                      : objectiveStatus === "waiting_approval"
-                        ? t.agentWorkbenchPages.statusWaitingApproval
-                        : objectiveStatus === "error"
-                          ? t.agentWorkbenchPages.statusError
-                          : t.agentWorkbenchPages.statusDone}
-                  </span>
-                </div>
-                <div className="mt-1 text-sm font-medium leading-5 text-foreground">
-                  {agentPhaseDisplayTitle(currentObjective, t.agentPhases)}
-                </div>
-                <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {objectiveHint}
-                </div>
-                {phases.length > 1 && (
-                  <div className="mt-3 flex items-center gap-2">
-                    <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-background/70">
-                      <div
-                        className="h-full rounded-full bg-info transition-all"
-                        style={{
-                          width: `${Math.round((Math.max(0, donePhaseCount) / phases.length) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                    <span className="shrink-0 font-mono text-micro text-muted-foreground">
-                      {donePhaseCount}/{phases.length}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </section>
-        )}
-
         {/* 思考/执行详情均在对话框内完整展示，右侧不再重复渲染。
             The task plan stays visible even when a transcript process event is
             focused: selecting evidence must not erase the user's todo list. */}
@@ -1456,9 +1356,6 @@ export function AgentSummaryPage({
                           )}
                 {phases.length > 0 && errorPhaseCount > 0
                   ? ` · ${errorPhaseCount} ${phaseStatusText("error")}`
-                  : ""}
-                {diffEntries.length > 0
-                  ? ` · ${t.agentWorkbenchPages.artifacts} ${diffEntries.length}`
                   : ""}
               </span>
               {expandedSections.has("progress") ? (
@@ -1611,54 +1508,6 @@ export function AgentSummaryPage({
                     {latestRecovery.subtitle}
                   </p>
                 )}
-                <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-3">
-                  <ReceiptMetric
-                    label={t.agentWorkbenchPages.verifiedSteps(donePhaseCount)}
-                    tone="success"
-                  />
-                  <ReceiptMetric
-                    label={
-                      diffEntries.length > 0
-                        ? `${t.agentWorkbenchPages.artifacts} ${diffEntries.length}`
-                        : `${t.agentWorkbenchPages.artifacts} 0`
-                    }
-                    tone={diffEntries.length > 0 ? "neutral" : "muted"}
-                  />
-                  <ReceiptMetric
-                    label={
-                      unresolvedCount > 0
-                        ? t.agentWorkbenchPages.unresolvedSteps(unresolvedCount)
-                        : runActive
-                          ? t.agentWorkbenchPages.statusRunning
-                          : recoveredCount > 0
-                          ? t.agentWorkbenchPages.recoveredOperations(recoveredCount)
-                          : t.agentWorkbenchPages.statusDone
-                    }
-                    tone={unresolvedCount > 0 ? "warning" : "neutral"}
-                  />
-                </div>
-                {(resultPreviewUrl || diffEntries.length > 0) && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {resultPreviewUrl && (
-                      <button
-                        type="button"
-                        onClick={() => onSelectTab?.("browser")}
-                        className="rounded-md border border-border-subtle bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/55"
-                      >
-                        {t.agentWorkbenchPages.browserTab}
-                      </button>
-                    )}
-                    {diffEntries.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => onSelectTab?.("diff")}
-                        className="rounded-md border border-border-subtle bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/55"
-                      >
-                        {t.agentWorkbenchPages.diffTab}
-                      </button>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
           </section>
@@ -1697,13 +1546,8 @@ export function AgentSummaryPage({
               <div className="mt-3">
                 {artifactDiffEntries.length > 0 && (
                   <>
-                    <div className="mb-1 flex items-center gap-1.5">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {t.agentWorkbenchPages.generatedArtifacts}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {artifactDiffEntries.length}
-                      </span>
+                    <div className="sr-only">
+                      {t.agentWorkbenchPages.generatedArtifacts}
                     </div>
                     <SummaryDiffEntryList
                       entries={artifactDiffEntries}
@@ -2016,15 +1860,14 @@ export function AgentSummaryPage({
                       return (
                         <li key={ref.id}>
                           {ref.url ? (
-                            <a
+                            <RoutedWebLink
                               href={ref.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                              openTargetSource="agent-reference"
                               title={ref.subtitle || ref.url}
                               className="group -mx-1 flex min-h-9 items-center gap-3 rounded-md px-1 py-1.5 transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                             >
                               {row}
-                            </a>
+                            </RoutedWebLink>
                           ) : (
                             <div className="-mx-1 flex min-h-9 items-center gap-3 px-1 py-1.5">
                               {row}

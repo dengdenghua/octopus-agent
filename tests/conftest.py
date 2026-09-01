@@ -137,39 +137,6 @@ def _disable_os_keychain(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _deterministic_plugin_policy_coverage(monkeypatch):
-    """Keep readiness verdicts independent of locally installed Codex plugins.
-
-    ``permission_sandbox_quality._plugin_policy_coverage`` scans
-    ``.octopus/plugins/codex`` and only reports ``ready`` when it finds at
-    least one plugin yielding verified permission-rule drafts. That directory
-    holds whatever the developer installed, so the e2e-surpass verdict tracked
-    the machine rather than the code: this checkout has ~20 plugins and yields
-    ``needs_behavioral_evidence``, while a fresh clone sees the 2 tracked ones,
-    produces no drafts, and drops to ``needs_work`` — nine tests across
-    test_production_readiness_gate / test_evolution_modules /
-    test_evolution_router flipped red on clone alone.
-
-    Pinning a ready report keeps those tests asserting gate logic. Tests that
-    care about the not-ready branch stub the coverage themselves.
-    """
-    from runtime.safety.evolution import permission_sandbox_quality as _psq
-
-    monkeypatch.setattr(
-        _psq,
-        "_plugin_policy_coverage",
-        lambda _base: {
-            "schema": "octopus.plugin_permission_rule_coverage.v1",
-            "ready": True,
-            "plugin_count": 1,
-            "total": 1,
-            "verified": 1,
-            "next_actions": [],
-        },
-    )
-
-
-@pytest.fixture(autouse=True)
 def _protect_live_custom_models():
     """Restore ``data/custom_models.json`` if a test writes the live copy.
 

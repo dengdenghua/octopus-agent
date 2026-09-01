@@ -3,7 +3,10 @@ import { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { useI18n } from "@/core/i18n/hooks";
-import { workspaceAgentReturnRoute } from "@/core/workspace/sidebar-routing";
+import {
+  BROWSER_WORKSPACE_ROUTE,
+  workspaceAgentReturnRoute,
+} from "@/core/workspace/sidebar-routing";
 import { cn } from "@/lib/utils";
 
 type WorkspaceSurfaceMode = "agent" | "browser";
@@ -57,7 +60,7 @@ export function WorkspaceSurfaceSwitch({
       kind: "brand" as const,
     },
     {
-      to: "/browser",
+      to: BROWSER_WORKSPACE_ROUTE,
       label: t.sidebar.navBrowserSurface,
       icon: GlobeIcon,
       value: "browser" as const,

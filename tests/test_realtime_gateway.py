@@ -368,14 +368,16 @@ def test_realtime_rejects_unauthenticated_when_required(
         pass
 
 
-def test_realtime_accepts_query_token_when_required(
+def test_realtime_rejects_query_token_when_required(
     authenticated_gateway_client: Any,
 ) -> None:
     client, _ = authenticated_gateway_client
-    with client.websocket_connect("/api/realtime?token=sk-alice") as ws:
-        outcome = _drive_turn(ws, thread_id="auth_th", text="hello auth")
-
-    assert outcome["response"].result["turn"]["status"] == "completed"
+    assert WebSocketDisconnect is not None
+    with (
+        pytest.raises(WebSocketDisconnect),
+        client.websocket_connect("/api/realtime?token=sk-alice"),
+    ):
+        pass
 
 
 def test_realtime_accepts_subprotocol_token_when_required(
@@ -416,7 +418,7 @@ def test_realtime_thread_resume_rejects_other_actor(
     two_actor_gateway_client: Any,
 ) -> None:
     client, _ = two_actor_gateway_client
-    with client.websocket_connect("/api/realtime?token=sk-alice") as ws:
+    with client.websocket_connect("/api/realtime", subprotocols=["bearer", "sk-alice"]) as ws:
         _drive_turn(
             ws,
             thread_id="auth_owner_thread",
@@ -424,7 +426,7 @@ def test_realtime_thread_resume_rejects_other_actor(
             approval_policy="never",
         )
 
-    with client.websocket_connect("/api/realtime?token=sk-bob") as ws:
+    with client.websocket_connect("/api/realtime", subprotocols=["bearer", "sk-bob"]) as ws:
         _send(
             ws,
             JsonRpcRequest(

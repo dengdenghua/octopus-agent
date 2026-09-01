@@ -27,7 +27,7 @@ vi.mock("@/components/workspace/workspace-container", () => ({
 }));
 
 describe("EvolutionPage", () => {
-  it("consolidates evolution into overview, evidence, and governance", async () => {
+  it("consolidates evolution into overview, experiments, candidates, deployments, and governance", async () => {
     const user = userEvent.setup();
     renderWithProviders(<EvolutionPage />, {
       locale: "zh-CN",
@@ -38,8 +38,14 @@ describe("EvolutionPage", () => {
     expect(screen.queryByText("游戏化")).not.toBeInTheDocument();
     expect(screen.queryByText("经典视图")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "实验证据" }));
-    expect(screen.getByText("helix-evidence")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "实验" }));
+    expect(screen.getByText("helix-experiments")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "候选" }));
+    expect(screen.getByText("helix-candidates")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "部署" }));
+    expect(screen.getByText("helix-deployments")).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "安全治理" }));
     expect(await screen.findByText("governance-panel")).toBeInTheDocument();

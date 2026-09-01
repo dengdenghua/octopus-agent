@@ -51,7 +51,9 @@ import { RunReviewPanel } from "@/components/workspace/run-review-panel";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
 import {
+  GlobalControlPlaneAccessError,
   authorizeToolEffectRetry,
+  globalControlPlaneUrl,
   type ToolEffectReceipt,
   type ToolEffectsSnapshot,
 } from "@/core/observability/api";
@@ -65,46 +67,73 @@ function useHeartbeat<T>(
   url: string,
   intervalMs: number,
   initial: T,
+  options: { globalControlPlane?: boolean } = {},
 ): {
   data: T;
   loading: boolean;
   error: string | null;
+  forbidden: boolean;
   refresh: () => void;
   lastFetchedAt: number | null;
 } {
+  const globalControlPlane = options.globalControlPlane === true;
   const [data, setData] = useState<T>(initial);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [forbidden, setForbidden] = useState(false);
   const [lastFetchedAt, setLastFetchedAt] = useState<number | null>(null);
   const tickRef = useRef(0);
+  const pollingStoppedRef = useRef(false);
 
   const fetchOnce = useCallback(async () => {
+    if (!url || pollingStoppedRef.current) {
+      setLoading(false);
+      return;
+    }
     const my = ++tickRef.current;
     try {
       const r = await fetch(url, { headers: authHeaders() });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (!r.ok) {
+        if (globalControlPlane && r.status === 403) {
+          pollingStoppedRef.current = true;
+          throw new GlobalControlPlaneAccessError();
+        }
+        throw new Error(`HTTP ${r.status}`);
+      }
       const j = (await r.json()) as T;
       // Drop stale responses if a newer request was started.
       if (tickRef.current !== my) return;
       setData(j);
       setError(null);
+      setForbidden(false);
       setLastFetchedAt(Date.now());
     } catch (e) {
       swallow(e);
       if (tickRef.current !== my) return;
       setError(e instanceof Error ? e.message : String(e));
+      setForbidden(e instanceof GlobalControlPlaneAccessError);
     } finally {
       if (tickRef.current === my) setLoading(false);
     }
-  }, [url]);
+  }, [globalControlPlane, url]);
 
   useEffect(() => {
+    pollingStoppedRef.current = false;
+    setForbidden(false);
     void fetchOnce();
-    const t = window.setInterval(fetchOnce, intervalMs);
+    const t = window.setInterval(() => {
+      if (!pollingStoppedRef.current) void fetchOnce();
+    }, intervalMs);
     return () => window.clearInterval(t);
   }, [fetchOnce, intervalMs]);
 
-  return { data, loading, error, refresh: fetchOnce, lastFetchedAt };
+  const refresh = useCallback(() => {
+    pollingStoppedRef.current = false;
+    setForbidden(false);
+    void fetchOnce();
+  }, [fetchOnce]);
+
+  return { data, loading, error, forbidden, refresh, lastFetchedAt };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -139,7 +168,9 @@ export default function ObservabilityPage({
               </div>
               <div className="flex shrink-0 gap-2">
                 <Button asChild className="h-9 rounded-full px-4">
-                  <Link to="/workspace/realtime/new">开始一次任务</Link>
+                  <Link to="/workspace/realtime/new">
+                    {t.observabilityPage.shell.startTask}
+                  </Link>
                 </Button>
               </div>
             </div>
@@ -147,23 +178,23 @@ export default function ObservabilityPage({
             <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <ObservabilitySignalCard
                 icon={<ActivityIcon className="size-4" />}
-                title="运行复盘"
-                description="先看任务是否顺畅，哪里报错，哪里值得回看。"
+                title={t.observabilityPage.shell.runReviewTitle}
+                description={t.observabilityPage.shell.runReviewDescription}
               />
               <ObservabilitySignalCard
                 icon={<NetworkIcon className="size-4" />}
-                title="实时事件"
-                description="并行协作、黑板和日志流合并成一个事件视图。"
+                title={t.observabilityPage.shell.liveEventsTitle}
+                description={t.observabilityPage.shell.liveEventsDescription}
               />
               <ObservabilitySignalCard
                 icon={<GaugeIcon className="size-4" />}
-                title="资源与成本"
-                description="上下文预算、令牌消耗和成本汇总放在一起看。"
+                title={t.observabilityPage.shell.resourcesTitle}
+                description={t.observabilityPage.shell.resourcesDescription}
               />
               <ObservabilitySignalCard
                 icon={<BrainCircuitIcon className="size-4" />}
-                title="系统状态"
-                description="自进化、诊断和后台状态统一收口。"
+                title={t.observabilityPage.shell.systemTitle}
+                description={t.observabilityPage.shell.systemDescription}
               />
             </div>
           </section>
@@ -172,19 +203,19 @@ export default function ObservabilityPage({
             <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1 md:grid-cols-4">
               <TabsTrigger value="overview" className="py-2">
                 <ActivityIcon className="mr-1.5 size-3.5" />
-                总览
+                {t.observabilityPage.shell.overviewTab}
               </TabsTrigger>
               <TabsTrigger value="events" className="py-2">
                 <NetworkIcon className="mr-1.5 size-3.5" />
-                事件流
+                {t.observabilityPage.shell.eventsTab}
               </TabsTrigger>
               <TabsTrigger value="resources" className="py-2">
                 <GaugeIcon className="mr-1.5 size-3.5" />
-                资源与成本
+                {t.observabilityPage.shell.resourcesTab}
               </TabsTrigger>
               <TabsTrigger value="system" className="py-2">
                 <BrainCircuitIcon className="mr-1.5 size-3.5" />
-                系统
+                {t.observabilityPage.shell.systemTab}
               </TabsTrigger>
             </TabsList>
 
@@ -193,9 +224,11 @@ export default function ObservabilityPage({
                 <section className="workspace-panel px-5 py-4">
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <h2 className="text-base font-semibold">先从总览开始</h2>
+                      <h2 className="text-base font-semibold">
+                        {t.observabilityPage.shell.overviewTitle}
+                      </h2>
                       <p className="text-sm text-muted-foreground">
-                        把当前后台的健康、事件、资源和系统状态分成四个视角，扫一眼就知道该去哪里。
+                        {t.observabilityPage.shell.overviewDescription}
                       </p>
                     </div>
                     <Button
@@ -203,7 +236,9 @@ export default function ObservabilityPage({
                       variant="outline"
                       className="h-9 rounded-full px-4"
                     >
-                      <Link to="/workspace/realtime/new">打开一次新任务</Link>
+                      <Link to="/workspace/realtime/new">
+                        {t.observabilityPage.shell.openNewTask}
+                      </Link>
                     </Button>
                   </div>
                 </section>
@@ -213,9 +248,9 @@ export default function ObservabilityPage({
 
             <TabsContent value="events" className="mt-4 space-y-4">
               <PanelGroup
-                eyebrow="事件流"
-                title="运行、协作和日志放到一起看"
-                description="这部分保留了原有的运行复盘、协作、黑板和日志，但不再把它们拆成一长排标签。"
+                eyebrow={t.observabilityPage.shell.eventsEyebrow}
+                title={t.observabilityPage.shell.eventsTitle}
+                description={t.observabilityPage.shell.eventsDescription}
               >
                 <RunReviewPanel />
                 <SwarmPanel />
@@ -226,9 +261,11 @@ export default function ObservabilityPage({
 
             <TabsContent value="resources" className="mt-4 space-y-4">
               <PanelGroup
-                eyebrow="资源与成本"
-                title="先看预算，再看账单"
-                description="把上下文预算和花费放在同一个层级里，减少来回切换。"
+                eyebrow={t.observabilityPage.shell.resourcesEyebrow}
+                title={t.observabilityPage.shell.resourcesGroupTitle}
+                description={
+                  t.observabilityPage.shell.resourcesGroupDescription
+                }
               >
                 <HemolymphPanel />
                 <CostPanel />
@@ -237,9 +274,9 @@ export default function ObservabilityPage({
 
             <TabsContent value="system" className="mt-4 space-y-4">
               <PanelGroup
-                eyebrow="系统"
-                title="把后台状态和自进化收口"
-                description="诊断不再单独占一个孤岛标签，而是和自进化一起作为系统视图。"
+                eyebrow={t.observabilityPage.shell.systemEyebrow}
+                title={t.observabilityPage.shell.systemGroupTitle}
+                description={t.observabilityPage.shell.systemGroupDescription}
               >
                 <ToolEffectsPanel />
                 <RegenerationPanel />
@@ -310,79 +347,79 @@ function SwarmPanel() {
             step?: { sucker_id?: string; node_id?: string };
           };
 
-        // sub_tool_start / sub_tool_end · the new direct-from-journal
-        // path (preferred — carries role_id, tool_name, error status).
-        if (
-          p.event_type === "sub_tool_start" ||
-          p.event_type === "sub_tool_end"
-        ) {
-          const callId = p.tool_call_id;
-          if (!callId) return;
-          setEvents((prev) => {
-            const idx = prev.findIndex((r) => r.id === callId);
-            if (p.event_type === "sub_tool_start") {
-              if (idx >= 0) return prev; // dedupe
-              const startRec: SubToolRecord = {
-                id: callId,
-                name: p.tool_name ?? "?",
-                sub_agent_role: p.role_id,
-                parent_tool_use_id:
-                  p.parent_tool_use_id ?? p.task_id ?? undefined,
-                status: "running",
-                started_at: Date.now(),
-              };
-              return [...prev, startRec].slice(-40);
-            }
-            // sub_tool_end · update existing record (or append closed)
-            const endStatus: "error" | "success" = p.is_error
-              ? "error"
-              : "success";
-            if (idx < 0) {
-              const closedRec: SubToolRecord = {
-                id: callId,
-                name: p.tool_name ?? "?",
-                sub_agent_role: p.role_id,
-                parent_tool_use_id:
-                  p.parent_tool_use_id ?? p.task_id ?? undefined,
+          // sub_tool_start / sub_tool_end · the new direct-from-journal
+          // path (preferred — carries role_id, tool_name, error status).
+          if (
+            p.event_type === "sub_tool_start" ||
+            p.event_type === "sub_tool_end"
+          ) {
+            const callId = p.tool_call_id;
+            if (!callId) return;
+            setEvents((prev) => {
+              const idx = prev.findIndex((r) => r.id === callId);
+              if (p.event_type === "sub_tool_start") {
+                if (idx >= 0) return prev; // dedupe
+                const startRec: SubToolRecord = {
+                  id: callId,
+                  name: p.tool_name ?? "?",
+                  sub_agent_role: p.role_id,
+                  parent_tool_use_id:
+                    p.parent_tool_use_id ?? p.task_id ?? undefined,
+                  status: "running",
+                  started_at: Date.now(),
+                };
+                return [...prev, startRec].slice(-40);
+              }
+              // sub_tool_end · update existing record (or append closed)
+              const endStatus: "error" | "success" = p.is_error
+                ? "error"
+                : "success";
+              if (idx < 0) {
+                const closedRec: SubToolRecord = {
+                  id: callId,
+                  name: p.tool_name ?? "?",
+                  sub_agent_role: p.role_id,
+                  parent_tool_use_id:
+                    p.parent_tool_use_id ?? p.task_id ?? undefined,
+                  status: endStatus,
+                  started_at: Date.now(),
+                  finished_at: Date.now(),
+                };
+                return [...prev, closedRec].slice(-40);
+              }
+              const existing = prev[idx];
+              if (!existing) return prev;
+              const updated = [...prev];
+              const merged: SubToolRecord = {
+                ...existing,
                 status: endStatus,
-                started_at: Date.now(),
                 finished_at: Date.now(),
               };
-              return [...prev, closedRec].slice(-40);
-            }
-            const existing = prev[idx];
-            if (!existing) return prev;
-            const updated = [...prev];
-            const merged: SubToolRecord = {
-              ...existing,
-              status: endStatus,
-              finished_at: Date.now(),
-            };
-            updated[idx] = merged;
-            return updated;
-          });
-          return;
-        }
+              updated[idx] = merged;
+              return updated;
+            });
+            return;
+          }
 
-        // Legacy `step` fallback for plain skill calls (kept so the
-        // panel still shows non-subagent activity).
-        if (p.event_type !== "step") return;
-        const sid = p.step?.sucker_id;
-        if (!sid) return;
-        setEvents((prev) => {
-          const next: SubToolRecord[] = [
-            ...prev,
-            {
-              id: `${p.task_id ?? "?"}-${p.step?.node_id ?? "?"}-${prev.length}`,
-              name: sid,
-              parent_tool_use_id: p.task_id,
-              status: "success",
-              started_at: Date.now(),
-              finished_at: Date.now(),
-            },
-          ];
-          return next.slice(-40);
-        });
+          // Legacy `step` fallback for plain skill calls (kept so the
+          // panel still shows non-subagent activity).
+          if (p.event_type !== "step") return;
+          const sid = p.step?.sucker_id;
+          if (!sid) return;
+          setEvents((prev) => {
+            const next: SubToolRecord[] = [
+              ...prev,
+              {
+                id: `${p.task_id ?? "?"}-${p.step?.node_id ?? "?"}-${prev.length}`,
+                name: sid,
+                parent_tool_use_id: p.task_id,
+                status: "success",
+                started_at: Date.now(),
+                finished_at: Date.now(),
+              },
+            ];
+            return next.slice(-40);
+          });
         } catch (e) {
           swallow(e);
         }
@@ -503,11 +540,11 @@ interface BlackboardSnapResp {
 
 function BlackboardPanel() {
   const { t } = useI18n();
-  const base = getBackendBaseURL();
   const list = useHeartbeat<BlackboardListResp>(
-    `${base}/api/blackboard`,
+    globalControlPlaneUrl("/api/blackboard"),
     3000,
     { turns: [] },
+    { globalControlPlane: true },
   );
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -520,10 +557,32 @@ function BlackboardPanel() {
   }, [list.data.turns, selected]);
 
   const snap = useHeartbeat<BlackboardSnapResp | null>(
-    selected ? `${base}/api/blackboard?turn_id=${selected}` : "",
+    selected
+      ? globalControlPlaneUrl(
+          `/api/blackboard?turn_id=${encodeURIComponent(selected)}`,
+        )
+      : "",
     2000,
     null,
+    { globalControlPlane: true },
   );
+
+  if (list.error) {
+    return (
+      <ErrorState
+        title={
+          list.forbidden
+            ? t.observabilityPage.crossTenantAdminRequired
+            : t.observabilityPage.errorPrefix
+        }
+        detail={
+          list.forbidden
+            ? t.observabilityPage.crossTenantAdminRequired
+            : list.error
+        }
+      />
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-[260px_1fr]">
@@ -692,7 +751,13 @@ function JournalPanel() {
     )
       return;
     setEvents([]);
-  }, [confirm, events.length, t.observabilityPage.clearConfirmTitle, t.observabilityPage.clearConfirmDescription, t.observabilityPage.clear]);
+  }, [
+    confirm,
+    events.length,
+    t.observabilityPage.clearConfirmTitle,
+    t.observabilityPage.clearConfirmDescription,
+    t.observabilityPage.clear,
+  ]);
 
   useEffect(() => {
     const base = getBackendBaseURL();
@@ -757,11 +822,7 @@ function JournalPanel() {
         </div>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {Object.entries(counts).map(([kind, n]) => (
-            <Badge
-              key={kind}
-              variant="outline"
-              className="text-xs font-mono"
-            >
+            <Badge key={kind} variant="outline" className="text-xs font-mono">
               {kind} · {n}
             </Badge>
           ))}
@@ -816,10 +877,7 @@ function JournalPanel() {
                     e.event_type === "sub_tool_end") && (
                     <span className="text-xs truncate flex items-center gap-1.5">
                       {e.role_id && (
-                        <Badge
-                          variant="outline"
-                          className="text-xs font-mono"
-                        >
+                        <Badge variant="outline" className="text-xs font-mono">
                           {e.role_id}
                         </Badge>
                       )}
@@ -929,12 +987,14 @@ const EMPTY_TOOL_EFFECTS: ToolEffectsSnapshot = {
 };
 
 export function ToolEffectsPanel() {
-  const base = getBackendBaseURL();
-  const { data, loading, error, refresh } = useHeartbeat<ToolEffectsSnapshot>(
-    `${base}/api/tool-effects?limit=100`,
-    3000,
-    EMPTY_TOOL_EFFECTS,
-  );
+  const { t } = useI18n();
+  const { data, loading, error, forbidden, refresh } =
+    useHeartbeat<ToolEffectsSnapshot>(
+      globalControlPlaneUrl("/api/tool-effects?limit=100"),
+      3000,
+      EMPTY_TOOL_EFFECTS,
+      { globalControlPlane: true },
+    );
   const [selected, setSelected] = useState<ToolEffectReceipt | null>(null);
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -953,16 +1013,20 @@ export function ToolEffectsPanel() {
     setSubmitting(true);
     try {
       await authorizeToolEffectRetry(selected, reason.trim());
-      toast.success("已允许一次受 fencing token 保护的重试");
+      toast.success(t.observabilityPage.toolEffects.retryAuthorizedSuccess);
       setSelected(null);
       setReason("");
       refresh();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "放行失败");
+      toast.error(
+        cause instanceof Error
+          ? cause.message
+          : t.observabilityPage.toolEffects.retryAuthorizationFailed,
+      );
     } finally {
       setSubmitting(false);
     }
-  }, [reason, refresh, selected]);
+  }, [reason, refresh, selected, t.observabilityPage.toolEffects]);
 
   return (
     <>
@@ -971,22 +1035,24 @@ export function ToolEffectsPanel() {
           <div>
             <CardTitle className="flex items-center gap-2 text-sm">
               <ShieldAlertIcon className="size-4 text-warning" />
-              外部动作回执
+              {t.observabilityPage.toolEffects.title}
             </CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
-              识别重复执行、节点接管和必须人工核对的外部副作用。
+              {t.observabilityPage.toolEffects.description}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant={indeterminate > 0 ? "destructive" : "secondary"}>
-              {indeterminate > 0 ? `${indeterminate} 项待核对` : "无待核对项"}
+              {indeterminate > 0
+                ? t.observabilityPage.toolEffects.pendingReview(indeterminate)
+                : t.observabilityPage.toolEffects.noPendingReview}
             </Badge>
             <Button
               size="icon"
               variant="ghost"
               className="size-8"
               onClick={refresh}
-              aria-label="刷新外部动作回执"
+              aria-label={t.observabilityPage.toolEffects.refreshAriaLabel}
             >
               <RefreshCwIcon
                 className={cn("size-3.5", loading && "animate-spin")}
@@ -997,16 +1063,19 @@ export function ToolEffectsPanel() {
         <CardContent>
           <div className="mb-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
             <span className="rounded-full bg-muted px-2.5 py-1">
-              后端 · {data.backend}
+              {t.observabilityPage.toolEffects.backendLabel} · {data.backend}
             </span>
             <span className="rounded-full bg-muted px-2.5 py-1">
-              {data.shared_across_hosts ? "跨节点共享" : "本机协调"}
+              {data.shared_across_hosts
+                ? t.observabilityPage.toolEffects.sharedAcrossHosts
+                : t.observabilityPage.toolEffects.localCoordination}
             </span>
             <span className="rounded-full bg-muted px-2.5 py-1">
-              已提交 · {data.state_counts.committed ?? 0}
+              {t.observabilityPage.toolEffects.committedLabel} ·{" "}
+              {data.state_counts.committed ?? 0}
             </span>
             <span className="rounded-full bg-muted px-2.5 py-1">
-              执行中 ·{" "}
+              {t.observabilityPage.toolEffects.runningLabel} ·{" "}
               {(data.state_counts.claimed ?? 0) +
                 (data.state_counts.started ?? 0)}
             </span>
@@ -1014,11 +1083,13 @@ export function ToolEffectsPanel() {
 
           {error ? (
             <div className="rounded-lg bg-destructive/8 px-3 py-3 text-xs text-destructive">
-              回执状态读取失败：{error}
+              {forbidden
+                ? t.observabilityPage.crossTenantAdminRequired
+                : t.observabilityPage.toolEffects.loadFailed(error)}
             </div>
           ) : data.receipts.length === 0 ? (
             <div className="rounded-lg bg-muted/30 px-3 py-5 text-center text-xs text-muted-foreground">
-              暂无外部动作回执；工具执行后会自动出现在这里。
+              {t.observabilityPage.toolEffects.empty}
             </div>
           ) : (
             <div className="divide-y divide-border-default/70 rounded-lg border border-border-default/70">
@@ -1030,13 +1101,17 @@ export function ToolEffectsPanel() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="truncate text-xs font-medium">
-                        {receipt.sucker_id || "未知工具"}
+                        {receipt.sucker_id ||
+                          t.observabilityPage.toolEffects.unknownTool}
                       </span>
                       <EffectStateBadge state={receipt.state} />
                     </div>
                     <div className="mt-1 truncate text-xs text-muted-foreground">
-                      任务 {receipt.task_id.slice(0, 12) || "—"} · 步骤{" "}
-                      {receipt.step_id} · token {receipt.fencing_token}
+                      {t.observabilityPage.toolEffects.receiptMeta(
+                        receipt.task_id.slice(0, 12) || "—",
+                        receipt.step_id,
+                        receipt.fencing_token,
+                      )}
                     </div>
                     {receipt.reason && (
                       <p className="mt-1 line-clamp-2 text-xs text-warning">
@@ -1056,14 +1131,14 @@ export function ToolEffectsPanel() {
                         }}
                       >
                         <RotateCcwIcon className="mr-1.5 size-3" />
-                        核对后重试
+                        {t.observabilityPage.toolEffects.reviewAndRetry}
                       </Button>
                     )}
                 </div>
               ))}
               {hasCollapsedReceipts && (
                 <div className="px-3 py-2 text-center text-xs text-muted-foreground">
-                  已收起历史提交记录，仅保留需关注项与最近 6 条
+                  {t.observabilityPage.toolEffects.collapsedHistory}
                 </div>
               )}
             </div>
@@ -1079,10 +1154,11 @@ export function ToolEffectsPanel() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>确认外部动作没有发生</DialogTitle>
+            <DialogTitle>
+              {t.observabilityPage.toolEffects.confirmTitle}
+            </DialogTitle>
             <DialogDescription>
-              只有在外部系统、文件或远程服务中确认该动作没有成功后才能放行。系统会核对
-              fencing token，页面过期时不会误操作新回执。
+              {t.observabilityPage.toolEffects.confirmDescription}
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
@@ -1091,7 +1167,7 @@ export function ToolEffectsPanel() {
           <Textarea
             value={reason}
             onChange={(event) => setReason(event.target.value)}
-            placeholder="填写核对依据，例如：支付平台确认没有生成订单。"
+            placeholder={t.observabilityPage.toolEffects.reasonPlaceholder}
             className="min-h-24"
           />
           <DialogFooter>
@@ -1100,14 +1176,16 @@ export function ToolEffectsPanel() {
               onClick={() => setSelected(null)}
               disabled={submitting}
             >
-              取消
+              {t.observabilityPage.toolEffects.cancel}
             </Button>
             <Button
               variant="destructive"
               onClick={() => void authorize()}
               disabled={submitting || reason.trim().length < 8}
             >
-              {submitting ? "正在核对状态…" : "确认未发生并允许重试"}
+              {submitting
+                ? t.observabilityPage.toolEffects.submitting
+                : t.observabilityPage.toolEffects.confirmRetry}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1117,12 +1195,13 @@ export function ToolEffectsPanel() {
 }
 
 function EffectStateBadge({ state }: { state: ToolEffectReceipt["state"] }) {
+  const { t } = useI18n();
   const labels: Record<ToolEffectReceipt["state"], string> = {
-    claimed: "已占用",
-    started: "执行中",
-    committed: "已提交",
-    indeterminate: "需核对",
-    retry_authorized: "已放行一次",
+    claimed: t.observabilityPage.toolEffects.states.claimed,
+    started: t.observabilityPage.toolEffects.states.started,
+    committed: t.observabilityPage.toolEffects.states.committed,
+    indeterminate: t.observabilityPage.toolEffects.states.indeterminate,
+    retry_authorized: t.observabilityPage.toolEffects.states.retryAuthorized,
   };
   return (
     <Badge
@@ -1162,12 +1241,13 @@ interface RegenSummary {
 
 function RegenerationPanel() {
   const { t } = useI18n();
-  const base = getBackendBaseURL();
-  const { data, loading, error, refresh } = useHeartbeat<RegenSummary | null>(
-    `${base}/api/regeneration/summary`,
-    5000,
-    null,
-  );
+  const { data, loading, error, forbidden, refresh } =
+    useHeartbeat<RegenSummary | null>(
+      globalControlPlaneUrl("/api/regeneration/summary"),
+      5000,
+      null,
+      { globalControlPlane: true },
+    );
 
   if (loading && !data) {
     return <LoadingState title={t.observabilityPage.loading} />;
@@ -1175,8 +1255,14 @@ function RegenerationPanel() {
   if (error) {
     return (
       <ErrorState
-        title={t.observabilityPage.errorPrefix}
-        detail={error}
+        title={
+          forbidden
+            ? t.observabilityPage.crossTenantAdminRequired
+            : t.observabilityPage.errorPrefix
+        }
+        detail={
+          forbidden ? t.observabilityPage.crossTenantAdminRequired : error
+        }
       />
     );
   }
@@ -1274,9 +1360,7 @@ function RegenerationPanel() {
             </CardHeader>
             <CardContent>
               <div className="text-lg font-bold">{p.metric}</div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                {p.hint}
-              </div>
+              <div className="mt-1 text-xs text-muted-foreground">{p.hint}</div>
             </CardContent>
           </Card>
         ))}
@@ -1306,12 +1390,27 @@ interface HemolymphResp {
 
 function HemolymphPanel() {
   const { t } = useI18n();
-  const base = getBackendBaseURL();
-  const { data } = useHeartbeat<HemolymphResp>(
-    `${base}/api/hemolymph/recent?limit=20`,
+  const { data, error, forbidden } = useHeartbeat<HemolymphResp>(
+    globalControlPlaneUrl("/api/hemolymph/recent?limit=20"),
     3000,
     { count: 0, max_tracked: 50, snapshots: [] },
+    { globalControlPlane: true },
   );
+
+  if (error) {
+    return (
+      <ErrorState
+        title={
+          forbidden
+            ? t.observabilityPage.crossTenantAdminRequired
+            : t.observabilityPage.errorPrefix
+        }
+        detail={
+          forbidden ? t.observabilityPage.crossTenantAdminRequired : error
+        }
+      />
+    );
+  }
 
   const latest = data.snapshots[data.snapshots.length - 1];
   const buckets = ["system", "suckers", "memory", "history"] as const;
@@ -1500,6 +1599,7 @@ function CostPanel() {
     <div className="space-y-3">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <StatTile
+          testId="cost-total-tokens"
           label={t.observabilityPage.cumulativeTokens}
           value={data.total_tokens.toLocaleString()}
         />
@@ -1508,6 +1608,7 @@ function CostPanel() {
           value={`$${data.total_usd.toFixed(4)}`}
         />
         <StatTile
+          testId="cost-commit-count"
           label={t.observabilityPage.commitCount}
           value={data.commit_count.toLocaleString()}
         />
@@ -1597,9 +1698,20 @@ function CostPanel() {
 // Shared UI helpers
 // ═══════════════════════════════════════════════════════════
 
-function StatTile({ label, value }: { label: string; value: string }) {
+function StatTile({
+  label,
+  value,
+  testId,
+}: {
+  label: string;
+  value: string;
+  testId?: string;
+}) {
   return (
-    <div className="rounded-lg border border-border-default bg-muted/20 p-3">
+    <div
+      data-testid={testId}
+      className="rounded-lg border border-border-default bg-muted/20 p-3"
+    >
       <div className="text-xs uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
@@ -1625,9 +1737,7 @@ function StatusDot({ status }: { status: string }) {
   return (
     <div className="flex items-center gap-1.5">
       <span className={cn("size-1.5 rounded-full", cls)} />
-      <span className="text-xs text-muted-foreground uppercase">
-        {label}
-      </span>
+      <span className="text-xs text-muted-foreground uppercase">{label}</span>
     </div>
   );
 }
@@ -1664,8 +1774,7 @@ function eventRowColor(kind: string): string {
   if (kind.startsWith("budget")) return "bg-warning/5";
   if (kind === "file_op") return "bg-primary/5";
   if (kind === "browser_artifact") return "bg-chart-1/5";
-  if (kind === "sub_tool_start" || kind === "sub_tool_end")
-    return "bg-info/5";
+  if (kind === "sub_tool_start" || kind === "sub_tool_end") return "bg-info/5";
   return "";
 }
 

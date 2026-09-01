@@ -17,7 +17,9 @@ import {
 import type { FileOpEvent } from "@/core/observability/api";
 import { useFileOpStream } from "@/core/observability/file-ops";
 import { useI18n } from "@/core/i18n/hooks";
+import { canAccessOperatorControlPlane } from "@/core/auth/control-plane-access";
 import { cn } from "@/lib/utils";
+import { useOptionalAuth } from "@/providers/AuthProvider";
 
 interface Props {
   className?: string;
@@ -25,7 +27,14 @@ interface Props {
 
 export function FileActivityIndicator({ className }: Props) {
   const { t } = useI18n();
-  const events = useFileOpStream({ limit: 20 });
+  const auth = useOptionalAuth();
+  const events = useFileOpStream({
+    limit: 20,
+    enabled: canAccessOperatorControlPlane(
+      auth?.authStatus ?? null,
+      auth?.user ?? null,
+    ),
+  });
   const [flashKey, setFlashKey] = useState<number | null>(null);
   const latest = events[events.length - 1];
 
@@ -115,9 +124,7 @@ function FileOpRow({ event }: { event: FileOpEvent }) {
           action={event.action}
           className="size-3 text-muted-foreground shrink-0"
         />
-        <span className="flex-1 font-mono text-xs truncate">
-          {event.path}
-        </span>
+        <span className="flex-1 font-mono text-xs truncate">{event.path}</span>
         <span className="text-xs text-muted-foreground tabular-nums shrink-0">
           {formatDelta(event.bytes_delta)}
         </span>
@@ -141,9 +148,7 @@ function DiffBlock({ diff }: { diff: string }) {
           key={i}
           className={cn(
             "block",
-            line.startsWith("+") &&
-              !line.startsWith("+++") &&
-              "text-success",
+            line.startsWith("+") && !line.startsWith("+++") && "text-success",
             line.startsWith("-") &&
               !line.startsWith("---") &&
               "text-destructive",

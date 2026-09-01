@@ -90,8 +90,41 @@ describe("UnifiedAssetsPanel", () => {
     expect(screen.getAllByText("Codex").length).toBeGreaterThan(0);
     // 调用参数
     expect(mocks.fetchUnifiedAssets).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: "plugin", limit: 1000 }),
+      expect.objectContaining({ kind: "plugin", limit: 60, offset: 0 }),
     );
+  });
+
+  it("按页加载统一资产而不是首屏拉取全部数据", async () => {
+    const firstPage = Array.from({ length: 60 }, (_, index) => ({
+      ...makeItems()[0],
+      id: `plugin-${index}`,
+      name_zh: `插件 ${index}`,
+    }));
+    mocks.fetchUnifiedAssets
+      .mockResolvedValueOnce({
+        summary,
+        total: 61,
+        items: firstPage,
+        kind_filter: "plugin",
+      })
+      .mockResolvedValueOnce({
+        summary,
+        total: 61,
+        items: [{ ...makeItems()[0], id: "plugin-60", name_zh: "插件 60" }],
+        kind_filter: "plugin",
+      });
+
+    renderWithProviders(<UnifiedAssetsPanel />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "加载更多(1)" }),
+    );
+
+    await waitFor(() =>
+      expect(mocks.fetchUnifiedAssets).toHaveBeenLastCalledWith(
+        expect.objectContaining({ limit: 60, offset: 60 }),
+      ),
+    );
+    expect(await screen.findByText("插件 60")).toBeInTheDocument();
   });
 
   it("切换技能 tab 会按 skill 重新拉取", async () => {
@@ -149,6 +182,31 @@ describe("UnifiedAssetsPanel", () => {
     await userEvent.click(screen.getByRole("tab", { name: /技能/ }));
     await waitFor(() => {
       expect(mocks.fetchUnifiedAssets).toHaveBeenLastCalledWith(
+        expect.objectContaining({ kind: "skill" }),
+      );
+    });
+  });
+
+  it("单一 Skills 视图不重复展示类型导航", async () => {
+    mocks.fetchUnifiedAssets.mockResolvedValue({
+      summary,
+      total: 1,
+      items: makeItems().filter((item) => item.kind === "skill"),
+      kind_filter: "skill",
+    });
+
+    renderWithProviders(
+      <UnifiedAssetsPanel
+        allowedKinds={["skill"]}
+        initialKind="skill"
+        showSyncAction={false}
+      />,
+    );
+
+    expect(screen.queryByRole("tab", { name: /技能/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "全部" })).toBeVisible();
+    await waitFor(() => {
+      expect(mocks.fetchUnifiedAssets).toHaveBeenCalledWith(
         expect.objectContaining({ kind: "skill" }),
       );
     });

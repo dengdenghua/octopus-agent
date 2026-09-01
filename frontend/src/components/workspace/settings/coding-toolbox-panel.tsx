@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 
 type CodingToolboxPanelProps = {
   onOpen?: (target: "tools" | "automationSecurity") => void;
+  compact?: boolean;
 };
 
 const ITEMS = [
@@ -56,7 +57,42 @@ const ITEMS = [
   },
 ] as const;
 
-export function CodingToolboxPanel({ onOpen }: CodingToolboxPanelProps) {
+export function CodingToolboxPanel({ onOpen, compact = false }: CodingToolboxPanelProps) {
+  if (compact) {
+    return (
+      <aside
+        aria-label="编码工具箱"
+        className="flex w-16 shrink-0 flex-col items-center gap-2 border-r border-border bg-muted/10 px-2 py-3"
+      >
+        {ITEMS.map((item) => {
+          const Icon = item.icon;
+          const clickable = item.key === "connections" || item.key === "environment";
+          return (
+            <button
+              key={item.key}
+              type="button"
+              disabled={!clickable}
+              onClick={() => {
+                if (item.key === "connections") onOpen?.("tools");
+                if (item.key === "environment") onOpen?.("automationSecurity");
+              }}
+              title={`${item.label} · ${item.detail}`}
+              className={cn(
+                "flex size-11 flex-col items-center justify-center gap-0.5 rounded-lg border border-transparent text-muted-foreground transition-colors",
+                clickable
+                  ? "hover:border-primary/30 hover:bg-primary/[0.06] hover:text-foreground"
+                  : "cursor-default",
+              )}
+            >
+              <Icon className={cn("size-4", item.tone)} aria-hidden="true" />
+              <span className="text-[9px] leading-3">{item.label}</span>
+            </button>
+          );
+        })}
+      </aside>
+    );
+  }
+
   return (
     <section
       aria-labelledby="coding-toolbox-title"

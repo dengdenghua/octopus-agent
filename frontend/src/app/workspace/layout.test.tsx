@@ -52,6 +52,52 @@ describe("<WorkspaceLayout /> stub response banner", () => {
     expect(screen.queryByText("模拟后端响应")).not.toBeInTheDocument();
   });
 
+  test("applies the active persona's illustration palette to the workspace", () => {
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn((key: string) =>
+        key === "octopus.active-agent" ? "market_researcher" : null,
+      ),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    });
+
+    renderWithProviders(<WorkspaceLayout />, { locale: "zh-CN" });
+
+    expect(screen.getByText("sidebar").parentElement).toHaveAttribute(
+      "data-persona-theme",
+      "noah",
+    );
+  });
+
+  test("renders design chat as an embedded surface without duplicating the sidebar", () => {
+    renderWithProviders(<WorkspaceLayout />, {
+      initialRoute: "/workspace/realtime/new?embedded=design",
+      locale: "zh-CN",
+    });
+
+    expect(screen.queryByText("sidebar")).not.toBeInTheDocument();
+    expect(screen.getByTestId("workspace-location").textContent).toBe(
+      "/workspace/realtime/new?embedded=design",
+    );
+    expect(
+      screen
+        .getByTestId("workspace-location")
+        .closest('[data-slot="sidebar-wrapper"]'),
+    ).not.toBeNull();
+  });
+
+  test("renders desktop apps as embedded workspaces without duplicating the sidebar", () => {
+    renderWithProviders(<WorkspaceLayout />, {
+      initialRoute: "/workspace/storage?library=images&embedded=app",
+      locale: "zh-CN",
+    });
+
+    expect(screen.queryByText("sidebar")).not.toBeInTheDocument();
+    expect(screen.getByTestId("workspace-location").textContent).toBe(
+      "/workspace/storage?library=images&embedded=app",
+    );
+  });
+
   test("shows stub response banners when debug flag is enabled", () => {
     vi.stubGlobal("localStorage", {
       getItem: vi.fn((key: string) =>

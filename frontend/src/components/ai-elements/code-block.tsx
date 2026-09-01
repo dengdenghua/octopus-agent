@@ -105,6 +105,32 @@ function LightweightCodeBlock({ code, wrap }: { code: string; wrap: boolean }) {
   );
 }
 
+/**
+ * Placeholder for a SETTLED (historical) code block whose first shiki
+ * highlight has not arrived yet. Readers reloading a conversation should
+ * never watch raw code "morph" into highlighted code — a neutral skeleton
+ * holds the geometry (same p-4 padding, one row per source line at
+ * leading-6 rhythm) until the real render is ready. Static bars only, no
+ * shimmer/pulse: this is a wait state, not live activity.
+ */
+function SettledCodeSkeleton({ code }: { code: string }) {
+  const lines = Math.max(code.split("\n").length, 1);
+  return (
+    <div className="flex flex-col p-4" aria-hidden="true">
+      {Array.from({ length: lines }, (_, i) => (
+        <div key={i} className="flex h-6 items-center">
+          <div
+            className={cn(
+              "h-3 rounded-sm bg-muted-foreground/10",
+              i % 3 === 2 ? "w-2/3" : "w-full",
+            )}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export const CodeBlock = ({
   code,
   language,
@@ -149,6 +175,14 @@ export const CodeBlock = ({
       }
     };
 
+    // A rejected highlight (grammar/engine failure) must not surface as an
+    // unhandled rejection — the block simply keeps its plain-text render.
+    const highlightSafely = (promise: Promise<string>) => {
+      promise.then(applyHighlight).catch((error: unknown) => {
+        swallow(error, "shiki-highlight");
+      });
+    };
+
     if (isStreaming) {
       // Keep the last rendered highlight instead of clearing it on every
       // token. Clearing per-token made the block flash back to plain text
@@ -156,8 +190,8 @@ export const CodeBlock = ({
       // the debounced one as soon as the stream pauses.
       highlightTimerRef.current = setTimeout(() => {
         highlightTimerRef.current = null;
-        void highlightCode(code, language, showLineNumbers, shikiTheme).then(
-          applyHighlight,
+        highlightSafely(
+          highlightCode(code, language, showLineNumbers, shikiTheme),
         );
       }, 150);
     } else {
@@ -165,8 +199,8 @@ export const CodeBlock = ({
       // highlight on screen until the fresh one arrives. Clearing here used
       // to flash one frame of unhighlighted plain text between the stream
       // and the final highlight.
-      void highlightCode(code, language, showLineNumbers, shikiTheme).then(
-        applyHighlight,
+      highlightSafely(
+        highlightCode(code, language, showLineNumbers, shikiTheme),
       );
     }
 
@@ -237,10 +271,15 @@ export const CodeBlock = ({
               // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized via DOMPurify (audit C3/M4).
               dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html) }}
             />
-          ) : (
+          ) : isStreaming ? (
             <div className="size-full overflow-auto">
               <LightweightCodeBlock code={code} wrap={wrap} />
             </div>
+          ) : (
+            // Settled historical block still waiting for its first
+            // highlight: show a geometry-stable placeholder instead of
+            // flashing raw text that later "reorganizes" into colors.
+            <SettledCodeSkeleton code={code} />
           )}
         </div>
       </div>

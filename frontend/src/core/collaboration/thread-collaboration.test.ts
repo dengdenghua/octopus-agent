@@ -88,9 +88,9 @@ describe("thread collaboration recovery", () => {
                 role: "tl",
               },
               {
-                agent_id: "local_codex_cli",
-                display_name: "Codex CLI",
-                avatar_url: "/avatar/codex.png",
+                agent_id: "installed_code_reviewer",
+                display_name: "Code Reviewer",
+                avatar_url: "/avatar/reviewer.png",
                 role: "member",
               },
             ],
@@ -109,11 +109,11 @@ describe("thread collaboration recovery", () => {
         role: "tl",
       },
       {
-        agent_id: "local_codex_cli",
-        avatar_url: "/avatar/codex.png",
-        display_name: "Codex CLI",
+        agent_id: "installed_code_reviewer",
+        avatar_url: "/avatar/reviewer.png",
+        display_name: "Code Reviewer",
         icon: null,
-        name: "local_codex_cli",
+        name: "installed_code_reviewer",
         role: "member",
       },
     ]);
@@ -124,7 +124,12 @@ describe("thread collaboration recovery", () => {
       collaborationRosterFromThread(
         {},
         {
-          task_agent_refs: ["general", "coder", "coder", "local_claude_code"],
+          task_agent_refs: [
+            "general",
+            "coder",
+            "coder",
+            "installed_code_reviewer",
+          ],
         },
         "general",
       ),
@@ -142,9 +147,9 @@ describe("thread collaboration recovery", () => {
         role: "member",
       },
       {
-        agent_id: "local_claude_code",
-        display_name: "local_claude_code",
-        name: "local_claude_code",
+        agent_id: "installed_code_reviewer",
+        display_name: "installed_code_reviewer",
+        name: "installed_code_reviewer",
         role: "member",
       },
     ]);

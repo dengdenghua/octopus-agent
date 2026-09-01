@@ -3,13 +3,14 @@
  * (P3 decomposition). Pure functions, no React; independently testable.
  */
 export const PRIMARY_WORKSPACE_ROUTE = "/workspace/realtime/new";
+export const BROWSER_WORKSPACE_ROUTE = "/browser";
 
 /**
  * Resolve where the EchoAI side of the workspace switch should return.
  *
- * The browser surface lives at `/browser`, outside the workspace route tree.
- * Keep the last internal workspace location so switching back does not discard
- * the active conversation, project, or settings context.
+ * The complete browser mode lives outside the workspace route tree. Keep the
+ * last workspace location so switching back does not discard the active
+ * conversation, project, or settings context.
  */
 export function workspaceAgentReturnRoute(
   pathname: string,
@@ -17,6 +18,19 @@ export function workspaceAgentReturnRoute(
   rememberedRoute?: string | null,
 ): string {
   const currentRoute = `${pathname}${search}`;
+  if (
+    pathname === BROWSER_WORKSPACE_ROUTE ||
+    pathname.startsWith(`${BROWSER_WORKSPACE_ROUTE}/`)
+  ) {
+    if (
+      rememberedRoute === "/workspace" ||
+      (rememberedRoute?.startsWith("/workspace/") &&
+        !rememberedRoute.startsWith(BROWSER_WORKSPACE_ROUTE))
+    ) {
+      return rememberedRoute;
+    }
+    return PRIMARY_WORKSPACE_ROUTE;
+  }
   if (pathname === "/workspace" || pathname.startsWith("/workspace/")) {
     return currentRoute;
   }

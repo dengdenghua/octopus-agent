@@ -36,6 +36,27 @@ export const ROUTE_LOCKS: { prefix: string; agent: string }[] = [
   // in chat mode — they're just "pulled into the group".
 ];
 
+export function activeAgentIdForLocation(
+  pathname: string,
+  search: string,
+  storedAgentId: string | null,
+): string | null {
+  const locked = routeLock(pathname);
+  if (locked) return locked;
+
+  // A fresh-task URL is an explicit persona choice. Resolve it synchronously
+  // so the workspace shell does not paint the previously stored persona for a
+  // frame before the realtime page's effects persist the new choice.
+  if (/^\/workspace\/realtime\/new(?:\/|$)/.test(pathname)) {
+    const requested = normalizeAgentId(
+      new URLSearchParams(search).get("agent"),
+    );
+    if (requested && isPrimaryPersonaAgentId(requested)) return requested;
+  }
+
+  return storedAgentId;
+}
+
 function routeLock(pathname: string): string | null {
   const agentChatMatch = /^\/workspace\/agents\/([^/]+)\/chats(?:\/|$)/.exec(
     pathname,
@@ -96,8 +117,7 @@ function readActive(): string | null {
  *  consumers can't drift off the owning persona.
  */
 export function useActiveAgentId(): string | null {
-  const { pathname } = useLocation();
-  const locked = routeLock(pathname);
+  const { pathname, search } = useLocation();
   const [id, setId] = useState<string | null>(() => readActive());
 
   // Subscribe to EventBus agent changes
@@ -122,5 +142,5 @@ export function useActiveAgentId(): string | null {
     };
   }, []);
 
-  return locked ?? id;
+  return activeAgentIdForLocation(pathname, search, id);
 }

@@ -48,6 +48,8 @@ export async function forgetMCPOAuth(serverName: string): Promise<void> {
 export interface MCPOAuthAuthorizeResult {
   ok: boolean;
   authorize_url: string;
+  /** Some provider consent pages return through a desktop custom scheme. */
+  callback_transport?: "standard" | "desktop-deep-link";
   /** 服务商直连 OAuth(GitHub 等)尚未配置 OAuth App 凭据 → 前端引导填写。 */
   needs_app_credentials?: boolean;
   provider?: string;
@@ -71,11 +73,14 @@ export async function oauthAuthorize(
   url: string,
   provider?: string,
 ): Promise<MCPOAuthAuthorizeResult> {
-  const response = await fetch(`${getBackendBaseURL()}/api/mcp/oauth/authorize`, {
-    method: "POST",
-    headers: jsonAuthHeaders(),
-    body: JSON.stringify({ server, url, provider }),
-  });
+  const response = await fetch(
+    `${getBackendBaseURL()}/api/mcp/oauth/authorize`,
+    {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify({ server, url, provider }),
+    },
+  );
   if (!response.ok) {
     const err = await response
       .json()
@@ -107,7 +112,10 @@ export async function saveOAuthApp(
     {
       method: "POST",
       headers: jsonAuthHeaders(),
-      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret }),
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
     },
   );
   await assertOk(response, "Failed to save OAuth app credentials");

@@ -16,6 +16,9 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { getRelayStatus, type RelayStatus } from "@/core/browser/api";
@@ -29,7 +32,10 @@ import { cn } from "@/lib/utils";
 type AutomationTargetControlProps = {
   value?: AutomationTarget | null;
   onChange?: (target: AutomationTarget | null) => void;
+  onAddCurrentWindow?: () => void;
+  capturingCurrentWindow?: boolean;
   disabled?: boolean;
+  placement?: "standalone" | "submenu";
 };
 
 function targetKey(target: AutomationTarget): string {
@@ -39,7 +45,10 @@ function targetKey(target: AutomationTarget): string {
 export function AutomationTargetControl({
   value,
   onChange,
+  onAddCurrentWindow,
+  capturingCurrentWindow = false,
   disabled = false,
+  placement = "standalone",
 }: AutomationTargetControlProps) {
   const { t } = useI18n();
   const [relay, setRelay] = useState<RelayStatus | null>(null);
@@ -96,6 +105,130 @@ export function AutomationTargetControl({
   const selectedLabel = value?.title?.trim() || t.chatInputBox.automationTarget;
   const SelectedIcon = value?.kind === "browser_tab" ? GlobeIcon : MonitorIcon;
 
+  const menuContent = (
+    <>
+      {onAddCurrentWindow ? (
+        <>
+          <DropdownMenuItem
+            data-testid="chat-add-appshot"
+            disabled={capturingCurrentWindow}
+            onSelect={onAddCurrentWindow}
+            className="items-start gap-2"
+          >
+            {capturingCurrentWindow ? (
+              <Loader2Icon className="mt-0.5 size-4 animate-spin" />
+            ) : (
+              <MonitorIcon className="mt-0.5 size-4" />
+            )}
+            <span className="min-w-0">
+              <span className="block text-sm">
+                {capturingCurrentWindow
+                  ? t.chatInputBox.capturingAppshot
+                  : t.chatInputBox.addAppshot}
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                {t.chatInputBox.appshotHint}
+              </span>
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+        </>
+      ) : null}
+      <DropdownMenuLabel className="flex items-center justify-between gap-2">
+        <span>{t.chatInputBox.chooseAutomationTarget}</span>
+        <button
+          type="button"
+          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          onClick={(event) => {
+            event.preventDefault();
+            void refresh();
+          }}
+          aria-label={t.chatInputBox.loadingAutomationTargets}
+        >
+          {loading ? (
+            <Loader2Icon className="size-3.5 animate-spin" />
+          ) : (
+            <RefreshCwIcon className="size-3.5" />
+          )}
+        </button>
+      </DropdownMenuLabel>
+      <DropdownMenuSeparator />
+      {targets.length ? (
+        <DropdownMenuRadioGroup
+          value={selectedKey}
+          onValueChange={(key) => {
+            const target = targets.find((item) => targetKey(item) === key);
+            if (target) onChange?.(target);
+          }}
+        >
+          {targets.map((target) => {
+            const Icon =
+              target.kind === "browser_tab" ? GlobeIcon : MonitorIcon;
+            return (
+              <DropdownMenuRadioItem
+                key={targetKey(target)}
+                value={targetKey(target)}
+                className="items-start gap-2"
+              >
+                <Icon className="mt-0.5 size-4 shrink-0" />
+                <span className="min-w-0">
+                  <span className="block truncate text-sm">{target.title}</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {target.kind === "browser_tab"
+                      ? target.url || t.chatInputBox.currentChromeTab
+                      : target.app_name || t.chatInputBox.currentDesktopWindow}
+                  </span>
+                </span>
+              </DropdownMenuRadioItem>
+            );
+          })}
+        </DropdownMenuRadioGroup>
+      ) : (
+        <div className="px-2 py-3 text-xs text-muted-foreground">
+          {loading
+            ? t.chatInputBox.loadingAutomationTargets
+            : t.chatInputBox.noAutomationTargets}
+        </div>
+      )}
+      {value ? (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem className="gap-2" onSelect={() => onChange?.(null)}>
+            <XIcon className="size-4" />
+            {t.chatInputBox.clearAutomationTarget}
+          </DropdownMenuItem>
+        </>
+      ) : null}
+    </>
+  );
+
+  if (placement === "submenu") {
+    return (
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger
+          data-testid="automation-target-submenu-trigger"
+          disabled={disabled}
+          className={cn(value && "font-medium text-primary")}
+        >
+          {value ? (
+            <SelectedIcon className="size-4" />
+          ) : (
+            <CrosshairIcon className="size-4" />
+          )}
+          <span className="min-w-0 flex-1 truncate">
+            {onAddCurrentWindow
+              ? t.chatInputBox.windowTools
+              : t.chatInputBox.automationTarget}
+            {value ? ` · ${selectedLabel}` : ""}
+          </span>
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="max-h-[min(70vh,32rem)] w-72 overflow-y-auto">
+          {menuContent}
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    );
+  }
+
   return (
     <DropdownMenu onOpenChange={(open) => open && void refresh()}>
       <DropdownMenuTrigger asChild>
@@ -126,77 +259,7 @@ export function AutomationTargetControl({
         sideOffset={8}
         className="w-72"
       >
-        <DropdownMenuLabel className="flex items-center justify-between gap-2">
-          <span>{t.chatInputBox.chooseAutomationTarget}</span>
-          <button
-            type="button"
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-            onClick={(event) => {
-              event.preventDefault();
-              void refresh();
-            }}
-            aria-label={t.chatInputBox.loadingAutomationTargets}
-          >
-            {loading ? (
-              <Loader2Icon className="size-3.5 animate-spin" />
-            ) : (
-              <RefreshCwIcon className="size-3.5" />
-            )}
-          </button>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {targets.length ? (
-          <DropdownMenuRadioGroup
-            value={selectedKey}
-            onValueChange={(key) => {
-              const target = targets.find((item) => targetKey(item) === key);
-              if (target) onChange?.(target);
-            }}
-          >
-            {targets.map((target) => {
-              const Icon =
-                target.kind === "browser_tab" ? GlobeIcon : MonitorIcon;
-              return (
-                <DropdownMenuRadioItem
-                  key={targetKey(target)}
-                  value={targetKey(target)}
-                  className="items-start gap-2"
-                >
-                  <Icon className="mt-0.5 size-4 shrink-0" />
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm">
-                      {target.title}
-                    </span>
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {target.kind === "browser_tab"
-                        ? target.url || t.chatInputBox.currentChromeTab
-                        : target.app_name ||
-                          t.chatInputBox.currentDesktopWindow}
-                    </span>
-                  </span>
-                </DropdownMenuRadioItem>
-              );
-            })}
-          </DropdownMenuRadioGroup>
-        ) : (
-          <div className="px-2 py-3 text-xs text-muted-foreground">
-            {loading
-              ? t.chatInputBox.loadingAutomationTargets
-              : t.chatInputBox.noAutomationTargets}
-          </div>
-        )}
-        {value ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="gap-2"
-              onSelect={() => onChange?.(null)}
-            >
-              <XIcon className="size-4" />
-              {t.chatInputBox.clearAutomationTarget}
-            </DropdownMenuItem>
-          </>
-        ) : null}
+        {menuContent}
       </DropdownMenuContent>
     </DropdownMenu>
   );

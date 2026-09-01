@@ -33,6 +33,10 @@ export function useProfile() {
     queryFn: () => accountApi.getProfile(),
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
+    // Local/community deployments may intentionally omit the optional
+    // profile service. Fail fast so Settings can render the authenticated
+    // account fallback instead of showing a retrying skeleton for seconds.
+    retry: false,
   });
 }
 
@@ -121,6 +125,7 @@ export function usePrivacySettings() {
     queryFn: () => accountApi.getPrivacySettings(),
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
+    retry: false,
   });
 }
 
@@ -147,6 +152,7 @@ export function useSubscription() {
     queryFn: () => accountApi.getSubscription(),
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
+    retry: false,
   });
 }
 

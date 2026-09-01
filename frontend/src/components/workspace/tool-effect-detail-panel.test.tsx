@@ -87,7 +87,7 @@ describe("ToolEffectDetailPanel", () => {
       );
       expect(post).toBeDefined();
       expect(String(post?.[0])).toContain(
-        "/api/tool-effects/effect%3Apayment/authorize-retry",
+        "/api/tool-effects/effect%3Apayment/authorize-retry?cross_tenant=true",
       );
       expect(JSON.parse(String(post?.[1]?.body))).toMatchObject({
         confirm: "AUTHORIZE RETRY",
@@ -110,17 +110,16 @@ describe("ToolEffectDetailPanel", () => {
 
     renderWithProviders(
       <ToolEffectsProvider>
-        <ToolEffectDetailPanel
-          effectKey="effect:payment"
-          onBack={vi.fn()}
-        />
+        <ToolEffectDetailPanel effectKey="effect:payment" onBack={vi.fn()} />
       </ToolEffectsProvider>,
       { locale: "zh-CN" },
     );
 
     expect(await screen.findByText("payment_tool")).toBeInTheDocument();
     expect(
-      screen.getByText("当前账号可以查看回执，但只有管理员能放行外部动作重试。"),
+      screen.getByText(
+        "当前账号可以查看回执，但只有管理员能放行外部动作重试。",
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(

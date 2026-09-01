@@ -623,6 +623,15 @@ function EmptyState({
 }
 
 /** 拉取当前线程绑定的 Project OS 项目；未绑定项目时返回 null。 */
+export function boundProjectRefetchInterval(
+  data: ProjectFullState | null | undefined,
+): number | false {
+  // A 404 is the authoritative, normal "not a Project OS thread" state.
+  // Project-binding mutations invalidate this query explicitly, so polling a
+  // confirmed null only creates duplicate 404 traffic and noisy backend logs.
+  return data === null ? false : 15_000;
+}
+
 export function useBoundProjectState(threadId: string | undefined | null) {
   return useQuery<ProjectFullState | null>({
     queryKey: ["project", "by-thread", threadId ?? ""],
@@ -637,7 +646,7 @@ export function useBoundProjectState(threadId: string | undefined | null) {
     },
     enabled: !!threadId,
     retry: false,
-    refetchInterval: 15_000,
+    refetchInterval: (query) => boundProjectRefetchInterval(query.state.data),
   });
 }
 

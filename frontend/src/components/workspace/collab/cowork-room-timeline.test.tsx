@@ -62,7 +62,10 @@ describe("CoworkRoomTimeline", () => {
       "@agent:researcher",
     );
     expect(screen.getByText("已创建事项 · 完成竞品调研")).toBeInTheDocument();
-    expect(screen.getByTestId("cowork-system-card")).toBeInTheDocument();
+    expect(screen.getByTestId("cowork-system-card")).toHaveAttribute(
+      "data-density",
+      "compact",
+    );
 
     await user.click(screen.getByRole("button", { name: "完成竞品调研" }));
     expect(onEntityClick).toHaveBeenCalledWith(

@@ -29,6 +29,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -57,17 +62,22 @@ import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/AuthProvider";
 import type { ReasoningEffort } from "@/core/threads";
-import type { PickerModel } from "@/components/workspace/model-picker";
+import {
+  isFreePickerModel,
+  ModelContextSetting,
+  type PickerModel,
+} from "@/components/workspace/model-picker";
 
 const COPY = {
   zh: {
     triggerFallback: "Coder 模型",
     followSystem: "跟随系统模型",
-    followSystemShort: "跟随系统",
+    followSystemShort: "系统",
     followSystemDescription:
-      "沿用兼容的 Octopus 系统模型配置；凭据始终由本机后端安全管理。",
+      "沿用兼容的系统模型配置；凭据始终由本机后端安全管理。",
     accountMode: "使用 ChatGPT / Codex",
     accountModeShort: "Codex 账号",
+    subscriptionModeShort: "ChatGPT 订阅",
     accountModeDescription:
       "使用你的 ChatGPT 订阅或单独提交的 OpenAI API Key。",
     loading: "正在读取 Coder 配置…",
@@ -82,10 +92,12 @@ const COPY = {
     subtitle:
       "Coder 是普通角色；人设、技能和小队规则由 Octopus 管理，代码执行由 Codex 引擎完成。",
     sourceTitle: "模型来源",
-    systemSource: "Octopus 模型",
-    codexSource: "ChatGPT / Codex",
+    systemSource: "系统模型",
+    subscriptionSource: "ChatGPT 订阅",
+    apiKeySource: "OpenAI API Key（按量）",
     systemDefault: "跟随系统默认",
     systemDefaultHint: "使用系统当前配置",
+    smartRoutingHint: "按任务智能选择",
     systemOrchestratorHint: "当前是编排模型，请在下方选择实际模型",
     signInToChoose: "登录后选择 Codex 模型",
     reasoningShort: "推理等级",
@@ -124,6 +136,7 @@ const COPY = {
     connectors: "OpenAI Connectors",
     connectorsHint: "仅启用你明确选择的连接；调用仍需经过 Octopus 审批。",
     connectorUnavailable: "当前账号没有可访问的 Connector。",
+    accountDetails: "Connector 与用量",
     saved: "已更新 Coder 模型配置",
     loginStarted: "请在授权页面完成登录",
     loginComplete: "Codex 账号已连接",
@@ -133,15 +146,18 @@ const COPY = {
     accountSummary: (email: string, plan: string) =>
       [email, plan].filter(Boolean).join(" · ") || "Codex 账号",
     openSettings: "管理登录与模型",
+    activeSummary: (model: string) => `当前通过 Codex 引擎运行 ${model}`,
+    technicalDetails: "运行详情",
   },
   en: {
     triggerFallback: "Coder model",
     followSystem: "Follow system model",
     followSystemShort: "System",
     followSystemDescription:
-      "Use the compatible Octopus system model configuration. Credentials stay managed by the local backend.",
+      "Use the compatible system model configuration. Credentials stay managed by the local backend.",
     accountMode: "Use ChatGPT / Codex",
     accountModeShort: "Codex account",
+    subscriptionModeShort: "ChatGPT subscription",
     accountModeDescription:
       "Use your ChatGPT subscription or a separately submitted OpenAI API key.",
     loading: "Loading Coder configuration…",
@@ -156,10 +172,12 @@ const COPY = {
     subtitle:
       "Coder remains a regular role. Octopus owns its persona, skills, and team rules; Codex runs the coding work.",
     sourceTitle: "Model source",
-    systemSource: "Octopus models",
-    codexSource: "ChatGPT / Codex",
+    systemSource: "System models",
+    subscriptionSource: "ChatGPT subscription",
+    apiKeySource: "OpenAI API key (metered)",
     systemDefault: "Follow system default",
     systemDefaultHint: "Use the current system configuration",
+    smartRoutingHint: "Choose intelligently per task",
     systemOrchestratorHint:
       "The current model is an orchestrator; choose an executable model below",
     signInToChoose: "Sign in to choose Codex models",
@@ -203,6 +221,7 @@ const COPY = {
       "Only explicitly selected connections are exposed. Calls still require Octopus approval.",
     connectorUnavailable:
       "No accessible connectors are available for this account.",
+    accountDetails: "Connectors and usage",
     saved: "Coder model configuration updated",
     loginStarted: "Complete sign-in in the authorization page",
     loginComplete: "Codex account connected",
@@ -212,6 +231,9 @@ const COPY = {
     accountSummary: (email: string, plan: string) =>
       [email, plan].filter(Boolean).join(" · ") || "Codex account",
     openSettings: "Manage sign-in and models",
+    activeSummary: (model: string) =>
+      `Currently running ${model} with the Codex engine`,
+    technicalDetails: "Runtime details",
   },
 };
 
@@ -244,6 +266,19 @@ function profileLabel(
   return profile.effective_model
     ? `${source} · ${profile.effective_model}`
     : source;
+}
+
+function compactProfileLabel(
+  profile: CoderModelProfile | undefined,
+  copy: typeof COPY.en,
+) {
+  if (!profile) return copy.triggerFallback;
+  return (
+    profile.effective_model ||
+    (profile.source === "follow_system"
+      ? copy.followSystemShort
+      : copy.accountModeShort)
+  );
 }
 
 const DEFAULT_REASONING_EFFORTS: ReasoningEffort[] = [
@@ -368,9 +403,21 @@ function UsageStat({
 export function CoderEngineControl({
   systemModels = [],
   disabled = false,
+  executionEngine = "codex",
+  value,
+  onChange,
+  onEffectiveModelChange,
+  reasoningEffort,
+  onReasoningEffortChange,
 }: {
   systemModels?: PickerModel[];
   disabled?: boolean;
+  executionEngine?: "octopus" | "codex";
+  value?: string;
+  onChange?: (model: string) => void;
+  onEffectiveModelChange?: (model: string) => void;
+  reasoningEffort?: ReasoningEffort;
+  onReasoningEffortChange?: (effort: ReasoningEffort) => void;
 }) {
   const { locale } = useI18n();
   const copy = copyForLocale(locale);
@@ -462,6 +509,22 @@ export function CoderEngineControl({
     },
   });
   const profile = profileQuery.data;
+  const nativeKernel = executionEngine === "octopus";
+  const pendingNativeModelRef = useRef(value || "auto");
+  useEffect(() => {
+    pendingNativeModelRef.current = value || "auto";
+  }, [value]);
+  const nativeAccountModel = nativeKernel
+    ? String(value || "").replace(/^chatgpt[/:]/i, "")
+    : "";
+  const nativeAccountSelected =
+    nativeKernel && /^chatgpt[/:]/i.test(String(value || ""));
+  const chatGPTSubscriptionConnected =
+    accountQuery.data?.account?.type === "chatgpt";
+  const visibleAccountSource =
+    accountQuery.data?.account?.type === "apiKey"
+      ? copy.apiKeySource
+      : copy.subscriptionSource;
   const visibleSystemModels = useMemo(() => {
     const seen = new Set<string>();
     return systemModels.filter((model) => {
@@ -473,26 +536,18 @@ export function CoderEngineControl({
       return true;
     });
   }, [systemModels]);
-  const longContextModels = useMemo(() => {
-    const result = new Map<string, PickerModel>();
-    for (const model of systemModels) {
-      if (!isCoderSystemModel(model)) continue;
-      if (model.context_profile === "1m") {
-        result.set(systemModelFamilyKey(model), model);
-      }
-    }
-    return result;
-  }, [systemModels]);
   const activeSystemModel = useMemo(
     () =>
-      (profile?.source === "follow_system"
-        ? systemModels.find((model) =>
-            modelMatches(
-              model,
-              profile.selected_model || profile.effective_model,
-            ),
-          )
-        : undefined) ??
+      (nativeKernel
+        ? systemModels.find((model) => modelMatches(model, value))
+        : profile?.source === "follow_system"
+          ? systemModels.find((model) =>
+              modelMatches(
+                model,
+                profile.selected_model || profile.effective_model,
+              ),
+            )
+          : undefined) ??
       systemModels.find((model) => modelMatches(model, profile?.system_model)),
     [
       profile?.effective_model,
@@ -500,16 +555,42 @@ export function CoderEngineControl({
       profile?.source,
       profile?.system_model,
       systemModels,
+      nativeKernel,
+      value,
     ],
   );
+  const visibleSystemModelName =
+    activeSystemModel?.display_name ||
+    activeSystemModel?.name ||
+    activeSystemModel?.model ||
+    value ||
+    "auto";
+  const visibleSystemSource = activeSystemModel?.source_display_name;
+  const fullProfileLabel = nativeKernel
+    ? nativeAccountSelected
+      ? `${copy.subscriptionModeShort} · ${nativeAccountModel}`
+      : `${visibleSystemSource || copy.followSystemShort} · ${visibleSystemModelName}`
+    : profile?.source === "codex_account" && profile.effective_model
+      ? `${visibleAccountSource} · ${profile.effective_model}`
+      : profileLabel(profile, copy);
   const activeCodexModel = useMemo(
     () =>
-      profile?.source === "codex_account"
+      nativeKernel
         ? modelsQuery.data?.models.find(
-            (model) => model.id === profile?.effective_model,
+            (model) => model.id === nativeAccountModel,
           )
-        : undefined,
-    [modelsQuery.data?.models, profile?.effective_model, profile?.source],
+        : profile?.source === "codex_account"
+          ? modelsQuery.data?.models.find(
+              (model) => model.id === profile?.effective_model,
+            )
+          : undefined,
+    [
+      modelsQuery.data?.models,
+      nativeAccountModel,
+      nativeKernel,
+      profile?.effective_model,
+      profile?.source,
+    ],
   );
   const offeredEfforts = useMemo(() => {
     const raw =
@@ -531,6 +612,10 @@ export function CoderEngineControl({
   ]);
 
   const changeReasoningEffort = (effort: ReasoningEffort) => {
+    if (nativeKernel) {
+      onReasoningEffortChange?.(effort);
+      return;
+    }
     if (!profile) return;
     saveProfile.mutate({
       source: viewSource,
@@ -540,6 +625,96 @@ export function CoderEngineControl({
       reasoning_effort: effort,
     });
   };
+
+  const selectSystemModel = (model?: string) => {
+    if (nativeKernel) {
+      const nextValue = model || "auto";
+      const pendingValue = pendingNativeModelRef.current;
+      const pendingSystemModel = model
+        ? systemModels.find((candidate) => modelMatches(candidate, model))
+        : undefined;
+      const alreadySelected = model
+        ? !/^chatgpt[/:]/i.test(pendingValue) &&
+          Boolean(
+            pendingSystemModel &&
+            modelMatches(pendingSystemModel, pendingValue),
+          )
+        : !/^chatgpt[/:]/i.test(pendingValue) &&
+          (!pendingValue ||
+            pendingValue === "auto" ||
+            pendingValue === "default");
+      if (alreadySelected) return;
+      pendingNativeModelRef.current = nextValue;
+      onChange?.(nextValue);
+      onEffectiveModelChange?.(
+        pendingSystemModel?.display_name ||
+          pendingSystemModel?.model ||
+          model ||
+          profile?.system_model ||
+          copy.systemDefault,
+      );
+      return;
+    }
+    const alreadySelected = model
+      ? profile?.source === "follow_system" &&
+        profile.model_source === "role" &&
+        Boolean(activeSystemModel && modelMatches(activeSystemModel, model))
+      : profile?.source === "follow_system" &&
+        profile.model_source === "system";
+    if (alreadySelected) return;
+    saveProfile.mutate(
+      {
+        source: "follow_system",
+        ...(model ? { model } : {}),
+        reasoning_effort: profile?.reasoning_effort,
+      },
+      {
+        onSuccess: (nextProfile) =>
+          onEffectiveModelChange?.(
+            nextProfile.effective_model || model || copy.systemDefault,
+          ),
+      },
+    );
+  };
+
+  const selectAccountModel = (model: string) => {
+    if (nativeKernel) {
+      const nextValue = `chatgpt/${model}`;
+      if (pendingNativeModelRef.current === nextValue) return;
+      pendingNativeModelRef.current = nextValue;
+      onChange?.(nextValue);
+      onEffectiveModelChange?.(model);
+      return;
+    }
+    if (
+      profile?.source === "codex_account" &&
+      profile.effective_model === model
+    ) {
+      return;
+    }
+    saveProfile.mutate(
+      { source: "codex_account", model },
+      {
+        onSuccess: (nextProfile) =>
+          onEffectiveModelChange?.(nextProfile.effective_model || model),
+      },
+    );
+  };
+
+  const controlPending = !nativeKernel && saveProfile.isPending;
+  const compactLabel = nativeKernel
+    ? nativeAccountSelected
+      ? nativeAccountModel
+      : visibleSystemModelName
+    : compactProfileLabel(profile, copy);
+  const selectedReasoningEffort = nativeKernel
+    ? reasoningEffort
+    : profile?.reasoning_effort;
+  const activeSystemSelectionValue = nativeKernel
+    ? value
+    : profile?.source === "follow_system"
+      ? profile.selected_model || profile.effective_model
+      : profile?.system_model;
 
   const openModelSettings = () => {
     setOpen(false);
@@ -553,26 +728,48 @@ export function CoderEngineControl({
       open={open}
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
-        if (nextOpen && profile) setViewSource(profile.source);
+        if (nextOpen) {
+          setViewSource(
+            nativeKernel
+              ? nativeAccountSelected
+                ? "codex_account"
+                : "follow_system"
+              : profile?.source || "follow_system",
+          );
+        }
       }}
     >
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          data-testid="coder-engine-trigger"
-          className="inline-flex min-w-0 items-center gap-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-xs text-muted-foreground outline-none transition hover:border-border-default hover:bg-muted/60 hover:text-foreground data-[state=open]:bg-muted data-[state=open]:text-foreground"
-          title={copy.title}
-          disabled={disabled}
-        >
-          {profileQuery.isLoading ? (
-            <Loader2Icon className="size-3 animate-spin" />
-          ) : null}
-          <span className="max-w-[var(--text-truncate-md)] truncate">
-            {profileLabel(profile, copy)}
-          </span>
-          <ChevronDownIcon className="size-3 opacity-60" />
-        </button>
-      </DropdownMenuTrigger>
+      <Tooltip delayDuration={80}>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              data-testid="coder-engine-trigger"
+              aria-label={fullProfileLabel}
+              className="inline-flex min-w-0 max-w-32 items-center gap-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-xs text-muted-foreground outline-none transition hover:border-border-default hover:bg-muted/60 hover:text-foreground data-[state=open]:bg-muted data-[state=open]:text-foreground"
+              disabled={disabled}
+            >
+              {profileQuery.isLoading ? (
+                <Loader2Icon className="size-3 animate-spin" />
+              ) : null}
+              <span
+                className={cn(
+                  "truncate",
+                  !nativeAccountSelected &&
+                    isFreePickerModel(activeSystemModel) &&
+                    "text-emerald-600 dark:text-emerald-400",
+                )}
+              >
+                {compactLabel}
+              </span>
+              <ChevronDownIcon className="size-3 opacity-60" />
+            </button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="top" sideOffset={6}>
+          {fullProfileLabel}
+        </TooltipContent>
+      </Tooltip>
       <DropdownMenuContent
         align="end"
         side="top"
@@ -596,7 +793,7 @@ export function CoderEngineControl({
               <button
                 type="button"
                 aria-pressed={viewSource === "follow_system"}
-                disabled={saveProfile.isPending}
+                disabled={controlPending}
                 onClick={() => setViewSource("follow_system")}
                 className={cn(
                   "h-7 rounded-md px-2 text-xs outline-none transition focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/40",
@@ -610,7 +807,7 @@ export function CoderEngineControl({
               <button
                 type="button"
                 aria-pressed={viewSource === "codex_account"}
-                disabled={saveProfile.isPending}
+                disabled={controlPending}
                 onClick={() => setViewSource("codex_account")}
                 className={cn(
                   "h-7 rounded-md px-2 text-xs outline-none transition focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/40",
@@ -619,7 +816,7 @@ export function CoderEngineControl({
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                {copy.codexSource}
+                {nativeKernel ? copy.subscriptionSource : visibleAccountSource}
               </button>
             </div>
 
@@ -628,14 +825,15 @@ export function CoderEngineControl({
                 <>
                   <button
                     type="button"
-                    disabled={saveProfile.isPending}
-                    onClick={() =>
-                      saveProfile.mutate({ source: "follow_system" })
-                    }
+                    disabled={controlPending}
+                    onClick={() => selectSystemModel()}
                     className={cn(
                       "flex h-8 w-full items-center justify-between rounded-md px-2 text-left text-xs hover:bg-muted/60",
-                      profile.source === "follow_system" &&
-                        profile.model_source === "system" &&
+                      (nativeKernel
+                        ? !nativeAccountSelected &&
+                          (!value || value === "auto" || value === "default")
+                        : profile.source === "follow_system" &&
+                          profile.model_source === "system") &&
                         "bg-muted/70 text-foreground",
                     )}
                   >
@@ -643,106 +841,96 @@ export function CoderEngineControl({
                       {locale.toLowerCase().startsWith("zh") ? "自动" : "Auto"}
                     </span>
                     <span className="ml-2 truncate text-muted-foreground">
-                      {isSystemOrchestratorModel(profile.system_model)
-                        ? copy.systemOrchestratorHint
-                        : profile.system_model || copy.systemDefaultHint}
+                      {nativeKernel
+                        ? copy.smartRoutingHint
+                        : isSystemOrchestratorModel(profile.system_model)
+                          ? copy.systemOrchestratorHint
+                          : profile.system_model || copy.systemDefaultHint}
                     </span>
                   </button>
                   {visibleSystemModels.map((model, index) => {
-                    const selected =
-                      profile.source === "follow_system" &&
-                      profile.model_source === "role" &&
-                      modelMatches(
-                        model,
-                        profile.selected_model || profile.effective_model,
-                      );
-                    const longModel = longContextModels.get(
-                      systemModelFamilyKey(model),
-                    );
-                    const longSelected = Boolean(
-                      longModel &&
-                      profile.source === "follow_system" &&
-                      profile.selected_model === pickerModelValue(longModel),
+                    const selected = nativeKernel
+                      ? !nativeAccountSelected && modelMatches(model, value)
+                      : profile.source === "follow_system" &&
+                        profile.model_source === "role" &&
+                        modelMatches(
+                          model,
+                          profile.selected_model || profile.effective_model,
+                        );
+                    const contextVariantSelected = Boolean(
+                      activeSystemModel &&
+                      systemModelFamilyKey(activeSystemModel) ===
+                        systemModelFamilyKey(model) &&
+                      (nativeKernel
+                        ? !nativeAccountSelected &&
+                          value !== "auto" &&
+                          value !== "default"
+                        : profile.source === "follow_system" &&
+                          profile.model_source === "role"),
                     );
                     return (
                       <div
                         key={`${pickerModelValue(model)}:${model.id || model.model || index}:${index}`}
                         className={cn(
                           "flex h-8 w-full items-stretch rounded-md text-xs hover:bg-muted/60",
-                          (selected || longSelected) &&
+                          (selected || contextVariantSelected) &&
                             "bg-muted/70 text-foreground",
                         )}
                       >
                         <button
                           type="button"
-                          disabled={saveProfile.isPending}
+                          disabled={controlPending}
                           onClick={() =>
-                            saveProfile.mutate({
-                              source: "follow_system",
-                              model: pickerModelValue(model),
-                              reasoning_effort: profile.reasoning_effort,
-                            })
+                            selectSystemModel(pickerModelValue(model))
                           }
                           className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-2 text-left"
                         >
-                          <span className="truncate">
+                          <span
+                            className={cn(
+                              "truncate",
+                              isFreePickerModel(model) &&
+                                "text-emerald-600 dark:text-emerald-400",
+                            )}
+                          >
                             {model.display_name || model.name}
                           </span>
-                          {selected && !longSelected ? (
+                          {selected || contextVariantSelected ? (
                             <CheckCircle2Icon className="size-3.5 shrink-0 text-muted-foreground" />
                           ) : null}
                         </button>
-                        {longModel ? (
-                          <button
-                            type="button"
-                            disabled={saveProfile.isPending}
-                            title="1M context"
-                            aria-label={`${model.display_name || model.name} · 1M`}
-                            onClick={() =>
-                              saveProfile.mutate({
-                                source: "follow_system",
-                                model: pickerModelValue(longModel),
-                                reasoning_effort: profile.reasoning_effort,
-                              })
-                            }
-                            className={cn(
-                              "mr-1 self-center rounded border px-1 text-[10px] text-muted-foreground",
-                              longSelected &&
-                                "border-foreground/35 bg-background text-foreground",
-                            )}
-                          >
-                            1M
-                          </button>
-                        ) : null}
                       </div>
                     );
                   })}
                 </>
-              ) : accountQuery.data?.account ? (
+              ) : accountQuery.data?.account &&
+                (!nativeKernel || chatGPTSubscriptionConnected) ? (
                 <>
                   {(modelsQuery.data?.models ?? []).map((model) => (
                     <button
                       key={model.id}
                       type="button"
-                      disabled={saveProfile.isPending}
+                      disabled={controlPending}
                       className={cn(
                         "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted",
-                        profile.source === "codex_account" &&
-                          profile.effective_model === model.id &&
+                        (nativeKernel
+                          ? nativeAccountSelected &&
+                            nativeAccountModel === model.id
+                          : profile.source === "codex_account" &&
+                            profile.effective_model === model.id) &&
                           "bg-muted/70 text-foreground",
                       )}
-                      onClick={() =>
-                        saveProfile.mutate({
-                          source: "codex_account",
-                          model: model.id,
-                        })
-                      }
+                      onClick={() => selectAccountModel(model.id)}
                     >
                       <span className="truncate">
                         {model.display_name || model.id}
                       </span>
-                      {profile.source === "codex_account" &&
-                      profile.effective_model === model.id ? (
+                      {(
+                        nativeKernel
+                          ? nativeAccountSelected &&
+                            nativeAccountModel === model.id
+                          : profile.source === "codex_account" &&
+                            profile.effective_model === model.id
+                      ) ? (
                         <CheckCircle2Icon className="size-3.5 shrink-0" />
                       ) : null}
                     </button>
@@ -781,12 +969,16 @@ export function CoderEngineControl({
                     <button
                       key={effort}
                       type="button"
-                      disabled={saveProfile.isPending}
+                      disabled={controlPending}
                       onClick={() => changeReasoningEffort(effort)}
                       className={cn(
                         "h-6 rounded px-1 text-xs transition",
-                        profile.source === viewSource &&
-                          profile.reasoning_effort === effort
+                        (
+                          nativeKernel
+                            ? selectedReasoningEffort === effort
+                            : profile.source === viewSource &&
+                              profile.reasoning_effort === effort
+                        )
                           ? "bg-background text-foreground shadow-sm"
                           : "text-muted-foreground hover:text-foreground",
                       )}
@@ -802,6 +994,17 @@ export function CoderEngineControl({
                 <span>{copy.reasoningAdaptive}</span>
               </div>
             )}
+
+            {viewSource === "follow_system" && activeSystemModel ? (
+              <ModelContextSetting
+                models={systemModels}
+                selected={activeSystemModel}
+                value={activeSystemSelectionValue}
+                disabled={controlPending}
+                onChange={selectSystemModel}
+                className="mx-1 mt-1 border-t border-border-default px-0.5 pt-1.5"
+              />
+            ) : null}
 
             {!profile.compatible ? (
               <div className="mt-1">
@@ -1097,9 +1300,9 @@ export function CoderEngineSettings() {
   return (
     <section
       data-testid="coder-engine-settings"
-      className="rounded-lg border border-border bg-card/60 p-4 shadow-sm"
+      className="rounded-lg border border-border bg-card/45 p-3"
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-base font-semibold">{copy.title}</h2>
@@ -1120,14 +1323,18 @@ export function CoderEngineSettings() {
                   : copy.notConnected}
             </span>
           </div>
-          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+          <p className="mt-0.5 max-w-3xl text-xs leading-5 text-muted-foreground">
             {copy.subtitle}
           </p>
         </div>
         <Button
           type="button"
           size="sm"
-          variant="ghost"
+          variant={
+            profileQuery.isError || accountQuery.isError ? "outline" : "ghost"
+          }
+          aria-label={copy.retry}
+          title={copy.retry}
           onClick={() => {
             void profileQuery.refetch();
             void accountQuery.refetch();
@@ -1147,7 +1354,7 @@ export function CoderEngineSettings() {
                 "animate-spin",
             )}
           />
-          {copy.retry}
+          {profileQuery.isError || accountQuery.isError ? copy.retry : null}
         </Button>
       </div>
 
@@ -1163,9 +1370,9 @@ export function CoderEngineSettings() {
           {copy.loadFailed}
         </div>
       ) : (
-        <div className="mt-4 space-y-4">
+        <div className="mt-3 space-y-3">
           <div>
-            <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <div className="mb-1.5 text-xs font-medium text-muted-foreground">
               {copy.sourceTitle}
             </div>
             <div className="grid gap-2 md:grid-cols-2">
@@ -1174,19 +1381,21 @@ export function CoderEngineSettings() {
                 aria-pressed={profile.source === "follow_system"}
                 disabled={busy}
                 className={cn(
-                  "rounded-lg border p-3 text-left transition",
+                  "flex min-h-11 items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition",
                   profile.source === "follow_system"
                     ? "border-primary/40 bg-primary/[0.07] ring-1 ring-primary/15"
                     : "border-border hover:border-border-strong hover:bg-muted/30",
                 )}
                 onClick={() => saveProfile.mutate({ source: "follow_system" })}
               >
-                <span className="flex items-center gap-2 text-sm font-medium">
-                  <ShieldCheckIcon className="size-4 text-primary" />
-                  {copy.followSystem}
-                </span>
-                <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-                  {copy.followSystemDescription}
+                <ShieldCheckIcon className="size-4 shrink-0 text-primary" />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium">
+                    {copy.followSystem}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {copy.followSystemDescription}
+                  </span>
                 </span>
               </button>
               <button
@@ -1194,55 +1403,72 @@ export function CoderEngineSettings() {
                 aria-pressed={profile.source === "codex_account"}
                 disabled={busy || !account}
                 className={cn(
-                  "rounded-lg border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
+                  "flex min-h-11 items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
                   profile.source === "codex_account"
                     ? "border-primary/40 bg-primary/[0.07] ring-1 ring-primary/15"
                     : "border-border hover:border-border-strong hover:bg-muted/30",
                 )}
                 onClick={() => saveProfile.mutate({ source: "codex_account" })}
               >
-                <span className="flex items-center gap-2 text-sm font-medium">
-                  <UserRoundIcon className="size-4 text-primary" />
-                  {copy.accountMode}
-                </span>
-                <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-                  {copy.accountModeDescription}
+                <UserRoundIcon className="size-4 shrink-0 text-primary" />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium">
+                    {copy.accountMode}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {copy.accountModeDescription}
+                  </span>
                 </span>
               </button>
             </div>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-3">
-            <div className="rounded-lg border border-border bg-background/60 p-3">
-              <div className="text-xs text-muted-foreground">
-                {copy.provider}
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-background/45 px-3 py-2 text-xs">
+            <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+              {copy.activeSummary(profile.effective_model || "—")}
+            </span>
+            <span
+              className={cn(
+                "ml-auto inline-flex items-center gap-1.5 font-medium",
+                profile.compatible ? "text-success" : "text-warning",
+              )}
+            >
+              {profile.compatible ? (
+                <CheckCircle2Icon className="size-3.5" />
+              ) : (
+                <AlertTriangleIcon className="size-3.5" />
+              )}
+              {profile.compatible ? copy.compatible : copy.incompatible}
+            </span>
+            <details className="basis-full text-muted-foreground">
+              <summary className="cursor-pointer select-none text-xs hover:text-foreground">
+                {copy.technicalDetails}
+              </summary>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-border pt-2">
+                <span>
+                  {copy.systemModel}{" "}
+                  <code className="text-foreground/80">
+                    {profile.system_model || "—"}
+                  </code>
+                </span>
+                <span>
+                  {copy.provider}{" "}
+                  <code className="text-foreground/80">
+                    {profile.provider || "—"}
+                  </code>
+                </span>
               </div>
-              <div className="mt-1 truncate font-mono text-xs">
-                {profile.provider || "—"}
-              </div>
-            </div>
-            <div className="rounded-lg border border-border bg-background/60 p-3">
-              <div className="text-xs text-muted-foreground">
-                {copy.systemModel}
-              </div>
-              <div className="mt-1 truncate font-mono text-xs">
-                {profile.system_model || "—"}
-              </div>
-            </div>
-            <div className="rounded-lg border border-border bg-background/60 p-3">
-              <div className="text-xs text-muted-foreground">
-                {copy.effectiveModel}
-              </div>
-              <div className="mt-1 truncate font-mono text-xs">
-                {profile.effective_model || "—"}
-              </div>
-            </div>
+            </details>
           </div>
-          <ProfileCompatibility profile={profile} />
+          {!profile.compatible && profile.compatibility_reason ? (
+            <p className="text-xs text-warning">
+              {profile.compatibility_reason}
+            </p>
+          ) : null}
 
           {account ? (
-            <div className="space-y-3 rounded-lg border border-border p-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-3">
+              <div className="grid gap-3 rounded-lg bg-muted/25 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <CheckCircle2Icon className="size-4 text-success" />
@@ -1255,18 +1481,6 @@ export function CoderEngineSettings() {
                     )}
                   </div>
                 </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() => void logout()}
-                >
-                  <LogOutIcon className="size-3.5" /> {copy.logout}
-                </Button>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
                 <label className="space-y-1.5 text-xs text-muted-foreground">
                   <span>{copy.model}</span>
                   <Select
@@ -1330,130 +1544,145 @@ export function CoderEngineSettings() {
                     </SelectContent>
                   </Select>
                 </label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => void logout()}
+                >
+                  <LogOutIcon className="size-3.5" /> {copy.logout}
+                </Button>
               </div>
 
               {hasChatGPTUsage ? (
-                <div className="space-y-4 border-t border-border pt-3">
-                  <div className="space-y-2">
-                    <div>
-                      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        {copy.connectors}
+                <details className="group rounded-lg border border-border bg-background/40 px-3 py-2">
+                  <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium marker:content-none">
+                    <ChevronDownIcon className="size-3.5 text-muted-foreground transition-transform group-open:rotate-180" />
+                    {copy.accountDetails}
+                  </summary>
+                  <div className="mt-3 space-y-4 border-t border-border pt-3">
+                    <div className="space-y-2">
+                      <div>
+                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          {copy.connectors}
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {copy.connectorsHint}
+                        </p>
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {copy.connectorsHint}
-                      </p>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {(appsQuery.data?.apps ?? [])
+                          .filter((app) => app.is_accessible)
+                          .map((app) => (
+                            <button
+                              key={app.id}
+                              type="button"
+                              aria-pressed={app.selected}
+                              disabled={saveApps.isPending}
+                              className={cn(
+                                "rounded-lg border p-3 text-left transition",
+                                app.selected
+                                  ? "border-primary/40 bg-primary/[0.07]"
+                                  : "border-border hover:bg-muted/30",
+                              )}
+                              onClick={() => {
+                                const selected = (appsQuery.data?.apps ?? [])
+                                  .filter((item) =>
+                                    item.id === app.id
+                                      ? !item.selected
+                                      : item.selected,
+                                  )
+                                  .map((item) => item.id);
+                                saveApps.mutate(selected);
+                              }}
+                            >
+                              <span className="flex items-center justify-between gap-2 text-sm font-medium">
+                                <span className="truncate">{app.name}</span>
+                                {app.selected ? (
+                                  <CheckCircle2Icon className="size-4 shrink-0 text-primary" />
+                                ) : null}
+                              </span>
+                              {app.description ? (
+                                <span className="mt-1 line-clamp-2 block text-xs text-muted-foreground">
+                                  {app.description}
+                                </span>
+                              ) : null}
+                            </button>
+                          ))}
+                      </div>
+                      {!appsQuery.isLoading &&
+                      (appsQuery.data?.apps ?? []).filter(
+                        (app) => app.is_accessible,
+                      ).length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          {copy.connectorUnavailable}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      {copy.allowance}
                     </div>
                     <div className="grid gap-2 sm:grid-cols-2">
-                      {(appsQuery.data?.apps ?? [])
-                        .filter((app) => app.is_accessible)
-                        .map((app) => (
-                          <button
-                            key={app.id}
-                            type="button"
-                            aria-pressed={app.selected}
-                            disabled={saveApps.isPending}
-                            className={cn(
-                              "rounded-lg border p-3 text-left transition",
-                              app.selected
-                                ? "border-primary/40 bg-primary/[0.07]"
-                                : "border-border hover:bg-muted/30",
-                            )}
-                            onClick={() => {
-                              const selected = (appsQuery.data?.apps ?? [])
-                                .filter((item) =>
-                                  item.id === app.id
-                                    ? !item.selected
-                                    : item.selected,
-                                )
-                                .map((item) => item.id);
-                              saveApps.mutate(selected);
-                            }}
+                      {(rateLimitsQuery.data?.buckets ?? []).map((bucket) => {
+                        const window = bucket.primary;
+                        return (
+                          <div
+                            key={bucket.limit_id}
+                            className="rounded-lg border border-border bg-background/60 p-3"
                           >
-                            <span className="flex items-center justify-between gap-2 text-sm font-medium">
-                              <span className="truncate">{app.name}</span>
-                              {app.selected ? (
-                                <CheckCircle2Icon className="size-4 shrink-0 text-primary" />
+                            <div className="flex items-center justify-between gap-2 text-xs">
+                              <span className="truncate font-medium">
+                                {bucket.limit_name || bucket.limit_id}
+                              </span>
+                              {window ? (
+                                <span className="text-muted-foreground">
+                                  {Math.round(window.remaining_percent)}%{" "}
+                                  {copy.remaining}
+                                </span>
                               ) : null}
-                            </span>
-                            {app.description ? (
-                              <span className="mt-1 line-clamp-2 block text-xs text-muted-foreground">
-                                {app.description}
-                              </span>
-                            ) : null}
-                          </button>
-                        ))}
-                    </div>
-                    {!appsQuery.isLoading &&
-                    (appsQuery.data?.apps ?? []).filter(
-                      (app) => app.is_accessible,
-                    ).length === 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        {copy.connectorUnavailable}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    {copy.allowance}
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {(rateLimitsQuery.data?.buckets ?? []).map((bucket) => {
-                      const window = bucket.primary;
-                      return (
-                        <div
-                          key={bucket.limit_id}
-                          className="rounded-lg border border-border bg-background/60 p-3"
-                        >
-                          <div className="flex items-center justify-between gap-2 text-xs">
-                            <span className="truncate font-medium">
-                              {bucket.limit_name || bucket.limit_id}
-                            </span>
+                            </div>
                             {window ? (
-                              <span className="text-muted-foreground">
-                                {Math.round(window.remaining_percent)}%{" "}
-                                {copy.remaining}
-                              </span>
+                              <>
+                                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                                  <div
+                                    className="h-full rounded-full bg-primary transition-[width]"
+                                    style={{
+                                      width: `${Math.max(0, Math.min(100, window.used_percent))}%`,
+                                    }}
+                                  />
+                                </div>
+                                <div className="mt-1.5 text-xs text-muted-foreground">
+                                  {copy.resetsAt}:{" "}
+                                  {new Date(
+                                    window.resets_at * 1000,
+                                  ).toLocaleString(locale)}
+                                </div>
+                              </>
                             ) : null}
                           </div>
-                          {window ? (
-                            <>
-                              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-                                <div
-                                  className="h-full rounded-full bg-primary transition-[width]"
-                                  style={{
-                                    width: `${Math.max(0, Math.min(100, window.used_percent))}%`,
-                                  }}
-                                />
-                              </div>
-                              <div className="mt-1.5 text-xs text-muted-foreground">
-                                {copy.resetsAt}:{" "}
-                                {new Date(
-                                  window.resets_at * 1000,
-                                ).toLocaleString(locale)}
-                              </div>
-                            </>
-                          ) : null}
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <UsageStat
+                        label={copy.lifetimeTokens}
+                        value={usageQuery.data?.summary?.lifetime_tokens}
+                        locale={locale}
+                      />
+                      <UsageStat
+                        label={copy.peakDailyTokens}
+                        value={usageQuery.data?.summary?.peak_daily_tokens}
+                        locale={locale}
+                      />
+                      <UsageStat
+                        label={copy.resetCredits}
+                        value={rateLimitsQuery.data?.reset_credits_available}
+                        locale={locale}
+                      />
+                    </div>
                   </div>
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    <UsageStat
-                      label={copy.lifetimeTokens}
-                      value={usageQuery.data?.summary?.lifetime_tokens}
-                      locale={locale}
-                    />
-                    <UsageStat
-                      label={copy.peakDailyTokens}
-                      value={usageQuery.data?.summary?.peak_daily_tokens}
-                      locale={locale}
-                    />
-                    <UsageStat
-                      label={copy.resetCredits}
-                      value={rateLimitsQuery.data?.reset_credits_available}
-                      locale={locale}
-                    />
-                  </div>
-                </div>
+                </details>
               ) : (
                 <p className="border-t border-border pt-3 text-xs text-muted-foreground">
                   {copy.usageUnavailable}

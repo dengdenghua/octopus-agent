@@ -62,6 +62,23 @@ describe("urlOfArtifact", () => {
       "http://localhost:8001/api/threads/t1/outputs/reports/out%20file.md?area=final&download=true",
     );
   });
+
+  it("requests a safe office preview for workspace outputs", () => {
+    const ref = workspaceOutputRef({
+      area: "final",
+      relativePath: "deck.pptx",
+    });
+    expect(
+      urlOfArtifact({
+        filepath: ref,
+        threadId: "t1",
+        officePreview: true,
+        officeFidelityPreview: true,
+      }),
+    ).toBe(
+      "http://localhost:8001/api/threads/t1/outputs/deck.pptx?area=final&office_preview=true&office_fidelity_preview=true",
+    );
+  });
 });
 
 describe("normalizeWorkspaceArtifactRef", () => {
@@ -81,7 +98,8 @@ describe("normalizeWorkspaceArtifactRef", () => {
   });
 
   it("does not reinterpret a path from another thread", () => {
-    const filepath = "/Users/me/data/workspaces/thread-other/output/final/report.md";
+    const filepath =
+      "/Users/me/data/workspaces/thread-other/output/final/report.md";
     expect(normalizeWorkspaceArtifactRef(filepath, "thread-1")).toBe(filepath);
   });
 });

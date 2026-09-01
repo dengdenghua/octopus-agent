@@ -10,6 +10,7 @@ import {
   type CoderUpstreamUpdate,
 } from "@/core/coder/api";
 import { useI18n } from "@/core/i18n/hooks";
+import { useAuth } from "@/providers/AuthProvider";
 
 function displayTime(value: string | null, locale: string) {
   if (!value) return "—";
@@ -30,6 +31,7 @@ function replaceStatus(
 
 export function CodexUpdateRadar() {
   const { locale } = useI18n();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const zh = locale.toLowerCase().startsWith("zh");
   const status = useQuery({
@@ -55,6 +57,9 @@ export function CodexUpdateRadar() {
         ? status.error.message
         : data?.error;
   const isApproved = data?.approval_status === "approved_for_next_release";
+  const canApprove = Boolean(
+    user?.roles?.some((role) => role === "admin" || role === "operator"),
+  );
 
   const openReleaseNotes = () => {
     if (!data?.release_url) return;
@@ -98,7 +103,7 @@ export function CodexUpdateRadar() {
               ? "检查中"
               : "Checking"
             : zh
-              ? "立即检查"
+              ? "检查 Codex 引擎更新"
               : "Check now"}
         </Button>
       </div>
@@ -141,7 +146,7 @@ export function CodexUpdateRadar() {
                 ? `发现 v${data.latest_version}，等待管理员批准。`
                 : `v${data.latest_version} is available and awaiting approval.`}
           </p>
-          {!isApproved && data.latest_version ? (
+          {!isApproved && data.latest_version && canApprove ? (
             <Button
               type="button"
               size="sm"

@@ -96,6 +96,11 @@ export interface UseRealtimeThreadValue {
   connected: boolean;
   startTurn: (params: {
     input: string;
+    /** Explicit local project directory. The backend validates/rewrites this
+     * at the authenticated boundary before it becomes the execution cwd. */
+    cwd?: string;
+    /** Stable client-minted id reused by the server's UserMessageItem. */
+    clientItemId?: string;
     attachments?: Record<string, unknown>[];
     approvalPolicy?: "never" | "on-request" | "untrusted";
     sandboxPolicy?: SandboxPolicy;
@@ -154,13 +159,7 @@ export interface UseRealtimeThreadValue {
 // Newest turns fetched per thread/resume page. Large threads resume
 // with the most recent window; older history pages in on demand via
 // loadOlderTurns().
-const RESUME_TURN_LIMIT = 50;
-// A route switch or hot reload unmounts the thread hook. Closing its socket
-// immediately also cancels the server-side turn, even though the user never
-// pressed Stop. Keep that one transport alive until the active turn emits a
-// terminal event; the timeout is only a leak guard for a wedged provider.
-const DETACHED_TURN_CLOSE_TIMEOUT_MS = 10 * 60 * 1_000;
-
+const RESUME_TURN_LIMIT = 20;
 interface ResumeResponse {
   thread?: { id: string; path?: string };
   turns: Conversation["turns"];
@@ -310,7 +309,9 @@ export function useRealtimeThread(
   // A turn/started notification observed after the request went out is
   // the real delivery signal — ``startTurn`` uses it to swallow later
   // transport rejections (reconnect + resume recover the turn state).
-  const turnDeliveryWatchesRef = useRef<Set<{ delivered: boolean }>>(new Set());
+  const turnDeliveryWatchesRef = useRef<
+    Set<{ delivered: boolean; clientItemId?: string }>
+  >(new Set());
 
   // Reducer anomalies feed the per-turn vitals marks so the turn's
   // telemetry record carries them. Keep the callback stable — it sits
@@ -433,9 +434,6 @@ export function useRealtimeThread(
     let cancelled = false;
     let openedOnce = false;
     let online = false;
-    let detached = false;
-    let detachedCloseTimer: ReturnType<typeof setTimeout> | null = null;
-    let detachedClient: RealtimeClient | null = null;
     let resumeSeq = 0;
     let resumeInFlight = false;
 
@@ -997,36 +995,11 @@ export function useRealtimeThread(
       }
     };
 
-    const closeDetachedClient = (): void => {
-      if (detachedCloseTimer !== null) {
-        clearTimeout(detachedCloseTimer);
-        detachedCloseTimer = null;
-      }
-      detachedClient?.close();
-      detachedClient = null;
-      detached = false;
-    };
-
     const onNotification = (note: {
       method: string;
       params: Record<string, unknown>;
     }): void => {
-      if (cancelled) {
-        const belongsToDetachedThread = note.params?.threadId === args.threadId;
-        const turn = note.params?.turn as { status?: unknown } | undefined;
-        const reachedTerminalState =
-          (note.method === "turn/completed" &&
-            (turn?.status === "completed" ||
-              turn?.status === "paused" ||
-              turn?.status === "cancelled" ||
-              turn?.status === "interrupted" ||
-              turn?.status === "failed")) ||
-          note.method === "turn/interrupted";
-        if (detached && belongsToDetachedThread && reachedTerminalState) {
-          closeDetachedClient();
-        }
-        return;
-      }
+      if (cancelled) return;
       const belongsToThread = note.params?.threadId === args.threadId;
       // Live-first ids stay unconfirmed until a fetched cursor includes the
       // same persisted event. This prevents a long recovered turn from
@@ -1090,6 +1063,24 @@ export function useRealtimeThread(
           if (!watch.delivered) {
             watch.delivered = true;
             break;
+          }
+        }
+      } else if (
+        note.method === "item/started" &&
+        note.params?.threadId === args.threadId
+      ) {
+        // The durable user-item receipt is an equally authoritative delivery
+        // anchor. In a fast failure the detached turn can publish item/started
+        // while the originating socket misses turn/started; treating the later
+        // RPC rejection as a send failure then restores an already-persisted
+        // draft and invites a duplicate retry.
+        const item = note.params?.item as { id?: unknown } | undefined;
+        if (typeof item?.id === "string") {
+          for (const watch of turnDeliveryWatchesRef.current) {
+            if (!watch.delivered && watch.clientItemId === item.id) {
+              watch.delivered = true;
+              break;
+            }
           }
         }
       }
@@ -1194,7 +1185,6 @@ export function useRealtimeThread(
       onOpen,
       onClose,
     });
-    detachedClient = client;
     clientRef.current = client;
     // Cold start: hydrate from the local replay cache BEFORE the first
     // resume goes out. A hydrated cursor routes the initial resume into
@@ -1242,18 +1232,18 @@ export function useRealtimeThread(
       cancelled = true;
       online = false;
       stopTailPolling();
-      const latestTurn = stateRef.current.turns.at(-1);
-      if (latestTurn?.status === "inProgress") {
-        // Navigating away is not an implicit Stop. The detached socket keeps
-        // the server-side request and event journal alive; its terminal event
-        // closes this transport, with a bounded timeout as a final safeguard.
-        detached = true;
-        detachedCloseTimer = setTimeout(
-          closeDetachedClient,
-          DETACHED_TURN_CLOSE_TIMEOUT_MS,
-        );
-      } else {
-        closeDetachedClient();
+      // A turn is server-resident and survives its originating WebSocket.
+      // Release this invisible route's connection immediately so a visible,
+      // reconnected watcher can receive live events and approval requests.
+      // Keeping the old owner alive intercepted approvals in an unmounted
+      // React tree and could make a healthy long task time out waiting for a
+      // prompt the user could never see.
+      client.close();
+      // Settle client-side incoming-request promises before clearing their
+      // timers. The server connection is already closing, so this is local
+      // resource cleanup rather than an authoritative approval decision.
+      for (const resolvePending of Array.from(resolvers.values())) {
+        resolvePending({ action: "decline", reason: "client disconnected" });
       }
       clientRef.current = null;
       resolvers.clear();
@@ -1275,7 +1265,10 @@ export function useRealtimeThread(
     async (input) => {
       const client = clientRef.current;
       if (!client) throw new Error("realtime client not ready");
-      const watch = { delivered: false };
+      const watch = {
+        delivered: false,
+        ...(input.clientItemId ? { clientItemId: input.clientItemId } : {}),
+      };
       turnDeliveryWatchesRef.current.add(watch);
       try {
         await client.request("turn/start", {
@@ -1290,6 +1283,8 @@ export function useRealtimeThread(
               ...(input.metadata ? { metadata: input.metadata } : {}),
             },
           ],
+          ...(input.clientItemId ? { userItemId: input.clientItemId } : {}),
+          ...(input.cwd ? { cwd: input.cwd } : {}),
           approvalPolicy: input.approvalPolicy ?? "on-request",
           ...(input.sandboxPolicy
             ? { sandboxPolicy: input.sandboxPolicy }
@@ -1308,7 +1303,12 @@ export function useRealtimeThread(
         // would make callers flag a successful send as failed (error
         // banner + draft restore → duplicate sends). Turn state is
         // recovered by the reconnect/resume path.
-        if (!watch.delivered) throw err;
+        const persistedAfterStart = input.clientItemId
+          ? stateRef.current.turns.some((turn) =>
+              turn.items.some((item) => item.id === input.clientItemId),
+            )
+          : false;
+        if (!watch.delivered && !persistedAfterStart) throw err;
       } finally {
         turnDeliveryWatchesRef.current.delete(watch);
       }

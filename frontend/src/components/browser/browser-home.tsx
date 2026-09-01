@@ -33,6 +33,7 @@ import {
   BrainCircuitIcon,
   GraduationCapIcon,
   Edit3,
+  EllipsisIcon,
   Folder,
   FolderOpen,
   Trash2,
@@ -43,6 +44,7 @@ import {
   CompassIcon,
   SquareKanbanIcon,
   CandlestickChartIcon,
+  DnaIcon,
   RssIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -62,6 +64,7 @@ import {
   useWorkspaceWebShortcuts,
   type WorkbenchBuiltinIcon,
 } from "@/core/workbench/apps";
+import { useActiveAgentId } from "@/core/agents/active";
 import { useEnabledModuleIds } from "@/core/modules/enabled-modules";
 import { useWorkbenchAvailabilitySync } from "@/core/workbench/availability";
 
@@ -79,12 +82,7 @@ type DesktopPanelId =
   | "games"
   | "add"
   | "settings";
-type DesktopAppCategory =
-  | "workspace"
-  | "ai"
-  | "video"
-  | "dev"
-  | "knowledge";
+type DesktopAppCategory = "workspace" | "ai" | "video" | "dev" | "knowledge";
 
 interface BrowserDesktopApp {
   name: string;
@@ -159,8 +157,21 @@ const BUILTIN_ICON_MAP: Record<WorkbenchBuiltinIcon, LucideIcon> = {
   trading: CandlestickChartIcon,
   design: PaletteIcon,
   narrative: BookOpenIcon,
+  evolution: DnaIcon,
   intelligence: RssIcon,
   community: CompassIcon,
+};
+
+/** Keep native app tiles distinct without letting the theme's saturated
+ * primary color overpower translucent desktop and Dock surfaces. */
+const BUILTIN_ICON_TONE: Record<WorkbenchBuiltinIcon, string> = {
+  projects: "from-slate-600/75 to-sky-500/65",
+  trading: "from-teal-600/75 to-emerald-500/65",
+  design: "from-violet-600/70 to-indigo-400/60",
+  narrative: "from-fuchsia-600/70 to-violet-500/60",
+  evolution: "from-violet-600/75 to-cyan-500/60",
+  intelligence: "from-cyan-600/75 to-blue-500/65",
+  community: "from-indigo-600/70 to-violet-500/60",
 };
 
 const WORKSPACE_DESKTOP_APPS: BrowserDesktopApp[] = WORKBENCH_BUILTIN_APPS.map(
@@ -168,7 +179,7 @@ const WORKSPACE_DESKTOP_APPS: BrowserDesktopApp[] = WORKBENCH_BUILTIN_APPS.map(
     name: app.name,
     url: app.launchUrl,
     icon: BUILTIN_ICON_MAP[app.icon],
-    color: "from-primary to-primary/70",
+    color: BUILTIN_ICON_TONE[app.icon],
     description: app.description,
     category: "workspace",
     workspaceRoute: app.workspaceRoute,
@@ -934,7 +945,8 @@ export function BrowserHome({
   onOpen: (url: string) => void;
 }) {
   useWorkbenchAvailabilitySync();
-  const enabledModuleIds = useEnabledModuleIds();
+  const activeAgentId = useActiveAgentId() ?? "general";
+  const enabledModuleIds = useEnabledModuleIds(activeAgentId);
   const enabledModuleIdSet = useMemo(
     () => new Set(enabledModuleIds),
     [enabledModuleIds],
@@ -1393,6 +1405,7 @@ export function BrowserHome({
       type: ContextMenuState["targetType"],
     ) => {
       e.preventDefault();
+      e.stopPropagation();
       setContextMenu({
         visible: true,
         x: Math.min(e.clientX, window.innerWidth - 180),
@@ -1487,16 +1500,28 @@ export function BrowserHome({
     });
   }, [editWidgetState]);
 
-  const handleDelete = useCallback((id: string) => {
-    setQuickLinks((prev) => prev.filter((l) => l.id !== id));
-    setWidgets((prev) => prev.filter((w) => w.id !== id));
-    setFolders((prev) =>
-      prev.map((f) => ({
-        ...f,
-        linkIds: f.linkIds.filter((linkId) => linkId !== id),
-      })),
-    );
-  }, []);
+  const handleDelete = useCallback(
+    async (id: string) => {
+      if (
+        !(await confirm({
+          title: wt.deleteConfirmTitle,
+          description: wt.deleteConfirmDescription,
+          confirmLabel: wt.ctxDelete,
+          destructive: true,
+        }))
+      )
+        return;
+      setQuickLinks((prev) => prev.filter((l) => l.id !== id));
+      setWidgets((prev) => prev.filter((w) => w.id !== id));
+      setFolders((prev) =>
+        prev.map((f) => ({
+          ...f,
+          linkIds: f.linkIds.filter((linkId) => linkId !== id),
+        })),
+      );
+    },
+    [confirm, wt.ctxDelete, wt.deleteConfirmDescription, wt.deleteConfirmTitle],
+  );
 
   const handleResize = useCallback((id: string, size: string) => {
     setWidgets((prev) =>
@@ -2258,7 +2283,7 @@ export function BrowserHome({
                     <div
                       key={widget.id}
                       className={cn(
-                        "rounded-2xl p-4 transition-all liquid-glass-subtle",
+                        "group/widget rounded-2xl p-4 transition-all liquid-glass-subtle",
                         widget.size === "large" && "col-span-2",
                         widget.size === "small" && "p-3",
                         isDragging && "opacity-40 scale-95",
@@ -2277,14 +2302,30 @@ export function BrowserHome({
                         <span className="text-[15px] font-semibold text-foreground">
                           {widget.title}
                         </span>
-                        {editMode && (
+                        <div className="flex items-center gap-1">
+                          {editMode && (
+                            <button
+                              type="button"
+                              onClick={() => handleEdit(widget.id)}
+                              className="grid size-7 place-items-center rounded-lg text-muted-foreground/60 transition hover:bg-foreground/5 hover:text-muted-foreground"
+                              title={wt.ctxEditWidget}
+                              aria-label={wt.ctxEditWidget}
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           <button
-                            onClick={() => handleEdit(widget.id)}
-                            className="text-muted-foreground/60 hover:text-muted-foreground"
+                            type="button"
+                            onClick={(event) =>
+                              handleContext(event, widget.id, "widget")
+                            }
+                            className="grid size-7 place-items-center rounded-lg text-muted-foreground/55 opacity-60 transition hover:bg-foreground/5 hover:text-foreground focus-visible:opacity-100 group-hover/widget:opacity-100"
+                            title={`${wt.ctxEditWidget} / ${wt.ctxDelete}`}
+                            aria-label={`${wt.ctxEditWidget} / ${wt.ctxDelete}`}
                           >
-                            <Edit3 className="w-3.5 h-3.5" />
+                            <EllipsisIcon className="size-4" />
                           </button>
-                        )}
+                        </div>
                       </div>
                       <div className="text-sm text-muted-foreground">
                         {widget.type === "notes" && (

@@ -61,6 +61,19 @@ export async function enableSkill(
     );
 }
 
+export async function enableMarketSkill(skillName: string): Promise<void> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/skills-market/${encodeURIComponent(skillName)}/enable`,
+    { method: "POST", headers: authHeaders() },
+  );
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(
+      err.detail ?? `Failed to enable market skill: ${res.statusText}`,
+    );
+  }
+}
+
 export async function loadSkills(): Promise<SkillInfo[]> {
   return listSkills();
 }

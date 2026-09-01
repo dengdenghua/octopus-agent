@@ -439,8 +439,12 @@ function normalizeModelProfile(payload: unknown): CoderModelProfile {
  */
 export function applyCoderModelProfileBoundary<
   T extends Record<string, unknown>,
->(agentId: string | null | undefined, context: T): T {
-  if (agentId !== "coder") return context;
+>(
+  agentId: string | null | undefined,
+  context: T,
+  executionEngine?: "octopus" | "codex",
+): T {
+  if (executionEngine !== "codex" && agentId !== "coder") return context;
   const next = { ...context };
   delete next.model_name;
   delete next.reasoning_effort;

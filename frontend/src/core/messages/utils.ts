@@ -48,43 +48,36 @@ function publicNarrativeCandidates(message: Message): string[] {
     .filter(Boolean);
 }
 
-/**
- * Some legacy streams emit the same public checkpoint twice: first as a plain
- * assistant message, then again on the following structured process item.
- * Classify the first copy structurally instead of guessing from words such as
- * "reading" or "investigating". The process renderer can then keep one copy
- * on the chronological lane without creating a second answer/avatar block.
- */
-function isDuplicatedProcessPrelude(
-  message: Message,
-  index: number,
-  messages: Message[],
-): boolean {
-  const narrative = normalizedNarrativeText(extractContentFromMessage(message));
-  if (!narrative) return false;
+const PROCESS_PRELUDE_NARRATIVE_RE =
+  /(?:接下来|下一步|随后|这就|按计划|从.{1,32}开始|(?:我|我们)(?:会|将|先)|先.{0,80}(?:再|然后|随后|逐一)|\b(?:next|let me|i(?:'ll| will| am going to)|we(?:'ll| will)|start by)\b|\bfirst\b.{0,120}\bthen\b)/i;
+const TERMINAL_OUTCOME_NARRATIVE_RE =
+  /(?:已完成|完成了|分析完成|结果(?:是|如下)|结论|总结|最终(?:结果|结论|报告)|\b(?:done|completed|result|conclusion|summary|final report)\b)/i;
 
-  for (let nextIndex = index + 1; nextIndex < messages.length; nextIndex += 1) {
-    const next = messages[nextIndex]!;
-    if (next.type === "human") break;
-    if (next.type !== "ai") continue;
-    const isProcessMessage =
-      next.additional_kwargs?.public_progress === true ||
-      hasToolCalls(next) ||
-      hasReasoning(next);
-    if (!isProcessMessage) continue;
-    if (publicNarrativeCandidates(next).includes(narrative)) return true;
-  }
-  return false;
+/**
+ * Some providers mark every visible assistant fragment as ``answer``, even
+ * when a short fragment only announces work that the next message performs.
+ * Keep protocol-marked real answers authoritative, but recover this narrow,
+ * observable prelude shape so it does not become a premature answer bubble.
+ */
+function hasProcessPreludeNarrative(message: Message): boolean {
+  const narrative = normalizedNarrativeText(extractContentFromMessage(message));
+  return Boolean(
+    narrative &&
+    narrative.length <= 480 &&
+    PROCESS_PRELUDE_NARRATIVE_RE.test(narrative) &&
+    !TERMINAL_OUTCOME_NARRATIVE_RE.test(narrative),
+  );
 }
 
 /**
  * Check whether an AI message is an intermediate process prelude rather than
  * the final answer. This covers cases where the model emits a plan/commentary
- * message (e.g. "接下来我会先圈定3个...") BEFORE any tool calls, and that text
- * isn't duplicated in a later structured process item (so isDuplicatedProcessPrelude
- * misses it). If subsequent AI messages in the same turn carry tool calls or
- * public_progress markers, this message belongs on the process timeline, not as
- * a standalone answer bubble above the thinking.
+ * message (e.g. "接下来我会先圈定3个...") BEFORE any tool calls. If subsequent
+ * AI messages in the same turn carry tool calls or public_progress markers,
+ * this message belongs on the process timeline, not as a standalone answer
+ * bubble above the thinking. groupMessages uses an equivalent pre-indexed
+ * predicate; this exported helper remains useful to callers classifying one
+ * isolated message.
  */
 export function isProcessPrelude(
   message: Message,
@@ -94,6 +87,17 @@ export function isProcessPrelude(
   if (message.type !== "ai") return false;
   if (hasToolCalls(message)) return false;
   if (message.additional_kwargs?.public_progress === true) return false;
+  // A provider may emit bookkeeping tools (for example the final todo
+  // completion) after it has already published the answer. Protocol-marked
+  // answers — and legacy messages that satisfy the same final-answer
+  // compatibility predicate — must stay in the answer lane instead of being
+  // reclassified as a process prelude merely because work follows them.
+  if (
+    isLikelyFinalAnswerContent(message) &&
+    !hasProcessPreludeNarrative(message)
+  ) {
+    return false;
+  }
   // Only messages with visible content can be preludes; reasoning-only
   // messages are already routed by the hasReasoning && !hasContent branch.
   if (!hasContent(message)) return false;
@@ -115,6 +119,85 @@ export function isProcessPrelude(
   return false;
 }
 
+interface FutureMessageSignals {
+  /** A later tool/progress AI message exists before the next human turn. */
+  hasLaterProcessMessage: boolean[];
+  /** A later structured process message repeats this message's narrative. */
+  hasLaterDuplicateNarrative: boolean[];
+  /** Any later non-error assistant message has visible content. */
+  hasLaterSuccessfulAssistant: boolean[];
+}
+
+/**
+ * Build the forward-looking predicates used by groupMessages in one reverse
+ * walk. The former implementation sliced/scanned the remaining transcript
+ * for every message, which made every streamed frame approach O(messages²)
+ * on long-running tasks.
+ */
+function indexFutureMessageSignals(messages: Message[]): FutureMessageSignals {
+  const hasLaterProcessMessage = Array<boolean>(messages.length).fill(false);
+  const hasLaterDuplicateNarrative = Array<boolean>(messages.length).fill(
+    false,
+  );
+  const hasLaterSuccessfulAssistant = Array<boolean>(messages.length).fill(
+    false,
+  );
+
+  let laterProcessMessage = false;
+  let laterSuccessfulAssistant = false;
+  const laterProcessNarratives = new Set<string>();
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]!;
+    hasLaterSuccessfulAssistant[index] = laterSuccessfulAssistant;
+    if (
+      (message.type === "ai" || message.type === "assistant") &&
+      !message.additional_kwargs?.error &&
+      hasContent(message)
+    ) {
+      laterSuccessfulAssistant = true;
+    }
+
+    if (message.type === "human") {
+      laterProcessMessage = false;
+      laterProcessNarratives.clear();
+      continue;
+    }
+
+    hasLaterProcessMessage[index] = laterProcessMessage;
+    if (message.type !== "ai") continue;
+
+    const narrative = normalizedNarrativeText(
+      extractContentFromMessage(message),
+    );
+    hasLaterDuplicateNarrative[index] = Boolean(
+      narrative && laterProcessNarratives.has(narrative),
+    );
+
+    const isStructuredProcessMessage =
+      message.additional_kwargs?.public_progress === true ||
+      hasToolCalls(message) ||
+      hasReasoning(message);
+    if (isStructuredProcessMessage) {
+      for (const candidate of publicNarrativeCandidates(message)) {
+        laterProcessNarratives.add(candidate);
+      }
+    }
+    if (
+      message.additional_kwargs?.public_progress === true ||
+      hasToolCalls(message)
+    ) {
+      laterProcessMessage = true;
+    }
+  }
+
+  return {
+    hasLaterProcessMessage,
+    hasLaterDuplicateNarrative,
+    hasLaterSuccessfulAssistant,
+  };
+}
+
 export function groupMessages<T>(
   messages: Message[],
   mapper: (group: MessageGroup) => T,
@@ -124,6 +207,23 @@ export function groupMessages<T>(
   }
 
   const groups: MessageGroup[] = [];
+  const futureSignals = indexFutureMessageSignals(messages);
+  let currentTurnProcessingGroup: MessageGroup | null = null;
+  const toolCallOwners = new Map<string, MessageGroup>();
+
+  function indexToolCallOwner(
+    message: Message,
+    group: MessageGroup,
+    prefer = false,
+  ) {
+    if (message.type !== "ai") return;
+    for (const toolCall of (message as AIMessage).tool_calls ?? []) {
+      if (!toolCall.id) continue;
+      if (prefer || !toolCallOwners.has(toolCall.id)) {
+        toolCallOwners.set(toolCall.id, group);
+      }
+    }
+  }
 
   // Returns the last group if it can still accept tool messages
   // (i.e. it's an in-flight processing group, not a terminal human/assistant group).
@@ -145,45 +245,30 @@ export function groupMessages<T>(
   // current human turn so those late process events return to the original
   // process lane instead of opening a new row below the terminal answer.
   function lastProcessingGroupInCurrentTurn() {
-    for (let index = groups.length - 1; index >= 0; index -= 1) {
-      const group = groups[index]!;
-      if (group.type === "human") break;
-      if (group.type === "assistant:processing") return group;
-    }
-    return null;
+    return currentTurnProcessingGroup;
   }
 
   function groupOwningToolCall(toolCallId: string | undefined) {
     if (!toolCallId) return null;
-    let fallback: MessageGroup | null = null;
-    for (let index = groups.length - 1; index >= 0; index -= 1) {
-      const group = groups[index]!;
-      if (group.type === "human") break;
-      const ownsCall = group.messages.some(
-        (candidate) =>
-          candidate.type === "ai" &&
-          (candidate as AIMessage).tool_calls?.some(
-            (toolCall) => toolCall.id === toolCallId,
-          ),
-      );
-      if (!ownsCall) continue;
-      if (group.type === "assistant:processing") return group;
-      fallback ??= group;
-    }
-    return fallback;
+    return toolCallOwners.get(toolCallId) ?? null;
   }
 
   function appendToCurrentProcessingGroup(message: Message) {
     const current = lastProcessingGroupInCurrentTurn();
     if (current) {
       current.messages.push(message);
-      return;
+      indexToolCallOwner(message, current, true);
+      return current;
     }
-    groups.push({
+    const group: MessageGroup = {
       id: message.id,
       type: "assistant:processing",
       messages: [message],
-    });
+    };
+    groups.push(group);
+    currentTurnProcessingGroup = group;
+    indexToolCallOwner(message, group, true);
+    return group;
   }
 
   // AI progress/reasoning is chronological conversation content. If a final
@@ -196,13 +281,16 @@ export function groupMessages<T>(
     const latest = groups[groups.length - 1];
     if (latest?.type === "assistant:processing") {
       latest.messages.push(message);
+      currentTurnProcessingGroup = latest;
       return;
     }
-    groups.push({
+    const group: MessageGroup = {
       id: message.id,
       type: "assistant:processing",
       messages: [message],
-    });
+    };
+    groups.push(group);
+    currentTurnProcessingGroup = group;
   }
 
   for (let index = 0; index < messages.length; index += 1) {
@@ -212,7 +300,10 @@ export function groupMessages<T>(
     }
 
     if (
-      isSupersededApprovalTimeoutMessage(message, messages.slice(index + 1))
+      isSupersededApprovalTimeoutMessage(
+        message,
+        futureSignals.hasLaterSuccessfulAssistant[index]!,
+      )
     ) {
       continue;
     }
@@ -223,6 +314,7 @@ export function groupMessages<T>(
 
     if (message.type === "human") {
       groups.push({ id: message.id, type: "human", messages: [message] });
+      currentTurnProcessingGroup = null;
       continue;
     }
 
@@ -246,11 +338,13 @@ export function groupMessages<T>(
         } else {
           // Orphaned tool message (e.g., approval request from PermissionMiddleware).
           // Wrap it in its own processing group instead of dropping it.
-          groups.push({
+          const group: MessageGroup = {
             id: message.id,
             type: "assistant:processing",
             messages: [message],
-          });
+          };
+          groups.push(group);
+          currentTurnProcessingGroup = group;
         }
       }
       continue;
@@ -258,17 +352,21 @@ export function groupMessages<T>(
 
     if (message.type === "ai") {
       if (hasPresentFiles(message)) {
-        groups.push({
+        const group: MessageGroup = {
           id: message.id,
           type: "assistant:present-files",
           messages: [message],
-        });
+        };
+        groups.push(group);
+        indexToolCallOwner(message, group);
       } else if (hasSubagent(message)) {
-        groups.push({
+        const group: MessageGroup = {
           id: message.id,
           type: "assistant:subagent",
           messages: [message],
-        });
+        };
+        groups.push(group);
+        indexToolCallOwner(message, group);
       } else if (message.additional_kwargs?.public_progress === true) {
         // Public checkpoints are answer-like prose, but they belong to the
         // chronological process lane rather than becoming standalone final
@@ -306,8 +404,10 @@ export function groupMessages<T>(
         groups.push({ id: message.id, type: "assistant", messages: [message] });
       } else if (
         hasContent(message) &&
-        (isDuplicatedProcessPrelude(message, index, messages) ||
-          isProcessPrelude(message, index, messages))
+        (futureSignals.hasLaterDuplicateNarrative[index] ||
+          ((!isLikelyFinalAnswerContent(message) ||
+            hasProcessPreludeNarrative(message)) &&
+            futureSignals.hasLaterProcessMessage[index]))
       ) {
         appendToLatestProcessingGroup(message);
       } else if (hasReasoning(message) && !hasContent(message)) {
@@ -396,7 +496,7 @@ const JSON_COMMAND_TOOL_FENCE_RE =
 const JSON_TOOL_ARRAY_FENCE_RE =
   /```(?:json|jsonc|json5)?\s*\n?\s*[[{][\s\S]*?"(?:tool|tool_name)"\s*:\s*"[^"]+"[\s\S]*?(?:```|$)/gi;
 const BARE_INTERNAL_TOOL_PAYLOAD_RE =
-  /^\s*(?:fs_writer|fs_writen|fs_written|write_file|write_text_file|edit_text_file|str_replace|apply_patch)\s*(?:\n|\()\s*[\s\S]*$/i;
+  /^\s*(?:fs_writer|fs_writen|fs_written|write_file|write_text_file|edit_file|edit_text_file|str_replace|apply_patch|todo_write|todo_update|exec_shell|shell_command|run_command|web_search|fetch_url|web_fetch|read_file|read_text_file|glob_files|find_files|grep_text|list_cwd|search_capabilities|query_skill|browser_open|browser_get_content|artifact|present_files)\s*(?:\n|\()\s*[\s\S]*$/i;
 const XML_TOOL_CALL_RE = /<tool_call>[\s\S]*?(?:<\/tool_call>|$)/gi;
 const SEED_TOOL_CALL_RE =
   /<seed:tool_call\b[^>]*>[\s\S]*?(?:<\/seed:tool_call>|$)/gi;
@@ -406,6 +506,12 @@ const XML_GENERIC_FUNCTION_CALL_RE =
   /<function(?:=[^>\s]+|\b[^>]*)>[\s\S]*?(?:<\/function>|$)/gi;
 const XML_FUNCTION_CALL_RE =
   /<function=(?:fs_writer|fs_writen|fs_written|write_file|write_text_file|edit_text_file|str_replace|apply_patch|deep_research|web_search|search)>[\s\S]*?(?:<\/function>|$)/gi;
+const INTERNAL_PROMPT_ENVELOPE_NAMES = [
+  "original-user-request",
+  "just-completed-evidence",
+  "next-public-scope",
+  "bounded-read-evidence",
+] as const;
 const INTERNAL_CONTROL_TAG_LINE_RE =
   /^\s*(?:<read_only>\s*<\/read_only>|<\/?read_only>)\s*$/i;
 const INTERNAL_CONTROL_TAG_INLINE_RE =
@@ -434,6 +540,53 @@ function stripLeakedTeamRoleNoise(content: string): string {
     .replace(TEAM_ROLE_START_RE, "")
     .replace(TEAM_ROLE_PREFIX_RE, "")
     .trim();
+}
+
+/**
+ * Remove model-facing prompt envelopes that a provider echoed into public
+ * assistant text. Process fenced code separately so documentation and code
+ * examples remain literal. A dangling opening tag consumes the rest of that
+ * non-code segment: truncated provider output must not expose half an internal
+ * request or evidence packet while it is still streaming.
+ */
+function stripInternalPromptEnvelopes(content: string): string {
+  const hadPromptEnvelope = new RegExp(
+    `\\[(?:${INTERNAL_PROMPT_ENVELOPE_NAMES.join("|")})\\]`,
+    "i",
+  ).test(content);
+  const cleanedContent = content
+    .split(/(```[\s\S]*?(?:```|$))/g)
+    .map((segment) => {
+      if (segment.startsWith("```")) return segment;
+      let cleaned = segment;
+      for (const name of INTERNAL_PROMPT_ENVELOPE_NAMES) {
+        const paired = new RegExp(
+          `\\[${name}\\][\\s\\S]*?\\[\\/${name}\\]`,
+          "gi",
+        );
+        const dangling = new RegExp(`\\[${name}\\][\\s\\S]*$`, "gi");
+        const closing = new RegExp(`\\[\\/${name}\\]`, "gi");
+        cleaned = cleaned
+          .replace(paired, "")
+          .replace(dangling, "")
+          .replace(closing, "");
+      }
+      return cleaned.replace(
+        /^\s*\[explicit-read-scope\][^\n]*(?:\n|$)/gim,
+        "",
+      );
+    })
+    .join("");
+  // If removing an echoed packet leaves only a short provider label such as
+  // "mock-echo:" or "Answer:", suppress the row entirely. Rendering that
+  // shell creates an empty assistant bubble above the actual answer.
+  if (
+    hadPromptEnvelope &&
+    /^[\p{L}\p{N}_ -]{0,40}[:：-]?\s*$/u.test(cleanedContent)
+  ) {
+    return "";
+  }
+  return cleanedContent;
 }
 
 export function stripLeakedRendererMarkup(
@@ -479,16 +632,23 @@ export function sanitizeLegacyGuardDiagnostic(content: string): string {
     ) ||
     (/(?:系统|system).{0,120}(?:拦截|阻止|拒绝|blocked|rejected)/i.test(text) &&
       /(?:我.{0,80}(?:回复|最终答案|收尾)|my final answer)/i.test(text));
-  if (!guardMatch || !isFailureDiagnostic) return content;
+  const leakedCompletenessReason =
+    /The proposed Final Answer (?:only announces|only promises|is empty)|Execute the stated (?:read|search)|not a completed answer/i.test(
+      text,
+    );
+  if ((!guardMatch && !leakedCompletenessReason) || !isFailureDiagnostic) {
+    return content;
+  }
 
-  const label = guardMatch[1]?.toLowerCase() ?? "";
-  const reason = label.includes("final-answer completeness")
-    ? "收尾内容仍像进行中说明，尚未形成可交付结果。"
-    : label.includes("todo-protocol")
-      ? "任务清单状态与实际执行结果没有同步。"
-      : label.includes("code-mode")
-        ? "代码任务缺少可确认的修改或验证结果。"
-        : "系统未能确认本轮已经形成可交付结果。";
+  const label = guardMatch?.[1]?.toLowerCase() ?? "";
+  const reason =
+    label.includes("final-answer completeness") || leakedCompletenessReason
+      ? "收尾内容仍像进行中说明，尚未形成可交付结果。"
+      : label.includes("todo-protocol")
+        ? "任务清单状态与实际执行结果没有同步。"
+        : label.includes("code-mode")
+          ? "代码任务缺少可确认的修改或验证结果。"
+          : "系统未能确认本轮已经形成可交付结果。";
 
   return [
     "这轮任务没有完成。我已停止重复尝试，并保留了当前进度。",
@@ -526,7 +686,7 @@ function stripReactProtocol(content: string): string {
 }
 
 export function stripInternalToolProtocol(content: string): string {
-  const cleaned = content
+  const cleaned = stripInternalPromptEnvelopes(content)
     .replace(INTERNAL_TOOL_FENCE_RE, "")
     .replace(JSON_COMMAND_TOOL_FENCE_RE, "")
     .replace(JSON_TOOL_ARRAY_FENCE_RE, "")
@@ -646,6 +806,12 @@ export type AssistantTerminalState =
   | "interrupted"
   | "failed"
   | "blocked";
+
+export function isAssistantStopTerminalState(
+  state: AssistantTerminalState | null,
+): boolean {
+  return state === "cancelled" || state === "interrupted";
+}
 
 export function latestAssistantTerminalState(
   messages: Message[],
@@ -859,7 +1025,7 @@ export function isHiddenFromUIMessage(message: Message) {
 
 function isSupersededApprovalTimeoutMessage(
   message: Message,
-  laterMessages: Message[],
+  hasLaterSuccessfulAssistant: boolean,
 ) {
   if (message.type !== "ai") return false;
   const error = message.additional_kwargs?.error;
@@ -870,12 +1036,7 @@ function isSupersededApprovalTimeoutMessage(
   ) {
     return false;
   }
-  return laterMessages.some(
-    (later) =>
-      (later.type === "ai" || later.type === "assistant") &&
-      !later.additional_kwargs?.error &&
-      hasContent(later),
-  );
+  return hasLaterSuccessfulAssistant;
 }
 
 /**

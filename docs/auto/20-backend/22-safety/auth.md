@@ -186,12 +186,13 @@ tier: "core"
 | --- | --- | --- |
 | func | `def offered_websocket_subprotocols(connection)` | Return the handshake protocols in client order. |
 | func | `def websocket_bearer_token(connection)` | Decode a bearer token offered through WebSocket subprotocols. |
+| func | `def websocket_auth_token(connection)` | Return a bearer credential from production-safe WS transports. |
 | func | `def accepted_auth_subprotocol(connection)` | Select only the non-secret auth marker from the client's offer. |
 
 
 ## Who imports this
 
-**144** file(s) reference this package:
+**145** file(s) reference this package:
 
 - **`runtime/adapters/`** · 5 file(s)
   - `runtime/adapters/integrations/local_auth/router.py`
@@ -251,9 +252,10 @@ tier: "core"
   - `runtime/sensing/gateway/_config_endpoints_security.py`
   - `runtime/sensing/gateway/_cowork_group_access.py`
   - _… and 61 more_
-- **`runtime/tentacle/`** · 2 file(s)
+- **`runtime/tentacle/`** · 3 file(s)
   - `runtime/tentacle/coordinator.py`
   - `runtime/tentacle/dashboard.py`
+  - `runtime/tentacle/dashboard_support.py`
 - **`runtime/tour.py/`** · 1 file(s)
   - `runtime/tour.py`
 - **`runtime/workspace/`** · 1 file(s)

@@ -85,7 +85,7 @@ const FALLBACK_NODE_SPECS: NodeSpec[] = [
         name: "filename_prefix",
         type: "STRING",
         optional: false,
-        default: "Octopus",
+        default: "Echo",
       },
     ],
   },
@@ -651,7 +651,7 @@ export function ComfyWorkflowEditor({
               </div>
               <div className="mt-5 rounded-lg border border-white/10 bg-white/[0.03] p-3 text-[9px] leading-4 text-zinc-500">
                 <ArrowRightIcon className="mb-1 size-3" />
-                参数与连线会写回 Comfy API prompt；节点坐标只保存在 Octopus UI
+                参数与连线会写回 Comfy API prompt；节点坐标只保存在 Echo UI
                 元数据中。
               </div>
             </>

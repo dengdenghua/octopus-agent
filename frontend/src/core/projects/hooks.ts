@@ -31,6 +31,26 @@ export interface ProjectHome {
   threadId: string;
 }
 
+export interface DetachedProjectBinding {
+  ok: boolean;
+  thread_id: string;
+  project_id: string;
+  detached: boolean;
+  project?: Project | null;
+}
+
+export class ProjectBindingRequestError extends Error {
+  readonly status: number;
+  readonly code: string | null;
+
+  constructor(message: string, status: number, code?: string | null) {
+    super(message);
+    this.name = "ProjectBindingRequestError";
+    this.status = status;
+    this.code = code?.trim() || null;
+  }
+}
+
 export interface ProjectInitialAgent {
   id: string;
   displayName?: string;
@@ -242,6 +262,8 @@ export async function ensureProjectHome(
 export function useProjects() {
   return useQuery<Project[]>({
     queryKey: ["projects"],
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const res = await fetch(BASE(), {
         headers: authHeaders(),
@@ -346,6 +368,86 @@ export function usePromoteGroupToProject() {
   });
 }
 
+/** Remove only the Project OS binding from a work group.
+ *
+ * The canonical group thread, room, members, invitations, and transcript are
+ * deliberately outside this mutation. Keeping the lifecycle operation in one
+ * hook also makes the DELETE contract easy to adapt without leaking endpoint
+ * details into the realtime page.
+ */
+export function useDetachProjectFromGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      threadId,
+      expectedProjectId,
+      force = false,
+    }: {
+      threadId: string;
+      expectedProjectId: string;
+      force?: boolean;
+    }) => {
+      const res = await fetch(
+        `${BASE()}/from-group/${encodeURIComponent(threadId)}`,
+        {
+          method: "DELETE",
+          headers: jsonAuthHeaders(),
+          body: JSON.stringify({
+            force,
+            expected_project_id: expectedProjectId,
+          }),
+        },
+      );
+      if (!res.ok) {
+        let detail = "";
+        let code: string | null = null;
+        try {
+          const payload = (await res.json()) as {
+            detail?: unknown;
+            message?: unknown;
+            code?: unknown;
+          };
+          const rawDetail = payload.detail ?? payload.message;
+          if (typeof rawDetail === "string") {
+            detail = rawDetail.trim();
+          } else if (rawDetail && typeof rawDetail === "object") {
+            const structured = rawDetail as {
+              code?: unknown;
+              message?: unknown;
+            };
+            if (typeof structured.message === "string") {
+              detail = structured.message.trim();
+            }
+            if (typeof structured.code === "string") {
+              code = structured.code.trim();
+            }
+          }
+          if (!code && typeof payload.code === "string") {
+            code = payload.code.trim();
+          }
+        } catch {
+          // Some deployments return an empty/plain response for errors. The
+          // status remains available to render the conflict-specific message.
+        }
+        throw new ProjectBindingRequestError(
+          detail || `Failed to detach project from group: ${res.statusText}`,
+          res.status,
+          code,
+        );
+      }
+      return (await res.json()) as DetachedProjectBinding;
+    },
+    onSuccess: (_result, input) => {
+      void qc.invalidateQueries({ queryKey: ["projects"] });
+      void qc.invalidateQueries({ queryKey: ["thread-map"] });
+      void qc.invalidateQueries({ queryKey: ["threads"] });
+      void qc.invalidateQueries({
+        queryKey: ["project", "by-thread", input.threadId],
+      });
+    },
+  });
+}
+
 export function useEnsureProjectHome() {
   const qc = useQueryClient();
   return useMutation({
@@ -400,6 +502,8 @@ export function useMoveThreadToProject() {
 export function useThreadMap() {
   return useQuery<Record<string, string>>({
     queryKey: ["thread-map"],
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const res = await fetch(`${BASE()}/thread-map`, {
         headers: authHeaders(),

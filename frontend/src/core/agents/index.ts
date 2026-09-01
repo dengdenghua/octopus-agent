@@ -1,6 +1,6 @@
 export * from "./api";
 export * from "./hooks";
-export * from "./local-cli";
+export * from "./agent-list";
 export * from "./mobile-devices";
 export * from "./persona-policy";
 export {

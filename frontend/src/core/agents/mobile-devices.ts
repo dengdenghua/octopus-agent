@@ -36,10 +36,16 @@ function deviceToAgent(d: TentacleDevice): Agent {
  * addable team members. Empty when none are connected or the bridge is offline
  * — the pickers just fall back to the built-in agents.
  */
-export function useMobileDevices(): {
+export type MobileDeviceQueryOptions = {
+  enabled?: boolean;
+  refetchInterval?: number | false;
+};
+
+export function useMobileDevices(opts: MobileDeviceQueryOptions = {}): {
   mobileAgents: Agent[];
   isLoading: boolean;
 } {
+  const enabled = opts.enabled ?? true;
   const { data, isLoading } = useQuery({
     queryKey: ["tentacle-devices"],
     queryFn: async ({ signal }): Promise<TentacleDevice[] | null> => {
@@ -53,10 +59,11 @@ export function useMobileDevices(): {
         return null;
       }
     },
+    enabled,
     refetchOnWindowFocus: false,
     // Devices come and go — refresh more often than the static agent list.
     staleTime: 15_000,
-    refetchInterval: 20_000,
+    refetchInterval: enabled ? (opts.refetchInterval ?? 20_000) : false,
   });
   const mobileAgents = (data ?? []).map(deviceToAgent);
   return { mobileAgents, isLoading };

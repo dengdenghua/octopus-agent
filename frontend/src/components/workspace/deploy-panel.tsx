@@ -35,6 +35,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { RoutedWebLink } from "@/components/ui/routed-web-link";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -271,7 +272,10 @@ function ConfigPreview({
         {t.deploy.generatedConfigs}
       </p>
       {configs.map((cfg, i) => (
-        <div key={cfg.filename} className="rounded-lg border border-border-default">
+        <div
+          key={cfg.filename}
+          className="rounded-lg border border-border-default"
+        >
           <button
             onClick={() => setExpanded(expanded === i ? null : i)}
             className="flex w-full items-center gap-2 px-2 py-1.5 text-xs transition-colors hover:bg-accent/40"
@@ -363,15 +367,14 @@ function HistoryItem({ record }: { record: DeployRecord }) {
         <p className="text-muted-foreground truncate text-xs">{timeStr}</p>
       </div>
       {record.url && (
-        <a
+        <RoutedWebLink
           href={record.url}
-          target="_blank"
-          rel="noopener noreferrer"
+          openTargetSource="deployment"
           className="text-primary hover:text-primary/80 shrink-0"
           title="Open deployment"
         >
           <ExternalLinkIcon className="size-3.5" />
-        </a>
+        </RoutedWebLink>
       )}
     </div>
   );
@@ -765,14 +768,13 @@ export function DeployPanel({
                 {currentDeploy.url && (
                   <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/5 p-3">
                     <GlobeIcon className="size-4 shrink-0 text-success" />
-                    <a
+                    <RoutedWebLink
                       href={currentDeploy.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      openTargetSource="deployment"
                       className="flex-1 truncate text-xs font-medium text-success underline decoration-green-400 dark:text-success"
                     >
                       {currentDeploy.url}
-                    </a>
+                    </RoutedWebLink>
                     <button
                       onClick={handleCopyUrl}
                       className="shrink-0 rounded p-1 text-success hover:bg-success/10 dark:hover:bg-success"
@@ -780,15 +782,14 @@ export function DeployPanel({
                     >
                       <CopyIcon className="size-3.5" />
                     </button>
-                    <a
+                    <RoutedWebLink
                       href={currentDeploy.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      openTargetSource="deployment"
                       className="shrink-0 rounded p-1 text-success hover:bg-success/10 dark:hover:bg-success"
                       title="Open in browser"
                     >
                       <ExternalLinkIcon className="size-3.5" />
-                    </a>
+                    </RoutedWebLink>
                   </div>
                 )}
 

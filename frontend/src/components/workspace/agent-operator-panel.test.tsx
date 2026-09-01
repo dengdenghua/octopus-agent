@@ -1502,7 +1502,7 @@ describe("<AgentOperatorPanel />", () => {
         reason: "operator scorecard drill-down remediation",
       });
     });
-    expect(await screen.findByText("#1 Octopus 97")).toBeInTheDocument();
+    expect(await screen.findByText("#1 EchoAI 97")).toBeInTheDocument();
     expect(await screen.findByText("Promotion audit")).toBeInTheDocument();
     expect(await screen.findByText("Memory quality")).toBeInTheDocument();
     expect(await screen.findByText("82% reliable")).toBeInTheDocument();

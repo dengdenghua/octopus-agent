@@ -24,6 +24,15 @@ export interface TentacleDevice {
   total_capabilities: number;
   last_used_ago: number | null;
   meta: Record<string, unknown>;
+  health?: DeviceHealth;
+}
+
+export interface DeviceHealth {
+  device_id: string;
+  level: "healthy" | "degraded" | "unhealthy" | "offline";
+  score: number;
+  reasons: string[];
+  heartbeat_age_s?: number;
 }
 
 export interface TaskStep {
@@ -63,6 +72,38 @@ export interface SkillInfo {
   description?: string;
   category?: string;
   enabled?: boolean;
+}
+
+export interface DeviceLease {
+  leased: boolean;
+  lease: null | {
+    owner: string;
+    task_id: string;
+    lease_id: string;
+    expires_in_s: number;
+  };
+}
+
+export interface DeviceProcedure {
+  procedure_id: string;
+  device_id: string;
+  status:
+    | "draft"
+    | "running"
+    | "paused"
+    | "succeeded"
+    | "failed"
+    | "cancelled"
+    | "emergency_stopped";
+  current_step: number;
+  steps: Array<{
+    step_id: string;
+    action: string;
+    arguments: Record<string, unknown>;
+  }>;
+  receipt_ids: string[];
+  error: string | null;
+  updated_at: number;
 }
 
 // ── VLM / Screen-stream types ──────────────────────────
@@ -109,6 +150,80 @@ export async function listDevices(): Promise<TentacleDevice[]> {
 
 export async function getDevice(tentacleId: string): Promise<TentacleDevice> {
   return request<TentacleDevice>(`/devices/${encodeURIComponent(tentacleId)}`);
+}
+
+export async function getDeviceManifest(
+  tentacleId: string,
+): Promise<Record<string, unknown>> {
+  return request(`/devices/${encodeURIComponent(tentacleId)}/manifest`);
+}
+
+export async function getDeviceLease(tentacleId: string): Promise<DeviceLease> {
+  return request(`/devices/${encodeURIComponent(tentacleId)}/lease`);
+}
+
+export async function getDeviceHealth(
+  tentacleId: string,
+): Promise<DeviceHealth> {
+  return request(`/devices/${encodeURIComponent(tentacleId)}/health`);
+}
+
+export async function getDeviceTelemetry(
+  tentacleId: string,
+  metric?: string,
+): Promise<{
+  samples: Array<Record<string, unknown>>;
+  faults: Array<Record<string, unknown>>;
+}> {
+  const query = metric ? `?metric=${encodeURIComponent(metric)}` : "";
+  return request(
+    `/devices/${encodeURIComponent(tentacleId)}/telemetry${query}`,
+  );
+}
+
+export async function listProcedures(): Promise<DeviceProcedure[]> {
+  return request("/procedures");
+}
+
+export async function controlProcedure(
+  procedureId: string,
+  action: "run" | "pause" | "resume" | "cancel" | "emergency-stop",
+): Promise<DeviceProcedure> {
+  return request(`/procedures/${encodeURIComponent(procedureId)}/${action}`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export interface SimulationReport {
+  procedure_id: string;
+  device_id: string;
+  success: boolean;
+  initial_state: Record<string, unknown>;
+  final_state: Record<string, unknown>;
+  errors: string[];
+  steps: Array<{
+    step_id: string;
+    action: string;
+    success: boolean;
+    before: Record<string, unknown>;
+    after: Record<string, unknown>;
+    errors: string[];
+    warnings: string[];
+  }>;
+}
+
+export async function dryRunProcedure(
+  procedureId: string,
+  scenario?: {
+    initial_state?: Record<string, unknown>;
+    injected_faults?: Record<string, string>;
+  },
+): Promise<SimulationReport> {
+  return request(`/procedures/${encodeURIComponent(procedureId)}/dry-run`, {
+    method: "POST",
+    body: JSON.stringify(scenario ?? {}),
+  });
 }
 
 export async function submitTask(

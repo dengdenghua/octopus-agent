@@ -31,11 +31,50 @@ export interface StreamingTextBufferOptions {
   backlogDivisor?: number;
   /** Reveal a backlog at or below this size immediately. */
   fastDrainThreshold?: number;
-  /** Maximum animated tail after settlement. Default 240 ms. */
+  /** Maximum animated tail after settlement. Default 96 ms. */
   maxFinishDelayMs?: number;
 }
 
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
+/**
+ * Shared playback presets so the overall streaming cadence is tuned in one
+ * place. Tuning rationale:
+ *
+ * - ``finalAnswer``: preserve a light visual cadence without letting the
+ *   renderer trail the transport by more than roughly one perceptual frame.
+ * - ``liveThinking``: private reasoning arrives in larger bursts than the
+ *   final answer; a slightly faster cadence (32ms, up to 10 chars) keeps
+ *   the live window from accumulating seconds of invisible backlog on
+ *   fast providers while staying readable.
+ * - ``burstDrain``: terminal-only verdicts (sub-agent final answer) that
+ *   never streamed token-by-token — the whole text appears at once, so the
+ *   drain window is wider (160ms) and the floor higher (2 chars/tick) to
+ *   read as a smooth materialisation rather than a flash.
+ */
+export const STREAMING_TYPE_PRESETS = {
+  finalAnswer: {
+    targetIntervalMs: 32,
+    backlogDivisor: 10,
+    fastDrainThreshold: 2,
+    maxFinishDelayMs: 96,
+  },
+  liveThinking: {
+    targetIntervalMs: 32,
+    maxCharsPerTick: 10,
+    backlogDivisor: 12,
+    fastDrainThreshold: 2,
+    maxFinishDelayMs: 120,
+  },
+  burstDrain: {
+    targetIntervalMs: 32,
+    minCharsPerTick: 2,
+    maxCharsPerTick: 12,
+    backlogDivisor: 8,
+    fastDrainThreshold: 4,
+    maxFinishDelayMs: 160,
+  },
+} as const satisfies Record<string, Partial<StreamingTextBufferOptions>>;
 
 function prefersReducedMotion(): boolean {
   return (
@@ -96,7 +135,7 @@ export function useStreamingTextBuffer({
   maxCharsPerTick = 6,
   backlogDivisor = 12,
   fastDrainThreshold = 0,
-  maxFinishDelayMs = 240,
+  maxFinishDelayMs = 96,
 }: StreamingTextBufferOptions): string {
   const [displayText, setDisplayText] = useState(targetText);
   const displayLengthRef = useRef(targetText.length);

@@ -57,7 +57,7 @@ describe("AppMarketplacePanel", () => {
     const market = screen.getByTestId("capability-market");
     expect(market).toHaveAttribute("data-view", "featured");
     expect(market).toHaveAttribute("data-search", "浏览器");
-    expect(market).toHaveAttribute("data-max-items", "6");
+    expect(market).toHaveAttribute("data-max-items", "7");
     expect(market).toHaveAttribute("data-show-toolbar", "false");
 
     await userEvent.click(screen.getByRole("tab", { name: "全部应用" }));

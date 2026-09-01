@@ -36,7 +36,7 @@ export function DiagnosticsContent() {
   const [project, setProject] = useState<string>("");
 
   // Resolve the active workspace root for the ambient-suggestions
-  // panel. Reads from ``/api/projects/active`` when the molili /
+  // panel. Reads from ``/api/projects/active`` when the account /
   // scope subsystem has one bound; otherwise leaves empty and the
   // panel renders a "no active project" hint.
   useEffect(() => {

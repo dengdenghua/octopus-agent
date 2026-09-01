@@ -1,8 +1,8 @@
 // Workflow settlement notification handler.
 //
 // Listens for workflow/completed server notifications and shows a browser
-// notification when a background workflow finishes. The DSH "settlement"
-// analog — keeps users informed when orchestrated work completes while
+// notification when an Octopus Native background workflow finishes. This
+// keeps users informed when orchestrated work completes while
 // they're in another tab or workspace.
 
 import { useEffect } from "react";
@@ -18,8 +18,6 @@ export function useWorkflowSettlementNotification(
 
   useEffect(() => {
     if (!onNotification) return;
-
-
 
     // This is a demonstration of the hook pattern. In practice, this would
     // be integrated directly into use-realtime-thread.ts's onNotification

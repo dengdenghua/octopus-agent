@@ -30,7 +30,13 @@ vi.mock("../cowork/api", () => ({
   replaceCoworkRoster: mocks.replaceRoster,
 }));
 
-import { ensureProjectHome, useCreateProject } from "./hooks";
+import {
+  ensureProjectHome,
+  ProjectBindingRequestError,
+  useCreateProject,
+  useDetachProjectFromGroup,
+  usePromoteGroupToProject,
+} from "./hooks";
 
 describe("project home work group", () => {
   beforeEach(() => {
@@ -380,5 +386,134 @@ describe("project home work group", () => {
     );
     expect(mocks.deleteThread).not.toHaveBeenCalled();
     expect(mocks.createThread).not.toHaveBeenCalled();
+  });
+
+  test("opens project capability on the existing group without starting execution", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          project: { id: "P-bound", name: "秋季发布" },
+          thread_id: "thread-existing-group",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    const wrapper = ({ children }: PropsWithChildren) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+    const { result } = renderHook(() => usePromoteGroupToProject(), {
+      wrapper,
+    });
+
+    const promoted = await result.current.mutateAsync({
+      threadId: "thread-existing-group",
+      name: "秋季发布",
+      goal: "九月底完成发布",
+    });
+
+    expect(promoted.project).toMatchObject({
+      id: "P-bound",
+      name: "秋季发布",
+    });
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      "/api/projects/from-group/thread-existing-group",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "秋季发布",
+          goal: "九月底完成发布",
+          run: false,
+        }),
+      },
+    );
+    expect(mocks.createThread).not.toHaveBeenCalled();
+    expect(mocks.deleteThread).not.toHaveBeenCalled();
+  });
+
+  test("detaches only the project binding from the canonical group thread", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          thread_id: "thread-stays",
+          project_id: "P-detached",
+          detached: true,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    const wrapper = ({ children }: PropsWithChildren) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+    const { result } = renderHook(() => useDetachProjectFromGroup(), {
+      wrapper,
+    });
+
+    const detached = await result.current.mutateAsync({
+      threadId: "thread-stays",
+      expectedProjectId: "P-detached",
+    });
+
+    expect(detached).toMatchObject({
+      thread_id: "thread-stays",
+      project_id: "P-detached",
+      detached: true,
+    });
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      "/api/projects/from-group/thread-stays",
+      {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          force: false,
+          expected_project_id: "P-detached",
+        }),
+      },
+    );
+    expect(mocks.deleteThread).not.toHaveBeenCalled();
+  });
+
+  test("preserves the 409 status when an active project cannot be detached", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "PROJECT_ACTIVE",
+            message: "project is active",
+            force_required: true,
+          },
+        }),
+        {
+          status: 409,
+          statusText: "Conflict",
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    const wrapper = ({ children }: PropsWithChildren) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+    const { result } = renderHook(() => useDetachProjectFromGroup(), {
+      wrapper,
+    });
+
+    const request = result.current.mutateAsync({
+      threadId: "thread-active",
+      expectedProjectId: "P-active",
+    });
+
+    await expect(request).rejects.toBeInstanceOf(ProjectBindingRequestError);
+    await expect(request).rejects.toMatchObject({
+      message: "project is active",
+      status: 409,
+      code: "PROJECT_ACTIVE",
+    });
   });
 });

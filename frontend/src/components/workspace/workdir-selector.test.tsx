@@ -5,6 +5,14 @@ import { renderWithProviders } from "@/test/harness";
 
 import { WorkDirSelector } from "./workdir-selector";
 
+vi.mock("@/providers/AuthProvider", () => ({
+  useAuth: () => ({
+    authStatus: { enabled: false },
+    isAuthenticated: false,
+    isLoading: false,
+  }),
+}));
+
 describe("<WorkDirSelector />", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -203,6 +211,7 @@ describe("<WorkDirSelector />", () => {
     const input = await screen.findByPlaceholderText(
       "Enter workspace directory path:",
     );
+    expect(screen.getByText("Browse current folder")).toBeInTheDocument();
     expect(input).toHaveValue("");
     fireEvent.change(input, { target: { value: "/Users/example/proj" } });
     fireEvent.submit(input.closest("form")!);

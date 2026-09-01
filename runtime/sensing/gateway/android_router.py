@@ -23,6 +23,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 
 from runtime.safety.approval.device_lock import get_device_lock_manager
+from runtime.safety.auth.websocket import accepted_auth_subprotocol, websocket_auth_token
 from runtime.sensing.model_router.devices import (
     AndroidDevice,
     get_device_pool,
@@ -117,9 +118,9 @@ def create_android_router(
         """Authenticate the device WebSocket before ``accept()``.
 
         Mirrors ``realtime_gateway._resolve_ws_actor``: the token may
-        arrive as an ``Authorization: Bearer`` header, the
-        ``sec-websocket-protocol`` subprotocol (``bearer, <token>``), or
-        a ``?token=`` query param. Degrades open when ``require_auth`` is
+        arrive as an ``Authorization: Bearer`` header or the
+        ``sec-websocket-protocol`` subprotocol. Query-string credentials are
+        rejected so proxies and access logs cannot retain them. Degrades open when ``require_auth`` is
         false, so default (no-auth) deployments are unchanged. The HTTP
         endpoints on this router are gated separately by the control-plane
         auth middleware in ``app.py``; that middleware never sees WS
@@ -129,17 +130,7 @@ def create_android_router(
             if require_auth:
                 raise _WsAuthError("identity store required for android auth")
             return None
-        token: str | None = None
-        auth_header = ws.headers.get("authorization") or ""
-        if auth_header.lower().startswith("bearer "):
-            token = auth_header[7:].strip()
-        if token is None:
-            subproto = ws.headers.get("sec-websocket-protocol") or ""
-            parts = [p.strip() for p in subproto.split(",") if p.strip()]
-            if len(parts) >= 2 and parts[0].lower() == "bearer":
-                token = parts[1]
-        if token is None:
-            token = ws.query_params.get("token")
+        token = websocket_auth_token(ws)
         if not token:
             if require_auth:
                 raise _WsAuthError("missing android auth token")
@@ -285,7 +276,7 @@ def create_android_router(
             with contextlib.suppress(Exception):
                 await ws.close(code=exc.close_code, reason=str(exc))
             return
-        await ws.accept()
+        await ws.accept(subprotocol=accepted_auth_subprotocol(ws))
 
         # Register device
         dev = AndroidDevice(device_id=device_id, ws=ws)

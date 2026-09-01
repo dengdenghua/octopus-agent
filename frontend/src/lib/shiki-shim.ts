@@ -152,14 +152,18 @@ type CodeToHtmlOptions = {
 };
 
 const highlighterCache = new Map<string, Promise<Highlighter>>();
-const loadedLanguages = new Map<string, Set<string>>();
+// Per-theme map of language → in-flight (or settled) load promise. Sharing
+// the PROMISE — not just a "loaded" flag — is what makes concurrent
+// codeToHtml calls safe: marking a flag before `loadLanguage` resolves let
+// a second caller skip the wait and hit shiki's "Language not found".
+const loadedLanguages = new Map<string, Map<string, Promise<unknown>>>();
 
 function getHighlighter(theme: string): Promise<Highlighter> {
   let pending = highlighterCache.get(theme);
   if (!pending) {
     pending = createHighlighter({ themes: [theme], langs: [] });
     highlighterCache.set(theme, pending);
-    loadedLanguages.set(theme, new Set());
+    loadedLanguages.set(theme, new Map());
   }
   return pending;
 }
@@ -175,12 +179,25 @@ export async function codeToHtml(code: string, options: CodeToHtmlOptions) {
   const lang = LANGUAGE_LOADERS[options.lang] ? options.lang : "text";
   const highlighter = await getHighlighter(theme);
   const loaded = loadedLanguages.get(theme);
-  if (loaded && lang !== "text" && !loaded.has(lang)) {
-    // Mark before awaiting so concurrent highlights of the same language
-    // share one loadLanguage call. The patched loadLanguage accepts plain
-    // name strings (see createHighlighter above); cast for TS.
-    loaded.add(lang);
-    await highlighter.loadLanguage(lang as never);
+  if (loaded && lang !== "text") {
+    // Concurrent highlights of the same language await the SAME load
+    // promise — whether it was just created here or is already in flight
+    // from an earlier caller — so nobody proceeds before the grammar is
+    // actually registered on the highlighter instance.
+    let load = loaded.get(lang);
+    if (!load) {
+      load = highlighter
+        .loadLanguage(lang as never)
+        .then(() => undefined)
+        .catch((error: unknown) => {
+          // Un-cache the failed load so a later call can retry instead of
+          // caching a rejection forever.
+          loaded.delete(lang);
+          throw error;
+        });
+      loaded.set(lang, load);
+    }
+    await load;
   }
   return highlighter.codeToHtml(code, {
     ...options,

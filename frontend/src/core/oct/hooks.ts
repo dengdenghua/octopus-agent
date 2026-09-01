@@ -1,4 +1,4 @@
-/** React Query hooks for the oct account gateway. 替代 molili/hooks.ts。 */
+/** React Query hooks for the oct account gateway. */
 import { swallow } from "@/core/utils/log";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
@@ -74,7 +74,10 @@ export function useOctLink() {
         return normalize(link);
       } catch (err) {
         swallow(err);
-        if (err instanceof OctApiError && (err.status === 404 || err.status === 503)) {
+        if (
+          err instanceof OctApiError &&
+          (err.status === 404 || err.status === 503)
+        ) {
           return null;
         }
         throw err;
@@ -108,8 +111,12 @@ export function useDailyClaimInfo(enabled = true) {
     queryFn: async () => {
       try {
         const m = await octApi.membership();
-        const remaining = Number((m as Record<string, unknown>).dailyFreeRemaining ?? 0);
-        const total = Number((m as Record<string, unknown>).dailyFreeCredits ?? 0);
+        const remaining = Number(
+          (m as Record<string, unknown>).dailyFreeRemaining ?? 0,
+        );
+        const total = Number(
+          (m as Record<string, unknown>).dailyFreeCredits ?? 0,
+        );
         return {
           data: {
             claimedToday: remaining <= 0,
@@ -120,7 +127,10 @@ export function useDailyClaimInfo(enabled = true) {
         };
       } catch (err) {
         swallow(err);
-        if (err instanceof OctApiError && (err.status === 404 || err.status === 503)) {
+        if (
+          err instanceof OctApiError &&
+          (err.status === 404 || err.status === 503)
+        ) {
           return null;
         }
         throw err;
@@ -153,7 +163,10 @@ export function useOctGoods(enabled = true) {
         return extractOctGoods(await octApi.goods());
       } catch (err) {
         swallow(err);
-        if (err instanceof OctApiError && (err.status === 404 || err.status === 503)) {
+        if (
+          err instanceof OctApiError &&
+          (err.status === 404 || err.status === 503)
+        ) {
           return [];
         }
         throw err;
@@ -166,8 +179,13 @@ export function useOctGoods(enabled = true) {
 
 /** 下单充值(返回 payUrl / Stripe 收银台 + orderNo 供轮询)。 */
 export function useCreateOrder() {
-  return useMutation<OctOrder, Error, { goodsId: string; currency?: "CNY" | "USD" }>({
-    mutationFn: ({ goodsId, currency }) => octApi.orders.create(goodsId, currency ?? "CNY"),
+  return useMutation<
+    OctOrder,
+    Error,
+    { goodsId: string; currency?: "CNY" | "USD" }
+  >({
+    mutationFn: ({ goodsId, currency }) =>
+      octApi.orders.create(goodsId, currency ?? "CNY"),
   });
 }
 

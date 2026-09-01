@@ -46,7 +46,10 @@ export function artifactDisplayPath(filepath: string) {
  * absolute paths for auditability, while the preview endpoint intentionally
  * accepts only a scoped relative path.
  */
-export function normalizeWorkspaceArtifactRef(filepath: string, threadId?: string) {
+export function normalizeWorkspaceArtifactRef(
+  filepath: string,
+  threadId?: string,
+) {
   if (!threadId || parseWorkspaceOutputRef(filepath)) return filepath;
   const normalizedPath = filepath.replaceAll("\\", "/");
   const relativeOutputMatch = normalizedPath.match(
@@ -78,7 +81,9 @@ export function normalizeWorkspaceArtifactRef(filepath: string, threadId?: strin
     const nestedArea = parts[root + 1];
     if (nestedArea === "final" || nestedArea === "stages") {
       const relativePath = parts.slice(root + 2).join("/");
-      return relativePath ? workspaceOutputRef({ area: nestedArea, relativePath }) : filepath;
+      return relativePath
+        ? workspaceOutputRef({ area: nestedArea, relativePath })
+        : filepath;
     }
   }
   if (["output", "deploy", "upload"].includes(area)) {
@@ -102,23 +107,52 @@ export function urlOfArtifact({
   filepath,
   threadId,
   download = false,
+  officePreview = false,
+  officeFidelityPreview = false,
   isMock = false,
 }: {
   filepath: string;
   threadId: string;
   download?: boolean;
+  officePreview?: boolean;
+  officeFidelityPreview?: boolean;
   isMock?: boolean;
 }) {
   const workspaceOutput = parseWorkspaceOutputRef(filepath);
   if (workspaceOutput) {
     const params = new URLSearchParams({ area: workspaceOutput.area });
     if (download) params.set("download", "true");
+    if (officePreview) params.set("office_preview", "true");
+    if (officeFidelityPreview) params.set("office_fidelity_preview", "true");
     return `${getBackendBaseURL()}/api/threads/${encodeURIComponent(threadId)}/outputs/${encodeArtifactPath(workspaceOutput.relativePath)}?${params.toString()}`;
   }
   if (isMock) {
-    return `${getBackendBaseURL()}/mock/api/threads/${threadId}/artifacts${filepath}${download ? "?download=true" : ""}`;
+    const params = new URLSearchParams();
+    if (download) params.set("download", "true");
+    if (officePreview) params.set("office_preview", "true");
+    if (officeFidelityPreview) params.set("office_fidelity_preview", "true");
+    const query = params.size ? `?${params.toString()}` : "";
+    return `${getBackendBaseURL()}/mock/api/threads/${threadId}/artifacts${filepath}${query}`;
   }
-  return `${getBackendBaseURL()}/api/threads/${threadId}/artifacts${filepath}${download ? "?download=true" : ""}`;
+  const params = new URLSearchParams();
+  if (download) params.set("download", "true");
+  if (officePreview) params.set("office_preview", "true");
+  if (officeFidelityPreview) params.set("office_fidelity_preview", "true");
+  const query = params.size ? `?${params.toString()}` : "";
+  return `${getBackendBaseURL()}/api/threads/${threadId}/artifacts${filepath}${query}`;
+}
+
+export function urlOfArtifactRevision({
+  filepath,
+  threadId,
+}: {
+  filepath: string;
+  threadId: string;
+}): string | null {
+  const workspaceOutput = parseWorkspaceOutputRef(filepath);
+  if (!workspaceOutput) return null;
+  const params = new URLSearchParams({ area: workspaceOutput.area });
+  return `${getBackendBaseURL()}/api/threads/${encodeURIComponent(threadId)}/output-revisions/${encodeArtifactPath(workspaceOutput.relativePath)}?${params.toString()}`;
 }
 
 export function extractArtifactsFromThread(thread: AgentThread) {

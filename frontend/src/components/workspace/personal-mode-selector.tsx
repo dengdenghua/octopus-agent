@@ -111,6 +111,7 @@ const PANEL_MIN_HEIGHT = 140;
 interface PersonalModeSelectorProps {
   mode: PersonalMode;
   chromeless?: boolean;
+  labelOverrides?: Partial<Record<PersonalMode, string>>;
   onModeChange: (mode: PersonalMode) => void;
   className?: string;
 }
@@ -118,6 +119,7 @@ interface PersonalModeSelectorProps {
 export function PersonalModeSelector({
   mode,
   chromeless = false,
+  labelOverrides,
   onModeChange,
   className,
 }: PersonalModeSelectorProps) {
@@ -309,13 +311,8 @@ export function PersonalModeSelector({
         title={activeLabels.desc}
       >
         <ActiveIcon className="size-3" />
-        <span
-          className={cn(
-            "truncate",
-            chromeless ? "max-w-[42px]" : "max-w-[72px]",
-          )}
-        >
-          {activeLabels.label}
+        <span className="max-w-[72px] truncate">
+          {labelOverrides?.[mode]?.trim() || activeLabels.label}
         </span>
         <ChevronDownIcon className="size-3 opacity-35 transition-opacity group-hover:opacity-60" />
       </button>
@@ -370,7 +367,10 @@ export function PersonalModeSelector({
                       >
                         <Icon className="size-4 shrink-0" />
                         <div className="flex min-w-0 items-center gap-2 text-left">
-                          <span className="font-semibold">{labels.label}</span>
+                          <span className="font-semibold">
+                            {labelOverrides?.[option.name]?.trim() ||
+                              labels.label}
+                          </span>
                           <span className="truncate text-xs opacity-70">
                             {labels.desc}
                           </span>

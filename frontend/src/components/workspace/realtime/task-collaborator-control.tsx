@@ -2,7 +2,7 @@
  * TaskCollaboratorControl — extracted from `workspace/realtime/[thread_id]/page.tsx`
  * (P3 decomposition). Behavior-preserving move: same code, same props, own module.
  */
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import {
   CheckIcon,
   SearchIcon,
@@ -21,7 +21,6 @@ import { AgentAvatar } from "@/components/workspace/sidebar-footer";
 import { type TeamMode } from "@/components/workspace/team-mode-picker";
 import { type Agent } from "@/core/agents";
 import { isPrimaryPersonaAgentId } from "@/core/agents/persona-policy";
-import { useCollabSession } from "@/core/cowork";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
@@ -49,7 +48,8 @@ export function TaskCollaboratorControl({
   onSelectedAgentIdsChange,
   onTeamModeChange,
   roster,
-  threadId,
+  onlineCount = 0,
+  humanInviteAction,
   labelPrefix,
   disabled = false,
 }: {
@@ -63,7 +63,10 @@ export function TaskCollaboratorControl({
   onSelectedAgentIdsChange: (ids: string[]) => void;
   onTeamModeChange: (mode: TeamMode) => void;
   roster: ChatCollaborationRosterEntry[];
-  threadId: string;
+  /** Supplied by the parent session owner to avoid a duplicate query observer. */
+  onlineCount?: number;
+  /** Remote people join from the same member surface as internal AI roles. */
+  humanInviteAction?: ReactNode;
   /** Distinguish the AI execution roster from the people in a project group. */
   labelPrefix?: string;
   /** The canonical roster is being persisted; prevent overlapping drafts. */
@@ -91,11 +94,6 @@ export function TaskCollaboratorControl({
     totalCount,
     t.chatInputBox.collaboratorsCountUnit,
   );
-  const collabSession = useCollabSession(threadId);
-  const onlineCount = useMemo(() => {
-    const presence = collabSession.data?.presence ?? [];
-    return presence.filter((m) => m.online).length;
-  }, [collabSession.data]);
   const hasOnlineMembers = onlineCount > 0;
   const controlLabel = labelPrefix
     ? `${labelPrefix} 成员`
@@ -159,11 +157,11 @@ export function TaskCollaboratorControl({
           type="button"
           data-slot="task-collaborator-trigger"
           className={cn(
-            "group inline-flex h-[42px] max-w-[11rem] items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium shadow-none transition-all duration-base sm:h-8 sm:px-2",
+            "group inline-flex h-[42px] max-w-[11rem] items-center gap-1.5 rounded-md px-2.5 text-xs font-medium shadow-none transition-all duration-base sm:h-8 sm:px-2",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
             isTeamDraft
-              ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
-              : "border-transparent bg-transparent text-muted-foreground hover:border-border-default hover:bg-muted/50 hover:text-foreground",
+              ? "bg-transparent text-foreground hover:bg-muted/55"
+              : "bg-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground",
           )}
           title={controlTitle}
           aria-label={controlTitle}
@@ -183,12 +181,12 @@ export function TaskCollaboratorControl({
           </span>
           <span
             className={cn(
-              "inline-flex items-center gap-1 shrink-0 rounded-md px-1.5 py-0.5 mr-1 text-xs transition-all duration-base",
+              "mr-1 inline-flex shrink-0 items-center gap-1 px-0.5 text-xs transition-all duration-base",
               isTeamDraft
-                ? "bg-primary-foreground/80 text-primary font-semibold"
+                ? "bg-transparent font-semibold text-primary"
                 : hasOnlineMembers
-                  ? "bg-success/10 text-success"
-                  : "bg-transparent text-muted-foreground group-hover:bg-background/75 group-hover:text-foreground",
+                  ? "text-success"
+                  : "text-muted-foreground group-hover:text-foreground",
             )}
           >
             {hasOnlineMembers && (
@@ -411,6 +409,14 @@ export function TaskCollaboratorControl({
               ) : null,
             )}
           </div>
+          {humanInviteAction ? (
+            <div
+              data-testid="collaborator-remote-invite"
+              className="mt-2 border-t border-border-subtle pt-2 [&_[data-slot=button]]:w-full [&_[data-slot=button]]:justify-start"
+            >
+              {humanInviteAction}
+            </div>
+          ) : null}
         </div>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -317,7 +317,7 @@ export function BrowserAutomationSettingsPage() {
                 : "Refreshes every 2 seconds and turns offline within 10 seconds of disconnecting."}
             </p>
           </div>
-          <Button
+          {relayState !== "online" ? <Button
             type="button"
             size="sm"
             variant="ghost"
@@ -330,8 +330,8 @@ export function BrowserAutomationSettingsPage() {
                 relay.isFetching && "animate-spin",
               )}
             />
-            {zh ? "刷新" : "Refresh"}
-          </Button>
+            {zh ? "重新连接浏览器扩展" : "Reconnect browser extension"}
+          </Button> : null}
         </div>
         <StatusRow
           label={zh ? "Relay" : "Relay"}

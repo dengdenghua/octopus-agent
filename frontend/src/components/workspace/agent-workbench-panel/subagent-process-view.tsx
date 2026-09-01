@@ -4,7 +4,10 @@ import { ArrowDownIcon } from "lucide-react";
 import type { AIMessage, Message, ToolMessage } from "@/core/api/types";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
-import { useStreamingTextBuffer } from "@/hooks/use-streaming-text-buffer";
+import {
+  STREAMING_TYPE_PRESETS,
+  useStreamingTextBuffer,
+} from "@/hooks/use-streaming-text-buffer";
 
 import type { AgentTile } from "../agent-workbench-utils";
 import { repairMojibakeText } from "../agent-workbench-utils";
@@ -271,12 +274,7 @@ export function SubagentProcessView({
     targetText: answerText,
     enabled: isRunning,
     resetKey: agent.id,
-    targetIntervalMs: 32,
-    minCharsPerTick: 2,
-    maxCharsPerTick: 12,
-    backlogDivisor: 8,
-    fastDrainThreshold: 4,
-    maxFinishDelayMs: 420,
+    ...STREAMING_TYPE_PRESETS.burstDrain,
   });
   const hasConversation = Boolean(
     messages.task || messages.process.length > 0 || messages.answer,

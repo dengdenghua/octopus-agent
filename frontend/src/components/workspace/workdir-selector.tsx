@@ -22,7 +22,7 @@ import {
 import { createPortal } from "react-dom";
 
 import { swallow } from "@/core/utils/log";
-import { authHeaders, currentActorId } from "@/core/auth/api";
+import { authHeaders } from "@/core/auth/api";
 import type { components } from "@/core/api/openapi-types";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
@@ -35,6 +35,8 @@ import { pickLocalDirectory } from "@/core/workspace/pick-local-directory";
 import { basename, isAbsolutePath, joinPath } from "@/lib/path-utils";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/providers/AuthProvider";
+import { useFeatureFlags } from "@/hooks/use-feature-flags";
 
 interface WorkDirSelectorProps {
   workDir: string;
@@ -227,6 +229,10 @@ export function WorkDirSelector({
 }: WorkDirSelectorProps) {
   const isMutedVariant = variant === "muted";
   const { t, locale } = useI18n();
+  const { authStatus, isAuthenticated, isLoading: authLoading } = useAuth();
+  const featureFlags = useFeatureFlags();
+  const remoteWorkspaceEnabled =
+    !featureFlags.loading && featureFlags.isOn("ui.remote_workspace");
   const trRemote = t.remoteWorkspace;
   const [isPicking, setIsPicking] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -398,11 +404,18 @@ export function WorkDirSelector({
   // Load remote workspaces from the registry. Cached at component level so
   // the second menu open is instant — we don't refetch on every tab switch.
   const loadRemoteWorkspaces = useCallback(async () => {
-    if (!enableRemoteTab) return;
+    if (!enableRemoteTab || !remoteWorkspaceEnabled) return;
+    const canReadRemoteWorkspaces =
+      !authLoading && (authStatus?.enabled === false || isAuthenticated);
+    if (!canReadRemoteWorkspaces) {
+      setRemoteWorkspaces([]);
+      setRemoteError(null);
+      return;
+    }
     setRemoteLoading(true);
     setRemoteError(null);
     try {
-      const list = await listWorkspaces(currentActorId());
+      const list = await listWorkspaces();
       setRemoteWorkspaces(list);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -411,18 +424,25 @@ export function WorkDirSelector({
     } finally {
       setRemoteLoading(false);
     }
-  }, [enableRemoteTab]);
+  }, [
+    authLoading,
+    authStatus?.enabled,
+    enableRemoteTab,
+    isAuthenticated,
+    remoteWorkspaceEnabled,
+  ]);
 
   // When the menu opens with the remote tab enabled, prime the list so
   // the user isn't staring at an empty state. Subsequent tab switches
   // reuse the cached list.
   useEffect(() => {
-    if (!showMenu || !enableRemoteTab) return;
+    if (!showMenu || !enableRemoteTab || !remoteWorkspaceEnabled) return;
     if (remoteWorkspaces.length > 0 || remoteLoading) return;
     void loadRemoteWorkspaces();
   }, [
     showMenu,
     enableRemoteTab,
+    remoteWorkspaceEnabled,
     remoteWorkspaces.length,
     remoteLoading,
     loadRemoteWorkspaces,
@@ -453,17 +473,17 @@ export function WorkDirSelector({
 
   useEffect(() => {
     if (!showMenu) return;
-    if (isMutedVariant) return;
+    if (isMutedVariant && !noBridgeHint) return;
     void loadDirectories(browsePath);
-  }, [isMutedVariant, showMenu, browsePath, loadDirectories]);
+  }, [isMutedVariant, noBridgeHint, showMenu, browsePath, loadDirectories]);
 
   useEffect(() => {
     if (!showMenu) return;
     const pendingName = pendingBrowserPickedNameRef.current;
     pendingBrowserPickedNameRef.current = "";
     setManualPath(pendingName || workDir);
-    if (!workDir && !isMutedVariant) setBrowserOpen(true);
-  }, [isMutedVariant, showMenu, workDir]);
+    if (!workDir && (!isMutedVariant || noBridgeHint)) setBrowserOpen(true);
+  }, [isMutedVariant, noBridgeHint, showMenu, workDir]);
 
   useEffect(() => {
     if (!showMenu) return;
@@ -492,6 +512,7 @@ export function WorkDirSelector({
     } catch (error) {
       swallow(error);
       setNoBridgeHint(true);
+      setBrowserOpen(true);
     } finally {
       setIsPicking(false);
     }
@@ -522,15 +543,16 @@ export function WorkDirSelector({
   const updateMenuPosition = useCallback(() => {
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
-    const targetWidth = isMutedVariant ? 136 : MENU_WIDTH;
-    const minWidth = isMutedVariant ? 128 : 280;
-    const _estimatedHeight = isMutedVariant ? 56 : 260;
-    const minHeight = isMutedVariant ? 48 : 240;
+    const compactMutedMenu = isMutedVariant && !noBridgeHint;
+    const targetWidth = compactMutedMenu ? 136 : MENU_WIDTH;
+    const minWidth = compactMutedMenu ? 128 : 280;
+    const _estimatedHeight = compactMutedMenu ? 56 : 260;
+    const minHeight = compactMutedMenu ? 48 : 240;
     const width = Math.min(
       targetWidth,
       Math.max(minWidth, window.innerWidth - MENU_MARGIN * 2),
     );
-    const preferredLeft = isMutedVariant ? rect.left : rect.right - width;
+    const preferredLeft = compactMutedMenu ? rect.left : rect.right - width;
     const left = Math.min(
       Math.max(MENU_MARGIN, preferredLeft),
       window.innerWidth - MENU_MARGIN - width,
@@ -550,7 +572,7 @@ export function WorkDirSelector({
         ? { bottom: window.innerHeight - rect.top + 6 }
         : { top: rect.bottom + 6 }),
     });
-  }, [isMutedVariant]);
+  }, [isMutedVariant, noBridgeHint]);
 
   useEffect(() => {
     if (!showMenu) {
@@ -586,6 +608,7 @@ export function WorkDirSelector({
     } catch (error) {
       swallow(error);
       setNoBridgeHint(true);
+      setBrowserOpen(true);
     } finally {
       setIsPicking(false);
     }
@@ -647,7 +670,7 @@ export function WorkDirSelector({
         "flex max-h-full flex-col overflow-hidden",
         // When wrapped in Tabs we drop the outer chrome — Tabs adds its own
         // border/rounded corners. When standalone we keep the original frame.
-        enableRemoteTab
+        remoteWorkspaceEnabled
           ? ""
           : "border border-border-default bg-popover/95 backdrop-blur " +
               (isMutedVariant
@@ -785,7 +808,7 @@ export function WorkDirSelector({
       {/* Advanced: in-page directory browser. Web-mode users without an
           Electron picker still need a way to navigate; native users will
           rarely open this. Collapsed by default so it doesn't dominate. */}
-      {!isMutedVariant && (
+      {(!isMutedVariant || noBridgeHint) && (
         <details
           className="group border-t border-border-default px-2.5 py-2"
           open={isBrowserOpen}
@@ -869,7 +892,7 @@ export function WorkDirSelector({
     <div
       className={cn(
         "flex max-h-full flex-col overflow-hidden",
-        enableRemoteTab
+        remoteWorkspaceEnabled
           ? ""
           : "border border-border-default bg-popover/95 backdrop-blur rounded-lg shadow-2xl",
       )}
@@ -958,7 +981,7 @@ export function WorkDirSelector({
   // so the user can flip between local-folder and remote-mount entry
   // points. Otherwise we render the local panel as before — no visual
   // change for existing callers.
-  const menuContent = enableRemoteTab ? (
+  const menuContent = remoteWorkspaceEnabled ? (
     <div
       className={cn(
         "flex max-h-full flex-col overflow-hidden rounded-lg border border-border-default bg-popover/95 backdrop-blur",

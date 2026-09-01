@@ -44,10 +44,17 @@ describe("built-in workbench apps", () => {
       resolve("src/components/workspace/workspace-sidebar.tsx"),
       "utf8",
     );
+    const hub = readFileSync(
+      resolve("src/components/workspace/agents/agent-world-unified.tsx"),
+      "utf8",
+    );
+
     expect(browserHome).toContain("narrative: BookOpenIcon");
     expect(sidebar).toContain("narrative: BookOpenIcon");
-    expect(browserTab).toContain(
-      'narrative: lazy(() => import("@/app/workspace/narrative/page"))',
+    expect(hub).toContain("narrative: BookOpenIcon");
+    expect(browserTab).toContain("<RemoteWorkbenchSurface");
+    expect(browserTab).not.toContain(
+      'import("@/app/workspace/narrative/page")',
     );
   });
 });

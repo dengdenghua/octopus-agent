@@ -186,7 +186,10 @@ def test_android_websocket_rejects_authenticated_non_operator(
 
     with (
         pytest.raises(WebSocketDisconnect) as exc_info,
-        client.websocket_connect("/api/android/ws/device-a?token=sk-alice"),
+        client.websocket_connect(
+            "/api/android/ws/device-a",
+            subprotocols=["bearer", "sk-alice"],
+        ),
     ):
         pass
 

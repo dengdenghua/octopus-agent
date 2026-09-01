@@ -5,6 +5,7 @@ export type WorkbenchBuiltinIcon =
   | "trading"
   | "design"
   | "narrative"
+  | "evolution"
   | "intelligence"
   | "community";
 
@@ -17,7 +18,7 @@ export interface WorkbenchBuiltinApp {
   launchUrl: string;
   icon: WorkbenchBuiltinIcon;
   /** Core surfaces ship with the shell; remote surfaces are installed on demand. */
-  delivery?: "core" | "remote";
+  delivery: "core" | "remote";
   /** Cloud catalog id and extracted package directory for remote surfaces. */
   cloudId?: string;
   packageId?: string;
@@ -35,6 +36,7 @@ export const WORKBENCH_BUILTIN_APPS: readonly WorkbenchBuiltinApp[] = [
     workspaceRoute: "/workspace/projects",
     launchUrl: "octopus://workspace/projects",
     icon: "projects",
+    delivery: "core",
   },
   {
     id: "paper-trading",
@@ -44,6 +46,10 @@ export const WORKBENCH_BUILTIN_APPS: readonly WorkbenchBuiltinApp[] = [
     workspaceRoute: "/workspace/paper-trading",
     launchUrl: "octopus://workspace/paper-trading",
     icon: "trading",
+    delivery: "remote",
+    cloudId: "workbench_paper-trading",
+    packageId: "paper-trading",
+    runtimePlugin: "paper_trading",
   },
   {
     id: "design",
@@ -53,6 +59,9 @@ export const WORKBENCH_BUILTIN_APPS: readonly WorkbenchBuiltinApp[] = [
     workspaceRoute: "/workspace/design",
     launchUrl: "octopus://workspace/design",
     icon: "design",
+    delivery: "remote",
+    cloudId: "workbench_design",
+    packageId: "design",
   },
   {
     id: "narrative",
@@ -68,6 +77,18 @@ export const WORKBENCH_BUILTIN_APPS: readonly WorkbenchBuiltinApp[] = [
     runtimePlugin: "narrative_studio",
   },
   {
+    id: "evolution",
+    moduleId: "evolution",
+    name: "自进化",
+    description: "双螺旋、候选基因、治理与审计",
+    workspaceRoute: "/workspace/evolution",
+    launchUrl: "octopus://workspace/evolution",
+    icon: "evolution",
+    delivery: "remote",
+    cloudId: "workbench_self-evolution",
+    packageId: "self_evolution",
+  },
+  {
     id: "intelligence",
     moduleId: "intelligence",
     name: "订阅",
@@ -75,6 +96,9 @@ export const WORKBENCH_BUILTIN_APPS: readonly WorkbenchBuiltinApp[] = [
     workspaceRoute: "/workspace/intelligence?surface=chat",
     launchUrl: "octopus://workspace/intelligence",
     icon: "intelligence",
+    delivery: "remote",
+    cloudId: "workbench_intelligence",
+    packageId: "intelligence",
   },
   {
     id: "community",
@@ -84,6 +108,9 @@ export const WORKBENCH_BUILTIN_APPS: readonly WorkbenchBuiltinApp[] = [
     workspaceRoute: "/workspace/community",
     launchUrl: "octopus://workspace/community",
     icon: "community",
+    delivery: "remote",
+    cloudId: "workbench_community",
+    packageId: "community",
   },
 ];
 

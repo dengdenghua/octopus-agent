@@ -202,5 +202,12 @@ describe("Coder Codex API", () => {
     expect(applyCoderModelProfileBoundary("researcher", ordinary)).toBe(
       ordinary,
     );
+    expect(
+      applyCoderModelProfileBoundary(
+        "custom-coder",
+        { model_name: "chatgpt/gpt-5.6-sol", reasoning_effort: "high" },
+        "codex",
+      ),
+    ).toEqual({});
   });
 });

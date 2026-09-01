@@ -5,10 +5,22 @@ import { renderWithProviders } from "@/test/harness";
 
 import { AgentWorkbenchPanel } from "../agent-workbench-panel";
 import {
+  boundProjectRefetchInterval,
   normalizeProjectProgress,
   ProjectOsTab,
   type ProjectFullState,
 } from "./project-os-tab";
+
+describe("boundProjectRefetchInterval", () => {
+  it("stops polling after the backend confirms that no project is bound", () => {
+    expect(boundProjectRefetchInterval(null)).toBe(false);
+  });
+
+  it("keeps the initial and bound-project refresh cadence", () => {
+    expect(boundProjectRefetchInterval(undefined)).toBe(15_000);
+    expect(boundProjectRefetchInterval(projectState)).toBe(15_000);
+  });
+});
 
 const projectState: ProjectFullState = {
   project: {
@@ -592,6 +604,25 @@ describe("AgentWorkbenchPanel project tab", () => {
       expect.stringContaining("/api/projects/by-thread/thread-1"),
       expect.anything(),
     );
+  });
+
+  it("keeps Echo Design out of the milestone project workbench", async () => {
+    renderWithProviders(
+      <AgentWorkbenchPanel
+        activeTab="design"
+        events={[]}
+        threadId="thread-1"
+      />,
+      { locale: "zh-CN" },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "项目" })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("tab", { name: "设计" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("embedded-project-design"),
+    ).not.toBeInTheDocument();
   });
 
   it("forwards the current group title to the project surface", async () => {

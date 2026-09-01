@@ -3,6 +3,7 @@ import {
   ActivityIcon,
   ArrowRightIcon,
   GaugeIcon,
+  RefreshCwIcon,
   Settings2Icon,
   ShieldCheckIcon,
 } from "lucide-react";
@@ -54,6 +55,7 @@ export function EvolutionGovernancePanel() {
     mutationFn: setDualHelixShadowEnabled,
     onSuccess: (value) => queryClient.setQueryData(shadowQueryKey, value),
   });
+  const shadowLoadFailed = Boolean(shadow.error) && !shadow.data;
 
   return (
     <section className="space-y-4" aria-label="安全治理">
@@ -79,14 +81,48 @@ export function EvolutionGovernancePanel() {
               disabled={setShadow.isPending || !shadow.data?.ok}
               onClick={() => setShadow.mutate(!shadow.data?.enabled)}
             >
-              {shadow.data?.enabled ? "保护已开启" : "开启保护"}
+              {shadowLoadFailed
+                ? "状态不可用"
+                : shadow.data?.enabled
+                  ? "保护已开启"
+                  : "开启保护"}
             </Button>
           </div>
-          <div className="mt-3 rounded-lg bg-muted/45 px-3 py-2 text-[11px] text-muted-foreground">
-            {shadow.data?.enabled
-              ? "已授权手动影子复核；开启状态本身不会调用模型。"
-              : "当前关闭，不会触发另一引擎，也不会产生额外费用。"}
-          </div>
+          {shadowLoadFailed ? (
+            <div
+              role="alert"
+              className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2"
+            >
+              <span className="text-[11px] text-destructive">
+                保护状态暂时无法加载；现有设置没有改变。
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={shadow.isFetching}
+                onClick={() => void shadow.refetch()}
+              >
+                <RefreshCwIcon
+                  className={`mr-1.5 size-3.5 ${shadow.isFetching ? "animate-spin" : ""}`}
+                />
+                重试
+              </Button>
+            </div>
+          ) : (
+            <div className="mt-3 rounded-lg bg-muted/45 px-3 py-2 text-[11px] text-muted-foreground">
+              {shadow.data?.enabled
+                ? "已授权手动影子复核；开启状态本身不会调用模型。"
+                : shadow.isLoading
+                  ? "正在读取保护状态…"
+                  : "当前关闭，不会触发另一引擎，也不会产生额外费用。"}
+            </div>
+          )}
+          {setShadow.error ? (
+            <p role="alert" className="mt-2 text-[11px] text-destructive">
+              保护设置未保存，请稍后重试。
+            </p>
+          ) : null}
         </article>
 
         <article className="rounded-xl border border-border bg-card p-4">
@@ -116,20 +152,32 @@ export function EvolutionGovernancePanel() {
         onValueChange={setDetailSection}
         className="space-y-3"
       >
-        <TabsList className="h-9 w-fit rounded-lg">
-          <TabsTrigger value="summary" className="h-8 px-3 text-xs">
+        <TabsList className="h-9 max-w-full min-w-max rounded-lg">
+          <TabsTrigger
+            value="summary"
+            className="h-8 shrink-0 px-2 text-xs sm:px-3"
+          >
             治理摘要
           </TabsTrigger>
-          <TabsTrigger value="control" className="h-8 gap-1.5 px-3 text-xs">
-            <GaugeIcon className="size-3.5" />
+          <TabsTrigger
+            value="control"
+            className="h-8 shrink-0 gap-1 px-2 text-xs sm:gap-1.5 sm:px-3"
+          >
+            <GaugeIcon className="hidden size-3.5 sm:block" />
             策略与预算
           </TabsTrigger>
-          <TabsTrigger value="reflex" className="h-8 gap-1.5 px-3 text-xs">
-            <ActivityIcon className="size-3.5" />
+          <TabsTrigger
+            value="reflex"
+            className="h-8 shrink-0 gap-1 px-2 text-xs sm:gap-1.5 sm:px-3"
+          >
+            <ActivityIcon className="hidden size-3.5 sm:block" />
             规则与响应
           </TabsTrigger>
-          <TabsTrigger value="runtime" className="h-8 gap-1.5 px-3 text-xs">
-            <Settings2Icon className="size-3.5" />
+          <TabsTrigger
+            value="runtime"
+            className="h-8 shrink-0 gap-1 px-2 text-xs sm:gap-1.5 sm:px-3"
+          >
+            <Settings2Icon className="hidden size-3.5 sm:block" />
             运行与设置
           </TabsTrigger>
         </TabsList>

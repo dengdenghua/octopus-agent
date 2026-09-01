@@ -22,10 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { isLocale, SUPPORTED_LOCALES, type Locale } from "@/core/i18n";
+import { isLocale, type Locale } from "@/core/i18n/locale";
 import { useI18n } from "@/core/i18n/hooks";
-import { enUS, jaJP, koKR, zhCN, type Translations } from "@/core/i18n/locales";
-import { useLocalSettings } from "@/core/settings";
 import {
   useAppearance,
   type CornerScale,
@@ -39,25 +37,17 @@ import { SettingsSection } from "./settings-section";
 /** Palettes with a fixed swatch — excludes "custom", which setPalette rejects. */
 type NamedPalette = Exclude<Palette, "custom">;
 
-function useLanguageOptions(): { value: Locale; label: string }[] {
-  return SUPPORTED_LOCALES.map((value) => ({
-    value,
-    label: TRANSLATIONS_BY_LOCALE[value].locale.localName,
-  }));
-}
-
-const TRANSLATIONS_BY_LOCALE: Record<Locale, Translations> = {
-  "en-US": enUS,
-  "zh-CN": zhCN,
-  "ja-JP": jaJP,
-  "ko-KR": koKR,
-};
+const LANGUAGE_OPTIONS = [
+  { value: "en-US", label: "English" },
+  { value: "zh-CN", label: "简体中文" },
+  { value: "ja-JP", label: "日本語" },
+  { value: "ko-KR", label: "한국어" },
+] satisfies { value: Locale; label: string }[];
 
 export default function AppearanceSettingsPage() {
   const { t, locale, changeLocale } = useI18n();
   const { theme, setTheme, systemTheme } = useTheme();
   const currentTheme = (theme ?? "system") as "system" | "light" | "dark";
-  const [settings, setSetting] = useLocalSettings();
   const {
     cornerScale,
     density,
@@ -68,8 +58,6 @@ export default function AppearanceSettingsPage() {
     setPalette,
     setCustomColor,
   } = useAppearance();
-
-  const languageOptions = useLanguageOptions();
 
   // Two groups by character: bright/warm ("柔和") vs low-chroma/deep ("沉稳").
   // Swatch hexes are the computed light-mode --primary of each [data-theme].
@@ -281,8 +269,8 @@ export default function AppearanceSettingsPage() {
 
       <Separator className="my-1" />
 
-      {/* Language / font size / detail level share one card: three one-line
-          rows instead of three full sections with their own headings. */}
+      {/* Language remains a general application preference. Conversation
+          density now has its own destination in Settings. */}
       <div className="divide-y rounded-lg border">
         <SettingRow
           title={t.settings.appearance.languageTitle}
@@ -303,79 +291,11 @@ export default function AppearanceSettingsPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {languageOptions.map((item) => (
+              {LANGUAGE_OPTIONS.map((item) => (
                 <SelectItem key={item.value} value={item.value}>
                   {item.label}
                 </SelectItem>
               ))}
-            </SelectContent>
-          </Select>
-        </SettingRow>
-
-        <SettingRow
-          title={t.settings.appearance.chatFontSizeTitle}
-          description={t.settings.appearance.chatFontSizeDescription}
-        >
-          <Select
-            value={settings.display.chat_font_size}
-            onValueChange={(value) => {
-              if (
-                value === "small" ||
-                value === "medium" ||
-                value === "large"
-              ) {
-                setSetting("display", { chat_font_size: value });
-              }
-            }}
-          >
-            <SelectTrigger
-              aria-label={t.settings.appearance.chatFontSizeTitle}
-              className="w-full sm:w-[200px]"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="small">
-                {t.settings.appearance.chatFontSizeSmall}
-              </SelectItem>
-              <SelectItem value="medium">
-                {t.settings.appearance.chatFontSizeMedium}
-              </SelectItem>
-              <SelectItem value="large">
-                {t.settings.appearance.chatFontSizeLarge}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </SettingRow>
-
-        <SettingRow
-          title={t.settings.appearance.conversationDetailLevelTitle}
-          description={t.settings.appearance.conversationDetailLevelDescription}
-        >
-          <Select
-            value={settings.display.conversation_detail_level ?? "medium"}
-            onValueChange={(value) => {
-              if (value === "low" || value === "medium" || value === "high") {
-                setSetting("display", { conversation_detail_level: value });
-              }
-            }}
-          >
-            <SelectTrigger
-              aria-label={t.settings.appearance.conversationDetailLevelTitle}
-              className="w-full sm:w-[200px]"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="low">
-                {t.settings.appearance.conversationDetailLevelLow}
-              </SelectItem>
-              <SelectItem value="medium">
-                {t.settings.appearance.conversationDetailLevelMedium}
-              </SelectItem>
-              <SelectItem value="high">
-                {t.settings.appearance.conversationDetailLevelHigh}
-              </SelectItem>
             </SelectContent>
           </Select>
         </SettingRow>
@@ -758,7 +678,9 @@ function ThemePreviewCard({
           <Icon className="size-4" />
         </div>
         <div className="min-w-0 space-y-1">
-          <div className="truncate text-xs font-semibold leading-none sm:text-sm">{label}</div>
+          <div className="truncate text-xs font-semibold leading-none sm:text-sm">
+            {label}
+          </div>
           <p className="hidden text-xs leading-snug text-muted-foreground sm:block">
             {description}
           </p>
@@ -787,7 +709,9 @@ function ThemePreviewCard({
               previewSidebarClass,
             )}
           >
-            <div className={cn("size-2 rounded-full sm:size-3", activeDotClass)} />
+            <div
+              className={cn("size-2 rounded-full sm:size-3", activeDotClass)}
+            />
             <div className="h-2 w-4 rounded-full bg-current/18" />
             <div className="h-2 w-4 rounded-full bg-current/14" />
             <div className="mt-auto h-2 w-4 rounded-full bg-current/12" />

@@ -4,7 +4,12 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   fetchCloudInstalled,
   fetchCloudPlugins,
@@ -22,7 +27,10 @@ import { cn } from "@/lib/utils";
 // 数据来自后端 /api/agent-market/cloud/plugins + /api/agent-market/cloud/skills。
 
 const KIND_META: Record<string, { label: string; badge: string }> = {
-  plugin: { label: "插件", badge: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" },
+  plugin: {
+    label: "插件",
+    badge: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
+  },
   connector: { label: "连接器", badge: "bg-primary/10 text-primary" },
 };
 
@@ -37,14 +45,29 @@ function InstallButton({
 }) {
   if (installed) {
     return (
-      <Button size="sm" variant="outline" className="pointer-events-none gap-1 text-muted-foreground" disabled>
+      <Button
+        size="sm"
+        variant="outline"
+        className="pointer-events-none gap-1 text-muted-foreground"
+        disabled
+      >
         <Check className="size-3.5 text-chart-2" /> 已安装
       </Button>
     );
   }
   return (
-    <Button size="sm" variant="ghost" className="gap-1" disabled={installing} onClick={onInstall}>
-      {installing ? <Loader2 className="size-3.5 animate-spin" /> : <Cloud className="size-3.5" />}
+    <Button
+      size="sm"
+      variant="ghost"
+      className="gap-1"
+      disabled={installing}
+      onClick={onInstall}
+    >
+      {installing ? (
+        <Loader2 className="size-3.5 animate-spin" />
+      ) : (
+        <Cloud className="size-3.5" />
+      )}
       {installing ? "安装中…" : "安装"}
     </Button>
   );
@@ -61,26 +84,53 @@ function PluginCard({
   installing: boolean;
   onInstall: () => void;
 }) {
-  const kind = KIND_META[item.kind] ?? { label: item.kind ?? "插件", badge: "bg-muted text-muted-foreground" };
+  const kind = KIND_META[item.kind] ?? {
+    label: item.kind ?? "插件",
+    badge: "bg-muted text-muted-foreground",
+  };
   return (
     <Card className="gap-1 py-3 transition-colors hover:border-primary/40">
       <CardHeader className="flex-row items-center gap-2 px-3 pt-0">
         <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border-default bg-muted text-base">
-          {item.kind === "connector" ? <Puzzle className="size-4 text-primary" /> : <Boxes className="size-4 text-indigo-500" />}
+          {item.kind === "connector" ? (
+            <Puzzle className="size-4 text-primary" />
+          ) : (
+            <Boxes className="size-4 text-indigo-500" />
+          )}
         </div>
         <div className="min-w-0 flex-1">
-          <CardTitle className="truncate text-sm">{item.name_zh || item.name}</CardTitle>
-          <CardDescription className="truncate text-xs">{item.id}</CardDescription>
+          <CardTitle className="truncate text-sm">
+            {item.name_zh || item.name}
+          </CardTitle>
+          <CardDescription className="truncate text-xs">
+            {item.id}
+          </CardDescription>
         </div>
-        <InstallButton installed={installed} installing={installing} onInstall={onInstall} />
+        <InstallButton
+          installed={installed}
+          installing={installing}
+          onInstall={onInstall}
+        />
       </CardHeader>
       <div className="flex flex-wrap items-center gap-1 px-3">
-        <Badge className={cn("border-transparent text-[11px]", kind.badge)}>{kind.label}</Badge>
-        <Badge variant="outline" className="text-[11px] font-normal text-muted-foreground">
-          {item.source === "codex" ? "Octopus 插件" : item.source === "workbuddy" ? "WorkBuddy" : item.source}
+        <Badge className={cn("border-transparent text-[11px]", kind.badge)}>
+          {kind.label}
+        </Badge>
+        <Badge
+          variant="outline"
+          className="text-[11px] font-normal text-muted-foreground"
+        >
+          {item.source === "codex"
+            ? "EchoOS 插件"
+            : item.source === "workbuddy"
+              ? "WorkBuddy"
+              : item.source}
         </Badge>
         {typeof item.skills_count === "number" && item.skills_count > 0 && (
-          <Badge variant="outline" className="text-[11px] font-normal text-muted-foreground">
+          <Badge
+            variant="outline"
+            className="text-[11px] font-normal text-muted-foreground"
+          >
             技能 ×{item.skills_count}
           </Badge>
         )}
@@ -112,24 +162,37 @@ function SkillCard({
         </div>
         <div className="min-w-0 flex-1">
           <CardTitle className="truncate text-sm">{item.name}</CardTitle>
-          <CardDescription className="truncate text-xs">{item.author}</CardDescription>
+          <CardDescription className="truncate text-xs">
+            {item.author}
+          </CardDescription>
         </div>
-        <InstallButton installed={installed} installing={installing} onInstall={onInstall} />
+        <InstallButton
+          installed={installed}
+          installing={installing}
+          onInstall={onInstall}
+        />
       </CardHeader>
       <div className="flex flex-wrap items-center gap-1 px-3">
         <Badge
           className={cn(
             "border-transparent text-[11px]",
-            isOctopus ? "bg-chart-2/10 text-chart-2" : "bg-chart-3/10 text-chart-3",
+            isOctopus
+              ? "bg-chart-2/10 text-chart-2"
+              : "bg-chart-3/10 text-chart-3",
           )}
         >
-          {isOctopus ? "Octopus 自研" : "WorkBuddy"}
+          {isOctopus ? "EchoOS 自研" : "WorkBuddy"}
         </Badge>
-        <Badge variant="outline" className="text-[11px] font-normal text-muted-foreground">
+        <Badge
+          variant="outline"
+          className="text-[11px] font-normal text-muted-foreground"
+        >
           v{item.version || "0.1.0"}
         </Badge>
       </div>
-      <p className="line-clamp-2 px-3 text-xs leading-5 text-muted-foreground">{item.description}</p>
+      <p className="line-clamp-2 px-3 text-xs leading-5 text-muted-foreground">
+        {item.description}
+      </p>
     </Card>
   );
 }
@@ -137,8 +200,12 @@ function SkillCard({
 export function CloudCatalogPanel() {
   const [plugins, setPlugins] = useState<CloudPluginItem[]>([]);
   const [skills, setSkills] = useState<CloudSkillItem[]>([]);
-  const [installedSkills, setInstalledSkills] = useState<Set<string>>(new Set());
-  const [installedPlugins, setInstalledPlugins] = useState<Set<string>>(new Set());
+  const [installedSkills, setInstalledSkills] = useState<Set<string>>(
+    new Set(),
+  );
+  const [installedPlugins, setInstalledPlugins] = useState<Set<string>>(
+    new Set(),
+  );
   const [installing, setInstalling] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -195,7 +262,9 @@ export function CloudCatalogPanel() {
       const res = await installCloudPlugin(id);
       const copied = res.copied_skills?.length ?? 0;
       toast.success(
-        copied > 0 ? `插件「${id}」已安装,捆绑技能 ×${copied}` : `插件「${id}」已安装`,
+        copied > 0
+          ? `插件「${id}」已安装,捆绑技能 ×${copied}`
+          : `插件「${id}」已安装`,
       );
       setInstalledPlugins((prev) => new Set(prev).add(member));
     } catch (err) {
@@ -214,7 +283,10 @@ export function CloudCatalogPanel() {
     () =>
       plugins.filter((p) => {
         if (!query) return true;
-        return [p.name, p.name_zh, p.id, p.description].join(" ").toLowerCase().includes(query);
+        return [p.name, p.name_zh, p.id, p.description]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
       }),
     [plugins, query],
   );
@@ -227,8 +299,12 @@ export function CloudCatalogPanel() {
     [skills, query],
   );
 
-  const installedPluginCount = plugins.filter((p) => installedPlugins.has(p.plugin)).length;
-  const installedSkillCount = skills.filter((s) => installedSkills.has(s.name)).length;
+  const installedPluginCount = plugins.filter((p) =>
+    installedPlugins.has(p.plugin),
+  ).length;
+  const installedSkillCount = skills.filter((s) =>
+    installedSkills.has(s.name),
+  ).length;
 
   return (
     <div className="space-y-3 rounded-md border border-border-default p-3">
@@ -236,8 +312,12 @@ export function CloudCatalogPanel() {
         <div className="flex items-center gap-1.5">
           <Cloud className="size-3.5 text-primary" />
           <span className="text-sm font-medium">云商城 · 我们发布的资产</span>
-          <Badge variant="outline" className="text-[11px] font-normal text-muted-foreground">
-            {plugins.length} 插件 / {skills.length} 技能 · 已装 {installedPluginCount}/{installedSkillCount}
+          <Badge
+            variant="outline"
+            className="text-[11px] font-normal text-muted-foreground"
+          >
+            {plugins.length} 插件 / {skills.length} 技能 · 已装{" "}
+            {installedPluginCount}/{installedSkillCount}
           </Badge>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
@@ -251,21 +331,31 @@ export function CloudCatalogPanel() {
               className="h-8 w-40 rounded-md border border-border-default bg-background pl-7 pr-2 text-sm outline-none focus:border-primary/50"
             />
           </div>
-          <Button size="sm" variant="ghost" disabled={loading} onClick={() => void load()} title="刷新云商城">
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={loading}
+            onClick={() => void load()}
+            title="刷新云商城"
+          >
             <Loader2 className={cn("size-3.5", loading && "animate-spin")} />
           </Button>
         </div>
       </div>
 
       {error ? (
-        <div className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</div>
+        <div className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          {error}
+        </div>
       ) : null}
 
       <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
         <div className="space-y-2">
           <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
             <Boxes className="size-3.5" /> 插件 / 连接器
-            <span className="ml-1 text-muted-foreground/70">{filteredPlugins.length}/{plugins.length}</span>
+            <span className="ml-1 text-muted-foreground/70">
+              {filteredPlugins.length}/{plugins.length}
+            </span>
           </div>
           <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
             {filteredPlugins.map((p) => (
@@ -278,14 +368,18 @@ export function CloudCatalogPanel() {
               />
             ))}
             {filteredPlugins.length === 0 && !loading && (
-              <div className="py-6 text-center text-xs text-muted-foreground">没有匹配的云插件</div>
+              <div className="py-6 text-center text-xs text-muted-foreground">
+                没有匹配的云插件
+              </div>
             )}
           </div>
         </div>
         <div className="space-y-2">
           <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
             <Cloud className="size-3.5" /> 技能
-            <span className="ml-1 text-muted-foreground/70">{filteredSkills.length}/{skills.length}</span>
+            <span className="ml-1 text-muted-foreground/70">
+              {filteredSkills.length}/{skills.length}
+            </span>
           </div>
           <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
             {filteredSkills.map((s) => (
@@ -298,7 +392,9 @@ export function CloudCatalogPanel() {
               />
             ))}
             {filteredSkills.length === 0 && !loading && (
-              <div className="py-6 text-center text-xs text-muted-foreground">没有匹配的云技能</div>
+              <div className="py-6 text-center text-xs text-muted-foreground">
+                没有匹配的云技能
+              </div>
             )}
           </div>
         </div>

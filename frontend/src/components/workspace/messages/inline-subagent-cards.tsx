@@ -211,14 +211,13 @@ export function deriveInlineSubagents(
       (isSubagentMarker &&
         event.lifecycle === undefined &&
         (event.status === "done" || event.status === "error"));
-    const status: InlineSubagentStatus =
-      isTerminalAgentEvent
-        ? event.status === "error" || outputIndicatesError
-          ? "error"
-          : "done"
-        : event.status === "waiting_approval"
-          ? "waiting"
-          : "running";
+    const status: InlineSubagentStatus = isTerminalAgentEvent
+      ? event.status === "error" || outputIndicatesError
+        ? "error"
+        : "done"
+      : event.status === "waiting_approval"
+        ? "waiting"
+        : "running";
 
     const task = compactSubagentTask(
       firstString(event.input as Record<string, unknown> | undefined, [
@@ -233,23 +232,22 @@ export function deriveInlineSubagents(
         existing?.task ||
         "",
     );
-    const summary =
-      isTerminalAgentEvent
-        ? (outputIsString
-            ? (event.output as string)
-            : firstString(outputObj, [
-                "summary",
-                "result",
-                "output",
-                "thought",
-                "observation",
-                "answer",
-                "content",
-              ])) ||
-          event.thought ||
-          event.observation ||
-          existing?.summary
-        : existing?.summary;
+    const summary = isTerminalAgentEvent
+      ? (outputIsString
+          ? (event.output as string)
+          : firstString(outputObj, [
+              "summary",
+              "result",
+              "output",
+              "thought",
+              "observation",
+              "answer",
+              "content",
+            ])) ||
+        event.thought ||
+        event.observation ||
+        existing?.summary
+      : existing?.summary;
     const filesTouched = Array.isArray(outputObj?.files_touched)
       ? (outputObj!.files_touched as unknown[]).filter(
           (p): p is string => typeof p === "string",
@@ -319,10 +317,7 @@ export function deriveInlineSubagents(
         (typeof outputObj?.iteration_count === "number"
           ? (outputObj.iteration_count as number)
           : existing?.iterationCount),
-      error:
-        isTerminalAgentEvent && status === "done"
-          ? undefined
-          : errorMsg,
+      error: isTerminalAgentEvent && status === "done" ? undefined : errorMsg,
       progress,
     });
   }
@@ -337,6 +332,22 @@ function parseToolContent(msg: ToolMessage): unknown {
   } catch {
     return content;
   }
+}
+
+function recordArrayFromUnknown(value: unknown): Record<string, unknown>[] {
+  let parsed = value;
+  if (typeof value === "string" && value.trim()) {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter(
+    (entry): entry is Record<string, unknown> =>
+      typeof entry === "object" && entry !== null && !Array.isArray(entry),
+  );
 }
 
 function roleEmoji(role?: string): string | undefined {
@@ -423,13 +434,12 @@ export function deriveSubagentsFromMessages(
         : [];
       const resultIsString = typeof result === "string";
 
-      const specs = Array.isArray(args.specs)
-        ? (args.specs as Array<Record<string, unknown>>)
-        : Array.isArray(args.agents)
-          ? (args.agents as Array<Record<string, unknown>>)
-          : Array.isArray(args.tasks)
-            ? (args.tasks as Array<Record<string, unknown>>)
-            : [];
+      // Command-execution history stores nested preview values as JSON text.
+      // Decode legacy stringified batches here; otherwise the whole parallel
+      // call is mistaken for one anonymous fourth Agent.
+      const specs = recordArrayFromUnknown(
+        args.specs ?? args.agents ?? args.tasks,
+      );
 
       if (specs && specs.length > 0) {
         // The dispatcher rejected the batch before spawning any child. Keep
@@ -452,7 +462,7 @@ export function deriveSubagentsFromMessages(
                 ? spec.name
                 : typeof spec.role === "string"
                   ? spec.role
-                : `spec-${i}`;
+                  : `spec-${i}`;
           const role = typeof spec.role === "string" ? spec.role : undefined;
 
           const success = successes.find(
@@ -814,9 +824,7 @@ function LedProgress({
       ? Math.max(0, Math.min(1, progress))
       : 0.1;
   // Running agents max out at 13/14; completion fills the matrix.
-  const litCols = completed
-    ? cols
-    : Math.min(cols - 1, Math.floor(p * cols));
+  const litCols = completed ? cols : Math.min(cols - 1, Math.floor(p * cols));
   const isActive = !completed && p > 0 && p < 1;
 
   return (

@@ -134,7 +134,9 @@ describe("RoutedWebLink", () => {
       "//cdn.example.com/x.js",
       "not a url",
     ]) {
-      const { unmount } = render(<RoutedWebLink href={href}>Raw</RoutedWebLink>);
+      const { unmount } = render(
+        <RoutedWebLink href={href}>Raw</RoutedWebLink>,
+      );
       expect(screen.getByRole("link", { name: "Raw" })).toHaveAttribute(
         "href",
         href,

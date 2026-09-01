@@ -86,7 +86,7 @@ describe("CreateProjectDialog", () => {
     await user.type(name, "不会创建的项目");
     await user.click(screen.getByRole("button", { name: "规划师" }));
     await user.click(
-      screen.getByRole("switch", { name: "进入项目群后立即邀请" }),
+      screen.getByRole("switch", { name: "进入工作群后立即邀请" }),
     );
     await user.click(screen.getByRole("button", { name: "取消" }));
     await user.click(screen.getByRole("button", { name: "reopen" }));
@@ -101,7 +101,7 @@ describe("CreateProjectDialog", () => {
       "false",
     );
     expect(
-      screen.getByRole("switch", { name: "进入项目群后立即邀请" }),
+      screen.getByRole("switch", { name: "进入工作群后立即邀请" }),
     ).not.toBeChecked();
   });
 
@@ -198,7 +198,7 @@ describe("CreateProjectDialog", () => {
       screen.getByText(/再通过安全邀请链接选择成员或访客/),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("switch", { name: "进入项目群后立即邀请" }),
+      screen.getByRole("switch", { name: "进入工作群后立即邀请" }),
     ).not.toBeChecked();
   });
 
@@ -209,7 +209,7 @@ describe("CreateProjectDialog", () => {
     });
 
     await user.click(
-      screen.getByRole("switch", { name: "进入项目群后立即邀请" }),
+      screen.getByRole("switch", { name: "进入工作群后立即邀请" }),
     );
     await user.type(screen.getByPlaceholderText("项目名称"), "协作项目");
     await user.click(screen.getByRole("button", { name: "创建项目" }));

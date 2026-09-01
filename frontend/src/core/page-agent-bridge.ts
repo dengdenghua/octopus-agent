@@ -370,6 +370,24 @@ function snapshot(): PageAgentSnapshot {
   };
 }
 
+function setNativeFormValue(
+  input: HTMLInputElement | HTMLTextAreaElement,
+  value: string,
+) {
+  let prototype = Object.getPrototypeOf(input) as object | null;
+  let setter: ((this: typeof input, nextValue: string) => void) | undefined;
+
+  while (prototype && !setter) {
+    setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set as
+      | ((this: typeof input, nextValue: string) => void)
+      | undefined;
+    prototype = Object.getPrototypeOf(prototype) as object | null;
+  }
+
+  if (setter) setter.call(input, value);
+  else input.value = value;
+}
+
 async function run(action: Parameters<OctopusPageAgentBridge["run"]>[0]) {
   if (action.type === "capability") {
     const capability = capabilityRegistry.get(action.id);
@@ -446,8 +464,9 @@ async function run(action: Parameters<OctopusPageAgentBridge["run"]>[0]) {
   } else {
     el.focus();
     const input = el as HTMLInputElement | HTMLTextAreaElement;
-    if (action.clear !== false) input.value = "";
-    input.value += action.text;
+    const nextValue =
+      action.clear === false ? `${input.value}${action.text}` : action.text;
+    setNativeFormValue(input, nextValue);
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
   }

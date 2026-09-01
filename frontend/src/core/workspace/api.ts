@@ -38,14 +38,15 @@ function parseJson<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function listWorkspaces(userId: string): Promise<Workspace[]> {
-  const params = new URLSearchParams({ user_id: userId });
-  const res = await fetch(`${BASE()}?${params.toString()}`, {
+export async function listWorkspaces(): Promise<Workspace[]> {
+  // Identity comes from the bearer token / HttpOnly cookie. A separately
+  // persisted user id can drift from the JWT subject and cause a false 403.
+  const res = await fetch(BASE(), {
     headers: authHeaders(),
   });
   await assertOk(res, "Failed to load workspaces");
   const data = await parseJson<Workspace[] | { workspaces: Workspace[] }>(res);
-  return Array.isArray(data) ? data : data.workspaces ?? [];
+  return Array.isArray(data) ? data : (data.workspaces ?? []);
 }
 
 export async function getWorkspace(id: string): Promise<Workspace> {
@@ -79,14 +80,17 @@ export async function deleteWorkspace(id: string): Promise<void> {
 export async function listMembers(
   workspaceId: string,
 ): Promise<WorkspaceMember[]> {
-  const res = await fetch(`${BASE()}/${encodeURIComponent(workspaceId)}/members`, {
-    headers: authHeaders(),
-  });
+  const res = await fetch(
+    `${BASE()}/${encodeURIComponent(workspaceId)}/members`,
+    {
+      headers: authHeaders(),
+    },
+  );
   await assertOk(res, "Failed to load workspace members");
   const data = await parseJson<
     WorkspaceMember[] | { members: WorkspaceMember[] }
   >(res);
-  return Array.isArray(data) ? data : data.members ?? [];
+  return Array.isArray(data) ? data : (data.members ?? []);
 }
 
 export async function addMember(
@@ -120,11 +124,14 @@ export async function acquireLease(
   workspaceId: string,
   params: AcquireLeaseParams,
 ): Promise<FileLease> {
-  const res = await fetch(`${BASE()}/${encodeURIComponent(workspaceId)}/lease`, {
-    method: "POST",
-    headers: jsonAuthHeaders(),
-    body: JSON.stringify(params),
-  });
+  const res = await fetch(
+    `${BASE()}/${encodeURIComponent(workspaceId)}/lease`,
+    {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify(params),
+    },
+  );
   await assertOk(res, "Failed to acquire file lease");
   return parseJson<FileLease>(res);
 }
@@ -159,26 +166,27 @@ export async function renewLease(
   return parseJson<FileLease>(res);
 }
 
-export async function listLeases(
-  workspaceId: string,
-): Promise<FileLease[]> {
+export async function listLeases(workspaceId: string): Promise<FileLease[]> {
   const res = await fetch(
     `${BASE()}/${encodeURIComponent(workspaceId)}/leases`,
     { headers: authHeaders() },
   );
   await assertOk(res, "Failed to load file leases");
   const data = await parseJson<FileLease[] | { leases: FileLease[] }>(res);
-  return Array.isArray(data) ? data : data.leases ?? [];
+  return Array.isArray(data) ? data : (data.leases ?? []);
 }
 
 export async function checkHealth(
   workspaceId: string,
 ): Promise<WorkspaceHealth> {
-  const res = await fetch(`${BASE()}/${encodeURIComponent(workspaceId)}/health`, {
-    method: "POST",
-    headers: jsonAuthHeaders(),
-    body: JSON.stringify({}),
-  });
+  const res = await fetch(
+    `${BASE()}/${encodeURIComponent(workspaceId)}/health`,
+    {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify({}),
+    },
+  );
   await assertOk(res, "Workspace health check failed");
   return parseJson<WorkspaceHealth>(res);
 }

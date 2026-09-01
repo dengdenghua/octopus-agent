@@ -37,6 +37,12 @@ function ThreadChatProbe() {
       >
         New task
       </button>
+      <button
+        type="button"
+        onClick={() => navigate("/workspace/realtime/new?agent=aoi")}
+      >
+        Switch to AOI
+      </button>
     </div>
   );
 }
@@ -72,6 +78,22 @@ describe("useThreadChat", () => {
     await waitFor(() => {
       expect(screen.getByTestId("thread-id").textContent).not.toBe(
         firstThreadId,
+      );
+    });
+    expect(screen.getByTestId("is-new")).toHaveTextContent("true");
+  });
+
+  test("allocates a persona-scoped draft when the new-task agent changes", async () => {
+    renderWithProviders(<ThreadChatProbe />, {
+      initialRoute: "/workspace/realtime/new?agent=coder",
+    });
+    const coderThreadId = screen.getByTestId("thread-id").textContent;
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to AOI" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("thread-id").textContent).not.toBe(
+        coderThreadId,
       );
     });
     expect(screen.getByTestId("is-new")).toHaveTextContent("true");

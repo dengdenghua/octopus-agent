@@ -46,15 +46,11 @@ import { copyTextToClipboard } from "@/core/clipboard";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
-import {
-  loadCommunityPage,
-  loadDesignPage,
-  loadIntelligencePage,
-  loadPaperTradingPage,
-  loadProjectsPage,
-} from "@/core/navigation/workspace-route-preload";
+import { loadProjectsPage } from "@/core/navigation/workspace-route-preload";
 import { WORKBENCH_BUILTIN_APPS } from "@/core/workbench/apps";
+import { RemoteWorkbenchSurface } from "@/core/workbench/remote-surface";
 import { WorkbenchSurfaceProvider } from "@/core/workbench/workbench-surface";
+import { useActiveAgentId } from "@/core/agents/active";
 import { useEnabledModuleIds } from "@/core/modules/enabled-modules";
 import { useWorkbenchAvailabilitySync } from "@/core/workbench/availability";
 import {
@@ -87,13 +83,8 @@ interface Props {
   renderDevice?: BrowserTab["device"];
 }
 
-const BROWSER_BUILTIN_COMPONENTS: Record<string, ComponentType> = {
+const BROWSER_CORE_COMPONENTS: Record<string, ComponentType> = {
   projects: lazy(loadProjectsPage),
-  "paper-trading": lazy(loadPaperTradingPage),
-  design: lazy(loadDesignPage),
-  narrative: lazy(() => import("@/app/workspace/narrative/page")),
-  intelligence: lazy(loadIntelligencePage),
-  community: lazy(loadCommunityPage),
 };
 
 /* Implementation note. */
@@ -1640,7 +1631,8 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
     imperativeRef,
   ) {
     useWorkbenchAvailabilitySync();
-    const enabledModuleIds = useEnabledModuleIds();
+    const activeAgentId = useActiveAgentId() ?? "general";
+    const enabledModuleIds = useEnabledModuleIds(activeAgentId);
     const enabledModuleIdSet = useMemo(
       () => new Set(enabledModuleIds),
       [enabledModuleIds],
@@ -2056,10 +2048,10 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
         </div>
       );
     }
-    const BuiltinPage = builtinApp
-      ? BROWSER_BUILTIN_COMPONENTS[builtinApp.id]
+    const CoreBuiltinPage = builtinApp
+      ? BROWSER_CORE_COMPONENTS[builtinApp.id]
       : undefined;
-    if (builtinApp && BuiltinPage) {
+    if (builtinApp && (builtinApp.delivery === "remote" || CoreBuiltinPage)) {
       return (
         <div
           style={style}
@@ -2074,7 +2066,14 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
                 </div>
               }
             >
-              <BuiltinPage />
+              {builtinApp.delivery === "remote" ? (
+                <RemoteWorkbenchSurface
+                  app={builtinApp}
+                  hostPath={builtinApp.workspaceRoute}
+                />
+              ) : CoreBuiltinPage ? (
+                <CoreBuiltinPage />
+              ) : null}
             </Suspense>
           </WorkbenchSurfaceProvider>
         </div>

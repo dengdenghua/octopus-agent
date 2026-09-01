@@ -43,7 +43,7 @@ function pickGreetingName(
     if (footerDisplay) return footerDisplay;
   }
 
-  return "Octopus";
+  return "EchoAI";
 }
 
 export function Welcome({

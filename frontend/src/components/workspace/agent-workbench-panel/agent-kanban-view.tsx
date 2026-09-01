@@ -26,6 +26,30 @@ type AgentKanbanUserInput = {
   attachments: Array<{ filename: string }>;
 } | null;
 
+function visibilityStepNeedsAttention(step: VisibilityStep): boolean {
+  const details = step.details ?? {};
+  const requiresAction = details["requires_user_action"];
+  if (requiresAction === true) return true;
+
+  const status = String(details["status"] ?? "").toLowerCase();
+  if (
+    [
+      "pending",
+      "blocked",
+      "error",
+      "failed",
+      "needs_input",
+      "needs_approval",
+      "permission_required",
+      "conflict",
+    ].includes(status)
+  )
+    return true;
+
+  const severity = String(details["severity"] ?? "").toLowerCase();
+  return severity === "error" || severity === "critical";
+}
+
 function AgentKanbanViewImpl({
   effectiveActivityView,
   selectedRosterSeat,
@@ -107,6 +131,10 @@ function AgentKanbanViewImpl({
         typeof (step as VisibilityStep).basis === "string",
     );
   }, [lastVisibilityEvent]);
+  const actionableVisibilitySteps = useMemo(
+    () => visibilitySteps.filter(visibilityStepNeedsAttention),
+    [visibilitySteps],
+  );
   const [visibilityOpen, setVisibilityOpen] = useState(false);
 
   return (
@@ -143,14 +171,6 @@ function AgentKanbanViewImpl({
             {view.label}
           </button>
         ))}
-        {!selectedRosterSeat && !selectedAgent && (
-          <span
-            className="rounded-full border border-border-subtle bg-background/55 px-1.5 py-0.5 text-micro text-muted-foreground"
-            title={t.agentWorkbenchPanel.latestTurnContextDescription}
-          >
-            {t.agentWorkbenchPanel.latestTurnContext}
-          </span>
-        )}
         <span className="ml-auto font-mono text-xs text-muted-foreground">
           {selectedRosterSeat
             ? selectedRosterSeat.name
@@ -225,14 +245,14 @@ function AgentKanbanViewImpl({
         />
       )}
 
-      {/* Visibility decisions — de-emphasised surface: collapsed by default,
-          small text, transparent background. Latest visibility item wins. */}
-      {lastVisibilityEvent && visibilitySteps.length > 0 ? (
-        <div className="relative shrink-0 bg-background/70 pt-2 before:pointer-events-none before:absolute before:inset-x-0 before:-top-7 before:h-9 before:bg-gradient-to-b before:from-transparent before:via-background/45 before:to-background/70">
+      {/* Explanatory capability traces stay in the event history. This surface
+          appears only when the latest trace explicitly needs user attention. */}
+      {lastVisibilityEvent && actionableVisibilitySteps.length > 0 ? (
+        <div className="relative shrink-0 border-t border-amber-200/70 bg-amber-50/55 py-1 dark:border-amber-900/50 dark:bg-amber-950/15">
           <button
             type="button"
             onClick={() => setVisibilityOpen((open) => !open)}
-            className="relative z-10 flex w-full items-center gap-1.5 px-5 py-1.5 text-left transition-colors hover:bg-muted/30"
+            className="relative z-10 flex w-full items-center gap-1.5 px-5 py-1.5 text-left transition-colors hover:bg-amber-100/55 dark:hover:bg-amber-900/20"
             aria-expanded={visibilityOpen}
           >
             {visibilityOpen ? (
@@ -240,16 +260,17 @@ function AgentKanbanViewImpl({
             ) : (
               <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground/60" />
             )}
-            <span className="text-[11px] font-medium text-muted-foreground">
-              {t.agentWorkbenchPanel.visibilityPanelTitle}
+            <span className="text-[11px] font-medium text-amber-800 dark:text-amber-300">
+              {t.agentWorkbenchPanel.visibilityPanelTitle} ·{" "}
+              {t.agentWorkbenchPanel.visibilityPanelAttention}
             </span>
-            <span className="rounded-full bg-muted/60 px-1.5 text-[10px] tabular-nums text-muted-foreground/65">
-              {visibilitySteps.length}
+            <span className="rounded-full bg-amber-100 px-1.5 text-[10px] tabular-nums text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+              {actionableVisibilitySteps.length}
             </span>
           </button>
           {visibilityOpen && (
             <div className="relative z-10 space-y-1.5 px-5 pb-2.5">
-              {visibilitySteps.map((step, index) => (
+              {actionableVisibilitySteps.map((step, index) => (
                 <div
                   key={`${step.decision_point}:${index}`}
                   className="rounded-md border border-border-subtle bg-background/40 px-2 py-1.5"

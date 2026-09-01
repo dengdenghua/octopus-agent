@@ -28,6 +28,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { TabBar } from "@/components/browser/tab-bar";
 import { UrlBar } from "@/components/browser/url-bar";
@@ -36,6 +37,7 @@ import {
   BROWSER_OPEN_URL_REQUEST_KEY,
   BROWSER_OPEN_URL_ACK_EVENT,
   BrowserStoreProvider,
+  SEARCH_ENGINE_URLS,
   setAppMode,
   useBrowserStore,
   type BrowserOpenUrlRequest,
@@ -1124,6 +1126,25 @@ function BrowserSidePanel({
   );
 }
 
+function BrowserRouteQuery() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { openTab, settings } = useBrowserStore();
+  const query = searchParams.get("q")?.trim() ?? "";
+
+  useEffect(() => {
+    if (!query) return;
+    openTab(
+      `${SEARCH_ENGINE_URLS[settings.searchEngine]}${encodeURIComponent(query)}`,
+      { title: query },
+    );
+    const next = new URLSearchParams(searchParams);
+    next.delete("q");
+    setSearchParams(next, { replace: true });
+  }, [openTab, query, searchParams, setSearchParams, settings.searchEngine]);
+
+  return null;
+}
+
 export default function BrowserPage() {
   // Implementation note.
   useEffect(() => {
@@ -1131,6 +1152,7 @@ export default function BrowserPage() {
   }, []);
   return (
     <BrowserStoreProvider>
+      <BrowserRouteQuery />
       <BrowserShell />
     </BrowserStoreProvider>
   );

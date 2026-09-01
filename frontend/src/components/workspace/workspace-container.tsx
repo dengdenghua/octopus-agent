@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { useWorkbenchSurface } from "@/core/workbench/workbench-surface";
 
 /* Implementation note. */
 const ELECTRON_TITLE_BAR_HEIGHT = 36;
@@ -10,20 +11,25 @@ export function WorkspaceContainer({
   children,
   ...props
 }: React.ComponentProps<"div">) {
+  const surface = useWorkbenchSurface();
+  const embeddedInBrowser = surface === "browser";
   // Implementation note.
   // Implementation note.
   return (
     <div
       className={cn(
-        "flex h-screen w-full flex-col px-3 pb-3 md:px-4",
+        "flex w-full flex-col px-3 pb-3 md:px-4",
+        embeddedInBrowser ? "h-full" : "h-screen",
         className,
       )}
       style={
-        inElectron() ? { paddingTop: ELECTRON_TITLE_BAR_HEIGHT } : undefined
+        inElectron() && !embeddedInBrowser
+          ? { paddingTop: ELECTRON_TITLE_BAR_HEIGHT }
+          : undefined
       }
       {...props}
     >
-      {inElectron() && (
+      {inElectron() && !embeddedInBrowser && (
         <div
           aria-hidden
           className="pointer-events-none fixed left-0 right-0 top-0 z-50 h-9"

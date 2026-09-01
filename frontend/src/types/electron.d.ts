@@ -301,6 +301,9 @@ export interface OctopusElectronAPI {
     /** Open DevTools for the host renderer (used by the preview panel's
      * inspector button so the user can examine runtime errors). */
     openDevTools: () => Promise<{ ok: boolean; error?: string }>;
+    /** Query the native window state so the custom title bar can leave the
+     * correct macOS traffic-light inset. */
+    isFullScreen: () => Promise<{ ok: boolean; fullScreen?: boolean }>;
   };
 
   /* Implementation note. */
@@ -346,7 +349,8 @@ export interface OctopusElectronAPI {
       | "browser:download-event"
       | "desktop:organize-now"
       | "desktop:items-changed"
-      | "backend:bootstrap-progress",
+      | "backend:bootstrap-progress"
+      | "window:fullscreen-changed",
     listener: (...args: unknown[]) => void,
   ) => () => void;
 }

@@ -1,10 +1,21 @@
 import type { AIMessage } from "@/core/api/types";
 import type { BaseStream } from "@/core/api/use-stream-types";
+import { authHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 
 import type { AgentThreadState } from "../threads";
 
 import { urlOfArtifact } from "./utils";
+
+export class ArtifactLoadError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ArtifactLoadError";
+    this.status = status;
+  }
+}
 
 export async function loadArtifactContent({
   filepath,
@@ -20,8 +31,14 @@ export async function loadArtifactContent({
     enhancedFilepath = filepath + "/SKILL.md";
   }
   const url = urlOfArtifact({ filepath: enhancedFilepath, threadId, isMock });
-  const response = await fetch(url);
+  const response = await fetch(url, { headers: authHeaders() });
   const text = await response.text();
+  if (!response.ok) {
+    throw new ArtifactLoadError(
+      response.status,
+      `artifact request failed (${response.status})`,
+    );
+  }
   return { content: text, url };
 }
 

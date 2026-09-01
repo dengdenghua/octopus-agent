@@ -12,7 +12,7 @@ import { swallow } from "@/core/utils/log";
 export const ASSISTANT_NAME_KEY = "octopus.assistant-name";
 
 /** Default assistant name — mirrors `agents/octopus/profile.jsonc`. */
-export const DEFAULT_ASSISTANT_NAME = "Octopus";
+export const DEFAULT_ASSISTANT_NAME = "EchoAI";
 
 export function getAssistantDisplayName(): string {
   try {

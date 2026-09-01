@@ -7,10 +7,6 @@ import { renderWithProviders } from "@/test/harness";
 
 import { TaskCollaboratorControl } from "./task-collaborator-control";
 
-vi.mock("@/core/cowork", () => ({
-  useCollabSession: () => ({ data: null }),
-}));
-
 vi.mock("@/components/workspace/sidebar-footer", () => ({
   AgentAvatar: ({ agent }: { agent?: Agent }) => (
     <span aria-hidden="true">{agent?.display_name ?? agent?.name}</span>
@@ -40,9 +36,9 @@ const agents: Agent[] = [
     tool_groups: [],
   },
   {
-    name: "local_codex_cli",
-    display_name: "Codex CLI",
-    description: "本地伙伴",
+    name: "installed_code_reviewer",
+    display_name: "Code Reviewer",
+    description: "已安装专家",
     model: null,
     tool_groups: [],
   },
@@ -66,7 +62,8 @@ describe("TaskCollaboratorControl", () => {
         onSelectedAgentIdsChange={onSelectedAgentIdsChange}
         onTeamModeChange={onTeamModeChange}
         roster={[]}
-        threadId="new"
+        onlineCount={0}
+        humanInviteAction={<button type="button">邀请真人</button>}
       />,
       { locale: "zh-CN" },
     );
@@ -75,7 +72,7 @@ describe("TaskCollaboratorControl", () => {
     expect(screen.getByRole("region", { name: "按需能力" })).toBeVisible();
     expect(
       screen.getByText(
-        "专家、数位分身和本地伙伴只加入当前对话，不会切换你的主身份。",
+        "专家、数位分身和已安装能力只加入当前对话，不会切换你的主身份。",
       ),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: /研究顾问/ })).toHaveAttribute(
@@ -85,6 +82,9 @@ describe("TaskCollaboratorControl", () => {
     expect(screen.getByRole("button", { name: /Eve/ })).toHaveAttribute(
       "data-capability-kind",
       "primary",
+    );
+    expect(screen.getByTestId("collaborator-remote-invite")).toContainElement(
+      screen.getByRole("button", { name: "邀请真人" }),
     );
 
     await user.click(screen.getByRole("button", { name: /研究顾问/ }));

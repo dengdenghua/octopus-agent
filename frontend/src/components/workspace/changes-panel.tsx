@@ -13,8 +13,10 @@ import { toast } from "sonner";
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
+import { canAccessOperatorControlPlane } from "@/core/auth/control-plane-access";
 import type { FileOpEvent } from "@/core/observability/api";
 import { useFileOpStream } from "@/core/observability/file-ops";
+import { useOptionalAuth } from "@/providers/AuthProvider";
 import { cn } from "@/lib/utils";
 
 import { HunkHeader } from "./diff-editor/hunk-actions";
@@ -27,7 +29,14 @@ interface ChangesPanelProps {
 
 export function ChangesPanel({ className, onFileClick }: ChangesPanelProps) {
   const { t } = useI18n();
-  const events = useFileOpStream({ limit: 50 });
+  const auth = useOptionalAuth();
+  const events = useFileOpStream({
+    limit: 50,
+    enabled: canAccessOperatorControlPlane(
+      auth?.authStatus ?? null,
+      auth?.user ?? null,
+    ),
+  });
 
   const uniqueFiles = new Map<string, FileOpEvent>();
   for (const e of events) {
@@ -296,10 +305,8 @@ function HunkBlock({
                 <td
                   className={cn(
                     "px-2 py-0.5 whitespace-pre",
-                    line.type === "add" &&
-                      "text-success",
-                    line.type === "remove" &&
-                      "text-destructive",
+                    line.type === "add" && "text-success",
+                    line.type === "remove" && "text-destructive",
                   )}
                 >
                   <span className="mr-2 inline-block w-2 text-muted-foreground/60">

@@ -19,6 +19,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { swallow } from "@/core/utils/log";
 import { useI18n } from "@/core/i18n/hooks";
+import { RoutedWebLink } from "@/components/ui/routed-web-link";
 import type { Translations } from "@/core/i18n/locales/types";
 import { cn } from "@/lib/utils";
 
@@ -282,7 +283,10 @@ export function LiveToolTimeline({
     [events, runningOnly, showAll],
   );
   const displayEvents = useMemo(
-    () => (compactDelegations ? compactDelegationEvents(visibleEvents) : visibleEvents.map((event) => ({ kind: "event" as const, event }))),
+    () =>
+      compactDelegations
+        ? compactDelegationEvents(visibleEvents)
+        : visibleEvents.map((event) => ({ kind: "event" as const, event })),
     [compactDelegations, visibleEvents],
   );
 
@@ -307,7 +311,7 @@ export function LiveToolTimeline({
   return (
     <div className={cn("space-y-1 py-1.5", className)}>
       <SwarmRunOverview events={events} />
-      {displayEvents.map((item) => (
+      {displayEvents.map((item) =>
         item.kind === "event" ? (
           <ParentWithChildren
             key={item.event.id}
@@ -323,8 +327,8 @@ export function LiveToolTimeline({
             target={item.target}
             t={t}
           />
-        )
-      ))}
+        ),
+      )}
     </div>
   );
 }
@@ -337,24 +341,27 @@ function compactDelegationEvents(
   events: LiveToolEvent[],
 ): TimelineDisplayItem[] {
   const items: TimelineDisplayItem[] = [];
-  const buckets = new Map<string, Extract<TimelineDisplayItem, { kind: "delegation" }>>();
+  const buckets = new Map<
+    string,
+    Extract<TimelineDisplayItem, { kind: "delegation" }>
+  >();
   for (const event of events) {
     if (event.lifecycle || !/agent|delegate|orchestrat/i.test(event.name)) {
       items.push({ kind: "event", event });
       continue;
     }
     const input = event.input ?? {};
-    const target = [
-      "agent_id",
-      "subagent_id",
-      "subagent_name",
-      "role",
-      "agent",
-      "name",
-    ]
-      .map((key) => input[key])
-      .find((value): value is string => typeof value === "string" && Boolean(value.trim()))
-      ?.trim() || event.subAgentRole || event.agentName || "other";
+    const target =
+      ["agent_id", "subagent_id", "subagent_name", "role", "agent", "name"]
+        .map((key) => input[key])
+        .find(
+          (value): value is string =>
+            typeof value === "string" && Boolean(value.trim()),
+        )
+        ?.trim() ||
+      event.subAgentRole ||
+      event.agentName ||
+      "other";
     const existing = buckets.get(target);
     if (existing) {
       existing.events.push(event);
@@ -1544,15 +1551,14 @@ function SearchResultsInline({
             {index + 1}
           </span>
           {result.url ? (
-            <a
+            <RoutedWebLink
               href={result.url}
-              target="_blank"
-              rel="noreferrer"
+              openTargetSource="tool-search-result"
               className="min-w-0 truncate text-foreground/75 underline-offset-2 hover:text-foreground hover:underline"
               title={result.title}
             >
               {result.title}
-            </a>
+            </RoutedWebLink>
           ) : (
             <span
               className="min-w-0 truncate text-foreground/75"

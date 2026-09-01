@@ -227,6 +227,27 @@ describe("KnowledgeGraphPanel", () => {
     });
     expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
+
+  it("opts into the global control plane and renders a stable 403 gate", async () => {
+    const fetchMock = vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(JSON.stringify({ detail: "forbidden" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    render(withProviders(<KnowledgeGraphPanel />));
+
+    expect(
+      await screen.findByText("crossTenantAdminRequired"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/知识图谱为空/)).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [input] of fetchMock.mock.calls) {
+      expect(String(input)).toContain("cross_tenant=true");
+    }
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe("IntelligencePanel", () => {
@@ -329,4 +350,3 @@ describe("EvolutionDashboard", () => {
     expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
 });
-

@@ -354,16 +354,28 @@ export const MessageBranchPage = ({
 export type MessageResponseProps = StreamdownProps;
 
 export const MessageResponse = memo(
-  ({ className, ...props }: MessageResponseProps) => (
+  ({ className, children, ...props }: MessageResponseProps) => (
     <Suspense
       fallback={
         <div
           className={cn(
-            "size-full whitespace-pre-wrap break-words select-text",
+            "size-full select-text",
+            typeof children === "string" &&
+              "whitespace-pre-wrap break-words text-foreground",
             className,
           )}
+          aria-busy="true"
         >
-          {props.children}
+          {typeof children === "string" ? (
+            children
+          ) : (
+            <div className="space-y-2">
+              <div className="h-4 w-3/5 rounded-sm bg-muted-foreground/10" />
+              <div className="h-4 w-full rounded-sm bg-muted-foreground/10" />
+              <div className="h-4 w-4/5 rounded-sm bg-muted-foreground/10" />
+              <div className="h-4 w-2/3 rounded-sm bg-muted-foreground/10" />
+            </div>
+          )}
         </div>
       }
     >
@@ -373,7 +385,9 @@ export const MessageResponse = memo(
           className,
         )}
         {...props}
-      />
+      >
+        {children}
+      </LazyStreamdown>
     </Suspense>
   ),
 );

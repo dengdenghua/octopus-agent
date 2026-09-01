@@ -7,6 +7,7 @@ import {
   getThreadModelName,
   saveThreadLocalSettings,
   saveThreadModelName,
+  subscribeLocalSettings,
 } from "./local";
 
 const LOCAL_SETTINGS_KEY = "octopus.local-settings";
@@ -120,5 +121,21 @@ describe("per-thread model persistence", () => {
     expect(getThreadLocalSettings("thread-a").context.model_name).toBe(
       "glm-5.3",
     );
+  });
+
+  it("broadcasts only after the new thread model is observable", () => {
+    const observed: Array<string | undefined> = [];
+    const unsubscribe = subscribeLocalSettings(() => {
+      observed.push(getThreadLocalSettings("thread-a").context.model_name);
+    });
+    const base = getThreadLocalSettings("thread-a");
+
+    saveThreadLocalSettings("thread-a", {
+      ...base,
+      context: { ...base.context, model_name: "big-pickle" },
+    });
+    unsubscribe();
+
+    expect(observed).toEqual(["big-pickle"]);
   });
 });

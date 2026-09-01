@@ -8,17 +8,22 @@ import {
   CirclePlayIcon,
   DownloadIcon,
   FootprintsIcon,
+  Globe2Icon,
+  KeyboardIcon,
   Move3DIcon,
+  PanelRightCloseIcon,
   PauseIcon,
   PlusIcon,
+  RectangleHorizontalIcon,
   Redo2Icon,
-  Rotate3DIcon,
+  SmartphoneIcon,
   Undo2Icon,
   UserRoundIcon,
   VideoIcon,
   XIcon,
 } from "lucide-react";
 import * as THREE from "three";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -372,6 +377,10 @@ export function DirectorStage({
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const threeSceneRef = useRef<THREE.Scene | null>(null);
+  const sceneRootRef = useRef<THREE.Group | null>(null);
+  const backgroundMeshRef = useRef<THREE.Mesh | null>(null);
+  const roleLabelRef = useRef<HTMLDivElement | null>(null);
   const characterRef = useRef<THREE.Group | null>(null);
   const modelLayerRef = useRef<THREE.Group | null>(null);
   const propLayerRef = useRef<THREE.Group | null>(null);
@@ -385,7 +394,8 @@ export function DirectorStage({
   const playingRef = useRef(false);
   const durationRef = useRef(0);
   const poseRef = useRef<Pose>("stand");
-  const [sceneOpen, setSceneOpen] = useState(true);
+  const showRoleLabelsRef = useRef(true);
+  const [sceneOpen, setSceneOpen] = useState(false);
   const [pose, setPose] = useState<Pose>("stand");
   const [bodyType, setBodyType] = useState<BodyType>("mannequin");
   const [selected, setSelected] = useState<
@@ -396,7 +406,18 @@ export function DirectorStage({
   const [props, setProps] = useState<PropEntity[]>([]);
   const [selectedPropId, setSelectedPropId] = useState<string | null>(null);
   const [sky, setSky] = useState("#fafafa");
-  const [zoom, setZoom] = useState(100);
+  const [sceneScale, setSceneScale] = useState(100);
+  const [timelineZoom, setTimelineZoom] = useState(100);
+  const [scenePosition, setScenePosition] = useState({ x: 0, y: 0, z: 0 });
+  const [sceneRotation, setSceneRotation] = useState({ x: 0, y: 0, z: 0 });
+  const [backgroundMode, setBackgroundMode] = useState<"panorama" | "flat">(
+    "panorama",
+  );
+  const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
+  const [backgroundImageName, setBackgroundImageName] = useState("");
+  const [horizontalRotation, setHorizontalRotation] = useState(0);
+  const [sphereRadius, setSphereRadius] = useState(90);
+  const [showRoleLabels, setShowRoleLabels] = useState(true);
   const [position, setPosition] = useState({ x: 0, y: 0, z: 0 });
   const [hasPath, setHasPath] = useState(false);
   const [tracks, setTracks] = useState<TimelineTrack[]>([]);
@@ -426,7 +447,18 @@ export function DirectorStage({
       .then(async (response) => {
         if (!response.ok) throw new Error(`load failed: ${response.status}`);
         return (await response.json()) as {
-          scene?: { skyColor?: string };
+          scene?: {
+            skyColor?: string;
+            scale?: number[];
+            position?: number[];
+            rotation?: number[];
+            backgroundMode?: "panorama" | "flat";
+            backgroundImage?: string | null;
+            backgroundImageName?: string | null;
+            horizontalRotation?: number;
+            sphereRadius?: number;
+            showRoleLabels?: boolean;
+          };
           entities?: Array<{
             id?: string;
             type?: string;
@@ -451,6 +483,27 @@ export function DirectorStage({
           (entity) => entity.type === "character",
         );
         if (payload.scene?.skyColor) setSky(payload.scene.skyColor);
+        if (payload.scene?.scale?.length === 3)
+          setSceneScale(Math.round(Number(payload.scene.scale[0]) * 100));
+        if (payload.scene?.position?.length === 3)
+          setScenePosition({
+            x: Number(payload.scene.position[0]),
+            y: Number(payload.scene.position[1]),
+            z: Number(payload.scene.position[2]),
+          });
+        if (payload.scene?.rotation?.length === 3)
+          setSceneRotation({
+            x: Number(payload.scene.rotation[0]),
+            y: Number(payload.scene.rotation[1]),
+            z: Number(payload.scene.rotation[2]),
+          });
+        if (payload.scene?.backgroundMode)
+          setBackgroundMode(payload.scene.backgroundMode);
+        setBackgroundImage(payload.scene?.backgroundImage ?? null);
+        setBackgroundImageName(payload.scene?.backgroundImageName ?? "");
+        setHorizontalRotation(Number(payload.scene?.horizontalRotation ?? 0));
+        setSphereRadius(Number(payload.scene?.sphereRadius ?? 90));
+        setShowRoleLabels(payload.scene?.showRoleLabels !== false);
         if (character?.pose && POSES.some((item) => item.id === character.pose))
           setPose(character.pose);
         if (character?.bodyType) setBodyType(character.bodyType);
@@ -520,6 +573,10 @@ export function DirectorStage({
   }, [pose]);
 
   useEffect(() => {
+    showRoleLabelsRef.current = showRoleLabels;
+  }, [showRoleLabels]);
+
+  useEffect(() => {
     if (!hydrated) return;
     if (skipSaveRef.current) {
       skipSaveRef.current = false;
@@ -534,7 +591,23 @@ export function DirectorStage({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             operations: [
-              { type: "set_scene", skyColor: sky },
+              {
+                type: "set_scene",
+                skyColor: sky,
+                scale: [sceneScale / 100, sceneScale / 100, sceneScale / 100],
+                position: [scenePosition.x, scenePosition.y, scenePosition.z],
+                rotation: [sceneRotation.x, sceneRotation.y, sceneRotation.z],
+              },
+              {
+                type: "set_environment",
+                skyColor: sky,
+                backgroundMode,
+                backgroundImage,
+                backgroundImageName,
+                horizontalRotation,
+                sphereRadius,
+                showRoleLabels,
+              },
               {
                 type: "set_pose",
                 entityId: "character-1",
@@ -561,16 +634,33 @@ export function DirectorStage({
       window.clearTimeout(timer);
       if (saveTimerRef.current === timer) saveTimerRef.current = null;
     };
-  }, [bodyType, hydrated, pose, position, sceneId, sky]);
-
-  useEffect(() => {
-    orbitRef.current.radius = Math.max(2.6, Math.min(10.4, 5.2 * (100 / zoom)));
-  }, [zoom]);
+  }, [
+    backgroundImage,
+    backgroundImageName,
+    backgroundMode,
+    bodyType,
+    horizontalRotation,
+    hydrated,
+    pose,
+    position,
+    sceneId,
+    scenePosition,
+    sceneRotation,
+    sceneScale,
+    showRoleLabels,
+    sky,
+    sphereRadius,
+  ]);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
     const scene = new THREE.Scene();
+    threeSceneRef.current = scene;
+    const sceneRoot = new THREE.Group();
+    sceneRoot.name = "场景根节点";
+    sceneRootRef.current = sceneRoot;
+    scene.add(sceneRoot);
     const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -588,28 +678,28 @@ export function DirectorStage({
     key.castShadow = true;
     scene.add(key);
     const grid = new THREE.GridHelper(16, 32, 0xb7c4d6, 0xdfe6ef);
-    scene.add(grid);
+    sceneRoot.add(grid);
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(16, 16),
       new THREE.ShadowMaterial({ color: 0x111827, opacity: 0.08 }),
     );
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
-    scene.add(floor);
+    sceneRoot.add(floor);
     const character = makeMannequin();
     character.userData.entityId = "character-1";
     character.userData.basePosition = [0, 0, 0];
     character.userData.baseRotationY = 0;
     characterRef.current = character;
-    scene.add(character);
+    sceneRoot.add(character);
     const modelLayer = new THREE.Group();
     modelLayer.name = "程序化模型";
     modelLayerRef.current = modelLayer;
-    scene.add(modelLayer);
+    sceneRoot.add(modelLayer);
     const propLayer = new THREE.Group();
     propLayer.name = "场景道具";
     propLayerRef.current = propLayer;
-    scene.add(propLayer);
+    sceneRoot.add(propLayer);
 
     const updateCamera = () => {
       const { theta, phi, radius } = orbitRef.current;
@@ -755,6 +845,19 @@ export function DirectorStage({
       const cameraDriven = evaluateTimeline(playheadRef.current);
       if (!cameraDriven) updateCamera();
       renderer.render(scene, camera);
+      const label = roleLabelRef.current;
+      if (label) {
+        const point = character.getWorldPosition(new THREE.Vector3());
+        point.y += 1.9;
+        point.project(camera);
+        const visible =
+          showRoleLabelsRef.current && point.z > -1 && point.z < 1;
+        label.style.display = visible ? "block" : "none";
+        if (visible) {
+          label.style.left = `${((point.x + 1) / 2) * host.clientWidth}px`;
+          label.style.top = `${((-point.y + 1) / 2) * host.clientHeight}px`;
+        }
+      }
       frame = requestAnimationFrame(render);
     };
     render();
@@ -765,6 +868,9 @@ export function DirectorStage({
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       renderer.dispose();
+      threeSceneRef.current = null;
+      sceneRootRef.current = null;
+      backgroundMeshRef.current = null;
       modelLayerRef.current = null;
       propLayerRef.current = null;
       renderer.domElement.remove();
@@ -821,6 +927,63 @@ export function DirectorStage({
   }, [bodyType, pose, position]);
 
   useEffect(() => {
+    const root = sceneRootRef.current;
+    if (!root) return;
+    const scale = Math.max(0.5, Math.min(1.6, sceneScale / 100));
+    root.scale.setScalar(scale);
+    root.position.set(scenePosition.x, scenePosition.y, scenePosition.z);
+    root.rotation.set(
+      THREE.MathUtils.degToRad(sceneRotation.x),
+      THREE.MathUtils.degToRad(sceneRotation.y),
+      THREE.MathUtils.degToRad(sceneRotation.z),
+    );
+  }, [scenePosition, sceneRotation, sceneScale]);
+
+  useEffect(() => {
+    const scene = threeSceneRef.current;
+    if (!scene) return;
+    const removeBackgroundMesh = () => {
+      const mesh = backgroundMeshRef.current;
+      if (!mesh) return;
+      scene.remove(mesh);
+      mesh.geometry.dispose();
+      const material = mesh.material as THREE.MeshBasicMaterial;
+      material.map?.dispose();
+      material.dispose();
+      backgroundMeshRef.current = null;
+    };
+    removeBackgroundMesh();
+    scene.background = new THREE.Color(sky);
+    if (!backgroundImage) return;
+    let cancelled = false;
+    const texture = new THREE.TextureLoader().load(backgroundImage, () => {
+      if (cancelled) {
+        texture.dispose();
+        return;
+      }
+      texture.colorSpace = THREE.SRGBColorSpace;
+      if (backgroundMode === "flat") {
+        scene.background = texture;
+        return;
+      }
+      texture.mapping = THREE.EquirectangularReflectionMapping;
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(sphereRadius, 48, 24),
+        new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide }),
+      );
+      mesh.rotation.y = THREE.MathUtils.degToRad(horizontalRotation);
+      mesh.name = "全景背景";
+      backgroundMeshRef.current = mesh;
+      scene.add(mesh);
+    });
+    return () => {
+      cancelled = true;
+      if (scene.background === texture) scene.background = new THREE.Color(sky);
+      removeBackgroundMesh();
+    };
+  }, [backgroundImage, backgroundMode, horizontalRotation, sky, sphereRadius]);
+
+  useEffect(() => {
     const renderer = rendererRef.current;
     if (renderer) renderer.setClearColor(new THREE.Color(sky), 1);
   }, [sky]);
@@ -859,7 +1022,10 @@ export function DirectorStage({
     };
   }, [
     bodyType,
+    backgroundImage,
+    backgroundMode,
     hydrated,
+    horizontalRotation,
     models,
     playheadSec,
     playing,
@@ -867,7 +1033,12 @@ export function DirectorStage({
     position,
     props,
     sceneId,
+    scenePosition,
+    sceneRotation,
+    sceneScale,
+    showRoleLabels,
     sky,
+    sphereRadius,
     tracks,
   ]);
 
@@ -1043,8 +1214,21 @@ export function DirectorStage({
           机位视角
         </Button>
         <span className="mx-2 h-5 w-px bg-border-subtle" />
-        <Button variant="ghost" size="icon" className="size-8">
-          <CameraIcon className="size-3.5" />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          title="虚拟摄像机（手机扫码运镜）"
+        >
+          <SmartphoneIcon className="size-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          title="快捷键一览"
+        >
+          <KeyboardIcon className="size-3.5" />
         </Button>
         <Button
           variant="ghost"
@@ -1065,31 +1249,7 @@ export function DirectorStage({
           <Redo2Icon className="size-3.5" />
         </Button>
         <span className="flex-1" />
-        <span
-          className={cn(
-            "mr-1 text-[9px]",
-            saveState === "error"
-              ? "text-destructive"
-              : "text-muted-foreground",
-          )}
-        >
-          {saveState === "loading"
-            ? "载入中"
-            : saveState === "saving"
-              ? "保存中"
-              : saveState === "error"
-                ? "保存失败"
-                : "已保存"}
-        </span>
-        <span
-          className={cn(
-            "mr-2 text-[9px]",
-            snapshotState === "error"
-              ? "text-destructive"
-              : "text-muted-foreground",
-          )}
-          title="Agent 读取的是真实 WebGL 预览图"
-        >
+        <span className="sr-only" aria-live="polite">
           {snapshotState === "syncing"
             ? "同步画面中"
             : snapshotState === "saved"
@@ -1213,7 +1373,13 @@ export function DirectorStage({
         ) : null}
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="relative min-h-0 flex-1 bg-[#fafafa]" ref={hostRef}>
-            <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-[14px] border bg-background/95 p-1 shadow-lg">
+            <div
+              ref={roleLabelRef}
+              className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-md border border-blue-200 bg-background/95 px-2 py-1 text-[9px] font-medium text-blue-700 shadow-sm backdrop-blur-sm"
+            >
+              角色A
+            </div>
+            <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-[12px] border bg-background/95 p-1 shadow-lg backdrop-blur-sm">
               <Button variant="ghost" size="icon" className="size-8">
                 <Move3DIcon className="size-4" />
               </Button>
@@ -1221,7 +1387,7 @@ export function DirectorStage({
                 <BoxIcon className="size-4" />
               </Button>
               <Button variant="ghost" size="icon" className="size-8">
-                <Rotate3DIcon className="size-4" />
+                <Globe2Icon className="size-4" />
               </Button>
               <Button variant="ghost" size="icon" className="size-8">
                 <CameraIcon className="size-4" />
@@ -1229,24 +1395,36 @@ export function DirectorStage({
               <Button size="icon" className="size-8">
                 <FootprintsIcon className="size-4" />
               </Button>
+              <Button variant="ghost" size="icon" className="size-8">
+                <RectangleHorizontalIcon className="size-4" />
+              </Button>
+              <Button variant="ghost" size="icon" className="size-8">
+                <PanelRightCloseIcon className="size-4" />
+              </Button>
             </div>
           </div>
-          <div className="h-[176px] shrink-0 border-t border-border-subtle bg-background">
+          <div className="h-[230px] shrink-0 border-t border-border-subtle bg-background">
             <div className="flex h-10 items-center gap-1 border-b border-border-subtle px-3">
               <Button
                 variant="outline"
                 size="icon"
                 className="size-7"
-                onClick={() => setZoom((value) => Math.max(25, value - 25))}
+                onClick={() =>
+                  setTimelineZoom((value) => Math.max(50, value - 25))
+                }
               >
                 −
               </Button>
-              <span className="w-11 text-center text-[10px]">{zoom}%</span>
+              <span className="w-11 text-center text-[10px]">
+                {timelineZoom}%
+              </span>
               <Button
                 variant="outline"
                 size="icon"
                 className="size-7"
-                onClick={() => setZoom((value) => Math.min(200, value + 25))}
+                onClick={() =>
+                  setTimelineZoom((value) => Math.min(300, value + 25))
+                }
               >
                 ＋
               </Button>
@@ -1312,66 +1490,72 @@ export function DirectorStage({
               </Button>
             </div>
             {hasPath ? (
-              <div className="h-[135px] overflow-y-auto px-4 py-3 text-[10px]">
-                {tracks.map((track) => {
-                  const left =
-                    (Math.max(0, Number(track.startSec ?? 0)) /
-                      Math.max(0.01, durationSec)) *
-                    100;
-                  const width =
-                    (Math.max(0.05, Number(track.durationSec ?? 0)) /
-                      Math.max(0.01, durationSec)) *
-                    100;
-                  const color =
-                    track.type === "camera_path"
-                      ? "bg-violet-500"
-                      : track.type === "character_animation"
-                        ? "bg-blue-500"
-                        : "bg-emerald-500";
-                  return (
-                    <div
-                      key={track.id}
-                      className="mb-2 flex items-center gap-3"
-                    >
-                      <span className="w-20 truncate text-muted-foreground">
-                        {track.type === "camera_path"
-                          ? "机位"
-                          : track.type === "character_animation"
-                            ? "角色动作"
-                            : "对象路径"}
-                      </span>
-                      <div className="relative h-8 flex-1 rounded-md bg-muted/70">
-                        <div
-                          className={cn(
-                            "absolute inset-y-1 overflow-hidden rounded px-2 py-1 text-white",
-                            color,
-                          )}
-                          style={{
-                            left: `${Math.min(100, left)}%`,
-                            width: `${Math.max(0, Math.min(100 - left, width))}%`,
-                          }}
-                        >
-                          <span className="block truncate">
-                            {track.name || track.motionId || "未命名片段"} ·{" "}
-                            {Number(track.durationSec ?? 0).toFixed(1)}s
-                          </span>
+              <div className="h-[189px] overflow-auto px-4 py-3 text-[10px]">
+                <div
+                  style={{ width: `${Math.max(100, timelineZoom)}%` }}
+                  className="min-w-full"
+                >
+                  {tracks.map((track) => {
+                    const left =
+                      (Math.max(0, Number(track.startSec ?? 0)) /
+                        Math.max(0.01, durationSec)) *
+                      100;
+                    const width =
+                      (Math.max(0.05, Number(track.durationSec ?? 0)) /
+                        Math.max(0.01, durationSec)) *
+                      100;
+                    const color =
+                      track.type === "camera_path"
+                        ? "bg-violet-500"
+                        : track.type === "character_animation"
+                          ? "bg-blue-500"
+                          : "bg-emerald-500";
+                    return (
+                      <div
+                        key={track.id}
+                        className="mb-2 flex items-center gap-3"
+                      >
+                        <span className="w-20 truncate text-muted-foreground">
+                          {track.type === "camera_path"
+                            ? "机位"
+                            : track.type === "character_animation"
+                              ? "角色动作"
+                              : "对象路径"}
+                        </span>
+                        <div className="relative h-8 flex-1 rounded-md bg-muted/70">
+                          <div
+                            className={cn(
+                              "absolute inset-y-1 overflow-hidden rounded px-2 py-1 text-white",
+                              color,
+                            )}
+                            style={{
+                              left: `${Math.min(100, left)}%`,
+                              width: `${Math.max(0, Math.min(100 - left, width))}%`,
+                            }}
+                          >
+                            <span className="block truncate">
+                              {track.name || track.motionId || "未命名片段"} ·{" "}
+                              {Number(track.durationSec ?? 0).toFixed(1)}s
+                            </span>
+                          </div>
+                          <div
+                            className="pointer-events-none absolute inset-y-0 w-px bg-foreground/70"
+                            style={{
+                              left: `${Math.min(
+                                100,
+                                (playheadSec / Math.max(0.01, durationSec)) *
+                                  100,
+                              )}%`,
+                            }}
+                          />
                         </div>
-                        <div
-                          className="pointer-events-none absolute inset-y-0 w-px bg-foreground/70"
-                          style={{
-                            left: `${Math.min(
-                              100,
-                              (playheadSec / Math.max(0.01, durationSec)) * 100,
-                            )}%`,
-                          }}
-                        />
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             ) : (
-              <div className="grid h-[135px] place-items-center text-[10px] text-muted-foreground">
+              <div className="grid h-[189px] place-items-center text-[10px] text-muted-foreground">
                 <div className="text-center">
                   <FootprintsIcon className="mx-auto size-5 opacity-50" />
                   <p className="mt-2">点击“添加路径”创建运镜片段</p>
@@ -1383,7 +1567,7 @@ export function DirectorStage({
         <aside className="w-[286px] shrink-0 overflow-y-auto border-l border-border-subtle bg-background p-4">
           {selected === "scene" ? (
             <>
-              <h3 className="text-sm font-semibold">3D 场景</h3>
+              <h3 className="text-sm font-semibold">3D场景</h3>
               <label className="mt-5 block text-[10px] text-muted-foreground">
                 场景缩放
               </label>
@@ -1391,11 +1575,65 @@ export function DirectorStage({
                 type="range"
                 min="50"
                 max="160"
-                value={zoom}
-                onChange={(event) => setZoom(Number(event.target.value))}
+                value={sceneScale}
+                onChange={(event) => setSceneScale(Number(event.target.value))}
                 className="mt-2 w-full accent-foreground"
               />
-              <div className="mt-1 text-right text-[10px]">{zoom}%</div>
+              <div className="mt-1 text-right text-[10px]">{sceneScale}%</div>
+              <label className="mt-4 block text-[10px] text-muted-foreground">
+                场景平移
+              </label>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {(["x", "y", "z"] as const).map((axis) => (
+                  <label
+                    key={axis}
+                    className="flex items-center rounded-lg border px-2"
+                  >
+                    <span className="mr-1 text-[9px] text-muted-foreground">
+                      {axis}
+                    </span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={scenePosition[axis]}
+                      onChange={(event) =>
+                        setScenePosition((current) => ({
+                          ...current,
+                          [axis]: Number(event.target.value),
+                        }))
+                      }
+                      className="h-8 min-w-0 flex-1 bg-transparent text-[10px] outline-none"
+                    />
+                  </label>
+                ))}
+              </div>
+              <label className="mt-4 block text-[10px] text-muted-foreground">
+                场景旋转
+              </label>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {(["x", "y", "z"] as const).map((axis) => (
+                  <label
+                    key={axis}
+                    className="flex items-center rounded-lg border px-2"
+                  >
+                    <span className="mr-1 text-[9px] text-muted-foreground">
+                      {axis}
+                    </span>
+                    <input
+                      type="number"
+                      step="1"
+                      value={sceneRotation[axis]}
+                      onChange={(event) =>
+                        setSceneRotation((current) => ({
+                          ...current,
+                          [axis]: Number(event.target.value),
+                        }))
+                      }
+                      className="h-8 min-w-0 flex-1 bg-transparent text-[10px] outline-none"
+                    />
+                  </label>
+                ))}
+              </div>
               <label className="mt-5 block text-[10px] text-muted-foreground">
                 天空颜色
               </label>
@@ -1409,14 +1647,136 @@ export function DirectorStage({
                 <span className="text-[11px]">{sky.toUpperCase()}</span>
               </div>
               <label className="mt-5 block text-[10px] text-muted-foreground">
+                背景图片
+              </label>
+              <div className="mt-2 flex items-center gap-2 rounded-lg border px-3 py-2">
+                <span className="min-w-0 flex-1 truncate text-[10px]">
+                  {backgroundImageName || "无"}
+                </span>
+                {backgroundImage ? (
+                  <button
+                    type="button"
+                    className="text-[9px] text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setBackgroundImage(null);
+                      setBackgroundImageName("");
+                    }}
+                  >
+                    清除
+                  </button>
+                ) : null}
+                <label className="cursor-pointer text-[9px] font-medium">
+                  选择
+                  <input
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = "";
+                      if (!file) return;
+                      if (file.size > 2_800_000) {
+                        toast.error("背景图片需小于 2.8 MB");
+                        return;
+                      }
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        if (typeof reader.result !== "string") return;
+                        setBackgroundImage(reader.result);
+                        setBackgroundImageName(file.name);
+                      };
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                </label>
+              </div>
+              <label className="mt-5 block text-[10px] text-muted-foreground">
                 背景模式
               </label>
               <div className="mt-2 flex rounded-lg bg-muted p-1 text-[10px]">
-                <button className="flex-1 rounded-md bg-foreground py-1.5 text-background">
+                <button
+                  onClick={() => setBackgroundMode("panorama")}
+                  className={cn(
+                    "flex-1 rounded-md py-1.5",
+                    backgroundMode === "panorama"
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground",
+                  )}
+                >
                   全景
                 </button>
-                <button className="flex-1 py-1.5 text-muted-foreground">
+                <button
+                  onClick={() => setBackgroundMode("flat")}
+                  className={cn(
+                    "flex-1 rounded-md py-1.5",
+                    backgroundMode === "flat"
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground",
+                  )}
+                >
                   平面
+                </button>
+              </div>
+              {backgroundMode === "panorama" ? (
+                <>
+                  <label className="mt-4 block text-[10px] text-muted-foreground">
+                    水平旋转
+                  </label>
+                  <div className="mt-2 flex items-center gap-3">
+                    <input
+                      type="range"
+                      min="-180"
+                      max="180"
+                      value={horizontalRotation}
+                      onChange={(event) =>
+                        setHorizontalRotation(Number(event.target.value))
+                      }
+                      className="min-w-0 flex-1 accent-foreground"
+                    />
+                    <span className="w-12 rounded-lg border px-2 py-1 text-right text-[10px]">
+                      {horizontalRotation}°
+                    </span>
+                  </div>
+                  <label className="mt-4 block text-[10px] text-muted-foreground">
+                    球形半径
+                  </label>
+                  <div className="mt-2 flex items-center gap-3">
+                    <input
+                      type="range"
+                      min="30"
+                      max="180"
+                      value={sphereRadius}
+                      onChange={(event) =>
+                        setSphereRadius(Number(event.target.value))
+                      }
+                      className="min-w-0 flex-1 accent-foreground"
+                    />
+                    <span className="w-12 rounded-lg border px-2 py-1 text-right text-[10px]">
+                      {sphereRadius}
+                    </span>
+                  </div>
+                </>
+              ) : null}
+              <div className="mt-5 flex items-center border-t border-border-subtle pt-4">
+                <span className="text-[10px] text-muted-foreground">
+                  角色标签
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={showRoleLabels}
+                  onClick={() => setShowRoleLabels((value) => !value)}
+                  className={cn(
+                    "ml-auto h-5 w-9 rounded-full p-0.5 transition",
+                    showRoleLabels ? "bg-foreground" : "bg-muted-foreground/30",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "block size-4 rounded-full bg-background transition-transform",
+                      showRoleLabels && "translate-x-4",
+                    )}
+                  />
                 </button>
               </div>
             </>

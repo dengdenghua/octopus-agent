@@ -23,9 +23,9 @@ describe("primary persona policy", () => {
     expect(isPrimaryPersonaAgentId("desktop_operator")).toBe(true);
   });
 
-  test("treats installed experts and local partners as on-demand", () => {
+  test("treats installed experts as on-demand", () => {
     expect(isPrimaryPersonaAgentId("twin_ai_engineer")).toBe(false);
-    expect(isPrimaryPersonaAgentId("local_claude_code")).toBe(false);
+    expect(isPrimaryPersonaAgentId("installed_code_reviewer")).toBe(false);
     expect(isPrimaryPersonaAgentId("echo_kane")).toBe(false);
   });
 

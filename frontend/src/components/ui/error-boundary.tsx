@@ -9,8 +9,19 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { I18nContext } from "@/core/i18n/context";
-import { enUS } from "@/core/i18n/locales/en-US";
 import type { Translations } from "@/core/i18n/locales";
+
+const FALLBACK_ERROR_BOUNDARY_TRANSLATIONS: Translations["errorBoundary"] = {
+  title: "Something went wrong",
+  description:
+    "An error occurred while loading this component. Try refreshing the page.",
+  chunkTitle: "Page resources were updated",
+  chunkDescription:
+    "The frontend bundle changed. Refresh the page to load the latest version.",
+  unexpectedDescription: "An unexpected error occurred.",
+  retry: "Retry",
+  refreshPage: "Refresh page",
+};
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -139,7 +150,9 @@ export class ErrorBoundary extends Component<
       return (
         <I18nContext.Consumer>
           {(context) =>
-            this.renderErrorCard((context?.t ?? enUS).errorBoundary)
+            this.renderErrorCard(
+              context?.t.errorBoundary ?? FALLBACK_ERROR_BOUNDARY_TRANSLATIONS,
+            )
           }
         </I18nContext.Consumer>
       );

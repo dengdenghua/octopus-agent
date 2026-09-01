@@ -1,21 +1,18 @@
 import { screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { renderWithProviders } from "@/test/harness";
 
 import {
   RealtimeChatHeaderActions,
   RealtimeChatHeaderMemberSurface,
-  RealtimeChatHeaderOverflowMenu,
 } from "./realtime-chat-header-controls";
 
 describe("realtime chat header controls", () => {
-  it("presents AI roster and human invite as one segmented member surface", () => {
+  it("presents one member trigger in the header", () => {
     renderWithProviders(
       <RealtimeChatHeaderMemberSurface
-        aiMembers={<button type="button">AI members 1</button>}
-        humanInvite={<button type="button">Invite person</button>}
+        aiMembers={<button type="button">Members 1</button>}
       />,
       { locale: "en-US" },
     );
@@ -24,55 +21,23 @@ describe("realtime chat header controls", () => {
       name: "Collaboration",
     });
     expect(
-      within(memberSurface).getByRole("button", { name: "AI members 1" }),
+      within(memberSurface).getByRole("button", { name: "Members 1" }),
     ).toBeInTheDocument();
-    expect(
-      within(memberSurface).getByRole("button", { name: "Invite person" }),
-    ).toBeInTheDocument();
+    expect(within(memberSurface).getAllByRole("button")).toHaveLength(1);
     expect(memberSurface).toHaveAttribute(
       "data-slot",
       "realtime-header-members",
     );
   });
 
-  it("keeps idle recording and share actions inside More", async () => {
-    const user = userEvent.setup();
-    const onOpenRecorder = vi.fn();
-    const onExportReplay = vi.fn();
-
-    renderWithProviders(
-      <RealtimeChatHeaderOverflowMenu
-        onOpenRecorder={onOpenRecorder}
-        share={{ title: "Launch notes", onExportReplay }}
-      />,
-      { locale: "en-US" },
-    );
-
-    expect(
-      screen.queryByRole("button", { name: /record/i }),
-    ).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "More" }));
-    await user.click(screen.getByRole("menuitem", { name: /record/i }));
-    expect(onOpenRecorder).toHaveBeenCalledOnce();
-
-    await user.click(screen.getByRole("button", { name: "More" }));
-    expect(
-      screen.getByRole("menuitem", { name: "Save as image" }),
-    ).toBeInTheDocument();
-    await user.click(
-      screen.getByRole("menuitem", { name: "Export replayable HTML" }),
-    );
-    expect(onExportReplay).toHaveBeenCalledOnce();
-  });
-
-  it("keeps active recording, workbench, and overflow in a stable order", () => {
+  it("keeps recording, workbench, and sharing in a stable order", () => {
     renderWithProviders(
       <RealtimeChatHeaderActions
         recording={<button type="button">REC active</button>}
         workbench={<button type="button">Workbench</button>}
-        overflow={<button type="button">More</button>}
+        share={<button type="button">Share</button>}
       />,
+      { locale: "en-US" },
     );
 
     const actions = screen
@@ -83,6 +48,11 @@ describe("realtime chat header controls", () => {
       within(actions as HTMLElement)
         .getAllByRole("button")
         .map((button) => button.textContent),
-    ).toEqual(["REC active", "Workbench", "More"]);
+    ).toEqual(["REC active", "Workbench", "Share"]);
+    expect(
+      within(actions as HTMLElement).getByRole("group", {
+        name: "View controls",
+      }),
+    ).toHaveAttribute("data-slot", "realtime-header-view-actions");
   });
 });

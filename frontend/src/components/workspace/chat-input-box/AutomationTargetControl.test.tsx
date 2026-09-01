@@ -1,8 +1,13 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/harness";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 import { AutomationTargetControl } from "./AutomationTargetControl";
 
@@ -94,7 +99,43 @@ describe("<AutomationTargetControl />", () => {
         name: "Choose a browser or desktop window",
       }),
     );
-    await user.click(screen.getByRole("menuitem", { name: "Clear pinned target" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "Clear pinned target" }),
+    );
     expect(onChange).toHaveBeenCalledWith(null);
+  });
+
+  it("can live inside the composer's plus menu without its own button", async () => {
+    const user = userEvent.setup();
+    const onAddCurrentWindow = vi.fn();
+    renderWithProviders(
+      <DropdownMenu>
+        <DropdownMenuTrigger>Insert</DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <AutomationTargetControl
+            placement="submenu"
+            onChange={vi.fn()}
+            onAddCurrentWindow={onAddCurrentWindow}
+          />
+        </DropdownMenuContent>
+      </DropdownMenu>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Insert" }));
+
+    expect(
+      await screen.findByTestId("automation-target-submenu-trigger"),
+    ).toHaveTextContent("Window");
+    expect(
+      screen.queryByTestId("automation-target-trigger"),
+    ).not.toBeInTheDocument();
+
+    await user.hover(screen.getByTestId("automation-target-submenu-trigger"));
+    fireEvent.click(
+      await screen.findByRole("menuitem", {
+        name: /Attach current window snapshot/,
+      }),
+    );
+    expect(onAddCurrentWindow).toHaveBeenCalledTimes(1);
   });
 });

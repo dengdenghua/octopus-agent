@@ -2,7 +2,6 @@ import {
   ArrowLeftIcon,
   AppWindowIcon,
   BookOpenIcon,
-  BotIcon,
   ChevronRightIcon,
   DatabaseIcon,
   DnaIcon,
@@ -27,10 +26,13 @@ import {
   SquareKanbanIcon,
   StoreIcon,
   UserRoundPenIcon,
+  WorkflowIcon,
   type LucideIcon,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -45,12 +47,17 @@ import { swallow } from "@/core/utils/log";
 import { useEvent, eventBus, emitProjectsChanged } from "@/core/events";
 
 import {
-  SettingsDialog,
   normalizeSettingsSection,
   type SettingsSection,
-} from "./settings/settings-dialog";
+} from "./settings/settings-sections";
 import { AgentFooter } from "./sidebar-footer";
 import { FileTree } from "./file-tree";
+
+const LazySettingsDialog = lazy(() =>
+  import("./settings/settings-dialog").then((module) => ({
+    default: module.SettingsDialog,
+  })),
+);
 
 import {
   Collapsible,
@@ -74,6 +81,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  inElectron,
+  useElectronTitleBar,
+} from "@/components/electron-title-bar";
 import { isIMEComposing } from "@/lib/ime";
 
 import {
@@ -83,6 +94,7 @@ import {
   SidebarGroup,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
@@ -122,6 +134,7 @@ import type { AgentThread } from "@/core/threads/types";
 import { useTasks } from "@/core/tasks/hooks";
 
 import {
+  BROWSER_WORKSPACE_ROUTE,
   isAgentSurfaceActive,
   isCompanySurfaceActive,
   isNavRouteActive,
@@ -144,8 +157,14 @@ import { useActiveAgentId } from "@/core/agents/active";
 import { formatCompactRelativeTimestamp } from "@/core/utils/datetime";
 import { basename, isAbsolutePath } from "@/lib/path-utils";
 import { cn } from "@/lib/utils";
+import { preloadWorkspaceRoute } from "@/core/navigation/workspace-route-preload";
 import { WorkspaceSurfaceHeader } from "@/components/workspace/workspace-surface-header";
 import { WorkspaceSwitcher } from "@/components/workspace/workspace-switcher";
+import {
+  setWorkspaceWebShortcut,
+  useWorkspaceWebShortcuts,
+  workspaceWebAppRoute,
+} from "@/core/workbench/apps";
 
 // Surface modes in the left sidebar. Chat and Company are handled by a
 // dedicated two-panel switch so they feel like peer work surfaces instead
@@ -158,6 +177,8 @@ type NavRoute = {
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   labelKey?: string;
   label?: string;
+  externalUrl?: string;
+  iconUrl?: string;
 };
 /** 助理固定对话线程 id —— 像微信一样共用一个持久会话，不随每次进入新建。
  *  侧边栏据此识别助理对话，避免生成指向自身的"当前任务会话"条目。 */
@@ -168,6 +189,32 @@ const OCTOPUS_THREAD_ID = "octopus-assistant";
 const LIVE_RUN_STATUS_TTL_MS = 30 * 60 * 1000;
 const LIVE_RUN_STATUS_PRUNE_INTERVAL_MS = 60 * 1000;
 
+// Sidebar history needs labels, routing metadata, workspace bindings and
+// avatars, but never full message transcripts or artifacts. Keep metadata
+// intact for legacy records while projecting only the values fallbacks still
+// read by the sidebar derivation helpers.
+const SIDEBAR_THREAD_QUERY_PARAMS = {
+  limit: 30,
+  sortBy: "updated_at",
+  sortOrder: "desc",
+  select: [
+    "thread_id",
+    "updated_at",
+    "metadata",
+    "values.title",
+    "values.sidebar_title_source",
+    "values.current_speaker",
+    "values.agent_name",
+    "values.agent_roster",
+    "values.team_members",
+    "values.mode",
+    "values.workspace_path",
+    "values.workspace_id",
+    "values.team_room_id",
+    "values.room_id",
+  ],
+} as const;
+
 // Icons live here rather than in the catalog so `core/modules` stays free of
 // component imports (it is pure data + logic, unit-tested without React).
 const MODULE_ICONS: Record<string, ComponentType<SVGProps<SVGSVGElement>>> = {
@@ -176,6 +223,7 @@ const MODULE_ICONS: Record<string, ComponentType<SVGProps<SVGSVGElement>>> = {
   intelligence: RssIcon,
   "paper.trading": CandlestickChartIcon,
   projects: SquareKanbanIcon,
+  design: WorkflowIcon,
   narrative: BookOpenIcon,
   evolution: DnaIcon,
   community: CompassIcon,
@@ -408,9 +456,16 @@ export function syncedSidebarPathname(
 export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const { pathname, search } = useLocation();
   const { t } = useI18n();
-  const { isMobile, openMobile, setOpenMobile } = useSidebar();
+  const {
+    isMobile,
+    openMobile,
+    setOpenMobile,
+    state: sidebarState,
+  } = useSidebar();
   const queryClient = useQueryClient();
   const apiClient = useMemo(() => getAPIClient(), []);
+  const electron = inElectron();
+  const { macTrafficLightsWidth } = useElectronTitleBar();
   // Starting from `/new` swaps in a server thread id before the live page can
   // safely remount. Use its transient route for sidebar selection until the
   // page finishes the Router transition.
@@ -436,7 +491,9 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       (t.sidebar as unknown as Record<string, string>)[key] ?? key,
     [t],
   );
-  const enabledModuleIds = useEnabledModuleIds();
+  const activeAgentId = useActiveAgentId();
+  const enabledModuleIds = useEnabledModuleIds(activeAgentId ?? "general");
+  const workspaceWebShortcuts = useWorkspaceWebShortcuts();
   const resolveRoutes = useCallback(
     (routes: NavRoute[]) =>
       filterRoutesByEnabled(routes, enabledModuleIds).map((r) => ({
@@ -449,6 +506,21 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     () => resolveRoutes(CHAT_CAPABILITY_ROUTES),
     [resolveRoutes],
   );
+  const workspaceWebShortcutItems = useMemo(
+    () =>
+      workspaceWebShortcuts.map((shortcut) => ({
+        to: workspaceWebAppRoute(shortcut),
+        icon: GlobeIcon,
+        label: shortcut.name,
+        externalUrl: shortcut.url,
+        iconUrl: shortcut.logoUrl,
+      })),
+    [workspaceWebShortcuts],
+  );
+  const workbenchCapabilityItems = useMemo(
+    () => [...chatCapabilityItems, ...workspaceWebShortcutItems],
+    [chatCapabilityItems, workspaceWebShortcutItems],
+  );
   const communityItems = useMemo(
     () => resolveRoutes(COMMUNITY_ROUTES),
     [resolveRoutes],
@@ -460,6 +532,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
 
   // Settings dialog state
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsHostActivated, setSettingsHostActivated] = useState(false);
   const [moduleEditorOpen, setModuleEditorOpen] = useState(false);
   const [settingsDefaultSection, setSettingsDefaultSection] =
     useState<SettingsSection>("appearance");
@@ -473,6 +546,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
 
       const openDialog = () => {
         pendingSettingsOpenRef.current = null;
+        setSettingsHostActivated(true);
         setSettingsDefaultSection(next);
         setSettingsOpen(true);
       };
@@ -552,34 +626,18 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   // so the left-bottom persona switch only affects the current chat lane.
   // Solo project conversations follow the same role boundary below. Shared
   // team sessions are queried separately and remain visible to the team.
-  const activeAgentId = useActiveAgentId();
   const { data: rawConversationThreads } = useThreads(
-    {
-      limit: 30,
-      sortBy: "updated_at",
-      sortOrder: "desc",
-      select: ["thread_id", "updated_at", "values", "metadata"],
-    },
+    SIDEBAR_THREAD_QUERY_PARAMS,
     undefined,
     activeAgentId,
   );
   const { data: rawProjectThreads } = useThreads(
-    {
-      limit: 30,
-      sortBy: "updated_at",
-      sortOrder: "desc",
-      select: ["thread_id", "updated_at", "values", "metadata"],
-    },
+    SIDEBAR_THREAD_QUERY_PARAMS,
     "code",
     activeAgentId,
   );
   const { data: rawTeamThreads } = useThreads(
-    {
-      limit: 30,
-      sortBy: "updated_at",
-      sortOrder: "desc",
-      select: ["thread_id", "updated_at", "values", "metadata"],
-    },
+    SIDEBAR_THREAD_QUERY_PARAMS,
     "team",
     null,
   );
@@ -993,12 +1051,34 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
         {...props}
       >
         {/* Implementation note. */}
-        <SidebarHeader className="h-11 shrink-0 border-b border-white/40 bg-transparent p-0 pl-[10px] pr-2 py-0 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:px-0 dark:border-white/10">
-          <div className="grid h-full w-full grid-cols-[auto_minmax(0,1fr)] items-center group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
+        <SidebarHeader
+          className="h-10 shrink-0 border-b border-white/40 bg-transparent p-0 pr-2 py-0 group-data-[collapsible=icon]:px-0 dark:border-white/10"
+          style={
+            electron
+              ? ({
+                  paddingLeft:
+                    macTrafficLightsWidth > 0
+                      ? sidebarState === "collapsed"
+                        ? macTrafficLightsWidth - 8
+                        : macTrafficLightsWidth + 18
+                      : 10,
+                  WebkitAppRegion: "drag",
+                } as React.CSSProperties)
+              : { paddingLeft: 10 }
+          }
+        >
+          <div
+            className="grid h-full w-full grid-cols-[auto_minmax(0,1fr)] items-center group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center"
+            style={
+              electron
+                ? ({ WebkitAppRegion: "no-drag" } as React.CSSProperties)
+                : undefined
+            }
+          >
             <WorkspaceSurfaceHeader
-              // The workspace preview belongs to the Octopus task surface.
-              // Only the standalone /browser route represents the AI Browser.
-              active="agent"
+              active={
+                pathname === BROWSER_WORKSPACE_ROUTE ? "browser" : "agent"
+              }
               className="group-data-[collapsible=icon]:hidden"
             />
             <div className="flex shrink-0 items-center justify-self-end">
@@ -1029,7 +1109,11 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
           </SidebarGroup>
           {/* Unified sidebar — no more surface branching. All navigation
             items are always visible regardless of the current route. */}
-          <NavSection items={chatCapabilityItems} pathname={pathname} />
+          <NavSection
+            items={workbenchCapabilityItems}
+            pathname={pathname}
+            search={search}
+          />
           <NavSection items={communityItems} pathname={pathname} />
           <LocalDatabaseSection
             title={resolveLabel("navDatabase")}
@@ -1079,11 +1163,15 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
           Radix unmounts a closed mobile SheetContent, which previously also
           unmounted this dialog and made every narrow-screen settings event a
           no-op. */}
-      <SettingsDialog
-        open={settingsOpen}
-        onOpenChange={handleSettingsOpenChange}
-        defaultSection={settingsDefaultSection}
-      />
+      {settingsHostActivated ? (
+        <Suspense fallback={null}>
+          <LazySettingsDialog
+            open={settingsOpen}
+            onOpenChange={handleSettingsOpenChange}
+            defaultSection={settingsDefaultSection}
+          />
+        </Suspense>
+      ) : null}
       <ModuleEditorDialog
         open={moduleEditorOpen}
         onOpenChange={setModuleEditorOpen}
@@ -1097,10 +1185,12 @@ type NavItem = NavRoute & { label: string };
 function NavSection({
   items,
   pathname,
+  search,
   label,
 }: {
   items: NavItem[];
   pathname: string;
+  search?: string;
   label?: string;
 }) {
   return (
@@ -1112,7 +1202,12 @@ function NavSection({
       )}
       <SidebarMenu className="gap-0.5">
         {items.map((item) => (
-          <NavRow key={item.to} item={item} pathname={pathname} />
+          <NavRow
+            key={item.externalUrl ?? item.to}
+            item={item}
+            pathname={pathname}
+            search={search}
+          />
         ))}
       </SidebarMenu>
     </SidebarGroup>
@@ -1254,6 +1349,8 @@ function StorageLibraryRow({
       >
         <Link
           to={item.to}
+          onMouseEnter={() => preloadWorkspaceRoute(item.to)}
+          onFocus={() => preloadWorkspaceRoute(item.to)}
           aria-current={active ? "page" : undefined}
           className="flex items-center gap-2"
         >
@@ -1379,11 +1476,13 @@ function ProjectFileExplorerView({
 }
 
 export const __testing = {
+  SIDEBAR_THREAD_QUERY_PARAMS,
   buildThreadRunStatusByHref,
   isProjectThreadMode,
   isNavRouteActive,
   isCompanySurfaceActive,
   isAgentSurfaceActive,
+  projectHasBoundFolder,
   buildConversationThreadSummaries,
   buildProjectThreadSummaries,
   mergeThreadRunStatus,
@@ -1401,103 +1500,6 @@ export const __testing = {
   ProjectGroupTrigger,
   SidebarTimestamp,
 };
-
-type WorkspaceSurfaceMode = "agent" | "browser";
-
-export function WorkspaceSurfaceSwitch({
-  active,
-}: {
-  active: WorkspaceSurfaceMode;
-}) {
-  const { t } = useI18n();
-  const items = [
-    {
-      to: PRIMARY_WORKSPACE_ROUTE,
-      label: t.desktop.header.brand,
-      icon: BotIcon,
-      value: "agent" as const,
-      kind: "brand" as const,
-    },
-    {
-      to: "/browser",
-      label: t.sidebar.navBrowserSurface,
-      icon: GlobeIcon,
-      value: "browser" as const,
-      kind: "icon" as const,
-    },
-  ];
-  const activeIndex = items.findIndex((item) => item.value === active);
-  const radiusVar = "var(--appearance-radius-control)";
-
-  return (
-    <div
-      className={cn(
-        "relative grid h-8 items-center gap-0 p-0.5",
-        "w-[96px] grid-cols-[minmax(0,1fr)_28px]",
-        "border border-border-default bg-muted/40",
-        "group-data-[collapsible=icon]:hidden",
-      )}
-      style={{ borderRadius: radiusVar }}
-      role="tablist"
-      aria-label="Workspace surface"
-    >
-      <span
-        className={cn(
-          "absolute top-0.5 bottom-0.5 z-0",
-          "bg-background shadow-[var(--shadow-xs)] ring-1 ring-border-default",
-          "transition-[left,width]",
-          activeIndex === 0
-            ? "left-[2px] w-[calc(100%-32px)]"
-            : "left-[calc(100%-26px)] w-[24px]",
-        )}
-        style={{ borderRadius: `calc(${radiusVar} - 4px)` }}
-        aria-hidden="true"
-      />
-      {items.map((item, index) => {
-        const Icon = item.icon;
-        const isActive = index === activeIndex;
-        return (
-          <Link
-            key={item.to}
-            to={item.to}
-            aria-current={isActive ? "page" : undefined}
-            aria-label={item.label}
-            title={item.label}
-            role="tab"
-            aria-selected={isActive}
-            className={cn(
-              "relative z-10 flex h-7 items-center justify-center",
-              "text-xs font-medium",
-              "transition-colors",
-              isActive
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-              item.kind === "brand" ? "px-0.5" : "px-0",
-              "group-data-[collapsible=icon]:grid group-data-[collapsible=icon]:size-7 group-data-[collapsible=icon]:place-items-center group-data-[collapsible=icon]:px-0",
-              isActive
-                ? "group-data-[collapsible=icon]:flex"
-                : "group-data-[collapsible=icon]:hidden",
-            )}
-            style={{ borderRadius: `calc(${radiusVar} - 4px)` }}
-          >
-            <Icon
-              className={cn(
-                "size-3.5 shrink-0",
-                item.kind === "brand" &&
-                  "hidden group-data-[collapsible=icon]:block",
-              )}
-            />
-            {item.kind === "brand" && (
-              <span className="min-w-0 truncate group-data-[collapsible=icon]:sr-only">
-                {item.label}
-              </span>
-            )}
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
 
 function SurfaceCreateButton({
   agentId,
@@ -1529,12 +1531,36 @@ function SurfaceCreateButton({
   );
 }
 
-function NavRow({ item, pathname }: { item: NavItem; pathname: string }) {
-  const active = isNavRouteActive(pathname, item.to);
+function NavRow({
+  item,
+  pathname,
+  search = "",
+}: {
+  item: NavItem;
+  pathname: string;
+  search?: string;
+}) {
+  const active = item.externalUrl
+    ? pathname === "/workspace/web-app" &&
+      new URLSearchParams(search).get("url") === item.externalUrl
+    : isNavRouteActive(pathname, item.to);
   const Icon = item.icon;
 
+  const removeWebShortcut = () => {
+    if (!item.externalUrl) return;
+    setWorkspaceWebShortcut(
+      {
+        name: item.label,
+        url: item.externalUrl,
+        logoUrl: item.iconUrl,
+      },
+      false,
+    );
+    toast.success(`已从侧栏移除 ${item.label}`);
+  };
+
   return (
-    <SidebarMenuItem className="justify-center">
+    <SidebarMenuItem className="group/menu-item justify-center">
       <SidebarMenuButton
         asChild
         isActive={active}
@@ -1550,8 +1576,17 @@ function NavRow({ item, pathname }: { item: NavItem; pathname: string }) {
       >
         <Link
           to={item.to}
+          onMouseEnter={() => {
+            if (!item.externalUrl) preloadWorkspaceRoute(item.to);
+          }}
+          onFocus={() => {
+            if (!item.externalUrl) preloadWorkspaceRoute(item.to);
+          }}
           aria-current={active ? "page" : undefined}
-          className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
+          className={cn(
+            "flex items-center gap-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0",
+            item.externalUrl && "pr-7",
+          )}
         >
           <span
             className={cn(
@@ -1561,13 +1596,37 @@ function NavRow({ item, pathname }: { item: NavItem; pathname: string }) {
                 : "text-muted-foreground group-hover/nav:text-foreground",
             )}
           >
-            <Icon className="size-[16px]" />
+            {item.iconUrl ? (
+              <img
+                src={item.iconUrl}
+                alt=""
+                className="size-[16px] rounded-sm object-contain"
+              />
+            ) : (
+              <Icon className="size-[16px]" />
+            )}
           </span>
           <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">
             {item.label}
           </span>
         </Link>
       </SidebarMenuButton>
+      {item.externalUrl ? (
+        <SidebarMenuAction
+          showOnHover
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            removeWebShortcut();
+          }}
+          aria-label={`从侧栏移除 ${item.label}`}
+          title={`从侧栏移除 ${item.label}`}
+          className="text-muted-foreground/55 hover:text-destructive md:pointer-events-none md:group-focus-within/menu-item:pointer-events-auto md:group-hover/menu-item:pointer-events-auto"
+        >
+          <Trash2Icon />
+        </SidebarMenuAction>
+      ) : null}
     </SidebarMenuItem>
   );
 }
@@ -1637,18 +1696,36 @@ function ThreadAvatar({
   );
 }
 
-function ProjectGroupIcon({ project: _project }: { project: string }) {
-  return <FolderIcon className="size-[18px] shrink-0 opacity-70" />;
+function projectHasBoundFolder(threads: ThreadSummary[]): boolean {
+  return threads.some((thread) => Boolean(thread.workspacePath?.trim()));
+}
+
+function ProjectGroupIcon({ hasBoundFolder }: { hasBoundFolder: boolean }) {
+  return hasBoundFolder ? (
+    <FolderIcon
+      data-project-kind="folder"
+      className="size-[18px] shrink-0 opacity-70"
+    />
+  ) : (
+    <SquareKanbanIcon
+      data-project-kind="milestone"
+      className="size-[18px] shrink-0 opacity-70"
+    />
+  );
 }
 
 function ProjectGroupTrigger({
   project,
   threadCount,
   deletable,
+  hasBoundFolder,
+  boundWorkspacePath,
 }: {
   project: string;
   threadCount: number;
   deletable: boolean;
+  hasBoundFolder: boolean;
+  boundWorkspacePath?: string;
 }) {
   return (
     <Tooltip>
@@ -1661,7 +1738,7 @@ function ProjectGroupTrigger({
             "outline-none focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:ring-inset",
           )}
         >
-          <ProjectGroupIcon project={project} />
+          <ProjectGroupIcon hasBoundFolder={hasBoundFolder} />
           <span className="min-w-0 truncate">{project}</span>
           <span
             className={cn(
@@ -1678,7 +1755,12 @@ function ProjectGroupTrigger({
         align="center"
         className="max-w-72 break-words"
       >
-        {project}
+        <span className="block font-medium">{project}</span>
+        <span className="mt-0.5 block text-[11px] text-muted-foreground">
+          {hasBoundFolder
+            ? boundWorkspacePath || "本地目录项目"
+            : "里程碑项目 · 不绑定本地目录"}
+        </span>
       </TooltipContent>
     </Tooltip>
   );
@@ -1723,6 +1805,10 @@ function ProjectGroup({
   onOpenFiles: (thread: ThreadSummary, project: string) => void;
 }) {
   const { t } = useI18n();
+  const hasBoundFolder = projectHasBoundFolder(threads);
+  const boundWorkspacePath = threads.find((thread) =>
+    Boolean(thread.workspacePath?.trim()),
+  )?.workspacePath;
   const containsActiveThread = threads.some(
     (thread) => activeWorkspaceThreadIdFromPathname(pathname) === thread.id,
   );
@@ -1788,6 +1874,8 @@ function ProjectGroup({
             project={project}
             threadCount={threads.length}
             deletable={deletable}
+            hasBoundFolder={hasBoundFolder}
+            boundWorkspacePath={boundWorkspacePath}
           />
           {deletable && (
             <DropdownMenu>
@@ -1851,7 +1939,7 @@ function ProjectGroup({
         </div>
         <CollapsibleContent className="overflow-hidden">
           {/* Keep task content indented, but let the active/hover bar span
-              the full project lane like TRAE's code sidebar. */}
+              the full project lane in the code sidebar. */}
           <ul className="mt-1 space-y-0.5">
             {visibleThreads.map((thread) => {
               const active =

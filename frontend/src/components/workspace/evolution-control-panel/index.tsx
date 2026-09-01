@@ -39,6 +39,7 @@ import { swallow } from "@/core/utils/log";
 import { authHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
+import { RoutedWebLink } from "@/components/ui/routed-web-link";
 import { cn } from "@/lib/utils";
 
 function numberOrZero(value: unknown): number {
@@ -550,14 +551,13 @@ function SkillProposalsSection() {
                 {p.topic && <Pill label={p.topic} tone="info" />}
               </div>
               {p.source_url && (
-                <a
+                <RoutedWebLink
                   href={p.source_url}
-                  target="_blank"
-                  rel="noreferrer"
+                  openTargetSource="evolution-source"
                   className="text-xs text-primary underline underline-offset-2"
                 >
                   {p.source_url}
-                </a>
+                </RoutedWebLink>
               )}
               <span className="text-xs text-muted-foreground">
                 {p.created_at}
@@ -1177,9 +1177,7 @@ function ProtocolDriftSection() {
                 {t.evolutionControl.drift.eventPrefix(r.drift_event_id)}
               </span>
             </div>
-            <div className="text-xs text-muted-foreground">
-              {r.rationale}
-            </div>
+            <div className="text-xs text-muted-foreground">{r.rationale}</div>
             {r.repair_tasks?.length ? (
               <div className="mt-1 rounded-md border border-border-default bg-muted/40 px-2 py-1.5">
                 {r.repair_tasks.slice(0, 2).map((task) => (

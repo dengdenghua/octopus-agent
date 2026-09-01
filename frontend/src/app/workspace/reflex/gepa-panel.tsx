@@ -328,20 +328,26 @@ export function GepaPanel() {
     total: 0,
   });
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [appliedLoading, setAppliedLoading] = useState(true);
+  const [appliedLoadFailed, setAppliedLoadFailed] = useState(false);
+  const [canariesLoaded, setCanariesLoaded] = useState(false);
+  const [canaryLoadFailed, setCanaryLoadFailed] = useState(false);
 
   const loadApplied = useCallback(async () => {
+    setAppliedLoading(true);
     try {
       const r: AppliedResp = await reflexFetch<AppliedResp>(
         "/api/evolution/forge/applied",
       );
       setApplied(r);
+      setAppliedLoadFailed(false);
     } catch (e) {
       swallow(e);
-      setStatusMsg(
-        e instanceof Error ? e.message : t.recipeForge.statusFetchFailed,
-      );
+      setAppliedLoadFailed(true);
+    } finally {
+      setAppliedLoading(false);
     }
-  }, [t]);
+  }, []);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -378,8 +384,11 @@ export function GepaPanel() {
         rolledBack: r.rolled_back_count ?? 0,
         total: r.total ?? r.canaries?.length ?? 0,
       });
+      setCanariesLoaded(true);
+      setCanaryLoadFailed(false);
     } catch (e) {
       swallow(e);
+      setCanaryLoadFailed(true);
     }
   }, []);
 
@@ -483,22 +492,19 @@ export function GepaPanel() {
         : t.recipeForge.globalScope;
       setStatusMsg(t.recipeForge.statusApplying(c.candidate_id, where));
       try {
-        const r = await reflexFetch<ApplyResp>(
-          "/api/evolution/forge/apply",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              prompt: fullPrompt,
-              candidate_id: c.candidate_id,
-              avg_score: c.avg_score,
-              rationale: c.rationale,
-              run_ts: opts?.runTs,
-              target_recipe_id: target ?? undefined,
-              winner_proposal: opts?.winnerProposal ?? undefined,
-            }),
-          },
-        );
+        const r = await reflexFetch<ApplyResp>("/api/evolution/forge/apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: fullPrompt,
+            candidate_id: c.candidate_id,
+            avg_score: c.avg_score,
+            rationale: c.rationale,
+            run_ts: opts?.runTs,
+            target_recipe_id: target ?? undefined,
+            winner_proposal: opts?.winnerProposal ?? undefined,
+          }),
+        });
         if (!r.ok) {
           setStatusMsg(t.recipeForge.statusApplyFailed(r.error));
           return;
@@ -596,7 +602,11 @@ export function GepaPanel() {
             <div className="font-medium">
               {t.recipeForge.addendumAppliedTitle}
             </div>
-            {applied?.applied ? (
+            {appliedLoading && !applied ? (
+              <Badge variant="outline">{t.recipeForge.stateLoading}</Badge>
+            ) : appliedLoadFailed && !applied ? (
+              <Badge variant="outline">{t.recipeForge.stateUnavailable}</Badge>
+            ) : applied?.applied ? (
               <Badge className="bg-success/15 text-success hover:bg-success/15">
                 <CheckCircleIcon className="mr-1 size-3" />
                 {t.recipeForge.addendumLive}
@@ -605,6 +615,22 @@ export function GepaPanel() {
               <Badge variant="outline">{t.recipeForge.addendumNone}</Badge>
             )}
           </div>
+          {appliedLoadFailed && (
+            <div
+              role="alert"
+              className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"
+            >
+              <span>{t.recipeForge.addendumUnavailable}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={() => void loadApplied()}
+              >
+                {t.reflexPage.retryButton}
+              </Button>
+            </div>
+          )}
           {applied?.applied && (
             <>
               <div className="mt-2 text-xs text-muted-foreground">
@@ -810,15 +836,33 @@ export function GepaPanel() {
               </Button>
             </div>
           </div>
+          {canaryLoadFailed && (
+            <div
+              role="alert"
+              className="mb-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"
+            >
+              {t.recipeForge.canaryUnavailable}
+            </div>
+          )}
           <div className="mb-2 text-xs text-muted-foreground">
-            {t.recipeForge.canaryCounts(
-              canarySummary.active,
-              canarySummary.rolledBack,
-              canarySummary.total,
-            )}
+            {!canariesLoaded && canaryLoadFailed
+              ? t.recipeForge.canaryCountsUnavailable
+              : !canariesLoaded
+                ? t.recipeForge.stateLoading
+                : t.recipeForge.canaryCounts(
+                    canarySummary.active,
+                    canarySummary.rolledBack,
+                    canarySummary.total,
+                  )}
           </div>
           <div className="space-y-2">
-            {canaries.length === 0 ? (
+            {!canariesLoaded ? (
+              <div className="rounded-md border border-dashed border-border-default px-3 py-2 text-xs text-muted-foreground">
+                {canaryLoadFailed
+                  ? t.recipeForge.canaryUnavailable
+                  : t.recipeForge.stateLoading}
+              </div>
+            ) : canaries.length === 0 ? (
               <div className="rounded-md border border-dashed border-border-default px-3 py-2 text-xs text-muted-foreground">
                 {t.recipeForge.canaryEmpty}
               </div>
@@ -1188,9 +1232,7 @@ function PastRunRow({
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <Badge
-          className={cn("text-xs", triggerColor, "hover:" + triggerColor)}
-        >
+        <Badge className={cn("text-xs", triggerColor, "hover:" + triggerColor)}>
           {run.trigger === "auto_propose"
             ? t.recipeForge.triggerAutoPropose
             : t.recipeForge.triggerManual}
@@ -1205,11 +1247,7 @@ function PastRunRow({
         </Badge>
         {lifecyclePhase && (
           <Badge
-            className={cn(
-              "text-xs",
-              lifecycleColor,
-              "hover:" + lifecycleColor,
-            )}
+            className={cn("text-xs", lifecycleColor, "hover:" + lifecycleColor)}
           >
             {t.recipeForge.canaryPhase(lifecyclePhase)}
           </Badge>

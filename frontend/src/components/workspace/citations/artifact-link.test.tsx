@@ -9,6 +9,10 @@ import {
 } from "@/components/browser/browser-store";
 
 import { setLinkOpenTarget } from "@/core/settings/automation-preferences";
+import {
+  OPEN_ARTIFACT_EVENT,
+  type OpenArtifactDetail,
+} from "@/core/artifacts/open-artifact";
 
 import { ArtifactLink } from "./artifact-link";
 
@@ -50,5 +54,20 @@ describe("ArtifactLink", () => {
     expect(
       screen.getByRole("link", { name: "Local report" }),
     ).not.toHaveAttribute("target");
+  });
+
+  it("hands generated office files to the artifact workbench", () => {
+    let opened: OpenArtifactDetail | null = null;
+    const openArtifact = (event: Event) => {
+      opened = (event as CustomEvent<OpenArtifactDetail>).detail;
+      event.preventDefault();
+    };
+    window.addEventListener(OPEN_ARTIFACT_EVENT, openArtifact);
+    render(<ArtifactLink href="out/deck.pptx">Deck</ArtifactLink>);
+
+    fireEvent.click(screen.getByRole("link", { name: "Deck" }));
+
+    expect(opened).toEqual({ path: "workspace-output:final:out/deck.pptx" });
+    window.removeEventListener(OPEN_ARTIFACT_EVENT, openArtifact);
   });
 });

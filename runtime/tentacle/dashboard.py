@@ -33,7 +33,7 @@ from fastapi import Request as FastAPIRequest
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
 from runtime.safety.auth import resolve_principal
-from runtime.safety.auth.websocket import accepted_auth_subprotocol, websocket_bearer_token
+from runtime.safety.auth.websocket import accepted_auth_subprotocol, websocket_auth_token
 from runtime.tentacle._dashboard_helpers import _auto_detect_vlm_config
 from runtime.tentacle._dashboard_html import _DASHBOARD_HTML
 from runtime.tentacle.base import ToolCall
@@ -98,21 +98,7 @@ def create_tentacle_router(
             if _enforce_auth:
                 raise PermissionError("identity store required for tentacle auth")
             return None
-        token: str | None = None
-        auth_header = ""
-        try:
-            auth_header = ws.headers.get("authorization") or ""
-        except Exception:  # noqa: BLE001
-            auth_header = ""
-        if auth_header.lower().startswith("bearer "):
-            token = auth_header[7:].strip()
-        if token is None:
-            token = websocket_bearer_token(ws)
-        if token is None:
-            try:
-                token = ws.query_params.get("token")
-            except Exception:  # noqa: BLE001
-                token = None
+        token = websocket_auth_token(ws)
         if not token:
             if _enforce_auth:
                 raise PermissionError("missing tentacle auth token")
@@ -715,7 +701,8 @@ def create_tentacle_router(
 
         账号登录鉴权：网关开启 ``require_auth`` 时，Claude Desktop /
         Cursor 等 MCP 客户端必须携带账号登录后的 Bearer Token
-        （``Authorization`` 请求头或 ``?token=`` 查询参数）。会话会
+        （``Authorization`` 请求头；浏览器也可使用安全会话 Cookie）。
+        查询参数中的凭证会被拒绝，避免令牌进入访问日志。会话会
         绑定到该账号，后续 ``/mcp/message`` 也要求同一账号凭证。
         """
         principal = resolve_principal(

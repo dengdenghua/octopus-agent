@@ -282,6 +282,36 @@ describe("MessageList process trace lifecycle", () => {
     ]);
   });
 
+  test("decodes stringified parallel specs without creating an anonymous extra Agent", () => {
+    const legacyDispatch: AIMessage = {
+      id: "legacy-stringified-dispatch",
+      type: "ai",
+      content: "",
+      tool_calls: [
+        {
+          id: "parallel-stringified",
+          name: "call_agent_parallel",
+          args: {
+            specs: JSON.stringify([
+              { agent_id: "security-review", prompt: "审计后端" },
+              { agent_id: "reviewer", prompt: "审计前端" },
+              { agent_id: "explorer", prompt: "审计构建" },
+            ]),
+            output: '{"ok":true,"count":3,"succeeded":3,"failed":0}',
+          },
+        },
+      ],
+    };
+
+    const agents = deriveSubagentsFromMessages([legacyDispatch]);
+    expect(agents).toHaveLength(3);
+    expect(agents.map((agent) => agent.id)).toEqual([
+      "security-review",
+      "reviewer",
+      "explorer",
+    ]);
+  });
+
   test("keeps same-role parallel lanes distinct and merges lifecycle aliases", () => {
     renderWithProviders(
       <InlineSubagentCards
@@ -403,7 +433,9 @@ describe("MessageList process trace lifecycle", () => {
 
     const panel = screen.getByTestId("agent-report-0");
     expect(panel).toHaveTextContent(fullReport);
-    expect(screen.getByRole("button", { name: /收起报告/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /收起报告/ }),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /收起报告/ }));
     expect(screen.queryByTestId("agent-report-0")).not.toBeInTheDocument();
@@ -1269,6 +1301,10 @@ describe("MessageList process trace lifecycle", () => {
     const thread = mockThread({ messages });
     renderMessageList({ thread, locale: "zh-CN" });
 
+    // Completed long traces are intentionally folded by default. Expand the
+    // replay before asserting its internal semantic sampling contract.
+    fireEvent.click(screen.getByTestId("process-replay-toggle"));
+
     const commentary = screen.getAllByTestId("public-progress-event");
     const execution = screen.getAllByTestId("process-timeline-event-execution");
     expect(commentary).toHaveLength(4);
@@ -1989,10 +2025,29 @@ describe("MessageList stalled-run warning", () => {
     renderMessageList({ thread });
 
     expect(
-      screen.getByText(/Code changes need verification before Octopus/i),
+      screen.getByText(/no verification result was produced/i),
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/This reply was interrupted/i),
+    ).not.toBeInTheDocument();
+  });
+
+  test("distinguishes a verifier failure from missing verification evidence", () => {
+    const thread = mockThread({
+      messages: [
+        message("user-1", "human", "Edit the code"),
+        message("assistant-1", "ai", "Updated the file."),
+      ],
+      error: new Error("Auto verification failed."),
+    });
+
+    renderMessageList({ thread });
+
+    expect(
+      screen.getByText(/Automatic verification ran and failed/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/no verification result was produced/i),
     ).not.toBeInTheDocument();
   });
 

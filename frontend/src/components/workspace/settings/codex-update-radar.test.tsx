@@ -23,6 +23,10 @@ vi.mock("@/core/coder/api", async (importOriginal) => {
   };
 });
 
+vi.mock("@/providers/AuthProvider", () => ({
+  useAuth: () => ({ user: { roles: ["admin"] } }),
+}));
+
 const pending = {
   package: "@openai/codex",
   current_version: "0.149.0",
@@ -70,7 +74,9 @@ describe("CodexUpdateRadar", () => {
     renderWithProviders(<CodexUpdateRadar />, { locale: "zh-CN" });
     await screen.findByText("0.149.0");
 
-    await user.click(screen.getByRole("button", { name: "立即检查" }));
+    await user.click(
+      screen.getByRole("button", { name: "检查 Codex 引擎更新" }),
+    );
 
     expect(api.check).toHaveBeenCalledTimes(1);
   });

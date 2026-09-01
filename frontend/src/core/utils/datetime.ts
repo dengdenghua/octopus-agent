@@ -2,8 +2,8 @@ import { format, formatDistanceToNow } from "date-fns";
 import { enUS as dateFnsEnUS } from "date-fns/locale/en-US";
 import { zhCN as dateFnsZhCN } from "date-fns/locale/zh-CN";
 
-import { detectLocale, type Locale } from "@/core/i18n";
 import { getLocaleFromCookie } from "@/core/i18n/cookies";
+import { detectLocale, type Locale } from "@/core/i18n/locale";
 
 /**
  * Server timestamps are part of the live-stream surface and may briefly be
@@ -11,7 +11,8 @@ import { getLocaleFromCookie } from "@/core/i18n/cookies";
  * take down the whole chat tree (date-fns throws for Invalid Date).
  */
 function toValidDate(value: Date | string | number): Date | null {
-  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  const date =
+    value instanceof Date ? new Date(value.getTime()) : new Date(value);
   return Number.isFinite(date.getTime()) ? date : null;
 }
 

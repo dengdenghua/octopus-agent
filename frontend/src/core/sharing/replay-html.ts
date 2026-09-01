@@ -57,7 +57,7 @@ export interface ReplayReceipt {
 export interface ReplayData {
   title: string;
   steps: ReplayStep[];
-  /** Brand line. Defaults to "Octopus Agent". */
+  /** Brand line. Defaults to "EchoAI". */
   brand?: string;
   /** Footer note (e.g. a date). */
   footer?: string;
@@ -113,7 +113,9 @@ function cleanStep(step: ReplayStep): ReplayStep {
   };
 }
 
-function cleanReceipt(receipt: ReplayReceipt | undefined): ReplayReceipt | undefined {
+function cleanReceipt(
+  receipt: ReplayReceipt | undefined,
+): ReplayReceipt | undefined {
   if (!receipt) return undefined;
   const items = (receipt.items ?? [])
     .map((item) => ({
@@ -132,8 +134,8 @@ function cleanReceipt(receipt: ReplayReceipt | undefined): ReplayReceipt | undef
 }
 
 export function buildReplayHtml(replay: ReplayData): string {
-  const title = cleanText(replay.title || "Octopus replay") || "Octopus replay";
-  const brand = cleanText(replay.brand || "Octopus Agent") || "Octopus Agent";
+  const title = cleanText(replay.title || "EchoAI replay") || "EchoAI replay";
+  const brand = cleanText(replay.brand || "EchoAI") || "EchoAI";
   const footer = cleanText(replay.footer || "");
   const frameMs = Number.isFinite(replay.frameMs)
     ? Math.max(200, replay.frameMs as number)

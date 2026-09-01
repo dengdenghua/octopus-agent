@@ -8,13 +8,16 @@
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-import { useEnabledModuleIds } from "./enabled-modules";
+import { useUserEnabledModuleIds } from "./enabled-modules";
 import { isLocationBlocked } from "./module-routing";
 
 export function useModuleRouteGuard(fallbackRoute: string): void {
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
-  const enabledIds = useEnabledModuleIds();
+  // Installation/runtime availability controls navigation visibility, but a
+  // direct link to an unavailable remote app must stay put so its surface can
+  // explain offline, missing, incompatible, or corrupt package states.
+  const enabledIds = useUserEnabledModuleIds();
 
   useEffect(() => {
     if (!isLocationBlocked(pathname, search, enabledIds)) return;

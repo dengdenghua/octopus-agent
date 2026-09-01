@@ -176,15 +176,13 @@ export default function RegisterPage() {
         <div className="hidden flex-col justify-center space-y-10 lg:flex">
           <div className="inline-flex items-center gap-3">
             <OctopusBrandMark size="lg" />
-            <span className="text-xl font-semibold tracking-tight">
-              Octopus Agent
-            </span>
+            <span className="text-xl font-semibold tracking-tight">EchoAI</span>
           </div>
 
           <div className="space-y-5">
             <div className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary">
               <SparklesIcon className="size-3.5" />
-              开始你的 AI 助理之旅
+              加入你的智能角色宇宙
             </div>
             <h1 className="text-5xl font-bold leading-[1.1] tracking-tight lg:text-[3.5rem]">
               创建账户
@@ -194,7 +192,7 @@ export default function RegisterPage() {
               </span>
             </h1>
             <p className="max-w-md text-lg leading-relaxed text-muted-foreground">
-              注册一个账户，立即体验多智能体协作带来的效率提升。
+              注册一个账户，让不同角色在 EchoOS 上协作、学习与进化。
             </p>
           </div>
 
@@ -225,9 +223,7 @@ export default function RegisterPage() {
         <div className="mx-auto w-full max-w-md">
           <div className="mb-8 flex items-center justify-center gap-2.5 lg:hidden">
             <OctopusBrandMark size="md" />
-            <span className="text-lg font-semibold tracking-tight">
-              Octopus Agent
-            </span>
+            <span className="text-lg font-semibold tracking-tight">EchoAI</span>
           </div>
 
           <Card className="overflow-hidden rounded-2xl border-border/50 bg-card/80 shadow-2xl shadow-black/[0.03] backdrop-blur-xl">
@@ -337,7 +333,7 @@ export default function RegisterPage() {
           </Card>
 
           <p className="mt-6 text-center text-xs text-muted-foreground/50">
-            © {new Date().getFullYear()} Octopus Agent. All rights reserved.
+            © {new Date().getFullYear()} EchoAI · Powered by EchoOS
           </p>
         </div>
       </div>

@@ -123,6 +123,40 @@ export function getBackendBaseURL() {
 }
 
 /**
+ * Optional dedicated read-only quote plane.  Only first-party production
+ * origins are accepted: a build-time typo or injected runtime URL must never
+ * become a destination for the user's Bearer token.  Empty means the plugin
+ * keeps using its current backend origin.
+ */
+export function getQuoteHubBaseURL() {
+  const raw = import.meta.env.VITE_QUOTE_HUB_BASE_URL;
+  if (!raw) return "";
+  try {
+    const origin = new URL(raw).origin;
+    if (
+      origin === "https://quotes.echo-age.com" ||
+      origin === "https://api.echo-age.com"
+    ) {
+      return origin;
+    }
+  } catch (e) {
+    swallow(e);
+  }
+  return "";
+}
+
+/**
+ * Control-plane requests carry the user's authenticated session, so they must
+ * stay on the configured backend or the current browser origin. Even though
+ * localhost and 127.0.0.1 reach the same process, browsers isolate their
+ * cookies by hostname; swapping the loopback alias silently logs these
+ * requests out after a browser restart.
+ */
+export function getControlPlaneBaseURL() {
+  return getBackendBaseURL();
+}
+
+/**
  * Raw loopback transport used only by browser WebSocket clients. Electron's
  * custom protocol handles fetch/iframe traffic, but WebSocket upgrades must
  * connect to the backend listener directly. The value comes from the trusted

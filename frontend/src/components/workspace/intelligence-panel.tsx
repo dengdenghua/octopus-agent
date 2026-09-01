@@ -17,6 +17,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { RoutedWebLink } from "@/components/ui/routed-web-link";
 import {
   Dialog,
   DialogContent,
@@ -1012,10 +1013,7 @@ export function IntelligencePanel() {
                     {t.intelligencePanel.expectedRun(scheduleText(draft, t))}
                   </div>
                   <div className="space-y-1">
-                    <Label
-                      htmlFor={draftInstructionsId}
-                      className="text-xs"
-                    >
+                    <Label htmlFor={draftInstructionsId} className="text-xs">
                       {t.intelligencePanel.instructions}
                     </Label>
                     <Textarea
@@ -1479,14 +1477,13 @@ export function IntelligencePanel() {
                                 {source.source ?? t.intelligence.web}
                               </span>
                               {source.url ? (
-                                <a
+                                <RoutedWebLink
                                   href={source.url}
-                                  target="_blank"
-                                  rel="noreferrer"
+                                  openTargetSource="intelligence-source"
                                   className="truncate text-sm font-medium text-foreground hover:underline"
                                 >
                                   {source.title || source.url}
-                                </a>
+                                </RoutedWebLink>
                               ) : (
                                 <span className="truncate text-sm font-medium text-foreground">
                                   {source.title}

@@ -41,8 +41,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { RoutedWebLink } from "@/components/ui/routed-web-link";
+import {
+  artifactRefFromMarkdownHref,
+  dispatchOpenArtifact,
+} from "@/core/artifacts/open-artifact";
 import { resolveArtifactURL } from "@/core/artifacts/utils";
 import { jsonAuthHeaders } from "@/core/auth/api";
+import { canAccessOperatorControlPlane } from "@/core/auth/control-plane-access";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import {
@@ -51,6 +57,7 @@ import {
   type DualHelixShadowStatus,
 } from "@/core/evolution/api";
 import { useForkThread } from "@/core/threads/hooks";
+import type { ExecutionPlan } from "@/core/threads/types";
 import {
   extractContentFromMessage,
   extractTextFromMessage,
@@ -63,6 +70,7 @@ import {
 import { useRehypeSplitWordsIntoSpans } from "@/core/rehype";
 import { useHumanMessagePlugins } from "@/core/streamdown";
 import { cn } from "@/lib/utils";
+import { useOptionalAuth } from "@/providers/AuthProvider";
 
 import { CopyButton } from "../copy-button";
 import {
@@ -83,11 +91,17 @@ import {
 import { normalizeExecutionPlan } from "../execution-plan-utils";
 
 import { MarkdownContent } from "./markdown-content";
-import { useThreadStreaming, useThreadValues } from "./context";
-import { useStreamingTextBuffer } from "@/hooks/use-streaming-text-buffer";
+import { useThreadValues } from "./context";
+import {
+  STREAMING_TYPE_PRESETS,
+  useStreamingTextBuffer,
+} from "@/hooks/use-streaming-text-buffer";
+import {
+  RETRY_PENDING_MESSAGE_EVENT,
+  type OutboundDeliveryState,
+} from "@/core/threads/optimistic-messages";
 import { ClarificationChoiceCard } from "./clarification-choice-card";
 import { GroundingChip } from "./grounding-chip";
-import { useConversationDetailLevel } from "./use-conversation-detail-level";
 import { extractClarificationQuestionnaire } from "../clarification-questionnaire";
 
 export interface MessageListProjectActions extends Omit<
@@ -120,12 +134,18 @@ export function ShadowReviewAction({
 }: {
   context: ShadowReviewContext;
 }) {
+  const auth = useOptionalAuth();
+  const canReview = canAccessOperatorControlPlane(
+    auth?.authStatus ?? null,
+    auth?.user ?? null,
+  );
   const [run, setRun] = useState<ShadowRun | null>(null);
   const [queueing, setQueueing] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const terminalNotified = useRef(false);
 
   useEffect(() => {
+    if (!canReview) return undefined;
     let active = true;
     void getDualHelixShadowStatus()
       .then((status) => {
@@ -146,7 +166,7 @@ export function ShadowReviewAction({
     return () => {
       active = false;
     };
-  }, [context.messageId, context.threadId]);
+  }, [canReview, context.messageId, context.threadId]);
 
   useEffect(() => {
     if (!isShadowRunActive(run)) return;
@@ -176,6 +196,7 @@ export function ShadowReviewAction({
   }, [run]);
 
   const queueReview = async () => {
+    if (!canReview) return;
     if (run && ["completed", "failed"].includes(run.status)) {
       setDialogOpen(true);
       return;
@@ -218,6 +239,8 @@ export function ShadowReviewAction({
       : active
         ? "另一引擎正在影子复核"
         : "让另一引擎复核本次任务";
+
+  if (!canReview) return null;
 
   return (
     <>
@@ -284,44 +307,77 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Format an ISO timestamp as local HH:mm, returning "" when unparseable. */
-function formatMessageTime(createdAt: string): string {
-  const date = new Date(createdAt);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function outboundDeliveryState(message: Message): OutboundDeliveryState | null {
+  if (message.type !== "human") return null;
+  const state = message.additional_kwargs?.delivery_state;
+  return state === "queued" || state === "sending" || state === "failed"
+    ? state
+    : null;
 }
 
-/**
- * Small muted HH:mm label shown under a message bubble. Visible on hover of
- * the message, or always when the conversation detail level is "high".
- */
-export function MessageTimestamp({
-  createdAt,
-  alwaysVisible,
-  align = "start",
+export function HumanMessageDeliveryStatus({
+  message,
+  threadId,
 }: {
-  createdAt?: string;
-  alwaysVisible?: boolean;
-  align?: "start" | "end";
+  message: Message;
+  threadId?: string | null;
 }) {
-  if (!createdAt) return null;
-  const formatted = formatMessageTime(createdAt);
-  if (!formatted) return null;
+  const { t } = useI18n();
+  const state = outboundDeliveryState(message);
+  if (!state) return null;
+  const clientMessageId = message.id;
+  const canRetry =
+    state === "failed" &&
+    typeof clientMessageId === "string" &&
+    clientMessageId.length > 0;
+  const label =
+    state === "queued"
+      ? t.conversation.messageQueued
+      : state === "sending"
+        ? t.conversation.messageSending
+        : t.conversation.messageSendFailed;
+  const error = message.additional_kwargs?.delivery_error;
   return (
-    <span
+    <div
       className={cn(
-        "text-micro text-muted-foreground/60 select-none",
-        align === "end" ? "self-end" : "self-start",
-        alwaysVisible
-          ? "opacity-100"
-          : "opacity-0 transition-opacity group-hover/conversation-message:opacity-100",
+        "mt-1 flex items-center justify-end gap-1.5 text-[11px] leading-4",
+        state === "failed" ? "text-destructive/80" : "text-muted-foreground/70",
       )}
+      data-testid="human-message-delivery-status"
+      data-delivery-state={state}
+      role="status"
+      title={typeof error === "string" ? error : undefined}
     >
-      {formatted}
-    </span>
+      {state === "sending" ? (
+        <Loader2Icon className="size-3 animate-spin" aria-hidden="true" />
+      ) : (
+        <span
+          className={cn(
+            "size-1.5 rounded-full",
+            state === "failed" ? "bg-destructive/70" : "bg-current/45",
+          )}
+          aria-hidden="true"
+        />
+      )}
+      <span>{label}</span>
+      {canRetry ? (
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 rounded px-1 py-0.5 font-medium text-destructive transition-colors hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45"
+          data-testid="retry-pending-message"
+          onClick={() => {
+            window.dispatchEvent(
+              new CustomEvent(RETRY_PENDING_MESSAGE_EVENT, {
+                detail: { threadId, clientMessageId },
+              }),
+            );
+          }}
+        >
+          <RefreshCwIcon className="size-3" aria-hidden="true" />
+          {t.conversation.retry}
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -524,6 +580,7 @@ export const MessageListItem = memo(function MessageListItem({
   const navigate = useNavigate();
   const forkThread = useForkThread();
   const isHuman = message.type === "human";
+  const deliveryState = outboundDeliveryState(message);
   const messageMetadata =
     message.type === "ai"
       ? (message.additional_kwargs as Record<string, unknown> | undefined)
@@ -538,6 +595,7 @@ export const MessageListItem = memo(function MessageListItem({
   const clipboardText = useMemo(() => messageClipboardText(message), [message]);
   const showMessageActions =
     !isLoading &&
+    deliveryState === null &&
     (isHuman ||
       (assistantIsSettledAnswer && clipboardText.length > 0 && isLastMessage));
   const params = useParams();
@@ -560,10 +618,6 @@ export const MessageListItem = memo(function MessageListItem({
     projectMessageActions,
     threadIdForFeedback,
   ]);
-  const { level } = useConversationDetailLevel();
-  const createdAt = (
-    message.additional_kwargs as { created_at?: string } | undefined
-  )?.created_at;
   const submitFeedback = useCallback(
     async (sentiment: "liked" | "disliked") => {
       const content =
@@ -615,11 +669,12 @@ export const MessageListItem = memo(function MessageListItem({
         suppressReasoningPanel={suppressReasoningPanel}
         enableClarificationActions={enableClarificationActions}
       />
-      <MessageTimestamp
-        createdAt={createdAt}
-        alwaysVisible={level === "high"}
-        align={isHuman ? "end" : "start"}
-      />
+      {isHuman ? (
+        <HumanMessageDeliveryStatus
+          message={message}
+          threadId={threadIdForFeedback}
+        />
+      ) : null}
       {afterContent}
       {showMessageActions && (
         <div
@@ -759,9 +814,82 @@ function MessageImage({
   const url = src.startsWith("/mnt/") ? resolveArtifactURL(src, threadId) : src;
 
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer">
+    <RoutedMessageLink href={url}>
       <img className={imgClassName} src={url} alt={alt} {...props} />
-    </a>
+    </RoutedMessageLink>
+  );
+}
+
+export function RoutedMessageLink({
+  href,
+  onClick,
+  children,
+  ...props
+}: ComponentProps<"a">) {
+  return (
+    <RoutedWebLink
+      {...props}
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(event) => {
+        onClick?.(event);
+        if (event.defaultPrevented || !href) return;
+        const artifactRef = artifactRefFromMarkdownHref(href);
+        if (artifactRef && dispatchOpenArtifact(artifactRef)) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
+      openTargetSource="conversation"
+    >
+      {children}
+    </RoutedWebLink>
+  );
+}
+
+function useLiveExecutionPlan(planFromMessage: ExecutionPlan): ExecutionPlan {
+  const { values } = useThreadValues();
+  const livePlan = normalizeExecutionPlan(values?.execution_plan);
+  return livePlan?.plan_id === planFromMessage.plan_id
+    ? livePlan
+    : planFromMessage;
+}
+
+/**
+ * Keep the frequently-changing thread values subscription inside the two
+ * message variants that actually need live plan updates. Regular transcript
+ * rows must not re-render when an unrelated execution-plan value changes.
+ */
+function LiveTaskChecklistContent({
+  className,
+  planFromMessage,
+}: {
+  className?: string;
+  planFromMessage: ExecutionPlan;
+}) {
+  const plan = useLiveExecutionPlan(planFromMessage);
+  return (
+    <AIElementMessageContent className={className}>
+      <TaskProgressChecklist plan={plan} />
+    </AIElementMessageContent>
+  );
+}
+
+function LiveExecutionPlanContent({
+  className,
+  planFromMessage,
+  threadId,
+}: {
+  className?: string;
+  planFromMessage: ExecutionPlan;
+  threadId: string;
+}) {
+  const plan = useLiveExecutionPlan(planFromMessage);
+  return (
+    <AIElementMessageContent className={className}>
+      <ExecutionPlanReview plan={plan} threadId={threadId} />
+    </AIElementMessageContent>
   );
 }
 
@@ -786,19 +914,18 @@ function MessageContent_({
   const isHuman = message.type === "human";
   const params = useParams();
   const thread_id = params.threadId ?? params.thread_id;
-  const { streamingMessage } = useThreadStreaming();
-  const { values } = useThreadValues();
 
   // useRehypeSplitWordsIntoSpans now returns the full plugin stack including
   // rehypeRaw and rehypeKatex, so we don't need to add them again.
   const allRehypePlugins = rehypePlugins;
 
-  // The typing cursor belongs only to the message actively receiving text,
-  // never to older messages that share the thread-level loading state.
-  const isCurrentlyStreaming = isLoading && message.id === streamingMessage?.id;
+  // MessageList already narrows this prop to the active streaming row. Using
+  // it directly avoids subscribing every historical message to delta updates.
+  const isCurrentlyStreaming = isLoading;
 
   const components = useMemo(
     () => ({
+      a: RoutedMessageLink,
       img: (props: ImgHTMLAttributes<HTMLImageElement>) => (
         <MessageImage {...props} threadId={thread_id ?? ""} maxWidth="90%" />
       ),
@@ -880,6 +1007,7 @@ function MessageContent_({
     targetText: visibleContentToDisplay,
     enabled: isCurrentlyStreaming,
     resetKey: message.id,
+    ...STREAMING_TYPE_PRESETS.finalAnswer,
   });
   const renderedBody =
     bufferedBody.length <= visibleContentToDisplay.length
@@ -932,11 +1060,9 @@ function MessageContent_({
           const src = att.data_url || att.url || att.artifact_url || "";
           if (!src) return null;
           return (
-            <a
+            <RoutedMessageLink
               key={`att-${idx}-${att.filename ?? idx}`}
               href={src}
-              target="_blank"
-              rel="noopener noreferrer"
               className="block overflow-hidden rounded-lg border border-border-subtle"
             >
               <img
@@ -944,7 +1070,7 @@ function MessageContent_({
                 alt={att.filename ?? t.message.attachmentFallback}
                 className="h-32 w-auto max-w-60 object-cover"
               />
-            </a>
+            </RoutedMessageLink>
           );
         })}
       </div>
@@ -970,19 +1096,12 @@ function MessageContent_({
   // Lightweight task checklist "" auto-mode plan (no approval needed)
   if (isTaskChecklistMessage(message)) {
     const planFromMessage = getChecklistPlanFromMessage(message);
-    const livePlan = normalizeExecutionPlan(values?.execution_plan);
-    const plan =
-      livePlan &&
-      planFromMessage &&
-      livePlan.plan_id === planFromMessage.plan_id
-        ? livePlan
-        : planFromMessage;
-
-    if (plan) {
+    if (planFromMessage) {
       return (
-        <AIElementMessageContent className={className}>
-          <TaskProgressChecklist plan={plan} />
-        </AIElementMessageContent>
+        <LiveTaskChecklistContent
+          className={className}
+          planFromMessage={planFromMessage}
+        />
       );
     }
   }
@@ -990,21 +1109,13 @@ function MessageContent_({
   // Execution plan review card "" shown inline when the middleware generates a plan
   if (isExecutionPlanMessage(message) && thread_id) {
     const planFromMessage = getExecutionPlanFromMessage(message);
-    // Prefer the live plan from thread state (updated in real-time) over the
-    // static plan snapshot embedded in the message.
-    const livePlan = normalizeExecutionPlan(values?.execution_plan);
-    const plan =
-      livePlan &&
-      planFromMessage &&
-      livePlan.plan_id === planFromMessage.plan_id
-        ? livePlan
-        : planFromMessage;
-
-    if (plan) {
+    if (planFromMessage) {
       return (
-        <AIElementMessageContent className={className}>
-          <ExecutionPlanReview plan={plan} threadId={thread_id} />
-        </AIElementMessageContent>
+        <LiveExecutionPlanContent
+          className={className}
+          planFromMessage={planFromMessage}
+          threadId={thread_id}
+        />
       );
     }
   }
@@ -1257,10 +1368,8 @@ function RichFileCard({
 
   if (isImage) {
     return (
-      <a
+      <RoutedMessageLink
         href={fileUrl}
-        target="_blank"
-        rel="noopener noreferrer"
         className="border-border-subtle relative block overflow-hidden rounded-lg border"
       >
         <img
@@ -1268,7 +1377,7 @@ function RichFileCard({
           alt={file.filename}
           className="h-32 w-auto max-w-60 object-cover"
         />
-      </a>
+      </RoutedMessageLink>
     );
   }
 

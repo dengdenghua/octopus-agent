@@ -82,6 +82,16 @@ def test_ws_rejects_wrong_token_when_required():
     assert ei.value.code == 4401
 
 
+def test_ws_rejects_valid_token_in_query_string_when_required():
+    client = _client(require_auth=True, store=_store())
+    with (
+        pytest.raises(WebSocketDisconnect) as ei,
+        client.websocket_connect("/api/terminal/ws/s1?token=sk-alice") as ws,
+    ):
+        ws.receive_text()
+    assert ei.value.code == 4401
+
+
 def test_ws_require_auth_without_identity_store_rejects():
     # require_auth set but no identity store wired → fail closed, not open.
     client = _client(require_auth=True, store=None)
@@ -117,7 +127,8 @@ def test_ws_rejects_foreign_owner_before_spawn():
     with (
         pytest.raises(WebSocketDisconnect) as ei,
         client.websocket_connect(
-            "/api/terminal/ws/agent-workbench-thread-alice?token=sk-bob"
+            "/api/terminal/ws/agent-workbench-thread-alice",
+            subprotocols=["bearer", "sk-bob"],
         ) as ws,
     ):
         ws.receive_text()

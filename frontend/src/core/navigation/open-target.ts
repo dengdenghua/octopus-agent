@@ -10,6 +10,7 @@ import {
   type LinkOpenTarget,
 } from "@/core/settings/automation-preferences";
 import { swallow } from "@/core/utils/log";
+import { BROWSER_WORKSPACE_ROUTE } from "@/core/workspace/sidebar-routing";
 
 export interface OpenTargetOptions extends Omit<BrowserOpenUrlRequest, "url"> {
   target?: LinkOpenTarget;
@@ -122,10 +123,10 @@ export async function openTarget(
         detail: request,
       }),
     );
-    window.location.hash = "#/browser";
+    window.location.hash = `#${BROWSER_WORKSPACE_ROUTE}`;
     if (await acknowledged) return "in_app";
     removePendingRequest(request.requestId!);
-    if (window.location.hash === "#/browser") {
+    if (window.location.hash === `#${BROWSER_WORKSPACE_ROUTE}`) {
       window.location.hash = previousHash;
     }
     return openExternally(url);

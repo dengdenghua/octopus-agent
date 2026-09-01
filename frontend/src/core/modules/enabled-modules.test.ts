@@ -9,17 +9,24 @@ import {
   setModuleAvailable,
   setModuleEnabled,
   setModuleStateProvider,
+  userEnabledModuleIds,
 } from "./enabled-modules";
 
 /** In-memory provider so tests never touch localStorage. */
 function memoryProvider(initial: string[] = []) {
   let disabled = [...initial];
+  let overrides: Record<string, Record<string, boolean>> = {};
   return {
     readDisabled: () => [...disabled],
     writeDisabled: (ids: string[]) => {
       disabled = [...ids];
     },
+    readOverrides: () => structuredClone(overrides),
+    writeOverrides: (next: Record<string, Record<string, boolean>>) => {
+      overrides = structuredClone(next);
+    },
     current: () => [...disabled],
+    currentOverrides: () => structuredClone(overrides),
   };
 }
 
@@ -87,20 +94,40 @@ describe("enabled modules", () => {
     }
   });
 
-  it("keeps runtime availability separate from the user's preference", () => {
-    setModuleEnabled("narrative", true);
-    setModuleAvailabilitySnapshot({ narrative: false });
-
-    expect(enabledModuleIds()).not.toContain("narrative");
-
-    setModuleAvailable("narrative", true);
-    expect(enabledModuleIds()).toContain("narrative");
+  it("shows paper trading by default only for the market persona", () => {
+    expect(enabledModuleIds("market_researcher")).toContain("paper.trading");
+    expect(enabledModuleIds("general")).not.toContain("paper.trading");
+    expect(enabledModuleIds("coder")).not.toContain("paper.trading");
   });
 
-  it("does not allow a preference write to resurrect an unavailable module", () => {
-    setModuleAvailabilitySnapshot({ narrative: false });
-    setModuleEnabled("narrative", true);
+  it("keeps user module overrides scoped to each persona", () => {
+    const provider = memoryProvider();
+    setModuleStateProvider(provider);
 
-    expect(enabledModuleIds()).not.toContain("narrative");
+    setModuleEnabled("paper.trading", true, "general");
+
+    expect(enabledModuleIds("general")).toContain("paper.trading");
+    expect(enabledModuleIds("coder")).not.toContain("paper.trading");
+    expect(provider.currentOverrides()).toEqual({
+      general: { "paper.trading": true },
+    });
+  });
+
+  it("keeps runtime availability separate from the user's preference", () => {
+    setModuleEnabled("narrative", true, "general");
+    setModuleAvailabilitySnapshot({ narrative: false });
+
+    expect(enabledModuleIds("general")).not.toContain("narrative");
+    expect(userEnabledModuleIds("general")).toContain("narrative");
+
+    setModuleAvailable("narrative", true);
+    expect(enabledModuleIds("general")).toContain("narrative");
+  });
+
+  it("does not allow persona overrides to resurrect an uninstalled module", () => {
+    setModuleEnabled("narrative", true, "writer");
+    setModuleAvailabilitySnapshot({ narrative: false });
+
+    expect(enabledModuleIds("writer")).not.toContain("narrative");
   });
 });

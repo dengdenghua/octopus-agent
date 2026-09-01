@@ -25,7 +25,8 @@ describe("<PermissionIndicator />", () => {
     expect(trigger).toBeInTheDocument();
     expect(trigger).toHaveAccessibleName("Permissions: Full access");
     expect(trigger).toHaveTextContent("Full access");
-    expect(trigger.className).toContain("text-warning");
+    expect(trigger.className).toContain("text-muted-foreground");
+    expect(trigger.querySelector(".text-warning")).toBeInTheDocument();
     expect(trigger.className).not.toContain("border-amber");
     expect(trigger.className).not.toContain("bg-amber");
 
@@ -101,7 +102,9 @@ describe("<PermissionIndicator />", () => {
     ).not.toBeInTheDocument();
 
     expect(
-      screen.getByText("Any write or command asks for your approval first. Safest option."),
+      screen.getByText(
+        "Any write or command asks for your approval first. Safest option.",
+      ),
     ).toBeInTheDocument();
   });
 });

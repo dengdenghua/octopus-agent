@@ -23,7 +23,7 @@ describe("persona history", () => {
   it("shares legacy on-demand actor histories instead of hiding them", () => {
     for (const owner of [
       "research-advisor",
-      "local_codex_cli",
+      "installed_code_reviewer",
       "mobile_phone1",
     ]) {
       expect(threadVisibleInPersonaHistory(thread(owner), "general")).toBe(

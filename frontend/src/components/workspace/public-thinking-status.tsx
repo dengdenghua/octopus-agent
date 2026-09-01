@@ -1,7 +1,11 @@
 "use client";
 
 import { useI18n } from "@/core/i18n/hooks";
-import type { StreamVitals } from "@/core/realtime/stream-vitals";
+import {
+  FIRST_RESPONSE_DELAY_NOTICE_MS,
+  formatStreamElapsed,
+  type StreamVitals,
+} from "@/core/realtime/stream-vitals";
 import { cn } from "@/lib/utils";
 
 import type { LiveToolEvent } from "./live-tool-timeline";
@@ -124,12 +128,24 @@ export function PublicThinkingStatus({
 
   if (!isLoading) return null;
 
+  // An optimistic outbound message becomes visible before turn/started can
+  // seed vitals. During that receipt gap ``isLoading`` is already true while
+  // vitals are still idle; treat it as an honest first-response wait so the
+  // assistant lane appears immediately after Send.
+  const measuredPhase = vitals?.phase;
   const phase =
-    vitals?.phase ?? (hasStreamingMessage ? "streaming" : "working");
-  if (phase === "idle" || phase === "streaming") return null;
+    measuredPhase && measuredPhase !== "idle"
+      ? measuredPhase
+      : hasStreamingMessage
+        ? "streaming"
+        : "waiting";
+  if (phase === "streaming") return null;
 
   const running = latestRunningEvent(liveToolEvents);
   const action = running ? eventSummary(running, t) : undefined;
+  const firstResponseDelayed =
+    phase === "waiting" &&
+    (vitals?.elapsedMs ?? 0) >= FIRST_RESPONSE_DELAY_NOTICE_MS;
   // "思考中" (waitingForModel) is reserved for the genuinely pre-response
   // state of a fresh turn — nothing from the agent yet. Once the task is
   // underway the line must say what is happening (the running action, or a
@@ -140,12 +156,18 @@ export function PublicThinkingStatus({
       ? t.publicThinkingStatus.reconnecting
       : phase === "slow"
         ? t.publicThinkingStatus.slowResponse
-        : phase === "waiting"
-          ? t.publicThinkingStatus.waitingForModel
-          : (action ?? t.publicThinkingStatus.processing);
+        : firstResponseDelayed
+          ? t.publicThinkingStatus.firstResponseSlow
+          : phase === "waiting"
+            ? t.publicThinkingStatus.waitingForModel
+            : (action ?? t.publicThinkingStatus.processing);
   // In the working phase the action already leads the line; only the
   // alert phases keep it as trailing context.
   const detail = phase === "working" ? undefined : action;
+  const elapsed =
+    !action && vitals && vitals.elapsedMs >= 3_000
+      ? formatStreamElapsed(vitals.elapsedMs)
+      : undefined;
 
   return (
     <div
@@ -153,6 +175,7 @@ export function PublicThinkingStatus({
       aria-live="polite"
       aria-atomic="false"
       data-phase={phase}
+      data-first-response-delayed={firstResponseDelayed ? "true" : "false"}
       data-testid="conversation-activity-pulse"
       className={cn(
         "my-1.5 ml-11 flex min-w-0 items-center gap-1.5 text-xs leading-4 text-muted-foreground/55",
@@ -162,7 +185,7 @@ export function PublicThinkingStatus({
       <span
         className={cn(
           "inline-block size-1 shrink-0 rounded-full animate-pulse",
-          phase === "slow"
+          phase === "slow" || firstResponseDelayed
             ? "bg-warning/50"
             : phase === "disconnected"
               ? "bg-destructive/50"
@@ -174,6 +197,14 @@ export function PublicThinkingStatus({
       {detail && (
         <span className="min-w-0 truncate text-muted-foreground/45">
           · {detail}
+        </span>
+      )}
+      {elapsed && (
+        <span
+          className="shrink-0 tabular-nums text-muted-foreground/45"
+          data-testid="conversation-activity-elapsed"
+        >
+          · {elapsed}
         </span>
       )}
     </div>

@@ -136,6 +136,37 @@ describe("WorkBuddyCloudStorePanel", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("统一目录只用一个专家团开关过滤团队", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <WorkBuddyCloudStorePanel
+        embedded
+        showTypeFilter={false}
+        showTeamFilter
+      />,
+      { locale: "zh-CN" },
+    );
+
+    await screen.findByText("专家 1");
+    const categoryButtons = within(
+      screen.getByTestId("workbuddy-category-scroll"),
+    ).getAllByRole("button");
+    expect(
+      categoryButtons.slice(0, 2).map((button) => button.textContent),
+    ).toEqual(["全部", "专家团"]);
+    const teamFilter = screen.getByRole("button", { name: "专家团" });
+    expect(teamFilter).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(teamFilter);
+    await waitFor(() => expect(cardTitles()).toHaveLength(7));
+    expect(screen.queryByText("专家 1")).not.toBeInTheDocument();
+    expect(teamFilter).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("button", { name: "研究" }));
+    await screen.findByText("专家 1");
+    expect(teamFilter).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("点击卡片打开详情弹窗,展示 quick_prompts 与安装入口", async () => {
     const user = userEvent.setup();
     renderWithProviders(<WorkBuddyCloudStorePanel />, { locale: "zh-CN" });

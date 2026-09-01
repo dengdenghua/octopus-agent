@@ -1,5 +1,5 @@
 /**
- * DSH P2 API Client
+ * Octopus Native Session API v2 client
  *
  * Client functions for Session-query, Feedback, and Export features.
  */
@@ -74,7 +74,7 @@ export interface GetFeedbackParams {
  * Search threads using full-text search (FTS5)
  */
 export async function searchThreadsFTS(
-  params: SearchParams
+  params: SearchParams,
 ): Promise<SearchResponse> {
   const url = new URL(`${getBackendBaseURL()}/api/threads/fts`);
 
@@ -113,7 +113,7 @@ export async function exportThreadMarkdown(thread_id: string): Promise<string> {
  */
 export async function downloadThreadMarkdown(
   thread_id: string,
-  filename?: string
+  filename?: string,
 ): Promise<void> {
   const markdown = await exportThreadMarkdown(thread_id);
   const blob = new Blob([markdown], { type: "text/markdown" });
@@ -132,7 +132,7 @@ export async function downloadThreadMarkdown(
  * Add feedback to a message
  */
 export async function addMessageFeedback(
-  params: AddFeedbackParams
+  params: AddFeedbackParams,
 ): Promise<MessageFeedback> {
   const url = `${getBackendBaseURL()}/api/threads/${params.thread_id}/feedback`;
 
@@ -158,10 +158,10 @@ export async function addMessageFeedback(
  * Get feedback for a thread or specific message
  */
 export async function getMessageFeedback(
-  params: GetFeedbackParams
+  params: GetFeedbackParams,
 ): Promise<{ feedbacks: MessageFeedback[] }> {
   const url = new URL(
-    `${getBackendBaseURL()}/api/threads/${params.thread_id}/feedback`
+    `${getBackendBaseURL()}/api/threads/${params.thread_id}/feedback`,
   );
 
   if (params.message_index !== undefined) {
@@ -181,7 +181,7 @@ export async function getMessageFeedback(
  * Get feedback statistics for a thread
  */
 export async function getFeedbackStats(
-  thread_id: string
+  thread_id: string,
 ): Promise<FeedbackStats> {
   const url = `${getBackendBaseURL()}/api/threads/${thread_id}/feedback/stats`;
   const response = await fetch(url);

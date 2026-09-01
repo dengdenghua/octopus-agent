@@ -44,6 +44,7 @@ export function EmptyShellView({
     | "browser"
     | "artifacts"
     | "workspace"
+    | "design"
     | "project";
   onTabClick: (tabId: AgentWorkbenchTabId) => void;
   onTabClose: (tabId: AgentWorkbenchTabId) => void;

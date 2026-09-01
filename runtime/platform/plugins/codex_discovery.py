@@ -440,7 +440,11 @@ def _plugin_smoke_check(
 
     permission_resolution = _permission_resolution(
         manifest,
+        has_capabilities=has_capabilities,
+        has_skills=has_skills,
+        has_apps=has_apps,
         has_mcp=has_mcp,
+        has_commands=has_commands,
         warnings=warnings,
     )
     content_provenance = _plugin_content_provenance(plugin_dir)
@@ -497,7 +501,11 @@ def _plugin_smoke_check(
 def _permission_resolution(
     manifest: dict[str, Any],
     *,
+    has_capabilities: bool,
+    has_skills: bool,
+    has_apps: bool,
     has_mcp: bool,
+    has_commands: bool,
     warnings: list[str],
 ) -> dict[str, Any]:
     raw_permissions = manifest.get("permissions")
@@ -514,8 +522,14 @@ def _permission_resolution(
     inferred: list[str] = []
     if has_mcp:
         inferred.append("mcp:execute:review_required")
-    if manifest.get("apps"):
+    if has_apps:
         inferred.append("app:render:review_required")
+    if has_capabilities:
+        inferred.append("capability:execute:review_required")
+    if has_skills:
+        inferred.append("skill:execute:review_required")
+    if has_commands:
+        inferred.append("command:execute:review_required")
     if manifest.get("interface"):
         inferred.append("ui:metadata:local")
     status = "review_required" if inferred or warnings else "none"

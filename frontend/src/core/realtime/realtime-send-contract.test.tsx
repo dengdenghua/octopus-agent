@@ -84,6 +84,43 @@ describe("realtime outbound wire contract", () => {
     ]);
   });
 
+  it("sends a selected project directory as the top-level execution cwd", async () => {
+    const { rendered, requests } = realtimeHarness();
+    await waitFor(() =>
+      expect(rendered.result.current.state.resumeState).toBe("resumed"),
+    );
+
+    await act(async () => {
+      await rendered.result.current.startTurn({
+        input: "分析该项目",
+        cwd: "/Users/example/project",
+        metadata: {
+          context: {
+            mode: "code",
+            workspace_path: "/Users/example/project",
+            workspace_scope: "project",
+          },
+        },
+      });
+    });
+
+    const started = requests.find((request) => request.method === "turn/start");
+    expect(started?.params).toMatchObject({
+      threadId: "thread-send-contract",
+      cwd: "/Users/example/project",
+      input: [
+        {
+          metadata: {
+            context: {
+              workspace_path: "/Users/example/project",
+              workspace_scope: "project",
+            },
+          },
+        },
+      ],
+    });
+  });
+
   it("keeps running steering on the current turn and preserves its item id", async () => {
     const { rendered, requests, emitNotification } = realtimeHarness();
     await waitFor(() =>
