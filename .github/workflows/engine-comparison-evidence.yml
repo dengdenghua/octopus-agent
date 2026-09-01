@@ -44,11 +44,6 @@ jobs:
       OCTOPUS_HARDENED_LAUNCHER_PYTHON_SHA256: ${{ vars.OCTOPUS_HARDENED_LAUNCHER_PYTHON_SHA256 }}
       OCTOPUS_HARDENED_LAUNCHER_MODULE: ${{ vars.OCTOPUS_HARDENED_LAUNCHER_MODULE_PATH }}
       OCTOPUS_HARDENED_LAUNCHER_MODULE_SHA256: ${{ vars.OCTOPUS_HARDENED_LAUNCHER_MODULE_SHA256 }}
-      OCTOPUS_HOME: ${{ runner.temp }}/octopus-engine-${{ github.run_id }}-${{ github.run_attempt }}
-      OCTOPUS_DATA_DIR: ${{ runner.temp }}/octopus-engine-${{ github.run_id }}-${{ github.run_attempt }}/data
-      OCTOPUS_CODEX_STATE_DIR: ${{ runner.temp }}/octopus-engine-${{ github.run_id }}-${{ github.run_attempt }}/codex-state
-      OCTOPUS_EVAL_SERVER_LOG: ${{ runner.temp }}/octopus-engine-${{ github.run_id }}-${{ github.run_attempt }}/server.log
-      OCTOPUS_PROTECTED_IDENTITY_BASELINE: ${{ runner.temp }}/octopus-protected-identities-${{ github.run_id }}-${{ github.run_attempt }}
       UV_PYTHON_DOWNLOADS: never
 
     steps:
@@ -58,6 +53,18 @@ jobs:
           ref: ${{ inputs.target_sha }}
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Initialize isolated runner paths
+        run: |
+          set -euo pipefail
+          run_root="${RUNNER_TEMP}/octopus-engine-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          {
+            echo "OCTOPUS_HOME=${run_root}"
+            echo "OCTOPUS_DATA_DIR=${run_root}/data"
+            echo "OCTOPUS_CODEX_STATE_DIR=${run_root}/codex-state"
+            echo "OCTOPUS_EVAL_SERVER_LOG=${run_root}/server.log"
+            echo "OCTOPUS_PROTECTED_IDENTITY_BASELINE=${RUNNER_TEMP}/octopus-protected-identities-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          } >> "${GITHUB_ENV}"
 
       - name: Fail closed unless protected runner identities are complete
         env:
