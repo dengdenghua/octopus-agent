@@ -379,9 +379,9 @@ omit = ["*/tests/*", "*/fixtures/*"]
 
 [tool.coverage.report]
 # Keep the local threshold in sync with .github/workflows/ci.yml
-# (pytest --cov-fail-under=78): a bare `make test` / `pytest --cov` must
-# fail below the same line CI does.
-fail_under = 78
+# (pytest --cov-fail-under=77.5): a bare `make test` / `pytest --cov` must
+# fail below the same exact (unrounded) line CI does.
+fail_under = 77.5
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",

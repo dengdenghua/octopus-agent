@@ -78,7 +78,7 @@ def test_ci_runs_the_complete_suite_once_and_keeps_python_312_compatibility() ->
     assert full["if"] == "always() && matrix.python-version == '3.11.9'"
     assert "--cov=runtime" in full["run"]
     assert "--cov=tools" not in full["run"]
-    assert "--cov-fail-under=78" in full["run"]
+    assert "--cov-fail-under=77.5" in full["run"]
 
     collection = steps["pytest collection compatibility (Python 3.12)"]
     assert collection["if"] == "always() && matrix.python-version == '3.12.11'"

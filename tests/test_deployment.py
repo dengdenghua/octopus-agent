@@ -273,7 +273,7 @@ class TestPyproject:
         project = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
 
         assert project["tool"]["coverage"]["run"]["source"] == ["runtime"]
-        assert project["tool"]["coverage"]["report"]["fail_under"] == 78
+        assert project["tool"]["coverage"]["report"]["fail_under"] == 77.5
 
     def test_dev_extra_covers_unconditionally_collected_optional_surfaces(self):
         project = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))

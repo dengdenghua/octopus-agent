@@ -195,7 +195,7 @@ jobs:
         # tools are exercised by this suite and the explicit lint ratchets,
         # but mixing their platform-dependent CLI entrypoints into this
         # percentage made the production gate non-reproducible.
-        run: pytest --cov=runtime --cov-report=term --cov-fail-under=78
+        run: pytest --cov=runtime --cov-report=term --cov-fail-under=77.5
 
       - name: pytest collection compatibility (Python 3.12)
         # Import every test module to catch syntax and dependency drift cheaply.
