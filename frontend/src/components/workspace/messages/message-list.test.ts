@@ -284,8 +284,21 @@ describe("message-list: failureKind classification", () => {
       failureKind("no verification step was recorded", "verification_required"),
     ).toBe("verification");
     expect(
-      failureKind("boom", "agent_response_failed"),
-    ).toBe("error");
+      failureKind("Auto verification failed.", "verification_failed"),
+    ).toBe("verification-failed");
+    expect(failureKind("boom", "agent_response_failed")).toBe("error");
+  });
+
+  test("durable tool-start failures are lifecycle failures", () => {
+    expect(
+      failureKind(
+        "tool execution blocked because its start event was not durably applied",
+        "react_producer_failed",
+      ),
+    ).toBe("lifecycle");
+    expect(
+      failureKind("journal unavailable", "react_structural_event_apply_failed"),
+    ).toBe("lifecycle");
   });
 });
 

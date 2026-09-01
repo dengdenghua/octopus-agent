@@ -17,6 +17,9 @@ from runtime.sensing.gateway.realtime_event_bridge import _ReactBridgeState
 class _BridgeStateStub:
     agent_message = None
 
+    def __init__(self) -> None:
+        self.finalized_statuses: list[TurnStatus] = []
+
     async def flush(self, *_args: Any, **_kwargs: Any) -> None:
         return None
 
@@ -24,8 +27,8 @@ class _BridgeStateStub:
     def prose_status_for_turn(_status: TurnStatus) -> ItemStatus:
         return ItemStatus.COMPLETED
 
-    async def finalize_workbench(self, *_args: Any, **_kwargs: Any) -> None:
-        return None
+    async def finalize_workbench(self, *_args: Any, **kwargs: Any) -> None:
+        self.finalized_statuses.append(kwargs["terminal_status"])
 
 
 class _RuntimeStub:
@@ -38,11 +41,14 @@ class _RuntimeStub:
         self._stack = SimpleNamespace(journal=None)
         self._orchestrator_bridge_tasks: set[asyncio.Task[Any]] = set()
         self._real_bridge = real_bridge
+        self.bridge_state: _BridgeStateStub | _ReactBridgeState | None = None
 
     def _make_bridge_state(self, *_args: Any, **_kwargs: Any) -> Any:
         if self._real_bridge:
-            return _ReactBridgeState(enable_adaptive_batching=False)
-        return _BridgeStateStub()
+            self.bridge_state = _ReactBridgeState(enable_adaptive_batching=False)
+        else:
+            self.bridge_state = _BridgeStateStub()
+        return self.bridge_state
 
     def _drain_turn_steering(self, _turn_id: str) -> list[str]:
         return []
@@ -365,9 +371,9 @@ async def test_terminal_apply_failure_is_not_counted_as_terminal_success(
     monkeypatch.setattr(drive, "_should_use_native_tool_loop", lambda *_a, **_k: False)
     monkeypatch.setattr(drive, "_apply_react_event", _failing_terminal_apply)
 
+    runtime = _RuntimeStub()
     turn = await asyncio.wait_for(
-        _run_drive(_RuntimeStub(), SimpleNamespace(), _EmitterStub()),
-        timeout=2.0,
+        _run_drive(runtime, SimpleNamespace(), _EmitterStub()), timeout=2.0
     )
 
     assert turn.status is TurnStatus.FAILED
@@ -378,6 +384,8 @@ async def test_terminal_apply_failure_is_not_counted_as_terminal_success(
         "event_type": "react_completed",
         "exception_type": "OSError",
     }
+    assert isinstance(runtime.bridge_state, _BridgeStateStub)
+    assert runtime.bridge_state.finalized_statuses == [TurnStatus.FAILED]
 
 
 @pytest.mark.asyncio

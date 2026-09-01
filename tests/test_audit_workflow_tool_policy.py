@@ -8,6 +8,7 @@ from runtime.execution.misc.skill_policy import (
     audit_read_only_tool_denial,
     filter_audit_read_only_tool_specs,
     is_audit_read_only_context,
+    is_enforced_read_only_context,
 )
 from runtime.execution.subagents.bridge import _inherit_parent_work_context
 from runtime.execution.suckers.registry import Skill, SkillRegistry
@@ -30,6 +31,27 @@ def test_audit_workflow_is_resolved_from_flat_or_nested_context(
     context: dict[str, object],
 ) -> None:
     assert is_audit_read_only_context(context) is True
+
+
+@pytest.mark.parametrize(
+    "context",
+    [
+        {"_read_only_turn_enforced": True},
+        {"metadata": {"_read_only_turn_enforced": True}},
+    ],
+)
+def test_diagnostic_read_only_policy_is_resolved_from_trusted_context(
+    context: dict[str, object],
+) -> None:
+    assert is_enforced_read_only_context(context) is True
+    assert audit_read_only_tool_denial("read_file", {}, context=context) is None
+    assert audit_read_only_tool_denial("run_tests", {}, context=context) is None
+    assert "current diagnostic/read-only request" in str(
+        audit_read_only_tool_denial("custom_writer", {}, context=context)
+    )
+    assert "current diagnostic/read-only request" in str(
+        audit_read_only_tool_denial("run_orchestration", {}, context=context)
+    )
 
 
 def test_audit_catalog_keeps_read_search_verification_and_orchestration() -> None:
@@ -208,3 +230,15 @@ def test_subagent_inherits_authoritative_parent_work_policy() -> None:
     assert develop["workflow_preset"] == "develop.iterate"
     assert develop["personal_mode"] == "build"
     assert "tool_allowlist_read_only" not in develop
+
+
+def test_subagent_inherits_diagnostic_read_only_policy() -> None:
+    parent = Session(
+        thread_id="parent-diagnostic",
+        metadata={"_read_only_turn_enforced": True},
+    )
+
+    inherited = _inherit_parent_work_context(None, parent)
+
+    assert inherited["_read_only_turn_enforced"] is True
+    assert inherited["tool_allowlist_read_only"] is True

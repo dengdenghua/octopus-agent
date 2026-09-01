@@ -2,12 +2,70 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
-from collections.abc import Iterable
-from contextlib import closing
+import threading
+from collections.abc import Iterable, Iterator
+from contextlib import closing, contextmanager
 from pathlib import Path
 
 _DRAIN_MESSAGE = "group storage journal migration requires draining older WAL workers"
+_LOCKS_GUARD = threading.Lock()
+_STORAGE_LOCKS: dict[str, threading.Lock] = {}
+
+
+def _storage_thread_lock(base_dir: Path) -> threading.Lock:
+    key = str(base_dir.resolve())
+    with _LOCKS_GUARD:
+        return _STORAGE_LOCKS.setdefault(key, threading.Lock())
+
+
+@contextmanager
+def cowork_storage_write_lock(base_dir: Path | str) -> Iterator[None]:
+    """Serialize cross-database cowork writes in one stable lock order.
+
+    SQLite acquires the main database before attached databases. Cowork
+    completion uses ``async_work.db`` as main while thread deletion uses
+    ``group_events.db`` as main, so two concurrent transactions can otherwise
+    form an AB/BA lock cycle and eventually raise ``database is locked``.
+    A directory-scoped advisory lock prevents that cycle across threads and
+    processes without imposing a wall-clock timeout.
+    """
+
+    root = Path(base_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    lock_path = root / ".cowork-storage-write.lock"
+    thread_lock = _storage_thread_lock(root)
+    with thread_lock, lock_path.open("a+b") as handle:
+        if os.name == "nt":
+            import msvcrt
+
+            handle.seek(0, 2)
+            if handle.tell() == 0:
+                handle.write(b"\0")
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)  # type: ignore[attr-defined]
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if os.name == "nt":
+                import msvcrt
+
+                handle.seek(0)
+                msvcrt.locking(  # type: ignore[attr-defined]
+                    handle.fileno(),
+                    msvcrt.LK_UNLCK,  # type: ignore[attr-defined]
+                    1,
+                )
+            else:
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def migrate_delete_journals(paths: Iterable[Path]) -> None:
@@ -52,4 +110,8 @@ def require_delete_journals(conn: sqlite3.Connection, schemas: Iterable[str]) ->
             raise RuntimeError("group storage requires FULL SQLite synchronization")
 
 
-__all__ = ["migrate_delete_journals", "require_delete_journals"]
+__all__ = [
+    "cowork_storage_write_lock",
+    "migrate_delete_journals",
+    "require_delete_journals",
+]

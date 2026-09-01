@@ -59,6 +59,19 @@ def is_audit_read_only_context(context: Mapping[str, Any] | None) -> bool:
     return workflow_preset_from_context(context) in AUDIT_READ_ONLY_WORKFLOW_PRESETS
 
 
+def is_enforced_read_only_context(context: Mapping[str, Any] | None) -> bool:
+    """Whether trusted turn policy requires a non-mutating tool surface."""
+
+    ctx = context or {}
+    nested = ctx.get("metadata")
+    metadata = nested if isinstance(nested, Mapping) else {}
+    return bool(
+        is_audit_read_only_context(ctx)
+        or ctx.get("_read_only_turn_enforced") is True
+        or metadata.get("_read_only_turn_enforced") is True
+    )
+
+
 def _verification_command_is_safe(tool_name: str, command: Any) -> bool:
     """Accept focused test/lint commands without exposing a general shell."""
 
@@ -135,11 +148,17 @@ def audit_read_only_tool_denial(
     from silently bypassing the contract.
     """
 
-    if not is_audit_read_only_context(context):
+    if not is_enforced_read_only_context(context):
         return None
     name = normalize_skill_name(skill_name)
     payload = args or {}
-    if name in _AUDIT_CONTROL_TOOLS:
+    audit_context = is_audit_read_only_context(context)
+    control_tools = (
+        _AUDIT_CONTROL_TOOLS
+        if audit_context
+        else frozenset({"todo_read", "todo_write", "write_todos"})
+    )
+    if name in control_tools:
         return None
     if name in {"run_tests", "lint_check"}:
         if name == "lint_check" and bool(payload.get("fix")):
@@ -160,11 +179,19 @@ def audit_read_only_tool_denial(
 
     if is_read_only_skill(name):
         return None
+    if audit_context:
+        return (
+            f"[audit-read-only] tool '{name}' is blocked by workflow preset "
+            f"{workflow_preset_from_context(context)!r}: audit turns may inspect and "
+            "verify but cannot modify files. Switch the task to develop before "
+            "applying fixes."
+        )
+    scope = "the current diagnostic/read-only request"
     return (
-        f"[audit-read-only] tool '{name}' is blocked by workflow preset "
-        f"{workflow_preset_from_context(context)!r}: audit tasks may read, search, "
-        "and run focused verification, but cannot write or modify project state. "
-        "Switch the task to develop before applying changes."
+        f"[read-only] tool '{name}' is blocked by {scope}: this turn may read, "
+        "search, and run focused verification, but cannot write or modify project "
+        "state. Ask the user to authorize a separate implementation turn before "
+        "applying changes."
     )
 
 
@@ -176,7 +203,7 @@ def filter_audit_read_only_tool_specs(
     """Narrow an advertised catalog to the executable audit surface."""
 
     items = list(specs)
-    if not is_audit_read_only_context(context):
+    if not is_enforced_read_only_context(context):
         return items
     return [
         spec

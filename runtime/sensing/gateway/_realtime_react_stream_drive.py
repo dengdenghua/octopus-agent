@@ -68,6 +68,23 @@ if TYPE_CHECKING:
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
 
 
+# Give cooperative providers a brief chance to unwind their stream after an
+# explicit Stop.  The user-visible turn must not remain hostage to an upstream
+# iterator that ignores cancellation; after this grace period the asyncio
+# wrapper is detached while the daemon/provider read finishes in the
+# background.  ``consumer_closed`` below prevents that abandoned producer from
+# applying events or crossing a tool side-effect boundary.
+_INTERRUPT_PRODUCER_DRAIN_TIMEOUT_S = 0.75
+
+# Public sub-agent prose is a live tail, not a second full transcript.  The
+# finish marker retains the bounded answer; keeping progress small and
+# throttled prevents token-by-token item_delta rows from multiplying a short
+# run into tens of megabytes of thread history.
+_SUBAGENT_PROGRESS_PREVIEW_CHARS = 2_400
+_SUBAGENT_PROGRESS_EMIT_CHARS = 160
+_SUBAGENT_PROGRESS_EMIT_INTERVAL_S = 0.25
+
+
 # ── Sub-agent lifecycle journal → workbench bridge ────────────────────
 # ``run_orchestration`` (the audit.ultracode fan-out) spawns its parallel
 # sub-agents via ``_call_agent_parallel`` → ``call_subagent`` WITHOUT an
@@ -112,6 +129,9 @@ def _start_subagent_lifecycle_bridge(
     started_tools: dict[str, McpToolCallItem] = {}
     progress_items: dict[str, McpToolCallItem] = {}
     progress_text: dict[str, str] = {}
+    progress_pending_chars: dict[str, int] = {}
+    progress_last_emit_at: dict[str, float] = {}
+    progress_emitted_ids: set[str] = set()
 
     def _identity_for_event(event: Any) -> dict[str, Any]:
         """Resolve one child without using a shared role as its primary key."""
@@ -166,8 +186,9 @@ def _start_subagent_lifecycle_bridge(
             # The finish marker carries the complete answer. Keep the live
             # progress item bounded so token streaming cannot grow one turn
             # without limit while preserving the newest visible context.
-            if len(combined) > 12_000:
-                combined = "…（较早输出已省略）\n" + combined[-11_500:]
+            if len(combined) > _SUBAGENT_PROGRESS_PREVIEW_CHARS:
+                prefix = "…（较早输出已省略）\n"
+                combined = prefix + combined[-(_SUBAGENT_PROGRESS_PREVIEW_CHARS - len(prefix)) :]
             progress_text[lane_key] = combined
             progress_item = _subagent_progress_item_from_journal(
                 event,
@@ -180,6 +201,22 @@ def _start_subagent_lifecycle_bridge(
             if existing is not None:
                 progress_item = progress_item.model_copy(update={"created_at": existing.created_at})
             progress_items[progress_item.id] = progress_item
+            pending_chars = progress_pending_chars.get(lane_key, 0) + len(delta)
+            now = time.monotonic()
+            last_emit = progress_last_emit_at.get(lane_key, 0.0)
+            should_emit = (
+                progress_item.id not in progress_emitted_ids
+                or pending_chars >= _SUBAGENT_PROGRESS_EMIT_CHARS
+                or delta.endswith("\n")
+                or (last_emit > 0 and now - last_emit >= _SUBAGENT_PROGRESS_EMIT_INTERVAL_S)
+            )
+            if not should_emit:
+                progress_pending_chars[lane_key] = pending_chars
+                return
+            progress_pending_chars[lane_key] = 0
+            progress_last_emit_at[lane_key] = now
+            started = progress_item.id not in progress_emitted_ids
+            progress_emitted_ids.add(progress_item.id)
             try:
                 asyncio.run_coroutine_threadsafe(
                     _emit_subagent_progress_item(
@@ -187,7 +224,7 @@ def _start_subagent_lifecycle_bridge(
                         log,
                         emitter,
                         progress_item,
-                        started=existing is None,
+                        started=started,
                     ),
                     loop,
                 )
@@ -490,6 +527,16 @@ async def _drive_react(
 
         session_metadata = dict(intent.user_context or {})
         _apply_react_session_metadata(session_metadata, runtime._stack, provider)
+        # Prompt guidance is not a sufficient mutation boundary. Derive a
+        # private, server-owned read-only marker from the actual turn goal so
+        # the executor and delegated children fail closed even when a model
+        # emits a write call during a diagnostic/read-only request.
+        from runtime.core.cerebrum.react_explicit_reads import _explicit_read_only_goal
+        from runtime.core.cerebrum.todo_protocol import _is_read_only_analysis_goal
+
+        _turn_goal = str(intent.normalized_goal or intent.raw or "")
+        if _explicit_read_only_goal(_turn_goal) or _is_read_only_analysis_goal(_turn_goal):
+            session_metadata["_read_only_turn_enforced"] = True
         # Sub-agents spawned inside the turn (run_orchestration fan-out,
         # call_agent_parallel, ...) mirror their lifecycle/tool events onto
         # the journal ONLY when the bound Session carries one
@@ -982,14 +1029,20 @@ async def _drive_react(
             emitter,
             status=state.prose_status_for_turn(turn.status),
         )
-    if turn.status == TurnStatus.IN_PROGRESS:
-        with contextlib.suppress(Exception):
-            await state.finalize_workbench(
-                turn,
-                log,
-                emitter,
-                terminal_status=TurnStatus.COMPLETED,
-            )
+    # Every terminal path must settle the workbench. Previously only the
+    # implicit-success path reached this call; producer/audit failures left the
+    # sidebar at "0/4 running" even though the turn had already failed.
+    with contextlib.suppress(Exception):
+        await state.finalize_workbench(
+            turn,
+            log,
+            emitter,
+            terminal_status=(
+                TurnStatus.COMPLETED
+                if turn.status == TurnStatus.IN_PROGRESS
+                else turn.status
+            ),
+        )
     # Note: background tool watchers (started by ``track_background_tool``)
     # are intentionally NOT cancelled here. They're designed to outlive
     # the current turn — the user starts a long-running shell command,

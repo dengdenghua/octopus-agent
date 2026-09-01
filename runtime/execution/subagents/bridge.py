@@ -65,6 +65,7 @@ _INHERITED_WORK_CONTEXT_KEYS: tuple[str, ...] = (
     "verification_policy",
     "default_skill_packs",
     "default_plugins",
+    "_read_only_turn_enforced",
 )
 
 
@@ -85,9 +86,9 @@ def _inherit_parent_work_context(
                 # strategy) while spawning a worker.
                 merged[key] = metadata[key]
 
-    from runtime.execution.misc.skill_policy import is_audit_read_only_context
+    from runtime.execution.misc.skill_policy import is_enforced_read_only_context
 
-    if is_audit_read_only_context(merged):
+    if is_enforced_read_only_context(merged):
         # Trusted parent policy may narrow a child but the child/model must not
         # be able to widen it.  The mini-loop intersects its tool catalog with
         # the established read-only verifier surface when this flag is set.

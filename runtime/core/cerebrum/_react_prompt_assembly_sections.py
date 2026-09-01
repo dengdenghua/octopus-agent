@@ -29,6 +29,7 @@ from runtime.core.cerebrum.react_native import trim_text_protocol_for_native
 from runtime.core.cerebrum.react_resume import _build_resume_context_prompt
 from runtime.core.cerebrum.react_types import REACT_SYSTEM_PROMPT_BASE
 from runtime.core.cerebrum.todo_protocol import (
+    _is_read_only_analysis_goal,
     context_mode,
     should_require_todo_protocol,
 )
@@ -199,7 +200,11 @@ def _assemble_early_sections(state: _AssemblyState) -> None:
     _goal = state.effective_goal or str(state.intent.normalized_goal or state.intent.raw or "")
     from runtime.execution.misc.skill_policy import is_audit_read_only_context
 
-    state.read_only_turn = _explicit_read_only_goal(_goal) or is_audit_read_only_context(_uc)
+    state.read_only_turn = (
+        _explicit_read_only_goal(_goal)
+        or _is_read_only_analysis_goal(_goal)
+        or is_audit_read_only_context(_uc)
+    )
     state.observed_read_sequence = state.read_only_turn and _explicit_observed_read_sequence(_goal)
     state.observed_read_groups = (
         ordered_explicit_read_groups(_goal) if state.observed_read_sequence else ()

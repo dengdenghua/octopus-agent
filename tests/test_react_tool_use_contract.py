@@ -101,6 +101,12 @@ def test_no_tool_turn_skips_tool_use_contract() -> None:
     assert "<direct-answer-contract>" in text
 
 
+def test_short_diagnostic_turn_gets_read_only_contract() -> None:
+    text = _system_text(_make_state(goal="为什么最后任务中断了？查原因"))
+    assert "<read-only-contract>" in text
+    assert "Do not call file-write" in text
+
+
 def test_tools_inactive_skips_tool_use_contract() -> None:
     text = _system_text(_make_state(tools_active=False))
     assert "<tool-use-contract>" not in text

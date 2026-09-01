@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from runtime.core.cerebrum import react_action_outcomes
+from runtime.core.cerebrum.react_explicit_reads import _punctuation_only_goal
 from runtime.core.cerebrum.react_loop import (
     _explicit_no_tool_goal,
     _finish_reason_is_length_limited,
@@ -41,6 +42,16 @@ def test_explicit_no_tool_goal(goal):
 )
 def test_non_no_tool_goal(goal):
     assert _explicit_no_tool_goal(goal) is False
+
+
+@pytest.mark.parametrize("goal", ["?", "？？", "...", "🦶", "？!"])
+def test_punctuation_only_goal(goal):
+    assert _punctuation_only_goal(goal) is True
+
+
+@pytest.mark.parametrize("goal", ["", "为什么任务中断", "fix?", "测试失败"])
+def test_non_punctuation_only_goal(goal):
+    assert _punctuation_only_goal(goal) is False
 
 
 @pytest.mark.parametrize(

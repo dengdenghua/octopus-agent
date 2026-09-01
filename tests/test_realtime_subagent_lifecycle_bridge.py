@@ -599,6 +599,60 @@ async def test_finish_closes_matching_public_progress_lane() -> None:
 
 
 @pytest.mark.asyncio()
+async def test_progress_is_bounded_and_token_deltas_are_throttled() -> None:
+    journal = _FakeStreamingJournal()
+    runtime = _fake_runtime(journal)
+    turn = SimpleNamespace(thread_id="t1", id="turn-1", items=[])
+    log = _FakeEventLog()
+    emitter = _FakeEmitter()
+    task_id = uuid4()
+    unsubscribe = _start_subagent_lifecycle_bridge(
+        runtime,
+        turn,
+        log,
+        emitter,
+        asyncio.get_running_loop(),
+        str(task_id),
+    )
+    assert unsubscribe is not None
+    callback = journal._callbacks[0]
+
+    def emit(delta: str) -> None:
+        callback(
+            SubTextDeltaEvent(
+                task_id=TaskId(task_id),
+                session_id="session-throttled",
+                agent_id="researcher-a",
+                codename="Spark-a1",
+                role_id="researcher",
+                round=1,
+                delta=delta,
+            )
+        )
+
+    emit("A")
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert len(log.started) == 1
+
+    for _ in range(160):
+        emit("x")
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    # One durable delta for 160 streamed token chunks, rather than 160 copies
+    # of the ever-growing accumulated preview.
+    assert len(log.deltas) == 1
+
+    emit("y" * 5_000)
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert len(log.deltas) == 2
+    assert len(log.deltas[-1][2]["preview"]) <= 2_400
+    assert "较早输出已省略" in log.deltas[-1][2]["preview"]
+    unsubscribe()
+
+
+@pytest.mark.asyncio()
 async def test_emit_appends_logs_and_notifies() -> None:
     turn = SimpleNamespace(thread_id="t1", id="turn-1", items=[])
     log = _FakeEventLog()

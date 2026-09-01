@@ -23,7 +23,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
-from runtime.memory.cowork._group_sqlite_coordination import require_delete_journals
+from runtime.memory.cowork._group_sqlite_coordination import (
+    cowork_storage_write_lock,
+    require_delete_journals,
+)
 from runtime.memory.cowork.group_store import GroupStore
 from runtime.memory.cowork.ids import (
     MAX_COWORK_MESSAGE_TEXT_LENGTH,
@@ -97,7 +100,7 @@ class AsyncWorkStore:
         self._groups = group_store or GroupStore(base_dir=d)
         board = self._groups.blackboard("async-schema")
         board.close()
-        with self._lock, self._connect() as conn:
+        with cowork_storage_write_lock(d), self._lock, self._connect() as conn:
             self._ensure_schema(conn)
 
     def _connect(self) -> sqlite3.Connection:
@@ -210,7 +213,7 @@ class AsyncWorkStore:
         task = AsyncTask(
             uuid4().hex, thread_id, assignee, prompt, "pending", None, actor, now, now, 0
         )
-        with self._lock, self._connect() as conn:
+        with cowork_storage_write_lock(self._db.parent), self._lock, self._connect() as conn:
             self._ensure_schema(conn)
             conn.execute("BEGIN IMMEDIATE")
             self._assert_thread_writable(conn, thread_id)
@@ -254,7 +257,7 @@ class AsyncWorkStore:
         else:
             where = "WHERE task_id=? AND status=?"
             params = (status, result, _now(), task_id, expected_status)
-        with self._lock, self._connect() as conn:
+        with cowork_storage_write_lock(self._db.parent), self._lock, self._connect() as conn:
             self._ensure_schema(conn)
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
@@ -274,7 +277,7 @@ class AsyncWorkStore:
     def claim(self, task_id: str) -> bool:
         """A runner takes the task (pending → working). False if not pending."""
         task_id = require_cowork_id(task_id, label="task_id")
-        with self._lock, self._connect() as conn:
+        with cowork_storage_write_lock(self._db.parent), self._lock, self._connect() as conn:
             self._ensure_schema(conn)
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
@@ -299,7 +302,7 @@ class AsyncWorkStore:
         result = _normalize_async_text(result, label="result")
         if blackboard_key is not None:
             blackboard_key = require_cowork_id(blackboard_key, label="blackboard_key")
-        with self._lock, self._connect() as conn:
+        with cowork_storage_write_lock(self._db.parent), self._lock, self._connect() as conn:
             self._ensure_schema(conn)
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute("SELECT * FROM async_tasks WHERE task_id=?", (task_id,)).fetchone()
@@ -355,7 +358,7 @@ class AsyncWorkStore:
             max_attempts = 3
         cutoff = (datetime.now(UTC) - timedelta(seconds=max_age_seconds)).isoformat()
         now = _now()
-        with self._lock, self._connect() as conn:
+        with cowork_storage_write_lock(self._db.parent), self._lock, self._connect() as conn:
             self._ensure_schema(conn)
             conn.execute("BEGIN IMMEDIATE")
             writable = (

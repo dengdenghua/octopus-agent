@@ -681,14 +681,28 @@ export function failureKind(
     return "error";
   }
   if (
-    /network error|fetch failed|econnrefused|timeout|websocket closed \(1006|transport error|connection (refused|reset|lost)/i.test(
+    /react_structural_event_(?:delivery|apply)_failed|tool_start durable audit failed|tool execution blocked because its start event was not durably applied/i.test(
+      signal,
+    )
+  ) {
+    return "lifecycle";
+  }
+  if (
+    /network error|fetch failed|econnrefused|timeout|websocket closed \(1006|transport error|connection (refused|reset|lost)|model_stream_disconnected|remoteprotocolerror|server disconnected/i.test(
       signal,
     )
   ) {
     return "network";
   }
   if (
-    /verification_required|verification_failed|verification required|no verification step|Code changes were produced/i.test(
+    /verification_failed|verification failed|auto(?:matic)? verification (?:failed|timed out)/i.test(
+      signal,
+    )
+  ) {
+    return "verification-failed";
+  }
+  if (
+    /verification_required|verification required|no verification step|Code changes were produced/i.test(
       signal,
     )
   ) {

@@ -8,7 +8,10 @@ from pathlib import Path
 
 from runtime.memory.runtime_state.blackboard_store import SqliteBlackboard
 
-from ._group_sqlite_coordination import require_delete_journals
+from ._group_sqlite_coordination import (
+    cowork_storage_write_lock,
+    require_delete_journals,
+)
 
 
 class GroupSqliteBlackboard(SqliteBlackboard):
@@ -37,6 +40,10 @@ class GroupSqliteBlackboard(SqliteBlackboard):
         ).fetchone()
         if row is not None:
             raise self._blocked_error(self.turn_id)
+
+    def write(self, key: str, value: object, *, writer: str | None = None) -> None:
+        with cowork_storage_write_lock(self.db_path.parent):
+            super().write(key, value, writer=writer)
 
 
 __all__ = ["GroupSqliteBlackboard"]

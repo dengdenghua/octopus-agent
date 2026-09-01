@@ -691,7 +691,11 @@ class GroupStore:
         tenant_id = str(tenant_id or "").strip()
         owner_id = str(owner_id or "").strip()
         async_db = self._dir / "async_work.db"
-        with self._lock, closing(self._connect()) as conn, conn:
+        from ._group_sqlite_coordination import cowork_storage_write_lock
+
+        with cowork_storage_write_lock(self._dir), self._lock, closing(
+            self._connect()
+        ) as conn, conn:
             from ._group_sqlite_coordination import require_delete_journals
 
             if async_db.exists():
@@ -774,7 +778,11 @@ class GroupStore:
         thread_id = require_cowork_id(thread_id, label="thread_id")
         token = require_cowork_id(token, label="thread_delete_token")
         async_db = self._dir / "async_work.db"
-        with self._lock, closing(self._connect()) as conn, conn:
+        from ._group_sqlite_coordination import cowork_storage_write_lock
+
+        with cowork_storage_write_lock(self._dir), self._lock, closing(
+            self._connect()
+        ) as conn, conn:
             from ._group_sqlite_coordination import require_delete_journals
 
             if async_db.exists():

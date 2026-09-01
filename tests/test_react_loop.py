@@ -6627,7 +6627,12 @@ def test_stream_no_events_when_skill_unknown() -> None:
             ]
         )
     )
-    gen = stream_react_loop(stack, _intent("?"), agent=None, max_iterations=3)
+    gen = stream_react_loop(
+        stack,
+        _intent("请调用不存在的工具"),
+        agent=None,
+        max_iterations=3,
+    )
     events, result = _drain(gen)
     assert not any(e["type"] in ("tool_start", "tool_end") for e in events)
     assert result is not None

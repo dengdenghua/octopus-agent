@@ -311,7 +311,7 @@ function verificationFromToolMessage(
 type ToolCallOutputs = {
   toolCalls: ToolCall[];
   artifacts: OutputArtifact[];
-  changes: OutputChange[];
+  changes: Array<{ fingerprint: string; value: OutputChange }>;
 };
 
 const toolCallOutputsCache = new WeakMap<Message, ToolCallOutputs>();
@@ -329,7 +329,22 @@ function toolCallOutputsFromMessage(message: Message): ToolCallOutputs {
       extracted.toolCalls.push(toolCall);
       const artifact = artifactFromToolCall(toolCall);
       if (artifact) extracted.artifacts.push(artifact);
-      extracted.changes.push(...changesFromToolCall(toolCall));
+      for (const change of changesFromToolCall(toolCall)) {
+        // Reconnect/replay can deliver the same file_change event more than
+        // once, sometimes under a reconstructed message id.  The diff itself
+        // is the authoritative identity for this summary; counting it twice
+        // turns a one-line edit into misleading totals such as +133/-0.
+        extracted.changes.push({
+          fingerprint: [
+            change.path,
+            change.op ?? "",
+            change.diff ?? "",
+            change.added,
+            change.removed,
+          ].join("\u0000"),
+          value: change,
+        });
+      }
     }
   }
   toolCallOutputsCache.set(message, extracted);
@@ -358,6 +373,7 @@ function verificationFromToolMessageCached(
 function summarizeOutputs(messages: Message[]): OutputSummary {
   const artifacts = new Map<string, OutputArtifact>();
   const changes = new Map<string, OutputChange>();
+  const seenChanges = new Set<string>();
   const verifications = new Map<string, VerificationEntry>();
   const toolCallMap = new Map<string, ToolCall>();
 
@@ -370,7 +386,10 @@ function summarizeOutputs(messages: Message[]): OutputSummary {
     for (const artifact of extracted.artifacts) {
       artifacts.set(artifact.path, artifact);
     }
-    for (const change of extracted.changes) {
+    for (const extractedChange of extracted.changes) {
+      if (seenChanges.has(extractedChange.fingerprint)) continue;
+      seenChanges.add(extractedChange.fingerprint);
+      const change = extractedChange.value;
       const existing = changes.get(change.path);
       const seen = new Set(change.hunks.map((h) => h.id));
       const carried = (existing?.hunks ?? []).filter((h) => !seen.has(h.id));
@@ -435,9 +454,22 @@ function extractOriginalPrompt(messages: Message[]): string | null {
   return null;
 }
 
+function extractRetryPrompt(
+  turnMessages: Message[],
+  contextMessages: Message[],
+): string | null {
+  const turnPrompt = extractOriginalPrompt(turnMessages);
+  // A punctuation-only nudge ("?", "？？", "...") carries no task intent.
+  // Replaying it in a fresh task produces an empty-looking conversation and
+  // loses the objective that was interrupted. Fall back to the first real
+  // user prompt from the conversation in that case.
+  if (turnPrompt && /[\p{L}\p{N}]/u.test(turnPrompt)) return turnPrompt;
+  return extractOriginalPrompt(contextMessages) ?? turnPrompt;
+}
+
 // Cloudflare Pages deploys to <project>.pages.dev (no "cloudflare." label).
 const DEPLOY_URL_PATTERN =
-  /\bhttps?:\/\/(?:localhost:\d+|127\.0\.0\.1:\d+|(?:[a-z0-9-]+\.)+(?:vercel\.app|netlify\.app|onrender\.com|herokuapp\.com|pages\.dev|gitpod\.io|github\.io|preview\.app))\b[^\s)\]]*/i;
+  /\bhttps?:\/\/(?:localhost:\d+|127\.0\.0\.1:\d+|(?:[a-z0-9-]+\.)+(?:vercel\.app|netlify\.app|onrender\.com|herokuapp\.com|pages\.dev|gitpod\.io|github\.io|preview\.app))\b[^\s)\]}>"'`，。；：！？、]*/i;
 
 /**
  * Scans AI messages (latest first) for a URL that looks like a deployed
@@ -448,7 +480,7 @@ export function extractResultUrl(messages: Message[]): string | null {
     const message = messages[i];
     if (!message || message.type !== "ai") continue;
     const match = messageText(message.content).match(DEPLOY_URL_PATTERN);
-    if (match) return match[0];
+    if (match) return match[0].replace(/[.,;:!?]+$/u, "");
   }
   return null;
 }
@@ -456,8 +488,10 @@ export function extractResultUrl(messages: Message[]): string | null {
 export function MessageOutputSummary({
   messages,
   turnMessages,
+  retryContextMessages,
   threadId,
   onOpenArtifact: onOpenArtifactProp,
+  onRetryTask,
   failure,
   className,
   presentation = "final",
@@ -469,9 +503,13 @@ export function MessageOutputSummary({
    *  results, the original prompt and deploy URLs can only be found here.
    *  Falls back to `messages` when absent. */
   turnMessages?: Message[];
+  /** Full conversation used when the failed turn contains only punctuation. */
+  retryContextMessages?: Message[];
   threadId?: string;
   /** Keep artifact navigation inside the host workbench when available. */
   onOpenArtifact?: (path: string) => void;
+  /** Retry the failed task while preserving the host conversation context. */
+  onRetryTask?: (prompt: string) => void;
   failure?: FailurePresentation | null;
   className?: string;
   presentation?: "final" | "process";
@@ -480,13 +518,17 @@ export function MessageOutputSummary({
   const { select, setOpen } = useArtifacts();
   const scanMessages = turnMessages ?? messages;
   const summary = useMemo(() => summarizeOutputs(scanMessages), [scanMessages]);
+  // Error details frequently contain failed proxy endpoints. They are
+  // diagnostics, not user-facing results, so a failed turn must never expose
+  // them as an "Open result" action.
   const resultUrl = useMemo(
-    () => extractResultUrl(scanMessages),
-    [scanMessages],
+    () => (failure ? null : extractResultUrl(scanMessages)),
+    [failure, scanMessages],
   );
   const originalPrompt = useMemo(
-    () => extractOriginalPrompt(scanMessages),
-    [scanMessages],
+    () =>
+      extractRetryPrompt(scanMessages, retryContextMessages ?? scanMessages),
+    [retryContextMessages, scanMessages],
   );
   if (
     !failure &&
@@ -521,6 +563,10 @@ export function MessageOutputSummary({
 
   const handleMakeSimilar = () => {
     if (!originalPrompt) return;
+    if (onRetryTask) {
+      onRetryTask(originalPrompt);
+      return;
+    }
     window.location.hash = `/workspace/realtime/new?prompt=${encodeURIComponent(
       originalPrompt,
     )}`;
