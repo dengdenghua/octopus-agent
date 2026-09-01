@@ -856,7 +856,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                               className={cn(
                                 // Keep the nav quiet: one active tint and a
                                 // slim leading accent are enough for hierarchy.
-                                "group/sec relative flex h-9 w-auto min-w-max items-center gap-1.5 rounded-md px-2.5 text-xs transition-[opacity,background-color] md:h-auto md:min-h-0 md:w-full md:gap-2 md:py-1.5 md:text-sm",
+                                "group/sec relative flex h-12 w-auto min-w-max items-center gap-1.5 rounded-md px-2.5 text-xs transition-[opacity,background-color] md:h-auto md:min-h-0 md:w-full md:gap-2 md:py-1.5 md:text-sm",
                                 disabled
                                   ? "cursor-not-allowed opacity-40"
                                   : "opacity-75 hover:opacity-100 hover:bg-muted/50",
@@ -949,10 +949,18 @@ export function SettingsDialog(props: SettingsDialogProps) {
                 </Suspense>
               )}
               {hasSettingsResults && activeSection === "coding" && (
-                <section aria-labelledby="settings-coding-title" className="space-y-4">
+                <section
+                  aria-labelledby="settings-coding-title"
+                  className="space-y-4"
+                >
                   <header className="space-y-1.5">
-                    <h2 id="settings-coding-title" className="text-lg font-semibold tracking-tight">
-                      {locale.toLowerCase().startsWith("zh") ? "编码" : "Coding"}
+                    <h2
+                      id="settings-coding-title"
+                      className="text-lg font-semibold tracking-tight"
+                    >
+                      {locale.toLowerCase().startsWith("zh")
+                        ? "编码"
+                        : "Coding"}
                     </h2>
                     <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
                       {locale.toLowerCase().startsWith("zh")

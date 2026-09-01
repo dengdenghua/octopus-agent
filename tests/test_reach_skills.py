@@ -4,6 +4,7 @@ import stat
 from typing import Any
 
 import pytest
+from defusedxml.common import EntitiesForbidden
 
 from runtime.execution.suckers.reach_skills import register_reach_skills
 from runtime.execution.suckers.registry import SkillRegistry
@@ -148,6 +149,14 @@ def test_rss_has_stdlib_fallback(monkeypatch: Any) -> None:
 
     assert result["backend"] == "stdlib_xml"
     assert result["results"][0]["title"] == "One"
+
+
+def test_rss_stdlib_fallback_rejects_xml_entities(monkeypatch: Any) -> None:
+    monkeypatch.setattr(rss_channel, "feedparser", None)
+    xml = b'<!DOCTYPE rss [<!ENTITY secret SYSTEM "file:///etc/passwd">]><rss><channel><title>&secret;</title></channel></rss>'
+
+    with pytest.raises(EntitiesForbidden):
+        rss_channel.read_rss(_Client([_Response({}, content=xml)]), "https://x/feed")
 
 
 def test_youtube_has_oembed_fallback(monkeypatch: Any) -> None:

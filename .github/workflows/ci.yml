@@ -575,7 +575,7 @@ jobs:
           node-version: "22.23.2"
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
-      - run: uv sync --locked --python 3.11.9 --extra dev --extra serve
+      - run: uv sync --locked --python 3.11.9 --extra dev --extra serve --extra web
         env: {UV_PYTHON_DOWNLOADS: never}
       - run: echo "${GITHUB_WORKSPACE}/.venv/bin" >> "${GITHUB_PATH}"
 

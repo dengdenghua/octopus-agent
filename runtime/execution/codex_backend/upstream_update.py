@@ -20,6 +20,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from runtime.platform.process.paths import app_paths
 
@@ -92,7 +93,19 @@ class CodexUpdateStatus:
 Fetcher = Callable[[str, float], dict[str, Any]]
 
 
+def _validate_registry_url(url: str) -> None:
+    parsed = urlsplit(url)
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise ValueError("Codex registry URL must be an unauthenticated HTTPS URL")
+
+
 def _fetch_registry_metadata(url: str, timeout: float) -> dict[str, Any]:
+    _validate_registry_url(url)
     request = urllib.request.Request(
         url,
         headers={
@@ -100,7 +113,10 @@ def _fetch_registry_metadata(url: str, timeout: float) -> dict[str, Any]:
             "User-Agent": "Octopus-Codex-Update-Radar/1.0",
         },
     )
-    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+    # Scheme, authority and embedded credentials are validated above.
+    with urllib.request.urlopen(  # noqa: S310  # nosec B310
+        request, timeout=timeout
+    ) as response:
         content_length = response.headers.get("Content-Length")
         if content_length and int(content_length) > MAX_RESPONSE_BYTES:
             raise ValueError("Codex registry response is too large")
@@ -126,8 +142,7 @@ class CodexUpstreamUpdateService:
         check_interval_seconds: float = DEFAULT_CHECK_INTERVAL_SECONDS,
         initial_check_delay_seconds: float = DEFAULT_INITIAL_CHECK_DELAY_SECONDS,
     ) -> None:
-        if not registry_url.startswith("https://"):
-            raise ValueError("Codex registry URL must use HTTPS")
+        _validate_registry_url(registry_url)
         self._state_path = Path(state_path).expanduser().resolve(strict=False)
         self._current_version = current_version or resolve_bundled_codex_version()
         _version_parts(self._current_version)

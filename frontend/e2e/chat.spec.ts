@@ -12,7 +12,7 @@ test.describe("Chat golden path", () => {
     await page.waitForLoadState("domcontentloaded");
 
     await expect(page).toHaveTitle(/(?:^|\s-\s)Octopus$/);
-    await expect(page.locator('a[aria-label="Octopus"]')).toBeVisible({
+    await expect(page.getByRole("tab", { name: "EchoAI" })).toBeVisible({
       timeout: 10_000,
     });
     await expect(
@@ -40,7 +40,7 @@ test.describe("Chat golden path", () => {
     await page.waitForLoadState("domcontentloaded");
 
     await expect(page).toHaveURL(/#\/workspace\/realtime\/new/);
-    await expect(page.getByText("Octopus").first()).toBeVisible({
+    await expect(page.getByRole("link", { name: "Assistant" })).toBeVisible({
       timeout: 15_000,
     });
     await expect(page.locator("textarea").first()).toBeVisible();

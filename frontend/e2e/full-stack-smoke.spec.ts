@@ -224,17 +224,22 @@ test.describe("Full-stack golden smoke", () => {
 
       await page.goto(`${origin}/#/workspace/agents?surface=chat`);
       await page.waitForLoadState("domcontentloaded");
-      await expect(
-        page
-          .getByTestId("agents-card-grid")
-          .or(page.getByTestId("agents-empty-state")),
-      ).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByRole("heading", { name: "HUB" })).toBeVisible({
+        timeout: 20_000,
+      });
+      await expect(page.getByRole("tabpanel")).toBeVisible();
 
       await page.goto(`${origin}/#/workspace/intelligence?surface=chat`);
       await page.waitForLoadState("domcontentloaded");
-      await expect(page.getByTestId("intelligence-panel")).toBeVisible({
-        timeout: 20_000,
-      });
+      await expect(
+        page.getByRole("heading", { name: "订阅暂时不可用" }),
+      ).toBeVisible({ timeout: 20_000 });
+      await expect(
+        page.getByRole("button", { name: "重新检查" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "前往应用中心" }),
+      ).toBeVisible();
     }
     expect(originSnapshots).toHaveLength(2);
     expect(originSnapshots[1].status).toMatchObject({
@@ -259,10 +264,14 @@ test.describe("Full-stack golden smoke", () => {
     });
 
     await page.getByTestId("chat-tools-trigger").click();
+    await page.getByRole("menuitem", { name: "Commands" }).hover();
     await page.getByTestId("chat-insert-codex-plan").click();
+    await expect(page.getByTestId("composer-command-prefix")).toContainText(
+      "Plan",
+    );
     await expect
       .poll(() => inputValue(page, '[data-testid="chat-composer-input"]'))
-      .toBe("/codex plan\n");
+      .toBe("");
     await expect(page.getByTestId("chat-send-button")).toBeDisabled();
 
     const agents = await request.get(`${backendBase}/api/agents`);

@@ -552,7 +552,7 @@ class BubblewrapBackend:
             wrapped.extend(["--dev", "/dev"])
         if Path("/proc").exists():
             wrapped.extend(["--proc", "/proc"])
-        wrapped.extend(["--tmpfs", "/tmp"])  # nosec B108 — bwrap tmpfs mount arg, not a temp file
+        wrapped.extend(["--tmpfs", "/tmp"])  # bwrap mount arg, not a temp file  # nosec B108
 
         mount_roots = _unique_paths([workspace, *policy.additional_write_roots])
         namespace_parents: list[Path] = []
@@ -567,7 +567,7 @@ class BubblewrapBackend:
         for parent in namespace_parents:
             # /tmp already exists as the private tmpfs mounted above; its
             # descendants still need explicit namespace directories.
-            if parent != Path("/tmp"):
+            if parent != Path("/tmp"):  # nosec B108
                 wrapped.extend(["--dir", str(parent)])
 
         workspace_flag = "--ro-bind" if policy.mode == "read-only" else "--bind"

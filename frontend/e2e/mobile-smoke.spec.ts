@@ -83,12 +83,18 @@ test.describe("Mobile workspace smoke", () => {
     expect(sectionStripLayout.scrollWidth).toBeGreaterThan(
       sectionStripLayout.clientWidth,
     );
-    const sectionTargetHeights = await sectionStrip
-      .getByRole("button")
-      .evaluateAll((buttons) =>
-        buttons.map((button) => button.getBoundingClientRect().height),
-      );
-    expect(Math.min(...sectionTargetHeights)).toBeGreaterThanOrEqual(44);
+    // Dialog zoom-in briefly scales every child below its final CSS size.
+    // Measure the settled targets rather than sampling mid-animation.
+    await expect
+      .poll(async () => {
+        const heights = await sectionStrip
+          .getByRole("button")
+          .evaluateAll((buttons) =>
+            buttons.map((button) => button.getBoundingClientRect().height),
+          );
+        return Math.min(...heights);
+      })
+      .toBeGreaterThanOrEqual(44);
 
     const resizeHandle = dialog.getByRole("separator", {
       name: /拖动调整大小|Drag to resize/,
@@ -98,11 +104,17 @@ test.describe("Mobile workspace smoke", () => {
     const sections = [
       /^(账户|Account)$/,
       /^(订阅与用量|Plan & Usage)$/,
-      /^(外观|Appearance)$/,
+      /^(通用|General)$/,
+      /^(对话|Conversation)$/,
+      /^(模型|Models)$/,
       /^(通知|Notification)$/,
-      /^(记忆|Memory)$/,
+      /^(记忆与个人规则|Memory & Personal Rules)$/,
+      /^(编码|Coding)$/,
       /^(工具与集成|Tools & integrations)$/,
-      /^(自动化与安全|Automation & security)$/,
+      /^(浏览器自动化|Browser automation)$/,
+      /^(桌面自动化|Desktop automation)$/,
+      /^(执行与安全|Automation & security)$/,
+      /^(个人空间与安全|Personal Space & Security)$/,
       /^(运行诊断|Run diagnostics)$/,
       /^(关于|About)$/,
     ];
@@ -138,9 +150,7 @@ test.describe("Mobile workspace smoke", () => {
     await expect(dialog).toBeHidden();
   });
 
-  test("Realtime composer fits mobile width", async ({
-    authedPage: page,
-  }) => {
+  test("Realtime composer fits mobile width", async ({ authedPage: page }) => {
     await page.goto("/#/workspace/realtime/new");
     await page.waitForLoadState("domcontentloaded");
 
@@ -161,7 +171,7 @@ test.describe("Mobile workspace smoke", () => {
     await expect(page.getByTestId("agents-loading-skeleton")).toBeHidden({
       timeout: 20_000,
     });
-    const chips = page.getByTestId("agents-category-scroll");
+    const chips = page.getByTestId("workbuddy-category-scroll");
     await expect(chips).toBeVisible();
     await expectNoHorizontalOverflow(page, chips, "agents category chips");
   });
@@ -172,15 +182,20 @@ test.describe("Mobile workspace smoke", () => {
     await page.goto("/#/workspace/skills");
     await page.waitForLoadState("domcontentloaded");
 
-    await expect(page).toHaveURL(/#\/workspace\/agents\?surface=chat&tab=skills/);
+    await expect(page).toHaveURL(
+      /#\/workspace\/agents\?surface=chat&tab=skills/,
+    );
     await expect(
       page.getByRole("tab", { name: /技能|Skills|Skill Market/i }),
     ).toBeVisible();
     const search = page.getByTestId("agents-search-input");
     await expect(search).toBeVisible({ timeout: 15_000 });
+    const skillsRegion = page.getByRole("region", { name: "Skills" });
+    await expect(skillsRegion).toBeVisible();
     await expect(
-      page.getByRole("button", { name: /^(全部|All)$/ }).first(),
+      skillsRegion.getByText("academic-paper-expert", { exact: true }),
     ).toBeVisible();
     await expectNoHorizontalOverflow(page, search, "skills search");
+    await expectNoHorizontalOverflow(page, skillsRegion, "skills list");
   });
 });

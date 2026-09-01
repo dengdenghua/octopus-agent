@@ -88,6 +88,8 @@ CREATE INDEX IF NOT EXISTS idx_team_invite_reservations_room
     ON team_invitation_reservations(tenant_id, room_id, actor_id);
 """
 
+# Immutable, server-owned column allowlists. Every caller binds user values via
+# SQLite parameters; the f-strings only reuse these fixed identifiers.
 _INVITE_COLUMNS = (
     "invite_id, tenant_id, room_id, token_hash, role, created_by, created_at, "
     "expires_at, max_uses, use_count, last_used_at, revoked_at, revoked_by"
@@ -226,7 +228,7 @@ def _reservation_row(
     actor_id: str,
 ) -> sqlite3.Row | None:
     return conn.execute(
-        f"SELECT {_RESERVATION_COLUMNS} FROM team_invitation_reservations "  # noqa: S608
+        f"SELECT {_RESERVATION_COLUMNS} FROM team_invitation_reservations "  # noqa: S608  # nosec B608
         "WHERE invite_id = ? AND actor_id = ?",
         (invite_id, actor_id),
     ).fetchone()
@@ -234,7 +236,7 @@ def _reservation_row(
 
 def _reservation_by_id(conn: sqlite3.Connection, reservation_id: str) -> sqlite3.Row | None:
     return conn.execute(
-        f"SELECT {_RESERVATION_COLUMNS} FROM team_invitation_reservations "  # noqa: S608
+        f"SELECT {_RESERVATION_COLUMNS} FROM team_invitation_reservations "  # noqa: S608  # nosec B608
         "WHERE reservation_id = ?",
         (reservation_id,),
     ).fetchone()

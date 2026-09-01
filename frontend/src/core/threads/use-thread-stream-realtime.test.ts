@@ -1057,6 +1057,10 @@ describe("useThreadStreamRealtime permissions", () => {
     expect(
       result.current[0].messages[0]?.additional_kwargs?.delivery_state,
     ).toBe("queued");
+    // The new-thread page must be able to distinguish this local optimistic
+    // row from a durable server receipt. Otherwise it can navigate away and
+    // tear down the socket before the queue reaches turn/start.
+    expect(result.current[0].values.messages).toEqual([]);
     expect(startTurn).not.toHaveBeenCalled();
 
     connected = true;

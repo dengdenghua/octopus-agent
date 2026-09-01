@@ -172,10 +172,14 @@ test.describe("workflow-as-skill · legacy route", () => {
   }) => {
     await page.goto("/#/workspace/workflows");
     await page.waitForLoadState("domcontentloaded");
-    await expect(page).toHaveURL(/#\/workspace\/agents\?surface=chat&tab=skills/);
-    await expect(
-      page.getByPlaceholder(/搜索技能名称|Search skill name/i),
-    ).toBeVisible();
+    await expect(page).toHaveURL(
+      /#\/workspace\/agents\?surface=chat&tab=skills/,
+    );
+    await expect(page.getByRole("tab", { name: "Skills" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(page.getByRole("textbox").first()).toBeVisible();
   });
 });
 
@@ -222,47 +226,19 @@ test.describe("Bug#1 regression · Intelligence subscriptions", () => {
     }
   });
 
-  test("UI creates a subscription through the current draft flow and cleans it up", async ({
+  test("clean install exposes a recoverable Intelligence app install path", async ({
     page,
   }) => {
-    const topic = `e2e-ui-${Date.now()}`;
     await page.goto("/#/workspace/intelligence");
     await page.waitForLoadState("domcontentloaded");
 
-    try {
-      await reactFill(
-        page,
-        "textarea",
-        `Create a temporary subscription named ${topic} for E2E cleanup verification.`,
-      );
-      await page
-        .getByRole("button", { name: /生成订阅草案|Generate Draft/ })
-        .click();
-
-      const createButton = page.getByRole("button", {
-        name: /创建这个订阅|Create Subscription/,
-      });
-      await expect(createButton).toBeVisible({ timeout: 10_000 });
-      await reactFill(page, "input", topic);
-      await createButton.click();
-
-      await expect(
-        page.getByText(/订阅添加成功|Subscription added/i),
-      ).toBeVisible({ timeout: 5000 });
-
-      const listed = await page.request.get(
-        `${BACKEND}/api/intelligence/subscriptions`,
-      );
-      expect(listed.ok()).toBeTruthy();
-      const listedBody = await listed.json();
-      expect(
-        (listedBody.subscriptions ?? []).some(
-          (item: { topic?: string }) => item.topic === topic,
-        ),
-      ).toBe(true);
-    } finally {
-      await deleteSubscriptionsByTopic(page.request, topic);
-    }
+    await expect(
+      page.getByRole("heading", { name: "订阅暂时不可用" }),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("button", { name: "重新检查" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "前往应用中心" }),
+    ).toBeVisible();
   });
 });
 

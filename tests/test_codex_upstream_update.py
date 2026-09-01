@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from runtime.execution.codex_backend.upstream_update import (
     CodexUpstreamUpdateService,
 )
@@ -101,3 +103,24 @@ def test_rejects_unverified_or_insecure_metadata(tmp_path):
 
     assert status.update_available is False
     assert status.error == "Codex package integrity is missing"
+
+
+@pytest.mark.parametrize(
+    "registry_url",
+    [
+        "http://registry.example.test/latest",
+        "file:///etc/passwd",
+        "https://user:secret@registry.example.test/latest",
+        "https:///missing-host",
+    ],
+)
+def test_rejects_unsafe_registry_urls_before_fetch(tmp_path, registry_url):
+    with pytest.raises(
+        ValueError,
+        match="unauthenticated HTTPS URL",
+    ):
+        CodexUpstreamUpdateService(
+            tmp_path / "status.json",
+            current_version="0.149.0",
+            registry_url=registry_url,
+        )

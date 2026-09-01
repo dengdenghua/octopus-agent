@@ -29,6 +29,15 @@ dev = [
     "pytest-asyncio>=0.24",
     "pytest-cov>=5.0",
     "pytest-timeout>=2.2",
+    # Optional first-party surfaces have import-level contract tests. Keep the
+    # lightweight runtime packages in dev so clean CI collects the same suite
+    # as a feature-complete workstation without pulling full model stacks.
+    "av>=12.0",
+    "mcp>=2.0.0,<3.0",
+    "playwright>=1.48",
+    # Windows does not ship an IANA timezone database. Runtime modules use
+    # ZoneInfo("Asia/Shanghai") at import time, so clean Windows CI needs it.
+    "tzdata>=2025.1; sys_platform == 'win32'",
     # Pinned to the minor that formatted the tree (see the repo-wide
     # `style: ruff format` commit) — an unpinned ruff drifts the format
     # check red on every formatter release.

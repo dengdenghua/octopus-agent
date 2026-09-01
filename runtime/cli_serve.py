@@ -361,7 +361,7 @@ def register_cron_executor_task(
     try:
         from runtime.execution.cron_executor import recover_interrupted_cron_jobs
 
-        recovered = recover_interrupted_cron_jobs(allow_cross_tenant=True)
+        recovered = recover_interrupted_cron_jobs()
         if recovered.get("interrupted"):
             logging.getLogger(__name__).warning(
                 "cron recovery: %d job(s) interrupted at startup: %s",
@@ -440,7 +440,6 @@ def register_cron_executor_task(
                 run_due_cron_jobs(
                     deliver=_deliver,
                     stop_event=_stopping,
-                    allow_cross_tenant=True,
                 )
             except Exception:  # noqa: BLE001 — a tick fault must not kill the cron pool
                 logging.getLogger(__name__).exception("cron tick failed")

@@ -23,6 +23,16 @@ class TestDockerfile:
 
         assert "pnpm install --frozen-lockfile" in text
         assert "--no-fund" not in text
+        assert "frontend/pnpm-workspace.yaml" in text
+
+    def test_full_stack_state_cleanup_runs_once_before_backend_start(self):
+        config = (REPO / "frontend/playwright.full.config.ts").read_text(encoding="utf-8")
+        preparer = REPO / "frontend/e2e/prepare-full-stack-state.mjs"
+
+        assert preparer.is_file()
+        assert "rmSync(e2eStateRoot" not in config
+        assert "prepare-full-stack-state.mjs" in config
+        assert "Refusing to reset E2E state outside" in preparer.read_text(encoding="utf-8")
 
     def test_dockerignore_exists(self):
         assert (REPO / ".dockerignore").exists()

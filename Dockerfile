@@ -27,7 +27,7 @@ FROM node:22.23.2-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e
 WORKDIR /webui
 
 # 利用 Docker 层缓存: 先复制清单 + pnpm 锁文件 -> 安装依赖 -> 再复制源码
-COPY frontend/package.json frontend/pnpm-lock.yaml ./
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
 RUN corepack enable && pnpm install --frozen-lockfile
 
 # 源码变更不影响依赖缓存层

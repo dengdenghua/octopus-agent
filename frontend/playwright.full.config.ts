@@ -3,7 +3,6 @@ import {
   devices,
   type ReporterDescription,
 } from "@playwright/test";
-import { rmSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -65,9 +64,12 @@ if (!reuseServers && !e2eStateRootIsDisposable) {
   );
 }
 
-if (!reuseServers) {
-  rmSync(e2eStateRoot, { force: true, recursive: true });
-}
+// Playwright loads this config in both the runner and worker processes. State
+// cleanup must happen once in the backend web-server command; doing it as a
+// module side effect can delete SQLite's parent directory after startup.
+const prepareStateCommand = reuseServers
+  ? ""
+  : `${backendEnv} node frontend/e2e/prepare-full-stack-state.mjs && `;
 
 /**
  * Full-stack Playwright configuration.
@@ -84,8 +86,7 @@ export default defineConfig({
   // Linux, dev on macOS): drop the default -{project}-{platform} suffix so
   // both lanes compare against the same committed PNGs. Font rasterisation
   // noise is absorbed by the maxDiffPixelRatio in visual-regression.spec.ts.
-  snapshotPathTemplate:
-    "{testDir}/__screenshots__/{testFilePath}/{arg}{ext}",
+  snapshotPathTemplate: "{testDir}/__screenshots__/{testFilePath}/{arg}{ext}",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -108,7 +109,7 @@ export default defineConfig({
 
   webServer: [
     {
-      command: `${backendEnv} ${pythonBin} -m runtime serve --config config.e2e.yaml --host ${backendHost} --port ${backendPort}`,
+      command: `${prepareStateCommand}${backendEnv} ${pythonBin} -m runtime serve --config config.e2e.yaml --host ${backendHost} --port ${backendPort}`,
       url: `${backendBase}/api/status`,
       cwd: repoRoot,
       reuseExistingServer: reuseServers,

@@ -245,7 +245,8 @@ class MXCloudSyncConnector:
             placeholders = ",".join("?" for _ in ids)
             with self._lock, self._connect() as conn:
                 conn.execute(
-                    f"UPDATE outbox SET sent_at=? WHERE id IN ({placeholders})",  # noqa: S608
+                    # Placeholder count is derived from server-owned row IDs; values stay bound.
+                    f"UPDATE outbox SET sent_at=? WHERE id IN ({placeholders})",  # noqa: S608  # nosec B608
                     (now, *ids),
                 )
             self._last_sync_at = now
