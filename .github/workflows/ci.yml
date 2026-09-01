@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # Keep the long-lived hardening branch under the same release gates as main.
+    branches: [main, codex/production-hardening]
   pull_request:
     branches: [main]
 
