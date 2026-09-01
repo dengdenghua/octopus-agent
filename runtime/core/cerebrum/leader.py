@@ -438,10 +438,45 @@ class LeaderProcess:
         self.pid_path.write_text(str(os.getpid()))
 
 
+def _pid_alive_windows(pid: int) -> bool:
+    """Query a Windows process without sending it a console control event."""
+
+    import ctypes
+    from ctypes import wintypes
+
+    process_query_limited_information = 0x1000
+    still_active = 259
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+    if not handle:
+        # Access denied still proves that the process exists. Invalid or stale
+        # PIDs return a different error and are treated as dead.
+        return ctypes.get_last_error() == 5  # type: ignore[attr-defined]
+    try:
+        exit_code = wintypes.DWORD()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+            return True
+        return exit_code.value == still_active
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def _pid_alive(pid: int) -> bool:
-    """Return True if ``pid`` is a live process we can signal."""
+    """Return True if ``pid`` is a live process without changing its state."""
     if pid <= 0:
         return False
+    if sys.platform == "win32":
+        # ``os.kill(pid, 0)`` is not a harmless existence probe on Windows;
+        # depending on the runtime it can become a console control event and
+        # interrupt the pytest/leader process itself.
+        return _pid_alive_windows(pid)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:

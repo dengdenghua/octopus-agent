@@ -66,6 +66,7 @@ class TestServeBasics:
         monkeypatch.delenv("OCTOPUS_DEPLOYMENT_MODE", raising=False)
         monkeypatch.delenv("OCTOPUS_PROCESS_SANDBOX", raising=False)
         monkeypatch.setattr(sandbox_mod.BubblewrapBackend, "available", staticmethod(lambda: False))
+        monkeypatch.setattr(sandbox_mod.LandlockBackend, "available", staticmethod(lambda: False))
         monkeypatch.setattr(sandbox_mod.SeatbeltBackend, "available", staticmethod(lambda: False))
 
         error, previous = _prepare_execution_security(
@@ -87,6 +88,26 @@ class TestServeBasics:
 
         assert "conflicts" in (error or "")
         assert previous == {}
+
+    def test_production_environment_keeps_local_config_in_strict_mode(self, monkeypatch):
+        from runtime.cli_serve import _prepare_execution_security
+        from runtime.platform.config import AgentConfig
+        from runtime.safety.sandboxing import sandbox as sandbox_mod
+
+        monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "production")
+        monkeypatch.delenv("OCTOPUS_PROCESS_SANDBOX", raising=False)
+        monkeypatch.setattr(
+            sandbox_mod,
+            "resolved_process_backend",
+            lambda _mode: object(),
+            raising=False,
+        )
+        error, previous = _prepare_execution_security(
+            AgentConfig.model_validate({"execution": {"deployment_mode": "local"}})
+        )
+
+        assert error is None
+        assert previous["OCTOPUS_DEPLOYMENT_MODE"] == "production"
 
     def test_commercial_execution_rejects_explicit_soft_sandbox(self, monkeypatch):
         from runtime.cli_serve import _prepare_execution_security
@@ -201,6 +222,40 @@ class TestServeBasics:
         )
         assert calls == ["start", "heartbeat"]
         assert "local knowledge storage: ready" in capsys.readouterr().out
+
+    def test_production_environment_never_exposes_local_workspace_access(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        from fastapi import FastAPI
+
+        import runtime.cli_serve as cli_serve
+        import runtime.platform.ui as ui_module
+
+        cfg = _write_cfg(tmp_path)
+        captured: dict[str, object] = {}
+
+        def spy_create_app(**kwargs):
+            captured.update(kwargs)
+            return FastAPI()
+
+        monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "production")
+        monkeypatch.setattr(cli_serve, "_prepare_execution_security", lambda _cfg: (None, {}))
+        monkeypatch.setattr(ui_module, "create_app", spy_create_app)
+        monkeypatch.setattr("uvicorn.run", lambda *args, **kwargs: None)
+
+        assert (
+            cli_serve.run_serve(
+                config_path=cfg,
+                host="127.0.0.1",
+                port=9093,
+                learn_interval_s=0,
+                color=False,
+            )
+            == 0
+        )
+        assert captured["allow_local_workspace_access"] is False
 
     def test_missing_config_returns_2(self, tmp_path: Path, capsys):
         from runtime.cli import run_serve

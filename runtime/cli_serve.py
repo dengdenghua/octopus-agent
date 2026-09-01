@@ -591,7 +591,6 @@ def run_serve(
         .strip()
         .lower()
     )
-    allow_local_workspace_access = deployment_mode == "local" and _is_loopback_host(host)
     bind_error = _insecure_bind_error(
         host=host,
         uds=uds,
@@ -630,6 +629,10 @@ def run_serve(
     if execution_error is not None:
         print(c.red(f"security error: {execution_error}"), file=sys.stderr)
         return 2
+    effective_deployment_mode = (
+        str(os.environ.get("OCTOPUS_DEPLOYMENT_MODE") or deployment_mode).strip().lower()
+    )
+    allow_local_workspace_access = effective_deployment_mode == "local" and _is_loopback_host(host)
 
     # Startup execution-health canary: probe whether a sandboxed command can
     # run in THIS process environment. When the backend cannot apply its
@@ -931,7 +934,6 @@ def run_serve(
     try:
         if uds:
             import contextlib
-            import os
 
             with contextlib.suppress(FileNotFoundError):
                 os.unlink(uds)

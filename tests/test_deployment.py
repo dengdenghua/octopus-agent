@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from runtime.platform.config import load_from_yaml
+
 REPO = Path(__file__).parent.parent
 
 
@@ -152,13 +154,26 @@ class TestDockerfile:
         steps = workflow["jobs"]["docker-build"]["steps"]
         named = {step.get("name"): step for step in steps if step.get("name")}
         smoke = named["Smoke installed image and bundled skill catalog"]["run"]
-        assert "/etc/octopus/config.example.yaml" in smoke
+        assert "/etc/octopus/docker-smoke.yaml" in smoke
+        assert "tests/fixtures/docker_smoke_config.yaml" in smoke
         assert "/readyz" in smoke
         assert "/api/health" in smoke
         assert "payload['skills'] >= 3" in smoke
         assert "resolve_process_backend('strict')" in smoke
         assert "assert choice.hard" in smoke
+        assert "docker inspect --format '{{json .State}}'" in smoke
+        assert "production container exited before readiness" in smoke
         assert "docker rm --force" in smoke
+
+    def test_docker_smoke_config_is_offline_and_production_strict(self):
+        cfg = load_from_yaml(REPO / "tests" / "fixtures" / "docker_smoke_config.yaml")
+
+        assert cfg.execution.deployment_mode == "production"
+        assert cfg.execution.process_sandbox == "strict"
+        assert cfg.planner.model.startswith("mock/")
+        assert cfg.intel_sources == []
+        assert cfg.enable_web_skills is False
+        assert cfg.tentacle.enabled is False
 
 
 # ═══════════════════════════════════════════════════════════

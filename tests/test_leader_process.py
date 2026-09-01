@@ -85,6 +85,20 @@ def test_pid_alive_for_invalid_pid() -> None:
     assert _pid_alive(0) is False
 
 
+def test_pid_alive_uses_native_query_instead_of_signal_on_windows(monkeypatch) -> None:
+    from runtime.core.cerebrum import leader as leader_mod
+
+    monkeypatch.setattr(leader_mod.sys, "platform", "win32")
+    monkeypatch.setattr(leader_mod, "_pid_alive_windows", lambda pid: pid == 123)
+
+    def _unexpected_kill(_pid: int, _signal: int) -> None:
+        raise AssertionError("Windows PID probes must not call os.kill")
+
+    monkeypatch.setattr(leader_mod.os, "kill", _unexpected_kill)
+    assert leader_mod._pid_alive(123) is True
+    assert leader_mod._pid_alive(456) is False
+
+
 def test_leader_writes_pid_file(running_leader: LeaderProcess, leader_pid: Path) -> None:
     assert leader_pid.exists()
     pid_in_file = int(leader_pid.read_text().strip())

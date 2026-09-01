@@ -1,0 +1,35 @@
+# Deterministic, offline configuration for validating the production image.
+# It deliberately exercises the production/strict isolation contract without
+# requiring credentials or calling external services.
+name: docker-smoke
+version_compat: "0.2"
+preset: null
+
+planner:
+  type: llm
+  model: mock/docker-smoke
+  mock_response: '{"nodes":[]}'
+  max_nodes: 2
+
+budget:
+  max_tokens: 1000
+  max_usd: 0.01
+  max_latency_ms: 30000
+
+execution:
+  deployment_mode: production
+  process_sandbox: strict
+
+intel_sources: []
+mcp_servers: []
+journal_file: null
+enable_web_skills: false
+
+oct:
+  enabled: false
+
+local_auth:
+  enabled: false
+
+tentacle:
+  enabled: false

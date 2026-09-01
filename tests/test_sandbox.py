@@ -395,6 +395,7 @@ class TestProcessBackendSelection:
     ) -> None:
         monkeypatch.setenv("OCTOPUS_PROCESS_SANDBOX", "strict")
         monkeypatch.setattr(BubblewrapBackend, "available", staticmethod(lambda: False))
+        monkeypatch.setattr(LandlockBackend, "available", staticmethod(lambda: False))
         monkeypatch.setattr(SeatbeltBackend, "available", staticmethod(lambda: False))
 
         with pytest.raises(SandboxViolation):

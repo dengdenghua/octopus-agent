@@ -41,6 +41,25 @@ def _restore_working_directory():
     os.chdir(starting_directory)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_execution_security_environment():
+    """Keep deployment/sandbox overrides from leaking across tests.
+
+    Some low-level tests intentionally call the serve security preparer
+    directly.  That preparer applies environment variables for the lifetime
+    of a server and returns a restoration token to its caller; an assertion
+    failure before restoration must not silently turn the rest of the suite
+    into a commercial deployment.
+    """
+
+    keys = ("OCTOPUS_DEPLOYMENT_MODE", "OCTOPUS_PROCESS_SANDBOX")
+    for key in keys:
+        os.environ.pop(key, None)
+    yield
+    for key in keys:
+        os.environ.pop(key, None)
+
+
 @pytest.fixture
 def bypass_serve_port_guard(monkeypatch):
     """Keep mocked-Uvicorn assembly tests independent of host listeners."""
