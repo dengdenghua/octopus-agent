@@ -81,6 +81,11 @@ class ThreadTurnClaim:
         self.acquired_at = acquired_at
         self.active_turn_id: str | None = None
         self._state_lock = threading.Lock()
+        # ``release`` belongs to the foreground owner and remains idempotent.
+        # Short-lived retained references can keep the descriptor locked while
+        # one background EventLog append crosses the foreground turn boundary.
+        self._owner_released = False
+        self._retained_references = 0
 
     @property
     def path(self) -> Path:
@@ -88,7 +93,23 @@ class ThreadTurnClaim:
 
     @property
     def released(self) -> bool:
-        return self._fd is None
+        with self._state_lock:
+            return self._owner_released
+
+    def retain_if_live(self) -> _ThreadTurnClaimReference | None:
+        """Atomically borrow a live foreground claim for one bounded write.
+
+        The returned reference owns its own idempotent ``release``. Once the
+        foreground owner releases, new borrows fail even if an earlier borrow
+        is still draining; this prevents a background watcher from extending a
+        turn forever by chaining references.
+        """
+
+        with self._state_lock:
+            if self._owner_released or self._fd is None:
+                return None
+            self._retained_references += 1
+        return _ThreadTurnClaimReference(self)
 
     def bind_turn(self, turn_id: str) -> bool:
         """Attach the active turn id and opaque epoch to the held claim.
@@ -104,7 +125,7 @@ class ThreadTurnClaim:
             return False
         with self._state_lock:
             fd = self._fd
-            if fd is None:
+            if fd is None or self._owner_released:
                 return False
             self.active_turn_id = clean_turn_id
             return _write_metadata(
@@ -117,20 +138,57 @@ class ThreadTurnClaim:
             )
 
     def release(self) -> None:
-        """Release the OS lock and close its owning descriptor, idempotently."""
+        """Release foreground ownership, idempotently.
+
+        The OS descriptor closes after the final already-retained background
+        reference drains. Repeated foreground cleanup calls never consume a
+        retained reference.
+        """
 
         with self._state_lock:
-            fd = self._fd
-            if fd is None:
+            if self._owner_released:
                 return
-            self._fd = None
-        try:
-            _unlock(fd)
-        finally:
-            with suppress(OSError):
-                os.close(fd)
+            self._owner_released = True
+            fd = self._detach_fd_if_unreferenced_locked()
+        _close_locked_fd(fd)
+
+    def _release_retained_reference(self) -> None:
+        with self._state_lock:
+            if self._retained_references <= 0:
+                return
+            self._retained_references -= 1
+            fd = self._detach_fd_if_unreferenced_locked()
+        _close_locked_fd(fd)
+
+    def _detach_fd_if_unreferenced_locked(self) -> int | None:
+        if not self._owner_released or self._retained_references:
+            return None
+        fd = self._fd
+        self._fd = None
+        return fd
 
     def __enter__(self) -> ThreadTurnClaim:
+        return self
+
+    def __exit__(self, _exc_type: Any, _exc: Any, _tb: Any) -> None:
+        self.release()
+
+
+class _ThreadTurnClaimReference:
+    """One idempotent retained reference to an acquired thread claim."""
+
+    def __init__(self, claim: ThreadTurnClaim) -> None:
+        self._claim: ThreadTurnClaim | None = claim
+        self._state_lock = threading.Lock()
+
+    def release(self) -> None:
+        with self._state_lock:
+            claim = self._claim
+            self._claim = None
+        if claim is not None:
+            claim._release_retained_reference()
+
+    def __enter__(self) -> _ThreadTurnClaimReference:
         return self
 
     def __exit__(self, _exc_type: Any, _exc: Any, _tb: Any) -> None:
@@ -211,6 +269,16 @@ def acquire_thread_turn_claim(
         turn_id=None,
     )
     return claim
+
+
+def _close_locked_fd(fd: int | None) -> None:
+    if fd is None:
+        return
+    try:
+        _unlock(fd)
+    finally:
+        with suppress(OSError):
+            os.close(fd)
 
 
 def _try_lock(fd: int) -> None:

@@ -13,8 +13,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from runtime.memory.threads.event_log import EventLog
@@ -53,7 +54,7 @@ from runtime.sensing.gateway._event_bridge_tool_items import (
     _tool_start_public_narrative,
     _verification_item_from_tool_evt,
 )
-from runtime.sensing.gateway.adaptive_delta_buffer import AdaptiveDeltaBuffer
+from runtime.sensing.gateway.adaptive_delta_buffer import AdaptiveFlushPolicy
 from runtime.sensing.gateway.realtime_gateway import EventEmitter
 from runtime.sensing.gateway.realtime_workbench import (
     _grounding_evidence,
@@ -79,6 +80,30 @@ def _safe_list_remove(bucket: list[Any], item: Any) -> None:
         bucket.remove(item)
 
 
+async def _guarded_background_write(
+    emitter: Any,
+    thread_id: str,
+    operation: Callable[[], Awaitable[None]],
+) -> None:
+    """Run one late log projection under the emitter's canonical guard.
+
+    Guard acquisition/probe failures intentionally escape so the owning
+    watcher stops forever. Transport or append failures retain the legacy
+    best-effort behavior and are suppressed only after authority is held.
+    """
+
+    async def _run() -> None:
+        with contextlib.suppress(ConnectionError, OSError, RuntimeError, TypeError):
+            await operation()
+
+    guard = getattr(emitter, "background_write_guard", None)
+    if callable(guard):
+        async with guard(thread_id):
+            await _run()
+        return
+    await _run()
+
+
 # ── Bridge state — open agentMessage / reasoning / tool items ─
 
 
@@ -87,6 +112,21 @@ def _safe_list_remove(bucket: list[Any], item: Any) -> None:
 # Fragments are token-sized, so emitting on every one would hammer the
 # socket; the first fragment always goes out immediately (TTFT).
 _TOOL_CALL_DELTA_EMIT_STRIDE = 64
+
+# SUNSET (was "MIGRATION sunset target: v0.3"): ``turn/plan/updated`` used
+# to embed the full ``workbenchSnapshot`` alongside the dedicated
+# ``workbench/snapshot`` notification, doubling snapshot bandwidth on every
+# plan update. The frontend reducer applies the embedded copy only when the
+# field is present (presence-checked) and has natively consumed
+# ``workbench/snapshot`` since the v2 protocol — so the legacy field now
+# defaults OFF. Set OCTOPUS_LEGACY_PLAN_SNAPSHOT=1 to re-enable it for
+# out-of-tree clients that still read the embedded copy.
+_LEGACY_PLAN_SNAPSHOT = os.environ.get("OCTOPUS_LEGACY_PLAN_SNAPSHOT", "0").lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
 
 
 class _ReactBridgeState:
@@ -124,8 +164,10 @@ class _ReactBridgeState:
         self._agent_display_name = agent_display_name
         self._agent_avatar_url = agent_avatar_url
         self._agent_icon = agent_icon
-        self._enable_adaptive_batching = enable_adaptive_batching
-        self._adaptive_buffer = AdaptiveDeltaBuffer() if enable_adaptive_batching else None
+        # Pure flush-decision policy: this class owns NO content. The single
+        # content buffer below is the only place deltas are stored, so there
+        # is exactly one bookkeeping (no double append / dead get_content).
+        self._flush_policy = AdaptiveFlushPolicy() if enable_adaptive_batching else None
         self.agent_message: AgentMessageItem | None = None
         self.commentary_message: AgentMessageItem | None = None
         self.last_public_commentary_key: str | None = None
@@ -444,10 +486,11 @@ class _ReactBridgeState:
         self._delta_buf.append(delta)
         self._delta_buf_chars += len(delta)
 
-        # 自适应批处理：根据吞吐量动态调整阈值
-        if self._enable_adaptive_batching and self._adaptive_buffer:
-            self._adaptive_buffer.append(delta)
-            should_flush = flush_now or self._adaptive_buffer.should_flush()
+        # 自适应批处理：策略只做"是否刷新"的决策（按吞吐量动态调整
+        # 字符/时间阈值），内容仍只存于上面唯一的 _delta_buf。
+        if self._flush_policy is not None:
+            self._flush_policy.record(len(delta))
+            should_flush = flush_now or self._flush_policy.should_flush()
         else:
             # 回退到固定批处理
             should_flush = flush_now or self._delta_buf_chars >= self._DELTA_FLUSH_MAX_CHARS
@@ -462,8 +505,16 @@ class _ReactBridgeState:
             self._delta_flush_task = asyncio.create_task(self._delayed_delta_flush())
 
     async def _delayed_delta_flush(self) -> None:
-        # 固定延迟刷新（自适应逻辑在 should_flush 中）
-        await asyncio.sleep(self._DELTA_FLUSH_INTERVAL_S)
+        # Deadline flush: without it, an LLM stall mid-stream would leave the
+        # buffered tail invisible until the next chunk arrives. The interval
+        # follows the policy's current throughput tier (16/32/64ms) instead
+        # of a fixed 32ms.
+        interval = (
+            self._flush_policy.flush_interval_s()
+            if self._flush_policy is not None
+            else self._DELTA_FLUSH_INTERVAL_S
+        )
+        await asyncio.sleep(interval)
         await self._flush_pending_delta()
 
     async def _flush_pending_delta(self) -> None:
@@ -478,9 +529,9 @@ class _ReactBridgeState:
             self._delta_buf.clear()
             self._delta_buf_chars = 0
 
-            # 清空自适应缓冲区
-            if self._enable_adaptive_batching and self._adaptive_buffer:
-                self._adaptive_buffer.clear()
+            # 通知策略：本窗口已刷新（采样吞吐量并重置窗口）
+            if self._flush_policy is not None:
+                self._flush_policy.mark_flushed()
 
             kind = self._delta_kind
             turn, log, emitter = self._delta_ctx
@@ -797,18 +848,20 @@ class _ReactBridgeState:
                     last_stdout = stdout
                     last_stderr = stderr
                     if delta:
-                        with contextlib.suppress(
-                            ConnectionError,
-                            OSError,
-                            RuntimeError,
-                            TypeError,
-                        ):
+
+                        async def _append_delta(delta: str = delta) -> None:
                             await self.append_tool_output(
                                 turn,
                                 log,
                                 emitter,
                                 {"tool_call_id": call_id, "delta": delta},
                             )
+
+                        await _guarded_background_write(
+                            emitter,
+                            turn.thread_id,
+                            _append_delta,
+                        )
 
                     status = str(snap.get("status") or "")
                     if status != "running":
@@ -818,12 +871,8 @@ class _ReactBridgeState:
                             end_status = "success"
                         else:
                             end_status = "error"
-                        with contextlib.suppress(
-                            ConnectionError,
-                            OSError,
-                            RuntimeError,
-                            TypeError,
-                        ):
+
+                        async def _complete(end_status: str = end_status) -> None:
                             await self.complete_tool(
                                 turn,
                                 log,
@@ -836,9 +885,24 @@ class _ReactBridgeState:
                                     "duration_ms": evt.get("duration_ms"),
                                 },
                             )
+
+                        await _guarded_background_write(
+                            emitter,
+                            turn.thread_id,
+                            _complete,
+                        )
                         return
                     await asyncio.sleep(0.5)
             except Exception:  # noqa: BLE001
+                # Losing canonical authority is terminal for this watcher. Kill
+                # the underlying process as well so it cannot be rediscovered
+                # and projected into a permanently deleted or newer turn.
+                with contextlib.suppress(Exception):
+                    from runtime.execution.suckers.write_skills import (
+                        _kill_background_exec,
+                    )
+
+                    _kill_background_exec(task_id=task_id)
                 _logger.debug("background command watcher failed", exc_info=True)
 
         _bg_task = asyncio.create_task(_watch_background())
@@ -1178,12 +1242,13 @@ class _ReactBridgeState:
             workspace_focus=focus_payload,
             workbench_snapshot=snapshot_payload,
         )
-        # MIGRATION (sunset target: v0.3): we currently emit the snapshot on
-        # BOTH ``turn/plan/updated`` (legacy clients) and ``workbench/snapshot``
-        # (new clients). Once every shipped frontend is on the new method,
-        # drop ``workbenchSnapshot`` from the ``turn/plan/updated`` payload
-        # so the wire is half the size for plan-only updates. Track removal
-        # in CHANGELOG when the tap is closed.
+        # SUNSET: the embedded ``workbenchSnapshot`` copy ships only for
+        # legacy clients (see _LEGACY_PLAN_SNAPSHOT above). New clients get
+        # the identical frame from the dedicated ``workbench/snapshot``
+        # notification below, halving the wire size for plan-only updates.
+        legacy_snapshot_payload = (
+            {"workbenchSnapshot": snapshot_payload} if _LEGACY_PLAN_SNAPSHOT else {}
+        )
         await emitter.notify(
             ServerMethod.TURN_PLAN_UPDATED,
             {
@@ -1191,7 +1256,7 @@ class _ReactBridgeState:
                 "turnId": turn.id,
                 "phases": phases_payload,
                 **({"workspaceFocus": focus_payload} if focus_payload is not None else {}),
-                "workbenchSnapshot": snapshot_payload,
+                **legacy_snapshot_payload,
                 **({"eventId": logged_update.event_id} if logged_update is not None else {}),
             },
         )

@@ -134,7 +134,7 @@ tier: "standard"
 | `_tool_bridge_session.py` | Session metadata + browser operation guidance helpers. |
 | `a2a_router.py` | A2A (Agent-to-Agent) remote agent registry + relay router. |
 | `account_usage_router.py` | — |
-| `adaptive_delta_buffer.py` | 自适应流式事件批处理器 |
+| `adaptive_delta_buffer.py` | 自适应流式刷新策略（纯决策，不存内容） |
 | `agent_market_sources/financial-services/agent-plugins/model-builder/skills/dcf-model/scripts/validate_dcf.py` | DCF Model Validation Script Validates Excel DCF models for formula errors and common DCF mistakes |
 | `agent_market_sources/financial-services/agent-plugins/pitch-agent/skills/dcf-model/scripts/validate_dcf.py` | DCF Model Validation Script Validates Excel DCF models for formula errors and common DCF mistakes |
 | `agent_market_sources/financial-services/agent-plugins/pitch-agent/skills/ib-check-deck/scripts/extract_numbers.py` | Extract numerical values from presentation content for consistency checking. |
@@ -609,8 +609,8 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| class | `class BufferMetrics` | 批处理缓冲区性能指标 |
-| class | `class AdaptiveDeltaBuffer` | 自适应批处理缓冲器 |
+| class | `class BufferMetrics` | 批处理策略性能指标（快照，getter 不改状态） |
+| class | `class AdaptiveFlushPolicy` | 自适应刷新策略 |
 
 ### `agent_market_sources/financial-services/agent-plugins/model-builder/skills/dcf-model/scripts/validate_dcf.py`
 
@@ -1373,7 +1373,7 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def create_thread_state_router(store, logs_root, session_titles, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, workspace_root, group_store, collaboration_store, team_rooms_router)` |  |
+| func | `def create_thread_state_router(store, logs_root, session_titles, identity_store, require_auth, allow_local_workspace_access, jwt_secret, jwt_issuer, jwt_audience, workspace_root, group_store, collaboration_store, team_rooms_router, project_store)` |  |
 
 ### `thread_workspace.py`
 

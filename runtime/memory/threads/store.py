@@ -13,6 +13,20 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from ._permanent_deletion import (
+    ThreadPermanentDeleteLease,
+    ThreadPermanentlyDeletedError,
+    deletion_record_path,
+    deletion_scope_allowed,
+    read_deletion_record,
+    write_deletion_record,
+)
+from ._state_mutation_lock import (
+    iter_jsonl_records_reverse,
+    latest_persisted_thread,
+    remove_stale_thread_copies,
+    thread_mutation_lock,
+)
 from .feedback import FeedbackStore, FeedbackType, MessageFeedback
 from .session_export import export_thread_to_markdown
 from .session_index import SessionIndex, entry_from_thread
@@ -37,6 +51,121 @@ def _utc_now_iso() -> str:
 
 def _deepcopy(value: Any) -> Any:
     return copy.deepcopy(value)
+
+
+_STATE_FROM_THREAD_KEY = "state_from_thread"
+
+
+def _encoded_state_record(state: dict[str, Any]) -> dict[str, Any]:
+    """Drop values duplicated verbatim by the record's ``thread`` payload."""
+
+    return {
+        key: value
+        for key, value in state.items()
+        if key not in {"values", "metadata"}
+    }
+
+
+def _decoded_state_record(
+    record: dict[str, Any],
+    thread: dict[str, Any],
+) -> dict[str, Any] | None:
+    raw_state = record.get("state")
+    if not isinstance(raw_state, dict):
+        return None
+    if record.get(_STATE_FROM_THREAD_KEY) is not True:
+        return raw_state
+    state = dict(raw_state)
+    # Thread snapshots are replaced rather than mutated in-place. Sharing the
+    # immutable value objects here avoids recreating a second full conversation
+    # in memory; all public getters return defensive deep copies.
+    state["values"] = thread.get("values", {})
+    state["metadata"] = thread.get("metadata", {})
+    return state
+
+
+_PROJECT_BINDING_METADATA_KEYS = frozenset(
+    {"project_id", "project_home", "project_binding_generation"}
+)
+_PROJECT_BINDING_VALUE_KEYS = frozenset({"project_id", "project_home"})
+
+
+def _without_project_binding_fields(
+    payload: dict[str, Any] | None,
+    keys: frozenset[str],
+) -> dict[str, Any]:
+    return {key: _deepcopy(value) for key, value in (payload or {}).items() if key not in keys}
+
+
+def _sidebar_title_source(value: dict[str, Any]) -> str | None:
+    """Extract a compact first-user-message title source without its history."""
+
+    values = value.get("values")
+    messages = values.get("messages") if isinstance(values, dict) else None
+    if not isinstance(messages, list):
+        return None
+    for message in messages:
+        if not isinstance(message, dict) or message.get("type") != "human":
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            return content[:4096]
+        if isinstance(content, list):
+            parts: list[str] = []
+            for part in content:
+                if isinstance(part, str):
+                    parts.append(part)
+                elif (
+                    isinstance(part, dict)
+                    and part.get("type") == "text"
+                    and isinstance(part.get("text"), str)
+                ):
+                    parts.append(part["text"])
+            title = " ".join(part for part in parts if part)
+            return title[:4096] if title else None
+        return None
+    return None
+
+
+def _project_fields(
+    value: dict[str, Any],
+    fields: tuple[str, ...] | list[str],
+) -> dict[str, Any]:
+    """Copy only requested top-level or dotted fields from a thread row."""
+
+    projected: dict[str, Any] = {}
+    for field in fields:
+        if not isinstance(field, str):
+            continue
+        if field == "values.sidebar_title_source":
+            raw_values = value.get("values")
+            existing_title = (
+                raw_values.get("sidebar_title_source") if isinstance(raw_values, dict) else None
+            )
+            title_source = (
+                existing_title if isinstance(existing_title, str) else _sidebar_title_source(value)
+            )
+            if title_source is not None:
+                projected.setdefault("values", {})["sidebar_title_source"] = title_source
+            continue
+        parts = tuple(part for part in field.split(".") if part)
+        if not parts:
+            continue
+        source: Any = value
+        target = projected
+        for index, part in enumerate(parts):
+            if not isinstance(source, dict) or part not in source:
+                break
+            if index == len(parts) - 1:
+                target[part] = _deepcopy(source[part])
+                break
+            source = source[part]
+            existing = target.get(part)
+            if not isinstance(existing, dict):
+                existing = {}
+                target[part] = existing
+            target = existing
+    return projected
 
 
 def _default_values(values: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -90,6 +219,7 @@ class ThreadStateStore:
     ) -> None:
         self._threads: dict[str, dict[str, Any]] = {}
         self._history: dict[str, list[dict[str, Any]]] = {}
+        self._memory_thread_deletions: dict[str, ThreadPermanentDeleteLease] = {}
         self._lock = threading.RLock()
 
         # Mode selection
@@ -124,14 +254,14 @@ class ThreadStateStore:
             if index_path is not None:
                 self._index = SessionIndex(index_path)
 
-        # Full-text search index (DSH P2: session-query)
+        # Octopus Native full-text session search index
         self._search: SessionSearchIndex | None = None
         if search_enabled:
             search_path = self._resolve_search_path()
             if search_path is not None:
                 self._search = SessionSearchIndex(search_path)
 
-        # Feedback store (DSH P2: feedback system)
+        # Octopus Native message-feedback store
         self._feedback: FeedbackStore | None = None
         if feedback_enabled:
             feedback_base = self._resolve_feedback_base()
@@ -143,6 +273,7 @@ class ThreadStateStore:
             self._load_from(self._path)
         if self._per_agent_base is not None:
             self._load_from_per_agent_tree()
+        self._prune_permanently_deleted_threads_locked()
         self._repair_conflicting_agent_copies_locked()
 
         # Backfill the index from in-memory state on first boot. The
@@ -161,7 +292,7 @@ class ThreadStateStore:
         return None
 
     def _resolve_search_path(self) -> Path | None:
-        """Resolve path for FTS5 search database (DSH P2)."""
+        """Resolve the path for the Octopus FTS5 search database."""
         if self._per_agent_base is not None:
             return self._per_agent_base / "data" / "sessions" / "search.db"
         if self._path is not None:
@@ -169,7 +300,7 @@ class ThreadStateStore:
         return None
 
     def _resolve_feedback_base(self) -> Path | None:
-        """Resolve base path for feedback storage (DSH P2)."""
+        """Resolve the base path for Octopus feedback storage."""
         if self._per_agent_base is not None:
             return self._per_agent_base / "data" / "sessions"
         if self._path is not None:
@@ -205,6 +336,297 @@ class ThreadStateStore:
             if entry is not None:
                 self._index.upsert(entry)
 
+    def _thread_delete_record_locked(
+        self,
+        thread_id: str,
+    ) -> ThreadPermanentDeleteLease | None:
+        path = deletion_record_path(
+            journal_path=self._path,
+            per_agent_base=self._per_agent_base,
+            thread_id=thread_id,
+        )
+        if path is None:
+            return self._memory_thread_deletions.get(thread_id)
+        record = read_deletion_record(path)
+        if record is not None and record.thread_id != thread_id:
+            raise RuntimeError("thread deletion record id mismatch")
+        return record
+
+    def _write_thread_delete_record_locked(self, lease: ThreadPermanentDeleteLease) -> None:
+        path = deletion_record_path(
+            journal_path=self._path,
+            per_agent_base=self._per_agent_base,
+            thread_id=lease.thread_id,
+        )
+        if path is None:
+            self._memory_thread_deletions[lease.thread_id] = lease
+            return
+        write_deletion_record(path, lease)
+
+    def _assert_thread_writable_locked(self, thread_id: str) -> None:
+        if self._thread_delete_record_locked(thread_id) is not None:
+            raise ThreadPermanentlyDeletedError(thread_id)
+
+    def _latest_persisted_locked(self, thread_id: str):
+        """Read durable state using the current canonical path when known."""
+
+        source_hint: Path | None = self._path
+        if source_hint is None and self._per_agent_base is not None:
+            current = self._threads.get(thread_id)
+            if current is not None:
+                source_hint = self._per_thread_path(current)
+        return latest_persisted_thread(
+            journal_path=self._path,
+            per_agent_base=self._per_agent_base,
+            thread_id=thread_id,
+            source_hint=source_hint,
+        )
+
+    def _prune_permanently_deleted_threads_locked(self) -> None:
+        """Drop stale snapshots whose durable delete fence already exists."""
+
+        for thread_id in tuple(self._threads):
+            if self._thread_delete_record_locked(thread_id) is None:
+                continue
+            self._threads.pop(thread_id, None)
+            self._history.pop(thread_id, None)
+
+    def is_permanently_deleted(self, thread_id: str) -> bool:
+        """Return whether normal readers and writers are permanently fenced."""
+
+        with (
+            self._lock,
+            thread_mutation_lock(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+            ),
+        ):
+            return self._thread_delete_record_locked(thread_id) is not None
+
+    def assert_not_permanently_deleted(self, thread_id: str) -> None:
+        """Fail closed when a permanent delete is in progress or finalized."""
+
+        with (
+            self._lock,
+            thread_mutation_lock(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+            ),
+        ):
+            self._assert_thread_writable_locked(thread_id)
+
+    def thread_delete_lease(
+        self,
+        thread_id: str,
+        *,
+        tenant_id: str = "",
+        owner_id: str = "",
+    ) -> ThreadPermanentDeleteLease | None:
+        """Read an authorized durable permanent-deletion claim or tombstone."""
+
+        tenant_id = str(tenant_id or "").strip()
+        owner_id = str(owner_id or "").strip()
+        with (
+            self._lock,
+            thread_mutation_lock(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+            ),
+        ):
+            lease = self._thread_delete_record_locked(thread_id)
+            if lease is not None and not deletion_scope_allowed(
+                lease,
+                tenant_id=tenant_id,
+                owner_id=owner_id,
+            ):
+                raise PermissionError("thread deletion belongs to another principal")
+            return lease
+
+    def thread_for_permanent_delete(
+        self,
+        thread_id: str,
+        token: str,
+    ) -> dict[str, Any] | None:
+        """Read the deletion snapshot through the exact durable lease token.
+
+        This is the narrow retry path for filesystem cleanup after a process
+        restart. Normal readers remain fenced as soon as deletion begins.
+        """
+
+        token = str(token or "").strip()
+        if not token:
+            raise ValueError("thread delete token is required")
+        with (
+            self._lock,
+            thread_mutation_lock(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+            ),
+        ):
+            lease = self._thread_delete_record_locked(thread_id)
+            if lease is None or lease.token != token:
+                raise ThreadPermanentlyDeletedError(thread_id)
+            if lease.finalized:
+                return None
+            persisted = self._latest_persisted_locked(thread_id)
+            current = persisted.thread if persisted.found else self._threads.get(thread_id)
+            return _deepcopy(current) if current is not None else None
+
+    def begin_permanent_delete(
+        self,
+        thread_id: str,
+        *,
+        tenant_id: str = "",
+        owner_id: str = "",
+        expected: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+        status: str = "deleting",
+    ) -> ThreadPermanentDeleteLease:
+        """Irreversibly fence every normal state writer for ``thread_id``."""
+
+        tenant_id = str(tenant_id or "").strip()
+        owner_id = str(owner_id or "").strip()
+        with (
+            self._lock,
+            thread_mutation_lock(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+            ),
+        ):
+            existing = self._thread_delete_record_locked(thread_id)
+            if existing is not None:
+                if not deletion_scope_allowed(
+                    existing,
+                    tenant_id=tenant_id,
+                    owner_id=owner_id,
+                ):
+                    raise PermissionError("thread deletion belongs to another principal")
+                return existing
+            persisted = self._latest_persisted_locked(thread_id)
+            current = persisted.thread if persisted.found else self._threads.get(thread_id)
+            if expected is not None and current != expected:
+                raise RuntimeError("thread state changed before permanent deletion")
+            if current is not None:
+                thread = _deepcopy(current)
+                merged_metadata = _deepcopy(thread.get("metadata") or {})
+                if metadata:
+                    merged_metadata.update(_deepcopy(metadata))
+                thread["metadata"] = merged_metadata
+                thread["status"] = status
+                thread["updated_at"] = _utc_now_iso()
+                state = self._make_state(thread)
+                target = self._append_upsert(
+                    thread,
+                    state,
+                    revision=persisted.revision + 1,
+                )
+                remove_stale_thread_copies(
+                    journal_path=self._path,
+                    per_agent_base=self._per_agent_base,
+                    thread_id=thread_id,
+                    keep_path=target,
+                )
+                self._threads[thread_id] = thread
+                self._remember_state_locked(thread_id, state)
+            lease = ThreadPermanentDeleteLease(
+                thread_id=thread_id,
+                token=f"TD-{uuid4().hex}",
+                resumed=False,
+                finalized=False,
+                tenant_id=tenant_id,
+                owner_id=owner_id,
+            )
+            self._write_thread_delete_record_locked(lease)
+            return lease
+
+    def finalize_permanent_delete(self, thread_id: str, token: str) -> bool:
+        """Delete the snapshot and retain a permanent writer tombstone."""
+
+        token = str(token or "").strip()
+        if not token:
+            raise ValueError("thread delete token is required")
+
+        with (
+            self._lock,
+            thread_mutation_lock(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+            ),
+        ):
+            lease = self._thread_delete_record_locked(thread_id)
+            if lease is None or lease.token != token:
+                raise ThreadPermanentlyDeletedError(thread_id)
+            return self._finalize_permanent_delete_locked(lease)
+
+    def permanently_delete(self, thread_id: str, token: str) -> bool:
+        """Permanently fence and delete a thread using an idempotency token.
+
+        The fence is durable before any snapshot/index removal starts. A retry
+        with the exact token completes or confirms the delete; a different
+        token can never take over an existing deletion.
+        """
+
+        token = str(token or "").strip()
+        if not token:
+            raise ValueError("thread delete token is required")
+        with (
+            self._lock,
+            thread_mutation_lock(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+            ),
+        ):
+            lease = self._thread_delete_record_locked(thread_id)
+            if lease is None:
+                lease = ThreadPermanentDeleteLease(
+                    thread_id=thread_id,
+                    token=token,
+                    resumed=False,
+                    finalized=False,
+                )
+                self._write_thread_delete_record_locked(lease)
+            elif lease.token != token:
+                raise ThreadPermanentlyDeletedError(thread_id)
+            return self._finalize_permanent_delete_locked(lease)
+
+    def _finalize_permanent_delete_locked(self, lease: ThreadPermanentDeleteLease) -> bool:
+        if lease.finalized:
+            return True
+        thread_id = lease.thread_id
+        persisted = self._latest_persisted_locked(thread_id)
+        current = persisted.thread if persisted.found else self._threads.get(thread_id)
+        target = self._append_delete(
+            thread_id,
+            _deepcopy(current) if current is not None else None,
+            revision=persisted.revision + 1,
+        )
+        remove_stale_thread_copies(
+            journal_path=self._path,
+            per_agent_base=self._per_agent_base,
+            thread_id=thread_id,
+            keep_path=target,
+        )
+        self._threads.pop(thread_id, None)
+        self._history.pop(thread_id, None)
+        self._write_thread_delete_record_locked(
+            ThreadPermanentDeleteLease(
+                thread_id=thread_id,
+                token=lease.token,
+                resumed=True,
+                finalized=True,
+                tenant_id=lease.tenant_id,
+                owner_id=lease.owner_id,
+            )
+        )
+        return True
+
     def create(
         self,
         *,
@@ -213,13 +635,18 @@ class ThreadStateStore:
         status: str = "idle",
     ) -> dict[str, Any]:
         now = _utc_now_iso()
-        thread = {
+        thread: dict[str, Any] = {
             "thread_id": uuid4().hex,
             "status": status,
             "created_at": now,
             "updated_at": now,
-            "metadata": _deepcopy(metadata or {}),
-            "values": _default_values(values),
+            "metadata": _without_project_binding_fields(
+                metadata,
+                _PROJECT_BINDING_METADATA_KEYS,
+            ),
+            "values": _default_values(
+                _without_project_binding_fields(values, _PROJECT_BINDING_VALUE_KEYS)
+            ),
         }
         state = self._make_state(thread)
         with self._lock:
@@ -236,24 +663,54 @@ class ThreadStateStore:
         values: dict[str, Any] | None = None,
         status: str = "idle",
     ) -> dict[str, Any]:
-        with self._lock:
-            existing = self._threads.get(thread_id)
+        with (
+            self._lock,
+            thread_mutation_lock(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+            ),
+        ):
+            self._assert_thread_writable_locked(thread_id)
+            persisted = self._latest_persisted_locked(thread_id)
+            if persisted.found and persisted.thread is not None:
+                existing = _deepcopy(persisted.thread)
+                self._threads[thread_id] = existing
+                remove_stale_thread_copies(
+                    journal_path=self._path,
+                    per_agent_base=self._per_agent_base,
+                    thread_id=thread_id,
+                    keep_path=persisted.source_path,
+                )
+                return _deepcopy(existing)
+            existing = self._threads.get(thread_id) if not persisted.found else None
             if existing is not None:
                 return _deepcopy(existing)
 
             now = _utc_now_iso()
-            thread = {
+            thread: dict[str, Any] = {
                 "thread_id": thread_id,
                 "status": status,
                 "created_at": now,
                 "updated_at": now,
-                "metadata": _deepcopy(metadata or {}),
-                "values": _default_values(values),
+                "metadata": _without_project_binding_fields(
+                    metadata,
+                    _PROJECT_BINDING_METADATA_KEYS,
+                ),
+                "values": _default_values(
+                    _without_project_binding_fields(values, _PROJECT_BINDING_VALUE_KEYS)
+                ),
             }
             state = self._make_state(thread)
             self._threads[thread_id] = thread
             self._history[thread_id] = [state]
-            self._append_upsert(thread, state)
+            target = self._append_upsert(thread, state, revision=persisted.revision + 1)
+            remove_stale_thread_copies(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+                keep_path=target,
+            )
             return _deepcopy(thread)
 
     def fork_thread(
@@ -275,18 +732,31 @@ class ThreadStateStore:
         earlier turn. When no completed turn exists the seed is empty and
         the child behaves like a fresh thread.
 
-        The child inherits the source metadata (agent / team / owner /
-        tenant / workspace) and the source title, and records its lineage
+        The child inherits ordinary source metadata (agent / team / owner /
+        tenant / workspace), but not Project OS binding fields, and records its lineage
         as ``metadata.parent_thread_id`` + ``metadata.parent_message_index``
         (the last included source message index, ``-1`` for an empty seed).
         Only conversation history is transferred — artifacts and live state
         are not copied (dsh: "the seed transfers conversation history only").
         """
-        with self._lock:
-            source = self._threads.get(thread_id)
+        with (
+            self._lock,
+            thread_mutation_lock(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+            ),
+        ):
+            self._assert_thread_writable_locked(thread_id)
+            persisted = self._latest_persisted_locked(thread_id)
+            source = persisted.thread if persisted.found else self._threads.get(thread_id)
             if source is None:
                 raise KeyError(thread_id)
-            source_values = source.get("values") if isinstance(source.get("values"), dict) else {}
+            self._threads[thread_id] = _deepcopy(source)
+            raw_source_values = source.get("values")
+            source_values: dict[str, Any] = (
+                raw_source_values if isinstance(raw_source_values, dict) else {}
+            )
             messages = source_values.get("messages") or []
             if not isinstance(messages, list):
                 messages = []
@@ -300,12 +770,15 @@ class ThreadStateStore:
             seed = messages[: cut + 1] if cut >= 0 else []
 
             now = _utc_now_iso()
-            child = {
+            child: dict[str, Any] = {
                 "thread_id": uuid4().hex,
                 "status": "idle",
                 "created_at": now,
                 "updated_at": now,
-                "metadata": _deepcopy(source.get("metadata") or {}),
+                "metadata": _without_project_binding_fields(
+                    source.get("metadata") if isinstance(source.get("metadata"), dict) else None,
+                    _PROJECT_BINDING_METADATA_KEYS,
+                ),
                 "values": _default_values({}),
             }
             lineage = child["metadata"]
@@ -370,21 +843,49 @@ class ThreadStateStore:
         return last_human - 1 if len(humans) >= 2 else -1
 
     def get(self, thread_id: str) -> dict[str, Any] | None:
-        with self._lock:
+        with (
+            self._lock,
+            thread_mutation_lock(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+            ),
+        ):
+            self._assert_thread_writable_locked(thread_id)
             thread = self._threads.get(thread_id)
             return _deepcopy(thread) if thread is not None else None
 
     def delete(self, thread_id: str) -> bool:
-        with self._lock:
-            if thread_id not in self._threads:
+        with (
+            self._lock,
+            thread_mutation_lock(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+            ),
+        ):
+            self._assert_thread_writable_locked(thread_id)
+            persisted = self._latest_persisted_locked(thread_id)
+            current = persisted.thread if persisted.found else self._threads.get(thread_id)
+            if current is None:
                 return False
-            thread = _deepcopy(self._threads[thread_id])
+            thread = _deepcopy(current)
             # Persist the tombstone before making the deletion visible in
             # memory.  If durable append fails, callers can retry against the
             # unchanged thread instead of receiving success for a state that
             # would resurrect on restart.
-            self._append_delete(thread_id, thread)
-            del self._threads[thread_id]
+            target = self._append_delete(
+                thread_id,
+                thread,
+                revision=persisted.revision + 1,
+            )
+            remove_stale_thread_copies(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+                keep_path=target,
+            )
+            self._threads.pop(thread_id, None)
             self._history.pop(thread_id, None)
             return True
 
@@ -395,13 +896,32 @@ class ThreadStateStore:
         failure cannot erase a thread that another request updated or claimed
         between the compensating read and delete.
         """
-        with self._lock:
-            current = self._threads.get(thread_id)
+        with (
+            self._lock,
+            thread_mutation_lock(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+            ),
+        ):
+            self._assert_thread_writable_locked(thread_id)
+            persisted = self._latest_persisted_locked(thread_id)
+            current = persisted.thread if persisted.found else self._threads.get(thread_id)
             if current is None or current != expected:
                 return False
             thread = _deepcopy(current)
-            self._append_delete(thread_id, thread)
-            del self._threads[thread_id]
+            target = self._append_delete(
+                thread_id,
+                thread,
+                revision=persisted.revision + 1,
+            )
+            remove_stale_thread_copies(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+                keep_path=target,
+            )
+            self._threads.pop(thread_id, None)
             self._history.pop(thread_id, None)
             return True
 
@@ -419,9 +939,14 @@ class ThreadStateStore:
         metadata: dict[str, Any] | None = None,
         sort_by: str = "updated_at",
         sort_order: str = "desc",
+        select: tuple[str, ...] | list[str] | None = None,
     ) -> list[dict[str, Any]]:
         with self._lock:
-            threads = list(self._threads.values())
+            threads = [
+                thread
+                for thread_id, thread in self._threads.items()
+                if self._thread_delete_record_locked(thread_id) is None
+            ]
         if metadata:
             threads = [
                 thread
@@ -430,20 +955,91 @@ class ThreadStateStore:
             ]
         reverse = sort_order.lower() != "asc"
         threads.sort(key=lambda item: item.get(sort_by) or "", reverse=reverse)
-        return [_deepcopy(item) for item in threads[offset : offset + limit]]
+        selected = threads[offset : offset + limit]
+        if select:
+            return [_project_fields(item, select) for item in selected]
+        return [_deepcopy(item) for item in selected]
 
     def get_state(self, thread_id: str) -> dict[str, Any] | None:
-        with self._lock:
+        with (
+            self._lock,
+            thread_mutation_lock(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+            ),
+        ):
+            self._assert_thread_writable_locked(thread_id)
             history = self._history.get(thread_id)
             if not history:
                 return None
             return _deepcopy(history[-1])
 
+    def _remember_state_locked(self, thread_id: str, state: dict[str, Any]) -> None:
+        """Retain only the latest state in RAM when a durable journal exists.
+
+        Every checkpoint contains the complete message list. Keeping all of
+        those copies made process memory grow with ``turns × conversation
+        size`` even though history is already durable on disk. Pure in-memory
+        stores still retain their full history for test and embedding use.
+        """
+
+        if self._path is not None or self._per_agent_base is not None:
+            self._history[thread_id] = [state]
+            return
+        self._history.setdefault(thread_id, []).append(state)
+
+    def _history_from_journal_locked(
+        self,
+        thread_id: str,
+        *,
+        limit: int,
+    ) -> list[dict[str, Any]] | None:
+        """Read newest history states lazily, stopping at the delete boundary."""
+
+        if self._path is not None:
+            target = self._path
+        elif self._per_agent_base is not None:
+            thread = self._threads.get(thread_id)
+            target = self._per_thread_path(thread) if thread is not None else None
+        else:
+            return None
+        if target is None or not target.exists():
+            return None
+
+        states: list[dict[str, Any]] = []
+        for record in iter_jsonl_records_reverse(target):
+            if record.get("thread_id") != thread_id:
+                continue
+            if record.get("op") == "delete":
+                break
+            thread = record.get("thread")
+            if not isinstance(thread, dict):
+                continue
+            state = _decoded_state_record(record, thread)
+            if state is None:
+                continue
+            states.append(state)
+            if limit > 0 and len(states) >= limit:
+                break
+        return states
+
     def get_history(self, thread_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
-        with self._lock:
+        with (
+            self._lock,
+            thread_mutation_lock(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+            ),
+        ):
+            self._assert_thread_writable_locked(thread_id)
+            persisted = self._history_from_journal_locked(thread_id, limit=limit)
+            if persisted is not None:
+                return [_deepcopy(item) for item in persisted]
             history = self._history.get(thread_id, [])
             sliced = history[-limit:] if limit > 0 else history[:]
-        return [_deepcopy(item) for item in reversed(sliced)]
+            return [_deepcopy(item) for item in reversed(sliced)]
 
     def update_state(
         self,
@@ -453,17 +1049,35 @@ class ThreadStateStore:
         metadata: dict[str, Any] | None = None,
         status: str | None = None,
     ) -> dict[str, Any]:
-        with self._lock:
-            if thread_id not in self._threads:
+        with (
+            self._lock,
+            thread_mutation_lock(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+            ),
+        ):
+            self._assert_thread_writable_locked(thread_id)
+            persisted = self._latest_persisted_locked(thread_id)
+            current = persisted.thread if persisted.found else self._threads.get(thread_id)
+            if current is None:
                 raise KeyError(thread_id)
-            thread = _deepcopy(self._threads[thread_id])
+            thread = _deepcopy(current)
             merged_values = _default_values(thread.get("values"))
             if values:
-                for key, value in values.items():
+                for key, value in _without_project_binding_fields(
+                    values,
+                    _PROJECT_BINDING_VALUE_KEYS,
+                ).items():
                     merged_values[key] = _deepcopy(value)
             merged_metadata = _deepcopy(thread.get("metadata", {}))
             if metadata:
-                merged_metadata.update(_deepcopy(metadata))
+                merged_metadata.update(
+                    _without_project_binding_fields(
+                        metadata,
+                        _PROJECT_BINDING_METADATA_KEYS,
+                    )
+                )
             # Persona is a thread-creation property, not mutable turn state.
             # Keeping it stable also keeps the append-only session in one
             # ``agents/<owner>/sessions`` shard. Role switching must create a
@@ -481,8 +1095,14 @@ class ThreadStateStore:
                 thread["status"] = status
             state = self._make_state(thread)
             self._threads[thread_id] = thread
-            self._history.setdefault(thread_id, []).append(state)
-            self._append_upsert(thread, state)
+            self._remember_state_locked(thread_id, state)
+            target = self._append_upsert(thread, state, revision=persisted.revision + 1)
+            remove_stale_thread_copies(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+                keep_path=target,
+            )
             return _deepcopy(state)
 
     def update_state_if_unchanged(
@@ -501,18 +1121,35 @@ class ThreadStateStore:
         scope or state change therefore aborts deletion instead of applying a
         stale filesystem decision.
         """
-        with self._lock:
-            current = self._threads.get(thread_id)
+        with (
+            self._lock,
+            thread_mutation_lock(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+            ),
+        ):
+            self._assert_thread_writable_locked(thread_id)
+            persisted = self._latest_persisted_locked(thread_id)
+            current = persisted.thread if persisted.found else self._threads.get(thread_id)
             if current is None or current != expected:
                 return None
             thread = _deepcopy(current)
             merged_values = _default_values(thread.get("values"))
             if values:
-                for key, value in values.items():
+                for key, value in _without_project_binding_fields(
+                    values,
+                    _PROJECT_BINDING_VALUE_KEYS,
+                ).items():
                     merged_values[key] = _deepcopy(value)
             merged_metadata = _deepcopy(thread.get("metadata", {}))
             if metadata:
-                merged_metadata.update(_deepcopy(metadata))
+                merged_metadata.update(
+                    _without_project_binding_fields(
+                        metadata,
+                        _PROJECT_BINDING_METADATA_KEYS,
+                    )
+                )
             owner_agent_id = self._agent_id_for(thread)
             if owner_agent_id:
                 merged_metadata["agent"] = owner_agent_id
@@ -526,20 +1163,113 @@ class ThreadStateStore:
                 thread["status"] = status
             state = self._make_state(thread)
             self._threads[thread_id] = thread
-            self._history.setdefault(thread_id, []).append(state)
-            self._append_upsert(thread, state)
+            self._remember_state_locked(thread_id, state)
+            target = self._append_upsert(thread, state, revision=persisted.revision + 1)
+            remove_stale_thread_copies(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+                keep_path=target,
+            )
+            return _deepcopy(thread)
+
+    def set_project_binding_metadata(
+        self,
+        thread_id: str,
+        project_id: str | None,
+        *,
+        expected_project_id: str | None = None,
+        generation: int | None = None,
+    ) -> dict[str, Any]:
+        """Project the optional Project OS binding into thread metadata.
+
+        This dedicated transition can *remove* keys, unlike ``update_state``'s
+        merge semantics.  Conversation values and history are otherwise left
+        untouched.  The compare guard prevents a stale detach from clearing a
+        newer project binding.
+        """
+
+        desired = str(project_id or "").strip()
+        expected = str(expected_project_id or "").strip()
+        with (
+            self._lock,
+            thread_mutation_lock(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+            ),
+        ):
+            self._assert_thread_writable_locked(thread_id)
+            persisted = self._latest_persisted_locked(thread_id)
+            current = persisted.thread if persisted.found else self._threads.get(thread_id)
+            if current is None:
+                raise KeyError(thread_id)
+            thread = _deepcopy(current)
+            metadata = _deepcopy(thread.get("metadata") or {})
+            values = _default_values(thread.get("values"))
+            metadata_id = str(metadata.get("project_id") or "").strip()
+            values_id = str(values.get("project_id") or "").strip()
+            if metadata_id and values_id and metadata_id != values_id:
+                raise RuntimeError("thread project metadata is inconsistent")
+            current_id = metadata_id or values_id
+            raw_generation = metadata.get("project_binding_generation")
+            has_generation = isinstance(raw_generation, int)
+            current_generation = max(0, raw_generation) if isinstance(raw_generation, int) else 0
+            if generation is not None and (not isinstance(generation, int) or generation < 0):
+                raise ValueError("project binding generation must be non-negative")
+            incoming_generation = current_generation if generation is None else generation
+            if incoming_generation < current_generation:
+                raise RuntimeError("stale thread project binding generation")
+            if incoming_generation == current_generation and has_generation:
+                if desired != current_id:
+                    raise RuntimeError("thread project binding generation conflict")
+                return _deepcopy(thread)
+            if generation is None:
+                if expected and current_id and current_id != expected:
+                    raise RuntimeError("thread project metadata changed")
+                if desired and current_id and current_id != desired:
+                    raise RuntimeError("thread is already projected to another project")
+
+            if desired:
+                metadata["project_id"] = desired
+                metadata["project_home"] = True
+                values["project_id"] = desired
+                values["project_home"] = True
+            else:
+                metadata.pop("project_id", None)
+                metadata.pop("project_home", None)
+                values.pop("project_id", None)
+                values.pop("project_home", None)
+            if generation is not None:
+                metadata["project_binding_generation"] = incoming_generation
+
+            thread["metadata"] = metadata
+            thread["values"] = values
+            thread["updated_at"] = _utc_now_iso()
+            state = self._make_state(thread)
+            self._threads[thread_id] = thread
+            self._remember_state_locked(thread_id, state)
+            target = self._append_upsert(thread, state, revision=persisted.revision + 1)
+            remove_stale_thread_copies(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+                keep_path=target,
+            )
             return _deepcopy(thread)
 
     def __len__(self) -> int:
         with self._lock:
-            return len(self._threads)
+            return sum(
+                self._thread_delete_record_locked(thread_id) is None for thread_id in self._threads
+            )
 
     def _make_state(self, thread: dict[str, Any]) -> dict[str, Any]:
         checkpoint_id = uuid4().hex
         return {
-            "values": _deepcopy(thread["values"]),
+            "values": thread["values"],
             "next": [],
-            "metadata": _deepcopy(thread["metadata"]),
+            "metadata": thread["metadata"],
             "checkpoint": {
                 "id": checkpoint_id,
                 "checkpoint_id": checkpoint_id,
@@ -653,13 +1383,23 @@ class ThreadStateStore:
         # file-path stability).
         return self._misc_path_for(thread_id)
 
-    def _append_upsert(self, thread: dict[str, Any], state: dict[str, Any]) -> None:
+    def _append_upsert(
+        self,
+        thread: dict[str, Any],
+        state: dict[str, Any],
+        *,
+        revision: int | None = None,
+    ) -> Path | None:
         record = {
             "op": "upsert",
             "thread_id": thread["thread_id"],
             "thread": thread,
-            "state": state,
+            "state": _encoded_state_record(state),
+            _STATE_FROM_THREAD_KEY: True,
         }
+        if revision is not None:
+            record["revision"] = revision
+            record["operation_at"] = _utc_now_iso()
         self._cleanup_stale_paths_if_promoted(thread)
         target = self._append_record(thread, record)
         if self._index is not None and target is not None:
@@ -670,9 +1410,10 @@ class ThreadStateStore:
             if entry is not None:
                 self._index.upsert(entry)
 
-        # Update search index (DSH P2: session-query)
+        # Update the Octopus Native session-search index.
         if self._search is not None:
             self._update_search_index(thread)
+        return target
 
     def _cleanup_stale_paths_if_promoted(self, thread: dict[str, Any]) -> None:
         """If a thread just gained an agent tag and is about to be
@@ -703,12 +1444,24 @@ class ThreadStateStore:
             with contextlib.suppress(OSError):
                 candidate.unlink()
 
-    def _append_delete(self, thread_id: str, thread: dict[str, Any] | None = None) -> None:
+    def _append_delete(
+        self,
+        thread_id: str,
+        thread: dict[str, Any] | None = None,
+        *,
+        revision: int | None = None,
+    ) -> Path | None:
         stub = thread or {"thread_id": thread_id, "metadata": {}}
-        record = {"op": "delete", "thread_id": thread_id}
-        self._append_record(stub, record)
+        record: dict[str, Any] = {"op": "delete", "thread_id": thread_id}
+        if revision is not None:
+            record["revision"] = revision
+            record["operation_at"] = _utc_now_iso()
+        target = self._append_record(stub, record)
         if self._index is not None:
             self._index.delete(thread_id)
+        if self._search is not None:
+            self._search.delete_thread(thread_id)
+        return target
 
     def _append_record(self, thread: dict[str, Any], record: dict[str, Any]) -> Path | None:
         target: Path | None
@@ -767,7 +1520,11 @@ class ThreadStateStore:
                         # the append-position seek below then restores
                         # the correct write cursor.
                         handle.seek(0, 0)
-                        _msvcrt.locking(fd, _msvcrt.LK_LOCK, 1)
+                        _msvcrt.locking(  # type: ignore[attr-defined]
+                            fd,
+                            _msvcrt.LK_LOCK,  # type: ignore[attr-defined]
+                            1,
+                        )
                         locked = True
                     else:
                         import fcntl as _fcntl
@@ -813,7 +1570,11 @@ class ThreadStateStore:
                                 OSError
                             ):  # best-effort · unlock below still targets the intended byte
                                 pass
-                            _msvcrt.locking(fd, _msvcrt.LK_UNLCK, 1)
+                            _msvcrt.locking(  # type: ignore[attr-defined]
+                                fd,
+                                _msvcrt.LK_UNLCK,  # type: ignore[attr-defined]
+                                1,
+                            )
                         else:
                             import fcntl as _fcntl
 
@@ -858,48 +1619,84 @@ class ThreadStateStore:
         get retroactively attributed. This is the "migration" path
         for old history that was invisible under the agent filter.
         """
+
+        # Scoped storage uses exactly one journal per thread. Its newest valid
+        # operation fully determines the current state, while older checkpoints
+        # remain available through ``get_history()``. Reading from the tail
+        # avoids parsing every full snapshot during service startup.
+        if self._per_agent_base is not None:
+            for record in iter_jsonl_records_reverse(path):
+                if record.get("thread_id") != path.stem:
+                    continue
+                if self._apply_loaded_record(
+                    record,
+                    implied_agent=implied_agent,
+                    implied_team_id=implied_team_id,
+                ):
+                    return
+            return
+
+        # The legacy journal can interleave many thread ids, so it still needs
+        # a forward fold. Stream it line by line to keep peak memory bounded.
         try:
-            lines = path.read_text(encoding="utf-8").splitlines()
+            handle = path.open("r", encoding="utf-8")
         except OSError:
             return
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                record = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            # Skip session_meta headers — they have no thread dict.
-            if record.get("type") == "session_meta":
-                continue
-            thread_id = record.get("thread_id")
-            if not isinstance(thread_id, str) or not thread_id:
-                continue
-            if record.get("op") == "delete":
-                self._threads.pop(thread_id, None)
-                self._history.pop(thread_id, None)
-                continue
-            thread = record.get("thread")
-            state = record.get("state")
-            if not isinstance(thread, dict) or not isinstance(state, dict):
-                continue
-            # Retro-tag legacy threads that lived under a per-agent
-            # folder without explicit metadata.agent. The folder name
-            # IS the agent id — trust it. Don't overwrite an existing
-            # tag (the thread may have been moved; explicit wins).
-            if implied_agent and isinstance(thread.get("metadata"), dict):
-                meta = thread["metadata"]
-                if not meta.get("agent"):
-                    meta["agent"] = implied_agent
-            if implied_team_id and isinstance(thread.get("metadata"), dict):
-                meta = thread["metadata"]
-                if not meta.get("team_id"):
-                    meta["team_id"] = implied_team_id
-                if not meta.get("mode"):
-                    meta["mode"] = "team"
-            self._threads[thread_id] = thread
-            self._history.setdefault(thread_id, []).append(state)
+        with handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(record, dict):
+                    self._apply_loaded_record(
+                        record,
+                        implied_agent=implied_agent,
+                        implied_team_id=implied_team_id,
+                    )
+
+    def _apply_loaded_record(
+        self,
+        record: dict[str, Any],
+        *,
+        implied_agent: str | None,
+        implied_team_id: str | None,
+    ) -> bool:
+        """Fold one valid state operation and report whether it was applied."""
+
+        if record.get("type") == "session_meta":
+            return False
+        thread_id = record.get("thread_id")
+        if not isinstance(thread_id, str) or not thread_id:
+            return False
+        if record.get("op") == "delete":
+            self._threads.pop(thread_id, None)
+            self._history.pop(thread_id, None)
+            return True
+        thread = record.get("thread")
+        if not isinstance(thread, dict):
+            return False
+        state = _decoded_state_record(record, thread)
+        if state is None:
+            return False
+        # Retro-tag legacy threads that lived under a per-agent folder without
+        # explicit metadata.agent. The folder name is the authoritative owner.
+        if implied_agent and isinstance(thread.get("metadata"), dict):
+            metadata = thread["metadata"]
+            if not metadata.get("agent"):
+                metadata["agent"] = implied_agent
+        if implied_team_id and isinstance(thread.get("metadata"), dict):
+            metadata = thread["metadata"]
+            if not metadata.get("team_id"):
+                metadata["team_id"] = implied_team_id
+            if not metadata.get("mode"):
+                metadata["mode"] = "team"
+        self._threads[thread_id] = thread
+        self._remember_state_locked(thread_id, state)
+        return True
 
     def _load_from_per_agent_tree(self) -> None:
         """Scan team, agent, and misc session trees and load every thread."""
@@ -960,80 +1757,108 @@ class ThreadStateStore:
                     continue
                 candidates.setdefault(path.stem, []).append((agent_dir.name, path, thread))
 
-        for thread_id, copies in candidates.items():
-            if len(copies) < 2:
+        for thread_id, discovered_copies in candidates.items():
+            if len(discovered_copies) < 2:
                 continue
-            owner_agent, owner_path, owner_thread = min(
-                copies,
-                key=lambda item: (
-                    str(item[2].get("created_at") or "9999"),
-                    str(item[2].get("updated_at") or "9999"),
-                ),
-            )
-            latest_thread = max(copies, key=lambda item: str(item[2].get("updated_at") or ""))[2]
-            repaired = _deepcopy(latest_thread)
-            repaired_meta = repaired.setdefault("metadata", {})
-            repaired_meta["agent"] = owner_agent
-            for key in ("agent_name", "agent_id", "assistant_id"):
-                if key in repaired_meta:
-                    repaired_meta[key] = owner_agent
-            state = self._make_state(repaired)
-            state["metadata"] = _deepcopy(repaired_meta)
-
-            # Rebuild one canonical file under the original owner. This is a
-            # startup migration of an already-corrupt duplicate set, not a
-            # normal append; all source files remain recoverable until the
-            # replacement has been flushed successfully.
-            owner_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp_path = owner_path.with_suffix(owner_path.suffix + ".repair")
-            tmp_path.write_text(
-                json.dumps(self._session_meta(repaired), ensure_ascii=False)
-                + "\n"
-                + json.dumps(
-                    {
-                        "op": "upsert",
-                        "thread_id": thread_id,
-                        "thread": repaired,
-                        "state": state,
-                    },
-                    ensure_ascii=False,
-                )
-                + "\n",
-                encoding="utf-8",
-            )
-            tmp_path.replace(owner_path)
-            for _agent, path, _thread in copies:
-                if path == owner_path:
+            with thread_mutation_lock(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+            ):
+                if self._thread_delete_record_locked(thread_id) is not None:
+                    self._threads.pop(thread_id, None)
+                    self._history.pop(thread_id, None)
                     continue
-                with contextlib.suppress(OSError):
-                    path.unlink()
-            logger.warning(
-                "thread-store: repaired conflicting role copies for %s; owner=%s, removed=%d",
-                thread_id,
-                owner_agent,
-                len(copies) - 1,
-            )
-            self._threads[thread_id] = repaired
-            self._history[thread_id] = [state]
-            if self._index is not None:
-                entry = entry_from_thread(
-                    repaired,
-                    file_path=self._index_file_for(owner_path),
+                # The constructor may have blocked behind a live writer after
+                # its initial scan. Never repair from that stale snapshot:
+                # re-enumerate every discovered role file while holding the
+                # same logical lock used by normal mutations.
+                copies: list[tuple[str, Path, dict[str, Any]]] = []
+                for agent, path, _thread in discovered_copies:
+                    current = self._latest_thread_from_file(path)
+                    if current is not None:
+                        copies.append((agent, path, current))
+
+                persisted = latest_persisted_thread(
+                    journal_path=self._path,
+                    per_agent_base=self._per_agent_base,
+                    thread_id=thread_id,
                 )
-                if entry is not None:
-                    self._index.upsert(entry)
+                if not persisted.found or persisted.thread is None:
+                    continue
+                if len(copies) < 2:
+                    # Another worker already completed the repair or a normal
+                    # mutation removed the stale copy while this constructor
+                    # waited. Refresh this instance from the durable winner.
+                    refreshed = _deepcopy(persisted.thread)
+                    refreshed_state = self._make_state(refreshed)
+                    self._threads[thread_id] = refreshed
+                    self._history[thread_id] = [refreshed_state]
+                    continue
+
+                owner_agent, owner_path, _owner_thread = min(
+                    copies,
+                    key=lambda item: (
+                        str(item[2].get("created_at") or "9999"),
+                        str(item[2].get("updated_at") or "9999"),
+                    ),
+                )
+                repaired = _deepcopy(persisted.thread)
+                repaired_meta = repaired.setdefault("metadata", {})
+                repaired_meta["agent"] = owner_agent
+                for key in ("agent_name", "agent_id", "assistant_id"):
+                    if key in repaired_meta:
+                        repaired_meta[key] = owner_agent
+                state = self._make_state(repaired)
+                state["metadata"] = _deepcopy(repaired_meta)
+
+                # Rebuild one canonical file under the original owner. The
+                # revision keeps the repair ordered after the durable snapshot
+                # it folded, so a later constructor cannot prefer an old copy.
+                owner_path.parent.mkdir(parents=True, exist_ok=True)
+                tmp_path = owner_path.with_suffix(owner_path.suffix + ".repair")
+                tmp_path.write_text(
+                    json.dumps(self._session_meta(repaired), ensure_ascii=False)
+                    + "\n"
+                    + json.dumps(
+                        {
+                            "op": "upsert",
+                            "thread_id": thread_id,
+                            "thread": repaired,
+                            "state": state,
+                            "revision": persisted.revision + 1,
+                            "operation_at": _utc_now_iso(),
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                tmp_path.replace(owner_path)
+                for _agent, path, _thread in copies:
+                    if path == owner_path:
+                        continue
+                    with contextlib.suppress(OSError):
+                        path.unlink()
+                logger.warning(
+                    "thread-store: repaired conflicting role copies for %s; owner=%s, removed=%d",
+                    thread_id,
+                    owner_agent,
+                    len(copies) - 1,
+                )
+                self._threads[thread_id] = repaired
+                self._history[thread_id] = [state]
+                if self._index is not None:
+                    entry = entry_from_thread(
+                        repaired,
+                        file_path=self._index_file_for(owner_path),
+                    )
+                    if entry is not None:
+                        self._index.upsert(entry)
 
     @staticmethod
     def _latest_thread_from_file(path: Path) -> dict[str, Any] | None:
-        try:
-            lines = path.read_text(encoding="utf-8").splitlines()
-        except OSError:
-            return None
-        for line in reversed(lines):
-            try:
-                record = json.loads(line)
-            except (json.JSONDecodeError, TypeError):
-                continue
+        for record in iter_jsonl_records_reverse(path):
             thread = record.get("thread") if isinstance(record, dict) else None
             if isinstance(thread, dict):
                 return thread
@@ -1062,7 +1887,7 @@ class ThreadStateStore:
                 chosen[thread_id] = jsonl
         return sorted(chosen.values())
 
-    # ─── Search and export (DSH P2: session-query) ───────────
+    # ─── Octopus Native session search and export ───────────
 
     def _update_search_index(self, thread: dict[str, Any]) -> None:
         """Update the FTS5 search index for a thread."""
@@ -1094,7 +1919,7 @@ class ThreadStateStore:
 
     @property
     def search_enabled(self) -> bool:
-        """Whether the full-text search index is active (DSH P2: session-query).
+        """Whether the Octopus full-text session-search index is active.
 
         The router uses this to return 501 instead of silently empty results
         when the operator disabled search.
@@ -1103,7 +1928,7 @@ class ThreadStateStore:
 
     @property
     def feedback_enabled(self) -> bool:
-        """Whether the feedback store is active (DSH P2: feedback system)."""
+        """Whether the Octopus message-feedback store is active."""
         return self._feedback is not None
 
     def search_threads(
@@ -1116,7 +1941,7 @@ class ThreadStateStore:
         before: str | None = None,
         limit: int = 50,
     ) -> list[SearchResult]:
-        """Search threads by content (DSH P2: session-query).
+        """Search Octopus threads by content.
 
         Args:
             query: Search query (supports FTS5 syntax)
@@ -1132,7 +1957,7 @@ class ThreadStateStore:
         if self._search is None:
             return []
 
-        return self._search.search(
+        results = self._search.search(
             query,
             agent_id=agent_id,
             team_id=team_id,
@@ -1140,9 +1965,15 @@ class ThreadStateStore:
             before=before,
             limit=limit,
         )
+        with self._lock:
+            return [
+                result
+                for result in results
+                if self._thread_delete_record_locked(result.thread_id) is None
+            ]
 
     def export_thread_markdown(self, thread_id: str) -> str | None:
-        """Export a thread to Markdown format (DSH P2: session-query).
+        """Export an Octopus thread to Markdown.
 
         Args:
             thread_id: Thread identifier
@@ -1150,7 +1981,15 @@ class ThreadStateStore:
         Returns:
             Markdown string with YAML frontmatter, or None if thread not found
         """
-        with self._lock:
+        with (
+            self._lock,
+            thread_mutation_lock(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+            ),
+        ):
+            self._assert_thread_writable_locked(thread_id)
             thread = self._threads.get(thread_id)
             if thread is None:
                 return None
@@ -1175,12 +2014,20 @@ class ThreadStateStore:
             )
 
     def delete_thread(self, thread_id: str) -> None:
-        """Delete a thread (DSH P2: enhanced with search index cleanup).
+        """Delete a thread and clean up its session-search index rows.
 
         Removes from in-memory cache, session index, and search index.
         The on-disk JSONL file is left intact for audit/recovery.
         """
-        with self._lock:
+        with (
+            self._lock,
+            thread_mutation_lock(
+                journal_path=self._path,
+                per_agent_base=self._per_agent_base,
+                thread_id=thread_id,
+            ),
+        ):
+            self._assert_thread_writable_locked(thread_id)
             if thread_id in self._threads:
                 del self._threads[thread_id]
             if thread_id in self._history:
@@ -1192,7 +2039,7 @@ class ThreadStateStore:
             if self._search is not None:
                 self._search.delete_thread(thread_id)
 
-    # ─── Feedback (DSH P2: feedback system) ──────────────
+    # ─── Octopus Native message feedback ──────────────
 
     def add_message_feedback(
         self,
@@ -1204,7 +2051,7 @@ class ThreadStateStore:
         comment: str = "",
         user_id: str | None = None,
     ) -> MessageFeedback | None:
-        """Add feedback for a message (DSH P2: feedback system).
+        """Add Octopus evaluation feedback for a message.
 
         Args:
             thread_id: Thread identifier
@@ -1232,7 +2079,7 @@ class ThreadStateStore:
     def get_message_feedback(
         self, thread_id: str, message_index: int | None = None
     ) -> list[MessageFeedback]:
-        """Get feedback for a thread or specific message (DSH P2: feedback system).
+        """Get feedback for an Octopus thread or specific message.
 
         Args:
             thread_id: Thread identifier
@@ -1250,7 +2097,7 @@ class ThreadStateStore:
         return self._feedback.get_feedback(thread_id)
 
     def get_feedback_stats(self, thread_id: str) -> dict[str, Any]:
-        """Get feedback statistics for a thread (DSH P2: feedback system).
+        """Get feedback statistics for an Octopus thread.
 
         Returns:
             Dictionary with counts:
@@ -1278,7 +2125,7 @@ class ThreadStateStore:
         min_feedback_count: int = 1,
         feedback_type_filter: FeedbackType | None = None,
     ) -> int:
-        """Export all feedback as RLHF training dataset (DSH P2: feedback system).
+        """Export all feedback as an evaluation/training dataset.
 
         Args:
             output_path: Path to write JSONL dataset

@@ -64,6 +64,7 @@ from runtime.protocol import (
     JsonRpcErrorCode,
     ServerMethod,
     Turn,
+    TurnParams,
     TurnStatus,
 )
 from runtime.protocol import (
@@ -80,6 +81,9 @@ from runtime.protocol import (
 )
 from runtime.protocol import (
     decode_message as decode_message,
+)
+from runtime.sensing.gateway._realtime_claim_aware_emitter import (
+    _ClaimAwareEmitter as _ClaimAwareEmitterBase,
 )
 from runtime.sensing.gateway._realtime_detached_turn import _DetachedTurnEmitter
 from runtime.sensing.gateway._realtime_gateway_approval import ApprovalManager, SharedTurnInterrupts
@@ -106,6 +110,14 @@ from runtime.sensing.gateway._realtime_gateway_types import (
 from runtime.sensing.gateway._realtime_gateway_types import (
     _ApprovalError as _ApprovalError,
 )
+from runtime.sensing.gateway._realtime_thread_delete_probe import (
+    assert_thread_accepts_runtime_writes,
+)
+from runtime.sensing.gateway._realtime_turn_idempotency import (
+    existing_user_item_text,
+    turn_for_user_item_id,
+    turn_input_text,
+)
 from runtime.sensing.gateway.realtime_interrupt_control import (
     InterruptAuthorityUnavailable,
     InterruptTargetInactive,
@@ -118,15 +130,8 @@ from runtime.sensing.gateway.realtime_interrupt_control import (
 _logger = logging.getLogger(__name__)
 
 
-class _ClaimAwareEmitter:
-    """Bind the runtime-created turn id to a held thread claim.
-
-    The wrapped emitter retains all transport/approval/interrupt semantics.
-    It also tails durable cross-worker control records addressed to this
-    claim's opaque epoch and projects them into the existing local interrupt
-    registry.  Claim metadata binding is fail-closed: without an exact epoch
-    remote Stop could not be made reliable.
-    """
+class _ClaimAwareEmitter(_ClaimAwareEmitterBase):
+    """Compatibility export retaining the gateway's interrupt-tail seam."""
 
     def __init__(
         self,
@@ -134,92 +139,17 @@ class _ClaimAwareEmitter:
         claim: ThreadTurnClaim,
         *,
         log: Any,
+        runtime: Any = None,
+        thread_access_resolver: Any = None,
     ) -> None:
-        self._delegate = delegate
-        self._claim = claim
-        self._log = log
-        try:
-            self._control_offset = log.path.stat().st_size
-        except OSError:
-            self._control_offset = 0
-        self._control_turn_id: str | None = None
-        self._control_task: asyncio.Task[None] | None = None
-
-    @property
-    def actor_id(self) -> str | None:
-        return getattr(self._delegate, "actor_id", None)
-
-    @property
-    def tenant_id(self) -> str | None:
-        return getattr(self._delegate, "tenant_id", None)
-
-    async def notify(self, method: ServerMethod | str, params: dict[str, Any]) -> None:
-        await self._delegate.notify(method, params)
-
-    async def request_approval(
-        self,
-        method: ServerMethod | str,
-        params: dict[str, Any],
-        *,
-        timeout: float | None = None,
-    ) -> Any:
-        return await self._delegate.request_approval(method, params, timeout=timeout)
-
-    def is_turn_interrupted(self, turn_id: str) -> bool:
-        return self._delegate.is_turn_interrupted(turn_id)
-
-    def get_interrupt_reason(self, turn_id: str) -> str | None:
-        return self._delegate.get_interrupt_reason(turn_id)
-
-    def register_turn(self, turn_id: str) -> None:
-        if not self._claim.bind_turn(turn_id):
-            raise ThreadTurnClaimUnavailable("thread claim metadata could not bind the active turn")
-        self._delegate.register_turn(turn_id)
-        self._control_turn_id = turn_id
-        self._control_task = asyncio.create_task(
-            self._watch_persisted_interrupt(turn_id),
-            name=f"turn-interrupt-watch:{turn_id}",
+        super().__init__(
+            delegate,
+            claim,
+            log=log,
+            runtime=runtime,
+            thread_access_resolver=thread_access_resolver,
+            tail_interrupt=lambda *args, **kwargs: tail_contains_interrupt(*args, **kwargs),
         )
-
-    def unregister_turn(self, turn_id: str) -> None:
-        task = self._control_task
-        self._control_task = None
-        self._control_turn_id = None
-        if task is not None:
-            task.cancel()
-        self._delegate.unregister_turn(turn_id)
-
-    async def _watch_persisted_interrupt(self, turn_id: str) -> None:
-        """Tail only bytes appended after this claim was constructed."""
-
-        try:
-            while self._control_turn_id == turn_id and not self._claim.released:
-                matched, self._control_offset = tail_contains_interrupt(
-                    self._log,
-                    self._control_offset,
-                    thread_id=self._claim.thread_id,
-                    turn_id=turn_id,
-                    claim_epoch=self._claim.claim_epoch,
-                )
-                if matched:
-                    self._latch_interrupt(turn_id)
-                    return
-                await asyncio.sleep(0.1)
-        except asyncio.CancelledError:
-            return
-        except Exception:  # noqa: BLE001 — shared control loss is fail-closed
-            _logger.exception("cross-worker interrupt watcher failed for %s", turn_id)
-            # A remote worker may already have returned ``interrupted: true``
-            # after fsyncing its request.  If this owner can no longer read
-            # the shared control stream, continuing the turn would violate
-            # that acknowledgement.  Latch the existing local interrupt path
-            # so approval waits and execution boundaries both stop safely.
-            self._latch_interrupt(turn_id)
-
-    def _latch_interrupt(self, turn_id: str) -> None:
-        request_interrupt = getattr(self._delegate, "request_interrupt", None)
-        if callable(request_interrupt):
-            request_interrupt(turn_id)
 
 
 # ── Gateway — FastAPI wiring + dispatch loop ─────────────────
@@ -245,6 +175,7 @@ class RealtimeGateway(_RealtimeGatewaySessionMixin):
         approval_timeout: float = _APPROVAL_TIMEOUT_DEFAULT,
         identity_store: Any = None,
         require_auth: bool = False,
+        allow_local_workspace_access: bool = False,
         jwt_secret: str | None = None,
         jwt_issuer: str | None = None,
         jwt_audience: str | None = None,
@@ -273,6 +204,7 @@ class RealtimeGateway(_RealtimeGatewaySessionMixin):
         self._approval_timeout = approval_timeout
         self._identity_store = identity_store
         self._require_auth = require_auth
+        self._allow_local_workspace_access = bool(allow_local_workspace_access)
         self._jwt_secret = jwt_secret
         self._jwt_issuer = jwt_issuer
         self._jwt_audience = jwt_audience
@@ -653,6 +585,11 @@ class RealtimeGateway(_RealtimeGatewaySessionMixin):
 
         try:
             try:
+                assert_thread_accepts_runtime_writes(
+                    self._runtime,
+                    thread_id,
+                    thread_access_resolver=self._thread_access_resolver,
+                )
                 async with self._turn_locks.hold(thread_id):
                     if thread_id in self._active_turn_threads:
                         return
@@ -673,6 +610,8 @@ class RealtimeGateway(_RealtimeGatewaySessionMixin):
                         conn,
                         claim,
                         log=EventLog(thread_log_path(claim.path.parent.parent, thread_id)),
+                        runtime=self._runtime,
+                        thread_access_resolver=self._thread_access_resolver,
                     )
                     try:
                         turn = await self._runtime.start_turn(params, emitter)
@@ -808,6 +747,19 @@ class RealtimeGateway(_RealtimeGatewaySessionMixin):
             thread_tenant_id=(getattr(access, "tenant_id", None) if access is not None else None),
         )
 
+        # Validate the client-stable user item coordinate before claiming or
+        # mutating the thread.  Once the claim is held below, an already
+        # persisted ``userItemId`` becomes an idempotent read of its owning
+        # turn instead of a second model execution.
+        try:
+            validated_params = TurnParams.model_validate(params)
+        except ValueError as exc:
+            raise _RpcError(
+                JsonRpcErrorCode.INVALID_PARAMS,
+                f"invalid turn/start params: {exc}",
+            ) from exc
+        user_item_id = validated_params.user_item_id
+
         # Claim before every stateful start action: a losing request must not
         # consume rate budget, register wake handlers, persist lifecycle rows,
         # or enter the runtime at all. The descriptor moves into the resident
@@ -820,6 +772,51 @@ class RealtimeGateway(_RealtimeGatewaySessionMixin):
             raise self._turn_claim_unavailable_error(thread_id) from None
 
         try:
+            from runtime.memory.threads import ThreadPermanentlyDeletedError
+
+            try:
+                assert_thread_accepts_runtime_writes(
+                    self._runtime,
+                    thread_id,
+                    thread_access_resolver=self._thread_access_resolver,
+                )
+            except ThreadPermanentlyDeletedError as exc:
+                raise _RpcError(
+                    JsonRpcErrorCode.THREAD_NOT_FOUND,
+                    f"unknown thread {thread_id}",
+                ) from exc
+            # Re-check under the authoritative thread claim.  Looking up first
+            # and claiming second leaves a small TOCTOU window where another
+            # worker can finish the same client item between those operations.
+            # An in-flight duplicate receives the normal claim conflict; once
+            # the owner finishes, a retry reuses its durable turn here.
+            if user_item_id is not None:
+                existing_turn = await asyncio.to_thread(
+                    turn_for_user_item_id,
+                    self._turn_claim_logs_root,
+                    thread_id,
+                    user_item_id,
+                )
+                if existing_turn is not None:
+                    incoming_text = turn_input_text(validated_params)
+                    existing_text = existing_user_item_text(existing_turn)
+                    if existing_text is not None and incoming_text != existing_text:
+                        raise _RpcError(
+                            JsonRpcErrorCode.INVALID_PARAMS,
+                            "userItemId was already used for different user input",
+                        )
+                    self._watch_thread(thread_id, conn)
+                    claim.release()
+                    _logger.info(
+                        "realtime: idempotent turn/start replay thread_id=%s "
+                        "turn_id=%s user_item_id=%s",
+                        thread_id,
+                        existing_turn.id,
+                        user_item_id,
+                    )
+                    return {
+                        "turn": existing_turn.model_dump(by_alias=True, mode="json"),
+                    }
             # Lenient per-actor turn-rate ceiling (auth-on only). Bursts pass;
             # only a sustained flood trips SERVER_BUSY, which clients treat as
             # "back off and retry". Different threads still run concurrently —
@@ -895,6 +892,8 @@ class RealtimeGateway(_RealtimeGatewaySessionMixin):
             _DetachedTurnEmitter(self, thread_id, conn),
             claim,
             log=EventLog(thread_log_path(claim.path.parent.parent, thread_id)),
+            runtime=self._runtime,
+            thread_access_resolver=self._thread_access_resolver,
         )
         try:
             try:

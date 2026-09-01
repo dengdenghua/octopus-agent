@@ -351,9 +351,10 @@ def test_gateway_echo_tombstone_blocks_runtime_but_missing_thread_is_allowed(
     app = FastAPI()
     app.include_router(gateway.router)
 
-    endpoint = "/api/realtime?token=sk-alice" if require_auth else "/api/realtime"
+    endpoint = "/api/realtime"
+    headers = {"Authorization": "Bearer sk-alice"} if require_auth else {}
     with TestClient(app) as client:
-        with client.websocket_connect(endpoint) as ws:
+        with client.websocket_connect(endpoint, headers=headers) as ws:
             ws.send_json(
                 {
                     "jsonrpc": "2.0",
@@ -374,7 +375,7 @@ def test_gateway_echo_tombstone_blocks_runtime_but_missing_thread_is_allowed(
         assert runtime.calls == 0
         assert not thread_log_path(logs_root, "gateway-deleted").exists()
 
-        with client.websocket_connect(endpoint) as ws:
+        with client.websocket_connect(endpoint, headers=headers) as ws:
             ws.send_json(
                 {
                     "jsonrpc": "2.0",

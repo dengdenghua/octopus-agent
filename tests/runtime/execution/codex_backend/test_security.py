@@ -57,6 +57,7 @@ def _prepare(
     thread_id: str = "thread-a",
     task_id: str = "task-a",
     sandbox_mode: str = "workspace-write",
+    selected_app_ids: tuple[str, ...] = (),
     outer_hard_sandbox_active: bool = False,
     host_env: dict[str, str] | None = None,
 ) -> CodexSidecarContext:
@@ -67,6 +68,7 @@ def _prepare(
         task_id=task_id,
         workspace=workspace,
         sandbox_mode=sandbox_mode,  # type: ignore[arg-type]
+        selected_app_ids=selected_app_ids,
         outer_hard_sandbox_active=outer_hard_sandbox_active,
         host_env=host_env,
     )
@@ -295,6 +297,36 @@ def test_generated_workspace_write_config_is_locked_and_self_validating(tmp_path
     assert APPROVAL_FAILURE_DECISION == "decline"
 
 
+def test_selected_apps_are_exact_and_keep_high_risk_tools_prompted(tmp_path: Path) -> None:
+    manager, workspace, _state_root = _manager(tmp_path)
+    context = _prepare(manager, workspace, selected_app_ids=("google_drive",))
+    config = _config(context)
+
+    assert config["features"]["apps"] is True  # type: ignore[index]
+    assert config["apps"] == {
+        "_default": {
+            "enabled": False,
+            "destructive_enabled": False,
+            "open_world_enabled": False,
+            "approvals_reviewer": "user",
+            "default_tools_approval_mode": "prompt",
+        },
+        "google_drive": {
+            "enabled": True,
+            "destructive_enabled": False,
+            "open_world_enabled": False,
+            "approvals_reviewer": "user",
+            "default_tools_approval_mode": "prompt",
+        },
+    }
+    context.validate_effective_config({"config": config})
+
+    unsafe = copy.deepcopy(config)
+    unsafe["apps"]["google_drive"]["destructive_enabled"] = True  # type: ignore[index]
+    with pytest.raises(CodexSecurityError, match="locked approval policy"):
+        context.validate_effective_config({"config": unsafe})
+
+
 def test_generated_read_only_config_keeps_workspace_read_only_and_private_scratch_writable(
     tmp_path: Path,
 ) -> None:
@@ -320,6 +352,34 @@ def test_generated_read_only_config_keeps_workspace_read_only_and_private_scratc
         str(context.state_root): "deny",
     }
     context.validate_effective_config(config)
+
+
+def test_selected_apps_keep_locked_non_destructive_approval_policy(tmp_path: Path) -> None:
+    manager, workspace, _state_root = _manager(tmp_path)
+    context = _prepare(manager, workspace, selected_app_ids=("connector-a",))
+    config = _config(context)
+
+    assert config["features"]["apps"] is True  # type: ignore[index]
+    assert config["apps"]["_default"] == {  # type: ignore[index]
+        "enabled": False,
+        "destructive_enabled": False,
+        "open_world_enabled": False,
+        "approvals_reviewer": "user",
+        "default_tools_approval_mode": "prompt",
+    }
+    assert config["apps"]["connector-a"] == {  # type: ignore[index]
+        "enabled": True,
+        "destructive_enabled": False,
+        "open_world_enabled": False,
+        "approvals_reviewer": "user",
+        "default_tools_approval_mode": "prompt",
+    }
+    context.validate_effective_config(config)
+
+    widened = copy.deepcopy(config)
+    widened["apps"]["connector-a"]["destructive_enabled"] = True  # type: ignore[index]
+    with pytest.raises(CodexSecurityError, match="apps.connector-a"):
+        context.validate_effective_config(widened)
 
 
 def test_effective_config_accepts_app_server_schema_expansion_with_nulls(tmp_path: Path) -> None:

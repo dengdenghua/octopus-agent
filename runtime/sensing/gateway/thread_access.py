@@ -69,12 +69,17 @@ class ThreadAccessResolver:
         collaboration_store: Any = None,
         team_rooms_router: Any = None,
         identity_store: Any = None,
+        allow_anonymous_ownerless: bool = False,
     ) -> None:
         self._thread_store = thread_store
         self._group_store = group_store
         self._collaboration_store = collaboration_store
         self._team_rooms_router = team_rooms_router
         self._identity_store = identity_store
+        # Single-user/auth-off runtimes historically persisted threads without
+        # an owner or tenant.  Keep that compatibility explicit and opt-in so
+        # authenticated deployments and every other resolver remain fail-closed.
+        self._allow_anonymous_ownerless = bool(allow_anonymous_ownerless)
 
     def _principal_tenant(self, actor_id: str, tenant_id: str | None) -> str:
         tenant = _clean(tenant_id)
@@ -244,6 +249,24 @@ class ThreadAccessResolver:
             )
 
         room_id = self._linked_room_id(thread_id)
+        if (
+            self._allow_anonymous_ownerless
+            and not actor
+            and not owner
+            and not stored_tenant
+            and not room_id
+        ):
+            # Auth-off local threads have no principal with which to prove
+            # ownership.  Only restore the legacy grant when the canonical row
+            # itself is ownerless/tenantless and no Team Room owns it.  In
+            # particular, never infer this from a thread-id prefix (``eval-`` is
+            # merely one producer of such historical rows).
+            return ThreadAccessDecision(
+                thread=thread,
+                can_manage=True,
+                can_read=True,
+                can_write=True,
+            )
         if not (actor and room_id and stored_tenant and tenant and stored_tenant == tenant):
             return ThreadAccessDecision(
                 thread=thread,

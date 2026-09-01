@@ -20,6 +20,64 @@ class PersistedThread:
     source_path: Path | None = None
 
 
+def iter_jsonl_records_reverse(
+    path: Path,
+    *,
+    block_size: int = 64 * 1024,
+) -> Iterator[dict[str, Any]]:
+    """Yield valid JSON-object records from *path*, newest first.
+
+    Thread journals contain full snapshots and can become large during a long
+    task.  The mutation path only needs the newest durable operation, so
+    ``Path.read_text().splitlines()`` needlessly copied the entire journal on
+    every update.  Reading fixed-size blocks from the tail keeps that hot path
+    bounded by the size of the newest record while preserving tolerant replay
+    of blank, partial, or malformed lines.
+    """
+
+    if block_size < 1:
+        raise ValueError("block_size must be positive")
+    try:
+        handle = path.open("rb")
+    except OSError:
+        return
+    with handle:
+        try:
+            handle.seek(0, os.SEEK_END)
+            position = handle.tell()
+        except OSError:
+            return
+        suffix = b""
+        while position > 0:
+            read_size = min(block_size, position)
+            position -= read_size
+            try:
+                handle.seek(position)
+                chunk = handle.read(read_size)
+            except OSError:
+                return
+            parts = (chunk + suffix).split(b"\n")
+            suffix = parts[0]
+            for raw_line in reversed(parts[1:]):
+                record = _decode_json_object(raw_line)
+                if record is not None:
+                    yield record
+        record = _decode_json_object(suffix)
+        if record is not None:
+            yield record
+
+
+def _decode_json_object(raw_line: bytes) -> dict[str, Any] | None:
+    raw_line = raw_line.strip()
+    if not raw_line:
+        return None
+    try:
+        record = json.loads(raw_line.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
+        return None
+    return record if isinstance(record, dict) else None
+
+
 def _lock_root(journal_path: Path | None, per_agent_base: Path | None) -> Path | None:
     if per_agent_base is not None:
         return per_agent_base / "data" / "sessions" / ".thread-mutation-locks"
@@ -118,40 +176,26 @@ def latest_persisted_thread(
     journal_path: Path | None,
     per_agent_base: Path | None,
     thread_id: str,
+    source_hint: Path | None = None,
 ) -> PersistedThread:
     """Read the newest durable operation for ``thread_id`` while its lock is held."""
 
+    if source_hint is not None and source_hint.exists():
+        hinted = _latest_candidate_from_path(source_hint, thread_id)
+        if hinted is not None:
+            revision, _operation_at, _updated_at, thread = hinted
+            return PersistedThread(
+                found=True,
+                thread=thread,
+                revision=revision,
+                source_path=source_hint,
+            )
+
     candidates: list[tuple[int, str, str, dict[str, Any] | None, Path]] = []
     for path in _candidate_paths(journal_path, per_agent_base, thread_id):
-        try:
-            lines = path.read_text(encoding="utf-8").splitlines()
-        except OSError:
-            continue
-        for line in reversed(lines):
-            try:
-                record = json.loads(line)
-            except (json.JSONDecodeError, TypeError):
-                continue
-            if not isinstance(record, dict) or record.get("thread_id") != thread_id:
-                continue
-            raw_revision = record.get("revision")
-            revision = raw_revision if isinstance(raw_revision, int) and raw_revision >= 0 else 0
-            operation_at = str(record.get("operation_at") or "")
-            if record.get("op") == "delete":
-                candidates.append((revision, operation_at, "", None, path))
-                break
-            thread = record.get("thread")
-            if isinstance(thread, dict):
-                candidates.append(
-                    (
-                        revision,
-                        operation_at,
-                        str(thread.get("updated_at") or ""),
-                        thread,
-                        path,
-                    )
-                )
-                break
+        candidate = _latest_candidate_from_path(path, thread_id)
+        if candidate is not None:
+            candidates.append((*candidate, path))
     if not candidates:
         return PersistedThread(found=False, thread=None)
     revision, _operation_at, _updated, thread, source_path = max(
@@ -164,6 +208,24 @@ def latest_persisted_thread(
         revision=revision,
         source_path=source_path,
     )
+
+
+def _latest_candidate_from_path(
+    path: Path,
+    thread_id: str,
+) -> tuple[int, str, str, dict[str, Any] | None] | None:
+    for record in iter_jsonl_records_reverse(path):
+        if record.get("thread_id") != thread_id:
+            continue
+        raw_revision = record.get("revision")
+        revision = raw_revision if isinstance(raw_revision, int) and raw_revision >= 0 else 0
+        operation_at = str(record.get("operation_at") or "")
+        if record.get("op") == "delete":
+            return revision, operation_at, "", None
+        thread = record.get("thread")
+        if isinstance(thread, dict):
+            return revision, operation_at, str(thread.get("updated_at") or ""), thread
+    return None
 
 
 def remove_stale_thread_copies(
@@ -185,6 +247,7 @@ def remove_stale_thread_copies(
 
 __all__ = [
     "PersistedThread",
+    "iter_jsonl_records_reverse",
     "latest_persisted_thread",
     "remove_stale_thread_copies",
     "thread_mutation_lock",

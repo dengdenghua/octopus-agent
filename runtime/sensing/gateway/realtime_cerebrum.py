@@ -210,6 +210,7 @@ class CerebrumRuntime:
         summary_router: Any = None,
         thread_store: Any = None,
         allow_client_auto_approve: bool = False,
+        allow_local_workspace_access: bool = False,
         reflex_router: Any = None,
         trace_store: Any = None,
         cowork_group_store: Any = None,
@@ -283,6 +284,7 @@ class CerebrumRuntime:
         # disable approval gates. Operators who genuinely want headless
         # batches must opt in at config time.
         self._allow_client_auto_approve = bool(allow_client_auto_approve)
+        self._allow_local_workspace_access = bool(allow_local_workspace_access)
         from pathlib import Path
 
         Path(logs_root).mkdir(parents=True, exist_ok=True)
@@ -332,6 +334,15 @@ class CerebrumRuntime:
         # streaming after the LLM finalises) but they CAN bleed into
         # a brand-new conversation when the user reuses the thread.
         self._thread_background_tasks: dict[str, list[asyncio.Task[None]]] = {}
+        # Cold durable subagent-session scans get only a bounded place in the
+        # foreground startup path.  Keep deferred tasks strongly referenced
+        # and one-per-thread so a later turn reuses the same claim attempt
+        # instead of racing it and injecting one parked report twice.
+        self._pending_subagent_report_tasks: dict[
+            str,
+            asyncio.Task[tuple[int, int]],
+        ] = {}
+        self._pending_subagent_refill_tasks: dict[str, asyncio.Task[None]] = {}
 
     def _make_bridge_state(
         self,
@@ -810,7 +821,7 @@ class CerebrumRuntime:
         thread_id: str,
         text: str,
     ) -> None:
-        """Run Project OS directly from a cowork thread in project mode."""
+        """Handle an explicit ``/project`` command for a cowork thread."""
         await _drive_project_os(
             self,
             turn,
@@ -821,22 +832,8 @@ class CerebrumRuntime:
             text=text,
         )
 
-    def _is_local_partner(self, agent: Any) -> bool:
-        """True when this agent should be driven by spawning its registered
-        coding-agent CLI directly (Claude Code / Codex / Trae / Qoder) instead of the LLM
-        loop — i.e. its profile carries drivable ``local_partner`` capabilities."""
-        from runtime.sensing.gateway.realtime_local_partner import agent_is_local_partner
-
-        return agent_is_local_partner(agent)
-
     def _is_codex_app_server_partner(self, agent: Any) -> bool:
-        """Return whether a Codex local partner should use App Server.
-
-        This is intentionally a narrower decision than ``_is_local_partner``:
-        other installed coding CLIs keep their existing one-shot adapters,
-        while Codex can opt out and fall back to the hardened ``codex exec``
-        path during rollout.
-        """
+        """Return whether the selected role uses embedded Codex App Server."""
         from runtime.sensing.gateway.realtime_codex_backend import (
             agent_is_codex_app_server_partner,
         )
@@ -875,25 +872,6 @@ class CerebrumRuntime:
             provider,
             text=text,
         )
-
-    async def _drive_local_partner(
-        self,
-        turn: Turn,
-        log: EventLog,
-        emitter: EventEmitter,
-        intent: ParsedIntent,
-        agent: Any,
-        provider: ApprovalProvider,
-        *,
-        text: str,
-    ) -> None:
-        """Drive the agent's registered external coding-agent CLI directly —
-        the missing execution half of LocalPartner. Delegates to the free
-        function so the dispatch/fallback logic stays unit-testable."""
-        from runtime.sensing.gateway.realtime_local_partner import drive_local_partner
-
-        await drive_local_partner(self, turn, log, emitter, intent, agent, provider, text=text)
-
 
 # Static check: this class fulfills the realtime contract.
 _: RealtimeRuntime = CerebrumRuntime.__new__(CerebrumRuntime)  # type: ignore[arg-type]

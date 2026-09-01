@@ -184,6 +184,45 @@ class _SseEmitter:
         self._interrupted.add(turn_id)
 
 
+async def _start_turn_with_claim(
+    runtime: Any,
+    params: dict[str, Any],
+    emitter: Any,
+) -> Any:
+    """Run the Anthropic compatibility turn under the canonical OS claim."""
+
+    from runtime.memory.threads.event_log import EventLog, thread_log_path
+    from runtime.platform.process.thread_turn_claim import (
+        ThreadTurnClaimUnavailable,
+        acquire_thread_turn_claim,
+    )
+    from runtime.sensing.gateway._realtime_claim_aware_emitter import (
+        _ClaimAwareEmitter,
+    )
+    from runtime.sensing.gateway._realtime_thread_delete_probe import (
+        assert_thread_accepts_runtime_writes,
+    )
+
+    thread_id = params.get("threadId")
+    if not isinstance(thread_id, str) or not thread_id.strip():
+        raise ThreadTurnClaimUnavailable("anthropic turn has no authoritative thread id")
+    logs_root = getattr(runtime, "_logs_root", None)
+    if logs_root is None:
+        raise ThreadTurnClaimUnavailable("realtime runtime has no authoritative logs root")
+    claim = acquire_thread_turn_claim(logs_root, thread_id)
+    try:
+        assert_thread_accepts_runtime_writes(runtime, thread_id)
+        guarded_emitter = _ClaimAwareEmitter(
+            emitter,
+            claim,
+            log=EventLog(thread_log_path(logs_root, thread_id)),
+            runtime=runtime,
+        )
+        return await runtime.start_turn(params, guarded_emitter)
+    finally:
+        claim.release()
+
+
 def create_anthropic_compat_router(
     *,
     stack: Any,
@@ -418,7 +457,7 @@ def create_anthropic_compat_router(
             # session so POST /events can reach this in-flight turn.
             emitter = _SseEmitter(manager, session_id)
             state.active_emitter = emitter
-            await runtime.start_turn(params, emitter)
+            await _start_turn_with_claim(runtime, params, emitter)
 
             await manager.publish(
                 session_id,

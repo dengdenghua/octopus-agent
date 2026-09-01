@@ -34,6 +34,7 @@ class _FsContext:
     thread_store: Any = None
     identity_store: Any = None
     require_auth: bool = False
+    allow_local_workspace_access: bool = False
     jwt_secret: str | None = None
     jwt_issuer: str | None = None
     jwt_audience: str | None = None
@@ -62,7 +63,7 @@ def _scope_roots(
     # Shared mode has exactly one source of truth: a structurally verified
     # server allocation on an owned thread. Client query/body paths and legacy
     # metadata are intentionally ignored.
-    if ctx.require_auth:
+    if ctx.require_auth and not ctx.allow_local_workspace_access:
         if ctx.thread_store is None or not thread_id:
             return []
         try:
@@ -137,7 +138,7 @@ def _assert_in_scope(
         workspace_path=workspace_path,
     )
     if not roots:
-        if ctx.require_auth:
+        if ctx.require_auth and not ctx.allow_local_workspace_access:
             raise HTTPException(
                 403,
                 {
@@ -173,11 +174,17 @@ def _assert_local_request_scope(
     thread_id: str | None,
     workspace_path: str | None,
 ) -> None:
-    """Require a server-owned thread workspace for authenticated local FS use."""
+    """Authorize authenticated local FS use for the configured deployment scope.
+
+    Loopback-local deployments may choose directories before a thread exists.
+    Shared deployments require an owned, server-managed thread workspace.
+    """
     if not ctx.require_auth or getattr(getattr(request, "state", None), "principal", None) is None:
         return
     principal = request.state.principal
     if not thread_id:
+        if ctx.allow_local_workspace_access:
+            return
         raise HTTPException(
             403,
             {
@@ -188,7 +195,21 @@ def _assert_local_request_scope(
     thread = None
     if ctx.thread_store is not None:
         if hasattr(ctx.thread_store, "get"):
-            thread = ctx.thread_store.get(thread_id)
+            try:
+                thread = ctx.thread_store.get(thread_id)
+            except Exception as exc:
+                from runtime.memory.threads import ThreadPermanentlyDeletedError
+
+                if not isinstance(exc, ThreadPermanentlyDeletedError):
+                    raise
+                raise HTTPException(
+                    403,
+                    {
+                        "error": "managed_workspace_required",
+                        "thread_id": thread_id,
+                        "hint": "deleted thread workspaces cannot be recreated",
+                    },
+                ) from exc
         if thread is None and hasattr(ctx.thread_store, "get_state"):
             thread = ctx.thread_store.get_state(thread_id)
     if not isinstance(thread, dict):
@@ -210,6 +231,8 @@ def _assert_local_request_scope(
             raise HTTPException(404, f"thread not found: {thread_id}")
         if principal_tenant and stored_tenant and stored_tenant != principal_tenant:
             raise HTTPException(404, f"thread not found: {thread_id}")
+    if ctx.allow_local_workspace_access:
+        return
     managed = verified_managed_workspace(
         ctx.workspace_root,
         thread_id=thread_id,
@@ -254,7 +277,7 @@ def _require_local_thread_scope(
         thread_id=thread_id,
         workspace_path=workspace_path,
     )
-    if ctx.require_auth and not roots:
+    if ctx.require_auth and not ctx.allow_local_workspace_access and not roots:
         raise HTTPException(
             403,
             {

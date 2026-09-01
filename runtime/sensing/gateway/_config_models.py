@@ -10,14 +10,18 @@ These give openapi.json real shape info for the config surface
 
 from __future__ import annotations
 
+from typing import Literal
+
 try:
-    from pydantic import BaseModel, Field
+    from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     BaseModel = object  # type: ignore[assignment, misc]
+    ConfigDict = None  # type: ignore[assignment, misc]
     Field = None  # type: ignore[assignment, misc]
+    SecretStr = str  # type: ignore[assignment, misc]
 
 if FASTAPI_AVAILABLE:
 
@@ -55,6 +59,7 @@ if FASTAPI_AVAILABLE:
         selection_ids: list[str] = Field(default_factory=list)
         display_name: str
         has_api_key: bool
+        managed_by_plugin: str | None = None
         max_tokens: int | None = None
         context_window: int | None = None
         enable_1m_context: bool = False
@@ -62,6 +67,7 @@ if FASTAPI_AVAILABLE:
         default_reasoning_effort: str | None = None
         supports_vision: bool | None = None
         supports_tool_use: bool | None = None
+        is_free: bool = False
         omit_sampling_parameters: bool | None = None
         compat_profile: str | None = None
         thinking_request_style: str | None = None
@@ -70,6 +76,7 @@ if FASTAPI_AVAILABLE:
         strict_tool_schema: bool | None = None
         max_temperature: float | None = None
         unsupported_request_fields: list[str] | None = None
+        codex_wire_api: Literal["responses"] | None = None
         default_header_names: list[str] = Field(default_factory=list)
         has_default_headers: bool = False
 
@@ -137,8 +144,175 @@ if FASTAPI_AVAILABLE:
     class ConstitutionProfilePutBody(BaseModel):
         profile: str
 
+    class CodexAccountWire(BaseModel):
+        type: Literal["apiKey", "chatgpt", "amazonBedrock"]
+        email: str | None = None
+        plan_type: str | None = None
+
+    class CodexAccountResponse(BaseModel):
+        account: CodexAccountWire | None = None
+        requires_openai_auth: bool
+        login_pending: bool
+        login_id: str | None = None
+        login_error: str | None = None
+
+    class CodexLoginBody(BaseModel):
+        """One-shot secret envelope; never used as a response or persisted."""
+
+        # The login route parses this model behind a fixed-error dependency so
+        # Pydantic validation details (which include the raw input object) are
+        # never returned by FastAPI.
+        model_config = ConfigDict(extra="forbid")
+
+        type: Literal["chatgpt", "chatgptDeviceCode", "apiKey"]
+        api_key: SecretStr | None = Field(default=None, repr=False)
+
+    class CodexLoginResponse(BaseModel):
+        type: Literal["chatgpt", "chatgptDeviceCode", "apiKey"]
+        login_id: str | None = None
+        auth_url: str | None = None
+        verification_url: str | None = None
+        user_code: str | None = None
+
+    class CodexCancelLoginResponse(BaseModel):
+        cancelled: bool
+        login_id: str
+        reason: str | None = None
+
+    class CodexLogoutResponse(BaseModel):
+        logged_out: bool
+
+    class CodexModelWire(BaseModel):
+        model_config = ConfigDict(protected_namespaces=())
+
+        id: str
+        display_name: str
+        description: str = ""
+        reasoning_efforts: list[str] = Field(default_factory=list)
+        default_reasoning_effort: str | None = None
+        hidden: bool = False
+        is_default: bool = False
+        input_modalities: list[str] = Field(default_factory=list)
+
+    class CodexModelsResponse(BaseModel):
+        models: list[CodexModelWire]
+        source: Literal["codex_account"] = "codex_account"
+
+    class CodexRateLimitWindow(BaseModel):
+        used_percent: float
+        remaining_percent: float
+        window_duration_mins: int
+        resets_at: int
+
+    class CodexRateLimitBucket(BaseModel):
+        limit_id: str
+        limit_name: str | None = None
+        primary: CodexRateLimitWindow | None = None
+        secondary: CodexRateLimitWindow | None = None
+        plan_type: str | None = None
+        rate_limit_reached_type: str | None = None
+
+    class CodexRateLimitsResponse(BaseModel):
+        buckets: list[CodexRateLimitBucket] = Field(default_factory=list)
+        reset_credits_available: int | None = None
+
+    class CodexUsageSummary(BaseModel):
+        lifetime_tokens: int | None = None
+        peak_daily_tokens: int | None = None
+        longest_running_turn_sec: int | None = None
+        current_streak_days: int | None = None
+        longest_streak_days: int | None = None
+
+    class CodexDailyUsageBucket(BaseModel):
+        start_date: str
+        tokens: int | None = None
+
+    class CodexUsageResponse(BaseModel):
+        summary: CodexUsageSummary
+        daily_usage_buckets: list[CodexDailyUsageBucket] = Field(default_factory=list)
+
+    class CodexAppWire(BaseModel):
+        id: str
+        name: str
+        description: str = ""
+        logo_url: str | None = None
+        install_url: str | None = None
+        is_accessible: bool
+        is_enabled: bool
+        selected: bool = False
+
+    class CodexAppsResponse(BaseModel):
+        apps: list[CodexAppWire] = Field(default_factory=list)
+
+    class CodexAppsPutBody(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        app_ids: list[str] = Field(default_factory=list, max_length=32)
+
+    class CodexUpdateApprovalBody(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        version: str = Field(min_length=1, max_length=64)
+
+    class CodexUpdateStatusResponse(BaseModel):
+        package: str
+        current_version: str
+        latest_version: str | None = None
+        update_available: bool = False
+        checked_at: str | None = None
+        source_url: str
+        release_url: str
+        integrity: str | None = None
+        tarball_url: str | None = None
+        approval_status: Literal["none", "pending", "approved_for_next_release"] = "none"
+        approved_version: str | None = None
+        approved_at: str | None = None
+        error: str | None = None
+
+    class CodexModelProfilePutBody(BaseModel):
+        """Full replacement of the principal's Coder model preference."""
+
+        model_config = ConfigDict(extra="forbid", protected_namespaces=())
+
+        mode: Literal["follow_system", "chatgpt"] = "follow_system"
+        model: str | None = None
+        reasoning_effort: str | None = None
+
+    class CodexModelProfileResponse(BaseModel):
+        model_config = ConfigDict(protected_namespaces=())
+
+        mode: Literal["follow_system", "chatgpt"]
+        selected_model: str | None = None
+        effective_model: str | None = None
+        system_model: str | None = None
+        reasoning_effort: str | None = None
+        model_source: Literal["turn", "role", "system", "codex_default"]
+        provider: str
+        compatible: bool
+        compatibility_reason: str | None = None
+        proxy_required: bool = False
+
 
 __all__ = [
+    "CodexAccountResponse",
+    "CodexAccountWire",
+    "CodexAppsPutBody",
+    "CodexAppsResponse",
+    "CodexUpdateApprovalBody",
+    "CodexUpdateStatusResponse",
+    "CodexAppWire",
+    "CodexCancelLoginResponse",
+    "CodexLoginBody",
+    "CodexLoginResponse",
+    "CodexLogoutResponse",
+    "CodexModelProfilePutBody",
+    "CodexModelProfileResponse",
+    "CodexModelsResponse",
+    "CodexModelWire",
+    "CodexRateLimitBucket",
+    "CodexRateLimitsResponse",
+    "CodexRateLimitWindow",
+    "CodexDailyUsageBucket",
+    "CodexUsageResponse",
+    "CodexUsageSummary",
     "ConstitutionProfilePutBody",
     "ConstitutionProfileResponse",
     "CustomModelDeleteResponse",

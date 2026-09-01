@@ -67,10 +67,11 @@ def test_team_delete_record_is_written_to_team_file(tmp_path: Path) -> None:
     assert store.delete("deleted-team-thread") is True
 
     team_path = tmp_path / "teams" / "team-alpha" / "sessions" / "deleted-team-thread.jsonl"
-    assert _records(team_path)[-1] == {
-        "op": "delete",
-        "thread_id": "deleted-team-thread",
-    }
+    tombstone = _records(team_path)[-1]
+    assert tombstone["op"] == "delete"
+    assert tombstone["thread_id"] == "deleted-team-thread"
+    assert tombstone["revision"] == 2
+    assert isinstance(tombstone["operation_at"], str)
 
     reloaded = ThreadStateStore(per_agent_base=tmp_path)
     assert reloaded.get("deleted-team-thread") is None

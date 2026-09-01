@@ -5,8 +5,12 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 from typing import TYPE_CHECKING, Any, cast
 
+from runtime.execution.tool_engine.session_reference_uri import (
+    SUPPORTED_SESSION_REFERENCE_SCHEMES,
+)
 from runtime.platform.models.primitives import now_utc
 from runtime.protocol import (
     ErrorItem,
@@ -18,6 +22,7 @@ from runtime.protocol import (
     VerificationItem,
 )
 from runtime.safety.approval.approval_gate import ApprovalProvider
+from runtime.sensing.gateway._realtime_cerebrum_project_os import _is_project_os_command
 from runtime.sensing.gateway._realtime_turn_lifecycle_helpers import (
     _background_task_is_verification,
     _inject_cowork_turn_plan,
@@ -76,6 +81,20 @@ _logger = logging.getLogger(__name__)
 # the model for work that is genuinely still finishing.
 _BACKGROUND_VERIFY_WAIT_S = 180.0
 
+# A parked-report disk scan should usually finish from the OS cache in a few
+# milliseconds.  Give it a small foreground budget so reports are available to
+# the first model round when cheap, then let the strongly tracked worker finish
+# in the background instead of turning a cold/contended store into 12–42 s of
+# model-start latency.
+_PENDING_REPORT_STARTUP_BUDGET_S = 1.0
+
+# A Stop can arrive immediately after the client sees ``turn/started``.  The
+# pending-report scan is intentionally allowed a one-second warm-start window,
+# but that foreground budget must never become a one-second cancellation
+# floor.  Poll the gateway's durable interrupt registry while the report task
+# runs so the lifecycle can close before any model/tool driver is constructed.
+_STARTUP_INTERRUPT_POLL_S = 0.05
+
 # Bounded number of agent-driven verification rounds the turn verifier runs
 # when code changed with no recorded verification evidence and the
 # auto-verifier could not produce any (sandbox didn't allow it, or no
@@ -123,6 +142,31 @@ def _close_turn(
     chronology -- a completion appended after the turn closed would replay out
     of order.
     """
+    # Settle governed canary evidence before writing the terminal journal
+    # record. Completed and failed turns are gradable; user-driven pause,
+    # cancellation, and interruption are explicitly discarded.
+    try:
+        from runtime.safety.evolution.runtime_outcomes import (
+            settle_runtime_candidate_outcomes,
+        )
+
+        candidate_success: bool | None
+        if getattr(turn, "status", None) is TurnStatus.COMPLETED:
+            candidate_success = True
+        elif getattr(turn, "status", None) is TurnStatus.FAILED:
+            turn_error = turn.error if isinstance(getattr(turn, "error", None), dict) else None
+            candidate_success = (
+                None if turn_error and turn_error.get("disposition") == "blocked_on_user" else False
+            )
+        else:
+            candidate_success = None
+        settle_runtime_candidate_outcomes(
+            str(getattr(turn, "id", "") or ""),
+            success=candidate_success,
+        )
+    except Exception:  # noqa: BLE001 — evolution telemetry must not break the turn
+        _logger.debug("candidate outcome settlement skipped", exc_info=True)
+
     for item in getattr(turn, "items", None) or []:
         if getattr(item, "status", None) is not ItemStatus.IN_PROGRESS:
             continue
@@ -168,12 +212,51 @@ def _close_turn(
         _logger.debug("dispatch_stop skipped", exc_info=True)
 
 
+def _finish_startup_interrupt(
+    runtime: CerebrumRuntime,
+    turn: Turn,
+    log: Any,
+    emitter: EventEmitter,
+    *,
+    intent: Any | None,
+) -> bool:
+    """Close an explicit Stop before an execution driver owns the turn.
+
+    ReAct, topology, reflection, and partner drivers each have their own
+    cancellation boundary. Startup work happens before any of those drivers
+    exist, so relying on their pollers lets an already-acknowledged Stop drift
+    through report discovery, intent construction, and agent resolution.
+    Preserve the durable user-message anchor, then terminate the turn here.
+    """
+
+    if not emitter.is_turn_interrupted(turn.id):
+        return False
+    runtime._set_turn_steering_accepting(turn, False)
+    turn.status = TurnStatus.CANCELLED
+    turn.outcome_reason = "user_cancelled"
+    if not turn.interrupt_reason:
+        with contextlib.suppress(Exception):
+            turn.interrupt_reason = emitter.get_interrupt_reason(turn.id)
+    log.turn_updated(
+        turn.thread_id,
+        turn.id,
+        objective_id=turn.objective_id,
+        task_id=turn.task_id,
+        outcome_reason=turn.outcome_reason,
+    )
+    _close_turn(log, turn.thread_id, turn)
+    runtime._snapshot_to_thread_store(turn.thread_id, log, intent)
+    return True
+
+
 def _resolve_session_reference_mentions(
     text: str,
     thread_id: str,
 ) -> tuple[str, str | None]:
-    """dsh host mention seam: resolve ``@session:`` / ``@subagent:`` /
-    canonical ``dsh-session:`` mentions in a realtime user prompt.
+    """Resolve session aliases and canonical Octopus mentions in a user prompt.
+
+    Both current ``octopus-session:`` references and historical
+    ``dsh-session:`` references are accepted.
 
     Returns ``(clean_text, frame)`` — mention tokens replaced by their
     readable labels plus the rendered referenced-sessions frame when any
@@ -183,7 +266,11 @@ def _resolve_session_reference_mentions(
     """
     if not text:
         return text, None
-    if "@session:" not in text and "@subagent:" not in text and "dsh-session:" not in text:
+    if (
+        "@session:" not in text
+        and "@subagent:" not in text
+        and not any(scheme in text for scheme in SUPPORTED_SESSION_REFERENCE_SCHEMES)
+    ):
         return text, None
     try:
         from runtime.execution.subagents.sessions import (
@@ -214,6 +301,139 @@ def _resolve_session_reference_mentions(
         return text, None
 
 
+async def _surface_pending_subagent_reports(
+    thread_id: str,
+) -> tuple[int, int]:
+    """Claim parked subagent reports without blocking realtime delivery.
+
+    Durable session discovery can parse every session JSON while holding the
+    store's main lock.  It used to run before ``turn_started`` and therefore
+    made an unrelated cold scan or lock holder look like a failed Send.  Run
+    the exact same claim/inject/ack sequence in a worker after the user anchor
+    is visible.  ``inject_report_into_thread`` is explicitly worker-safe: it
+    crosses into the active turn through the steering registry.
+
+    Returns ``(pending_count, injected_count)`` for startup diagnostics.
+    A report is still acknowledged only after successful injection, preserving
+    the existing at-least-once durable / exactly-once steering boundary.
+    """
+
+    def _surface() -> tuple[int, int]:
+        from runtime.execution.subagents.sessions import (
+            get_subagent_session_store,
+            inject_report_into_thread,
+        )
+
+        store = get_subagent_session_store()
+        if store is None:
+            return 0, 0
+        pending = store.pending_thread_reports(thread_id)
+        injected = 0
+        for session_id, index, report in pending:
+            if inject_report_into_thread(thread_id, report.content):
+                store.mark_reports_delivered(session_id, up_to_index=index)
+                injected += 1
+        return len(pending), injected
+
+    try:
+        return await asyncio.to_thread(_surface)
+    except Exception:  # noqa: BLE001 — report surfacing is best-effort
+        _logger.debug("pending subagent report surfacing skipped", exc_info=True)
+        return 0, 0
+
+
+async def _refill_subagent_wake_budget(thread_id: str) -> None:
+    """Best-effort human-turn wake-budget refill on the store worker lane."""
+
+    def _refill() -> None:
+        from runtime.execution.subagents.sessions import get_subagent_session_store
+
+        store = get_subagent_session_store()
+        if store is not None:
+            store.refill_thread_wake_budget(thread_id)
+
+    try:
+        await asyncio.to_thread(_refill)
+    except Exception:  # noqa: BLE001 — budget refill is best-effort
+        _logger.debug("subagent wake-budget refill skipped", exc_info=True)
+
+
+def _schedule_subagent_wake_budget_refill(
+    runtime: CerebrumRuntime,
+    thread_id: str,
+) -> None:
+    registry = getattr(runtime, "_pending_subagent_refill_tasks", None)
+    if not isinstance(registry, dict):
+        registry = {}
+        runtime._pending_subagent_refill_tasks = registry
+    existing = registry.get(thread_id)
+    if existing is not None and not existing.done():
+        return
+    task = asyncio.create_task(
+        _refill_subagent_wake_budget(thread_id),
+        name=f"subagent-wake-refill:{thread_id}",
+    )
+    registry[thread_id] = task
+
+    def _discard(done: asyncio.Task[None]) -> None:
+        if registry.get(thread_id) is done:
+            registry.pop(thread_id, None)
+
+    task.add_done_callback(_discard)
+
+
+def _schedule_pending_subagent_reports(
+    runtime: CerebrumRuntime,
+    *,
+    thread_id: str,
+    turn_id: str,
+) -> asyncio.Task[tuple[int, int]]:
+    """Return the one live report-surfacing task for ``thread_id``."""
+
+    registry = getattr(runtime, "_pending_subagent_report_tasks", None)
+    if not isinstance(registry, dict):
+        registry = {}
+        runtime._pending_subagent_report_tasks = registry
+    existing = registry.get(thread_id)
+    if existing is not None and not existing.done():
+        return existing
+
+    worker_started_at = time.perf_counter()
+    task = asyncio.create_task(
+        _surface_pending_subagent_reports(thread_id),
+        name=f"pending-subagent-reports:{thread_id}",
+    )
+    registry[thread_id] = task
+
+    def _complete(done: asyncio.Task[tuple[int, int]]) -> None:
+        if registry.get(thread_id) is done:
+            registry.pop(thread_id, None)
+        if done.cancelled():
+            _logger.debug(
+                "pending subagent report worker cancelled thread_id=%s turn_id=%s",
+                thread_id,
+                turn_id,
+            )
+            return
+        try:
+            pending_count, injected_count = done.result()
+        except Exception:  # noqa: BLE001 — diagnostics cannot break task cleanup
+            _logger.debug("pending subagent report worker failed", exc_info=True)
+            return
+        _logger.info(
+            "realtime pending reports worker completed thread_id=%s turn_id=%s "
+            "pending_count=%d injected_count=%d worker_ms=%.3f",
+            thread_id,
+            turn_id,
+            pending_count,
+            injected_count,
+            (time.perf_counter() - worker_started_at) * 1000,
+        )
+
+    task.add_done_callback(_complete)
+    return task
+
+
 async def _start_turn(
     runtime: CerebrumRuntime,
     params: dict[str, Any],
@@ -224,27 +444,16 @@ async def _start_turn(
     validated = TurnParams.model_validate(params)
     thread_id = runtime._require_thread_id(validated.thread_id)
     # dsh ``agent/inbox/claimed``: a HUMAN-initiated turn refills every
-    # subagent wake budget owned by this thread so a fresh budget's worth of
-    # wakeup reports may open parent turns again (report lane, dsh
-    # ``maxConsecutiveWakes``). An auto-woken parent turn (gateway
-    # ``auto_wake`` marker) deliberately does NOT refill — otherwise a
-    # chatty child could chain an unbounded sequence of parent turns.
-    # Best-effort: a missing store never blocks.
+    # subagent wake budget owned by this thread.  The actual store call is
+    # deliberately deferred until after ``turn_started`` + the user anchor:
+    # it shares the durable-session lock with cold disk discovery and must not
+    # hold the visible Send acknowledgement hostage.  An auto-woken parent
+    # still never refills the budget.
     _input_meta = _input_metadata(validated)
     _auto_wake = bool(
         isinstance(_input_meta.get("context"), dict)
         and bool(_input_meta["context"].get("auto_wake"))
     )
-    try:
-        from runtime.execution.subagents.sessions import (
-            get_subagent_session_store,
-        )
-
-        store = get_subagent_session_store()
-        if store is not None and not _auto_wake:
-            store.refill_thread_wake_budget(thread_id)
-    except Exception:  # noqa: BLE001 — budget refill is best-effort
-        _logger.debug("subagent wake-budget refill skipped", exc_info=True)
     text = _join_text(validated.input)
     stripped_text, marker_mode = _extract_codex_composer_mode(text)
     if marker_mode is not None:
@@ -331,6 +540,11 @@ async def _start_turn(
             if isinstance(_user_ctx_for_complexity, dict)
             else None
         ) or ""
+        _external_model_owner = (
+            str(_user_ctx_for_complexity.get("execution_engine") or "").strip().lower()
+            if isinstance(_user_ctx_for_complexity, dict)
+            else ""
+        ) == "codex"
         _is_code_mode_for_routing = bool(_mode_str == "code" or _capability_mode_str)
         _verdict = estimate_turn_complexity(
             text,
@@ -358,11 +572,18 @@ async def _start_turn(
             _verdict = apply_ai_mode_override(_verdict)
         except ImportError:  # noqa: BLE001 — ai mode is optional
             pass
-        _routed_model, _route_reason = select_model_for_complexity(
-            _verdict,
-            user_model=validated.model,
-            is_code_mode=_is_code_mode_for_routing,
-        )
+        if _external_model_owner:
+            # Codex owns its effective model through the principal-scoped
+            # model profile. Realtime still estimates complexity for its own
+            # lifecycle policy, but must not overwrite or report a model that
+            # will never execute.
+            _routed_model, _route_reason = None, "external_engine:codex"
+        else:
+            _routed_model, _route_reason = select_model_for_complexity(
+                _verdict,
+                user_model=validated.model,
+                is_code_mode=_is_code_mode_for_routing,
+            )
         if _routed_model:
             validated = validated.model_copy(update={"model": _routed_model})
             _logger.info(
@@ -391,6 +612,7 @@ async def _start_turn(
     )
 
     turn = Turn(thread_id=thread_id, params=validated)
+    turn_created_at = time.perf_counter()
     # Every turn has an objective coordinate from its first emitted snapshot.
     # ReAct replaces this provisional id with its durable task id as soon as
     # ``react_started`` arrives; direct/reflection turns keep the turn id.
@@ -404,27 +626,12 @@ async def _start_turn(
     # where a client's turn/interrupt (matched by id, not sequence)
     # arrives before our first poll.
     emitter.register_turn(turn.id)
+    emitter_registered_at = time.perf_counter()
     runtime._register_active_turn(turn, log)
-    # dsh inject-at-next-wake: a fresh parent turn claims every parked
-    # subagent report its thread owns, not just the ones for the exact
-    # session it continues. Best-effort: missing store or failures never
-    # block the turn, and each surfaced report is acked up to the index
-    # actually injected so repeated turns do not re-surface it.
-    try:
-        from runtime.execution.subagents.sessions import (
-            get_subagent_session_store,
-            inject_report_into_thread,
-        )
-
-        store = get_subagent_session_store()
-        if store is not None:
-            for session_id, index, report in store.pending_thread_reports(thread_id):
-                if inject_report_into_thread(thread_id, report.content):
-                    store.mark_reports_delivered(session_id, up_to_index=index)
-    except Exception:  # noqa: BLE001 — report surfacing is best-effort
-        _logger.debug("pending subagent report surfacing skipped", exc_info=True)
+    active_turn_registered_at = time.perf_counter()
     try:
         evt = log.turn_started(thread_id, turn)
+        turn_started_persisted_at = time.perf_counter()
         runtime._active_turn_ids.add(turn.id)
         await emitter.notify(
             ServerMethod.TURN_STARTED,
@@ -433,6 +640,21 @@ async def _start_turn(
                 "turn": turn.model_dump(by_alias=True, mode="json"),
                 "eventId": evt.event_id,
             },
+        )
+        turn_started_visible_at = time.perf_counter()
+        _logger.info(
+            "realtime turn startup timing thread_id=%s turn_id=%s "
+            "emitter_register_ms=%.3f active_register_ms=%.3f "
+            "turn_started_persist_ms=%.3f turn_started_notify_ms=%.3f "
+            "created_to_turn_started_ms=%.3f created_to_visible_ms=%.3f",
+            thread_id,
+            turn.id,
+            (emitter_registered_at - turn_created_at) * 1000,
+            (active_turn_registered_at - emitter_registered_at) * 1000,
+            (turn_started_persisted_at - active_turn_registered_at) * 1000,
+            (turn_started_visible_at - turn_started_persisted_at) * 1000,
+            (turn_started_persisted_at - turn_created_at) * 1000,
+            (turn_started_visible_at - turn_created_at) * 1000,
         )
         runtime._record_task_run_started(turn, text=text, params=validated)
 
@@ -488,9 +710,9 @@ async def _start_turn(
             )
             return turn
 
-        # ── PHASE 3.5 · session-reference mention resolution (dsh host
-        # mention seam) ──
-        # Resolve @session: / @subagent: / canonical dsh-session: mentions
+        # ── PHASE 3.5 · Octopus session-reference mention resolution ──
+        # Resolve @session: / @subagent: / canonical octopus-session: mentions
+        # (plus historical dsh-session: references)
         # into a read-only referenced-sessions frame. The frame is injected
         # into the model's user context (never the sidebar text); any
         # failure degrades to the raw prompt.
@@ -505,20 +727,103 @@ async def _start_turn(
         # title falls back to empty and the chat history starts
         # with the AI's reply only.
         user_item = None
+        user_message_visible_at: float | None = None
         try:
             from runtime.protocol import UserMessageItem
 
-            user_item = UserMessageItem(
-                text=text,
-                attachments=_input_attachments(validated.input),
-            )
+            attachments = _input_attachments(validated.input)
+            if validated.user_item_id is None:
+                user_item = UserMessageItem(text=text, attachments=attachments)
+            else:
+                user_item = UserMessageItem(
+                    id=validated.user_item_id,
+                    text=text,
+                    attachments=attachments,
+                )
             turn.items.append(user_item)
             await runtime._emit_item_started(turn, log, emitter, user_item)
             user_item.status = ItemStatus.COMPLETED
             await runtime._emit_item_completed(turn, log, emitter, user_item)
+            user_message_visible_at = time.perf_counter()
+            _logger.info(
+                "realtime user message timing thread_id=%s turn_id=%s item_id=%s "
+                "turn_started_to_user_visible_ms=%.3f created_to_user_visible_ms=%.3f",
+                thread_id,
+                turn.id,
+                user_item.id,
+                (user_message_visible_at - turn_started_visible_at) * 1000,
+                (user_message_visible_at - turn_created_at) * 1000,
+            )
         except Exception:  # noqa: BLE001
             # Non-fatal: react loop still runs without the anchor.
             _logger.debug("user-message anchor skipped", exc_info=True)
+
+        # ``turn/interrupt`` may race the prompt hooks or user-item emission.
+        # Keep the user's message as the durable conversation anchor, but do
+        # not start report discovery, model routing, or any tool-capable driver
+        # after the Stop has already been acknowledged.
+        if _finish_startup_interrupt(
+            runtime,
+            turn,
+            log,
+            emitter,
+            intent=None,
+        ):
+            return turn
+
+        # dsh inject-at-next-wake: claim every parked report owned by this
+        # thread only after the user's Send is durably visible.  The worker
+        # hop also keeps a cold all-session scan from blocking the realtime
+        # event loop.  Warm scans still inject before history replay; a scan
+        # that exceeds the budget keeps running and reaches the live steering
+        # queue at the next safe model/tool boundary.  If the turn has already
+        # ended, injection returns false and the worker deliberately does not
+        # ack, leaving the durable report for the next turn.
+        pending_reports_started_at = time.perf_counter()
+        if not _auto_wake:
+            _schedule_subagent_wake_budget_refill(runtime, thread_id)
+        pending_reports_task = _schedule_pending_subagent_reports(
+            runtime,
+            thread_id=thread_id,
+            turn_id=turn.id,
+        )
+        reports_deadline = asyncio.get_running_loop().time() + _PENDING_REPORT_STARTUP_BUDGET_S
+        reports_ready = pending_reports_task.done()
+        while not reports_ready and not emitter.is_turn_interrupted(turn.id):
+            remaining = reports_deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                break
+            completed_report_tasks, _ = await asyncio.wait(
+                {pending_reports_task},
+                timeout=min(_STARTUP_INTERRUPT_POLL_S, remaining),
+            )
+            reports_ready = pending_reports_task in completed_report_tasks
+        pending_count: int | None = None
+        injected_count: int | None = None
+        if reports_ready:
+            pending_count, injected_count = pending_reports_task.result()
+        pending_reports_finished_at = time.perf_counter()
+        _logger.info(
+            "realtime pending reports timing thread_id=%s turn_id=%s "
+            "pending_count=%s injected_count=%s deferred=%s "
+            "pending_reports_ms=%.3f user_visible_to_reports_ready_ms=%.3f",
+            thread_id,
+            turn.id,
+            pending_count if pending_count is not None else "pending",
+            injected_count if injected_count is not None else "pending",
+            str(not reports_ready).lower(),
+            (pending_reports_finished_at - pending_reports_started_at) * 1000,
+            (pending_reports_finished_at - (user_message_visible_at or turn_started_visible_at))
+            * 1000,
+        )
+        if _finish_startup_interrupt(
+            runtime,
+            turn,
+            log,
+            emitter,
+            intent=None,
+        ):
+            return turn
 
         # ── PHASE 4 · intent build + resume check ──────────────────
         conversation_messages: list[dict[str, Any]] = []
@@ -531,8 +836,22 @@ async def _start_turn(
             workspaces=runtime._workspaces,
             thread_store=runtime._thread_store,
             allow_client_auto_approve=runtime._allow_client_auto_approve,
+            allow_local_workspace_access=runtime._allow_local_workspace_access,
             conversation_messages=conversation_messages,
         )
+        resolved_execution_workspace = intent.user_context.get("cwd")
+        turn.execution_workspace_path = (
+            resolved_execution_workspace.strip()
+            if isinstance(resolved_execution_workspace, str)
+            and resolved_execution_workspace.strip()
+            else None
+        )
+        # Make a newly-created thread queryable as soon as its authenticated
+        # user anchor and execution context exist. Previously the derived HTTP
+        # thread store was written only at terminal completion, so workbench
+        # and sidebar queries saw several seconds of transient 404s while the
+        # live turn was already streaming successfully.
+        runtime._snapshot_to_thread_store(thread_id, log, intent)
         if session_reference_frame is not None:
             intent = intent.model_copy(
                 update={
@@ -557,7 +876,10 @@ async def _start_turn(
                 actor_id=getattr(emitter, "actor_id", None),
                 intent=intent,
             )
-        if (intent.user_context or {}).get("cowork_waiting_for_mention"):
+        explicit_project_command = _is_project_os_command(text)
+        if (intent.user_context or {}).get(
+            "cowork_waiting_for_mention"
+        ) and not explicit_project_command:
             # A durable chat room accepts ordinary human conversation without
             # manufacturing an assistant response.  Close this as a successful
             # user-only turn before approval/model routing; the canonical room
@@ -650,6 +972,17 @@ async def _start_turn(
             intent=intent,
             fallback=agent,
         )
+        # Agent resolution and resume plumbing can yield to async stores. A
+        # Stop accepted during that window still belongs to startup and must
+        # close before dispatch selects any model/tool-capable driver.
+        if _finish_startup_interrupt(
+            runtime,
+            turn,
+            log,
+            emitter,
+            intent=intent,
+        ):
+            return turn
         turn_driver = "react"
 
         try:
@@ -704,43 +1037,10 @@ async def _start_turn(
                     },
                 )
 
-            if runtime._is_codex_app_server_partner(agent):
-                # Codex keeps Octopus as the public turn/control plane while
-                # delegating the inner coding loop to the formally supported
-                # App Server protocol.  This must precede the generic local
-                # partner branch so Codex does not fall back to one-shot exec
-                # unless the App Server driver explicitly declares itself
-                # unavailable before an inner turn starts.
-                turn_driver = "codex_app_server"
-                used_app_server = await runtime._drive_codex_app_server(
-                    turn,
-                    log,
-                    emitter,
-                    intent,
-                    agent,
-                    provider,
-                    text=text,
-                )
-                turn_driver = "codex_app_server" if used_app_server else "local_partner"
-            elif runtime._is_local_partner(agent):
-                # LocalPartner agent: the user picked a registered external
-                # coding-agent CLI (Claude Code / Codex / Trae / Qoder). Drive that CLI
-                # directly with their own login instead of the LLM loop. The
-                # agent identity is the strongest signal, so this wins even
-                # over a stale topology_id.
-                turn_driver = "local_partner"
-                await runtime._drive_local_partner(
-                    turn,
-                    log,
-                    emitter,
-                    intent,
-                    agent,
-                    provider,
-                    text=text,
-                )
-            elif (intent.user_context or {}).get("cowork_mode") == "project" and not (
-                intent.user_context or {}
-            ).get("cowork_responders"):
+            if explicit_project_command:
+                # Project is a capability attached to the thread, not a fourth
+                # response strategy. Only an explicit command enters Project
+                # OS; ordinary group messages follow chat/cluster/swarm above.
                 turn_driver = "project_os"
                 await runtime._drive_project_os(
                     turn,
@@ -795,6 +1095,21 @@ async def _start_turn(
                     text=text,
                     topology_id=topology_id,
                 )
+            elif runtime._is_codex_app_server_partner(agent):
+                # Group/topology routing wins first: selecting Coder as one
+                # roster member must not turn the whole room into a single
+                # Coder turn. Concrete member dispatch still reaches this same
+                # backend through the persistent standard-role runner.
+                turn_driver = "codex_app_server"
+                await runtime._drive_codex_app_server(
+                    turn,
+                    log,
+                    emitter,
+                    intent,
+                    agent,
+                    provider,
+                    text=text,
+                )
             elif runtime._should_use_reflection_fast_path(
                 text,
                 validated,
@@ -823,9 +1138,7 @@ async def _start_turn(
                 )
         except Exception as exc:
             _logger.exception("CerebrumRuntime: turn driver crashed: %s", turn_driver)
-            turn.execution_engine = (
-                "codex" if turn_driver == "codex_app_server" else "octopus"
-            )
+            turn.execution_engine = "codex" if turn_driver == "codex_app_server" else "octopus"
             context = intent.user_context if isinstance(intent.user_context, dict) else {}
             err = ErrorItem(
                 message=str(exc) or exc.__class__.__name__,
@@ -850,9 +1163,7 @@ async def _start_turn(
             runtime._snapshot_to_thread_store(thread_id, log, intent)
             return turn
 
-        turn.execution_engine = (
-            "codex" if turn_driver == "codex_app_server" else "octopus"
-        )
+        turn.execution_engine = "codex" if turn_driver == "codex_app_server" else "octopus"
 
         # Native tool turns consume steering between model rounds. Other
         # drivers (reflection, topology, Project OS) may finish one atomic
@@ -939,13 +1250,15 @@ async def _start_turn(
 
         repair_attempt = 0
         requested_sandbox = params.get("sandboxPolicy")
+        from runtime.safety.evolution.auto_verifier import (
+            _sandbox_allows_auto_verification,
+        )
+
         repair_limit = (
             2
             if turn_driver == "react"
-            and isinstance(requested_sandbox, dict)
-            and str(requested_sandbox.get("type") or "") == "workspaceWrite"
-            and isinstance(validated.sandbox_policy, dict)
-            and str(validated.sandbox_policy.get("type") or "") == "workspaceWrite"
+            and _sandbox_allows_auto_verification(requested_sandbox)
+            and _sandbox_allows_auto_verification(validated.sandbox_policy)
             else 0
         )
         if _turn_has_failed_code_verification(turn):

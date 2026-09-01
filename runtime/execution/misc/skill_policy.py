@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shlex
 from collections import OrderedDict
 from collections.abc import Iterable, Mapping
@@ -40,6 +41,38 @@ _AUDIT_CONTROL_TOOLS: frozenset[str] = frozenset(
         "todo_read",
         "todo_write",
         "write_todos",
+    }
+)
+
+_NO_LOCAL_ACCESS_SAFE_TOOLS: frozenset[str] = frozenset(
+    {
+        "todo_read",
+        "todo_write",
+        "search_skills",
+        "query_skill",
+        "web_search",
+        "search_web",
+        "web_fetch",
+        "fetch_url",
+        "read_url",
+    }
+)
+
+_READ_ONLY_BLOCKED_TOOLS: frozenset[str] = frozenset(
+    {
+        "write_text_file",
+        "append_text_file",
+        "edit_text_file",
+        "edit_file",
+        "multi_edit_file",
+        "format_code",
+        "exec_shell",
+        "run_tests",
+        "update_soul",
+        "revert_soul",
+        "remember",
+        "note_user",
+        "diary_write",
     }
 )
 
@@ -215,6 +248,85 @@ def filter_audit_read_only_tool_specs(
         )
         is None
     ]
+
+
+def goal_forbids_local_workspace_access(value: str) -> bool:
+    """Whether the user explicitly prohibited even reading local files."""
+
+    text = " ".join(str(value or "").strip().split()).lower()
+    return bool(
+        re.search(
+            r"(?:不要|禁止|不得|不可|严禁|不允许)\s*"
+            r"(?:读取|访问|查看|检查|分析)"
+            r"[^。；;\n]{0,48}(?:本地|项目|仓库|工作区)"
+            r"[^。；;\n]{0,24}(?:文件|代码|目录)",
+            text,
+        )
+        or re.search(
+            r"\b(?:do\s+not|don't|never|must\s+not)\s+"
+            r"(?:read|access|inspect|analy[sz]e)\b"
+            r"[^.\n]{0,64}\b(?:local|workspace|repository|repo|project)\b"
+            r"[^.\n]{0,32}\b(?:files?|code|director(?:y|ies))\b",
+            text,
+        )
+    )
+
+
+def goal_is_read_only(value: str) -> bool:
+    """Whether the user requested a non-mutating workspace operation."""
+
+    text = str(value or "").lower()
+    return bool(
+        re.search(r"\bread[- ]only\b", text)
+        or re.search(
+            r"\b(?:do\s+not|don't|must\s+not|never)\s+"
+            r"(?:modify|change|edit|write|create|update|add|remove|delete|patch)",
+            text,
+        )
+        or re.search(
+            r"(?:只读|(?:不要|严禁|禁止|不得|不可|不允许)\s*"
+            r"(?:修改|改动|更改|编辑|写入|创建|新增|添加|删除|提交))",
+            text,
+        )
+    )
+
+
+def filter_tool_specs_for_workspace_contract(
+    tool_specs: list[Any],
+    goal: str,
+    *,
+    user_context: Mapping[str, Any] | None = None,
+) -> tuple[list[Any], str | None]:
+    """Enforce local-workspace restrictions at every tool catalog boundary."""
+
+    if is_enforced_read_only_context(user_context):
+        return (
+            filter_audit_read_only_tool_specs(
+                tool_specs,
+                context=user_context,
+            ),
+            (
+                "audit_read_only"
+                if is_audit_read_only_context(user_context)
+                else "read_only"
+            ),
+        )
+    if goal_forbids_local_workspace_access(goal):
+        allowed = [
+            spec
+            for spec in tool_specs
+            if str(getattr(spec, "name", "")) in _NO_LOCAL_ACCESS_SAFE_TOOLS
+            or str(getattr(spec, "name", "")).startswith("browser_")
+        ]
+        return allowed, "no_local_access"
+    if goal_is_read_only(goal):
+        allowed = [
+            spec
+            for spec in tool_specs
+            if str(getattr(spec, "name", "")) not in _READ_ONLY_BLOCKED_TOOLS
+        ]
+        return allowed, "read_only"
+    return tool_specs, None
 
 
 def normalize_skill_name(value: Any) -> str:

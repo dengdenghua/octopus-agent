@@ -347,9 +347,7 @@ class EchoRuntime:
             "turns": [t.model_dump(by_alias=True, mode="json") for t in window],
             "totalTurns": len(turns),
             "lastTurnId": last_turn.id if last_turn is not None else None,
-            "lastTurnStatus": (
-                last_turn.status.value if last_turn is not None else None
-            ),
+            "lastTurnStatus": (last_turn.status.value if last_turn is not None else None),
             "hasMore": has_more,
             "incremental": False,
             "nextEventSequence": next_sequence,
@@ -378,12 +376,16 @@ class EchoRuntime:
         self, params: dict[str, Any], emitter: EventEmitter
     ) -> dict[str, Any]:
         from runtime.memory.threads.event_log import archive_thread
+        from runtime.sensing.gateway._realtime_thread_delete_probe import (
+            claimed_runtime_thread_write,
+        )
         from runtime.sensing.gateway.realtime_gateway import _RpcError
 
         thread_id = self._require_thread_id(params.get("threadId"))
-        self._require_owner(self._log_for(thread_id), getattr(emitter, "actor_id", None))
-        if not archive_thread(self._logs_root, thread_id):
-            raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
+        async with claimed_runtime_thread_write(self, thread_id):
+            self._require_owner(self._log_for(thread_id), getattr(emitter, "actor_id", None))
+            if not archive_thread(self._logs_root, thread_id):
+                raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
         return {"threadId": thread_id, "archived": True}
 
     # ── Item emitters ────────────────────────────────────────
