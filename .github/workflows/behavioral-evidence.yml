@@ -17,7 +17,9 @@ jobs:
     # Required reviewers and the fixed identity vars/secrets are configured on
     # this environment. A missing variable fails closed in the preflight below.
     environment: behavioral-evidence
-    timeout-minutes: 720
+    # GitHub Actions rejects values above its 360-minute per-job ceiling at
+    # workflow-parse time, before a self-hosted runner can start.
+    timeout-minutes: 360
     env:
       OCTOPUS_BEHAVIORAL_EXPECTED_REVISION: ${{ github.sha }}
       OCTOPUS_EVAL_CONFIG: ${{ vars.OCTOPUS_BEHAVIORAL_CONFIG_PATH }}

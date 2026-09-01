@@ -25,7 +25,9 @@ jobs:
     name: Same-service native vs Codex AB/BA evidence
     runs-on: [self-hosted, Linux, X64, hardened-verifier]
     environment: engine-comparison-evidence
-    timeout-minutes: 720
+    # GitHub Actions rejects values above its 360-minute per-job ceiling at
+    # workflow-parse time, before a self-hosted runner can start.
+    timeout-minutes: 360
     env:
       TARGET_SHA: ${{ inputs.target_sha }}
       OCTOPUS_EVAL_CONFIG: ${{ vars.OCTOPUS_ENGINE_CONFIG_PATH }}
