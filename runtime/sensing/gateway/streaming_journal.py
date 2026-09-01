@@ -41,8 +41,12 @@ class StreamingJournal(Journal):
             return len(self._subscribers)
 
     def write(self, event: JournalEvent) -> None:
-        self._inner.write(event)
-        self._broadcast(event)
+        durable_event = self._inner.canonicalize_event(event)
+        self._inner.write(durable_event)
+        self._broadcast(durable_event)
+
+    def canonicalize_event(self, event: JournalEvent) -> JournalEvent:
+        return self._inner.canonicalize_event(event)
 
     def read_all(self, *, scope: TenantScope | None = None) -> list[JournalEvent]:
         return self._inner.read_all(scope=scope)

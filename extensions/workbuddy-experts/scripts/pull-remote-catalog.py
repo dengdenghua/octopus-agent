@@ -9,12 +9,15 @@ Downloads:
 Full bundles (all team members / skills / avatars / references) are ~1GB+ and
 are NOT pulled by default; use `--bundles` to fetch them (heavy).
 """
+
 from __future__ import annotations
 
 import argparse
 import concurrent.futures as cf
 import json
+import shutil
 import sys
+import tarfile
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -24,6 +27,9 @@ MANIFEST_URL = f"{BASE}/expert_center.json"
 FORK_ROOT = Path(__file__).resolve().parent.parent
 REMOTE = FORK_ROOT / "remote"
 AGENTS_DIR = REMOTE / "agents"
+_MAX_ARCHIVE_MEMBERS = 20_000
+_MAX_MEMBER_BYTES = 256 * 1024 * 1024
+_MAX_EXTRACTED_BYTES = 4 * 1024 * 1024 * 1024
 
 
 def _get(url: str, timeout: float = 30) -> bytes:
@@ -55,22 +61,57 @@ def pull_one(expert: dict) -> tuple[str, str]:
         return plugin, f"err:{e}"
 
 
-
-
-def _safe_extract(tf: "tarfile.TarFile", dest: Path) -> None:
-    """Path-traversal-safe extraction that works on Python 3.9+."""
+def _safe_extract(tf: tarfile.TarFile, dest: Path) -> None:
+    """Extract regular files/directories without following archive links."""
+    if dest.is_symlink():
+        raise ValueError(f"unsafe extraction root: {dest}")
+    members = tf.getmembers()
+    if len(members) > _MAX_ARCHIVE_MEMBERS:
+        raise ValueError("expert bundle contains too many members")
     dest_res = dest.resolve()
-    for member in tf.getmembers():
-        target = (dest / member.name).resolve()
+    validated: list[tuple[tarfile.TarInfo, Path]] = []
+    seen_targets: set[Path] = set()
+    extracted_bytes = 0
+    for member in members:
+        if "\\" in member.name or "\x00" in member.name:
+            raise ValueError(f"unsafe tar path: {member.name}")
+        if not (member.isdir() or member.isreg()):
+            raise ValueError(f"unsupported tar member: {member.name}")
+        raw_target = dest / member.name
+        current = raw_target
+        while current != dest:
+            if current.is_symlink():
+                raise ValueError(f"tar path crosses symlink: {member.name}")
+            current = current.parent
+        target = raw_target.resolve()
         if dest_res not in target.parents and target != dest_res:
             raise ValueError(f"unsafe tar path: {member.name}")
-    tf.extractall(dest)
+        if target in seen_targets:
+            raise ValueError(f"duplicate tar path: {member.name}")
+        seen_targets.add(target)
+        if member.isreg():
+            if member.size < 0 or member.size > _MAX_MEMBER_BYTES:
+                raise ValueError(f"tar member is too large: {member.name}")
+            extracted_bytes += member.size
+            if extracted_bytes > _MAX_EXTRACTED_BYTES:
+                raise ValueError("expert bundle expands beyond the size limit")
+        validated.append((member, target))
+
+    for member, target in validated:
+        if member.isdir():
+            target.mkdir(parents=True, exist_ok=True)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        source = tf.extractfile(member)
+        if source is None:
+            raise ValueError(f"tar member has no file content: {member.name}")
+        with source, target.open("wb") as output:
+            shutil.copyfileobj(source, output, length=1024 * 1024)
 
 
 def pull_bundles(manifest: dict, args) -> tuple[int, int]:
     """Download + extract every expert bundle. Returns (done, failed)."""
     import io
-    import tarfile
 
     bundles_dir = REMOTE / "bundles"
     bundles_dir.mkdir(parents=True, exist_ok=True)
@@ -116,8 +157,14 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--concurrency", type=int, default=8)
     ap.add_argument("--no-index", action="store_true")
-    ap.add_argument("--bundles", action="store_true", help="download full .tar.gz bundles (heavy, ~1GB)")
-    ap.add_argument("--strip-avatars", action="store_true", help="with --bundles: delete avatars/*.png after extract (~80% size)")
+    ap.add_argument(
+        "--bundles", action="store_true", help="download full .tar.gz bundles (heavy, ~1GB)"
+    )
+    ap.add_argument(
+        "--strip-avatars",
+        action="store_true",
+        help="with --bundles: delete avatars/*.png after extract (~80% size)",
+    )
     args = ap.parse_args()
 
     print("fetching manifest…")
@@ -140,7 +187,9 @@ def main() -> int:
 
     if args.bundles:
         done, failed = pull_bundles(manifest, args)
-        print(f"bundles: {done} ok, {failed} failed ({'avatars stripped' if args.strip_avatars else 'avatars kept'})")
+        print(
+            f"bundles: {done} ok, {failed} failed ({'avatars stripped' if args.strip_avatars else 'avatars kept'})"
+        )
 
     if args.no_index:
         return 0
@@ -153,8 +202,8 @@ def main() -> int:
         "# WorkBuddy Expert Center — 全量目录(远程镜像)",
         "",
         f"> 来源: `{BASE}` · 共 **{len(experts)}** 个专家 "
-        f"(agent {sum(1 for e in experts if e.get('expertType')=='agent')} / "
-        f"team {sum(1 for e in experts if e.get('expertType')=='team')})",
+        f"(agent {sum(1 for e in experts if e.get('expertType') == 'agent')} / "
+        f"team {sum(1 for e in experts if e.get('expertType') == 'team')})",
         "",
         "## 分类统计",
         "",

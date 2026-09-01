@@ -308,6 +308,20 @@ class TestCredentialStore:
 
 
 class TestConnectorRegistry:
+    def test_token_schemas_never_ship_default_credentials(self):
+        violations: list[str] = []
+        for schema_path in FORK.rglob("token-schema.json"):
+            schema = json.loads(schema_path.read_text(encoding="utf-8"))
+            for field in schema.get("fields", []):
+                key = str(field.get("key") or "")
+                credential_like = field.get("type") == "password" or any(
+                    marker in key.lower() for marker in ("token", "secret", "key")
+                )
+                if credential_like and str(field.get("defaultValue") or "").strip():
+                    violations.append(f"{schema_path.relative_to(FORK)}:{key}")
+
+        assert violations == []
+
     def test_list_fork(self):
         reg = ConnectorRegistry(marketplace_root=FORK)
         conns = reg.list()
