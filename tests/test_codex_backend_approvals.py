@@ -26,6 +26,7 @@ def _broker(tmp_path: Path, provider: _Provider, interrupted=lambda: False):
         outer_thread_id="outer-thread",
         outer_turn_id="outer-turn",
         workspace=workspace,
+        selected_app_ids=(),
         is_interrupted=interrupted,
     )
     broker.bind_inner_scope(thread_id="inner-thread", turn_id="inner-turn")
