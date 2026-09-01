@@ -499,6 +499,47 @@ def create_thread_state_router(
                 break
         return {"threads": results}
 
+    @router.get("/api/threads/diagnostics/errors")
+    def conversation_error_diagnostics(
+        request: Request,
+        thread_limit: int = Query(100, ge=1, le=500),  # type: ignore[misc]
+        message_limit: int = Query(500, ge=1, le=5_000),  # type: ignore[misc]
+        sample_limit: int = Query(20, ge=0, le=100),  # type: ignore[misc]
+    ) -> dict[str, Any]:
+        """Return an owner-filtered, privacy-bounded conversation error summary."""
+
+        actor_id = _auth(request)
+        tenant_id = _tenant(request)
+        _require_store()
+        visible: list[dict[str, Any]] = []
+        # Apply the public limit after ACL filtering. Limiting the global store
+        # first lets another tenant's newer threads crowd the caller's rows out
+        # of a small diagnostic request.
+        for thread in store.search(
+            limit=500,
+            offset=0,
+            sort_by="updated_at",
+            sort_order="desc",
+        ):
+            if not _can_read(thread, actor_id, tenant_id):
+                continue
+            thread_id = thread.get("thread_id")
+            if isinstance(thread_id, str) and _is_archived(thread_id):
+                continue
+            visible.append(thread)
+            if len(visible) >= thread_limit:
+                break
+
+        from ._conversation_error_diagnostics import build_conversation_error_diagnostics
+
+        report = build_conversation_error_diagnostics(
+            visible,
+            message_limit=message_limit,
+            sample_limit=sample_limit,
+        )
+        report["bounds"]["thread_limit"] = thread_limit
+        return report
+
     # Octopus Native Session API v2: full-text search endpoint
     @router.get("/api/threads/fts")
     def full_text_search(
