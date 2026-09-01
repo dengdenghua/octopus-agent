@@ -10,6 +10,7 @@ to 104 bytes — pytest's default ``tmp_path`` is often longer.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import time
@@ -117,6 +118,8 @@ def test_second_leader_fails_with_already_running(
     with pytest.raises(LeaderAlreadyRunning):
         second.start(blocking=False)
     second.stop()
+    with LeaderClient.connect(leader_socket) as client:
+        assert client.call("ping", {})["pong"] is True
 
 
 def test_stale_pid_file_is_reclaimed(short_tmp: Path) -> None:
@@ -149,6 +152,26 @@ def test_client_ping(running_leader: LeaderProcess, leader_socket: Path) -> None
     with LeaderClient.connect(leader_socket) as client:
         result = client.call("ping", {})
     assert result == {"pong": True, "pid": os.getpid()}
+
+
+def test_authenticated_loopback_fallback_round_trip(
+    leader_socket: Path,
+    leader_pid: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.core.cerebrum import leader as leader_mod
+
+    monkeypatch.setattr(leader_mod, "_uses_loopback_transport", lambda: True)
+    proc = LeaderProcess(socket_path=leader_socket, pid_path=leader_pid)
+    proc.start(blocking=False)
+    try:
+        endpoint = json.loads(leader_socket.read_text(encoding="utf-8"))
+        assert endpoint["host"] == "127.0.0.1"
+        assert len(endpoint["token"]) >= 32
+        with LeaderClient.connect(leader_socket) as client:
+            assert client.call("ping", {})["pong"] is True
+    finally:
+        proc.stop()
 
 
 def test_client_pause_and_resume(

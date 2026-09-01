@@ -73,7 +73,8 @@ def resolve_bundled_codex_version() -> str:
 @dataclass(frozen=True)
 class CodexUpdateStatus:
     package: str
-    current_version: str
+    current_version: str | None
+    available: bool = True
     latest_version: str | None = None
     update_available: bool = False
     checked_at: str | None = None
@@ -141,11 +142,23 @@ class CodexUpstreamUpdateService:
         fetcher: Fetcher | None = None,
         check_interval_seconds: float = DEFAULT_CHECK_INTERVAL_SECONDS,
         initial_check_delay_seconds: float = DEFAULT_INITIAL_CHECK_DELAY_SECONDS,
+        allow_unavailable: bool = False,
     ) -> None:
         _validate_registry_url(registry_url)
         self._state_path = Path(state_path).expanduser().resolve(strict=False)
-        self._current_version = current_version or resolve_bundled_codex_version()
-        _version_parts(self._current_version)
+        self._unavailable_reason: str | None = None
+        if current_version is not None:
+            self._current_version: str | None = current_version
+        else:
+            try:
+                self._current_version = resolve_bundled_codex_version()
+            except RuntimeError as exc:
+                if not allow_unavailable:
+                    raise
+                self._current_version = None
+                self._unavailable_reason = str(exc)
+        if self._current_version is not None:
+            _version_parts(self._current_version)
         self._registry_url = registry_url
         self._fetcher = fetcher or _fetch_registry_metadata
         self._check_interval_seconds = max(60.0, float(check_interval_seconds))
@@ -155,6 +168,8 @@ class CodexUpstreamUpdateService:
 
     def read(self) -> CodexUpdateStatus:
         with self._lock:
+            if self._current_version is None:
+                return self._empty_status()
             try:
                 payload = json.loads(self._state_path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
@@ -165,6 +180,8 @@ class CodexUpstreamUpdateService:
 
     def check(self, *, timeout: float = 8.0) -> CodexUpdateStatus:
         with self._lock:
+            if self._current_version is None:
+                return self._empty_status()
             previous = self.read()
             checked_at = _utc_now()
             try:
@@ -222,6 +239,8 @@ class CodexUpstreamUpdateService:
 
     def approve(self, version: str) -> CodexUpdateStatus:
         with self._lock:
+            if self._current_version is None:
+                raise ValueError("bundled Codex runtime is unavailable")
             current = self.read()
             if not current.update_available or current.latest_version != version:
                 raise ValueError("Codex update candidate is not current")
@@ -238,6 +257,8 @@ class CodexUpstreamUpdateService:
             return status
 
     def start(self) -> None:
+        if self._current_version is None:
+            return
         if self._task is None or self._task.done():
             self._task = asyncio.create_task(self._run(), name="codex-update-radar")
 
@@ -260,7 +281,9 @@ class CodexUpstreamUpdateService:
         return CodexUpdateStatus(
             package=CODEX_PACKAGE_NAME,
             current_version=self._current_version,
+            available=self._current_version is not None,
             source_url=self._registry_url,
+            error=self._unavailable_reason,
         )
 
     def _status_from_payload(self, payload: dict[str, Any]) -> CodexUpdateStatus:

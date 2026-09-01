@@ -30,6 +30,7 @@ vi.mock("@/providers/AuthProvider", () => ({
 const pending = {
   package: "@openai/codex",
   current_version: "0.149.0",
+  available: true,
   latest_version: "0.150.0",
   update_available: true,
   checked_at: "2026-08-23T00:00:00Z",
@@ -79,5 +80,26 @@ describe("CodexUpdateRadar", () => {
     );
 
     expect(api.check).toHaveBeenCalledTimes(1);
+  });
+
+  it("explains backend-only distributions without offering a broken check", async () => {
+    api.get.mockResolvedValue({
+      ...pending,
+      current_version: null,
+      available: false,
+      latest_version: null,
+      update_available: false,
+      checked_at: null,
+      error: "bundled Codex version is unavailable",
+    });
+
+    renderWithProviders(<CodexUpdateRadar />, { locale: "zh-CN" });
+
+    expect(await screen.findByText("未内置")).toBeInTheDocument();
+    expect(screen.getByText(/不影响后端服务/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "检查 Codex 引擎更新" }),
+    ).toBeDisabled();
+    expect(screen.queryByText(/检查失败/)).not.toBeInTheDocument();
   });
 });

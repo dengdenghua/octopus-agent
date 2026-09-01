@@ -57,7 +57,7 @@ CODEX_BUNDLE_LICENSE_SOURCES = {
     "third-party/codex-rust/THIRD_PARTY_LICENSES-windows-sandbox.html": (
         ROOT / "extras/desktop/licenses/codex-0.149.0/THIRD_PARTY_LICENSES-windows-sandbox.html"
     ),
-    "third-party/codex-rust/README.md": (
+    "third-party/codex-rust/THIRD_PARTY_LICENSES.md": (
         ROOT / "extras/desktop/licenses/codex-0.149.0/THIRD_PARTY_LICENSES.md"
     ),
     "third-party/codex-native/NATIVE_PROVENANCE.json": (
@@ -391,7 +391,8 @@ def test_packaged_desktop_backend_has_no_uv_python_or_network_fallback() -> None
         # The Windows profile materializes .exe executables; the darwin and Linux
         # profiles reuse the extension-less basename, so only assert the exact
         # codex executable path and the Windows inventory when running on Windows.
-        assert 'path.join(resourcesPath(), "codex", "bin", "codex.exe")' in source
+        assert 'executableName: "codex.exe"' in source
+        assert 'resourcesPath(),\n    "codex",\n    "bin",' in source
         for relative in (*CODEX_BUNDLE_EXECUTABLES, *CODEX_BUNDLE_LICENSE_SOURCES):
             assert f'"{relative}"' in source
     assert 'relative: "codex-package.json"' in source
@@ -460,7 +461,8 @@ def test_packaged_runtime_rejects_missing_codex_before_any_spawn(tmp_path: Path)
         pytest.skip("Node.js is required for the packaged Codex contract")
     resources = tmp_path / "packaged-resources"
     user_data = tmp_path / "user-data"
-    backend = resources / "backend/octopus-backend"
+    backend_name = "octopus-backend.exe" if os.name == "nt" else "octopus-backend"
+    backend = resources / "backend" / backend_name
     backend.parent.mkdir(parents=True)
     backend.write_bytes(b"backend")
     script = r"""

@@ -105,6 +105,33 @@ def test_rejects_unverified_or_insecure_metadata(tmp_path):
     assert status.error == "Codex package integrity is missing"
 
 
+def test_optional_radar_is_inert_when_bundled_runtime_is_unavailable(tmp_path, monkeypatch):
+    def unavailable() -> str:
+        raise RuntimeError("bundled Codex version is unavailable")
+
+    monkeypatch.setattr(
+        "runtime.execution.codex_backend.upstream_update.resolve_bundled_codex_version",
+        unavailable,
+    )
+    service = CodexUpstreamUpdateService(
+        tmp_path / "status.json",
+        allow_unavailable=True,
+        fetcher=lambda _url, _timeout: pytest.fail("unavailable radar must not fetch"),
+    )
+
+    status = service.check()
+
+    assert status.available is False
+    assert status.current_version is None
+    assert status.update_available is False
+    assert status.error == "bundled Codex version is unavailable"
+    assert not (tmp_path / "status.json").exists()
+    service.start()
+    assert service._task is None
+    with pytest.raises(ValueError, match="runtime is unavailable"):
+        service.approve("0.150.0")
+
+
 @pytest.mark.parametrize(
     "registry_url",
     [
