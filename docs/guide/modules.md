@@ -214,7 +214,7 @@ Cross-cutting infrastructure used by all other modules.
 | Channels | 20+ channel adapters (Discord, Slack, WeChat, Telegram, Email, etc.) |
 | MCP Client | Model Context Protocol client bridge |
 | Scheduler | Cron-based task scheduler |
-| Integrations | Third-party integrations (Molili, local auth) |
+| Integrations | Account integrations (Oct, local auth) |
 | Instrumentation | OpenTelemetry tracing |
 | Web Auth | Web authentication |
 

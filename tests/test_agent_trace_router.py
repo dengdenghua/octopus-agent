@@ -547,6 +547,158 @@ def test_trace_review_queue_promotions_can_plan_apply_and_audit(
     assert len(promoted_record["metadata"]["replay"]["fingerprint"]) == 16
 
 
+def _forged_skill_promotion_client(
+    tmp_path: Path,
+    *,
+    auto_persist_dir: Path | None,
+):
+    from uuid import uuid4
+
+    from runtime.execution.suckers import Skill, SkillRegistry
+    from runtime.memory.journal import InMemoryJournal
+    from runtime.memory.learning.review_queue import ReviewQueue
+    from runtime.platform.models import (
+        ArmId,
+        ExecutionResult,
+        Step,
+        TaskId,
+        ToolCall,
+        Trajectory,
+        TrajectoryOutcome,
+    )
+
+    journal = InMemoryJournal()
+    registry = SkillRegistry()
+    for name in ("list_cwd", "count_words"):
+        registry.register(
+            Skill(
+                name=name,
+                trusted_source=f"builtin://{name}",
+                handler=lambda **_: {"ok": True},
+            ),
+            verify_tests=False,
+        )
+    raw_task_id = uuid4()
+    task_id = str(raw_task_id)
+    steps = []
+    for index, name in enumerate(("list_cwd", "count_words")):
+        call = ToolCall(caller="test", sucker_id=name, args={})
+        steps.append(
+            Step(
+                step_id=index,
+                node_id=f"n{index}",
+                action=call,
+                result=ExecutionResult(
+                    call_id=call.call_id,
+                    status="success",
+                    output={"ok": True},
+                ),
+            )
+        )
+    journal.write_trajectory(
+        Trajectory(
+            task_id=TaskId(raw_task_id),
+            arm_id=ArmId("test"),
+            strategy_id="react_loop",
+            steps=steps,
+            outcome=TrajectoryOutcome(success=True),
+        )
+    )
+
+    queue = ReviewQueue(tmp_path / "review_queue.json")
+    item = queue.upsert_item(
+        source="task_run_review",
+        source_kind="success_pattern",
+        candidate_kind="success_pattern",
+        priority="P1",
+        target_bucket="experience",
+        title="Forge the successful sequence",
+        text="Promote this run into a reusable skill.",
+        source_task_ids=[task_id],
+    )["items"][0]
+    queue.decide(item["id"], action="promoted", promoted_to="forged_skill")
+
+    store = AgentTraceStore(tmp_path / "agent_trace.sqlite")
+    app = FastAPI()
+    app.include_router(
+        create_agent_trace_router(
+            store=store,
+            journal=journal,
+            registry=registry,
+            auto_persist_dir=auto_persist_dir,
+            experience_ledger_path=tmp_path / "experience_ledger.json",
+            review_queue=queue,
+            promotion_audit_path=tmp_path / "promotion_audit.json",
+            proposal_ledger_path=tmp_path / "proposal_ledger.jsonl",
+        )
+    )
+    return TestClient(app), registry, store
+
+
+def test_trace_forged_skill_promotion_is_persisted_and_restart_loadable(
+    tmp_path: Path,
+) -> None:
+    from runtime.execution.suckers import SkillRegistry, load_forged_skills_from_dir
+
+    persist_dir = tmp_path / "forged_skills"
+    client, registry, store = _forged_skill_promotion_client(
+        tmp_path,
+        auto_persist_dir=persist_dir,
+    )
+    try:
+        response = client.post(
+            "/api/agent-trace/review-queue/promotions/apply",
+            json={
+                "target": "forged_skill",
+                "override_replay_gate": True,
+                "override_reason": "Reviewed the selected successful trajectory.",
+            },
+        )
+    finally:
+        store.close()
+
+    assert response.status_code == 200
+    assert response.json()["applied"] == 1
+    promoted = response.json()["results"][0]["artifact"]["promoted"]
+    assert len(promoted) == 1
+    promoted_name = promoted[0]
+    assert registry.has(promoted_name)
+    assert (persist_dir / f"{promoted_name}.md").is_file()
+
+    restarted_registry = SkillRegistry()
+    for name in ("list_cwd", "count_words"):
+        restarted_registry.register(registry.get(name), verify_tests=False)
+    loaded = load_forged_skills_from_dir(persist_dir, restarted_registry)
+    assert promoted_name in loaded
+    assert restarted_registry.has(promoted_name)
+
+
+def test_trace_forged_skill_promotion_fails_closed_when_persistence_is_unwired(
+    tmp_path: Path,
+) -> None:
+    client, registry, store = _forged_skill_promotion_client(
+        tmp_path,
+        auto_persist_dir=None,
+    )
+    try:
+        response = client.post(
+            "/api/agent-trace/review-queue/promotions/apply",
+            json={
+                "target": "forged_skill",
+                "override_replay_gate": True,
+                "override_reason": "Would otherwise override replay evidence.",
+            },
+        )
+    finally:
+        store.close()
+
+    assert response.status_code == 503
+    detail = response.json()["detail"]
+    assert detail["message"] == "forged_skill promotion dependencies unavailable"
+    assert detail["missing"] == ["auto_persist_dir"]
+    assert registry.list_by_affinity("forged") == []
+
+
 def test_trace_review_queue_promotion_apply_requires_replay_gate_or_override(
     tmp_path: Path,
 ) -> None:

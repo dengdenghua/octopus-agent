@@ -139,6 +139,17 @@ def test_client_fetch_real_quotes_payload_and_decode() -> None:
     assert payload["params"] == ["605080.sh", "003032.sz"]
 
 
+def test_client_fetch_real_quotes_wraps_single_quote_object() -> None:
+    client, _calls = _client_with_stub_request()
+    client._stub_responses.append(
+        {"code": 1, "data": _gzip_b64({"stockCode": "600000", "currentPrice": 12.34})}
+    )
+
+    data = client.fetch_real_quotes(["600000.sh"])
+
+    assert data == [{"stockCode": "600000", "currentPrice": 12.34}]
+
+
 # ── 2. LiveDataSource.watch 聚合 + 缓存 + 降级 ─────────────
 
 
@@ -285,7 +296,30 @@ def test_watch_page_route_serves_html(tmp_path: Path) -> None:
     r = client.get("/api/plugins/paper-trading/watch")
     assert r.status_code == 200
     assert "盯盘" in r.text
-    # 实时推送页:SSE 流 + 轮询兜底
-    assert "push/stream" in r.text
-    assert "EventSource" in r.text
-    assert "live/watch" in r.text or 'PUSH+"/watch"' in r.text
+    assert "watch.js" in r.text
+
+    script = client.get("/api/plugins/paper-trading/watch.js")
+    assert script.status_code == 200
+    assert script.headers["content-type"].startswith("application/javascript")
+    # 统一行情中心:带 Bearer 的 fetch-SSE 单连接 + 快照轮询兜底。
+    assert 'QUOTE_URL + "/stream?codes="' in script.text
+    assert 'QUOTE_URL + "/snapshot?codes="' in script.text
+    assert "response.body.getReader()" in script.text
+    assert 'headers.Authorization = "Bearer " + bearerToken' in script.text
+    assert 'result.credentials = "omit"' in script.text
+    assert "new EventSource" not in script.text
+    assert "sessionStorage" not in script.text
+    assert "localStorage" not in script.text
+    assert 'type: "octopus:quote-config-request"' in script.text
+    assert 'message.type !== "octopus:quote-config"' in script.text
+    assert 'origin !== "null" && origin === window.location.origin' in script.text
+    assert 'packet.event === "reauth"' in script.text
+    assert "status === 401" in script.text
+    assert "status === 429" in script.text
+    assert '"https://quotes.echo-age.com"' in script.text
+    assert "Array.isArray(payload.quotes)" in script.text
+    assert 'window.addEventListener("pageshow"' in script.text
+    assert 'requestQuoteConfig("pageshow")' in script.text
+    assert "token=" not in script.text.lower()
+    assert "/live/watch" in script.text
+    assert "window.__quoteHubV2 = true" in script.text

@@ -242,25 +242,6 @@ grep -rl "import octopus" . | xargs sed -i 's/import octopus/import runtime/g'
 
 ---
 
-## 2026-04 · Molili 网关集成
-
-落地范围：4 个文件 · 改造后 1,110 行（删除 `octopus.auth` 依赖 + 改 sync httpx）
-
-| 文件 | 改造要点 |
-|---|---|
-| `runtime/integrations/molili/config.py` | 移除全局 singleton · 加 `jwt_secret` / `jwt_expire_seconds` / `jwt_issuer` 用于登录签发 |
-| `runtime/integrations/molili/links.py` | 移除配置路径依赖 · 默认路径兜底 `~/.octopus/molili_links.json` |
-| `runtime/integrations/molili/client.py` | 共享 helpers · sync httpx · 注入式 http_client · 测试友好 |
-| `runtime/integrations/molili/router_auth.py` | 换 `IdentityStore` 自动创建 · `encode_jwt_hs256` 签发 · Pydantic 模型挪模块级 |
-| `runtime/integrations/molili/router_account.py` | 保留 link/credits/goods/orders/daily-claim · auth 走 `_resolve_actor` |
-| `runtime/integrations/molili/router_proxy.py` | 同上 · 保留 SSE 流式转发 |
-
-**测试**：`tests/test_molili.py` · 42 个测试 · 覆盖 config / link store / SMS / credits / daily-claim / goods / orders / proxy / create_app wiring。
-
-**前端**：`frontend/src/pages/{Login,Billing}.tsx` + API client `molili.*` + auth localStorage helper + Layout 侧边栏 Credits badge。
-
----
-
 ## 对等参考（架构思路）
 
 本项目不 fork 外部代码。下列参考仅用于内部设计对照：

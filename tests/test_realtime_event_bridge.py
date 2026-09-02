@@ -312,6 +312,63 @@ async def test_adaptive_batching_default_on_single_chunk_message_unchanged() -> 
     assert "".join(emitter.deltas()) == "hello"
 
 
+# ── legacy plan-snapshot sunset ─────────────────────────────────
+
+
+def _plan_updates(emitter: _StubEmitter) -> list[dict]:
+    return [p for m, p in emitter.notified if m.endswith("turn/plan/updated")]
+
+
+def _snapshot_updates(emitter: _StubEmitter) -> list[dict]:
+    return [p for m, p in emitter.notified if m.endswith("workbench/snapshot")]
+
+
+@pytest.mark.asyncio
+async def test_plan_update_omits_embedded_snapshot_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SUNSET: turn/plan/updated no longer embeds workbenchSnapshot by
+    default — the identical frame ships on the dedicated
+    workbench/snapshot notification only."""
+    import runtime.sensing.gateway.realtime_event_bridge as bridge
+
+    monkeypatch.setattr(bridge, "_LEGACY_PLAN_SNAPSHOT", False)
+    state, turn, emitter, log = _new_state()
+
+    await state._emit_turn_update(turn, log, emitter)
+
+    plan_updates = _plan_updates(emitter)
+    snapshot_updates = _snapshot_updates(emitter)
+    assert len(plan_updates) == 1
+    assert len(snapshot_updates) == 1
+    assert "workbenchSnapshot" not in plan_updates[0]
+    # phases still ride the plan channel; the snapshot channel carries the
+    # identical frame.
+    assert "phases" in plan_updates[0]
+    assert snapshot_updates[0]["snapshot"]["version"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_plan_update_embeds_snapshot_when_legacy_flag_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OCTOPUS_LEGACY_PLAN_SNAPSHOT=1 restores the embedded copy for
+    out-of-tree clients that still read it."""
+    import runtime.sensing.gateway.realtime_event_bridge as bridge
+
+    monkeypatch.setattr(bridge, "_LEGACY_PLAN_SNAPSHOT", True)
+    state, turn, emitter, log = _new_state()
+
+    await state._emit_turn_update(turn, log, emitter)
+
+    plan_updates = _plan_updates(emitter)
+    assert len(plan_updates) == 1
+    assert plan_updates[0]["workbenchSnapshot"]["version"] >= 1
+    # The dedicated channel is unaffected — both frames ship when the
+    # legacy flag is on.
+    assert len(_snapshot_updates(emitter)) == 1
+
+
 # ── tool-call-delta live assembly preview (dsh lane) ──────────────────
 
 

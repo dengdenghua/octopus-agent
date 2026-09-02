@@ -217,6 +217,7 @@ def test_browser_surface_marker_promotes_chat_turn_to_tool_mode():
     assert context["capability_mode"] == "browser"
     assert context["browser_operation_mode"] is True
     assert context["browser_session_policy"] == "thread_native"
+    assert context["browser_track_preference"] == "electron"
     assert context["native_tool_loop"] is True
     assert context["realtime_public_narrative"] is True
     assert context["realtime_public_orientation"] is True
@@ -364,6 +365,12 @@ def test_agentic_session_metadata_preserves_browser_surface_context():
             "browser_surface": "browser",
             "browser_session_policy": "thread_native",
             "browser_evidence_policy": ("state_first_screenshot_only_for_visual_evidence"),
+            "automation_target": {
+                "kind": "browser_tab",
+                "source": "browser_relay",
+                "id": "7",
+                "title": "Docs",
+            },
         },
     )
 
@@ -374,6 +381,7 @@ def test_agentic_session_metadata_preserves_browser_surface_context():
     assert metadata["runtime_surfaces"] == ["browser"]
     assert metadata["browser_operation_mode"] is True
     assert metadata["browser_session_policy"] == "thread_native"
+    assert metadata["automation_target"]["id"] == "7"
     assert "thread-native browser operation" in guidance
     assert "live_browser_state" in guidance
 

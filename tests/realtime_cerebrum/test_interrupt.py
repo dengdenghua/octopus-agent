@@ -184,6 +184,213 @@ def test_turn_interrupt_kills_in_flight_subprocess(
     assert final.result["turn"]["status"] == "cancelled"
 
 
+@pytest.mark.asyncio()
+async def test_turn_interrupt_closes_before_silent_provider_thread_returns(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Stop is a control-plane boundary, not a provider-read courtesy.
+
+    A provider may block before yielding its first byte and ignore the ambient
+    cancellation token. The turn must still become cancelled promptly, and a
+    late ``tool_start`` from that abandoned producer must never cross into its
+    side effect.
+    """
+    import asyncio
+    import threading
+    import time
+
+    import runtime.core.cerebrum.react_loop as react_loop
+    import runtime.sensing.gateway._realtime_react_stream_drive as drive
+    from runtime.memory.threads.event_log import EventLog
+    from runtime.platform.models import ParsedIntent
+    from runtime.protocol import Turn, TurnStatus
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+
+    provider_entered = threading.Event()
+    release_provider = threading.Event()
+    provider_woke_after_stop = threading.Event()
+    late_side_effect = threading.Event()
+    returned_before_release = {"value": False}
+
+    def silent_provider_stream(*_args: Any, **_kwargs: Any) -> Iterator[dict[str, Any]]:
+        provider_entered.set()
+        release_provider.wait(timeout=5.0)
+        provider_woke_after_stop.set()
+        yield {
+            "type": "tool_start",
+            "tool_name": "write_file",
+            "tool_call_id": "late-after-stop",
+            "iteration": 1,
+            "input_preview": {"path": "must-not-run.txt"},
+        }
+        late_side_effect.set()
+        yield {"type": "react_completed"}
+
+    class InterruptEmitter:
+        interrupted = False
+
+        def is_turn_interrupted(self, _turn_id: str) -> bool:
+            return self.interrupted
+
+        def get_interrupt_reason(self, _turn_id: str) -> str:
+            return "user interrupted turn"
+
+        async def notify(self, _method: Any, _params: dict[str, Any]) -> None:
+            return None
+
+    monkeypatch.setattr(react_loop, "stream_react_loop", silent_provider_stream)
+    monkeypatch.setattr(drive, "_should_use_native_tool_loop", lambda *_a, **_k: False)
+
+    log = EventLog(tmp_path / "threads" / "silent-provider.jsonl")
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "threads"),
+    )
+    turn = Turn(threadId="silent-provider")
+    emitter = InterruptEmitter()
+    task = asyncio.create_task(
+        drive._drive_react(
+            runtime,
+            turn,
+            log,
+            emitter,  # type: ignore[arg-type]
+            ParsedIntent(
+                raw="wait forever",
+                intent_type="task",
+                normalized_goal="wait forever",
+                user_context={},
+            ),
+            None,  # type: ignore[arg-type]
+            None,
+        )
+    )
+
+    assert await asyncio.to_thread(provider_entered.wait, 1.0)
+    interrupted_at = time.monotonic()
+    emitter.interrupted = True
+
+    async def release_silent_provider_after_detach_window() -> None:
+        await asyncio.sleep(0.9)
+        returned_before_release["value"] = task.done()
+        release_provider.set()
+
+    releaser = asyncio.create_task(release_silent_provider_after_detach_window())
+    done, _ = await asyncio.wait({task}, timeout=1.5)
+
+    # Always release the fake provider so a failing implementation cannot
+    # strand pytest's default thread pool during teardown.
+    await releaser
+    release_provider.set()
+    if not task.done():
+        await asyncio.wait_for(task, timeout=2.0)
+    else:
+        await task
+    assert await asyncio.to_thread(provider_woke_after_stop.wait, 1.0)
+    await asyncio.sleep(0.05)
+
+    assert done
+    assert returned_before_release["value"], "turn stayed blocked on a silent provider after Stop"
+    assert time.monotonic() - interrupted_at < 1.5
+    assert turn.status == TurnStatus.CANCELLED
+    assert turn.outcome_reason == "user_cancelled"
+    assert turn.interrupt_reason == "user interrupted turn"
+    assert not late_side_effect.is_set(), "late tool side effect crossed the Stop boundary"
+
+
+def test_turn_interrupt_during_startup_skips_execution_driver(
+    gateway: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Stop during the pending-report warmup closes at the lifecycle boundary.
+
+    The report scan may use a one-second foreground budget. An interrupt that
+    arrives after the durable user anchor must not wait out that budget or
+    continue into intent/agent/model startup.
+    """
+    import asyncio
+    import threading
+    import time
+
+    import runtime.core.cerebrum.react_loop as react_loop
+    import runtime.sensing.gateway.realtime_turn_lifecycle as lifecycle
+
+    report_scan_entered = threading.Event()
+    driver_entered = threading.Event()
+
+    async def slow_report_scan(_thread_id: str) -> tuple[int, int]:
+        report_scan_entered.set()
+        await asyncio.sleep(5.0)
+        return 0, 0
+
+    def execution_driver_must_not_start(*_args: Any, **_kwargs: Any) -> Iterator[dict[str, Any]]:
+        driver_entered.set()
+        yield {"type": "react_completed"}
+
+    monkeypatch.setattr(lifecycle, "_surface_pending_subagent_reports", slow_report_scan)
+    monkeypatch.setattr(react_loop, "stream_react_loop", execution_driver_must_not_start)
+
+    client, _ = gateway
+    turn_id: str | None = None
+    final: JsonRpcResponse | None = None
+    interrupted_at: float | None = None
+    with client.websocket_connect("/api/realtime") as ws:
+        ws.send_text(
+            encode_message(
+                JsonRpcRequest(
+                    id=1,
+                    method="turn/start",
+                    params={
+                        "threadId": "th_interrupt_during_startup",
+                        "userItemId": "itm_interrupt_during_startup",
+                        "input": [{"type": "text", "text": "start slowly"}],
+                        "approvalPolicy": "never",
+                    },
+                )
+            )
+        )
+
+        while final is None:
+            msg = decode_message(ws.receive_text())
+            if isinstance(msg, Notification):
+                if msg.method == "turn/started":
+                    turn_id = msg.params["turn"]["id"]
+                item = msg.params.get("item") if isinstance(msg.params, dict) else None
+                if (
+                    msg.method == "item/completed"
+                    and isinstance(item, dict)
+                    and item.get("id") == "itm_interrupt_during_startup"
+                    and interrupted_at is None
+                ):
+                    assert report_scan_entered.wait(1.0), "report warmup did not start"
+                    assert turn_id is not None
+                    interrupted_at = time.monotonic()
+                    ws.send_text(
+                        encode_message(
+                            JsonRpcRequest(
+                                id=99,
+                                method="turn/interrupt",
+                                params={
+                                    "threadId": "th_interrupt_during_startup",
+                                    "turnId": turn_id,
+                                },
+                            )
+                        )
+                    )
+                continue
+            if isinstance(msg, JsonRpcResponse) and msg.id == 1:
+                final = msg
+
+    assert interrupted_at is not None
+    elapsed = time.monotonic() - interrupted_at
+    assert elapsed < 0.5, f"startup interrupt took {elapsed:.3f}s"
+    assert final is not None
+    assert final.result["turn"]["status"] == "cancelled"
+    assert final.result["turn"]["outcomeReason"] == "user_cancelled"
+    assert not driver_entered.is_set(), "execution started after Stop"
+
+
 def test_thread_resume_closes_stale_in_progress_turn(tmp_path: Path) -> None:
     from fastapi import FastAPI
 

@@ -1,7 +1,7 @@
 """Collaboration / wiki / tentacle / terminal / channel router wiring.
 
 Extracted from ``app.py`` during the god-file reduction (§2.5 of the
-navigation map). Mounts auto-wiki, local-brain setup, CLI-team, team
+navigation map). Mounts auto-wiki, local-brain setup, team
 role-model tiering, the mobile tentacle bridge (WebSocket), semantic
 retrieval, persistent terminal, and IM channels routers.
 """
@@ -63,20 +63,6 @@ def mount_collaboration(
 
     app.include_router(
         create_storage_proxy_router(
-            identity_store=ctx.identity_store,
-            require_auth=ctx.require_auth,
-            jwt_secret=ctx.jwt_secret,
-            jwt_issuer=ctx.jwt_issuer,
-            jwt_audience=ctx.jwt_audience,
-        )
-    )
-
-    # CLI-team · detect installed coding CLIs (Claude/Codex/Trae/Qoder) + run them as a team
-    # in isolated worktrees, diff-first review.
-    from runtime.sensing.gateway.cli_team_router import create_cli_team_router
-
-    app.include_router(
-        create_cli_team_router(
             identity_store=ctx.identity_store,
             require_auth=ctx.require_auth,
             jwt_secret=ctx.jwt_secret,

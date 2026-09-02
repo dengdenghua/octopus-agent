@@ -17,8 +17,6 @@ from benchmarks.verifier_sandbox import (
     verifier_sandbox_provenance,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
-
 
 def test_builtin_verifier_backends_are_never_authorized() -> None:
     with pytest.raises(FixtureInfrastructureError) as exc_info:
@@ -175,7 +173,7 @@ def test_exact_coding_wrapper_routes_only_to_trusted_controller(
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    wrapper = (ROOT / "benchmarks/verifiers/verify_path_boundary.py").resolve(strict=True)
+    wrapper = Path("benchmarks/verifiers/verify_path_boundary.py").resolve(strict=True)
     calls: list[dict[str, object]] = []
 
     class FakeRunner:

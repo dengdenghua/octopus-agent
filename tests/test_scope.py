@@ -489,6 +489,76 @@ class TestExecutorEnforcement:
         assert args["sandbox_dir"] == str(uploads)
         assert _read_file(**args)["content"] == "attachment body"
 
+    def test_read_tool_does_not_duplicate_artifact_prefix(
+        self,
+        data_dir: Path,
+        mk_session,
+    ):
+        from runtime.execution.suckers.builtins import _read_file
+        from runtime.execution.suckers.registry import Skill
+        from runtime.execution.tool_engine.executor import _prepare_scoped_args
+        from runtime.platform.models import SkillId
+        from runtime.platform.process.session import session_scope
+
+        artifact_root = data_dir / "workspaces" / "thread-prefix" / "output" / "final"
+        artifact_root.mkdir(parents=True)
+        document = artifact_root / "report.jsonl"
+        document.write_text("claim 3", encoding="utf-8")
+        sess = mk_session(mode="chat", thread_id="thread-prefix")
+        skill = Skill(
+            name="read_file",
+            affinity=["file", "io"],
+            trusted_source="skill://public/read_file",
+            handler=_read_file,
+        )
+
+        with session_scope(sess):
+            args = _prepare_scoped_args(
+                skill,
+                SkillId("read_file"),
+                {"path": "output/final/report.jsonl"},
+            )
+
+        assert args["path"] == str(document)
+        assert _read_file(**args)["content"] == "claim 3"
+
+    def test_complete_access_selects_scope_for_absolute_cwd(
+        self,
+        data_dir: Path,
+        mk_session,
+    ):
+        from runtime.execution.suckers._write_skills_exec import _ipython
+        from runtime.execution.suckers.registry import Skill
+        from runtime.execution.tool_engine.executor import _prepare_scoped_args
+        from runtime.platform.models import SkillId
+        from runtime.platform.process.session import session_scope
+
+        thread_id = "thread-ipython-cwd"
+        workspace = data_dir / "workspaces" / thread_id
+        artifact_root = workspace / "output" / "final"
+        artifact_root.mkdir(parents=True)
+        sess = mk_session(mode="chat", thread_id=thread_id)
+        sess.metadata["permission_mode"] = "bypassPermissions"
+        sess.metadata["execution_environment"] = "local"
+        skill = Skill(
+            name="ipython",
+            affinity=["python", "analysis", "exec", "dangerous"],
+            trusted_source="skill://public/ipython",
+            handler=_ipython,
+        )
+
+        with session_scope(sess):
+            args = _prepare_scoped_args(
+                skill,
+                SkillId("ipython"),
+                {"code": "print('ok')", "cwd": str(workspace)},
+            )
+
+        assert args["sandbox_dir"] == workspace.anchor
+        result = _ipython(**args)
+        assert result["success"] is True
+        assert result["stdout"].strip() == "ok"
+
     def test_code_sandbox_defaults_writes_to_octopus_work(
         self,
         tmp_path: Path,
@@ -788,6 +858,11 @@ class TestExecutionScope:
         assert scope.shell_policy == "allow"
         assert scope.network_policy == "allow"
         assert scope.browser_policy == "allow"
+        outside_workspace = tmp_path / "outside" / "report.txt"
+        assert scope.allows_read(outside_workspace)
+        assert scope.allows_write(outside_workspace)
+        assert scope.primary_read == wp
+        assert scope.primary_write == wp
 
 
 # ═══════════════════════════════════════════════════════════

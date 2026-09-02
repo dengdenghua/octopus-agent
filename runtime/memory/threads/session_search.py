@@ -1,9 +1,7 @@
 """Session search and query engine.
 
 Full-text search across thread messages using SQLite FTS5, plus export
-capabilities. Part of DSH P2 feature parity.
-
-DSH feature parity: point P2 session-query (2026-08-14).
+capabilities for the Octopus Native Session API v2.
 
 Architecture:
 - SQLite FTS5 for full-text indexing of all messages
@@ -17,7 +15,7 @@ Schema:
 
 Search examples:
 - search("authentication bug") → all threads discussing auth bugs
-- search("authentication", agent_id="local_codex_cli") → filter by agent
+- search("authentication", agent_id="coder") → filter by agent
 - search("token", after="2026-08-01") → date-filtered search
 """
 

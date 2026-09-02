@@ -31,6 +31,21 @@ _READ_BEFORE_WRITE_TOOLS = frozenset(
         "edit_text_file",
         "edit_file",
         "multi_edit_file",
+        "documents.replace_text",
+        "spreadsheets.update_cells",
+        "presentations.replace_text",
+    }
+)
+_FILE_READ_TRACKING_TOOLS = frozenset(
+    {
+        "read_file",
+        "read_file_range",
+        "documents.extract_text",
+        "documents.docx_info",
+        "spreadsheets.read_sheet",
+        "spreadsheets.workbook_info",
+        "presentations.extract_text",
+        "presentations.presentation_info",
     }
 )
 _READ_TRACKING_KEY = "_read_file_paths_this_turn"
@@ -258,6 +273,8 @@ def _prepare_scoped_args(
     # Path-param injection — relative paths resolve against the scope
     # primary instead of the process CWD.
     if has_path_param and arg_primary is not None:
+        from runtime.safety.auth.path_guard import normalize_scoped_relative_path
+
         for _pp in _path_params:
             if _pp not in handler_params:
                 continue
@@ -272,7 +289,8 @@ def _prepare_scoped_args(
                 break
             _supplied_str = str(_supplied)
             if not Path(_supplied_str).is_absolute():
-                args = {**args, _pp: str(arg_primary / _supplied_str)}
+                normalized = normalize_scoped_relative_path(_supplied_str, arg_primary)
+                args = {**args, _pp: str(arg_primary / normalized)}
                 break
 
     if has_sandbox:
@@ -287,32 +305,36 @@ def _prepare_scoped_args(
             )
         supplied = args.get("sandbox_dir")
         default_sandbox = scope.primary_write if _mutates_files else read_primary
-        if not _mutates_files:
-            # A read tool may target any granted readable root, not only the
-            # primary project directory. Pick the containing root for an
-            # absolute path (notably the per-thread upload directory) so the
-            # handler's own path_guard enforces the same narrow boundary.
-            for path_param in _path_params:
-                raw_path = args.get(path_param)
-                if not isinstance(raw_path, (str, Path)) or not Path(raw_path).is_absolute():
-                    continue
+        # A tool may target any granted root, not only the primary project
+        # directory. Pick the most specific containing root for an absolute
+        # path. In local complete-access mode this selects the filesystem root
+        # for paths outside the normal workspace.
+        allowed_roots = scope.writable_roots if _mutates_files else scope.readable_roots
+        # Directory parameters such as ``cwd`` are scope-bearing too. Exec
+        # skills commonly receive an absolute cwd but no file path; ignoring
+        # it left ``sandbox_dir`` pinned to output/final even in local
+        # complete-access mode.
+        for path_param in (*_path_params, *_root_params):
+            raw_path = args.get(path_param)
+            if not isinstance(raw_path, (str, Path)) or not Path(raw_path).is_absolute():
+                continue
+            try:
+                resolved_path = Path(raw_path).expanduser().resolve(strict=False)
+            except OSError:
+                continue
+            matching_roots: list[Path] = []
+            for readable_root in allowed_roots:
                 try:
-                    resolved_path = Path(raw_path).expanduser().resolve(strict=False)
-                except OSError:
+                    resolved_path.relative_to(readable_root.resolve(strict=False))
+                except (OSError, ValueError):
                     continue
-                matching_roots: list[Path] = []
-                for readable_root in scope.readable_roots:
-                    try:
-                        resolved_path.relative_to(readable_root.resolve(strict=False))
-                    except (OSError, ValueError):
-                        continue
-                    matching_roots.append(readable_root)
-                if matching_roots:
-                    default_sandbox = max(
-                        matching_roots,
-                        key=lambda candidate: len(candidate.parts),
-                    )
-                break
+                matching_roots.append(readable_root)
+            if matching_roots:
+                default_sandbox = max(
+                    matching_roots,
+                    key=lambda candidate: len(candidate.parts),
+                )
+            break
         if not supplied:
             # Lazily create the primary root so the skill can open
             # files there without having to mkdir itself.
@@ -597,7 +619,7 @@ def _record_successful_read(
     if isinstance(output, dict) and output.get("error"):
         return
     paths: list[Path] = []
-    if skill_name in {"read_file", "read_file_range"}:
+    if skill_name in _FILE_READ_TRACKING_TOOLS:
         path = canonical_tool_path(args)
         if path is not None:
             paths.append(path)
@@ -683,6 +705,8 @@ def _make_reject_step(
     reason: str = "",
     protocol_tags: list[str] | None = None,
 ) -> Step:
+    from runtime.execution.tool_engine.effect_receipts import not_executed_effect_receipt
+
     return Step(
         step_id=step_id,
         node_id=node_id,
@@ -693,16 +717,27 @@ def _make_reject_step(
             output=None,
             error_type=status,
             stderr_tags=[status] + list(protocol_tags or []) + ([reason] if reason else []),
+            effect_receipt=not_executed_effect_receipt(
+                call_id=call.call_id,
+                tool_name=call.sucker_id,
+                reason=reason or status,
+            ),
         ),
         immune_verdict=status if status == "immune_reject" else None,
     )
 
 
-def _check_capability_permission(skill_id: SkillId) -> tuple[bool, str | None]:
+def _check_capability_permission(skill: Any) -> tuple[bool, str | None]:
     try:
         from runtime.execution.misc.capability_permissions import is_skill_allowed
+        from runtime.platform.capabilities.permission_grants import (
+            is_marketplace_skill_allowed,
+        )
 
-        return is_skill_allowed(str(skill_id))
+        allowed, reason = is_skill_allowed(str(getattr(skill, "name", "") or ""))
+        if not allowed:
+            return allowed, reason
+        return is_marketplace_skill_allowed(skill)
     except (ImportError, AttributeError, TypeError, RuntimeError):  # noqa: BLE001 - permission layer must fail closed
         return False, "capability permission check failed"
 
@@ -717,6 +752,11 @@ def _check_task_capability_permission(skill_id: SkillId) -> tuple[bool, str | No
         manifest = manifest_from_session_metadata(session.metadata if session is not None else None)
         if manifest is None:
             return True, None
+        normalized_skill_id = str(skill_id)
+        if not manifest.allows_skill(normalized_skill_id):
+            task_id = str(session.metadata.get("task_id") or "") if session is not None else ""
+            suffix = f" for task {task_id}" if task_id else ""
+            return False, f"task capability skill disabled: {normalized_skill_id}{suffix}"
         group = permission_group_for_skill(str(skill_id))
         if manifest.allows_group(group):
             return True, None

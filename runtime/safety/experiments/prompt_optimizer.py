@@ -11,6 +11,7 @@ from uuid import UUID  # noqa: E402
 
 from runtime.core.cerebrum import LLMPlanner  # noqa: E402
 from runtime.platform.models import ParsedIntent, TaskGraph, TaskId  # noqa: E402
+from runtime.safety.auth.scope import TenantScope  # noqa: E402
 
 from .variant import ABSplitter, Variant, VariantStats  # noqa: E402
 
@@ -103,12 +104,17 @@ class PromptOptimizer:
             return
         self._splitter.record_outcome(name, success=success)
 
-    def report(self, journal: Any = None) -> dict[str, VariantReport]:
+    def report(
+        self,
+        journal: Any = None,
+        *,
+        scope: TenantScope | None = None,
+    ) -> dict[str, VariantReport]:
         journal = journal or self.stack.journal
 
         from runtime.safety.recovery import RecipeEvaluator
 
-        eval_report = RecipeEvaluator(journal).evaluate()
+        eval_report = RecipeEvaluator(journal, scope=scope).evaluate()
         score_by_hash = {s.recipe_id: s for s in eval_report.scores}
 
         out: dict[str, VariantReport] = {}

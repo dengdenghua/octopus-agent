@@ -11,7 +11,14 @@ from typing import Any
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
-from ._observability_auth import _can_authorize_retry, _operator_actor
+from ._observability_auth import (
+    _can_authorize_retry,
+    _journal_scope_context,
+    _observability_scope,
+    _operator_actor,
+    _require_global_control,
+    _scoped_observability_journal,
+)
 from ._observability_helpers import HTTPException, Query, Request, _safe_call, _skill_forge_stub
 from ._observability_state import ObservabilityContext
 
@@ -30,8 +37,11 @@ def register_journal_endpoints(router: Any, ctx: ObservabilityContext) -> None:
         request: Request,
         state: str | None = Query(default=None),
         limit: int = Query(default=100, ge=1, le=500),
+        cross_tenant: bool = Query(default=False),
     ) -> dict[str, Any]:
         """List fenced external-effect receipts without exposing arguments/results."""
+
+        _require_global_control(request, ctx, cross_tenant=cross_tenant)
 
         allowed_states = {
             "claimed",
@@ -45,6 +55,7 @@ def register_journal_endpoints(router: Any, ctx: ObservabilityContext) -> None:
         if effect_store is None:
             return {
                 "backend": "disabled",
+                "global_control_plane": True,
                 "shared_across_hosts": False,
                 "can_authorize_retry": _can_authorize_retry(request, ctx),
                 "count": 0,
@@ -62,6 +73,7 @@ def register_journal_endpoints(router: Any, ctx: ObservabilityContext) -> None:
             counts[receipt.state] = counts.get(receipt.state, 0) + 1
         return {
             "backend": str(getattr(effect_store, "backend_name", "unknown")),
+            "global_control_plane": True,
             "shared_across_hosts": bool(getattr(effect_store, "shared_across_hosts", False)),
             "can_authorize_retry": _can_authorize_retry(request, ctx),
             "count": len(receipts),
@@ -74,9 +86,11 @@ def register_journal_endpoints(router: Any, ctx: ObservabilityContext) -> None:
         effect_key: str,
         body: dict[str, Any],
         request: Request,
+        cross_tenant: bool = Query(default=False),
     ) -> dict[str, Any]:
         """Authorize one retry after an operator verifies no effect occurred."""
 
+        scope = _require_global_control(request, ctx, cross_tenant=cross_tenant)
         actor = _operator_actor(request, ctx)
         if effect_store is None:
             raise HTTPException(503, "tool-effect receipt backend unavailable")
@@ -109,17 +123,19 @@ def register_journal_endpoints(router: Any, ctx: ObservabilityContext) -> None:
             )
         audit_warning = ""
         try:
-            journal.write_tool_effect_reconciliation(
-                effect_key=effect_key,
-                fencing_token=expected_token,
-                action="authorize_retry",
-                reason=reason,
-                actor=actor,
-            )
+            with _journal_scope_context(scope):
+                journal.write_tool_effect_reconciliation(
+                    effect_key=effect_key,
+                    fencing_token=expected_token,
+                    action="authorize_retry",
+                    reason=reason,
+                    actor=actor,
+                )
         except Exception as exc:
             audit_warning = f"journal audit append failed: {type(exc).__name__}"
         return {
             "ok": True,
+            "global_control_plane": True,
             "effect_key": effect_key,
             "state": "retry_authorized",
             "fencing_token": expected_token,
@@ -130,9 +146,12 @@ def register_journal_endpoints(router: Any, ctx: ObservabilityContext) -> None:
     # ─── /api/journal ───────────────────────────────────────
     @router.get("/api/journal")
     def api_journal(
+        request: Request,
         limit: int = Query(default=20, ge=1, le=500),
+        cross_tenant: bool = Query(default=False),
     ) -> dict[str, Any]:
-        events = journal.read_all()
+        scope = _observability_scope(request, ctx, cross_tenant=cross_tenant)
+        events = _scoped_observability_journal(journal, scope).read_all()
         counts: dict[str, int] = {}
         for e in events:
             counts[e.event_type] = counts.get(e.event_type, 0) + 1
@@ -150,10 +169,13 @@ def register_journal_endpoints(router: Any, ctx: ObservabilityContext) -> None:
     # ─── /api/journal/timeline ─────────────────────────────
     @router.get("/api/journal/timeline")
     def api_journal_timeline(
+        request: Request,
         task_id: str | None = Query(default=None),
         limit: int = Query(default=50, ge=1, le=200),
+        cross_tenant: bool = Query(default=False),
     ) -> dict[str, Any]:
-        events = journal.read_all()
+        scope = _observability_scope(request, ctx, cross_tenant=cross_tenant)
+        events = _scoped_observability_journal(journal, scope).read_all()
         grouped: dict[str, list[dict[str, Any]]] = {}
         for e in events:
             tid = str(e.task_id) if e.task_id else "_no_task"
@@ -238,8 +260,13 @@ def register_journal_endpoints(router: Any, ctx: ObservabilityContext) -> None:
 
     # ─── /api/reflect ───────────────────────────────────────
     @router.get("/api/reflect")
-    def api_reflect() -> dict[str, Any]:
-        if len(journal.read_all()) == 0:
+    def api_reflect(
+        request: Request,
+        cross_tenant: bool = Query(default=False),
+    ) -> dict[str, Any]:
+        scope = _observability_scope(request, ctx, cross_tenant=cross_tenant)
+        scoped_journal = _scoped_observability_journal(journal, scope)
+        if len(scoped_journal.read_all()) == 0:
             return {"error": "journal empty · run something first"}
 
         # Lazy imports · these pull in heavier analysis code that
@@ -254,14 +281,14 @@ def register_journal_endpoints(router: Any, ctx: ObservabilityContext) -> None:
         )
 
         sf_result = _safe_call(
-            lambda: _skill_forge_stub(journal, registry),
+            lambda: _skill_forge_stub(journal, registry, scope=scope),
         )
-        re_report = RuleExtractor(journal).extract()
+        re_report = RuleExtractor(journal, scope=scope).extract()
         kg = KnowledgeGraph()
-        kg_report = KGUpdater(journal, kg).update()
-        mc = MemoryConsolidator(journal).consolidate()
-        wr = WorkflowRewriter(journal).analyze()
-        rc = RecipeEvaluator(journal).evaluate()
+        kg_report = KGUpdater(journal, kg, scope=scope).update()
+        mc = MemoryConsolidator(journal, scope=scope).consolidate()
+        wr = WorkflowRewriter(journal, scope=scope).analyze()
+        rc = RecipeEvaluator(journal, scope=scope).evaluate()
 
         return {
             "skill_forge": sf_result,
@@ -304,9 +331,14 @@ def register_journal_endpoints(router: Any, ctx: ObservabilityContext) -> None:
     # reads the pre-computed ``learned_*_section`` strings + counts
     # trajectories by strategy_id. Cost: O(1) + O(N_trajectories).
     @router.get("/api/evolution/status")
-    def api_evolution_status() -> dict[str, Any]:
+    def api_evolution_status(
+        request: Request,
+        cross_tenant: bool = Query(default=False),
+    ) -> dict[str, Any]:
+        _require_global_control(request, ctx, cross_tenant=cross_tenant)
         if planner is None:
             return {
+                "global_control_plane": True,
                 "enabled": False,
                 "reason": "no planner wired to observability router",
             }
@@ -351,6 +383,7 @@ def register_journal_endpoints(router: Any, ctx: ObservabilityContext) -> None:
             react_variants = []
 
         return {
+            "global_control_plane": True,
             "enabled": True,
             "rules_count": rules_count,
             "memories_count": memories_count,
@@ -368,7 +401,12 @@ def register_journal_endpoints(router: Any, ctx: ObservabilityContext) -> None:
 
     # ─── DELETE /api/evolution/rules/{index} ────────────────
     @router.delete("/api/evolution/rules/{index}")
-    def api_forget_rule(index: int) -> dict[str, Any]:
+    def api_forget_rule(
+        index: int,
+        request: Request,
+        cross_tenant: bool = Query(default=False),
+    ) -> dict[str, Any]:
+        _require_global_control(request, ctx, cross_tenant=cross_tenant)
         if planner is None:
             raise HTTPException(status_code=503, detail="planner not wired")
         current = _parse_section_lines(
@@ -384,11 +422,16 @@ def register_journal_endpoints(router: Any, ctx: ObservabilityContext) -> None:
             "LEARNED MITIGATIONS (from past failures):",
             current,
         )
-        return {"dropped": dropped, "remaining": len(current)}
+        return {"global_control_plane": True, "dropped": dropped, "remaining": len(current)}
 
     # ─── DELETE /api/evolution/memories/{index} ─────────────
     @router.delete("/api/evolution/memories/{index}")
-    def api_forget_memory(index: int) -> dict[str, Any]:
+    def api_forget_memory(
+        index: int,
+        request: Request,
+        cross_tenant: bool = Query(default=False),
+    ) -> dict[str, Any]:
+        _require_global_control(request, ctx, cross_tenant=cross_tenant)
         if planner is None:
             raise HTTPException(status_code=503, detail="planner not wired")
         current = _parse_section_lines(
@@ -404,7 +447,7 @@ def register_journal_endpoints(router: Any, ctx: ObservabilityContext) -> None:
             "CONSOLIDATED MEMORIES (past pattern stats):",
             current,
         )
-        return {"dropped": dropped, "remaining": len(current)}
+        return {"global_control_plane": True, "dropped": dropped, "remaining": len(current)}
 
 
 __all__ = ["register_journal_endpoints"]

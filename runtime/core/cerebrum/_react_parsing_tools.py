@@ -96,6 +96,14 @@ _FENCED_JSON_RE = re.compile(
     r"```(?:json)?\s*(?P<body>\{.*?\})\s*```",
     re.IGNORECASE | re.DOTALL,
 )
+# Some providers put a complete JSON function call directly in the assistant
+# text lane (for example ``web_search({"query": "..."})``).  Keep this
+# deliberately anchored to the entire response; snippets mentioned in prose
+# must never become executable actions.
+_BARE_INLINE_TOOL_CALL_RE = re.compile(
+    r"^\s*(?P<name>[A-Za-z_][A-Za-z0-9_./:-]*)\s*\(\s*(?P<args>\{.*\})\s*\)\s*$",
+    re.DOTALL,
+)
 _ACTION_XML_CONTAINER_RE = re.compile(
     r"<Action>\s*(?P<body>.*?)\s*</Action>",
     re.IGNORECASE | re.DOTALL,
@@ -370,6 +378,20 @@ def _extract_tool_actions_from_loose_output(text: str) -> list[str]:
         if not isinstance(args, dict):
             args = {}
         actions.append(_format_action(_normalize_action_name(raw_name.strip()), args))
+    if actions:
+        return actions
+
+    # Last-resort recovery for a complete bare ``tool_name({...})`` response.
+    # This is intentionally full-string only, so ordinary prose containing a
+    # tool example remains prose and cannot trigger execution.
+    bare = _BARE_INLINE_TOOL_CALL_RE.fullmatch(text or "")
+    if bare:
+        try:
+            args = json.loads(bare.group("args"))
+        except json.JSONDecodeError:
+            args = None
+        if isinstance(args, dict):
+            actions.append(_format_action(_normalize_action_name(bare.group("name").strip()), args))
     return actions
 
 

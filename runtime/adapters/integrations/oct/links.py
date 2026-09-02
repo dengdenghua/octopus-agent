@@ -1,6 +1,6 @@
 """oct 账号绑定存储:agent actor → oct 网关 JWT + 积分快照。
 
-镜像 molili 的 MoliliLinkStore,但 ``oct_token`` 存的是 oct 网关签发的 JWT(用于后续
+``oct_token`` 存储 oct 网关签发的 JWT（用于后续
 带 ``Authorization: Bearer`` 调网关 /account、/billing、/v1/chat/completions)。
 """
 

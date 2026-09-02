@@ -127,6 +127,45 @@ class TestDockerfile:
 
 
 class TestDockerCompose:
+    def test_lightweight_cloud_edge_compose_is_loopback_and_bounded(self):
+        yaml = pytest.importorskip("yaml")
+        path = REPO / "deploy" / "cloud-edge-compose.yml"
+        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+        service = doc["services"]["account-message-service"]
+        assert service["ports"] == [
+            "${OCTOPUS_CLOUD_EDGE_BIND_IP:-127.0.0.1}:${OCTOPUS_CLOUD_EDGE_PORT:-8090}:8090"
+        ]
+        assert service["deploy"]["resources"]["limits"]["memory"] == "512M"
+        assert "OCTOPUS_CLOUD_EDGE_TOKEN_SECRET" in service["environment"]
+        assert "OCTOPUS_CLOUD_EDGE_ADMIN_KEY" in service["environment"]
+        assert "OCTOPUS_CLOUD_REGISTRATION_CODE" in service["environment"]
+        assert "OCTOPUS_CLOUD_SHARE_RELAY_KEY" in service["environment"]
+        assert "OCTOPUS_PUBLIC_SHARE_BASE_URL" in service["environment"]
+        assert "OCTOPUS_CLOUD_EDGE_SHARE_TTL_SECONDS" in service["environment"]
+        assert "OCTOPUS_CLOUD_EDGE_SHARE_MAX_PER_OWNER" in service["environment"]
+        assert "OCTOPUS_CLOUD_EDGE_SHARE_MAX_SNAPSHOT_BYTES" in service["environment"]
+        assert "OCTOPUS_CLOUD_EDGE_SHARE_MAX_TOTAL_BYTES" in service["environment"]
+        assert "../data/cloud-edge:/data" in service["volumes"]
+        assert service["build"]["dockerfile"] == "deploy/cloud-service.Dockerfile"
+        assert service["image"] == "octopus-cloud-service:latest"
+        assert service["entrypoint"] == ["python", "-m", "uvicorn"]
+
+    def test_public_share_vhost_uses_body_token_and_keeps_relay_loopback(self):
+        text = (REPO / "deploy" / "share.echo-age.com.nginx.conf").read_text(encoding="utf-8")
+        assert "location = /api/public/thread-shares/resolve" in text
+        assert "location = /api/v1/public/thread-shares/resolve" in text
+        assert "proxy_pass http://127.0.0.1:8090" in text
+        assert "location ^~ /api/public/thread-shares/" in text
+        assert "access_log off" in text
+        assert "before following the redirect" in text
+        assert "Content-Security-Policy" in text
+        assert 'X-Robots-Tag "noindex, nofollow, noarchive"' in text
+        assert "log_format octopus_share_safe" in text
+        assert "share.echo-age.com.access.log octopus_share_safe" in text
+        assert "limit_req_zone $binary_remote_addr zone=octopus_share_read_per_ip" in text
+        assert "limit_req zone=octopus_share_read_per_ip" in text
+        assert "limit_req zone=octopus_share_manage_per_ip" in text
+
     def test_compose_file_valid_yaml(self):
         yaml = pytest.importorskip("yaml")
         path = REPO / "docker-compose.yml"
@@ -214,6 +253,18 @@ class TestDockerCompose:
             )
             assert environment["OCTOPUS_ADMIN_PASSWORD_HASH"] == (
                 "${OCTOPUS_ADMIN_PASSWORD_HASH:-}"
+            )
+            assert environment["OCTOPUS_CLOUD_EDGE_TOKEN_SECRET"] == (
+                "${OCTOPUS_CLOUD_EDGE_TOKEN_SECRET:-}"
+            )
+            assert environment["OCTOPUS_PUBLIC_SHARE_RELAY_URL"] == (
+                "${OCTOPUS_PUBLIC_SHARE_RELAY_URL:-}"
+            )
+            assert environment["OCTOPUS_PUBLIC_SHARE_RELAY_API_KEY"] == (
+                "${OCTOPUS_PUBLIC_SHARE_RELAY_API_KEY:-}"
+            )
+            assert environment["OCTOPUS_PUBLIC_SHARE_RELAY_BEARER_TOKEN"] == (
+                "${OCTOPUS_PUBLIC_SHARE_RELAY_BEARER_TOKEN:-}"
             )
 
     def test_compose_restart_policy(self):

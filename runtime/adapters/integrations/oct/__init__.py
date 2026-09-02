@@ -1,6 +1,6 @@
-"""oct 账号网关集成 · 把母本账号体系统一到 octopus 自己的网关(api.octoapk.com)。
+"""oct 账号网关集成 · 把母本账号体系统一到 octopus 自己的网关(octopus.aurest.ai)。
 
-替代旧的 molili 集成:邮箱验证码登录、积分/会员/用量/商品/订单、LLM 中转计费。
+提供邮箱验证码登录、积分/会员/用量/商品/订单与 LLM 中转计费。
 三个 router 由 create_oct_routers 装配,挂载在 runtime/platform/ui/app.py(gated config.oct.enabled)。
 """
 

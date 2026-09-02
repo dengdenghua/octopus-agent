@@ -186,6 +186,9 @@ class Tentacle(Protocol):
     # ── 能力（动态上报） ──────────────────────────────────────
     capabilities: list[str]
 
+    # ``manifest`` is intentionally optional during the v1 migration. Use
+    # ``contract.manifest_for(tentacle)`` for legacy-compatible discovery.
+
     # ── 生命周期 ──────────────────────────────────────────────
     async def connect(self) -> None: ...
     async def disconnect(self) -> None: ...

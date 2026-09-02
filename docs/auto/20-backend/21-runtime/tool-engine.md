@@ -49,7 +49,7 @@ tier: "core"
 | `redis_effect_store.py` | Redis-backed, cross-host tool-effect receipts. |
 | `session_metadata.py` | Project caller context into the metadata trusted by tool sessions. |
 | `session_projection.py` | Byte-bounded projection of a session's conversation surface. |
-| `session_reference.py` | Cross-session reference resolver — dsh ``@dsh-session-reference`` service. |
+| `session_reference.py` | Octopus Native cross-session reference resolver. |
 | `session_reference_uri.py` | Canonical Octopus session URI and inline mention encoding. |
 | `skill_gate.py` | Shared pre-execution safety gate for direct skill dispatch. |
 | `tool_output_pruner.py` | Deterministic head/middle/tail pruning for over-budget tool results. |
@@ -76,6 +76,8 @@ tier: "core"
 | func | `def args_fingerprint(args)` |  |
 | func | `def effect_key(task_id, step_id, sucker_id, args)` |  |
 | func | `def is_side_effecting(affinity)` | Fail closed for unknown affinity; known read-only tags may retry. |
+| func | `def not_executed_effect_receipt(call_id, tool_name, reason)` | Return the server-owned proof used by pre-dispatch rejection paths. |
+| func | `def build_server_effect_receipt(skill, call_id, handler_executed, result_status, resolution, receipt_rewrite_source)` | Seal one conservative execution-effect classification. |
 | class | `class EffectResolution` |  |
 | class | `class EffectLeaseLost(RuntimeError)` | The caller lost its fenced claim before entering the handler. |
 | class | `class ToolEffectReceiptIndex` | Journal-backed receipts plus optional cross-process coordination. |
@@ -100,7 +102,7 @@ tier: "core"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def execute_native_tool_call(stack, call, max_chars, prune_middle, spill_oversized)` | Run one native tool request through the normal executor chokepoint. |
+| func | `def execute_native_tool_call(stack, call, max_chars, prune_middle, spill_oversized, task_id, step_id, arm_id, budget)` | Run one native tool request through the normal executor chokepoint. |
 
 ### `redis_effect_store.py`
 
@@ -183,6 +185,7 @@ tier: "core"
 | func | `def session_spill_dir(root, session_key)` | The session-scoped directory: ``<root>/session-<sha256-prefix>``. |
 | func | `def default_spill_root()` | The default spill root: a private (0700) per-process temp directory. |
 | func | `def save_text_spill(session_key, content, suggested_name, root)` | Persist ``content`` to a session-scoped spill file and return its ref. |
+| func | `def is_current_session_spill_path(path)` | Return whether ``path`` is an exact spill owned by the active session. |
 | func | `def head_tail_preview(text, budget_bytes)` | Return ``(preview, omitted_bytes)`` splitting budget across both ends. |
 | func | `def head_tail_preview_bytes(text, head_bytes, tail_bytes)` | Return ``(preview, omitted_bytes)`` keeping ``head_bytes + tail_bytes``. |
 | func | `def spill_notice(omitted_bytes, ref)` | The one-line spill notice (no preview, no leading blank line). |
@@ -228,18 +231,19 @@ tier: "core"
 
 ## Who imports this
 
-**21** file(s) reference this package:
+**26** file(s) reference this package:
 
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
 - **`runtime/cli_run.py/`** · 1 file(s)
   - `runtime/cli_run.py`
-- **`runtime/core/`** · 5 file(s)
+- **`runtime/core/`** · 7 file(s)
   - `runtime/core/cerebrum/_react_execution_dispatch.py`
   - `runtime/core/cerebrum/_react_execution_phase6d.py`
   - `runtime/core/cerebrum/_react_execution_results.py`
-  - `runtime/core/cerebrum/react_parallel_dispatch.py`
-  - `runtime/core/graph_runtime/runtime.py`
+  - `runtime/core/cerebrum/react_action_outcomes.py`
+  - `runtime/core/cerebrum/react_execution_receipts.py`
+  - _… and 2 more_
 - **`runtime/execution/`** · 6 file(s)
   - `runtime/execution/codex_backend/dynamic_tools.py`
   - `runtime/execution/subagents/sessions.py`
@@ -249,13 +253,14 @@ tier: "core"
   - `runtime/execution/suckers/forged_persistence.py`
 - **`runtime/platform/`** · 1 file(s)
   - `runtime/platform/config/builder.py`
-- **`runtime/safety/`** · 1 file(s)
+- **`runtime/safety/`** · 2 file(s)
+  - `runtime/safety/auth/path_guard.py`
   - `runtime/safety/recovery/skill_forge.py`
-- **`runtime/sensing/`** · 6 file(s)
+- **`runtime/sensing/`** · 8 file(s)
   - `runtime/sensing/gateway/_observability_rollback_panels.py`
   - `runtime/sensing/gateway/_realtime_react_stream_helpers.py`
   - `runtime/sensing/gateway/_tool_bridge_exec.py`
-  - `runtime/sensing/gateway/realtime_react_policy.py`
-  - `runtime/sensing/gateway/realtime_turn_lifecycle.py`
-  - `runtime/sensing/gateway/realtime_turn_outcome.py`
+  - `runtime/sensing/gateway/_tool_bridge_policy.py`
+  - `runtime/sensing/gateway/_tool_bridge_session.py`
+  - _… and 3 more_
 

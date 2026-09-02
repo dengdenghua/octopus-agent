@@ -70,6 +70,31 @@ def test_looks_like_protocol_leak_detects_and_rejects():
     assert _looks_like_protocol_leak("这是一条正常的审计结论,没有协议块。") is False
 
 
+def test_parse_step_recovers_bare_inline_json_tool_call():
+    step, final = _parse_step(
+        'web_search({"query":"site:example.com complaint","max_results":10})',
+        iteration=1,
+    )
+    assert step.action == 'web_search({"query": "site:example.com complaint", "max_results": 10})'
+    assert step.actions == [step.action]
+    assert final is None
+
+
+def test_bare_inline_tool_call_is_protocol_leak_not_final_prose():
+    text = 'web_search({"query":"x"})'
+    assert _looks_like_protocol_leak(text) is True
+
+
+def test_inline_tool_example_inside_prose_is_not_executable():
+    step, final = _parse_step(
+        '说明一下 web_search({"query":"x"}) 的用途。',
+        iteration=1,
+    )
+    assert not step.action
+    assert _looks_like_protocol_leak('说明一下 web_search({"query":"x"}) 的用途。') is False
+    assert final is None
+
+
 def test_parse_step_cleans_final_when_no_pending_action():
     # A Final Answer that carries only protocol noise (no executable Action)
     # must be scrubbed, not delivered verbatim.

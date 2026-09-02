@@ -140,7 +140,7 @@ def stream_react_loop(
     max_usd_budget: float = BUDGET_DEFAULT_MAX_USD,
     approval_provider: ApprovalProvider | None = None,
     output_chunk_sink: Callable[[str, str, str], None] | None = None,
-    step_evaluator: Callable[[dict[str, Any]], float | None] | None = None,
+    step_evaluator: Callable[[dict[str, Any]], Any] | None = None,
     planning_mode: bool = False,
     reasoning_effort: str | None = None,
     steering_drain: Callable[[], list[str]] | None = None,
@@ -195,7 +195,7 @@ def _stream_react_loop_impl(
     max_usd_budget: float = BUDGET_DEFAULT_MAX_USD,
     approval_provider: ApprovalProvider | None = None,
     output_chunk_sink: Callable[[str, str, str], None] | None = None,
-    step_evaluator: Callable[[dict[str, Any]], float | None] | None = None,
+    step_evaluator: Callable[[dict[str, Any]], Any] | None = None,
     planning_mode: bool = False,
     reasoning_effort: str | None = None,
     steering_drain: Callable[[], list[str]] | None = None,
@@ -975,6 +975,7 @@ def _stream_react_loop_impl(
             current_phase=_current_phase,
             public_progress_summary=_public_progress_summary,
             step_evaluator=step_evaluator,
+            retry_hint_sink=state.guard_notices,
         )
 
         steps.append(step)
@@ -1064,6 +1065,7 @@ def run_react_loop(
     max_tokens_budget: int = BUDGET_DEFAULT_MAX_TOKENS,
     max_usd_budget: float = BUDGET_DEFAULT_MAX_USD,
     approval_provider: ApprovalProvider | None = None,
+    step_evaluator: Callable[[dict[str, Any]], Any] | None = None,
 ) -> ReActResult | None:
     gen = stream_react_loop(
         stack,
@@ -1078,6 +1080,7 @@ def run_react_loop(
         max_tokens_budget=max_tokens_budget,
         max_usd_budget=max_usd_budget,
         approval_provider=approval_provider,
+        step_evaluator=step_evaluator,
     )
     try:
         while True:

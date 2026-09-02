@@ -150,11 +150,16 @@ def _scaffold_local_agent(asset: dict[str, Any]) -> tuple[str, Path]:
     _ensure_safe_dir(agent_root)
     _ensure_safe_dir(core)
 
+    from runtime.execution.agents.identity import build_identity_profile, generate_identity_code
+
+    identity_code = generate_identity_code(default_agents_root())
     profile = {
         "id": agent_id,
         "name": name,
         "icon": str(asset.get("icon") or "🤖"),
-        "did": f"DID-{agent_id.upper()}-ENTERPRISE",
+        "did": identity_code,
+        "identity_code": identity_code,
+        "identity": build_identity_profile(identity_code),
         "description": description,
         "category": category,
         "tags": tags,

@@ -18,6 +18,7 @@ Covers Task 6:
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -305,6 +306,32 @@ def test_write_routes_through_backend_for_workspace_prefix(tmp_path: Path) -> No
     ] or any(c[0] == "write_file" for c in backend.calls)
     # File landed in the backend's in-memory store.
     assert backend.files["src/app.py"] == b"print('hi')"
+
+
+def test_remote_write_rejects_stale_digest_as_conflict(tmp_path: Path) -> None:
+    backend = _MockMountBackend()
+    backend.seed("src/app.py", "agent version")
+    reg = _make_backend_registry(backend)
+    store = WorkspaceStore(db_path=tmp_path / "ws.db")
+    _seed_workspace(store, workspace_id="ws-1", owner_id="alice")
+    reg._instances["ws-1"] = backend
+    client = _client(tmp_path=tmp_path, workspace_store=store, registry=reg)
+
+    r = client.post(
+        "/api/fs/write",
+        json={
+            "path": "ws-1:src/app.py",
+            "content": "stale human version",
+            "user_id": "alice",
+            "holder_id": "alice",
+            "expected_sha256": hashlib.sha256(b"older version").hexdigest(),
+        },
+    )
+
+    assert r.status_code == 409
+    assert r.json()["detail"]["error"] == "file_changed"
+    assert backend.files["src/app.py"] == b"agent version"
+    assert not any(call[0] == "write_file" for call in backend.calls)
 
 
 def test_write_409_when_other_holder_owns_lease(tmp_path: Path) -> None:

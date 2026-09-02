@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from runtime.cli_core import _build_stack
 from runtime.core.cerebrum.react_loop import ReActResult, stream_react_loop
+from runtime.core.cerebrum.react_step_evaluator import build_runtime_step_evaluator
 from runtime.platform.models import ParsedIntent
 from runtime.platform.process.session import Session, session_scope
 from runtime.safety.approval.approval_gate import (
@@ -158,6 +159,7 @@ def run_code_command(args: Any, *, color: bool = True) -> int:  # noqa: ARG001
             max_tokens_budget=int(getattr(args, "max_tokens", 100_000) or 100_000),
             max_usd_budget=float(getattr(args, "max_usd", 1.00) or 1.00),
             approval_provider=provider,
+            step_evaluator=build_runtime_step_evaluator(),
             planning_mode=permission_mode == "plan",
         )
         while True:

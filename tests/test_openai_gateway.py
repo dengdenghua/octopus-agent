@@ -643,15 +643,29 @@ class TestCompatPathBindsSession:
 
     def test_run_chat_binds_session_scope(self, stack, client, monkeypatch):
         from runtime.platform.process.session import current_session
+        from runtime.safety.evolution import runtime_outcomes
 
         captured: list[object] = []
+        planner_sessions: list[object] = []
+        settled: list[tuple[str, bool | None]] = []
         real_run = stack.runtime.run
+        real_plan = stack.planner.plan
 
         def _spy_run(*args, **kwargs):
             captured.append(current_session())
             return real_run(*args, **kwargs)
 
+        def _spy_plan(*args, **kwargs):
+            planner_sessions.append(current_session())
+            return real_plan(*args, **kwargs)
+
         monkeypatch.setattr(stack.runtime, "run", _spy_run)
+        monkeypatch.setattr(stack.planner, "plan", _spy_plan)
+        monkeypatch.setattr(
+            runtime_outcomes,
+            "settle_runtime_candidate_outcomes",
+            lambda turn_id, *, success, **_: settled.append((turn_id, success)),
+        )
 
         r = client.post(
             "/v1/chat/completions",
@@ -662,16 +676,30 @@ class TestCompatPathBindsSession:
         )
         assert r.status_code == 200
         assert len(captured) == 1
+        assert len(planner_sessions) == 1
         session = captured[0]
+        planner_session = planner_sessions[0]
         assert session is not None
+        assert planner_session is session
         assert session.thread_id == "convo-sync-1"
         assert session.metadata.get("enforce_executor_approval") is True
+        assert settled == [(session.turn_id, True)]
         # Session must not leak past the call.
         assert current_session() is None
 
-    def test_stream_chat_binds_session_scope(self, stack, client, monkeypatch):
-        from runtime.platform.process.session import current_session
+    def test_run_chat_uses_tenant_partitioned_initialized_workspace(
+        self,
+        stack,
+        monkeypatch,
+        tmp_path,
+    ):
+        from pathlib import Path
 
+        from runtime.platform.models import ParsedIntent
+        from runtime.platform.process.session import current_session
+        from runtime.sensing.gateway._openai_gateway_router_run import _run_chat
+
+        monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
         captured: list[object] = []
         real_run = stack.runtime.run
 
@@ -680,6 +708,155 @@ class TestCompatPathBindsSession:
             return real_run(*args, **kwargs)
 
         monkeypatch.setattr(stack.runtime, "run", _spy_run)
+
+        conversation_id = "../../shared-conversation-secret"
+        identities = (
+            ("tenant-a-secret", "alice-secret"),
+            ("tenant-a-secret", "bob-secret"),
+            ("tenant-b-secret", "alice-secret"),
+        )
+        for tenant_id, actor in identities:
+            response = _run_chat(
+                stack,
+                ParsedIntent(
+                    raw="list",
+                    intent_type="task",
+                    normalized_goal="list",
+                ),
+                "octopus-agent",
+                "default",
+                actor=actor,
+                conversation_id=conversation_id,
+                tenant_id=tenant_id,
+                owner_actor_id=actor,
+            )
+            assert response["octopus"]["success"] is True
+
+        artifact_roots = [
+            Path(session.metadata["_artifact_output_root"])
+            for session in captured
+            if session is not None
+        ]
+        assert len(artifact_roots) == 3
+        assert len(set(artifact_roots)) == 3
+        assert all(root.is_dir() for root in artifact_roots)
+        assert all(root.is_relative_to(tmp_path / "data" / "workspaces") for root in artifact_roots)
+        assert all(
+            all(raw not in str(root) for raw in (*identity, conversation_id))
+            for root, identity in zip(artifact_roots, identities, strict=True)
+        )
+
+    def test_run_chat_local_workspace_is_opaque_unique_and_initialized(
+        self,
+        stack,
+        monkeypatch,
+        tmp_path,
+    ):
+        from pathlib import Path
+
+        from runtime.platform.models import ParsedIntent
+        from runtime.platform.process.session import current_session
+        from runtime.sensing.gateway._openai_gateway_router_run import _run_chat
+
+        monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+        captured: list[object] = []
+        real_run = stack.runtime.run
+
+        def _spy_run(*args, **kwargs):
+            captured.append(current_session())
+            return real_run(*args, **kwargs)
+
+        monkeypatch.setattr(stack.runtime, "run", _spy_run)
+        conversation_ids = ("a/b", "a?b", "../../escape")
+        for conversation_id in conversation_ids:
+            response = _run_chat(
+                stack,
+                ParsedIntent(raw="list", intent_type="task", normalized_goal="list"),
+                "octopus-agent",
+                "default",
+                conversation_id=conversation_id,
+            )
+            assert response["octopus"]["success"] is True
+
+        artifact_roots = [
+            Path(session.metadata["_artifact_output_root"])
+            for session in captured
+            if session is not None
+        ]
+        assert len(set(artifact_roots)) == len(conversation_ids)
+        assert all(root.is_dir() for root in artifact_roots)
+        assert all(root.is_relative_to(tmp_path / "data" / "workspaces") for root in artifact_roots)
+        assert all(
+            conversation_id not in str(root)
+            for root, conversation_id in zip(artifact_roots, conversation_ids, strict=True)
+        )
+
+    def test_run_chat_rejects_preexisting_managed_workspace_symlink(
+        self,
+        stack,
+        monkeypatch,
+        tmp_path,
+    ):
+        from hashlib import sha256
+
+        from runtime.platform.models import ParsedIntent
+        from runtime.platform.runtime_policy.workspaces import managed_workspace_path
+        from runtime.sensing.gateway._openai_gateway_router_run import _run_chat
+
+        data_dir = tmp_path / "data"
+        monkeypatch.setenv("OCTOPUS_DATA_DIR", str(data_dir))
+        conversation_id = "symlink-conversation"
+        workspace = managed_workspace_path(
+            data_dir / "workspaces",
+            tenant_id="tenant-a",
+            actor_id="alice",
+            thread_id=sha256(conversation_id.encode("utf-8")).hexdigest()[:32],
+        )
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        workspace.parent.mkdir(parents=True)
+        workspace.symlink_to(outside, target_is_directory=True)
+
+        with pytest.raises(ValueError, match="symlink"):
+            _run_chat(
+                stack,
+                ParsedIntent(raw="list", intent_type="task", normalized_goal="list"),
+                "octopus-agent",
+                "default",
+                actor="alice",
+                tenant_id="tenant-a",
+                owner_actor_id="alice",
+                conversation_id=conversation_id,
+            )
+        assert not (outside / "workspace.json").exists()
+
+    def test_stream_chat_binds_session_scope(self, stack, client, monkeypatch):
+        from pathlib import Path
+
+        from runtime.platform.process.session import current_session
+        from runtime.safety.evolution import runtime_outcomes
+
+        captured: list[object] = []
+        planner_sessions: list[object] = []
+        settled: list[tuple[str, bool | None]] = []
+        real_run = stack.runtime.run
+        real_plan = stack.planner.plan
+
+        def _spy_run(*args, **kwargs):
+            captured.append(current_session())
+            return real_run(*args, **kwargs)
+
+        def _spy_plan(*args, **kwargs):
+            planner_sessions.append(current_session())
+            return real_plan(*args, **kwargs)
+
+        monkeypatch.setattr(stack.runtime, "run", _spy_run)
+        monkeypatch.setattr(stack.planner, "plan", _spy_plan)
+        monkeypatch.setattr(
+            runtime_outcomes,
+            "settle_runtime_candidate_outcomes",
+            lambda turn_id, *, success, **_: settled.append((turn_id, success)),
+        )
 
         with client.stream(
             "POST",
@@ -695,7 +872,207 @@ class TestCompatPathBindsSession:
                 pass
 
         assert len(captured) == 1
+        assert len(planner_sessions) == 1
         session = captured[0]
         assert session is not None
+        assert planner_sessions[0] is session
         assert session.thread_id == "convo-stream-1"
+        assert session.conversation_id == "convo-stream-1"
         assert session.metadata.get("enforce_executor_approval") is True
+        assert session.metadata.get("owner_actor_id") is None
+        assert Path(session.metadata["_artifact_output_root"]).is_dir()
+        assert settled == [(session.turn_id, True)]
+        assert current_session() is None
+
+    def test_stream_chat_partitions_authenticated_workspace_and_scope(
+        self,
+        stack,
+        monkeypatch,
+        tmp_path,
+    ):
+        from pathlib import Path
+
+        from runtime.platform.models import ParsedIntent
+        from runtime.platform.process.scope import resolve_execution_scope
+        from runtime.platform.process.session import current_session
+        from runtime.safety.evolution import runtime_outcomes
+        from runtime.sensing.gateway.openai_gateway.stream_handler import (
+            _stream_chat_wrapped,
+        )
+
+        monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+        planner_sessions: list[object] = []
+        runtime_sessions: list[tuple[object, object]] = []
+        real_plan = stack.planner.plan
+        real_run = stack.runtime.run
+
+        def _spy_plan(*args, **kwargs):
+            planner_sessions.append(current_session())
+            return real_plan(*args, **kwargs)
+
+        def _spy_run(*args, **kwargs):
+            session = current_session()
+            runtime_sessions.append((session, resolve_execution_scope(session)))
+            return real_run(*args, **kwargs)
+
+        monkeypatch.setattr(stack.planner, "plan", _spy_plan)
+        monkeypatch.setattr(stack.runtime, "run", _spy_run)
+        monkeypatch.setattr(
+            runtime_outcomes,
+            "settle_runtime_candidate_outcomes",
+            lambda *_args, **_kwargs: None,
+        )
+
+        intent = ParsedIntent(raw="list", intent_type="task", normalized_goal="list")
+        conversation_id = "../../same-conversation-secret"
+        identities = (("tenant-a-secret", "alice-secret"), ("tenant-b-secret", "bob-secret"))
+        for tenant_id, actor in identities:
+            list(
+                _stream_chat_wrapped(
+                    stack,
+                    intent,
+                    "octopus-agent",
+                    "default",
+                    actor=actor,
+                    conversation_id=conversation_id,
+                    tenant_id=tenant_id,
+                    owner_actor_id=actor,
+                )
+            )
+
+        assert len(planner_sessions) == len(runtime_sessions) == 2
+        roots: list[Path] = []
+        for index, ((session, scope), identity) in enumerate(
+            zip(runtime_sessions, identities, strict=True)
+        ):
+            assert planner_sessions[index] is session
+            tenant_id, actor = identity
+            assert session.actor == actor
+            assert session.metadata["tenant_id"] == tenant_id
+            assert session.metadata["owner_actor_id"] == actor
+            root = Path(session.metadata["_artifact_output_root"])
+            roots.append(root)
+            assert scope.primary_write == root.resolve()
+            assert root.is_dir()
+            assert all(raw not in str(root) for raw in (tenant_id, actor, conversation_id))
+        assert roots[0] != roots[1]
+
+    @pytest.mark.parametrize(
+        ("success", "degraded", "disposition", "expected"),
+        [
+            (True, False, "completed", True),
+            (True, True, "completed_with_warning", False),
+            (False, False, "failed", False),
+            (False, False, "cancelled", None),
+            (False, False, "interrupted", None),
+        ],
+    )
+    def test_sync_and_stream_candidate_settlement_are_symmetric(
+        self,
+        stack,
+        monkeypatch,
+        tmp_path,
+        success,
+        degraded,
+        disposition,
+        expected,
+    ):
+        from types import SimpleNamespace
+
+        from runtime.platform.models import ParsedIntent
+        from runtime.safety.evolution import runtime_outcomes
+        from runtime.sensing.gateway import _openai_gateway_router_run as run_module
+        from runtime.sensing.gateway.openai_gateway.stream_handler import (
+            _stream_chat_wrapped,
+        )
+
+        monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+        settled: list[bool | None] = []
+        monkeypatch.setattr(
+            runtime_outcomes,
+            "settle_runtime_candidate_outcomes",
+            lambda _turn_id, *, success, **_: settled.append(success),
+        )
+        trajectory = SimpleNamespace(
+            outcome=SimpleNamespace(
+                success=success,
+                degraded=degraded,
+                disposition=disposition,
+            ),
+            step_count=0,
+        )
+        monkeypatch.setattr(stack.runtime, "run", lambda *_args, **_kwargs: trajectory)
+        monkeypatch.setattr(run_module, "synthesize_reply", lambda *_args, **_kwargs: "ok")
+        intent = ParsedIntent(raw="list", intent_type="task", normalized_goal="list")
+
+        run_module._run_chat(
+            stack,
+            intent,
+            "octopus-agent",
+            "default",
+            conversation_id="sync-settlement",
+        )
+        list(
+            _stream_chat_wrapped(
+                stack,
+                intent,
+                "octopus-agent",
+                "default",
+                conversation_id="stream-settlement",
+            )
+        )
+
+        assert settled == [expected, expected]
+
+    @pytest.mark.parametrize("failure_phase", ["planner", "runtime"])
+    def test_sync_and_stream_failures_settle_negative_once(
+        self,
+        stack,
+        monkeypatch,
+        tmp_path,
+        failure_phase,
+    ):
+        from runtime.platform.models import ParsedIntent
+        from runtime.safety.evolution import runtime_outcomes
+        from runtime.sensing.gateway import _openai_gateway_router_run as run_module
+        from runtime.sensing.gateway.openai_gateway.stream_handler import (
+            _stream_chat_wrapped,
+        )
+
+        monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+        settled: list[bool | None] = []
+        monkeypatch.setattr(
+            runtime_outcomes,
+            "settle_runtime_candidate_outcomes",
+            lambda _turn_id, *, success, **_: settled.append(success),
+        )
+        monkeypatch.setattr(run_module, "_direct_llm_fallback", lambda *_args, **_kwargs: None)
+
+        def _fail(*_args, **_kwargs):
+            raise RuntimeError(f"{failure_phase} boom")
+
+        if failure_phase == "planner":
+            monkeypatch.setattr(stack.planner, "plan", _fail)
+        else:
+            monkeypatch.setattr(stack.runtime, "run", _fail)
+
+        intent = ParsedIntent(raw="list", intent_type="task", normalized_goal="list")
+        with pytest.raises(Exception, match=f"{failure_phase} boom"):
+            run_module._run_chat(
+                stack,
+                intent,
+                "octopus-agent",
+                "default",
+                conversation_id=f"sync-{failure_phase}-failure",
+            )
+        frames = list(
+            _stream_chat_wrapped(
+                stack,
+                intent,
+                "octopus-agent",
+                "default",
+                conversation_id=f"stream-{failure_phase}-failure",
+            )
+        )
+        assert any('"finish_reason": "failed"' in frame for frame in frames)
+        assert settled == [False, False]

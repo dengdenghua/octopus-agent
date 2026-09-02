@@ -7,6 +7,7 @@ from runtime.execution.suckers import SkillRegistry
 from runtime.execution.suckers.crawler_skills import (
     CRAWLER_SKILL_NAMES,
     _crawl_site,
+    _resolve_output_path,
     register_crawler_skills,
 )
 
@@ -124,6 +125,20 @@ def test_crawl_site_follows_same_domain_links_and_writes_jsonl(tmp_path: Path) -
     assert len(lines) == 2
     rows = [json.loads(line) for line in lines]
     assert [row["title"] for row in rows] == ["Home", "A"]
+
+
+def test_output_path_does_not_repeat_artifact_prefix(tmp_path: Path) -> None:
+    artifact_root = tmp_path / "output" / "final"
+    artifact_root.mkdir(parents=True)
+
+    resolved, error = _resolve_output_path(
+        "output/final/patent.jsonl",
+        "https://patents.example/item",
+        str(artifact_root),
+    )
+
+    assert error is None
+    assert resolved == artifact_root / "patent.jsonl"
 
 
 def test_crawl_site_respects_robots_disallow(tmp_path: Path) -> None:

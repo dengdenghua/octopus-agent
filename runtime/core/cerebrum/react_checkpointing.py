@@ -144,12 +144,13 @@ def _auto_checkpoint_and_evaluate_step(
     current_phase: Any,
     public_progress_summary: Any,
     step_evaluator: Any,
+    retry_hint_sink: list[str],
 ) -> Generator[dict[str, Any], None, None]:
     """Auto-checkpoint after a completed step, then run the evaluator.
 
     Yields the ``evaluator_retry_hint`` event when a wired evaluator
-    scores the step below threshold; the retry hint itself is appended
-    to ``messages`` in place.
+    scores the step below threshold.  The retry hint is queued for Phase 6g so
+    it lands *after* the assistant action and its Observation in model history.
     """
     # ── Periodic auto-checkpoint (P3 long-task durability) ──
     # Mirrors the pause path's checkpoint write so a SIGKILL or
@@ -212,34 +213,34 @@ def _auto_checkpoint_and_evaluate_step(
     # pattern from Anthropic's harness-design research.
     if step_evaluator is not None:
         try:
-            _eval_score = step_evaluator(
+            _eval_result = step_evaluator(
                 {
                     "iteration": step.iteration,
                     "thought": step.thought,
                     "action": step.action,
                     "observation": step.observation,
+                    "action_results": [dict(result) for result in step.action_results],
                     "progress_summary": public_progress_summary,
                 }
             )
+            _eval_score = getattr(_eval_result, "score", _eval_result)
             if isinstance(_eval_score, (int, float)) and _eval_score < 0.3:
-                _retry_hint = (
+                _retry_hint = str(getattr(_eval_result, "hint", "") or "").strip() or (
                     f"[evaluator] The previous step scored {_eval_score:.2f}/1.0 "
                     f"— quality is below threshold. Please reconsider your "
-                    f"approach and try a different strategy."
+                    "approach and try a different strategy. Preserve completed "
+                    "evidence. Do not blindly repeat a write, command, delete, "
+                    "transaction, or other side-effecting action; inspect current "
+                    "state first."
                 )
-                from runtime.platform.models.llm import Message
-
-                messages.append(
-                    Message(
-                        role="user",
-                        content=_retry_hint,
-                    )
-                )
+                retry_hint_sink.append(_retry_hint)
                 yield {
                     "type": "evaluator_retry_hint",
                     "iteration": step.iteration,
                     "score": _eval_score,
                     "hint": _retry_hint,
+                    "category": str(getattr(_eval_result, "category", "") or ""),
+                    "dedupe_key": str(getattr(_eval_result, "dedupe_key", "") or ""),
                 }
         except Exception as _eval_exc:
             _logger.debug("step_evaluator raised: %s", _eval_exc)

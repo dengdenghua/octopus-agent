@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DSH P2 Manual Verification Script
+Octopus Native Session API v2 Manual Verification Script
 
 Quick smoke test for P2 features:
 - Session-query (FTS5 search)
@@ -60,7 +60,7 @@ def test_p2_features():
         )
         assert feedback1.feedback_type == "thumbs_up"
         assert len(feedback1.tags) == 2
-        print(f"✓ Added positive feedback to message 1")
+        print("✓ Added positive feedback to message 1")
 
         feedback2 = store.add_message_feedback(
             thread_id=thread_id,
@@ -70,7 +70,7 @@ def test_p2_features():
             comment="Need more details",
         )
         assert feedback2.feedback_type == "thumbs_down"
-        print(f"✓ Added negative feedback to message 3")
+        print("✓ Added negative feedback to message 3")
 
         # Test 3: Feedback Stats
         stats = store.get_feedback_stats(thread_id)
@@ -92,7 +92,7 @@ def test_p2_features():
         print(f"✓ Export generated {len(markdown)} chars of Markdown")
 
         # Test 5: Multiple threads search
-        thread2 = store.create(
+        store.create(
             metadata={"owner_actor_id": "test_user"},
             values={
                 "messages": [
@@ -109,7 +109,7 @@ def test_p2_features():
         # Test 6: Search with no results
         results = store.search_threads("nonexistent xyz123")
         assert len(results) == 0
-        print(f"✓ Search correctly returns 0 results for gibberish")
+        print("✓ Search correctly returns 0 results for gibberish")
 
         print("\n✅ All P2 features working correctly!")
 

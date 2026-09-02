@@ -37,6 +37,9 @@ def test_verification_tool_detection():
     # non-verification shell commands
     assert not is_verification_tool("bash", {"command": "cat src/app.py"})
     assert not is_verification_tool("bash", {"command": "git status"})
+    assert not is_verification_tool("bash", {"command": "ruff --version"})
+    assert not is_verification_tool("bash", {"command": "pytest --collect-only"})
+    assert not is_verification_tool("pytest", {"args": ["--collect-only"]})
 
 
 def test_gate_fires_when_write_without_followup_verification():

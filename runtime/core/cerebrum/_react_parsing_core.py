@@ -22,6 +22,7 @@ import re
 from typing import Any
 
 from runtime.core.cerebrum._react_parsing_tools import (
+    _BARE_INLINE_TOOL_CALL_RE,
     _SPECIAL_TOOL_ENVELOPE_MARKERS,
     _extract_tool_action_from_loose_output,
     _extract_tool_actions_from_loose_output,
@@ -354,6 +355,7 @@ def _looks_like_protocol_leak(text: str) -> bool:
     return bool(
         _REACT_LEAK_ACTION_CALL_RE.search(s)
         or (_REACT_LEAK_SECTION_HEADER_RE.search(s) and _REACT_LEAK_TOOL_CALL_LINE_RE.search(s))
+        or _BARE_INLINE_TOOL_CALL_RE.fullmatch(s)
     )
 
 

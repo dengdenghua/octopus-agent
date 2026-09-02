@@ -8,7 +8,7 @@ import pytest
 
 from runtime.core.graph_runtime import GraphRuntime
 from runtime.execution.agents import AgentRegistry, make_desktop_operator_agent
-from runtime.execution.arms.presets import make_desktop_operator_arm
+from runtime.execution.arms.presets import make_desktop_operator_arm, make_web_read_arm
 
 # ═══════════════════════════════════════════════════════════
 # Desktop Operator preset
@@ -21,6 +21,17 @@ class _FakeExecutor:
 
 def _rt():
     return GraphRuntime(executor=_FakeExecutor(), journal=None)
+
+
+def test_web_read_arm_exposes_native_reach_skills():
+    names = {str(skill) for skill in make_web_read_arm(_rt()).allowed_skills}
+    assert {
+        "platform_search",
+        "platform_read",
+        "platform_collect",
+        "platform_monitor",
+        "reach_doctor",
+    } <= names
 
 
 class TestDesktopOperatorArm:
@@ -107,6 +118,50 @@ class TestHealthEndpoint:
         assert "journal_events" in data
         assert isinstance(data["journal_events"], int)
         assert isinstance(data["channels"], list)
+        assert data["runtime"] == {
+            "name": "octopus-agent-runtime",
+            "version": "0.2.0",
+            "verifiedBundle": False,
+        }
+
+    def test_reports_only_a_launcher_verified_clean_source(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        source_id = "a" * 40
+        monkeypatch.setenv("OCTOPUS_RUNTIME_SOURCE_ID", source_id)
+        monkeypatch.setenv("OCTOPUS_RUNTIME_BUNDLE_VERIFIED", "1")
+
+        app = create_app(journal_path=tmp_path / "events.jsonl")
+        runtime = TestClient(app).get("/api/health").json()["runtime"]
+
+        assert runtime == {
+            "name": "octopus-agent-runtime",
+            "version": "0.2.0",
+            "sourceId": source_id,
+            "verifiedBundle": True,
+        }
+
+    @pytest.mark.parametrize(
+        ("source_id", "verified"),
+        [("a" * 40, "0"), ("not-a-commit", "1"), ("A" * 40, "1")],
+    )
+    def test_rejects_unverified_or_noncanonical_runtime_source_identity(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        source_id: str,
+        verified: str,
+    ):
+        monkeypatch.setenv("OCTOPUS_RUNTIME_SOURCE_ID", source_id)
+        monkeypatch.setenv("OCTOPUS_RUNTIME_BUNDLE_VERIFIED", verified)
+
+        app = create_app(journal_path=tmp_path / "events.jsonl")
+        runtime = TestClient(app).get("/api/health").json()["runtime"]
+
+        assert runtime["verifiedBundle"] is False
+        assert "sourceId" not in runtime
 
     def test_reports_agents_count_when_registered(self, tmp_path: Path):
         from runtime.execution.agents import make_all_agent_presets

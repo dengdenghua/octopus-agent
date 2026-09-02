@@ -15,6 +15,7 @@ from runtime.core.cerebrum.react_guards import (
     GuardContext,
     _goal_requests_research_lookup,
     _invoke_missing_inspection,
+    _research_low_quality_evidence_guard,
     _research_missing_lookup_guard,
     evaluate_guards,
 )
@@ -104,6 +105,43 @@ def test_accepts_user_help_handoff() -> None:
             "需要你提供 API 凭证才能查询。",
             goal="查一下最新数据",
             tools_active=True,
+        )
+        is None
+    )
+
+
+def test_low_quality_search_cannot_complete_research() -> None:
+    steps = [
+        _step(
+            'web_search({"query": "Eight Sleep patent lawsuit"})',
+            '{"results": [], "result_count": 0, "quality_warning": "low_relevance"}',
+        )
+    ]
+    msg = _research_low_quality_evidence_guard(
+        steps,
+        "这个搜索引擎不支持该问题。",
+        goal="调研一下 Eight Sleep 的专利诉讼",
+    )
+    assert msg is not None
+    assert "low_relevance" in msg
+
+
+def test_verified_page_clears_low_quality_search_guard() -> None:
+    steps = [
+        _step(
+            'web_search({"query": "Eight Sleep patent lawsuit"})',
+            '{"results": [], "result_count": 0, "quality_warning": "low_relevance"}',
+        ),
+        _step(
+            'web_fetch({"url": "https://courtlistener.com/docket/1"})',
+            '{"answer": "The complaint alleges patent infringement."}',
+        ),
+    ]
+    assert (
+        _research_low_quality_evidence_guard(
+            steps,
+            "法院材料显示该案涉及专利侵权。",
+            goal="调研一下 Eight Sleep 的专利诉讼",
         )
         is None
     )

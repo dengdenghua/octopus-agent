@@ -1,7 +1,7 @@
 name: clip_studio
 display_name: AI 剪辑工坊
-version: 0.6.0
-description: 本地多轨视频剪辑工作台，提供项目读取、原子批量编辑、真实音频静音剪切、撤销历史、时间线诊断、真实合成帧、字幕与项目导出。
+version: 0.7.0
+description: 本地多轨视频剪辑工作台，提供项目读取、原子批量编辑、关键帧、多层合成、真实音频静音剪切、撤销历史、时间线诊断、真实合成帧与 MP4 成片导出。
 author: Octopus
 tags:
   - design
@@ -15,4 +15,5 @@ provides:
   - clip_studio.project.view
   - clip_studio.project.snapshot
   - clip_studio.project.diagnostics
+  - clip_studio.project.export
 config: {}

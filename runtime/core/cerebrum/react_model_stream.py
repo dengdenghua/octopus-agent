@@ -20,6 +20,11 @@ import time
 from collections.abc import Callable, Generator
 from typing import Any
 
+from runtime.core.cerebrum.react_context import (
+    _compress_context,
+    _estimate_messages_tokens,
+    context_budget_tokens_for_model,
+)
 from runtime.core.cerebrum.react_final_answer_guards import (
     _final_answer_needs_pre_emit_guard,
     _looks_like_observation_echo,
@@ -67,6 +72,21 @@ _REACT_STREAM_LEADERS = (
     "observation:",
     "(real tool execution succeeded)",
 )
+
+
+def _is_context_limit_error(exc: BaseException) -> bool:
+    text = f"{type(exc).__name__}: {exc}".casefold()
+    return any(
+        marker in text
+        for marker in (
+            "context_length_exceeded",
+            "maximum context length",
+            "context window",
+            "too many tokens",
+            "input is too long",
+            "上下文超过",
+        )
+    )
 
 
 def _stream_answer_body(text: str) -> str:
@@ -230,6 +250,13 @@ def _phase_6b_model_stream(
     _native_public_update_tool_specs = state.native_public_update_tool_specs
     _budget_auto_pause_enabled = state.budget_auto_pause_enabled
     _budget_pause_threshold = state.budget_pause_threshold
+    _budget_config = getattr(getattr(stack, "config", None), "budget", None)
+    _user_context = getattr(intent, "user_context", None) or {}
+    _cumulative_token_auto_pause_enabled = bool(
+        _user_context.get("cumulative_token_auto_pause")
+        or getattr(intent, "flags", {}).get("cumulative_token_auto_pause", False)
+        or getattr(_budget_config, "cumulative_token_auto_pause", False)
+    )
     _agent_id_for_pause = state.agent_id_for_pause
     _throughput_started_at = state.throughput_started_at
     _throughput_interval_s = state.throughput_interval_s
@@ -789,6 +816,54 @@ def _phase_6b_model_stream(
                 locals().get("_final_stream_started", False)
                 or locals().get("_streamed_final_chars", 0)
             )
+            if (
+                not _error_text_was_exposed
+                and _is_context_limit_error(exc)
+                and consecutive_llm_errors < 2
+            ):
+                # Repeating the identical oversized request cannot recover.
+                # Compact the in-memory conversation immediately, retain the
+                # deterministic code continuation, and resume in this turn.
+                _before_tokens = _estimate_messages_tokens(messages)
+                _capacity_tokens = context_budget_tokens_for_model(effective_model)
+                _target_tokens = max(
+                    8_000,
+                    min(int(_before_tokens * 0.60), int(_capacity_tokens * 0.30)),
+                )
+                _compacted = _compress_context(
+                    messages,
+                    max_tokens=_target_tokens,
+                    router=router,
+                    model=effective_model,
+                    is_code_mode=_is_code_mode,
+                )
+                messages[:] = _compacted
+                consecutive_llm_errors += 1
+                messages.append(
+                    Message(
+                        role="user",
+                        content=(
+                            "[SYSTEM CHECK - context recovery]\n"
+                            "The provider rejected the previous request for context size. "
+                            "The conversation has been compacted while preserving successful "
+                            "tool results and workspace state. Continue from the next unfinished "
+                            "action; do not repeat completed writes."
+                        ),
+                    )
+                )
+                yield {
+                    "type": "commentary_delta",
+                    "delta": "模型上下文已接近上限，已保留工作状态并压缩后继续。",
+                    "progress_source": "runtime",
+                    "iteration": i + 1,
+                }
+                yield {
+                    "type": "react_retry",
+                    "kind": "context_compaction",
+                    "iteration": i + 1,
+                    "attempt": consecutive_llm_errors,
+                }
+                return _LoopControl.NEXT_ITERATION
             if not _error_text_was_exposed and is_retryable_model_error(exc):
                 _fallback_model = _try_react_model_failover(type(exc).__name__)
                 # The injected wrapper bumped the counter through the
@@ -878,6 +953,7 @@ def _phase_6b_model_stream(
         try:
             _in_tok = int(getattr(resp, "input_tokens", 0) or 0)
             _out_tok = int(getattr(resp, "output_tokens", 0) or 0)
+            _cache_read_tok = int(getattr(resp, "cache_read_tokens", 0) or 0)
             _tok = _in_tok + _out_tok
             _cost_obj = getattr(resp, "cost", None)
             _cost = float(getattr(_cost_obj, "usd", 0) or 0) if _cost_obj else 0.0
@@ -907,38 +983,78 @@ def _phase_6b_model_stream(
             _updated = _pause.update_active_usage(
                 str(react_task_id),
                 tokens_delta=_tok,
+                input_tokens_delta=_in_tok,
+                output_tokens_delta=_out_tok,
+                cache_read_tokens_delta=_cache_read_tok,
+                # Provider input usage is the strongest available measure of
+                # the live request footprint because it includes tool schemas
+                # and other provider-visible prompt material that the local
+                # message estimator cannot see.
+                current_context_tokens=_in_tok,
+                context_capacity_tokens=context_budget_tokens_for_model(
+                    str(getattr(resp, "model", "") or effective_model or "")
+                ),
                 cost_delta=_cost,
             )
-            # 弹性预算：无论是否启用自动暂停，都在超限时记录告警统计。
-            # 仅当用户显式开启 budget_auto_pause 时才真正发起暂停（reason=
-            # budget_near_limit）；默认关闭则只告警、不阻塞长任务。
+            # Three distinct quantities are intentionally kept separate:
+            # current request context, cumulative token accounting, and hard
+            # monetary spend. Re-sent prompt tokens make the cumulative token
+            # counter grow much faster than the live context window, so it is
+            # warn-only unless strict legacy accounting is explicitly enabled.
             if react_task_id is not None and _updated is not None:
                 _token_pct = (
                     _updated.tokens_spent / _updated.max_tokens if _updated.max_tokens > 0 else 0
                 )
                 _usd_pct = _updated.cost_usd / _updated.max_usd if _updated.max_usd > 0 else 0
-                if _token_pct >= _budget_pause_threshold or _usd_pct >= _budget_pause_threshold:
+                _context_pct = (
+                    _updated.current_context_tokens / _updated.context_capacity_tokens
+                    if _updated.context_capacity_tokens > 0
+                    else 0.0
+                )
+                _token_pressure = _token_pct >= _budget_pause_threshold
+                _cost_pressure = _usd_pct >= _budget_pause_threshold
+                _strict_token_pause = (
+                    _budget_auto_pause_enabled
+                    and _cumulative_token_auto_pause_enabled
+                    and _token_pressure
+                )
+                _hard_cost_pause = _budget_auto_pause_enabled and _cost_pressure
+                if _token_pressure or _cost_pressure:
                     _logger.warning(
-                        "react_loop budget above threshold · task %s · "
-                        "tokens %d/%d (%.0f%%) · usd %.3f/%.3f (%.0f%%) · %s",
+                        "react_loop accounting budget above threshold · task %s · "
+                        "context %d/%d (%.0f%%) · cumulative tokens %d/%d (%.0f%%) · "
+                        "usd %.3f/%.3f (%.0f%%) · %s",
                         react_task_id,
+                        _updated.current_context_tokens,
+                        _updated.context_capacity_tokens,
+                        _context_pct * 100,
                         _updated.tokens_spent,
                         _updated.max_tokens,
                         _token_pct * 100,
                         _updated.cost_usd,
                         _updated.max_usd,
                         _usd_pct * 100,
-                        "auto-pausing" if _budget_auto_pause_enabled else "warning only",
+                        (
+                            "auto-pausing on cost"
+                            if _hard_cost_pause
+                            else "auto-pausing on cumulative tokens"
+                            if _strict_token_pause
+                            else "warning only"
+                        ),
                     )
-                    if _budget_auto_pause_enabled and not _pause.is_pause_requested(
+                    if (_hard_cost_pause or _strict_token_pause) and not _pause.is_pause_requested(
                         str(react_task_id)
                     ):
+                        _limit_label = "成本预算" if _hard_cost_pause else "累计处理量"
                         _pause.request_pause(
                             task_id=str(react_task_id),
                             reason="budget_near_limit",
                             requested_by="system",
                             note=(
-                                f"自动暂停 · tokens {_updated.tokens_spent:,}/"
+                                f"自动暂停 · {_limit_label}临界 · 当前上下文 "
+                                f"{_updated.current_context_tokens:,}/"
+                                f"{_updated.context_capacity_tokens:,} · 累计 tokens "
+                                f"{_updated.tokens_spent:,}/"
                                 f"{_updated.max_tokens:,} "
                                 f"({int(_token_pct * 100)}%) · "
                                 f"${_updated.cost_usd:.3f}/"

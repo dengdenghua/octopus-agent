@@ -231,6 +231,55 @@ def test_code_ui_regression_native_specs_hide_desktop_browser_tools():
     assert not any(name.startswith("live_browser_") for name in names)
 
 
+def test_plain_research_native_specs_hide_browser_tools():
+    registry = SkillRegistry()
+    for name in ("web_search", "fetch_url", "browser_navigate", "live_browser_navigate"):
+        registry.register(
+            Skill(
+                name=name,
+                description=f"Run {name}.",
+                trusted_source=f"skill://public/{name}",
+                handler=lambda **_kwargs: {},
+            ),
+            verify_tests=False,
+        )
+
+    specs = build_anthropic_tool_specs(
+        registry,
+        goal="搜索并调研最新的睡眠专利，给出来源",
+        user_context={"mode": "research"},
+    )
+    names = {spec.name for spec in specs}
+
+    assert {"web_search", "fetch_url"} <= names
+    assert "browser_navigate" not in names
+    assert "live_browser_navigate" not in names
+
+
+def test_concrete_browser_interaction_goal_exposes_browser_tools():
+    registry = SkillRegistry()
+    for name in ("web_search", "browser_navigate", "browser_click"):
+        registry.register(
+            Skill(
+                name=name,
+                description=f"Run {name}.",
+                trusted_source=f"skill://public/{name}",
+                handler=lambda **_kwargs: {},
+            ),
+            verify_tests=False,
+        )
+
+    specs = build_anthropic_tool_specs(
+        registry,
+        goal="打开登录页并点击登录按钮",
+        user_context={"mode": "react"},
+    )
+    names = {spec.name for spec in specs}
+
+    assert "browser_navigate" in names
+    assert "browser_click" in names
+
+
 def test_allowlist_filter_failure_denies_all_skills(monkeypatch):
     """``filter_allowed_names`` is the agent's tool allow-list gate. If it
     raises, the agent must get NO tools, not the full unfiltered list —

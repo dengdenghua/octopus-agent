@@ -38,7 +38,11 @@ from runtime.core.cerebrum.react_convergence import (
     build_direct_answer_directive,
     read_only_evidence_convergence,
 )
-from runtime.core.cerebrum.react_execution_receipts import _execution_receipt_trust
+from runtime.core.cerebrum.react_execution_receipts import (
+    _execution_effect_receipt,
+    _execution_receipt_trust,
+    _retry_safe_effect_receipt,
+)
 from runtime.core.cerebrum.react_explicit_reads import (
     _narrow_command_direct_answer,
 )
@@ -157,6 +161,52 @@ def _looks_like_sandbox_violation(observation: str | None) -> bool:
     return bool(observation and _SANDBOX_VIOLATION_RE.search(observation))
 
 
+_UNAVAILABLE_APPROVAL_REASONS = (
+    "timeout",
+    "connection_lost",
+    "error:",
+    "no interactive approval ui",
+)
+
+
+def _approval_could_not_reach_user(decision: Any) -> bool:
+    """Separate an unavailable reviewer from an explicit human decline."""
+
+    if bool(getattr(decision, "approved", False)):
+        return False
+    reason = str(getattr(decision, "reason", "") or "").strip().lower()
+    return any(
+        reason == marker or reason.startswith(marker) for marker in _UNAVAILABLE_APPROVAL_REASONS
+    )
+
+
+def _pause_for_unavailable_approval(
+    state: _LoopState,
+    *,
+    iteration: int,
+    tool_name: str,
+    detail: str,
+) -> bool:
+    """Request a checkpointed pause instead of turning UI absence into failure."""
+
+    pause_controller = state.pause_controller
+    task_id = str(state.react_task_id or "").strip()
+    if pause_controller is None or not task_id:
+        return False
+    pause_controller.request_pause(
+        task_id=task_id,
+        reason="approval_required",
+        requested_by="system",
+        note=f"{tool_name}: {detail}",
+        thread_id=state.thread_id,
+        agent_id=state.agent_id_for_pause,
+    )
+    # Reserve a boundary for the normal pause guard, including when the
+    # blocked call happened on what would otherwise be the final iteration.
+    state.iteration_limit = max(state.iteration_limit, iteration + 2)
+    return True
+
+
 def _can_escalate_sandbox(tool_name: str) -> bool:
     """Whether this tool is eligible for the sandbox-escalation prompt."""
     return tool_name in _ESCALABLE_TOOLS
@@ -222,7 +272,6 @@ def _phase_6d_dispatch_and_observe(
     _action_batch_fingerprint = action_batch_fingerprint
     _deduplicate_actions = deduplicate_actions
     _per_action_outcomes = per_action_outcomes
-    _retry_safe_affinity = retry_safe_affinity
     _tool_call_succeeded = tool_call_succeeded
     _observation_is_noop = observation_is_noop
     # Reference-typed aliases — mutations propagate to the main loop.
@@ -627,9 +676,31 @@ def _phase_6d_dispatch_and_observe(
                                 args_preview=str(_input_preview)[:500] if _input_preview else "",
                                 detail=_approval_detail,
                             ),
-                            timeout=120.0,
+                            timeout=600.0,
                         )
                         if not _decision.approved:
+                            if _approval_could_not_reach_user(
+                                _decision
+                            ) and _pause_for_unavailable_approval(
+                                state,
+                                iteration=i,
+                                tool_name=resolved_name,
+                                detail=_approval_detail,
+                            ):
+                                yield {
+                                    "type": "tool_end",
+                                    "tool_name": resolved_name,
+                                    "tool_call_id": call_id,
+                                    "iteration": i + 1,
+                                    "status": "waiting_approval",
+                                    "output_preview": (
+                                        "审批界面暂不可用，任务已保存并暂停，等待用户授权后继续。"
+                                    ),
+                                    "duration_ms": int(
+                                        (time.monotonic() - _tool_started_at) * 1000
+                                    ),
+                                }
+                                return _LoopControl.CONTINUE
                             yield {
                                 "type": "tool_end",
                                 "tool_name": resolved_name,
@@ -756,9 +827,31 @@ def _phase_6d_dispatch_and_observe(
                                 args_preview=(str(_input_preview)[:500] if _input_preview else ""),
                                 detail=_escalation_detail,
                             ),
-                            timeout=120.0,
+                            timeout=600.0,
                         )
                         if not _escalation_decision.approved:
+                            if _approval_could_not_reach_user(
+                                _escalation_decision
+                            ) and _pause_for_unavailable_approval(
+                                state,
+                                iteration=i,
+                                tool_name=resolved_name,
+                                detail=_escalation_detail,
+                            ):
+                                yield {
+                                    "type": "tool_end",
+                                    "tool_name": resolved_name,
+                                    "tool_call_id": call_id,
+                                    "iteration": i + 1,
+                                    "status": "waiting_approval",
+                                    "output_preview": (
+                                        "沙箱放宽审批暂不可用，任务已保存并暂停，等待授权后继续。"
+                                    ),
+                                    "duration_ms": int(
+                                        (time.monotonic() - _tool_started_at) * 1000
+                                    ),
+                                }
+                                return _LoopControl.CONTINUE
                             yield {
                                 "type": "tool_end",
                                 "tool_name": resolved_name,
@@ -812,23 +905,13 @@ def _phase_6d_dispatch_and_observe(
                                 "\n[已获授权放宽沙箱重跑，但仍失败；请换方法或调整参数]"
                             )
                     if not tool_ok and observation:
-                        # C2: only auto-retry idempotent tools. Re-running a
-                        # write/edit/exec/delete/dangerous tool whose first
-                        # attempt already had side effects (a partial write, a
-                        # shell command that ran before its result failed to
-                        # parse) would double them, so non-idempotent failures
-                        # surface to the model instead of silently re-executing.
-                        _retry_affinity: list[str] | None = None
-                        try:
-                            if executor.registry.has(resolved_name):
-                                _retry_affinity = executor.registry.get(
-                                    resolved_name,
-                                ).affinity
-                        except (KeyError, AttributeError):
-                            _retry_affinity = None
-                        if not _retry_safe_affinity(_retry_affinity):
+                        # C2: affinity/name metadata can be forged by a plugin.
+                        # Silent retry therefore requires a server-stamped
+                        # receipt proving that the exact canonical handler was
+                        # read-only, entered, failed, and is retry-safe.
+                        if not _retry_safe_effect_receipt(beak_step):
                             observation = observation + (
-                                "\n[写/执行类工具失败，未自动重试以避免重复副作用；"
+                                "\n[未获得可安全重试的服务器执行凭证，已停止自动重放；"
                                 "请检查状态后再决定是否重试或换方法]"
                             )
                         else:
@@ -943,6 +1026,7 @@ def _phase_6d_dispatch_and_observe(
                             "call_id": call_id,
                             "trusted_execution": _trusted_execution,
                             "execution_source": _execution_source,
+                            "effect_receipt": _execution_effect_receipt(beak_step),
                         }
                     ]
                 else:

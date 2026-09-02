@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -22,6 +23,8 @@ from runtime.platform.models import (
     QuotaAllocation,
     TaskGraph,
 )
+from runtime.safety.auth.scope import TenantScope
+from runtime.safety.recovery.tenant_scope import read_learning_events
 
 # ── Compose telemetry ring buffer ─────────────────────────
 # Each ``compose()`` call records a small snapshot here so the
@@ -296,6 +299,7 @@ class ContextComposer:
         history_cutoff_n: int = 5,
         recipe_id: str | None = None,
         task_type: str | None = None,
+        scope: TenantScope | None = None,
     ) -> ContextPacket:
         with trace_stage(
             "hemolymph.compose",
@@ -350,6 +354,7 @@ class ContextComposer:
                     n=history_cutoff_n,
                     arm_id=arm_id,
                     budget_for_bucket=alloc["memory"],
+                    scope=scope,
                 )
                 cached_memory = (
                     self.gill_cache.get_memory(
@@ -367,6 +372,7 @@ class ContextComposer:
                         n=history_cutoff_n,
                         arm_id=arm_id,
                         budget_for_bucket=alloc["memory"],
+                        scope=scope,
                     )
                     segments.extend(memory_segments)
                     if self.gill_cache is not None:
@@ -403,9 +409,22 @@ class ContextComposer:
             )
 
     @staticmethod
-    def memory_cache_key(*, n: int, arm_id: ArmId | None, budget_for_bucket: int) -> str:
+    def memory_cache_key(
+        *,
+        n: int,
+        arm_id: ArmId | None,
+        budget_for_bucket: int,
+        scope: TenantScope | None = None,
+    ) -> str:
         """Stable identity for a recent-trajectory retrieval window."""
-        return f"recent-trajectories:{arm_id or '*'}:{n}:{budget_for_bucket}"
+        if scope is None:
+            scope_key = "legacy"
+        elif scope.allow_cross_tenant:
+            scope_key = "cross-tenant"
+        else:
+            ownership = f"{scope.tenant_id}\x00{scope.actor_id}".encode()
+            scope_key = hashlib.sha256(ownership).hexdigest()[:20]
+        return f"recent-trajectories:{scope_key}:{arm_id or '*'}:{n}:{budget_for_bucket}"
 
     def prefetch_memory_segments(
         self,
@@ -413,6 +432,7 @@ class ContextComposer:
         n: int = 5,
         arm_id: ArmId | None = None,
         budget_for_bucket: int,
+        scope: TenantScope | None = None,
     ) -> list[ContextSegment]:
         """Render memory in the same shape consumed by ``compose``.
 
@@ -433,6 +453,7 @@ class ContextComposer:
                 n=n,
                 arm_id=arm_id,
                 budget_for_bucket=budget_for_bucket,
+                scope=scope,
             )
         ]
 
@@ -517,9 +538,13 @@ class ContextComposer:
         n: int,
         arm_id: ArmId | None,
         budget_for_bucket: int,
+        scope: TenantScope | None = None,
     ) -> list[tuple[str, list[str]]]:
         assert self.journal is not None
-        events = self.journal.read_by_type("trajectory")
+        # Context recall is a learning/serving boundary.  No scope means old
+        # ownership-free rows only; authenticated callers must pass the
+        # server-resolved tenant+owner scope explicitly.
+        events = read_learning_events(self.journal, "trajectory", scope=scope)
         grouped: dict[object, list[tuple[int, TrajectoryEvent]]] = {}
         for idx, event in enumerate(events):
             if not isinstance(event, TrajectoryEvent):
@@ -551,10 +576,17 @@ class ContextComposer:
         used = 0
         for e in recent:
             t = e.trajectory
+            outcome_label = (
+                "yes"
+                if t.outcome.success and not t.outcome.degraded
+                else "degraded"
+                if t.outcome.degraded
+                else "no"
+            )
             summary = (
                 f"past trajectory: task={t.task_id} arm={t.arm_id} "
                 f"steps={t.step_count} "
-                f"ok={'yes' if t.outcome.success else 'no'}"
+                f"ok={outcome_label}"
             )
             cost = estimate_tokens(summary)
             if used + cost > budget_for_bucket:

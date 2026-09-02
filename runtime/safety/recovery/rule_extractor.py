@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from runtime.adapters.instrumentation import trace_stage
 from runtime.memory.journal import Journal, TrajectoryEvent
 from runtime.platform.models import SkillId, Trajectory
+from runtime.safety.auth.scope import TenantScope
+from runtime.safety.recovery.tenant_scope import read_learning_events
 
 # ═══════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════
@@ -63,9 +65,12 @@ class RuleExtractor:
         self,
         journal: Journal,
         config: ExtractorConfig | None = None,
+        *,
+        scope: TenantScope | None = None,
     ) -> None:
         self.journal = journal
         self.config = config or ExtractorConfig()
+        self.scope = scope
 
     def extract(self) -> RuleExtractionReport:
         with trace_stage("regeneration.rule_extractor.extract"):
@@ -101,7 +106,11 @@ class RuleExtractor:
             )
 
     def _all_trajectories(self) -> list[Trajectory]:
-        events = self.journal.read_by_type("trajectory")
+        events = read_learning_events(
+            self.journal,
+            "trajectory",
+            scope=self.scope,
+        )
         trajs = [e.trajectory for e in events if isinstance(e, TrajectoryEvent)]
 
         # A swarm task may emit both per-arm trajectories and one

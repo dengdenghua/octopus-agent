@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
 
-from runtime.memory.journal import InMemoryJournal, JSONLJournal
+from runtime.memory.journal import (
+    InMemoryJournal,
+    JournalTransactionError,
+    JSONLJournal,
+    StepEvent,
+    journal_context,
+)
 from runtime.memory.journal._journal_models import TokenUsageEvent
 from runtime.platform.models import (
     ArmId,
@@ -188,6 +195,132 @@ class TestWithJSONLInner:
         path = tmp_path / "events.jsonl"
         j = StreamingJournal(JSONLJournal(path))
         assert Path(j._path) == path
+
+    def test_step_broadcast_matches_durable_redacted_scoped_event(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from runtime.platform.observability.redactor import Redactor
+
+        canary = "sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789ABC"
+        call = ToolCall(
+            caller="arms/x",
+            sucker_id="secret_echo",
+            args={"token": canary},
+        )
+        step = Step(
+            step_id=0,
+            node_id="n0",
+            action=call,
+            result=ExecutionResult(
+                call_id=call.call_id,
+                status="success",
+                output={"echo": canary},
+            ),
+        )
+        path = tmp_path / "events.jsonl"
+        inner = JSONLJournal(path, redactor=Redactor())
+        journal = StreamingJournal(inner)
+        received: list[StepEvent] = []
+        journal.subscribe(lambda event: received.append(event))
+
+        with journal_context(tenant_id="tenant-a", owner_actor_id="owner-a"):
+            journal.write_step(TaskId(uuid4()), ArmId("arm-a"), step)
+
+        stored = inner.read_by_type("step")
+        assert len(received) == len(stored) == 1
+        assert received[0].model_dump(mode="json") == stored[0].model_dump(mode="json")
+        assert received[0].tenant_id == "tenant-a"
+        assert received[0].owner_actor_id == "owner-a"
+        assert canary not in received[0].model_dump_json()
+        assert canary not in path.read_text(encoding="utf-8")
+        assert "[REDACTED:api_key]" in received[0].model_dump_json()
+        assert "[REDACTED:api_key]" in path.read_text(encoding="utf-8")
+
+    def test_step_is_not_broadcast_when_durable_fsync_fails(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        journal = StreamingJournal(JSONLJournal(tmp_path / "events.jsonl"))
+        received = []
+        journal.subscribe(received.append)
+
+        def fail_fsync(_fd: int) -> None:
+            raise OSError("simulated durable write failure")
+
+        monkeypatch.setattr(os, "fsync", fail_fsync)
+        with pytest.raises(JournalTransactionError, match="durable journal data"):
+            journal.write_step(TaskId(uuid4()), ArmId("arm-a"), _mk_step())
+
+        assert received == []
+
+
+class TestLegacyWriteCompatibility:
+    def test_write_only_duck_is_called_once_without_replay(self) -> None:
+        class LegacyJournal:
+            def __init__(self, existing: StepEvent) -> None:
+                self.events = [existing]
+                self.write_calls = 0
+
+            def write(self, event: StepEvent) -> None:
+                self.write_calls += 1
+                self.events.append(event)
+
+        existing = StepEvent(
+            task_id=TaskId(uuid4()),
+            arm_id=ArmId("arm-a"),
+            step=_mk_step(),
+        )
+        inner = LegacyJournal(existing)
+        journal = StreamingJournal(inner)  # type: ignore[arg-type]
+        received: list[StepEvent] = []
+        journal.subscribe(lambda event: received.append(event))
+        new_event = StepEvent(
+            task_id=TaskId(uuid4()),
+            arm_id=ArmId("arm-a"),
+            step=_mk_step(),
+        )
+
+        with journal_context(tenant_id="tenant-a", owner_actor_id="owner-a"):
+            journal.write(new_event)
+
+        assert inner.write_calls == 1
+        assert len(inner.events) == 2
+        assert received == [inner.events[-1]]
+        assert existing not in received
+        assert received[0].tenant_id == "tenant-a"
+        assert received[0].owner_actor_id == "owner-a"
+
+    def test_canonical_hook_failure_is_not_retried_through_legacy_write(self) -> None:
+        class FailingCanonicalJournal:
+            def __init__(self) -> None:
+                self.canonical_calls = 0
+                self.write_calls = 0
+
+            def write_canonical(self, _event: StepEvent) -> StepEvent:
+                self.canonical_calls += 1
+                raise OSError("commit failed")
+
+            def write(self, _event: StepEvent) -> None:
+                self.write_calls += 1
+
+        inner = FailingCanonicalJournal()
+        journal = StreamingJournal(inner)  # type: ignore[arg-type]
+        received = []
+        journal.subscribe(received.append)
+        event = StepEvent(
+            task_id=TaskId(uuid4()),
+            arm_id=ArmId("arm-a"),
+            step=_mk_step(),
+        )
+
+        with pytest.raises(OSError, match="commit failed"):
+            journal.write(event)
+
+        assert inner.canonical_calls == 1
+        assert inner.write_calls == 0
+        assert received == []
 
 
 # ═══════════════════════════════════════════════════════════

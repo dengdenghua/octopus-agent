@@ -132,9 +132,25 @@ class TestPushClient:
 
     def test_no_credentials_start_false(self):
         c = PlatformClient("http://x/api", phone="", password="")
-        push = LivePushClient(c, host="h", auto_start=False)
+        states = []
+        push = LivePushClient(
+            c,
+            host="h",
+            auto_start=False,
+            state_callback=lambda state, error: states.append((state, error)),
+        )
         assert push.start() is False
         assert "凭证" in push._last_error
+        assert states == [("failure", "未配置平台凭证")]
+
+    def test_state_callback_isolated_from_push_worker(self):
+        c = self._client()
+
+        def broken_callback(state, error):  # noqa: ARG001
+            raise RuntimeError("observer failed")
+
+        push = LivePushClient(c, host="h", auto_start=False, state_callback=broken_callback)
+        push._notify_state("connected")
 
     def test_stop_keeps_live_worker_reference_to_prevent_duplicate_start(self):
         class _BlockedThread:

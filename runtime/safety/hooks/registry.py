@@ -76,8 +76,30 @@ class HookRegistry:
         self,
         event_type: type,
         handler: HookHandler,
-    ) -> None:
-        self._handlers.setdefault(event_type, []).append(handler)
+    ) -> Callable[[], None]:
+        """Register a handler and return an idempotent disposer.
+
+        The returned disposer is the lifecycle boundary for plugin-owned
+        hooks.  Removing by identity prevents an old plugin generation from
+        unregistering a newer handler that happens to share the same name.
+        Existing callers may continue to ignore the return value.
+        """
+
+        handlers = self._handlers.setdefault(event_type, [])
+        handlers.append(handler)
+
+        def dispose() -> None:
+            current = self._handlers.get(event_type)
+            if not current:
+                return
+            for index, registered in enumerate(current):
+                if registered is handler:
+                    current.pop(index)
+                    break
+            if not current:
+                self._handlers.pop(event_type, None)
+
+        return dispose
 
     def handlers_for(self, event_type: type) -> list[HookHandler]:
         """Return handlers for this exact event type · subclasses

@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 from pydantic import BaseModel
 
-DEFAULT_BASE = "https://api.octoapk.com"
+DEFAULT_BASE = "https://os.echo-age.com"
 _API = "/api/v1/registry/assets"
 _SHA256_RE = re.compile(r"^(?:sha256:)?([0-9a-fA-F]{64})$")
 _ASSET_ID_RE = re.compile(r"^[a-z][a-z0-9-]*/[A-Za-z0-9][A-Za-z0-9._-]*$")

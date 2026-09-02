@@ -33,17 +33,11 @@ tier: "standard"
 | `_agents_endpoints_conversations.py` | Conversation (journal) endpoints for the agents router. |
 | `_agents_endpoints_crud.py` | Agent CRUD + visual + reload endpoints for the agents router. |
 | `_agents_endpoints_groups.py` | Agent-group endpoints for the agents router. |
-| `_agents_endpoints_local_partners.py` | LocalPartner endpoints for the agents router. |
 | `_agents_endpoints_shared.py` | Shared types for the ``_agents_endpoints`` submodules. |
 | `_agents_endpoints_system.py` | System-level endpoints (regeneration status + capabilities) for the agents router. |
 | `_agents_endpoints_tasks.py` | Task (pause/resume) endpoints for the agents router. |
 | `_agents_endpoints_tools.py` | Arms + tool-registry endpoints for the agents router. |
 | `_agents_helpers.py` | Pure helper functions for the agents router. |
-| `_agents_local_partner_doctor.py` | Doctor-style readiness summary for LocalPartner. |
-| `_agents_local_partner_guidance.py` | UX guidance / command hints / diagnostics for the LocalPartner connect dialog. |
-| `_agents_local_partner_security.py` | Security primitives for LocalPartner detection + registration. |
-| `_agents_local_partner_specs.py` | Compatibility re-export — specs now live in the execution layer. |
-| `_agents_local_partner_writer.py` | SOUL.md template + agent writer for LocalPartner registration. |
 | `_channels_constructors.py` | — |
 | `_channels_models.py` | — |
 | `_channels_persist.py` | — |
@@ -57,7 +51,6 @@ tier: "standard"
 | `_config_endpoints_system.py` | System / runtime-config endpoints for the config router. |
 | `_config_helpers.py` | Pure helper functions for the config router. |
 | `_config_models.py` | Pydantic response models for the config router. |
-| `_conversation_error_diagnostics.py` | Privacy-bounded diagnostics for errors persisted in conversation snapshots. |
 | `_cowork_group_access.py` | Authorization helpers for the cowork group HTTP router. |
 | `_cowork_group_models.py` | Pydantic request bodies for the cowork group HTTP API. |
 | `_cowork_group_room_ensure.py` | Atomic ensure-room workflow for collaboration sessions. |
@@ -143,7 +136,6 @@ tier: "standard"
 | `agent_trace_dependencies.py` | State factories and promotion helpers for the agent-trace API. |
 | `agent_trace_router.py` | Read-only API for the durable agent trace store. |
 | `agent_world_router.py` | Agent Market router · local agent marketplace. |
-| `agents_local_partner.py` | LocalPartner subsystem — detection + secure registration. |
 | `agents_models.py` | Pydantic wire models for ``agents_router``. |
 | `agents_router.py` | Agents router · public factory for the ``/api/agents`` surface. |
 | `ambient_suggestions_router.py` | Ambient Suggestions router · ``/api/ambient-suggestions/*``. |
@@ -156,7 +148,7 @@ tier: "standard"
 | `asset_registry_router.py` | 统一资产仓库路由 —— 插件 / 技能 / 角色(WorkBuddy + Codex + 本地 + 内置)归一视图。 |
 | `capability_router.py` | 统一「插件」市场路由 —— 所有外部能力(WorkBuddy MCP 服务 + Codex 插件)统一叫插件。 |
 | `channels_router.py` | — |
-| `cli_team_router.py` | CLI-team router · ``/api/cli-team/*``. |
+| `comfyui_manager.py` | User-triggered managed ComfyUI installation and update jobs. |
 | `comfyui_supervisor.py` | User-triggered lifecycle control for an existing local ComfyUI installation. |
 | `completion_router.py` | Inline code completion endpoint — Tab-complete skeleton. |
 | `computer_actions.py` | Action normalization/execution/preview-contract + UIA goal-planning for the computer-automation router. |
@@ -213,6 +205,7 @@ tier: "standard"
 | `openai_gateway/stream_handler.py` | — |
 | `openai_gateway/synthesis.py` | Final-answer synthesis for completed non-streaming gateway runs. |
 | `openai_gateway/tool_converter.py` | — |
+| `openai_gateway/turn_context.py` | Shared turn/session preparation for the OpenAI compatibility gateway. |
 | `openai_gateway_router.py` | — |
 | `org_router.py` | Organization API router (阶段一 企业协作 · 组织 API 路由). |
 | `organizations_router.py` | REST endpoints for team-topology management. |
@@ -229,7 +222,6 @@ tier: "standard"
 | `realtime_frame_bounds.py` | Last-resort frame bounding for realtime WebSocket notifications. |
 | `realtime_gateway.py` | Realtime gateway — JSON-RPC 2.0 over WebSocket. |
 | `realtime_interrupt_control.py` | Authoritative cross-worker interrupt control for realtime turns. |
-| `realtime_local_partner.py` | Direct execution of LocalPartner agents on the realtime path. |
 | `realtime_react_policy.py` | Routing policy and event translation for realtime agent streams. |
 | `realtime_react_stream.py` | Single-agent stream drivers for the realtime runtime. |
 | `realtime_team_stream.py` | Multi-agent team-topology stream driver for the realtime runtime. |
@@ -241,11 +233,11 @@ tier: "standard"
 | `realtime_turn_routing.py` | Turn-routing helpers for the realtime runtime. |
 | `realtime_turn_support.py` | Observable-output, cowork-context, and resume-intent helpers. |
 | `realtime_workbench.py` | Workbench snapshot + workspace-focus helpers for the realtime runtime. |
+| `recorder_store.py` | Durable, privacy-aware event store for the optional Echo REC plugin. |
 | `registry_consumer_router.py` | 资产 Registry 消费路由(母体接 registry · 只读浏览 + 安装 prompt-skill)。 |
 | `remote_backends_router.py` | Remote backends router · ``/api/remote-backends/*``. |
 | `remote_transport.py` | Remote Transport · connect a desktop session to a remote octopus-agent runtime over SSH-tunneled HTTP. |
 | `retrieve_router.py` | Retrieval router · ``/api/retrieve/rank``. |
-| `searxng_supervisor.py` | One-click local SearXNG for the private web-search backend. |
 | `skill_market_router.py` | — |
 | `slash_command_expansion.py` | Slash-command expansion for realtime chat input. |
 | `storage_proxy_router.py` | Same-origin gateway for the private octopus-storage service. |
@@ -315,27 +307,6 @@ tier: "standard"
 | --- | --- | --- |
 | func | `def register_trace_endpoints(router, deps)` |  |
 
-### `_agents_local_partner_doctor.py`
-
-| Kind | Symbol | Doc |
-| --- | --- | --- |
-| func | `def doctor_summary(partners)` | Aggregate local partner readiness into a doctor-style report. |
-
-### `_agents_local_partner_security.py`
-
-| Kind | Symbol | Doc |
-| --- | --- | --- |
-| func | `def validate_alias(value)` | Reject aliases that could pollute SOUL.md / IDENTITY.md or DoS disk. |
-| func | `def identity_has_admin_role(identity)` | Conservative admin check. |
-| func | `def safe_executable(executable_path)` | Reject executables that resolve into the current working directory subtree. Defense against the most common PATH-poisoning scenario: an atta |
-
-### `_agents_local_partner_writer.py`
-
-| Kind | Symbol | Doc |
-| --- | --- | --- |
-| func | `def soul_template(alias, partner_name, command)` | Render the SOUL.md persona block for a registered partner. |
-| func | `def write_partner_agent(spec, alias, command, executable, runtime, registry)` | Write a LocalPartner agent's profile + SOUL/IDENTITY/AGENTS docs to disk and register it in the agent registry. Returns the loaded Agent ins |
-
 ### `_channels_constructors.py`
 
 | Kind | Symbol | Doc |
@@ -347,13 +318,6 @@ tier: "standard"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def register_computer_appshot_routes(router, state, screenshot, preview_action, auth_dependency)` | Register screenshot-grounded semantic target routes on ``router``. |
-
-### `_conversation_error_diagnostics.py`
-
-| Kind | Symbol | Doc |
-| --- | --- | --- |
-| func | `def classify_conversation_error(code, message)` | Return a stable category, operator action, and retryability hint. |
-| func | `def build_conversation_error_diagnostics(threads, message_limit, sample_limit)` | Summarize bounded thread snapshots without exposing error details. |
 
 ### `_cowork_group_access.py`
 
@@ -413,7 +377,7 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def evolution_overview_payload(journal, registry, planner)` |  |
+| func | `def evolution_overview_payload(journal, registry, planner, include_global_intelligence)` |  |
 | func | `def evolution_story_payload(journal, registry, planner, thread_store, limit)` | Build plain-language evidence for what the system actually learned. |
 | func | `def evolution_memory_growth_payload(journal, registry, planner, days)` |  |
 | func | `def evolution_learning_curve_payload(journal, weeks)` |  |
@@ -596,7 +560,7 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def stream_agentic_fallback(stack, intent, agent, model, sub_event_queue, steering_drain)` | Agentic streaming · same ``(kind, delta, final)`` shape as ``_stream_direct_llm_fallback`` so the SSE loop can consume both paths identicall |
+| func | `def stream_agentic_fallback(stack, intent, agent, model, sub_event_queue, steering_drain)` | Run the native tool loop with a fail-closed terminal finalizer. |
 
 ### `_tool_bridge_protocol.py`
 
@@ -654,31 +618,19 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def create_agent_modes_router(identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
+| func | `def create_agent_modes_router(identity_store, require_auth, allow_local_workspace_access, jwt_secret, jwt_issuer, jwt_audience)` |  |
 
 ### `agent_trace_router.py`
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def create_agent_trace_router(store, db_path, experience_ledger, experience_ledger_path, review_queue, review_queue_path, promotion_audit_path, proposal_ledger_path, approval_policy_path, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
+| func | `def create_agent_trace_router(store, db_path, experience_ledger, experience_ledger_path, review_queue, review_queue_path, promotion_audit_path, proposal_ledger_path, approval_policy_path, journal, registry, auto_persist_dir, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
 
 ### `agent_world_router.py`
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def create_agent_world_router(registry, runtime, skill_registry, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
-
-### `agents_local_partner.py`
-
-| Kind | Symbol | Doc |
-| --- | --- | --- |
-| func | `def readiness_for_partner(partner_id, command, executable)` | Explain whether a detected local partner is actually dispatchable. |
-| func | `def partner_model(partner_id)` | Read a local CLI partner's own configured default model — its namespace (e.g. codex ``gpt-5.5``), NOT octopus's — so the UI can display it i |
-| func | `def resolve_local_command(command)` |  |
-| func | `def which_command(commands)` | Probe a list of candidate commands; return (name, path) for the first match, or (None, None) if none found. |
-| func | `def dir_registered(agent_id)` | True iff ``agents/<agent_id>/profile.jsonc`` exists on disk. |
-| func | `def to_wire(spec, registry, which_fn)` | Materialize a partner spec into its current-state wire form. |
-| func | `def probe_partner(partner_id, command, executable, timeout, runner)` | Run a small real health probe against a detected local partner. |
+| func | `def create_agent_world_router(registry, runtime, skill_registry, identity_store, require_auth, allow_local_user_plugin_lifecycle, jwt_secret, jwt_issuer, jwt_audience)` |  |
 
 ### `agents_models.py`
 
@@ -694,16 +646,6 @@ tier: "standard"
 | class | `class ArmOptionWire(BaseModel)` |  |
 | class | `class ToolRegistryWire(BaseModel)` |  |
 | class | `class CapabilitiesWire(BaseModel)` |  |
-| class | `class LocalPartnerCommandHint(BaseModel)` |  |
-| class | `class LocalPartnerDiagnosticItem(BaseModel)` |  |
-| class | `class LocalPartnerWire(BaseModel)` |  |
-| class | `class LocalPartnerDoctorGroup(BaseModel)` |  |
-| class | `class LocalPartnerDoctorResponse(BaseModel)` |  |
-| class | `class LocalPartnerRegisterItem(BaseModel)` |  |
-| class | `class LocalPartnerRegisterRequest(BaseModel)` |  |
-| class | `class LocalPartnerRegisterResult(BaseModel)` |  |
-| class | `class LocalPartnerRegisterResponse(BaseModel)` |  |
-| class | `class LocalPartnerProbeResponse(BaseModel)` |  |
 | class | `class PauseTaskBody(BaseModel)` |  |
 | class | `class ResumeTaskBody(BaseModel)` |  |
 | class | `class GroupCreate(BaseModel)` |  |
@@ -714,7 +656,7 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def create_agents_router(registry, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, journal, group_registry, runtime, thread_store)` |  |
+| func | `def create_agents_router(registry, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, journal, group_registry, runtime, thread_store, allow_local_workspace_access)` |  |
 
 ### `ambient_suggestions_router.py`
 
@@ -800,12 +742,23 @@ tier: "standard"
 | class | `class LocalChannelManager` | Small channel manager for dashboard-only sessions. |
 | func | `def create_channels_router(manager, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, state_path)` |  |
 
-### `cli_team_router.py`
+### `comfyui_manager.py`
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| class | `class CliTeamRunRequest(BaseModel)` |  |
-| func | `def create_cli_team_router(identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` | Build + return the router. ``app.include_router(create_cli_team_router())``. |
+| func | `def managed_root()` |  |
+| func | `def managed_home()` |  |
+| func | `def managed_python()` |  |
+| func | `def manager_status()` |  |
+| func | `def start_manager_job(action, node_id, model_url, model_group)` | Start an install/update job without waiting for large dependencies. |
+| func | `def cancel_manager_job()` | Cancel only the install/update process tree started by Octopus. |
+| func | `def list_node_backups(node_id)` |  |
+| func | `def uninstall_managed_node(node_id)` |  |
+| func | `def rollback_managed_node(node_id, backup_id)` |  |
+| func | `def list_managed_models()` |  |
+| func | `def remove_managed_model(group, name)` |  |
+| func | `def list_model_backups()` |  |
+| func | `def restore_managed_model(backup_id)` |  |
 
 ### `comfyui_supervisor.py`
 
@@ -903,7 +856,14 @@ tier: "standard"
 | class | `class WorkflowSave(BaseModel)` |  |
 | class | `class QueueRequest(BaseModel)` |  |
 | class | `class CanvasSave(BaseModel)` |  |
-| func | `def create_design_studio_router(project_store, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
+| class | `class CanvasPresenceHeartbeat(BaseModel)` |  |
+| class | `class PluginNodeStatePut(BaseModel)` |  |
+| class | `class ComfyCustomNodeAction(BaseModel)` |  |
+| class | `class ComfyCustomNodeRollback(BaseModel)` |  |
+| class | `class ComfyModelDownload(BaseModel)` |  |
+| class | `class ComfyModelAction(BaseModel)` |  |
+| class | `class ComfyModelRestore(BaseModel)` |  |
+| func | `def create_design_studio_router(project_store, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, plugin_node_state_store)` |  |
 
 ### `enterprise_assets_router.py`
 
@@ -1048,6 +1008,15 @@ tier: "standard"
 | --- | --- | --- |
 | func | `def synthesize_reply(stack, goal, trajectory, model, agent, conversation_messages, profile_memories, user_context, usage_out)` |  |
 
+### `openai_gateway/turn_context.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class PreparedChatTurn` | The one authoritative Session and workspace for an API turn. |
+| func | `def prepare_chat_turn(stack, turn_id, actor, agent, conversation_id, tenant_id, owner_actor_id)` | Allocate an opaque, scope-partitioned workspace and bind its Session. |
+| func | `def candidate_outcome_for_trajectory(trajectory)` | Map a runtime trajectory to governed-canary evidence semantics. |
+| func | `def settle_candidate_outcomes(turn_id, success)` | Best-effort canary settlement which never changes API availability. |
+
 ### `openai_gateway_router.py`
 
 | Kind | Symbol | Doc |
@@ -1152,13 +1121,6 @@ tier: "standard"
 | func | `def claim_is_held_for_turn(logs_root, thread_id, turn_id)` | No-TTL liveness check used by stale-turn recovery. |
 | func | `def acquire_stale_recovery_claim(logs_root, thread_id)` | Acquire recovery authority; conflict means a live owner, never stale. |
 
-### `realtime_local_partner.py`
-
-| Kind | Symbol | Doc |
-| --- | --- | --- |
-| func | `def agent_is_local_partner(agent)` | True when ``agent`` should be driven by spawning its registered coding-agent CLI directly rather than the LLM loop. |
-| func | `async def drive_local_partner(runtime, turn, log, emitter, intent, agent, provider, text)` | Dispatch the turn to the agent's external coding-agent CLI (``claude -p`` / ``codex exec``). The CLI's answer comes back as one plain agentM |
-
 ### `realtime_react_policy.py`
 
 | Kind | Symbol | Doc |
@@ -1190,6 +1152,12 @@ tier: "standard"
 | func | `async def record_pending_resume_intent(runtime, thread_id, resume_intent)` |  |
 | func | `async def consume_confirmed_resume_intent(runtime, thread_id, text)` |  |
 
+### `recorder_store.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class RecorderStore` | File-backed recording sessions with at most one active session/thread. |
+
 ### `registry_consumer_router.py`
 
 | Kind | Symbol | Doc |
@@ -1219,16 +1187,6 @@ tier: "standard"
 | --- | --- | --- |
 | class | `class RankRequest(BaseModel)` |  |
 | func | `def create_retrieve_router(identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` | Build the router. ``app.include_router(create_retrieve_router())``. |
-
-### `searxng_supervisor.py`
-
-| Kind | Symbol | Doc |
-| --- | --- | --- |
-| func | `def searxng_status()` | Snapshot for a status endpoint / UI light. Heartbeat-cached when running, else probes once. ``docker_present`` is a cheap PATH check (no dae |
-| func | `def enable_searxng()` | One-click deploy of a local SearXNG. Returns immediately with a status (``docker_missing`` / ``docker_not_running`` / ``already_running`` /  |
-| func | `def disable_searxng()` | Stop the managed container (kept, not removed, so re-enable is instant) and release ``SEARXNG_URL`` if we set it (never clobbers an external |
-| func | `def maybe_start_searxng()` | Boot-time autostart (opt-in via ``OCTOPUS_SEARXNG_AUTOSTART``). Conservative: if ``SEARXNG_URL`` is already set (external instance), defers  |
-| func | `def start_searxng_heartbeat()` | Start the supervision heartbeat once (idempotent, daemon thread). No-op unless we manage a local container — an external SearXNG is observed |
 
 ### `skill_market_router.py`
 
@@ -1289,6 +1247,7 @@ tier: "standard"
 | --- | --- | --- |
 | class | `class TaskApprovalDecisionRequest(BaseModel)` |  |
 | class | `class TaskTakeoverRequest(BaseModel)` |  |
+| class | `class TaskResumeExecutionRequest(BaseModel)` | One explicit operator request to continue a checkpointed objective. |
 | func | `def create_task_runs_router(supervisor, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
 
 ### `teach_repeat_router.py`
@@ -1296,9 +1255,10 @@ tier: "standard"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | class | `class StartRecordingRequest(BaseModel)` |  |
+| class | `class AppendRecordingEventsRequest(BaseModel)` |  |
 | class | `class StopRecordingRequest(BaseModel)` |  |
 | class | `class TemplateUpdateRequest(BaseModel)` |  |
-| func | `def create_teach_repeat_router(journal, registry, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
+| func | `def create_teach_repeat_router(journal, registry, auto_persist_dir, capability_registry, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, recording_store)` |  |
 
 ### `team_invitations_router.py`
 
@@ -1494,11 +1454,11 @@ tier: "standard"
 - **`runtime/kernel/`** · 1 file(s)
   - `runtime/kernel/kernel.py`
 - **`runtime/platform/`** · 13 file(s)
+  - `runtime/platform/plugins/bundled/comfyui_bridge/__init__.py`
   - `runtime/platform/plugins/cloud_expert_store.py`
   - `runtime/platform/ui/_app_agents.py`
   - `runtime/platform/ui/_app_collab.py`
   - `runtime/platform/ui/_app_health.py`
-  - `runtime/platform/ui/_app_meta.py`
   - _… and 8 more_
 - **`runtime/projectos/`** · 1 file(s)
   - `runtime/projectos/group_service.py`

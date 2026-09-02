@@ -321,7 +321,12 @@ class GraphRuntime:
                     on_step_callback=on_step_callback,
                 )
 
-            overall_ok = len(steps) >= len(graph.nodes) and all(s.success for s in steps)
+            nodes_by_id = {node.node_id: node for node in graph.nodes}
+            overall_ok = len({step.node_id for step in steps}) >= len(graph.nodes) and all(
+                step.success
+                or bool(getattr(nodes_by_id.get(step.node_id), "continue_on_failure", False))
+                for step in steps
+            )
             traj = Trajectory(
                 task_id=graph.task_id,
                 arm_id=arm_id,
@@ -408,6 +413,11 @@ class GraphRuntime:
             )
             steps.append(step)
             if step.success:
+                outputs_by_node[node.node_id] = step.result.output
+            elif node.continue_on_failure:
+                # Preserve the diagnostic payload for downstream templates.
+                # The Step remains failed, so telemetry does not pretend the
+                # command passed; only graph control flow is allowed onward.
                 outputs_by_node[node.node_id] = step.result.output
             elif stop_on_failure:
                 retry_step = self.executor.execute_step(
@@ -534,7 +544,7 @@ class GraphRuntime:
                     actor=actor,
                 )
                 steps.append(step)
-                if step.success:
+                if step.success or node.continue_on_failure:
                     outputs_by_node[node.node_id] = step.result.output
                 elif stop_on_failure:
                     self._retry_or_replan(
@@ -569,7 +579,7 @@ class GraphRuntime:
                 failed_any = False
                 for _gi, node, step in layer_results:
                     steps.append(step)
-                    if step.success:
+                    if step.success or node.continue_on_failure:
                         outputs_by_node[node.node_id] = step.result.output
                     elif stop_on_failure:
                         failed_any = True

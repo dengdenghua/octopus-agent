@@ -6,9 +6,8 @@ member replies briefly in its own persona — a short "bubble", not a full task
 run — and the replies come back per-member so the UI can stream each as its own
 group-chat bubble.
 
-This is the native-agent sibling of ``cli_team.run_cli_team`` (which fans out to
-external coding CLIs): same parallel-and-collect shape, but each unit is one of
-the room's in-process roster agents giving a conversational reply.
+Each unit is one of the room's in-process roster agents giving a conversational
+reply through the same delegation boundary as an ordinary agent turn.
 
 Honest scope: this is still *conversation*, not a full task graph.  It does,
 however, now returns a deterministic arbitration summary so downstream team

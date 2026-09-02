@@ -7,6 +7,7 @@ import pytest
 
 from runtime.core.cerebrum.react_types import ReActResult
 from runtime.execution.loops.controller import LoopController
+from runtime.execution.loops.learning import build_loop_repair_candidate_spec
 from runtime.execution.loops.models import (
     LoopAttempt,
     LoopMode,
@@ -29,6 +30,8 @@ from runtime.platform.process.session import current_session
 from runtime.platform.process.task_supervisor import TaskRunStatus, TaskSupervisor
 from runtime.platform.runtime_policy.workspaces import WorkspaceManager
 from runtime.safety.approval.cancellation import CancellationSource
+from runtime.safety.auth.scope import TenantScope, tenant_scoped_path
+from runtime.safety.evolution.candidate_registry import CandidateRegistry, CandidateStatus
 
 
 class _StubVerifierRegistry:
@@ -119,6 +122,7 @@ def test_loop_controller_retries_with_verifier_feedback(tmp_path) -> None:
     workspace = tmp_path / "repo"
     workspace.mkdir()
     run = LoopRun(
+        tenant_id="tenant-a",
         owner_id="alice",
         goal="Fix the failing authentication tests",
         thread_id="thread-loop",
@@ -234,6 +238,171 @@ def test_loop_controller_retries_with_verifier_feedback(tmp_path) -> None:
     assert queued["items"][0]["candidate_kind"] == "success_pattern"
     assert queued["items"][0]["metadata"]["replay"]["replayable"] is True
     assert queued["items"][0]["metadata"]["replay"]["case_id"].startswith("task-run:")
+    assert queued["items"][0]["tenant_id"] == "tenant-a"
+    assert queued["items"][0]["owner_actor_id"] == "alice"
+    assert queue.items(scope=TenantScope("tenant-b", "bob"))["total"] == 0
+    candidate = queued["items"][0]["metadata"]["candidate"]
+    assert candidate["gene_type"] == "prompt"
+    assert candidate["candidate_stage"] == "pending_review"
+    assert candidate["automatic_activation"] is False
+
+
+def test_verified_local_repair_registers_tenant_scoped_proposed_candidate(tmp_path) -> None:
+    failed_verifier = VerifierResult(
+        profile="python_repo_patch",
+        kind="python",
+        failure_category="test_failure",
+        passed=False,
+        findings=[
+            VerifierFinding(
+                name="pytest",
+                category="test_failure",
+                passed=False,
+                exit_code=1,
+            )
+        ],
+    )
+    passed_verifier = VerifierResult(
+        profile="python_repo_patch",
+        kind="python",
+        passed=True,
+        findings=[VerifierFinding(name="pytest", passed=True, exit_code=0)],
+    )
+    sealed_summary = {
+        "schema": "octopus.loop.attempt_effect_summary.v2",
+        "emitted_by": "react_runtime",
+        "complete": True,
+        "sealed": True,
+        "total_tool_count": 2,
+        "read_only_effect_count": 1,
+        "workspace_write_effect_count": 1,
+        "local_state_effect_count": 0,
+        "external_effect_count": 0,
+        "indeterminate_effect_count": 0,
+        "unsealed_receipt_count": 0,
+        "unknown_effect_count": 0,
+        "effect_fingerprint": "sealed-local-repair",
+    }
+    run = LoopRun(
+        run_id="tenant-local-repair",
+        tenant_id="tenant-a",
+        owner_id="alice",
+        goal="Repair the parser",
+        status=LoopRunStatus.COMPLETED,
+        completed_at="2026-08-27T01:00:00+00:00",
+        attempts=[
+            LoopAttempt(
+                attempt_index=1,
+                prompt="Repair the parser",
+                status="completed",
+                success=False,
+                verifier_result=failed_verifier,
+            ),
+            LoopAttempt(
+                attempt_index=2,
+                prompt="Repair the parser with verifier evidence",
+                status="completed",
+                success=True,
+                verifier_result=passed_verifier,
+                effect_summary=sealed_summary,
+            ),
+        ],
+        last_verifier_result=passed_verifier,
+    )
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    store.create(run)
+    candidate_path = tmp_path / "evolution_candidates.jsonl"
+    controller = LoopController(
+        store=store,
+        stack=SimpleNamespace(name="stack"),
+        workspace_manager=WorkspaceManager(tmp_path / "workspaces"),
+        review_queue=ReviewQueue(tmp_path / "review_queue.json"),
+        candidate_registry_path=candidate_path,
+    )
+
+    finalized = controller._finalize_learning(run)
+
+    assert finalized.last_evolution_candidate_result is not None
+    assert finalized.last_evolution_candidate_result["status"] == "proposed"
+    assert finalized.last_evolution_candidate_result["automatic_activation"] is False
+    scope = TenantScope("tenant-a", "alice")
+    scoped_path = tenant_scoped_path(candidate_path, scope)
+    registry = CandidateRegistry(scoped_path, tenant_scope=scope)
+    candidates = registry.list()
+    assert len(candidates) == 1
+    assert candidates[0].status == CandidateStatus.PROPOSED
+    assert candidates[0].hard_gate_results["server_owned_effect_receipts"] is True
+    assert candidates[0].hard_gate_results["local_effects_only"] is True
+    assert candidates[0].hard_gate_results["independent_verifier_passed"] is True
+    assert candidates[0].hard_gate_results["repair_tool_confinement"] is True
+    assert candidates[0].hard_gate_results["independent_replay"] is False
+    assert candidates[0].hard_gate_passed is False
+    assert candidates[0].patch["target"] == "loop.repair_prompt"
+    assert candidates[0].patch["when"]["failure_categories"] == ["test_failure"]
+    assert candidates[0].metadata["automatic_activation"] is False
+    assert candidates[0].metadata["awaiting_gates"] == ["independent_replay"]
+    assert not candidate_path.exists()
+    tenant_b = TenantScope("tenant-b", "bob")
+    assert (
+        CandidateRegistry(
+            tenant_scoped_path(candidate_path, tenant_b), tenant_scope=tenant_b
+        ).list()
+        == []
+    )
+
+    repeated = controller._finalize_learning(finalized)
+    assert repeated.last_evolution_candidate_result == finalized.last_evolution_candidate_result
+    assert len(registry.list()) == 1
+
+
+def test_external_or_unsealed_repair_cannot_become_typed_candidate() -> None:
+    verifier = VerifierResult(
+        profile="python_repo_patch",
+        kind="python",
+        failure_category="test_failure",
+        passed=True,
+    )
+    base_summary = {
+        "schema": "octopus.loop.attempt_effect_summary.v2",
+        "emitted_by": "react_runtime",
+        "complete": True,
+        "sealed": True,
+        "workspace_write_effect_count": 1,
+        "external_effect_count": 0,
+        "indeterminate_effect_count": 0,
+        "unknown_effect_count": 0,
+        "unsealed_receipt_count": 0,
+    }
+    first = LoopAttempt(
+        attempt_index=1,
+        prompt="repair",
+        success=False,
+        verifier_result=verifier.model_copy(update={"passed": False}),
+    )
+
+    for blocked_update in (
+        {"external_effect_count": 1},
+        {"indeterminate_effect_count": 1},
+        {"unsealed_receipt_count": 1, "sealed": False},
+        {"workspace_write_effect_count": 0},
+    ):
+        summary = {**base_summary, **blocked_update}
+        run = LoopRun(
+            goal="repair",
+            status=LoopRunStatus.COMPLETED,
+            attempts=[
+                first,
+                LoopAttempt(
+                    attempt_index=2,
+                    prompt="repair with evidence",
+                    success=True,
+                    verifier_result=verifier,
+                    effect_summary=summary,
+                ),
+            ],
+            last_verifier_result=verifier,
+        )
+        assert build_loop_repair_candidate_spec(run) is None
 
 
 def test_loop_policy_defaults_to_auto_verifier_profile() -> None:
@@ -300,7 +469,7 @@ def test_loop_controller_goal_mode_passes_bounded_objective_context(tmp_path) ->
             "objective": "Finish the migration with verification",
             "goal_mode": True,
             "completion_policy": "goal",
-            "budget_auto_pause": True,
+            "budget_auto_pause": False,
             "max_tokens_budget": 12_345,
             "max_usd_budget": 1.25,
         }
@@ -1670,7 +1839,7 @@ def test_loop_controller_stops_writing_after_task_lease_is_lost(tmp_path) -> Non
     assert record.status == TaskRunStatus.RUNNING
 
 
-def test_loop_controller_recovers_interrupted_attempt_before_retry(tmp_path) -> None:
+def test_loop_controller_marks_unknown_interrupted_attempt_for_explicit_resume(tmp_path) -> None:
     store = LoopRunStore(tmp_path / "loop_runs.json")
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -1712,20 +1881,19 @@ def test_loop_controller_recovers_interrupted_attempt_before_retry(tmp_path) -> 
         react_runner=runner,
     )
 
-    completed = controller.execute(run.run_id)
+    interrupted = controller.execute(run.run_id)
 
-    assert completed.status == LoopRunStatus.COMPLETED
-    assert runner_calls == ["Recover the half-written attempt"]
-    assert len(completed.attempts) == 2
-    assert completed.attempts[0].status == "interrupted"
-    assert completed.attempts[0].success is False
-    assert "interrupted" in completed.attempts[0].error
-    assert completed.attempts[1].status == "completed"
-    assert completed.last_verifier_result is not None
-    assert completed.last_verifier_result.passed is True
+    assert interrupted.status == LoopRunStatus.INTERRUPTED
+    assert runner_calls == []
+    assert len(interrupted.attempts) == 1
+    assert interrupted.attempts[0].status == "interrupted"
+    assert interrupted.attempts[0].success is False
+    assert "interrupted" in interrupted.attempts[0].error
+    assert interrupted.last_review is not None
+    assert interrupted.last_review["resume"]["available"] is True
 
 
-def test_loop_controller_fails_exhausted_interrupted_attempt_with_review(
+def test_loop_controller_keeps_exhausted_interrupted_attempt_resumable(
     tmp_path,
 ) -> None:
     store = LoopRunStore(tmp_path / "loop_runs.json")
@@ -1763,7 +1931,7 @@ def test_loop_controller_fails_exhausted_interrupted_attempt_with_review(
 
     failed = controller.execute(run.run_id)
 
-    assert failed.status == LoopRunStatus.FAILED
+    assert failed.status == LoopRunStatus.INTERRUPTED
     assert runner_calls == []
     assert len(failed.attempts) == 1
     assert failed.attempts[0].status == "interrupted"
@@ -1775,7 +1943,7 @@ def test_loop_controller_fails_exhausted_interrupted_attempt_with_review(
         failed.last_review["resume"]["latest_checkpoint"]["state"]["last_attempt"]["status"]
         == "interrupted"
     )
-    assert queue.summary()["pending_count"] == 2
+    assert queue.summary()["pending_count"] == 0
 
 
 def test_loop_controller_resumes_pending_verification_without_rerunning_attempt(

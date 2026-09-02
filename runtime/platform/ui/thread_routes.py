@@ -24,6 +24,7 @@ def mount_thread_state_routes(
     logs_root: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
+    allow_local_workspace_access: bool = False,
     jwt_secret: str | None = None,
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
@@ -44,6 +45,7 @@ def mount_thread_state_routes(
             logs_root=logs_root,
             identity_store=identity_store,
             require_auth=require_auth,
+            allow_local_workspace_access=allow_local_workspace_access,
             jwt_secret=jwt_secret,
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
@@ -51,6 +53,7 @@ def mount_thread_state_routes(
             group_store=group_store,
             collaboration_store=collaboration_store,
             team_rooms_router=team_rooms_router,
+            project_store=lambda: getattr(app.state, "project_store", None),
         )
     )
 

@@ -21,7 +21,10 @@ from runtime.core.cerebrum.react_execution import (
     _execute_action_via_beak,
     _tool_event_extras_from_beak_step,
 )
-from runtime.core.cerebrum.react_execution_receipts import _execution_receipt_trust
+from runtime.core.cerebrum.react_execution_receipts import (
+    _execution_effect_receipt,
+    _execution_receipt_trust,
+)
 from runtime.core.cerebrum.react_parsing import _parse_action, _summarize_observation
 from runtime.execution.tool_engine import (
     normalize_tool_lifecycle_event,
@@ -601,6 +604,7 @@ def _dispatch_parallel_actions(
                 "call_id": call_ids[idx],
                 "trusted_execution": _trusted_execution,
                 "execution_source": _execution_source,
+                "effect_receipt": _execution_effect_receipt(bk),
             }
         )
         # Per-call header keeps the model from confusing which

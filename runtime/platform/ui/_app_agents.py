@@ -35,11 +35,12 @@ def mount_agents(
 
             agent_registry = AgentRegistry()
             _runtime = stack.runtime if stack is not None else None
-            for agent in load_all_agents(_runtime):
-                try:
-                    agent_registry.register(agent)
-                except (TypeError, ValueError, KeyError):
-                    continue
+            if _runtime is not None:
+                for agent in load_all_agents(_runtime):
+                    try:
+                        agent_registry.register(agent)
+                    except (TypeError, ValueError, KeyError):
+                        continue
             # Also load admin explicitly (excluded from load_all_agents)
             try:
                 from runtime.execution.agents.presets import make_admin_agent
@@ -62,6 +63,34 @@ def mount_agents(
             pass
     ctx.agent_registry = agent_registry
 
+    # Regeneration starts during ``wire_stack`` but this compatibility loader
+    # runs afterwards. Rebind so fitness/drift always resolve against the
+    # actual runtime registry, never ``stack.config.name``.
+    if stack is not None:
+        try:
+            from runtime.safety.recovery.scheduler import get_scheduler
+
+            get_scheduler().bind_agent_registry(agent_registry)
+        except (ImportError, AttributeError, TypeError) as exc:
+            logging.getLogger(__name__).debug(
+                "regeneration agent registry bind skipped: %s",
+                exc,
+            )
+
+    # ``wire_stack`` runs before this fallback loader.  Rebind the evolution
+    # trigger after mounting so create_app(stack=..., agent_registry=None)
+    # still evaluates the actual registered agents instead of the app name.
+    if stack is not None and getattr(stack, "is_llm_planner", False):
+        try:
+            from runtime.safety.evolution.auto_trigger import get_auto_trigger
+
+            get_auto_trigger().bind_agent_registry(agent_registry)
+        except (ImportError, AttributeError, TypeError) as exc:
+            logging.getLogger(__name__).debug(
+                "evolution agent registry bind skipped: %s",
+                exc,
+            )
+
     if agent_registry is not None:
         from runtime.sensing.gateway.agents_router import create_agents_router
 
@@ -76,6 +105,7 @@ def mount_agents(
                 journal=state.journal,  # /api/conversations/*
                 group_registry=group_registry,  # /api/groups/*
                 runtime=stack.runtime if stack is not None else None,  # /api/agents/{id}/reload
+                allow_local_workspace_access=ctx.allow_local_workspace_access,
             )
         )
 
@@ -160,6 +190,11 @@ def mount_agents(
         room_delete_projection=_delete_room_from_collaboration,
         room_message_projection=_project_room_message_to_collaboration,
         room_message_provider=_collaboration_room_messages,
+        group_store=(
+            getattr(ctx.cowork_runtime, "group_store", None)
+            if ctx.cowork_runtime is not None
+            else None
+        ),
         twin_responder=make_twin_responder(stack),
     )
     app.state.team_rooms_router = team_rooms_router

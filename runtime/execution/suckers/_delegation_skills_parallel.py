@@ -739,18 +739,24 @@ def _build_parallel_envelope(
     status_summary = (
         f"{success_count}/{total} sub-agents succeeded" if total else "0/0 sub-agents succeeded"
     )
-    honesty_warning = ""
+    honesty_warning = (
+        "Sub-agent outputs are delegated reports, not independently verified facts. "
+        "Before presenting factual or code-audit claims, the parent must check their "
+        "cited file/tool/source evidence and label anything unchecked as unverified."
+    )
     if partial:
         failed_labels = [
             str(f.get("task_label") or f.get("agent_id") or f.get("role") or "?") for f in failures
         ]
-        honesty_warning = (
+        honesty_warning += (
+            " "
             "PARTIAL RUN: do not claim all sub-agents completed. "
             f"State that {status_summary}; failed lanes: "
             f"{', '.join(failed_labels)}."
         )
     elif failure_count > 0:
-        honesty_warning = (
+        honesty_warning += (
+            " "
             "FAILED RUN: no sub-agent completed successfully. Do not present "
             "a complete multi-agent result unless you independently filled "
             "the gaps and disclose that fallback."

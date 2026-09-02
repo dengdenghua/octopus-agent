@@ -228,8 +228,11 @@ def _finder_prompt(goal: str, seen: list[str], role: str = "") -> str:
         )
     base += (
         "Report your findings as JSON: a `findings` array where each element is "
-        "ONE atomic finding (a short string). No preamble or commentary — just "
-        'the findings. If you have nothing, return {"findings": []}.'
+        "ONE atomic finding (a short string). Every finding must carry a concrete "
+        "evidence anchor inside that string: file:line, source URL, or an exact "
+        "observed command/tool result. Do not turn assumptions, recommendations, "
+        "or tool knowledge you did not execute into findings. No preamble or "
+        'commentary — just the findings. If you have no grounded finding, return {"findings": []}.'
     )
     if seen:
         shown = "\n".join(f"- {s}" for s in seen[:40])
@@ -267,7 +270,9 @@ def _synthesis_prompt(goal: str, findings: list[str]) -> str:
         "You are the synthesizer at the end of a parallel discovery + "
         "verification pass. Combine the CONFIRMED FINDINGS below into ONE "
         "coherent, non-redundant answer to the GOAL. Merge overlaps, order by "
-        "importance, and add nothing that is not supported by a finding.\n\n"
+        "importance, preserve each evidence anchor, and add nothing that is not "
+        "supported by a finding. A majority vote is a screening signal, not new "
+        "evidence: soften or omit any claim whose anchor does not support it.\n\n"
         f"GOAL:\n{goal}\n\n"
         f"CONFIRMED FINDINGS:\n{numbered}\n\n"
         "Return the synthesized answer as plain text — no preamble."

@@ -675,71 +675,6 @@ def _mobile_artifacts(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return artifacts
 
 
-def _local_cli_members(task: TeamTaskWire) -> list[dict[str, str]]:
-    """The locally-installed coding-agent CLIs assigned to this task — the
-    ``local_*`` agent assignees that :func:`select_cli_members` confirms are
-    runnable here. Empty → the task takes the normal role-topology path."""
-    from runtime.execution.agents.cli_team import select_cli_members
-
-    refs = [
-        a.ref.strip()
-        for a in task.assignees
-        if a.kind.strip().lower() == "agent" and a.ref.strip().startswith("local_")
-    ]
-    return select_cli_members(refs)
-
-
-def _cli_team_artifacts(cli_result: dict[str, Any]) -> list[dict[str, Any]]:
-    """One artifact per CLI member carrying its diff + output, so the team room
-    can review each candidate. Diffs are NOT merged (diff-first by design)."""
-    artifacts: list[dict[str, Any]] = []
-    for member in cli_result.get("members", []) or []:
-        if not isinstance(member, dict):
-            continue
-        agent_id = str(member.get("agent_id") or "agent")
-        failure_kind = str(member.get("failure_kind") or "")
-        failure_label = _cli_failure_kind_label(failure_kind) if failure_kind else None
-        artifacts.append(
-            {
-                "id": f"artifact-{uuid4().hex[:12]}",
-                "type": "cli_team_diff",
-                "title": f"{agent_id} · {'diff' if member.get('diff') else 'no changes'}",
-                "content": str(member.get("diff") or member.get("output") or ""),
-                "agent_id": agent_id,
-                "partner_id": str(member.get("partner_id") or ""),
-                "ok": bool(member.get("ok")),
-                "files": _jsonable(member.get("files", [])),
-                "error": member.get("error"),
-                "raw_error": member.get("raw_error"),
-                "failure_kind": member.get("failure_kind"),
-                "failure_label": failure_label,
-                "failure_title": member.get("failure_title"),
-                "fix_hint": member.get("fix_hint"),
-                "summary": member.get("failure_title") if not member.get("ok") else None,
-                "created_at": _now(),
-            }
-        )
-    return artifacts
-
-
-def _cli_failure_kind_label(kind: str) -> str:
-    labels = {
-        "auth": "需要登录",
-        "empty_output": "无输出",
-        "entitlement": "账号权益",
-        "execution_exception": "执行异常",
-        "missing_binary": "命令缺失",
-        "model": "模型配置",
-        "network": "网络环境",
-        "permission": "权限/信任",
-        "quota": "额度/限流",
-        "timeout": "执行超时",
-        "unknown": "未分类",
-        "version": "版本不兼容",
-    }
-    return labels.get(kind, kind or "未分类")
-
-
 def _runner_artifacts(result: Any, prepared: dict[str, Any]) -> list[dict[str, Any]]:
     final_output = str(_result_value(result, "final_output", "") or "")
     if not final_output.strip():
@@ -877,9 +812,6 @@ __all__ = [
     "_runner_result_error",
     "_runner_metadata",
     "_mobile_artifacts",
-    "_local_cli_members",
-    "_cli_team_artifacts",
-    "_cli_failure_kind_label",
     "_runner_artifacts",
     "_result_value",
     "_jsonable",

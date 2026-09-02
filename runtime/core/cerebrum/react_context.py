@@ -37,6 +37,8 @@ from runtime.core.cerebrum._react_context_helpers import (
     _summarize_messages,
     _trim_message_to_budget,
     context_budget_tokens_for_model,
+    context_compaction_message_target_tokens,
+    context_compaction_target_tokens,
 )
 from runtime.core.cerebrum._react_context_project import (
     _build_project_profile_prompt,
@@ -47,6 +49,8 @@ from runtime.core.cerebrum._react_context_project import (
 
 __all__ = [
     "context_budget_tokens_for_model",
+    "context_compaction_message_target_tokens",
+    "context_compaction_target_tokens",
     "_attachment_context_appendix",
     "_build_code_agent_mode_prompt",
     "_build_code_context_prelude",

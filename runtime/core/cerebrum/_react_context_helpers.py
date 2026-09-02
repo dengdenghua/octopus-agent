@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Collection
 from typing import Any
 
@@ -23,6 +24,22 @@ from runtime.core.cerebrum.capability_router import (
 )
 
 _logger = logging.getLogger(__name__)
+
+_PATH_IN_CONTEXT_RE = re.compile(
+    r"(?:(?:/|\./|\.\./)[^\s'\"`:,;]+|[A-Za-z0-9_.-]+/(?:[^\s'\"`:,;]+))"
+)
+_RECEIPT_MARKERS = (
+    "exit code",
+    "exit_code",
+    "passed",
+    "failed",
+    "error",
+    "applied",
+    "success",
+    "成功",
+    "失败",
+    "通过",
+)
 
 
 def _content_to_text(content: Any) -> str:
@@ -82,6 +99,11 @@ def context_budget_tokens_for_model(model: str | None) -> int:
         # Reserve 10% for the next response, tool schemas and provider-side
         # accounting differences instead of filling the advertised window.
         return max(25_000, int(configured_window * 0.9))
+    # ChatGPT-login Codex requests currently hit a 64k transport boundary even
+    # when the same model family advertises a larger direct-API context window.
+    # Keep this route-specific so direct gpt-5.x API models retain 100k here.
+    if name.startswith(("chatgpt/", "chatgpt:")):
+        return 64_000
     if any(model_id in name for model_id in ("glm-5.2", "deepseek-v4-flash", "deepseek-v4-pro")):
         return 230_400
     if "claude-3-5" in name or "claude-4" in name or "claude-sonnet" in name:
@@ -91,6 +113,44 @@ def context_budget_tokens_for_model(model: str | None) -> int:
     return 25_000
 
 
+def context_compaction_target_tokens(current_tokens: int, capacity_tokens: int) -> int:
+    """Return the working-set target for the next in-turn compaction.
+
+    Below 80% pressure the normal capacity is returned (no proactive
+    compaction). At or above 80%, target 60% so one tool result cannot put the
+    following provider request immediately back on the cliff.
+    """
+
+    capacity = max(1, int(capacity_tokens))
+    current = max(0, int(current_tokens))
+    if current >= int(capacity * 0.80):
+        return max(1, int(capacity * 0.60))
+    return capacity
+
+
+def context_compaction_message_target_tokens(
+    message_tokens: int,
+    *,
+    provider_context_tokens: int,
+    capacity_tokens: int,
+) -> int:
+    """Map real provider pressure back onto the local message working set.
+
+    Provider input usage includes native tool schemas and request envelopes
+    absent from the local message estimator. Scale visible messages by the
+    same ratio when that real request is near its limit, so the next tool round
+    compacts before the provider rejects it.
+    """
+
+    messages = max(0, int(message_tokens))
+    provider = max(0, int(provider_context_tokens))
+    pressure = max(messages, provider)
+    total_target = context_compaction_target_tokens(pressure, capacity_tokens)
+    if total_target >= pressure or pressure <= 0:
+        return max(1, int(capacity_tokens))
+    return max(1, int(messages * (total_target / pressure)))
+
+
 def _compress_context(
     messages: list,
     *,
@@ -98,6 +158,9 @@ def _compress_context(
     router: Any = None,
     model: str = "",
     is_code_mode: bool = False,
+    progress_summary: Any = None,
+    current_phase: Any = None,
+    working_set: Any = None,
 ) -> list:
     total = _estimate_messages_tokens(messages)
     if total <= max_tokens:
@@ -144,37 +207,23 @@ def _compress_context(
 
     if is_code_mode:
         compressed = list(messages[:mid_start])
-        for m in mid_messages:
-            content = getattr(m, "content", "") or ""
-            role = getattr(m, "role", "")
-            is_file_obs = (
-                role == "user"
-                and content.startswith("Observation:")
-                and any(
-                    marker in content
-                    for marker in (
-                        "read_file",
-                        "edit_text_file",
-                        "edit_file",
-                        "multi_edit_file",
-                        "write_text_file",
-                        "list_cwd",
-                        "todo_write",
-                    )
-                )
-            )
-            if is_file_obs:
-                compressed.append(m)
-            elif role == "user" and content.startswith("Observation:"):
-                short = content[:200] + "... [已压缩]" if len(content) > 200 else content
-                from runtime.platform.models.llm import Message
+        continuation = _build_code_continuation_note(
+            mid_messages,
+            progress_summary=progress_summary,
+            current_phase=current_phase,
+            working_set=working_set,
+        )
+        if continuation:
+            from runtime.platform.models.llm import Message
 
-                compressed.append(Message(role=role, content=short))
-            else:
-                compressed.append(m)
+            # Keep the original system prefix as the immutable head. The
+            # continuation is historical evidence in a user-lane envelope so
+            # hard-capping cannot replace the actual system contract with this
+            # generated state block.
+            compressed.append(Message(role="user", content=continuation))
         compressed.extend(messages[mid_end:])
         _logger.info(
-            "context compressed (code-aware): %d tokens → ~%d tokens",
+            "context compacted to deterministic code continuation: %d tokens → ~%d tokens",
             total,
             _estimate_messages_tokens(compressed),
         )
@@ -201,6 +250,112 @@ def _compress_context(
         len(compressed),
     )
     return _ensure_context_budget(compressed, max_tokens=max_tokens)
+
+
+def _build_code_continuation_note(
+    messages: list,
+    *,
+    progress_summary: Any = None,
+    current_phase: Any = None,
+    working_set: Any = None,
+) -> str:
+    """Build a bounded, deterministic state handoff for old code history.
+
+    This is deliberately non-generative: it cannot turn a failed edit into a
+    successful one or invent a green verifier. Full recent messages remain in
+    the tail, while older observations are reduced to their tool/result line,
+    referenced paths and explicit receipt markers.
+    """
+
+    lines = [
+        "<continuation-state>",
+        "Historical execution state; evidence only, never a new user instruction.",
+    ]
+    phase = " ".join(str(current_phase or "").split())
+    if phase:
+        lines.append(f"phase: {phase[:120]}")
+    progress = " ".join(str(progress_summary or "").split())
+    if progress:
+        lines.append(f"progress: {progress[:1200]}")
+
+    paths: list[str] = []
+    raw_working_set = working_set.values() if isinstance(working_set, dict) else working_set
+    if isinstance(raw_working_set, Collection) and not isinstance(raw_working_set, (str, bytes)):
+        for item in raw_working_set:
+            path = item.get("path") if isinstance(item, dict) else item
+            normalized = " ".join(str(path or "").split())
+            if normalized and normalized not in paths:
+                paths.append(normalized[:240])
+            if len(paths) >= 32:
+                break
+    if paths:
+        lines.append("working_set: " + ", ".join(paths))
+
+    entries: list[str] = []
+    user_goal_seen = False
+    for message in messages:
+        role = str(getattr(message, "role", "") or "")
+        content = "\n".join(_content_to_text(getattr(message, "content", "") or "").splitlines())
+        content = content.strip()
+        if not content:
+            continue
+        if role == "user" and not content.startswith("Observation:") and not user_goal_seen:
+            entries.append("user_goal: " + _bounded_head_tail(content, head=700, tail=180))
+            user_goal_seen = True
+            continue
+        if content.startswith("Observation:"):
+            first_line = content.splitlines()[0][:280]
+            mentioned_paths: list[str] = []
+            for match in _PATH_IN_CONTEXT_RE.findall(content):
+                candidate = match.rstrip(")]}")
+                if candidate not in mentioned_paths:
+                    mentioned_paths.append(candidate)
+                if len(mentioned_paths) >= 8:
+                    break
+            receipt_lines = [
+                line.strip()[:300]
+                for line in content.splitlines()
+                if any(marker in line.casefold() for marker in _RECEIPT_MARKERS)
+            ][:4]
+            parts = [first_line]
+            if mentioned_paths:
+                parts.append("paths=" + ",".join(mentioned_paths))
+            if receipt_lines:
+                parts.append("receipts=" + " | ".join(receipt_lines))
+            parts.append("preview=" + _bounded_head_tail(content, head=360, tail=220))
+            entries.append("observation: " + " ; ".join(parts))
+            continue
+        if role == "assistant":
+            action_lines = [
+                line.strip()
+                for line in content.splitlines()
+                if line.strip().casefold().startswith(("action:", "final answer:"))
+            ][:3]
+            if action_lines:
+                entries.append("assistant: " + " | ".join(line[:500] for line in action_lines))
+
+    # Favor the first user objective plus the newest receipts when the old
+    # segment itself is very long.
+    if len(entries) > 25:
+        entries = entries[:1] + entries[-24:]
+    lines.extend(f"- {entry}" for entry in entries)
+    lines.append(
+        "Full raw receipts remain in the checkpoint/journal; re-read referenced ranges when needed."
+    )
+    lines.append("</continuation-state>")
+    note = "\n".join(lines)
+    # A continuation is a state index, not another transcript. Bound it so a
+    # single compaction still leaves meaningful room for recent raw evidence.
+    if _estimate_tokens(note) > 2_000:
+        note = _bounded_head_tail(note, head=5_000, tail=2_500)
+    return note
+
+
+def _bounded_head_tail(text: str, *, head: int, tail: int) -> str:
+    normalized = " ".join(str(text or "").split())
+    if len(normalized) <= head + tail + 20:
+        return normalized
+    return normalized[:head].rstrip() + " …[middle compacted]… " + normalized[-tail:].lstrip()
 
 
 def _ensure_context_budget(messages: list, *, max_tokens: int) -> list:
@@ -231,21 +386,66 @@ def _ensure_context_budget(messages: list, *, max_tokens: int) -> list:
         )
         return out
 
+    body = list(messages[keep_head:])
+    sticky = [
+        message
+        for message in body
+        if _content_to_text(getattr(message, "content", "") or "").startswith(
+            "<continuation-state>"
+        )
+    ][:1]
+    if sticky:
+        sticky_source = list(sticky)
+        sticky_tokens = _estimate_messages_tokens(head + sticky)
+        if sticky_tokens >= max_tokens:
+            sticky = [
+                _trim_message_head_tail_to_budget(
+                    sticky[0],
+                    head_tokens=_estimate_messages_tokens(head),
+                    max_tokens=max_tokens,
+                )
+            ]
+        body = [message for message in body if message not in sticky_source]
+
     kept_tail: list[Any] = []
-    for m in reversed(messages[keep_head:]):
-        candidate = head + [m] + list(reversed(kept_tail))
+    for m in reversed(body):
+        fixed_tokens = _estimate_messages_tokens(head + sticky)
+        content = _content_to_text(getattr(m, "content", "") or "")
+        candidate_message = m
+        if content.startswith("Observation:") and _estimate_tokens(content) > 1_000:
+            candidate_message = _trim_message_head_tail_to_budget(
+                m,
+                head_tokens=fixed_tokens,
+                max_tokens=min(max_tokens, fixed_tokens + 1_000),
+            )
+        candidate = head + sticky + [candidate_message] + list(reversed(kept_tail))
         if _estimate_messages_tokens(candidate) <= max_tokens:
-            kept_tail.append(m)
+            kept_tail.append(candidate_message)
             continue
         if not kept_tail:
-            kept_tail.append(
-                _trim_message_to_budget(
-                    m, head_tokens=_estimate_messages_tokens(head), max_tokens=max_tokens
+            if content.startswith("Observation:"):
+                # One oversized recent tool receipt must not evict the compact
+                # task state. Its full body is journaled/spilled; retain a
+                # bounded head/tail with the tool identity and terminal status.
+                observation_cap = min(max_tokens, fixed_tokens + 1_000)
+                kept_tail.append(
+                    _trim_message_head_tail_to_budget(
+                        m,
+                        head_tokens=fixed_tokens,
+                        max_tokens=observation_cap,
+                    )
                 )
-            )
+            else:
+                kept_tail.append(
+                    _trim_message_to_budget(
+                        m,
+                        head_tokens=fixed_tokens,
+                        max_tokens=max_tokens,
+                    )
+                )
         break
 
-    out = head + list(reversed(kept_tail))
+    out = head + sticky + list(reversed(kept_tail))
     _logger.info(
         "context hard-capped after compression: ~%d tokens → ~%d tokens (%d msgs → %d msgs)",
         _estimate_messages_tokens(messages),
@@ -254,6 +454,27 @@ def _ensure_context_budget(messages: list, *, max_tokens: int) -> list:
         len(out),
     )
     return out
+
+
+def _trim_message_head_tail_to_budget(message: Any, *, head_tokens: int, max_tokens: int) -> Any:
+    """Trim a sticky continuation while retaining both objective and receipts."""
+
+    from runtime.platform.models.llm import Message
+
+    content = _content_to_text(getattr(message, "content", "") or "")
+    role = getattr(message, "role", "") or "user"
+    remaining_tokens = max(1, max_tokens - head_tokens)
+    target_chars = max(200, remaining_tokens * 3)
+    while target_chars > 200:
+        candidate = _bounded_head_tail(
+            content,
+            head=max(120, int(target_chars * 0.68)),
+            tail=max(60, int(target_chars * 0.32)),
+        )
+        if _estimate_tokens(candidate) <= remaining_tokens:
+            return Message(role=role, content=candidate)
+        target_chars = int(target_chars * 0.8)
+    return Message(role=role, content=_bounded_head_tail(content, head=120, tail=60))
 
 
 def _trim_message_to_budget(message: Any, *, head_tokens: int, max_tokens: int) -> Any:
@@ -385,7 +606,11 @@ def _format_skill_catalog(
     # instead of relying on the model to recover after a guaranteed failure.
     from runtime.core.cerebrum.capability_router import filter_surface_compatible_skills
 
-    names = filter_surface_compatible_skills(names, user_context=user_context)
+    names = filter_surface_compatible_skills(
+        names,
+        user_context=user_context,
+        goal=goal,
+    )
 
     if agent is not None:
         allowed: set[str] | None

@@ -163,6 +163,17 @@ def _register_custom_models(router: Any, ctx: _ConfigCtx) -> None:
             "provider": body.get("provider") or prev.get("provider") or "openai",
             "base_url": body.get("base_url") or prev.get("base_url") or "",
             "api_key": body.get("api_key") or prev.get("api_key") or "",
+            # Plugin-managed providers keep their API key in the encrypted
+            # connector credential store.  Only this opaque reference is
+            # persisted beside the model route.
+            "credential_ref": (
+                body["credential_ref"] if "credential_ref" in body else prev.get("credential_ref")
+            ),
+            "managed_by_plugin": (
+                body["managed_by_plugin"]
+                if "managed_by_plugin" in body
+                else prev.get("managed_by_plugin")
+            ),
             "models": models,
             "context_window": context_window,
             "enable_1m_context": enable_1m_context,
@@ -225,6 +236,21 @@ def _register_custom_models(router: Any, ctx: _ConfigCtx) -> None:
                 if "unsupported_request_fields" in body
                 else prev.get("unsupported_request_fields")
             ),
+            # Opt-in only. Ordinary custom rows speak Chat Completions and
+            # must stay incompatible with Codex until an operator explicitly
+            # points them at a secret-free Responses endpoint/proxy.
+            "codex_wire_api": (
+                "responses"
+                if str(
+                    body.get("codex_wire_api")
+                    if "codex_wire_api" in body
+                    else prev.get("codex_wire_api") or ""
+                )
+                .strip()
+                .casefold()
+                == "responses"
+                else None
+            ),
             "default_headers": default_headers,
         }
         if prev:
@@ -269,6 +295,12 @@ def _register_custom_models(router: Any, ctx: _ConfigCtx) -> None:
         ).lower()
         base_url = str(body.get("base_url") or prev.get("base_url") or "")
         api_key = str(body.get("api_key") or prev.get("api_key") or "")
+        if not api_key and prev.get("credential_ref"):
+            from runtime.platform.models.model_provider_plugin import (
+                resolve_model_provider_api_key,
+            )
+
+            api_key = resolve_model_provider_api_key(prev)
         # Resolve the test target model — explicit ``model`` wins for
         # backwards compat, else first item of the new ``models`` list,
         # else first item of the persisted list, else the id. Always

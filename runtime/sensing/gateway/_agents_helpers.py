@@ -178,19 +178,58 @@ def _agent_visual_urls_for(agent_id: str) -> dict[str, str]:
     return urls
 
 
-def _to_wire(agent: Any) -> AgentWire:
+def _identity_metadata_for(agent_id: str) -> tuple[str | None, dict[str, Any]]:
+    """Read public identity metadata without adding it to the runtime Agent."""
+    from runtime.execution.agents.loader import default_agents_root
+    from runtime.platform.process.utils import parse_jsonc
+
+    profile_path = default_agents_root() / agent_id / "profile.jsonc"
+    try:
+        profile = parse_jsonc(profile_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        profile = {}
+    identity = profile.get("identity")
+    identity_profile = dict(identity) if isinstance(identity, dict) else {}
+    code = str(
+        profile.get("identity_code") or identity_profile.get("code") or profile.get("did") or ""
+    ).strip()
+    if not code:
+        from runtime.execution.agents.identity import (
+            build_identity_profile,
+            legacy_identity_code,
+        )
+
+        code = legacy_identity_code(agent_id)
+        identity_profile = build_identity_profile(code)
+        identity_profile["derived_for_legacy_profile"] = True
+    return code, identity_profile
+
+
+def _to_wire(agent: Any, *, include_visuals: bool = True) -> AgentWire:
     tool_groups = [str(arm.arm_id) for arm in agent.arms]
+    # The roster endpoint is latency-sensitive and may contain hundreds of
+    # agents. Its compact mode avoids parsing every profile and probing up to
+    # twenty visual files per agent. The stable avatar endpoint lets the UI
+    # load only the handful of rows it actually renders and fall back on 404.
+    avatar_url = (
+        _avatar_url_for(agent.agent_id)
+        if include_visuals
+        else f"/api/agents/{agent.agent_id}/avatar"
+    )
+    identity_code, identity_profile = _identity_metadata_for(agent.agent_id)
     return AgentWire(
         name=agent.agent_id,
         display_name=agent.display_name or None,
         description=agent.description,
         icon=agent.icon or None,
-        avatar_url=_avatar_url_for(agent.agent_id),
-        visual_urls=_agent_visual_urls_for(agent.agent_id),
+        avatar_url=avatar_url,
+        visual_urls=_agent_visual_urls_for(agent.agent_id) if include_visuals else {},
         model=agent.model,
         tool_groups=tool_groups or None,
         soul=_soul_for_display(agent.soul),
         capabilities=dict(getattr(agent, "capabilities", {}) or {}),
+        identity_code=identity_code,
+        identity_profile=identity_profile,
     )
 
 
@@ -219,6 +258,7 @@ def _to_detail_wire(agent: Any) -> AgentDetailWire:
         )
         for arm in agent.arms
     ]
+    identity_code, identity_profile = _identity_metadata_for(agent.agent_id)
     return AgentDetailWire(
         name=agent.agent_id,
         display_name=agent.display_name or None,
@@ -235,6 +275,8 @@ def _to_detail_wire(agent: Any) -> AgentDetailWire:
         skill_policy=skill_policy,
         extra_affinity=list(agent.extra_affinity),
         budget=dict(getattr(agent, "budget", {}) or {}),
+        identity_code=identity_code,
+        identity_profile=identity_profile,
     )
 
 

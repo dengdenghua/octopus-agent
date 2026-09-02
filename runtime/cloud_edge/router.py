@@ -6,20 +6,37 @@ import asyncio
 import base64
 import json
 import os
+import re
+import secrets
 import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from .security import TokenError, decode_token, encode_token
-from .store import CloudEdgeStore
+from .shares import CreateThreadShareBody, ResolveThreadShareBody, normalise_public_snapshot
+from .store import (
+    DEFAULT_SHARE_MAX_PER_OWNER,
+    DEFAULT_SHARE_MAX_SNAPSHOT_BYTES,
+    DEFAULT_SHARE_MAX_TOTAL_BYTES,
+    DEFAULT_SHARE_TTL_SECONDS,
+    CloudEdgeStore,
+    ShareLimitError,
+)
 
 TOKEN_ISSUER = "octopus-cloud-edge"
 TOKEN_AUDIENCE = "octopus-edge-device"
+_PUBLIC_NO_STORE_HEADERS = {
+    "Cache-Control": "no-store",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+_RELAY_OWNER_SCOPE_RE = re.compile(r"^relay_[a-f0-9]{64}$")
 
 
 class PairingBody(BaseModel):
@@ -85,6 +102,20 @@ def _verify_device_signature(
         raise HTTPException(401, "invalid device signature") from exc
 
 
+def _public_share_base_url(value: str | None) -> str:
+    base = str(value or "").strip().rstrip("/")
+    if not base:
+        return ""
+    parsed = urlsplit(base)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("public_share_base_url must be an absolute HTTP(S) URL")
+    if parsed.scheme != "https" and parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
+        raise ValueError("public_share_base_url must use HTTPS outside loopback development")
+    if parsed.query or parsed.fragment or parsed.username or parsed.password:
+        raise ValueError("public_share_base_url cannot contain credentials, query, or fragment")
+    return base
+
+
 def create_cloud_edge_router(
     *,
     db_path: str | Path,
@@ -96,6 +127,14 @@ def create_cloud_edge_router(
     jwt_audience: str | None = None,
     principal_resolver: Callable[[Request], Any] | None = None,
     operator_resolver: Callable[[Request], Any] | None = None,
+    public_share_base_url: str | None = None,
+    share_ttl_seconds: int = DEFAULT_SHARE_TTL_SECONDS,
+    share_max_per_owner: int = DEFAULT_SHARE_MAX_PER_OWNER,
+    share_max_snapshot_bytes: int = DEFAULT_SHARE_MAX_SNAPSHOT_BYTES,
+    share_max_total_bytes: int = DEFAULT_SHARE_MAX_TOTAL_BYTES,
+    share_relay_key: str | None = None,
+    share_relay_tenant_id: str = "default",
+    share_relay_owner_id: str = "admin",
 ) -> APIRouter:
     """Create the cloud edge router.
 
@@ -104,8 +143,24 @@ def create_cloud_edge_router(
     """
 
     router = APIRouter(tags=["cloud-edge"])
-    store = CloudEdgeStore(db_path)
+    store = CloudEdgeStore(
+        db_path,
+        share_ttl_seconds=share_ttl_seconds,
+        share_max_per_owner=share_max_per_owner,
+        share_max_snapshot_bytes=share_max_snapshot_bytes,
+        share_max_total_bytes=share_max_total_bytes,
+    )
     signing_secret = str(token_secret or "").strip()
+    public_base_url = _public_share_base_url(public_share_base_url)
+    relay_key = str(share_relay_key or "").strip()
+    relay_tenant_id = str(share_relay_tenant_id).strip()
+    relay_owner_id = str(share_relay_owner_id).strip()
+    if relay_key and len(relay_key) < 32:
+        raise ValueError("share_relay_key must contain at least 32 characters")
+    if relay_key and signing_secret and secrets.compare_digest(relay_key, signing_secret):
+        raise ValueError("share_relay_key must be independent from the device token secret")
+    if relay_key and (not relay_tenant_id or not relay_owner_id):
+        raise ValueError("share relay tenant and owner must be non-empty")
 
     def enabled() -> None:
         if len(signing_secret) < 32:
@@ -151,6 +206,25 @@ def create_cloud_edge_router(
             raise HTTPException(401, "authentication required")
         return type("LocalPrincipal", (), {"tenant_id": "local", "actor_id": "local"})()
 
+    def share_actor(request: Request) -> Any:
+        """Accept the narrow relay key only on share-management routes."""
+
+        enabled()
+        candidate = str(request.headers.get("X-API-Key") or "")
+        if relay_key and candidate and secrets.compare_digest(candidate, relay_key):
+            requested_scope = str(request.headers.get("X-Octopus-Share-Owner-Scope") or "").strip()
+            if requested_scope and not _RELAY_OWNER_SCOPE_RE.fullmatch(requested_scope):
+                raise HTTPException(400, "invalid public share owner scope")
+            return type(
+                "ShareRelayPrincipal",
+                (),
+                {
+                    "tenant_id": relay_tenant_id,
+                    "actor_id": requested_scope or relay_owner_id,
+                },
+            )()
+        return principal(request)
+
     def device_claims(request: Request) -> dict[str, Any]:
         enabled()
         header = str(request.headers.get("Authorization") or "")
@@ -175,6 +249,74 @@ def create_cloud_edge_router(
         ):
             raise HTTPException(401, "device token binding mismatch")
         return claims
+
+    def create_share(
+        body: CreateThreadShareBody,
+        *,
+        tenant_id: str,
+        owner_id: str,
+        creator_type: str,
+        creator_id: str,
+    ) -> dict[str, Any]:
+        try:
+            snapshot = normalise_public_snapshot(body.snapshot)
+            record = store.create_thread_share(
+                tenant_id=tenant_id,
+                owner_id=owner_id,
+                creator_type=creator_type,
+                creator_id=creator_id,
+                source_thread_id=body.source_thread_id,
+                snapshot=snapshot,
+                ttl_seconds=body.ttl_seconds,
+            )
+        except ShareLimitError as exc:
+            status_code = 413 if exc.kind == "snapshot" else 507 if exc.kind == "total" else 409
+            raise HTTPException(status_code, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        token = str(record.pop("token"))
+        share_path = f"#/share/{token}"
+        result = {**record, "token": token, "share_path": share_path}
+        if public_base_url:
+            result["share_url"] = f"{public_base_url}/{share_path}"
+        return result
+
+    def list_shares(
+        *,
+        tenant_id: str,
+        owner_id: str,
+        source_thread_id: str | None,
+        limit: int,
+    ) -> dict[str, Any]:
+        return {
+            "shares": store.list_thread_shares(
+                tenant_id=tenant_id,
+                owner_id=owner_id,
+                source_thread_id=source_thread_id,
+                limit=limit,
+            )
+        }
+
+    def revoke_share(share_id: str, *, tenant_id: str, owner_id: str) -> Response:
+        if not store.revoke_thread_share(
+            share_id,
+            tenant_id=tenant_id,
+            owner_id=owner_id,
+        ):
+            raise HTTPException(404, "shared task not found")
+        return Response(status_code=204)
+
+    def resolve_share(token: str, response: Response) -> dict[str, Any]:
+        enabled()
+        record = store.get_public_thread_share(token)
+        if record is None:
+            raise HTTPException(
+                404,
+                "shared task not found or expired",
+                headers=_PUBLIC_NO_STORE_HEADERS,
+            )
+        response.headers.update(_PUBLIC_NO_STORE_HEADERS)
+        return record
 
     @router.get("/api/cloud-edge/status")
     def status() -> dict[str, Any]:
@@ -237,6 +379,51 @@ def create_cloud_edge_router(
                 after_id=after_id,
             )
         }
+
+    @router.post("/api/cloud-edge/thread-shares", status_code=201)
+    def create_account_thread_share(
+        body: CreateThreadShareBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        actor = share_actor(request)
+        return create_share(
+            body,
+            tenant_id=str(actor.tenant_id),
+            owner_id=str(actor.actor_id),
+            creator_type="account",
+            creator_id=str(actor.actor_id),
+        )
+
+    @router.get("/api/cloud-edge/thread-shares")
+    def list_account_thread_shares(
+        request: Request,
+        source_thread_id: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        actor = share_actor(request)
+        return list_shares(
+            tenant_id=str(actor.tenant_id),
+            owner_id=str(actor.actor_id),
+            source_thread_id=source_thread_id,
+            limit=limit,
+        )
+
+    @router.delete(
+        "/api/cloud-edge/thread-shares/{share_id}",
+        status_code=204,
+        response_class=Response,
+        response_model=None,
+    )
+    def revoke_account_thread_share(
+        share_id: str,
+        request: Request,
+    ) -> Response:
+        actor = share_actor(request)
+        return revoke_share(
+            share_id,
+            tenant_id=str(actor.tenant_id),
+            owner_id=str(actor.actor_id),
+        )
 
     @router.get("/api/cloud-edge/messages/stream")
     async def message_stream(
@@ -345,6 +532,48 @@ def create_cloud_edge_router(
         )
         return {"features": features}
 
+    @router.post("/edge/v1/thread-shares", status_code=201)
+    def create_device_thread_share(  # noqa: B008 - FastAPI dependency declaration
+        body: CreateThreadShareBody,
+        claims: dict[str, Any] = Depends(device_claims),  # noqa: B008
+    ) -> dict[str, Any]:
+        return create_share(
+            body,
+            tenant_id=str(claims["tenant_id"]),
+            owner_id=str(claims["sub"]),
+            creator_type="device",
+            creator_id=str(claims["device_id"]),
+        )
+
+    @router.get("/edge/v1/thread-shares")
+    def list_device_thread_shares(  # noqa: B008 - FastAPI dependency declaration
+        source_thread_id: str | None = None,
+        limit: int = 100,
+        claims: dict[str, Any] = Depends(device_claims),  # noqa: B008
+    ) -> dict[str, Any]:
+        return list_shares(
+            tenant_id=str(claims["tenant_id"]),
+            owner_id=str(claims["sub"]),
+            source_thread_id=source_thread_id,
+            limit=limit,
+        )
+
+    @router.delete(
+        "/edge/v1/thread-shares/{share_id}",
+        status_code=204,
+        response_class=Response,
+        response_model=None,
+    )
+    def revoke_device_thread_share(  # noqa: B008 - FastAPI dependency declaration
+        share_id: str,
+        claims: dict[str, Any] = Depends(device_claims),  # noqa: B008
+    ) -> Response:
+        return revoke_share(
+            share_id,
+            tenant_id=str(claims["tenant_id"]),
+            owner_id=str(claims["sub"]),
+        )
+
     @router.post("/edge/v1/messages/batch")
     def ingest(  # noqa: B008 - FastAPI dependency declaration
         body: MessageBatch,
@@ -362,6 +591,24 @@ def create_cloud_edge_router(
             messages=[item.model_dump() for item in body.messages],
         )
         return {"ok": True, **result}
+
+    @router.post("/api/public/thread-shares/resolve")
+    @router.post("/api/v1/public/thread-shares/resolve")
+    def resolve_public_thread_share(
+        body: ResolveThreadShareBody,
+        response: Response,
+    ) -> dict[str, Any]:
+        """Resolve a capability from the request body so proxies need not log it."""
+
+        return resolve_share(body.token, response)
+
+    @router.get("/api/public/thread-shares/{token}")
+    @router.get("/api/v1/public/thread-shares/{token}")
+    def get_public_thread_share_compat(token: str, response: Response) -> dict[str, Any]:
+        """Compatibility path; new clients should use the body-based resolver."""
+
+        response.headers["Deprecation"] = "true"
+        return resolve_share(token, response)
 
     return router
 

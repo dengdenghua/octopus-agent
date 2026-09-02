@@ -32,34 +32,34 @@ graph LR
   sensing[sensing]
   adapters[adapters]
   platform[platform]
-  sensing -- 161 --> platform
-  sensing -- 121 --> safety
-  execution -- 111 --> platform
-  safety -- 97 --> platform
-  sensing -- 93 --> memory
-  sensing -- 86 --> execution
-  execution -- 62 --> safety
+  sensing -- 167 --> platform
+  sensing -- 129 --> safety
+  execution -- 118 --> platform
+  safety -- 98 --> platform
+  sensing -- 95 --> memory
+  sensing -- 78 --> execution
+  execution -- 75 --> safety
   memory -- 60 --> platform
   core -- 58 --> platform
-  platform -- 47 --> safety
+  platform -- 50 --> safety
   sensing -- 46 --> protocol
-  platform -- 37 --> execution
+  platform -- 39 --> execution
   sensing -- 37 --> adapters
-  sensing -- 33 --> core
+  sensing -- 34 --> core
   execution -- 32 --> memory
-  core -- 26 --> execution
-  core -- 26 --> safety
+  core -- 28 --> execution
+  core -- 27 --> safety
+  memory -- 24 --> safety
   safety -- 22 --> memory
   platform -- 21 --> sensing
   execution -- 20 --> core
-  memory -- 18 --> safety
   platform -- 16 --> memory
   sensing -- 16 --> projectos
   core -- 14 --> memory
   platform -- 14 --> core
   safety -- 14 --> adapters
-  platform -- 12 --> adapters
-  safety -- 12 --> execution
+  safety -- 13 --> execution
+  platform -- 11 --> adapters
   adapters -- 10 --> safety
   adapters -- 9 --> platform
   execution -- 9 --> adapters
@@ -79,6 +79,8 @@ graph LR
   execution -- 4 --> protocol
   platform -- 4 --> tentacle
   research -- 4 --> platform
+  tentacle -- 4 --> platform
+  cli.py -- 3 --> platform
   cli_core.py -- 3 --> core
   cli_reflect.py -- 3 --> platform
   cli_run.py -- 3 --> platform
@@ -89,7 +91,6 @@ graph LR
   projectos -- 3 --> memory
   projectos -- 3 --> platform
   sensing -- 3 --> workspace
-  tentacle -- 3 --> safety
   tour.py -- 3 --> core
   tour.py -- 3 --> safety
   workspace -- 3 --> platform

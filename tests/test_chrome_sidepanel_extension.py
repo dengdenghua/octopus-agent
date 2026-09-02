@@ -20,9 +20,7 @@ def test_chrome_extension_manifest_declares_side_panel() -> None:
     assert "ws://127.0.0.1:8000" in csp
     assert "ws://localhost:8000" in csp
     assert manifest["name"] == "EchoAI Browser Relay"
-    assert manifest["description"] == (
-        "Connect the active browser tab to EchoOS automation."
-    )
+    assert manifest["description"] == ("Connect the active browser tab to EchoOS automation.")
     assert manifest["action"]["default_title"] == "Open EchoAI Browser Relay"
 
 

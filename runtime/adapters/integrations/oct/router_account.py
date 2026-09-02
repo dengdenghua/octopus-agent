@@ -1,6 +1,6 @@
 """oct 账号管理路由 · /api/account/oct/*。
 
-用存在 OctLink 里的网关 JWT 调 oct 网关(api.octoapk.com)的 /account 与 /billing 端点,
+用存在 OctLink 里的网关 JWT 调 oct 网关(octopus.aurest.ai)的 /account 与 /billing 端点,
 做积分余额/会员/用量/商品/订单/每日签到。网关 401 → 标记 token 失效。
 """
 
@@ -180,7 +180,8 @@ def create_account_router(
     def membership(request: Request) -> dict[str, Any]:
         _require_enabled()
         actor = _actor(request)
-        return _get(actor, _link_or_404(actor), "/account/membership")
+        link = _link_or_404(actor)
+        return _get(actor, link, "/account/membership")
 
     @router.get("/usage")
     def usage(request: Request, page: int = 1, page_size: int = 50) -> dict[str, Any]:

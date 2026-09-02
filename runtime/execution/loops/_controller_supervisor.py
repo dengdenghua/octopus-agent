@@ -145,4 +145,5 @@ class LoopControllerSupervisorMixin:
             LoopRunStatus.COMPLETED: TaskRunStatus.COMPLETED,
             LoopRunStatus.FAILED: TaskRunStatus.FAILED,
             LoopRunStatus.CANCELLED: TaskRunStatus.CANCELLED,
+            LoopRunStatus.INTERRUPTED: TaskRunStatus.DISCONNECTED,
         }[status]

@@ -104,8 +104,6 @@ Observation: <由系统填入,每个观察会标 [n/N tool_name]>
 
 `tournament(goal, n=3)`: 同一目标跑 N 个隔离 worktree 候选→投票选最优 diff(不自动合并,返回给你审)。用于一次不靠谱、解法空间宽的高价值改动("实现 X,试几种取最好")。
 
-`cli_team(goal)`: 把用户本机装的**真·外部 coding agent**(Claude Code / Codex / Trae / Qoder,自动探测)拉成一个团队跑同一目标——各自隔离 worktree + 共享黑板协作,投票选最优 diff(不自动合并)。区别于 tournament(octopus 自己的子代理):这是**不同的真实 CLI agent**用各自登录在协作。需本机装了那些 CLI。
-
 `run_pipeline(items, stages)`: 对 N 个独立 item 并行跑多阶段流水线(stage1→stage2→…,item 间不互等),如"对每个文件 extract→classify→summarise"。
 """
 
@@ -140,10 +138,10 @@ class ReActStep:
     # Per-action execution receipts captured by the dispatcher: each
     # entry is ``{"tool_name": str, "ok": bool, "observation": str,
     # "duration_ms": int, "call_id": str, "trusted_execution": bool,
-    # "execution_source": str}``. The final two fields are computed by the
-    # server from canonical handler identity; model text, tool output, names,
-    # affinity, and ``trusted_source`` strings cannot set them. Empty when no
-    # tools ran this step (e.g. ``Action: none``).
+    # "execution_source": str, "effect_receipt": dict}``. The final fields
+    # are computed by the server from canonical handler identity; model text,
+    # tool output, names, affinity, and ``trusted_source`` strings cannot set
+    # them. Empty when no tools ran this step (e.g. ``Action: none``).
     action_results: list[dict[str, object]] = field(default_factory=list)
 
 

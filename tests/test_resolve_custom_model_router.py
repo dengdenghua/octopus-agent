@@ -117,7 +117,7 @@ def test_unknown_name_passes_through(
 ) -> None:
     """A name that's neither an entry id nor a known variant returns
     the router unchanged. Lets the dispatcher hand off to its
-    fallback (built-in presets / molili / etc.)."""
+    configured fallback."""
     from runtime.sensing.gateway.openai_gateway.request_parser import (
         _resolve_custom_model_router,
     )
@@ -348,7 +348,7 @@ def test_no_custom_models_file_returns_unchanged(
 
 class TestBuildFallbackFromCustomModels:
     """build_fallback_router_from_custom_models — self model as dispatch fallback
-    instead of the login-gated Molili."""
+    instead of a login-gated account provider."""
 
     def test_prefers_entry_matching_planner_model(self, _custom_models_path: Path) -> None:
         _write(
@@ -397,13 +397,13 @@ class TestBuildFallbackFromCustomModels:
             build_fallback_router_from_custom_models,
         )
 
-        # tmp file not written → no entries → caller keeps Molili
+        # tmp file not written → no entries → caller keeps its existing fallback
         assert build_fallback_router_from_custom_models("x") is None
 
 
 def test_unconfigured_model_router_raises_clear_error() -> None:
     """The last-resort fallback (no model configured) raises an actionable
-    error instead of the old Molili login gate."""
+    error instead of an opaque login gate."""
     import pytest as _pytest
 
     from runtime.sensing.model_router.models import (

@@ -9,12 +9,15 @@ before a remote marketplace exists.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import shutil
 from pathlib import Path
 from typing import Any
 
 try:
     from fastapi import APIRouter, Depends, HTTPException, Query, Request
+    from fastapi.responses import StreamingResponse
 
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
@@ -24,6 +27,7 @@ except ImportError:  # pragma: no cover
     HTTPException = None  # type: ignore[assignment, misc]
     Query = None  # type: ignore[assignment, misc]
     Request = None  # type: ignore[assignment, misc]
+    StreamingResponse = None  # type: ignore[assignment, misc]
 
 from runtime.execution.agents.loader import default_agents_root
 from runtime.execution.misc.agent_avatar import pixel_agent_avatar_svg
@@ -206,6 +210,12 @@ def _install_template_agent(
         raise
     try:
         skill_bundle = _copy_template_private_skills(template, skills_root)
+        from runtime.execution.agents.identity import (
+            build_identity_profile,
+            generate_identity_code,
+        )
+
+        identity_code = generate_identity_code(agents_root)
         profile = {
             "id": template["id"],
             "templateId": template["id"],
@@ -214,7 +224,9 @@ def _install_template_agent(
             "managed_by": "agent-market",
             "name": template["display_name"],
             "icon": template["icon"],
-            "did": f"DID-{template['id'].upper()}-LOCAL",
+            "did": identity_code,
+            "identity_code": identity_code,
+            "identity": build_identity_profile(identity_code),
             "description": template["description"],
             "avatar": "avatar.svg",
             "category": template["category"],
@@ -298,6 +310,7 @@ def _template_to_agent_dict(template: dict[str, Any], *, installed: set[str]) ->
         "is_featured": bool(template.get("featured")),
         "is_official": template["author"] == "octopus",
         "is_installed": agent_id in installed,
+        "source_kind": _MARKET_INSTALL_SOURCE,
         "created_at": "0",
         "source_url": template.get("source_url"),
         "key_skills": _template_private_skills(template),
@@ -312,6 +325,7 @@ def create_agent_world_router(
     skill_registry: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
+    allow_local_user_plugin_lifecycle: bool = False,
     jwt_secret: str | None = None,
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
@@ -334,7 +348,17 @@ def create_agent_world_router(
         )
 
     def _admin_dep(request: Request) -> None:
-        """Protect shared executable-content mutations in auth-on mode."""
+        """Protect shared mutations while allowing the trusted local desktop.
+
+        The desktop server already computes this posture from the explicit
+        ``execution.deployment_mode=local`` + loopback bind contract.  Reuse
+        it here so the legacy cloud catalog has the same local lifecycle
+        semantics as ``/api/capabilities``.  The default remains admin-only,
+        which preserves the shared/server security boundary for direct router
+        users and deployments that do not opt into the local posture.
+        """
+        if allow_local_user_plugin_lifecycle:
+            return
         from runtime.safety.auth.principal import require_roles
 
         require_roles(
@@ -543,57 +567,6 @@ def create_agent_world_router(
     def api_agent_market_ratings(agent_id: str) -> dict[str, Any]:
         return {"ratings": []}
 
-    @router.get(
-        "/api/agent-market/packs/preview",
-        dependencies=[Depends(_admin_dep)],
-    )
-    def api_agent_pack_preview(path: str) -> dict[str, Any]:
-        from runtime.execution.misc.agent_packs import scan_agent_pack
-
-        try:
-            return scan_agent_pack(path).to_dict()
-        except FileNotFoundError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        except NotADirectoryError as exc:
-            raise HTTPException(400, str(exc)) from exc
-
-    @router.post(
-        "/api/agent-market/packs/import-agent",
-        dependencies=[Depends(_admin_dep)],
-    )
-    def api_agent_pack_import_agent(body: dict[str, Any]) -> dict[str, Any]:
-        from runtime.execution.misc.agent_packs import (
-            AgentPackAgentNotFound,
-            import_agent_from_pack,
-        )
-
-        path = str(body.get("path") or "").strip()
-        agent_name = str(
-            body.get("agent_name") or body.get("agentId") or body.get("agent_id") or ""
-        ).strip()
-        if not path:
-            raise HTTPException(400, "path is required")
-        if not agent_name:
-            raise HTTPException(400, "agent_name is required")
-        try:
-            result = import_agent_from_pack(
-                path,
-                agent_name,
-                agents_root=default_agents_root(),
-                skills_root=resources_root() / "skills" / "public",
-            )
-        except FileNotFoundError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        except NotADirectoryError as exc:
-            raise HTTPException(400, str(exc)) from exc
-        except AgentPackAgentNotFound as exc:
-            raise HTTPException(404, str(exc)) from exc
-        except FileExistsError as exc:
-            raise HTTPException(409, str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(400, str(exc)) from exc
-        return result.to_dict()
-
     @router.get("/api/agent-market/social/{agent_name}/relationships")
     def api_agent_market_social(agent_name: str) -> dict[str, Any]:
         return {"relationships": []}
@@ -716,6 +689,7 @@ def create_agent_world_router(
         return {
             "skills": cat.installed_skills(),
             "plugins": plugins.installed_plugins(),
+            "plugin_states": plugins.plugin_statuses(),
         }
 
     # ── 云商城安装(下载内容包 → 解包落地) ─────────────────────
@@ -739,6 +713,53 @@ def create_agent_world_router(
             raise HTTPException(404, str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+
+    @router.post(
+        "/api/agent-market/cloud/skills/{name}/install/stream",
+        dependencies=[Depends(_admin_dep)],
+    )
+    async def api_agent_market_cloud_skill_install_stream(name: str) -> Any:
+        """Stream observable install phases as newline-delimited JSON."""
+        from runtime.execution.suckers.market_skills import immutable_prompt_catalog_required
+
+        if immutable_prompt_catalog_required():
+            raise HTTPException(
+                403,
+                "remote skill installation is disabled in shared/commercial deployments; "
+                "ship skill prompts in a reviewed release artifact",
+            )
+
+        async def events():
+            def line(payload: dict[str, Any]) -> str:
+                return json.dumps(payload, ensure_ascii=False) + "\n"
+
+            yield line({"phase": "resolving", "progress": 10, "message": "正在解析云端技能"})
+            await asyncio.sleep(0)
+            yield line({"phase": "installing", "progress": 45, "message": "正在下载并校验内容包"})
+            try:
+                result = await asyncio.to_thread(_cloud_catalog("skills").install_skill, name)
+            except (KeyError, ValueError) as exc:
+                yield line({"phase": "failed", "progress": 100, "message": str(exc)})
+                return
+            except Exception as exc:  # pragma: no cover - defensive stream boundary
+                yield line({"phase": "failed", "progress": 100, "message": str(exc)})
+                return
+            yield line({"phase": "indexing", "progress": 85, "message": "正在写入本地技能目录"})
+            await asyncio.sleep(0)
+            yield line(
+                {
+                    "phase": "completed",
+                    "progress": 100,
+                    "message": "安装完成",
+                    "result": result,
+                }
+            )
+
+        return StreamingResponse(
+            events(),
+            media_type="application/x-ndjson",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     @router.post(
         "/api/agent-market/cloud/plugins/{plugin_id}/install",
@@ -766,7 +787,14 @@ def create_agent_world_router(
             else "connector"
         )
         member = str(item.get("plugin") or plugin_id)
-        is_factory_workbench = archive_kind == "workbench" and bool(item.get("factory_seed"))
+        runtime_member = str(item.get("runtime_plugin") or member)
+        factory_checker = getattr(cat, "is_factory_plugin", None)
+        catalog_marks_factory = (
+            bool(factory_checker(member)) if callable(factory_checker) else False
+        )
+        is_factory_workbench = (
+            archive_kind == "workbench" and bool(item.get("factory_seed")) and catalog_marks_factory
+        )
         if immutable_prompt_catalog_required() and not is_factory_workbench:
             raise HTTPException(
                 403,
@@ -786,12 +814,22 @@ def create_agent_world_router(
         try:
             hub = getattr(request.app.state, "plugin_hub", None)
             if is_factory_workbench and hub is not None:
-                return hub.install_plugin(
-                    member,
-                    enabled=enabled_value,
-                    restore_data=restore_value,
-                    recovery_id=recovery_value,
-                )
+                try:
+                    return hub.install_plugin(
+                        member,
+                        enabled=enabled_value,
+                        restore_data=restore_value,
+                        recovery_id=recovery_value,
+                    )
+                except KeyError as exc:
+                    # A source checkout may ship the runtime module with a
+                    # ``delivery: remote`` manifest. PluginHub deliberately
+                    # hides such bundled modules from factory discovery, but
+                    # the cloud catalog can still materialize the reviewed
+                    # workbench package. Fall through to that path when the
+                    # hub reports only this discoverability mismatch.
+                    if not str(exc).startswith("'factory plugin is unavailable:"):
+                        raise
             if is_factory_workbench:
                 return cat.install_plugin(
                     member,
@@ -800,7 +838,92 @@ def create_agent_world_router(
                     restore_data=restore_value,
                     recovery_id=recovery_value,
                 )
-            return cat.install_plugin(member, plugin_kind=archive_kind)
+            was_loaded = bool(
+                archive_kind == "workbench"
+                and hub is not None
+                and hub.get_plugin(runtime_member) is not None
+            )
+            was_started = bool(was_loaded and hub is not None and hub.is_started(runtime_member))
+            if was_loaded and hub is not None:
+                hub.unload(runtime_member)
+            try:
+                install_options: dict[str, Any] = {"plugin_kind": archive_kind}
+                if archive_kind == "workbench":
+                    install_options.update(
+                        enabled=enabled_value,
+                        restore_data=restore_value,
+                        recovery_id=recovery_value,
+                    )
+                result = cat.install_plugin(member, **install_options)
+            except Exception:
+                if was_loaded and hub is not None:
+                    hub.load(runtime_member)
+                    if was_started:
+                        hub.start(runtime_member)
+                raise
+            if archive_kind == "workbench" and hub is not None:
+                package_dir = Path(str(result.get("path") or ""))
+                activated_dependencies: list[str] = []
+                parent_has_runtime = (package_dir / "plugin.yaml").is_file()
+
+                def activate_runtime(name: str) -> None:
+                    if hasattr(hub, "enable_plugin"):
+                        lifecycle = hub.enable_plugin(name)
+                        if not lifecycle.get("loaded") or not lifecycle.get("started"):
+                            raise RuntimeError(f"failed to activate plugin: {name}")
+                    else:
+                        loaded = hub.load(name)
+                        if loaded is None or not hub.start(name):
+                            raise RuntimeError(f"failed to activate plugin: {name}")
+
+                try:
+                    for dependency in result.get("installed_dependencies") or []:
+                        dependency_runtime = str(dependency.get("runtime_plugin") or "").strip()
+                        if dependency_runtime:
+                            activate_runtime(dependency_runtime)
+                            activated_dependencies.append(dependency_runtime)
+                    if parent_has_runtime:
+                        runtime_member = str(result.get("runtime_plugin") or runtime_member)
+                        activate_runtime(runtime_member)
+                except Exception:
+                    if parent_has_runtime:
+                        hub.unload(runtime_member)
+                    for dependency_runtime in reversed(activated_dependencies):
+                        hub.unload(dependency_runtime)
+                    transaction_id = result.get("transaction_id")
+                    if transaction_id:
+                        cat.rollback_plugin(
+                            member,
+                            plugin_kind=archive_kind,
+                            transaction_id=str(transaction_id),
+                        )
+                    else:
+                        cat.uninstall_plugin(member, plugin_kind=archive_kind)
+                    consumed: set[str] = set()
+                    for dependency in reversed(result.get("installed_dependencies") or []):
+                        dependency_transaction = str(dependency.get("transaction_id") or "")
+                        if not dependency_transaction or dependency_transaction in consumed:
+                            continue
+                        cat.rollback_plugin(
+                            str(dependency.get("plugin_id") or ""),
+                            plugin_kind="workbench",
+                            transaction_id=dependency_transaction,
+                        )
+                        consumed.add(dependency_transaction)
+                    if was_loaded:
+                        hub.load(runtime_member)
+                        if was_started:
+                            hub.start(runtime_member)
+                    raise
+                if parent_has_runtime:
+                    result.update(
+                        loaded=True,
+                        started=True,
+                        restart_required=False,
+                    )
+                if activated_dependencies:
+                    result["activated_dependencies"] = activated_dependencies
+            return result
         except KeyError as exc:
             raise HTTPException(404, str(exc)) from exc
         except FileExistsError as exc:
@@ -809,6 +932,90 @@ def create_agent_world_router(
             raise HTTPException(400, str(exc)) from exc
         except RuntimeError as exc:
             raise HTTPException(400, str(exc)) from exc
+
+    @router.post(
+        "/api/agent-market/cloud/plugins/{plugin_id}/rollback",
+        dependencies=[Depends(_admin_dep)],
+    )
+    def api_agent_market_cloud_plugin_rollback(
+        plugin_id: str,
+        request: Request,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        cat = _cloud_catalog("plugins")
+        item = next((i for i in cat.items() if i.get("id") == plugin_id), None)
+        if item is None or item.get("kind") != "workbench":
+            raise HTTPException(404, f"workbench plugin not found: {plugin_id}")
+        member = str(item.get("plugin") or plugin_id)
+        runtime_member = str(item.get("runtime_plugin") or member)
+        payload = body or {}
+        transaction_id = payload.get("transaction_id")
+        if transaction_id is not None and not isinstance(transaction_id, str):
+            raise HTTPException(400, "transaction_id must be a string")
+        hub = getattr(request.app.state, "plugin_hub", None)
+        was_loaded = bool(hub is not None and hub.get_plugin(runtime_member) is not None)
+        was_started = bool(was_loaded and hub is not None and hub.is_started(runtime_member))
+        if was_loaded and hub is not None:
+            hub.unload(runtime_member)
+        try:
+            result = cat.rollback_plugin(
+                member,
+                plugin_kind="workbench",
+                transaction_id=transaction_id,
+            )
+            restored_runtime = str(result.get("runtime_plugin") or runtime_member)
+            if result.get("installed") and hub is not None:
+                lifecycle = hub.enable_plugin(restored_runtime)
+                if not lifecycle.get("started"):
+                    raise RuntimeError(f"failed to activate rollback: {restored_runtime}")
+                result.update(loaded=True, started=True, restart_required=False)
+            else:
+                result.update(loaded=False, started=False, restart_required=False)
+            return result
+        except (KeyError, ValueError, RuntimeError) as exc:
+            if was_loaded and hub is not None and hub.get_plugin(runtime_member) is None:
+                hub.load(runtime_member)
+                if was_started:
+                    hub.start(runtime_member)
+            status = 404 if isinstance(exc, KeyError) else 409
+            raise HTTPException(status, str(exc)) from exc
+
+    @router.post(
+        "/api/agent-market/cloud/plugins/{plugin_id}/{action}",
+        dependencies=[Depends(_admin_dep)],
+    )
+    def api_agent_market_cloud_plugin_activation(
+        plugin_id: str,
+        action: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        if action not in {"enable", "disable"}:
+            raise HTTPException(404, f"unsupported workbench action: {action}")
+        cat = _cloud_catalog("plugins")
+        item = next((i for i in cat.items() if i.get("id") == plugin_id), None)
+        if item is None or item.get("kind") != "workbench":
+            raise HTTPException(404, f"workbench plugin not found: {plugin_id}")
+        member = str(item.get("plugin") or plugin_id)
+        runtime_member = str(item.get("runtime_plugin") or "").strip()
+        enabled = action == "enable"
+        try:
+            if runtime_member:
+                hub = getattr(request.app.state, "plugin_hub", None)
+                if hub is None:
+                    raise RuntimeError("plugin runtime is unavailable")
+                result = (
+                    hub.enable_plugin(runtime_member)
+                    if enabled
+                    else hub.disable_plugin(runtime_member)
+                )
+                if bool(result.get("enabled")) != enabled:
+                    raise RuntimeError(str(result.get("error") or "plugin state did not change"))
+            package = cat.set_workbench_enabled(member, enabled)
+            return {**package, **(result if runtime_member else {})}
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except (FileNotFoundError, ValueError, RuntimeError) as exc:
+            raise HTTPException(409, str(exc)) from exc
 
     @router.delete(
         "/api/agent-market/cloud/plugins/{plugin_id}/install",
@@ -833,7 +1040,14 @@ def create_agent_world_router(
             else "connector"
         )
         member = str(item.get("plugin") or plugin_id)
-        is_factory_workbench = archive_kind == "workbench" and bool(item.get("factory_seed"))
+        runtime_member = str(item.get("runtime_plugin") or member)
+        factory_checker = getattr(cat, "is_factory_plugin", None)
+        is_factory_workbench = (
+            archive_kind == "workbench"
+            and bool(item.get("factory_seed"))
+            and callable(factory_checker)
+            and bool(factory_checker(member))
+        )
         try:
             hub = getattr(request.app.state, "plugin_hub", None)
             if is_factory_workbench and hub is not None:
@@ -849,7 +1063,25 @@ def create_agent_world_router(
                     data_policy=data_policy,
                     confirm_data_move=confirm_data_move,
                 )
-            return cat.uninstall_plugin(member, plugin_kind=archive_kind)
+            was_loaded = bool(hub is not None and hub.get_plugin(runtime_member) is not None)
+            was_started = bool(was_loaded and hub is not None and hub.is_started(runtime_member))
+            if was_loaded and hub is not None:
+                hub.unload(runtime_member)
+            try:
+                if archive_kind == "workbench":
+                    return cat.uninstall_plugin(
+                        member,
+                        plugin_kind=archive_kind,
+                        data_policy=data_policy,
+                        confirm_data_move=confirm_data_move,
+                    )
+                return cat.uninstall_plugin(member, plugin_kind=archive_kind)
+            except Exception:
+                if was_loaded and hub is not None:
+                    hub.load(runtime_member)
+                    if was_started:
+                        hub.start(runtime_member)
+                raise
         except KeyError as exc:
             raise HTTPException(404, str(exc)) from exc
         except ValueError as exc:

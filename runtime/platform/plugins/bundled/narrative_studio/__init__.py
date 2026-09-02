@@ -136,9 +136,7 @@ class NarrativeStudioPlugin(ModulePlugin):
         self.echo_max_bytes_per_file = int(config.get("echo_max_bytes_per_file") or 2 * 1024 * 1024)
         self.mcp_server = NarrativeMcpServer(self._require_store)
         app_state = getattr(getattr(ctx, "fastapi_app", None), "state", None)
-        self._host_requires_auth = bool(
-            getattr(app_state, "octopus_require_auth", False)
-        )
+        self._host_requires_auth = bool(getattr(app_state, "octopus_require_auth", False))
         super().on_load(ctx)
 
     def on_unload(self, _ctx: Any) -> None:
@@ -566,9 +564,7 @@ class NarrativeStudioPlugin(ModulePlugin):
                     "tool_policy": "candidate_only_allowlist",
                     "tools": self._require_mcp_server().tool_names,
                 },
-                "packaged_skills": [
-                    asset.catalog_entry() for asset in self.packaged_skill_assets
-                ],
+                "packaged_skills": [asset.catalog_entry() for asset in self.packaged_skill_assets],
                 "capabilities": [
                     "projects",
                     "world_packs",

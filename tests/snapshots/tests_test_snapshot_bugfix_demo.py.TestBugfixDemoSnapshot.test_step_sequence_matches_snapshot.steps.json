@@ -14,11 +14,11 @@
     "status": "success"
   },
   {
-    "error_type": null,
+    "error_type": "semantic_error",
     "exit_code": null,
     "node": "n2",
     "skill": "exec_shell",
-    "status": "success"
+    "status": "failed"
   },
   {
     "error_type": null,

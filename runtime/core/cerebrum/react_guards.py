@@ -78,6 +78,8 @@ from runtime.core.cerebrum.react_final_answer_content_guards import (  # noqa: F
     _control_tag_leak_guard,
     _fabricated_citation_guard,
     _incomplete_final_answer_guard,
+    _missing_research_source_guard,
+    _research_low_quality_evidence_guard,
     _research_missing_lookup_guard,
     _ungrounded_external_fact_guard,
 )
@@ -282,6 +284,16 @@ def _invoke_fabricated_citation(ctx: GuardContext) -> str | None:
     )
 
 
+def _invoke_missing_research_source(ctx: GuardContext) -> str | None:
+    if ctx.is_code_mode:
+        return None
+    return _missing_research_source_guard(
+        ctx.steps,
+        ctx.final_answer,
+        prior_observations=ctx.prior_grounding_text,
+    )
+
+
 def _invoke_ungrounded_fact(ctx: GuardContext) -> str | None:
     # Research / chat only — code turns have their own evidence cluster
     # (language / path / typecheck / test-coverage guards).
@@ -291,6 +303,16 @@ def _invoke_ungrounded_fact(ctx: GuardContext) -> str | None:
         ctx.steps,
         ctx.final_answer,
         prior_observations=ctx.prior_grounding_text,
+    )
+
+
+def _invoke_low_quality_research(ctx: GuardContext) -> str | None:
+    if ctx.is_code_mode:
+        return None
+    return _research_low_quality_evidence_guard(
+        ctx.steps,
+        ctx.final_answer,
+        goal=ctx.goal,
     )
 
 
@@ -442,8 +464,10 @@ GUARD_REGISTRY: list[GuardSpec] = [
     GuardSpec("mixed-mode completion guard", "protocol", _invoke_mixed_mode_completion),
     GuardSpec("browser-completion guard", "protocol", _invoke_browser_completion),
     # ── Research / chat quality (non-code turns) ──
+    GuardSpec("research-source-display guard", "research", _invoke_missing_research_source),
     GuardSpec("citation-grounding guard", "research", _invoke_fabricated_citation),
     GuardSpec("fact-grounding guard", "research", _invoke_ungrounded_fact),
+    GuardSpec("research-evidence-quality guard", "research", _invoke_low_quality_research),
     # ── Verification completeness ──
     _spec_code_mode(
         "language-verification guard", "verification", _language_mismatched_verification_guard
@@ -744,6 +768,7 @@ __all__ = [
     "_answer_item_count_guard",
     "_fabricated_citation_guard",
     "_incomplete_final_answer_guard",
+    "_missing_research_source_guard",
     "_research_missing_lookup_guard",
     "_ungrounded_external_fact_guard",
     # ── Security guards (re-exported) ──
@@ -789,6 +814,7 @@ __all__ = [
     "_invoke_code_mode_completion",
     "_invoke_explicit_tool_request",
     "_invoke_fabricated_citation",
+    "_invoke_missing_research_source",
     "_invoke_false_no_tool",
     "_invoke_false_tool_result",
     "_invoke_incomplete_final",

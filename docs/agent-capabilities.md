@@ -28,7 +28,7 @@
 ### A · 基础执行
 | 能力 | 说明 | 实现 |
 |------|------|------|
-| 多 provider 路由 | Anthropic / OpenAI / Gemini / Molili 都跑得通,自定义模型 UI 注册 | `runtime/sensing/eyes/dispatch_router.py` + `runtime/sensing/siphon/config_router.py` |
+| 多 provider 路由 | Anthropic / OpenAI / Gemini / Oct 都跑得通，自定义模型 UI 注册 | `runtime/sensing/model_router/dispatch_router.py` + `runtime/sensing/gateway/config_router.py` |
 | 原生 `tool_use` | Claude/OpenAI/Gemini 各自原生 function-calling 协议 | `runtime/sensing/siphon/tool_bridge.py` |
 | 流式 SSE + cancel | 170ms cancel 延迟实测 | `runtime/sensing/siphon/thread_compat_router.py` + `runtime/adapters/runs_registry.py` |
 | 部分恢复 | 中断后下次回话能看到上一轮的 partial output | thread state eager-flush + `run_status` tag |
@@ -204,7 +204,7 @@ python tmp/smoke_token_stats.py
 
 工程层短期路线:
 - **集群规模**:单进程 8 并发 → 跨进程 / 跨机部署
-- **Skills 系统**:目前只支持 markdown 文本样例;支持 PDF / PPT / Excel 解析
+- **Office 实时协作深度**:已支持 Word / Excel / PowerPoint / PDF 的本地创建、读取、原位修改与产物预览，也支持 HTML 直接编辑和 AI 选区修改；仍未实现多人同时光标、批注和 WPS 级像素化画布编辑
 - **B3 真闭环**:目前 LLM-judge 是预测 impact,真正的 canary 评估需要 holdout 集
 - **自动 revert 决策**:目前 B1 只给建议,不自动 revert;加用户授权后可自动
 

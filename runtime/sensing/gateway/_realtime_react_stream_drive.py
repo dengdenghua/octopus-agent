@@ -357,6 +357,7 @@ async def _drive_react(
     coroutine via a queue.
     """
     from runtime.core.cerebrum.react_loop import stream_react_loop
+    from runtime.core.cerebrum.react_step_evaluator import build_runtime_step_evaluator
     from runtime.safety.approval.cancellation import (
         CancellationSource,
         scoped_cancellation,
@@ -365,6 +366,8 @@ async def _drive_react(
     queue: asyncio.Queue[_QueuedReactEvent | dict[str, Any]] = asyncio.Queue(maxsize=64)
     loop = asyncio.get_running_loop()
     producer_done = asyncio.Event()
+    interrupt_requested = asyncio.Event()
+    consumer_closed = threading.Event()
 
     # Per-turn cancellation source. Tripped when the gateway records a
     # ``turn/interrupt`` for this turn id; every tool call inside
@@ -402,6 +405,18 @@ async def _drive_react(
         drop the newest delta instead of stalling the producer 10s (which
         used to cascade and lose *structural* events downstream).
         """
+        event_kind = str(event.get("type") or "")
+        if consumer_closed.is_set():
+            # Never let a provider that wakes up after the turn was already
+            # cancelled advance past ``yield tool_start`` into the real side
+            # effect. Decorative/prose/terminal events are simply abandoned;
+            # the turn already has an authoritative terminal snapshot.
+            if event_kind == "tool_start":
+                raise _ToolStartAuditError(
+                    "tool execution blocked because the interrupted turn already closed"
+                )
+            return
+
         timeout_s = _REACT_QUEUE_PUT_TIMEOUT_S if timeout is None else max(0.01, timeout)
         if _is_coalescable_delta(event):
             coalesce_future: Future[None] | None = None
@@ -444,7 +459,6 @@ async def _drive_react(
             put_future.result(timeout=timeout_s)
         except (FutureCancelledError, RuntimeError, TimeoutError) as exc:
             put_future.cancel()
-            event_kind = str(event.get("type") or "")
             if event_kind in _CRITICAL_STRUCTURAL_EVENT_TYPES:
                 if apply_receipt is not None:
                     apply_receipt.cancel()
@@ -553,8 +567,10 @@ async def _drive_react(
         if runtime._trace_store is not None:
             session_metadata["_trace_store"] = runtime._trace_store
         session_agent = agent if hasattr(agent, "agent_id") else None
+        _journal_tenant_id = str(session_metadata.get("tenant_id") or "").strip() or None
+        _journal_owner_actor_id = str(session_metadata.get("owner_actor_id") or "").strip() or None
         turn_session = Session(
-            actor=getattr(intent, "actor", None),
+            actor=getattr(intent, "actor", None) or _journal_owner_actor_id,
             agent=session_agent,
             thread_id=turn.thread_id,
             conversation_id=turn.thread_id,
@@ -608,6 +624,8 @@ async def _drive_react(
             journal_context(
                 conversation_id=turn.thread_id,
                 agent_id=_journal_agent_id,
+                tenant_id=_journal_tenant_id,
+                owner_actor_id=_journal_owner_actor_id,
             ),
             scoped_cancellation(cancel_source.token),
             orchestration_progress_scope(_orchestration_progress),
@@ -670,6 +688,7 @@ async def _drive_react(
                         resume_task_id=_resume_task_id,
                         approval_provider=provider,
                         output_chunk_sink=_push_chunk,
+                        step_evaluator=build_runtime_step_evaluator(),
                         planning_mode=_planning_mode,
                         model=model,
                         reasoning_effort=(
@@ -740,6 +759,7 @@ async def _drive_react(
         try:
             while not cancel_source.is_cancelled:
                 if emitter.is_turn_interrupted(turn.id):
+                    interrupt_requested.set()
                     cancel_source.cancel(reason="user interrupted turn")
                     return
                 await asyncio.sleep(0.1)
@@ -793,7 +813,23 @@ async def _drive_react(
 
     saw_terminal_event = False
     structural_apply_failure: dict[str, Any] | None = None
+    user_interrupt_terminal = False
+
+    def _mark_user_interrupted_turn() -> None:
+        nonlocal user_interrupt_terminal
+        user_interrupt_terminal = True
+        if not cancel_source.is_cancelled:
+            cancel_source.cancel(reason="user interrupted turn")
+        turn.status = TurnStatus.CANCELLED
+        turn.outcome_reason = "user_cancelled"
+        if not turn.interrupt_reason:
+            with contextlib.suppress(Exception):
+                reason = emitter.get_interrupt_reason(turn.id)
+                if reason:
+                    turn.interrupt_reason = reason
+
     producer_done_waiter = asyncio.create_task(producer_done.wait())
+    interrupt_waiter = asyncio.create_task(interrupt_requested.wait())
     queue_getter: asyncio.Task[_QueuedReactEvent | dict[str, Any]] | None = None
     try:
         loop_started = time.monotonic()
@@ -803,10 +839,19 @@ async def _drive_react(
                 break
             queue_getter = asyncio.create_task(queue.get())
             ready, _pending = await asyncio.wait(
-                {queue_getter, producer_done_waiter},
+                {queue_getter, producer_done_waiter, interrupt_waiter},
                 timeout=_SINGLE_AGENT_HEARTBEAT_INTERVAL_S,
                 return_when=asyncio.FIRST_COMPLETED,
             )
+            if interrupt_waiter in ready:
+                queue_getter.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await queue_getter
+                _mark_user_interrupted_turn()
+                # Do not wait for a provider iterator that is stuck before its
+                # first byte. The finally block gives cooperative producers a
+                # short drain window, then detaches them safely.
+                break
             if queue_getter in ready:
                 queued = queue_getter.result()
             elif producer_done_waiter in ready:
@@ -845,22 +890,11 @@ async def _drive_react(
                         "tool_start was skipped because the turn was interrupted"
                     ),
                 )
-                if not cancel_source.is_cancelled:
-                    cancel_source.cancel(reason="user interrupted turn")
-                turn.status = TurnStatus.CANCELLED
-                turn.outcome_reason = "user_cancelled"
-                # Record the concrete interrupt reason so the
-                # frontend can tell the user *why* the turn stopped.
-                if not turn.interrupt_reason:
-                    with contextlib.suppress(Exception):
-                        reason = emitter.get_interrupt_reason(turn.id)
-                        if reason:
-                            turn.interrupt_reason = reason
-                # Keep draining so the producer's bounded ``put``
-                # calls succeed and it can reach its ``None`` sentinel
-                # cleanly. Breaking here would leave the worker
-                # blocked on a full queue.
-                continue
+                _mark_user_interrupted_turn()
+                # The turn's control-plane terminal state must not wait for a
+                # silent provider. Teardown below drains queued receipts and
+                # closes the consumer boundary before detaching if needed.
+                break
             try:
                 await _apply_react_event(runtime, turn, log, emitter, state, evt)
             except asyncio.CancelledError:
@@ -917,6 +951,7 @@ async def _drive_react(
         # interrupt, or supervisor lease loss) — a dropped WebSocket no
         # longer reaches this path; the turn runs on server-side.
         cancel_source.cancel(reason="consumer teardown")
+        consumer_closed.set()
         if queue_getter is not None and not queue_getter.done():
             queue_getter.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -925,6 +960,10 @@ async def _drive_react(
             producer_done_waiter.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await producer_done_waiter
+        if not interrupt_waiter.done():
+            interrupt_waiter.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await interrupt_waiter
         # Reject receipts before awaiting the worker so teardown cannot
         # advance a stranded tool_start into its side effect.
         with pending_apply_receipts_lock:
@@ -947,8 +986,34 @@ async def _drive_react(
         watcher.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await watcher
-        with contextlib.suppress(Exception):
-            await worker
+        if user_interrupt_terminal and not worker.done():
+            try:
+                await asyncio.wait_for(
+                    asyncio.shield(worker),
+                    timeout=_INTERRUPT_PRODUCER_DRAIN_TIMEOUT_S,
+                )
+            except TimeoutError:
+                # ``asyncio.to_thread`` cannot kill the underlying OS thread.
+                # Leave its wrapper detached so the provider can still unwind
+                # and release the executor thread. The cancellation token plus
+                # ``consumer_closed`` keep the late producer from publishing
+                # output or starting a tool. Retrieve the eventual result to
+                # avoid a detached-task exception warning.
+                _logger.warning(
+                    "react producer did not drain within %.2fs after interrupt; detaching it",
+                    _INTERRUPT_PRODUCER_DRAIN_TIMEOUT_S,
+                )
+
+                def _consume_detached_worker_result(task: asyncio.Task[Any]) -> None:
+                    with contextlib.suppress(asyncio.CancelledError, Exception):
+                        task.result()
+
+                worker.add_done_callback(_consume_detached_worker_result)
+            except Exception:  # noqa: BLE001 - producer records its own failure
+                pass
+        else:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await worker
         # Cancel any live orchestrator bridges for this turn. Each bridge
         # subscribes to a parallel batch that already terminated (the loop
         # consumed its synthetic observation), so leaving them running would
@@ -1038,9 +1103,7 @@ async def _drive_react(
             log,
             emitter,
             terminal_status=(
-                TurnStatus.COMPLETED
-                if turn.status == TurnStatus.IN_PROGRESS
-                else turn.status
+                TurnStatus.COMPLETED if turn.status == TurnStatus.IN_PROGRESS else turn.status
             ),
         )
     # Note: background tool watchers (started by ``track_background_tool``)

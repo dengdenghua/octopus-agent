@@ -24,6 +24,13 @@ class OpenAICompatSmokeProvider:
 
 _SMOKE_PROVIDERS: tuple[OpenAICompatSmokeProvider, ...] = (
     OpenAICompatSmokeProvider(
+        id="opencode_zen",
+        base_url="https://opencode.ai/zen/v1",
+        api_key_env=("OPENCODE_ZEN_API_KEY",),
+        model_env="OPENCODE_ZEN_SMOKE_MODEL",
+        default_model="big-pickle",
+    ),
+    OpenAICompatSmokeProvider(
         id="deepseek",
         base_url="https://api.deepseek.com/v1",
         api_key_env=("DEEPSEEK_API_KEY",),

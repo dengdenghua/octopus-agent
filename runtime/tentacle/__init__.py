@@ -19,10 +19,47 @@ Octopus Mobile 的核心抽象。详见：
 from __future__ import annotations
 
 from .base import Heartbeat, Tentacle, TentacleStatus, TentacleType, ToolCall, ToolResult
+from .contract import (
+    CONTRACT_VERSION,
+    ActionSpec,
+    ApprovalClass,
+    ConcurrencyMode,
+    DeviceManifest,
+    ObservationSpec,
+    RuntimeSpec,
+    SafetySpec,
+    StateCondition,
+    StateEffect,
+    ValueConstraint,
+    legacy_manifest,
+    manifest_for,
+)
 from .desktop import DESKTOP_CAPABILITIES, DesktopDevice
+from .execution import (
+    ActionGrant,
+    ApprovalEnvelope,
+    DeviceActionExecutor,
+    ExecutionReceipt,
+    ExecutionReceiptLedger,
+)
 from .mobile.device import ANDROID_CAPABILITIES, MobileDevice
 from .mobile.mcp_server import TentacleMcpServer, serve_stdio
 from .pool import TentaclePool, select_for_affinity
+from .procedure import (
+    Procedure,
+    ProcedureCheckpointStore,
+    ProcedureExecutor,
+    ProcedureStatus,
+    ProcedureStep,
+    RetryPolicy,
+)
+from .simulation import (
+    ProcedureSimulator,
+    SimulationReport,
+    SimulationScenario,
+    SimulationStepResult,
+)
+from .telemetry import FaultEvent, FaultKind, HealthLevel, TelemetryHub, TelemetrySample
 
 # 仿生学别名（按 ADR-001 双轨命名契约 —— 类名用工程名，生物名仅在文档与别名）
 Tentacle = Tentacle  # 同名（生物名 ≡ 工程名，因为概念高度一致）
@@ -34,6 +71,39 @@ __all__ = [
     "Heartbeat",
     "ToolCall",
     "ToolResult",
+    "CONTRACT_VERSION",
+    "ActionSpec",
+    "ApprovalClass",
+    "ConcurrencyMode",
+    "DeviceManifest",
+    "ObservationSpec",
+    "RuntimeSpec",
+    "SafetySpec",
+    "StateCondition",
+    "StateEffect",
+    "ValueConstraint",
+    "legacy_manifest",
+    "manifest_for",
+    "ActionGrant",
+    "ApprovalEnvelope",
+    "DeviceActionExecutor",
+    "ExecutionReceipt",
+    "ExecutionReceiptLedger",
+    "Procedure",
+    "ProcedureCheckpointStore",
+    "ProcedureExecutor",
+    "ProcedureStatus",
+    "ProcedureStep",
+    "RetryPolicy",
+    "FaultEvent",
+    "FaultKind",
+    "HealthLevel",
+    "TelemetryHub",
+    "TelemetrySample",
+    "ProcedureSimulator",
+    "SimulationReport",
+    "SimulationScenario",
+    "SimulationStepResult",
     "TentaclePool",
     "MobileDevice",
     "DesktopDevice",

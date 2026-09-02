@@ -21,15 +21,18 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from runtime.execution.suckers._ephemeral_events import _emit_subagent_lifecycle_event
 from runtime.memory.journal import SubTextDeltaEvent, SubToolEndEvent, SubToolStartEvent
 from runtime.memory.journal._journal_base import Journal
 from runtime.platform.models import TaskId
+from runtime.platform.process.session import Session, session_scope
 from runtime.protocol import (
     ItemMarker,
     ItemStatus,
     McpToolCallItem,
     ServerMethod,
 )
+from runtime.protocol.text_limits import MAX_SUBAGENT_ANSWER_CHARS
 from runtime.sensing.gateway._realtime_react_stream_drive import (
     _emit_subagent_lifecycle_item,
     _emit_subagent_progress_item,
@@ -106,6 +109,63 @@ def test_parse_preview_tolerates_junk() -> None:
     assert _parse_lifecycle_preview("{not json") == {}
     assert _parse_lifecycle_preview("[1, 2, 3]") == {}
     assert _parse_lifecycle_preview('"a string"') == {}
+
+
+def test_long_spawn_prompt_keeps_valid_identity_json() -> None:
+    written: list[Any] = []
+    journal = SimpleNamespace(write=written.append)
+    with session_scope(
+        Session(
+            thread_id="thread-long-prompt",
+            metadata={"journal": journal, "task_id": TaskId(uuid4())},
+        )
+    ):
+        _emit_subagent_lifecycle_event(
+            "subagent_spawned",
+            {
+                "agent_id": "researcher-a",
+                "requested_agent_id": "researcher-a",
+                "codename": "Spark-a1",
+                "role": "researcher",
+                "prompt_preview": "核对证据" * 2_000,
+            },
+            publish_bus=False,
+        )
+    assert len(written) == 1
+    parsed = _parse_lifecycle_preview(written[0].args_preview)
+    assert parsed["agent_id"] == "researcher-a"
+    assert parsed["codename"] == "Spark-a1"
+    assert parsed["role"] == "researcher"
+    assert len(written[0].args_preview) <= 1000
+
+
+def test_long_finish_output_keeps_valid_terminal_json() -> None:
+    written: list[Any] = []
+    journal = SimpleNamespace(write=written.append)
+    with session_scope(
+        Session(
+            thread_id="thread-long-output",
+            metadata={"journal": journal, "task_id": TaskId(uuid4())},
+        )
+    ):
+        _emit_subagent_lifecycle_event(
+            "subagent_finished",
+            {
+                "agent_id": "reviewer-a",
+                "codename": "Zenith-a1",
+                "role": "reviewer",
+                "ok": True,
+                "output": "已验证" * 100_000,
+            },
+            publish_bus=False,
+        )
+    assert len(written) == 1
+    parsed = _parse_lifecycle_preview(written[0].output_preview)
+    assert parsed["agent_id"] == "reviewer-a"
+    assert parsed["codename"] == "Zenith-a1"
+    assert parsed["ok"] is True
+    assert parsed["output"].startswith("已验证")
+    assert len(written[0].output_preview) <= MAX_SUBAGENT_ANSWER_CHARS
 
 
 # ---------------------------------------------------------------------------

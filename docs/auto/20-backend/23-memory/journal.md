@@ -28,6 +28,7 @@ tier: "core"
 - `Journal`
 - `JournalEvent`
 - `JournalEventType`
+- `JournalTransactionError`
 - `JSONLJournal`
 - `JournalIndex`
 - `McpProposalDecisionEvent`
@@ -50,6 +51,7 @@ tier: "core"
 - `TaskStartedEvent`
 - `ToolEffectIntentEvent`
 - `ToolEffectReconciliationEvent`
+- `TrajectoryConflictError`
 - `TrajectoryEvent`
 - `all_task_progress`
 - `current_agent_id`
@@ -173,6 +175,8 @@ tier: "core"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
+| class | `class JournalTransactionError(RuntimeError)` | A durable journal transaction could not be established or verified. |
+| class | `class TrajectoryConflictError(JournalTransactionError)` | One idempotency key was reused for a different terminal payload. |
 | class | `class InMemoryJournal(Journal)` |  |
 | class | `class JSONLJournal(Journal)` |  |
 
@@ -217,7 +221,7 @@ tier: "core"
 
 ## Who imports this
 
-**57** file(s) reference this package:
+**60** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
@@ -235,13 +239,13 @@ tier: "core"
   - `runtime/core/cerebrum/llm_planner.py`
   - `runtime/core/cerebrum/resume_cli.py`
   - `runtime/core/graph_runtime/runtime.py`
-- **`runtime/execution/`** · 11 file(s)
+- **`runtime/execution/`** · 12 file(s)
+  - `runtime/execution/cron_executor.py`
   - `runtime/execution/jobs/subagent_producer.py`
   - `runtime/execution/parallel_agents/helpers.py`
   - `runtime/execution/subagents/sessions.py`
   - `runtime/execution/suckers/_ephemeral_events.py`
-  - `runtime/execution/suckers/browser_act_skills.py`
-  - _… and 6 more_
+  - _… and 7 more_
 - **`runtime/memory/`** · 5 file(s)
   - `runtime/memory/goals/projection.py`
   - `runtime/memory/goals/service.py`
@@ -259,13 +263,13 @@ tier: "core"
   - `runtime/safety/recovery/memory_consolidator.py`
   - `runtime/safety/recovery/recipe_evaluator.py`
   - _… and 4 more_
-- **`runtime/sensing/`** · 19 file(s)
+- **`runtime/sensing/`** · 21 file(s)
+  - `runtime/sensing/gateway/_observability_auth.py`
   - `runtime/sensing/gateway/_observability_journal.py`
   - `runtime/sensing/gateway/_observability_progress_stream.py`
   - `runtime/sensing/gateway/_observability_rollback_panels.py`
   - `runtime/sensing/gateway/_realtime_react_stream_drive.py`
-  - `runtime/sensing/gateway/_realtime_react_stream_reflection.py`
-  - _… and 14 more_
+  - _… and 16 more_
 - **`runtime/tour.py/`** · 1 file(s)
   - `runtime/tour.py`
 

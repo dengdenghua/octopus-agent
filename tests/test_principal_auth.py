@@ -15,9 +15,19 @@ from runtime.safety.auth.principal import (  # noqa: E402
 )
 
 
-def _request(token: str | None = None) -> SimpleNamespace:
+def _request(
+    token: str | None = None,
+    *,
+    headers: dict[str, str] | None = None,
+    cookies: dict[str, str] | None = None,
+) -> SimpleNamespace:
     return SimpleNamespace(
-        headers=({"Authorization": f"Bearer {token}"} if token is not None else {}),
+        headers=(
+            headers
+            if headers is not None
+            else ({"Authorization": f"Bearer {token}"} if token is not None else {})
+        ),
+        cookies=cookies or {},
         query_params={},
         state=SimpleNamespace(),
     )
@@ -52,6 +62,25 @@ def test_principal_uses_verified_identity_metadata() -> None:
     assert request.state.principal == principal
 
 
+def test_principal_accepts_websocket_bearer_subprotocol() -> None:
+    request = _request(headers={"sec-websocket-protocol": "bearer, sk-alice"})
+
+    principal = resolve_principal(request, _store(), True)
+
+    assert principal is not None
+    assert principal.actor_id == "alice"
+
+
+def test_principal_accepts_http_only_browser_session_cookie() -> None:
+    request = _request(cookies={"octopus_session": "sk-alice"})
+
+    principal = resolve_principal(request, _store(), True)
+
+    assert principal is not None
+    assert principal.actor_id == "alice"
+    assert principal.authn_method == "api_key"
+
+
 def test_regular_user_cannot_cross_operator_boundary() -> None:
     from fastapi import HTTPException
 
@@ -66,3 +95,4 @@ def test_auth_without_identity_store_fails_closed() -> None:
     with pytest.raises(HTTPException) as exc_info:
         resolve_principal(_request(), None, True)
     assert exc_info.value.status_code == 401
+    assert exc_info.value.headers == {"X-Octopus-Auth-Expired": "1"}

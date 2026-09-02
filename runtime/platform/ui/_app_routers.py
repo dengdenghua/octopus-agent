@@ -12,12 +12,17 @@ registry-consumer, enterprise-assets, and intelligence routers.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any
 
 from runtime.platform.process.paths import app_paths
 
 from ._app_context import AppContext
+
+
+def _workspaces_router_root(ctx: AppContext) -> Any:
+    """Use the same workspace root as turn execution and thread storage."""
+
+    return ctx.thread_workspace_root or (app_paths().data_dir / "workspaces")
 
 
 def mount_routers_a(
@@ -78,13 +83,11 @@ def mount_routers_a(
         )
     )
 
-    # ─── SearXNG control · one-click local private web-search backend ──
-    # POST /api/searxng/{enable,disable} (auth-gated; mutations spawn/stop a
-    # Docker container). Read-only liveness is the public /api/searxng/status.
-    from runtime.platform.ui.searxng_router import create_searxng_router
+    # Native multi-platform search/read/collection operations.
+    from runtime.platform.ui.reach_router import create_reach_router
 
     app.include_router(
-        create_searxng_router(
+        create_reach_router(
             identity_store=ctx.identity_store,
             require_auth=ctx.require_auth,
             jwt_secret=ctx.jwt_secret,
@@ -201,6 +204,7 @@ def mount_routers_a(
             thread_store=ctx.thread_store,
             identity_store=ctx.identity_store,
             require_auth=ctx.require_auth,
+            allow_local_workspace_access=ctx.allow_local_workspace_access,
             jwt_secret=ctx.jwt_secret,
             jwt_issuer=ctx.jwt_issuer,
             jwt_audience=ctx.jwt_audience,
@@ -214,6 +218,7 @@ def mount_routers_a(
         create_agent_modes_router(
             identity_store=ctx.identity_store,
             require_auth=ctx.require_auth,
+            allow_local_workspace_access=ctx.allow_local_workspace_access,
             jwt_secret=ctx.jwt_secret,
             jwt_issuer=ctx.jwt_issuer,
             jwt_audience=ctx.jwt_audience,
@@ -225,7 +230,11 @@ def mount_routers_a(
 
         app.include_router(
             create_workspaces_router(
-                workspace_root=app_paths().data_dir / "workspaces",
+                # The execution stack derives this root from the active
+                # journal. Artifact listing/preview must read from that exact
+                # location; app_paths() may point at an appliance data dir
+                # while turns are writing into a project-local journal.
+                workspace_root=_workspaces_router_root(ctx),
                 thread_store=ctx.thread_store,
                 identity_store=ctx.identity_store,
                 require_auth=ctx.require_auth,
@@ -317,6 +326,7 @@ def mount_routers_a(
                 stack=stack,
                 workspace_manager=WorkspaceManager(_loop_workspace_root),
                 review_queue=_loop_review_queue,
+                candidate_registry_path=app_paths().evolution_candidates_path,
                 trace_store=getattr(state, "trace_store", None),
                 task_supervisor=getattr(state, "task_supervisor", None),
             )
@@ -553,7 +563,7 @@ def mount_routers_a(
             registry=state.registry,
             planner=getattr(stack, "planner", None) if stack is not None else None,
             thread_store=ctx.thread_store,
-            forged_skill_dir=Path("data/forged_skills"),
+            forged_skill_dir=app_paths().data_dir / "forged_skills",
             identity_store=ctx.identity_store,
             require_auth=ctx.require_auth,
             jwt_secret=ctx.jwt_secret,
@@ -640,6 +650,7 @@ def mount_routers_a(
                 skill_registry=state.registry,
                 identity_store=ctx.identity_store,
                 require_auth=ctx.require_auth,
+                allow_local_user_plugin_lifecycle=ctx.allow_local_workspace_access,
                 jwt_secret=ctx.jwt_secret,
                 jwt_issuer=ctx.jwt_issuer,
                 jwt_audience=ctx.jwt_audience,
@@ -716,8 +727,11 @@ def mount_routers_a(
 
         app.include_router(
             create_capability_router(
+                codex_accounts=getattr(app.state, "codex_account_service", None),
+                model_provider_plugins=getattr(app.state, "model_provider_plugins", None),
                 identity_store=ctx.identity_store,
                 require_auth=ctx.require_auth,
+                allow_local_user_plugin_lifecycle=ctx.allow_local_workspace_access,
                 jwt_secret=ctx.jwt_secret,
                 jwt_issuer=ctx.jwt_issuer,
                 jwt_audience=ctx.jwt_audience,

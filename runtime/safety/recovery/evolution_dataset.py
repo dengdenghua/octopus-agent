@@ -14,7 +14,12 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from runtime.safety.auth.scope import TenantScope
 from runtime.safety.evolution.proposal_ledger import ProposalLedger
+from runtime.safety.recovery.tenant_scope import (
+    is_legacy_unscoped_event,
+    read_learning_events,
+)
 
 
 @dataclass(frozen=True)
@@ -137,6 +142,7 @@ class EvolutionDatasetBuilder:
         *,
         recipe_id: str | None = None,
         limit: int = 50,
+        scope: TenantScope | None = None,
     ) -> EvolutionDataset:
         """Mine successful tool-chain templates from Journal trajectories.
 
@@ -145,7 +151,7 @@ class EvolutionDatasetBuilder:
         action sequences and recipe scopes rather than user wording.
         """
         try:
-            events = journal.read_by_type("trajectory")
+            events = read_learning_events(journal, "trajectory", scope=scope)
         except (OSError, TypeError, ValueError, AttributeError):
             return EvolutionDataset()
         examples: list[EvolutionExample] = []
@@ -155,7 +161,9 @@ class EvolutionDatasetBuilder:
             if trajectory is None:
                 continue
             outcome = getattr(trajectory, "outcome", None)
-            if not bool(getattr(outcome, "success", False)):
+            if not bool(getattr(outcome, "success", False)) or bool(
+                getattr(outcome, "degraded", False)
+            ):
                 continue
             rid = str(getattr(trajectory, "recipe_id", None) or "").strip()
             if recipe_id and rid != recipe_id:
@@ -172,10 +180,10 @@ class EvolutionDatasetBuilder:
                 continue
             seen.add(signature)
             action_chain = " -> ".join(actions)
-            scope = rid or "__unscoped__"
+            recipe_scope = rid or "__unscoped__"
             examples.append(
                 EvolutionExample(
-                    task_input=f"Preserve successful recipe {scope}: {action_chain}",
+                    task_input=f"Preserve successful recipe {recipe_scope}: {action_chain}",
                     expected_behavior=(
                         "Keep this verified tool-chain behavior available while improving "
                         "failure handling. Avoid regressions in the successful path."
@@ -200,18 +208,24 @@ class EvolutionDatasetBuilder:
         *,
         ledger_path: Any = "data/proposal_ledger.jsonl",
         limit: int = 50,
+        scope: TenantScope | None = None,
     ) -> EvolutionDataset:
         try:
             records = ProposalLedger(ledger_path).query(
                 kind="turn_success",
                 limit=max(1, int(limit)),
+                scope=scope,
             )
         except (OSError, TypeError, ValueError, AttributeError):
             return EvolutionDataset()
         examples: list[EvolutionExample] = []
         seen: set[str] = set()
         for record in reversed(records):
+            if scope is None and not is_legacy_unscoped_event(record):
+                continue
             metadata = record.metadata if isinstance(record.metadata, dict) else {}
+            if not _ledger_record_is_clean_success(metadata):
+                continue
             goal = str(metadata.get("goal") or "").strip()
             if not goal or goal in seen:
                 continue
@@ -247,17 +261,20 @@ class EvolutionDatasetBuilder:
         ledger_path: Any = "data/proposal_ledger.jsonl",
         recipe_id: str | None = None,
         limit: int = 50,
+        scope: TenantScope | None = None,
     ) -> EvolutionDataset:
         """Merge real-goal successes with legacy tool-chain successes."""
         ledger_dataset = self.build_from_ledger_successes(
             ledger_path=ledger_path,
             limit=limit,
+            scope=scope,
         )
         journal_dataset = (
             self.build_from_journal_successes(
                 journal,
                 recipe_id=recipe_id,
                 limit=limit,
+                scope=scope,
             )
             if journal is not None
             else EvolutionDataset()
@@ -408,6 +425,18 @@ class EvolutionDatasetBuilder:
             val=examples[train_end:val_end],
             holdout=examples[val_end:],
         )
+
+
+def _ledger_record_is_clean_success(metadata: dict[str, Any]) -> bool:
+    """Reject warning/degraded completions from the positive corpus."""
+
+    if bool(metadata.get("degraded")):
+        return False
+    outcome = str(metadata.get("outcome") or metadata.get("result") or "").strip().lower()
+    if outcome in {"pass_degraded", "degraded", "completed_with_warning", "partial"}:
+        return False
+    disposition = str(metadata.get("disposition") or "").strip().lower()
+    return disposition not in {"completed_with_warning", "partial"}
 
 
 def _normalize_cluster_text(text: str) -> str:

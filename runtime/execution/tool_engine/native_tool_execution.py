@@ -27,6 +27,10 @@ def execute_native_tool_call(
     max_chars: int = TOOL_OUTPUT_MAX_CHARS,
     prune_middle: bool = TOOL_RESULT_PRUNE_ENABLED,
     spill_oversized: bool = TOOL_RESULT_SPILL_ENABLED,
+    task_id: TaskId | None = None,
+    step_id: int = 0,
+    arm_id: ArmId | None = None,
+    budget: Budget | None = None,
 ) -> tuple[str, bool]:
     """Run one native tool request through the normal executor chokepoint.
 
@@ -67,18 +71,20 @@ def execute_native_tool_call(
 
     if hasattr(executor, "execute_step"):
         try:
-            task_id = TaskId(uuid4())
+            resolved_task_id = task_id or TaskId(uuid4())
+            resolved_arm_id = arm_id or ArmId("agentic")
             session = current_session()
             step = executor.execute_step(
-                0,
+                step_id,
                 f"agentic:{normalized.id}",
                 SkillId(normalized.name),
                 dict(normalized.arguments),
                 caller="agentic",
-                task_id=task_id,
-                arm_id=ArmId("agentic"),
-                budget=Budget(
-                    task_id,
+                task_id=resolved_task_id,
+                arm_id=resolved_arm_id,
+                budget=budget
+                or Budget(
+                    resolved_task_id,
                     BudgetLimits(tokens=100_000, usd=10.0),
                 ),
                 actor=session.actor if session is not None else None,

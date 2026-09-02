@@ -1154,22 +1154,18 @@ class TestLlmModelsMerge:
         assert "mirror-x" in blob or "Mirror X" in blob
         assert "supports_thinking" in blob
 
-    def test_llm_models_do_not_advertise_legacy_molili_presets(
+    def test_llm_models_do_not_advertise_retired_bundled_presets(
         self,
         client: TestClient,
     ) -> None:
-        """The React model picker should not surface retired Molili gateway
-        presets such as MiniMax M2.5 unless the user explicitly configures
-        them as custom models.
+        """The model picker only exposes models from active providers or
+        explicit custom configuration, not retired bundled presets.
         """
         r = client.get("/api/llm-models")
         assert r.status_code == 200
         models = r.json()["models"]
         ids = {row.get("id") for row in models}
         names = {row.get("display_name") for row in models}
-        providers = {row.get("provider") for row in models}
-
-        assert "molili" not in providers
         assert "minimax-m2.5" not in ids
         assert "MiniMax M2.5" not in names
         assert "kimi-k2.5" not in ids

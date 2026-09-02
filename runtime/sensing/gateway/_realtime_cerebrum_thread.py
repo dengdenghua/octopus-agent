@@ -437,6 +437,7 @@ def _snapshot_to_thread_store(
             "personal_workspace_enabled",
             "owner_actor_id",
             "actor_id",
+            "tenant_id",
         ):
             v = uc.get(key) if isinstance(uc, dict) else None
             if v is not None:
@@ -477,7 +478,17 @@ def _snapshot_to_thread_store(
             metadata=metadata if metadata else None,
             status=thread_status,
         )
-        if session_titles is not None:
+        # Auto-title is a first-*completed*-turn enhancement. Running it for a
+        # prompt that the user just cancelled both wastes another model call
+        # and holds the live ``turn/completed`` notification behind that call,
+        # making a 50 ms cancellation look several seconds slow in the UI.
+        # Failed/paused/interrupted turns also must not consume the one-shot
+        # ``title_auto_attempted`` marker before a real answer exists.
+        if (
+            session_titles is not None
+            and latest_turn is not None
+            and latest_turn.status is TurnStatus.COMPLETED
+        ):
             session_titles.maybe_auto_refresh(thread_id)
     except Exception as exc:  # noqa: BLE001
         # Not fatal (the realtime event log is the durable record), but a

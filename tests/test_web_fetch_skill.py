@@ -208,6 +208,37 @@ class TestWebFetchHappyPath:
         assert result.get("ok") is True
         assert result["extracted_chars"] <= 500
 
+    def test_empty_http_shell_uses_background_renderer_without_interactive_browser(self) -> None:
+        client = _MockClient(
+            get_response=_MockResponse(
+                status_code=200,
+                text="<html><body><script src='app.js'></script></body></html>",
+                url="https://example.com/app",
+            )
+        )
+        stub = _StubLLMCaller(answer="rendered answer")
+        calls: list[dict[str, Any]] = []
+
+        def rendered_fetcher(**kwargs: Any) -> dict[str, Any]:
+            calls.append(kwargs)
+            return {
+                "url": "https://example.com/app",
+                "content": "The rendered application contains the requested answer.",
+            }
+
+        result = _web_fetch(
+            url="https://example.com/app",
+            prompt="What does the app say?",
+            client=client,
+            _llm_caller=stub,
+            _rendered_fetcher=rendered_fetcher,
+        )
+
+        assert result.get("ok") is True
+        assert result["fetch_mode"] == "background_browser"
+        assert calls and calls[0]["_background_only"] is True
+        assert "rendered application" in (stub.last_user or "")
+
 
 @pytest.mark.skipif(not HTTPX_AVAILABLE, reason="httpx not installed")
 class TestWebFetchTrafilaturaMissing:
@@ -293,3 +324,15 @@ class TestWebFetchNetworkError:
         )
         assert result.get("error_type") == "network_error"
         assert "connection refused" in result["error"]
+
+
+def test_set_web_fetch_router_registers_shared_planner_router() -> None:
+    from runtime.execution.suckers.web_skills import set_web_fetch_router
+    from runtime.platform.process.service_provider import get_provider
+
+    router = object()
+    set_web_fetch_router(router, default_model="test/cheap")
+
+    provider = get_provider()
+    assert provider.get("web_fetch_cheap") is router
+    assert provider.get("web_fetch_default_model") == "test/cheap"

@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "generated_at": "2026-09-01T17:14:53+00:00",
-  "files_analyzed": 170,
+  "generated_at": "2026-09-01T10:09:03+00:00",
+  "files_analyzed": 162,
   "tree": [
     {
       "type": "doc",
@@ -233,26 +233,6 @@
             },
             {
               "type": "doc",
-              "title": "CC Claude Code 伙伴",
-              "path": "20-backend/26-agents/local_claude_code.md"
-            },
-            {
-              "type": "doc",
-              "title": "CB CodeBuddy CLI 伙伴",
-              "path": "20-backend/26-agents/local_codebuddy_cli.md"
-            },
-            {
-              "type": "doc",
-              "title": "CX Codex CLI 伙伴",
-              "path": "20-backend/26-agents/local_codex_cli.md"
-            },
-            {
-              "type": "doc",
-              "title": "OC OpenCode CLI 伙伴",
-              "path": "20-backend/26-agents/local_opencode_cli.md"
-            },
-            {
-              "type": "doc",
               "title": "📊 Noah",
               "path": "20-backend/26-agents/market_researcher.md"
             },
@@ -260,16 +240,6 @@
               "type": "doc",
               "title": "🐙 Octopus",
               "path": "20-backend/26-agents/octopus.md"
-            },
-            {
-              "type": "doc",
-              "title": "🌐 Claude Code 伙伴",
-              "path": "20-backend/26-agents/registry_local_claude_code.md"
-            },
-            {
-              "type": "doc",
-              "title": "🌐 Codex CLI 伙伴",
-              "path": "20-backend/26-agents/registry_local_codex_cli.md"
             },
             {
               "type": "doc",
@@ -623,11 +593,6 @@
             },
             {
               "type": "doc",
-              "title": "⚙️ 包装工程师分身",
-              "path": "20-backend/26-agents/twin_packaging_engineer.md"
-            },
-            {
-              "type": "doc",
               "title": "⚡ PCB 工程师分身",
               "path": "20-backend/26-agents/twin_pcb_engineer.md"
             },
@@ -740,11 +705,6 @@
               "type": "doc",
               "title": "🔍 传感器工程师分身",
               "path": "20-backend/26-agents/twin_sensor_engineer.md"
-            },
-            {
-              "type": "doc",
-              "title": "⚙️ 钣金工程师分身",
-              "path": "20-backend/26-agents/twin_sheet_metal_engineer.md"
             },
             {
               "type": "doc",
@@ -960,6 +920,11 @@
     },
     {
       "from": "20-backend/21-runtime/suckers.md",
+      "to": "20-backend/22-safety/recovery.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/suckers.md",
       "to": "20-backend/22-safety/validation.md",
       "type": "imports"
     },
@@ -985,6 +950,11 @@
     },
     {
       "from": "20-backend/21-runtime/tool-engine.md",
+      "to": "20-backend/21-runtime/all-skills.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/tool-engine.md",
       "to": "20-backend/21-runtime/suckers.md",
       "type": "imports"
     },
@@ -1006,6 +976,11 @@
     {
       "from": "20-backend/21-runtime/tool-engine.md",
       "to": "20-backend/23-memory/journal.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/22-safety/auth.md",
+      "to": "20-backend/21-runtime/tool-engine.md",
       "type": "imports"
     },
     {
@@ -1056,6 +1031,16 @@
     {
       "from": "20-backend/23-memory/hemolymph.md",
       "to": "20-backend/21-runtime/suckers.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/23-memory/hemolymph.md",
+      "to": "20-backend/22-safety/auth.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/23-memory/hemolymph.md",
+      "to": "20-backend/22-safety/recovery.md",
       "type": "imports"
     },
     {

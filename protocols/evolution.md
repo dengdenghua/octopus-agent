@@ -1,12 +1,20 @@
 ---
 implementation_status: implemented
 implemented_in:
+  - runtime/safety/evolution/experiment_protocol.py
+  - runtime/safety/evolution/candidate_registry.py
+  - runtime/safety/evolution/dual_helix_shadow.py
+  - runtime/safety/evolution/candidate_canary.py
+  - runtime/safety/evolution/runtime_deployment.py
   - runtime/safety/evolution/fitness.py
   - runtime/safety/evolution/drift_monitor.py
-last_verified: 2026-06-25
+last_verified: 2026-08-25
 ---
 
 # Protocol · Evolution (再生 / 自进化协议)
+
+> **V2 权威实现：** [Evolution OS v2](../docs/architecture/evolution-os-v2.md)。
+> V2 使用严格 `TaskSpec → Trial → PairEvidence`、类型化 Candidate、结构化影子复核、候选级灰度和运行时 overlay。下方内容保留为 V1 历史设计参考；其中“直接写 Skill/Prompt”“所有评分只走 Batch API”等描述不再代表当前控制面。
 
 > **原则 ④ Variation + Selection** 的具体协议。
 > 三条回路：**正向** (成功路径 → Skill)、**负向** (失败路径 → 规避规则)、**策略** (A/B → 最优参数)。

@@ -7,25 +7,17 @@ opt-in: nothing starts until the user confirms in the UI and calls
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from runtime.sensing.gateway.recorder_store import RecorderStore
 
-@dataclass
-class _Recording:
-    thread_id: str
-    name: str
-    description: str
-    started_at: str
-    step_count: int = 0
-
-
-_RECORDINGS: dict[str, _Recording] = {}
 _TEMPLATES: dict[str, dict[str, Any]] = {}
 
 
@@ -33,6 +25,12 @@ class StartRecordingRequest(BaseModel):
     thread_id: str
     name: str
     description: str | None = None
+    provider: str = "hybrid"
+
+
+class AppendRecordingEventsRequest(BaseModel):
+    thread_id: str
+    events: list[dict[str, Any]] = Field(max_length=100)
 
 
 class StopRecordingRequest(BaseModel):
@@ -55,12 +53,39 @@ def create_teach_repeat_router(
     *,
     journal: Any = None,
     registry: Any = None,
+    auto_persist_dir: Path | str | None = None,
+    capability_registry: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
     jwt_secret: str | None = None,
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
+    recording_store: RecorderStore | None = None,
 ) -> APIRouter:
+    store = recording_store or RecorderStore()
+    forge_persist_dir = Path(auto_persist_dir) if auto_persist_dir is not None else None
+
+    def _require_forge_dependencies() -> Path:
+        missing = [
+            name
+            for name, value in (
+                ("journal", journal),
+                ("registry", registry),
+                ("auto_persist_dir", forge_persist_dir),
+            )
+            if value is None
+        ]
+        if missing:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "message": "teach-repeat forge dependencies unavailable",
+                    "missing": missing,
+                },
+            )
+        assert forge_persist_dir is not None
+        return forge_persist_dir
+
     def _operator_dep(request: Request) -> None:
         from runtime.safety.auth.principal import require_operator
 
@@ -75,7 +100,19 @@ def create_teach_repeat_router(
             jwt_audience=jwt_audience,
         )
 
-    router = APIRouter(dependencies=[Depends(_operator_dep)])
+    def _recorder_plugin_dep() -> None:
+        # Keep the route adapter in the base, but expose no recording surface
+        # unless the remotely installable plugin owns and enables it.
+        if capability_registry is None:
+            return
+        item = capability_registry.get("echo-recorder")
+        surfaces = item.get("surface_capabilities") if item else []
+        if not (
+            item and item.get("installed") and item.get("enabled") and "chat.recorder" in surfaces
+        ):
+            raise HTTPException(404, "REC recorder plugin is not installed or enabled")
+
+    router = APIRouter(dependencies=[Depends(_operator_dep), Depends(_recorder_plugin_dep)])
 
     def _auth(request: Request) -> str | None:
         if require_auth and identity_store is None:
@@ -91,6 +128,59 @@ def create_teach_repeat_router(
             jwt_audience=jwt_audience,
         )
 
+    def _capture_template(session: dict[str, Any]) -> str | None:
+        """Materialise a reviewable workflow from semantic UI events."""
+
+        if int(session.get("event_count") or 0) <= 0:
+            return None
+        path = Path(str(session.get("events_path") or ""))
+        if not path.is_file():
+            return None
+        steps: list[dict[str, Any]] = []
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                for index, line in enumerate(handle):
+                    if index >= 1000:
+                        break
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    steps.append(
+                        {
+                            "id": str(event.get("event_id") or f"event-{index + 1}"),
+                            "type": "system_event",
+                            "content": str(event.get("kind") or "ui_event"),
+                            "tool_name": None,
+                            "tool_args": {},
+                            "tool_result": None,
+                            "expected_output_pattern": None,
+                            "is_parameterised": False,
+                            "metadata": event,
+                            "timestamp": str(event.get("ts") or _now()),
+                        }
+                    )
+        except OSError:
+            return None
+        if not steps:
+            return None
+        template_id = f"rec_{uuid4().hex[:12]}"
+        created = _now()
+        _TEMPLATES[template_id] = {
+            "id": template_id,
+            "name": str(session.get("name") or "REC demonstration"),
+            "description": str(session.get("description") or ""),
+            "steps": steps,
+            "params": [],
+            "tags": ["rec", "demonstration", str(session.get("provider") or "hybrid")],
+            "use_count": 0,
+            "last_used_at": None,
+            "created_at": created,
+            "updated_at": created,
+            "recording_session_id": session.get("session_id"),
+        }
+        return template_id
+
     @router.post("/api/teach-repeat/record/start")
     def start_recording(request: Request, body: StartRecordingRequest) -> dict[str, Any]:
         _auth(request)
@@ -98,61 +188,115 @@ def create_teach_repeat_router(
         if not thread_id:
             raise HTTPException(400, "thread_id is required")
         name = body.name.strip() or "对话回放学习"
-        rec = _Recording(
+        provider = body.provider.strip().lower() or "hybrid"
+        if provider not in {"agent", "human", "hybrid"}:
+            raise HTTPException(400, "provider must be agent, human, or hybrid")
+        rec = store.start(
             thread_id=thread_id,
             name=name,
             description=(body.description or "").strip(),
-            started_at=_now(),
+            provider=provider,
         )
-        _RECORDINGS[thread_id] = rec
-        return {"recording": True, "thread_id": thread_id, "name": name}
+        return {
+            "recording": rec.get("status") == "recording",
+            "thread_id": thread_id,
+            "name": rec.get("name") or name,
+            "provider": rec.get("provider"),
+            "session_id": rec.get("session_id"),
+            "started_at": rec.get("started_at"),
+            "max_duration_seconds": rec.get("max_duration_seconds"),
+        }
+
+    @router.post("/api/teach-repeat/record/events")
+    def append_recording_events(
+        request: Request,
+        body: AppendRecordingEventsRequest,
+    ) -> dict[str, Any]:
+        _auth(request)
+        thread_id = body.thread_id.strip()
+        if not thread_id:
+            raise HTTPException(400, "thread_id is required")
+        try:
+            session = store.append(thread_id, body.events)
+        except LookupError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return {
+            "recording": True,
+            "thread_id": thread_id,
+            "session_id": session.get("session_id"),
+            "accepted": session.get("accepted", 0),
+            "event_count": session.get("event_count", 0),
+            "step_count": session.get("step_count", 0),
+        }
 
     @router.post("/api/teach-repeat/record/stop")
     def stop_recording(request: Request, body: StopRecordingRequest) -> dict[str, Any]:
         _auth(request)
+        from runtime.safety.auth.scope import scope_from_request
+
+        scope = scope_from_request(request)
         thread_id = body.thread_id.strip()
-        rec = _RECORDINGS.pop(thread_id, None)
+        if store.status(thread_id) is None:
+            raise HTTPException(404, "No active recording for this thread")
+        persist_dir = _require_forge_dependencies()
+        rec = store.stop(thread_id)
         if rec is None:
             raise HTTPException(404, "No active recording for this thread")
+
+        template_id = _capture_template(rec)
+        recording_fields = {
+            "thread_id": thread_id,
+            "session_id": rec.get("session_id"),
+            "provider": rec.get("provider"),
+            "event_count": rec.get("event_count", 0),
+            "events_path": rec.get("events_path"),
+            "metadata_path": rec.get("metadata_path"),
+            "template_id": template_id,
+        }
 
         # The real "recording" is the journal Trajectory react_loop already
         # wrote for this conversation. Forge a reusable skill from it via the
         # active single-demo forge (no min_hits wait). The immune gate still
         # quarantines macros over dangerous primitives for human approval.
-        if journal is None or registry is None:
-            return {
-                "name": rec.name,
-                "status": "no_runtime",
-                "forged": [],
-                "step_count": 0,
-            }
-
         try:
             from runtime.memory.journal.journal import TrajectoryEvent
             from runtime.safety.recovery.skill_forge import SkillForge
+            from runtime.safety.recovery.tenant_scope import read_learning_events
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(503, f"forge unavailable: {exc}") from exc
 
         trajs = [
             e.trajectory
-            for e in journal.read_by_type("trajectory")
+            for e in read_learning_events(
+                journal,
+                "trajectory",
+                scope=scope,
+            )
             if isinstance(e, TrajectoryEvent)
             and getattr(e.trajectory, "thread_id", None) == thread_id
             and e.trajectory.outcome.success
+            and not e.trajectory.outcome.degraded
         ]
         if not trajs:
             return {
-                "name": rec.name,
-                "status": "no_successful_trajectory",
+                "name": rec.get("name"),
+                "status": "captured" if template_id else "no_successful_trajectory",
                 "forged": [],
-                "thread_id": thread_id,
-                "step_count": 0,
+                "step_count": rec.get("step_count", 0),
+                **recording_fields,
             }
 
-        result = SkillForge(journal=journal, registry=registry).forge_selected(trajs)
+        result = SkillForge(
+            journal=journal,
+            registry=registry,
+            auto_persist_dir=persist_dir,
+            scope=scope,
+        ).forge_selected(trajs)
         status = (
             "promoted"
             if result.promoted
+            else "governed"
+            if result.governed
             else "quarantined"
             if result.quarantined
             else "shadow_failed"
@@ -160,25 +304,32 @@ def create_teach_repeat_router(
             else "no_candidate"
         )
         return {
-            "name": rec.name,
+            "name": rec.get("name"),
             "status": status,
             "forged": list(result.promoted),
             "quarantined": list(result.quarantined),
+            "governed": list(result.governed),
+            "evolution_candidates": list(result.evolution_candidates),
             "candidates_total": result.candidates_total,
-            "thread_id": thread_id,
-            "step_count": sum(t.step_count for t in trajs),
+            "step_count": sum(t.step_count for t in trajs) + int(rec.get("step_count") or 0),
+            **recording_fields,
         }
 
     @router.get("/api/teach-repeat/record/status")
     def recording_status(request: Request, thread_id: str) -> dict[str, Any]:
         _auth(request)
-        rec = _RECORDINGS.get(thread_id)
+        rec = store.status(thread_id)
         if rec is None:
             return {"recording": False, "step_count": 0, "name": ""}
         return {
-            "recording": True,
-            "step_count": rec.step_count,
-            "name": rec.name,
+            "recording": rec.get("status") == "recording",
+            "step_count": rec.get("step_count", 0),
+            "event_count": rec.get("event_count", 0),
+            "name": rec.get("name", ""),
+            "provider": rec.get("provider"),
+            "session_id": rec.get("session_id"),
+            "started_at": rec.get("started_at"),
+            "max_duration_seconds": rec.get("max_duration_seconds"),
         }
 
     @router.get("/api/teach-repeat/templates")

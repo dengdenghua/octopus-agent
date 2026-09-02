@@ -726,8 +726,7 @@ def _phase_6c_parse_and_guard(
                                 _guard_message,
                                 steps,
                                 candidate_was_published=(
-                                    _final_stream_started
-                                    or _final_delta_emitted_this_iteration
+                                    _final_stream_started or _final_delta_emitted_this_iteration
                                 ),
                             )
                         )

@@ -24,6 +24,7 @@ class CreateAgentRequest(BaseModel):
     model: str | None = None
     tool_groups: list[str] | None = None
     soul: str | None = None
+    personality_anchors: dict[str, Any] | None = None
 
 
 class UpdateAgentRequest(BaseModel):
@@ -32,6 +33,7 @@ class UpdateAgentRequest(BaseModel):
     model: str | None = None
     soul: str | None = None
     capabilities: dict[str, Any] | None = None
+    personality_anchors: dict[str, Any] | None = None
 
 
 class GenerateAgentVisualsRequest(BaseModel):
@@ -64,6 +66,8 @@ class AgentWire(BaseModel):
     # flag was removed — code mode is available to every agent by
     # default.)
     capabilities: dict[str, Any] = Field(default_factory=dict)
+    identity_code: str | None = None
+    identity_profile: dict[str, Any] = Field(default_factory=dict)
 
 
 class ArmWire(BaseModel):
@@ -100,109 +104,6 @@ class ToolRegistryWire(BaseModel):
 class CapabilitiesWire(BaseModel):
     browser_automation: bool = True
     desktop_automation: bool = True
-
-
-class LocalPartnerCommandHint(BaseModel):
-    command: str
-    scope: str
-    behavior: str
-
-
-class LocalPartnerDiagnosticItem(BaseModel):
-    label: str
-    value: str
-    tone: str = "neutral"
-    detail: str = ""
-
-
-class LocalPartnerWire(BaseModel):
-    id: str
-    agent_id: str
-    name: str
-    default_alias: str
-    description: str
-    avatar_url: str | None = None
-    detected: bool = False
-    registered: bool = False
-    status: str = "missing"
-    effective_status: str = "missing"
-    command: str | None = None
-    executable: str | None = None
-    ready: bool = False
-    headless_supported: bool = False
-    readiness_status: str = "missing"
-    readiness_message: str = ""
-    fix_hint: str | None = None
-    install_command: str | None = None
-    native_command: str | None = None
-    native_launch_command: str | None = None
-    native_launch_cwd: str | None = None
-    verify_command: str | None = None
-    setup_hint: str | None = None
-    interaction_hint: str | None = None
-    command_hints: list[LocalPartnerCommandHint] = Field(default_factory=list)
-    diagnostic_items: list[LocalPartnerDiagnosticItem] = Field(default_factory=list)
-
-
-class LocalPartnerDoctorGroup(BaseModel):
-    status: str
-    label: str
-    count: int = 0
-    partner_ids: list[str] = Field(default_factory=list)
-    next_action: str = ""
-
-
-class LocalPartnerDoctorResponse(BaseModel):
-    summary: str
-    total: int = 0
-    detected: int = 0
-    ready: int = 0
-    registered: int = 0
-    needs_attention: int = 0
-    groups: list[LocalPartnerDoctorGroup] = Field(default_factory=list)
-    next_actions: list[str] = Field(default_factory=list)
-
-
-class LocalPartnerRegisterItem(BaseModel):
-    id: str
-    alias: str | None = None
-
-
-class LocalPartnerRegisterRequest(BaseModel):
-    partners: list[LocalPartnerRegisterItem] = Field(default_factory=list)
-
-
-class LocalPartnerRegisterResult(BaseModel):
-    id: str
-    agent_id: str
-    status: str
-    message: str = ""
-    agent: AgentDetailWire | None = None
-
-
-class LocalPartnerRegisterResponse(BaseModel):
-    results: list[LocalPartnerRegisterResult] = Field(default_factory=list)
-    registered_count: int = 0
-    already_exists_count: int = 0
-    skipped_count: int = 0
-
-
-class LocalPartnerProbeResponse(BaseModel):
-    id: str
-    agent_id: str = ""
-    ok: bool = False
-    detected: bool = False
-    ready: bool = False
-    status: str = "missing"
-    command: str | None = None
-    executable: str | None = None
-    output: str = ""
-    error: str = ""
-    raw_error: str = ""
-    failure_kind: str | None = None
-    failure_title: str = ""
-    fix_hint: str | None = None
-    elapsed_ms: int = 0
 
 
 # Task control bodies. Defined at module level so FastAPI's Pydantic

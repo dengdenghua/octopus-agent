@@ -122,6 +122,22 @@
             ],
             "title": "Icon"
           },
+          "identity_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identity Code"
+          },
+          "identity_profile": {
+            "additionalProperties": true,
+            "title": "Identity Profile",
+            "type": "object"
+          },
           "model": {
             "anyOf": [
               {
@@ -267,6 +283,22 @@
             ],
             "title": "Icon"
           },
+          "identity_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identity Code"
+          },
+          "identity_profile": {
+            "additionalProperties": true,
+            "title": "Identity Profile",
+            "type": "object"
+          },
           "model": {
             "anyOf": [
               {
@@ -319,6 +351,29 @@
           "name"
         ],
         "title": "AgentWire",
+        "type": "object"
+      },
+      "AppendRecordingEventsRequest": {
+        "properties": {
+          "events": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "maxItems": 100,
+            "title": "Events",
+            "type": "array"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id",
+          "events"
+        ],
+        "title": "AppendRecordingEventsRequest",
         "type": "object"
       },
       "ArmOptionWire": {
@@ -559,6 +614,100 @@
         "title": "Body_api_thread_uploads_api_threads__thread_id__uploads_post",
         "type": "object"
       },
+      "Body_create_design_asset_api_design_assets_post": {
+        "properties": {
+          "category": {
+            "default": "自定义",
+            "maxLength": 20,
+            "title": "Category",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 1200,
+            "title": "Description",
+            "type": "string"
+          },
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "persona_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona Id"
+          },
+          "tags": {
+            "default": "",
+            "maxLength": 600,
+            "title": "Tags",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "name"
+        ],
+        "title": "Body_create_design_asset_api_design_assets_post",
+        "type": "object"
+      },
+      "Body_import_design_asset_pack_api_design_assets_import_pack_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "persona_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona Id"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_design_asset_pack_api_design_assets_import_pack_post",
+        "type": "object"
+      },
+      "Body_upload_project_assets_api_design_projects__project_id__assets_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "contentMediaType": "application/octet-stream",
+              "type": "string"
+            },
+            "title": "Files",
+            "type": "array"
+          }
+        },
+        "required": [
+          "files"
+        ],
+        "title": "Body_upload_project_assets_api_design_projects__project_id__assets_post",
+        "type": "object"
+      },
       "BreakoutBody": {
         "properties": {
           "at_message": {
@@ -779,6 +928,59 @@
         "title": "CandidateRollbackBody",
         "type": "object"
       },
+      "CanvasPresenceHeartbeat": {
+        "properties": {
+          "client_id": {
+            "pattern": "^[a-zA-Z0-9._:-]{8,128}$",
+            "title": "Client Id",
+            "type": "string"
+          },
+          "display_name": {
+            "default": "协作者",
+            "maxLength": 48,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "section": {
+            "default": "canvas",
+            "pattern": "^(home|canvas|assets|skills|comfyui)$",
+            "title": "Section",
+            "type": "string"
+          },
+          "x": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": -100000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X"
+          },
+          "y": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": -100000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Y"
+          }
+        },
+        "required": [
+          "client_id"
+        ],
+        "title": "CanvasPresenceHeartbeat",
+        "type": "object"
+      },
       "CanvasSave": {
         "properties": {
           "document": {
@@ -860,28 +1062,6 @@
           "permissions"
         ],
         "title": "CapabilityPermissionsResponse",
-        "type": "object"
-      },
-      "CliTeamRunRequest": {
-        "properties": {
-          "goal": {
-            "default": "",
-            "title": "Goal",
-            "type": "string"
-          },
-          "repo_root": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Repo Root"
-          }
-        },
-        "title": "CliTeamRunRequest",
         "type": "object"
       },
       "CodexAccountResponse": {
@@ -1793,6 +1973,142 @@
         "title": "CollabTaskBody",
         "type": "object"
       },
+      "CollectRequest": {
+        "properties": {
+          "max_results": {
+            "default": 10,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Max Results",
+            "type": "integer"
+          },
+          "output_format": {
+            "default": "json",
+            "title": "Output Format",
+            "type": "string"
+          },
+          "platform": {
+            "default": "web",
+            "title": "Platform",
+            "type": "string"
+          },
+          "queries": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Queries",
+            "type": "array"
+          },
+          "urls": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Urls",
+            "type": "array"
+          },
+          "use_browser": {
+            "default": false,
+            "title": "Use Browser",
+            "type": "boolean"
+          }
+        },
+        "title": "CollectRequest",
+        "type": "object"
+      },
+      "ComfyCustomNodeAction": {
+        "properties": {
+          "node_id": {
+            "maxLength": 120,
+            "minLength": 2,
+            "title": "Node Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_id"
+        ],
+        "title": "ComfyCustomNodeAction",
+        "type": "object"
+      },
+      "ComfyCustomNodeRollback": {
+        "properties": {
+          "backup_id": {
+            "anyOf": [
+              {
+                "maxLength": 180,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup Id"
+          }
+        },
+        "title": "ComfyCustomNodeRollback",
+        "type": "object"
+      },
+      "ComfyModelAction": {
+        "properties": {
+          "group": {
+            "maxLength": 80,
+            "minLength": 2,
+            "title": "Group",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group",
+          "name"
+        ],
+        "title": "ComfyModelAction",
+        "type": "object"
+      },
+      "ComfyModelDownload": {
+        "properties": {
+          "group": {
+            "maxLength": 80,
+            "minLength": 2,
+            "title": "Group",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 2048,
+            "minLength": 12,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "group"
+        ],
+        "title": "ComfyModelDownload",
+        "type": "object"
+      },
+      "ComfyModelRestore": {
+        "properties": {
+          "backup_id": {
+            "maxLength": 600,
+            "minLength": 3,
+            "title": "Backup Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "backup_id"
+        ],
+        "title": "ComfyModelRestore",
+        "type": "object"
+      },
       "CompleteBody": {
         "properties": {
           "blackboard_key": {
@@ -2110,6 +2426,18 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "personality_anchors": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Personality Anchors"
           },
           "soul": {
             "anyOf": [
@@ -4188,562 +4516,6 @@
         "title": "LinkRoomBody",
         "type": "object"
       },
-      "LocalPartnerCommandHint": {
-        "properties": {
-          "behavior": {
-            "title": "Behavior",
-            "type": "string"
-          },
-          "command": {
-            "title": "Command",
-            "type": "string"
-          },
-          "scope": {
-            "title": "Scope",
-            "type": "string"
-          }
-        },
-        "required": [
-          "command",
-          "scope",
-          "behavior"
-        ],
-        "title": "LocalPartnerCommandHint",
-        "type": "object"
-      },
-      "LocalPartnerDiagnosticItem": {
-        "properties": {
-          "detail": {
-            "default": "",
-            "title": "Detail",
-            "type": "string"
-          },
-          "label": {
-            "title": "Label",
-            "type": "string"
-          },
-          "tone": {
-            "default": "neutral",
-            "title": "Tone",
-            "type": "string"
-          },
-          "value": {
-            "title": "Value",
-            "type": "string"
-          }
-        },
-        "required": [
-          "label",
-          "value"
-        ],
-        "title": "LocalPartnerDiagnosticItem",
-        "type": "object"
-      },
-      "LocalPartnerDoctorGroup": {
-        "properties": {
-          "count": {
-            "default": 0,
-            "title": "Count",
-            "type": "integer"
-          },
-          "label": {
-            "title": "Label",
-            "type": "string"
-          },
-          "next_action": {
-            "default": "",
-            "title": "Next Action",
-            "type": "string"
-          },
-          "partner_ids": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Partner Ids",
-            "type": "array"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "status",
-          "label"
-        ],
-        "title": "LocalPartnerDoctorGroup",
-        "type": "object"
-      },
-      "LocalPartnerDoctorResponse": {
-        "properties": {
-          "detected": {
-            "default": 0,
-            "title": "Detected",
-            "type": "integer"
-          },
-          "groups": {
-            "items": {
-              "$ref": "#/components/schemas/LocalPartnerDoctorGroup"
-            },
-            "title": "Groups",
-            "type": "array"
-          },
-          "needs_attention": {
-            "default": 0,
-            "title": "Needs Attention",
-            "type": "integer"
-          },
-          "next_actions": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Next Actions",
-            "type": "array"
-          },
-          "ready": {
-            "default": 0,
-            "title": "Ready",
-            "type": "integer"
-          },
-          "registered": {
-            "default": 0,
-            "title": "Registered",
-            "type": "integer"
-          },
-          "summary": {
-            "title": "Summary",
-            "type": "string"
-          },
-          "total": {
-            "default": 0,
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "summary"
-        ],
-        "title": "LocalPartnerDoctorResponse",
-        "type": "object"
-      },
-      "LocalPartnerProbeResponse": {
-        "properties": {
-          "agent_id": {
-            "default": "",
-            "title": "Agent Id",
-            "type": "string"
-          },
-          "command": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Command"
-          },
-          "detected": {
-            "default": false,
-            "title": "Detected",
-            "type": "boolean"
-          },
-          "elapsed_ms": {
-            "default": 0,
-            "title": "Elapsed Ms",
-            "type": "integer"
-          },
-          "error": {
-            "default": "",
-            "title": "Error",
-            "type": "string"
-          },
-          "executable": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Executable"
-          },
-          "failure_kind": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Failure Kind"
-          },
-          "failure_title": {
-            "default": "",
-            "title": "Failure Title",
-            "type": "string"
-          },
-          "fix_hint": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Fix Hint"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "ok": {
-            "default": false,
-            "title": "Ok",
-            "type": "boolean"
-          },
-          "output": {
-            "default": "",
-            "title": "Output",
-            "type": "string"
-          },
-          "raw_error": {
-            "default": "",
-            "title": "Raw Error",
-            "type": "string"
-          },
-          "ready": {
-            "default": false,
-            "title": "Ready",
-            "type": "boolean"
-          },
-          "status": {
-            "default": "missing",
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "title": "LocalPartnerProbeResponse",
-        "type": "object"
-      },
-      "LocalPartnerRegisterItem": {
-        "properties": {
-          "alias": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Alias"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "title": "LocalPartnerRegisterItem",
-        "type": "object"
-      },
-      "LocalPartnerRegisterRequest": {
-        "properties": {
-          "partners": {
-            "items": {
-              "$ref": "#/components/schemas/LocalPartnerRegisterItem"
-            },
-            "title": "Partners",
-            "type": "array"
-          }
-        },
-        "title": "LocalPartnerRegisterRequest",
-        "type": "object"
-      },
-      "LocalPartnerRegisterResponse": {
-        "properties": {
-          "already_exists_count": {
-            "default": 0,
-            "title": "Already Exists Count",
-            "type": "integer"
-          },
-          "registered_count": {
-            "default": 0,
-            "title": "Registered Count",
-            "type": "integer"
-          },
-          "results": {
-            "items": {
-              "$ref": "#/components/schemas/LocalPartnerRegisterResult"
-            },
-            "title": "Results",
-            "type": "array"
-          },
-          "skipped_count": {
-            "default": 0,
-            "title": "Skipped Count",
-            "type": "integer"
-          }
-        },
-        "title": "LocalPartnerRegisterResponse",
-        "type": "object"
-      },
-      "LocalPartnerRegisterResult": {
-        "properties": {
-          "agent": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/AgentDetailWire"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "agent_id": {
-            "title": "Agent Id",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "message": {
-            "default": "",
-            "title": "Message",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "agent_id",
-          "status"
-        ],
-        "title": "LocalPartnerRegisterResult",
-        "type": "object"
-      },
-      "LocalPartnerWire": {
-        "properties": {
-          "agent_id": {
-            "title": "Agent Id",
-            "type": "string"
-          },
-          "avatar_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Avatar Url"
-          },
-          "command": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Command"
-          },
-          "command_hints": {
-            "items": {
-              "$ref": "#/components/schemas/LocalPartnerCommandHint"
-            },
-            "title": "Command Hints",
-            "type": "array"
-          },
-          "default_alias": {
-            "title": "Default Alias",
-            "type": "string"
-          },
-          "description": {
-            "title": "Description",
-            "type": "string"
-          },
-          "detected": {
-            "default": false,
-            "title": "Detected",
-            "type": "boolean"
-          },
-          "diagnostic_items": {
-            "items": {
-              "$ref": "#/components/schemas/LocalPartnerDiagnosticItem"
-            },
-            "title": "Diagnostic Items",
-            "type": "array"
-          },
-          "effective_status": {
-            "default": "missing",
-            "title": "Effective Status",
-            "type": "string"
-          },
-          "executable": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Executable"
-          },
-          "fix_hint": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Fix Hint"
-          },
-          "headless_supported": {
-            "default": false,
-            "title": "Headless Supported",
-            "type": "boolean"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "install_command": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Install Command"
-          },
-          "interaction_hint": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Interaction Hint"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "native_command": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Native Command"
-          },
-          "native_launch_command": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Native Launch Command"
-          },
-          "native_launch_cwd": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Native Launch Cwd"
-          },
-          "readiness_message": {
-            "default": "",
-            "title": "Readiness Message",
-            "type": "string"
-          },
-          "readiness_status": {
-            "default": "missing",
-            "title": "Readiness Status",
-            "type": "string"
-          },
-          "ready": {
-            "default": false,
-            "title": "Ready",
-            "type": "boolean"
-          },
-          "registered": {
-            "default": false,
-            "title": "Registered",
-            "type": "boolean"
-          },
-          "setup_hint": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Setup Hint"
-          },
-          "status": {
-            "default": "missing",
-            "title": "Status",
-            "type": "string"
-          },
-          "verify_command": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Verify Command"
-          }
-        },
-        "required": [
-          "id",
-          "agent_id",
-          "name",
-          "default_alias",
-          "description"
-        ],
-        "title": "LocalPartnerWire",
-        "type": "object"
-      },
       "LoopAttempt": {
         "properties": {
           "attempt_index": {
@@ -4762,9 +4534,19 @@
             ],
             "title": "Completed At"
           },
+          "completion_decision": {
+            "additionalProperties": true,
+            "title": "Completion Decision",
+            "type": "object"
+          },
           "completion_receipt": {
             "additionalProperties": true,
             "title": "Completion Receipt",
+            "type": "object"
+          },
+          "effect_summary": {
+            "additionalProperties": true,
+            "title": "Effect Summary",
             "type": "object"
           },
           "error": {
@@ -4842,7 +4624,7 @@
             "type": "boolean"
           },
           "budget_auto_pause": {
-            "default": true,
+            "default": false,
             "title": "Budget Auto Pause",
             "type": "boolean"
           },
@@ -4871,14 +4653,14 @@
             "type": "integer"
           },
           "max_tokens_budget": {
-            "default": 50000,
+            "default": 100000,
             "maximum": 2000000.0,
             "minimum": 1.0,
             "title": "Max Tokens Budget",
             "type": "integer"
           },
           "max_usd_budget": {
-            "default": 0.5,
+            "default": 1.0,
             "maximum": 100.0,
             "minimum": 0.0,
             "title": "Max Usd Budget",
@@ -4963,6 +4745,18 @@
             "default": "",
             "title": "Last Error",
             "type": "string"
+          },
+          "last_evolution_candidate_result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Evolution Candidate Result"
           },
           "last_review": {
             "anyOf": [
@@ -5067,6 +4861,17 @@
           "status": {
             "$ref": "#/components/schemas/LoopRunStatus",
             "default": "pending"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
           },
           "thread_id": {
             "anyOf": [
@@ -5648,6 +5453,31 @@
           "goal"
         ],
         "title": "PlanBody",
+        "type": "object"
+      },
+      "PluginNodeStatePut": {
+        "properties": {
+          "expected_revision": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "plugin_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Plugin Id",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "plugin_id",
+          "value"
+        ],
+        "title": "PluginNodeStatePut",
         "type": "object"
       },
       "ProjectGroupAgentBody": {
@@ -6586,6 +6416,11 @@
             "title": "Name",
             "type": "string"
           },
+          "provider": {
+            "default": "hybrid",
+            "title": "Provider",
+            "type": "string"
+          },
           "thread_id": {
             "title": "Thread Id",
             "type": "string"
@@ -6929,6 +6764,38 @@
         "title": "TaskInterventionBody",
         "type": "object"
       },
+      "TaskResumeExecutionRequest": {
+        "description": "One explicit operator request to continue a checkpointed objective.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "requestId": {
+            "anyOf": [
+              {
+                "maxLength": 96,
+                "minLength": 8,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requestid"
+          }
+        },
+        "title": "TaskResumeExecutionRequest",
+        "type": "object"
+      },
       "TaskTakeoverRequest": {
         "properties": {
           "reason": {
@@ -7178,6 +7045,18 @@
               }
             ],
             "title": "Model"
+          },
+          "personality_anchors": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Personality Anchors"
           },
           "soul": {
             "anyOf": [
@@ -8099,6 +7978,87 @@
           "download_url"
         ],
         "title": "WorkspaceOutputEntry",
+        "type": "object"
+      },
+      "WorkspaceOutputRestoreRequest": {
+        "properties": {
+          "expected_sha256": {
+            "title": "Expected Sha256",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision_id",
+          "expected_sha256"
+        ],
+        "title": "WorkspaceOutputRestoreRequest",
+        "type": "object"
+      },
+      "WorkspaceOutputWriteRequest": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "expected_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Sha256"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "WorkspaceOutputWriteRequest",
+        "type": "object"
+      },
+      "WorkspaceOutputWriteResponse": {
+        "properties": {
+          "bytes": {
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Id"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "path",
+          "bytes",
+          "sha256"
+        ],
+        "title": "WorkspaceOutputWriteResponse",
         "type": "object"
       },
       "WorkspaceOutputsResponse": {
@@ -9327,6 +9287,121 @@
         ]
       }
     },
+    "/api/agent-market/cloud/plugins/{plugin_id}/rollback": {
+      "post": {
+        "operationId": "api_agent_market_cloud_plugin_rollback_api_agent_market_cloud_plugins__plugin_id__rollback_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "title": "Plugin Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Market Cloud Plugin Rollback Api Agent Market Cloud Plugins  Plugin Id  Rollback Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Market Cloud Plugin Rollback",
+        "tags": [
+          "agent-market"
+        ]
+      }
+    },
+    "/api/agent-market/cloud/plugins/{plugin_id}/{action}": {
+      "post": {
+        "operationId": "api_agent_market_cloud_plugin_activation_api_agent_market_cloud_plugins__plugin_id___action__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "title": "Plugin Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "action",
+            "required": true,
+            "schema": {
+              "title": "Action",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Market Cloud Plugin Activation Api Agent Market Cloud Plugins  Plugin Id   Action  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Market Cloud Plugin Activation",
+        "tags": [
+          "agent-market"
+        ]
+      }
+    },
     "/api/agent-market/cloud/skills": {
       "get": {
         "operationId": "api_agent_market_cloud_skills_api_agent_market_cloud_skills_get",
@@ -9452,6 +9527,49 @@
           }
         },
         "summary": "Api Agent Market Cloud Skill Install",
+        "tags": [
+          "agent-market"
+        ]
+      }
+    },
+    "/api/agent-market/cloud/skills/{name}/install/stream": {
+      "post": {
+        "description": "Stream observable install phases as newline-delimited JSON.",
+        "operationId": "api_agent_market_cloud_skill_install_stream_api_agent_market_cloud_skills__name__install_stream_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Api Agent Market Cloud Skill Install Stream Api Agent Market Cloud Skills  Name  Install Stream Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Market Cloud Skill Install Stream",
         "tags": [
           "agent-market"
         ]
@@ -9872,95 +9990,6 @@
           }
         },
         "summary": "Api Agent Market Memory",
-        "tags": [
-          "agent-market"
-        ]
-      }
-    },
-    "/api/agent-market/packs/import-agent": {
-      "post": {
-        "operationId": "api_agent_pack_import_agent_api_agent_market_packs_import_agent_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "additionalProperties": true,
-                "title": "Body",
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Api Agent Pack Import Agent Api Agent Market Packs Import Agent Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Api Agent Pack Import Agent",
-        "tags": [
-          "agent-market"
-        ]
-      }
-    },
-    "/api/agent-market/packs/preview": {
-      "get": {
-        "operationId": "api_agent_pack_preview_api_agent_market_packs_preview_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "path",
-            "required": true,
-            "schema": {
-              "title": "Path",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Api Agent Pack Preview Api Agent Market Packs Preview Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Api Agent Pack Preview",
         "tags": [
           "agent-market"
         ]
@@ -13374,6 +13403,18 @@
     "/api/agents": {
       "get": {
         "operationId": "list_agents_api_agents_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_visuals",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Visuals",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -13388,6 +13429,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Agents",
@@ -13431,182 +13482,6 @@
           }
         },
         "summary": "Create Agent",
-        "tags": [
-          "agents"
-        ]
-      }
-    },
-    "/api/agents/local-partners": {
-      "get": {
-        "operationId": "list_local_partners_api_agents_local_partners_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": {
-                    "items": {
-                      "$ref": "#/components/schemas/LocalPartnerWire"
-                    },
-                    "type": "array"
-                  },
-                  "title": "Response List Local Partners Api Agents Local Partners Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "List Local Partners",
-        "tags": [
-          "agents"
-        ]
-      }
-    },
-    "/api/agents/local-partners/doctor": {
-      "get": {
-        "operationId": "local_partners_doctor_api_agents_local_partners_doctor_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LocalPartnerDoctorResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Local Partners Doctor",
-        "tags": [
-          "agents"
-        ]
-      }
-    },
-    "/api/agents/local-partners/register": {
-      "post": {
-        "operationId": "register_local_partners_api_agents_local_partners_register_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LocalPartnerRegisterRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LocalPartnerRegisterResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Register Local Partners",
-        "tags": [
-          "agents"
-        ]
-      }
-    },
-    "/api/agents/local-partners/{partner_id}/model": {
-      "get": {
-        "operationId": "get_local_partner_model_api_agents_local_partners__partner_id__model_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "partner_id",
-            "required": true,
-            "schema": {
-              "title": "Partner Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Local Partner Model Api Agents Local Partners  Partner Id  Model Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Local Partner Model",
-        "tags": [
-          "agents"
-        ]
-      }
-    },
-    "/api/agents/local-partners/{partner_id}/probe": {
-      "post": {
-        "operationId": "probe_local_partner_api_agents_local_partners__partner_id__probe_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "partner_id",
-            "required": true,
-            "schema": {
-              "title": "Partner Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LocalPartnerProbeResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Probe Local Partner",
         "tags": [
           "agents"
         ]
@@ -15586,6 +15461,16 @@
               ],
               "title": "Turn Id"
             }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -16881,6 +16766,16 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
             }
           }
         ],
@@ -18652,72 +18547,6 @@
         "summary": "List Pairings",
         "tags": [
           "channels"
-        ]
-      }
-    },
-    "/api/cli-team/run": {
-      "post": {
-        "operationId": "api_cli_team_run_api_cli_team_run_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CliTeamRunRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Api Cli Team Run Api Cli Team Run Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Api Cli Team Run",
-        "tags": [
-          "cli-team"
-        ]
-      }
-    },
-    "/api/cli-team/status": {
-      "get": {
-        "operationId": "api_cli_team_status_api_cli_team_status_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Api Cli Team Status Api Cli Team Status Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Api Cli Team Status",
-        "tags": [
-          "cli-team"
         ]
       }
     },
@@ -24189,6 +24018,429 @@
         ]
       }
     },
+    "/api/design/assets": {
+      "get": {
+        "operationId": "list_design_assets_api_design_assets_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "persona_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Persona Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Design Assets Api Design Assets Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Design Assets",
+        "tags": [
+          "design-studio"
+        ]
+      },
+      "post": {
+        "operationId": "create_design_asset_api_design_assets_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_design_asset_api_design_assets_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Design Asset Api Design Assets Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Design Asset",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/assets/import-pack": {
+      "post": {
+        "operationId": "import_design_asset_pack_api_design_assets_import_pack_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_design_asset_pack_api_design_assets_import_pack_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Import Design Asset Pack Api Design Assets Import Pack Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Design Asset Pack",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/assets/{asset_id}/content": {
+      "get": {
+        "operationId": "read_design_asset_api_design_assets__asset_id__content_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "persona_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Persona Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Design Asset",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/custom-nodes/install": {
+      "post": {
+        "operationId": "comfyui_custom_node_install_api_design_comfyui_custom_nodes_install_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComfyCustomNodeAction"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comfyui Custom Node Install Api Design Comfyui Custom Nodes Install Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Comfyui Custom Node Install",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/custom-nodes/registry": {
+      "get": {
+        "operationId": "comfyui_custom_node_registry_api_design_comfyui_custom_nodes_registry_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 120,
+              "title": "Query",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comfyui Custom Node Registry Api Design Comfyui Custom Nodes Registry Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Comfyui Custom Node Registry",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/custom-nodes/update": {
+      "post": {
+        "operationId": "comfyui_custom_node_update_api_design_comfyui_custom_nodes_update_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComfyCustomNodeAction"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comfyui Custom Node Update Api Design Comfyui Custom Nodes Update Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Comfyui Custom Node Update",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/custom-nodes/{node_id}": {
+      "delete": {
+        "operationId": "comfyui_custom_node_uninstall_api_design_comfyui_custom_nodes__node_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comfyui Custom Node Uninstall Api Design Comfyui Custom Nodes  Node Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Comfyui Custom Node Uninstall",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/custom-nodes/{node_id}/rollback": {
+      "post": {
+        "operationId": "comfyui_custom_node_rollback_api_design_comfyui_custom_nodes__node_id__rollback_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComfyCustomNodeRollback"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comfyui Custom Node Rollback Api Design Comfyui Custom Nodes  Node Id  Rollback Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Comfyui Custom Node Rollback",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
     "/api/design/comfyui/dependencies": {
       "get": {
         "operationId": "comfyui_dependencies_api_design_comfyui_dependencies_get",
@@ -24251,6 +24503,227 @@
           }
         },
         "summary": "Comfyui History",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/install": {
+      "post": {
+        "operationId": "comfyui_install_api_design_comfyui_install_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comfyui Install Api Design Comfyui Install Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Comfyui Install",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/manager": {
+      "get": {
+        "operationId": "comfyui_manager_state_api_design_comfyui_manager_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comfyui Manager State Api Design Comfyui Manager Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Comfyui Manager State",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/manager/cancel": {
+      "post": {
+        "operationId": "comfyui_manager_cancel_api_design_comfyui_manager_cancel_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comfyui Manager Cancel Api Design Comfyui Manager Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Comfyui Manager Cancel",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/models": {
+      "get": {
+        "operationId": "comfyui_models_api_design_comfyui_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comfyui Models Api Design Comfyui Models Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Comfyui Models",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/models/download": {
+      "post": {
+        "operationId": "comfyui_model_download_api_design_comfyui_models_download_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComfyModelDownload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comfyui Model Download Api Design Comfyui Models Download Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Comfyui Model Download",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/models/remove": {
+      "post": {
+        "operationId": "comfyui_model_remove_api_design_comfyui_models_remove_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComfyModelAction"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comfyui Model Remove Api Design Comfyui Models Remove Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Comfyui Model Remove",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/models/restore": {
+      "post": {
+        "operationId": "comfyui_model_restore_api_design_comfyui_models_restore_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComfyModelRestore"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comfyui Model Restore Api Design Comfyui Models Restore Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Comfyui Model Restore",
         "tags": [
           "design-studio"
         ]
@@ -24387,6 +24860,29 @@
           }
         },
         "summary": "Comfyui Stop",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/comfyui/update": {
+      "post": {
+        "operationId": "comfyui_update_api_design_comfyui_update_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comfyui Update Api Design Comfyui Update Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Comfyui Update",
         "tags": [
           "design-studio"
         ]
@@ -24554,6 +25050,162 @@
         ]
       }
     },
+    "/api/design/comfyui/workflows/{workflow_id}/diagnostics": {
+      "get": {
+        "operationId": "diagnose_comfyui_workflow_api_design_comfyui_workflows__workflow_id__diagnostics_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Diagnose Comfyui Workflow Api Design Comfyui Workflows  Workflow Id  Diagnostics Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Diagnose Comfyui Workflow",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/projects/{project_id}/assets": {
+      "post": {
+        "operationId": "upload_project_assets_api_design_projects__project_id__assets_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_project_assets_api_design_projects__project_id__assets_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Upload Project Assets Api Design Projects  Project Id  Assets Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Project Assets",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/projects/{project_id}/assets/{artifact_id}/{filename}": {
+      "get": {
+        "operationId": "read_project_asset_api_design_projects__project_id__assets__artifact_id___filename__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "filename",
+            "required": true,
+            "schema": {
+              "title": "Filename",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Project Asset",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
     "/api/design/projects/{project_id}/canvas": {
       "get": {
         "operationId": "get_project_canvas_api_design_projects__project_id__canvas_get",
@@ -24645,6 +25297,416 @@
           }
         },
         "summary": "Save Project Canvas",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/projects/{project_id}/plugin-nodes/{node_id}/state": {
+      "get": {
+        "operationId": "get_plugin_node_state_api_design_projects__project_id__plugin_nodes__node_id__state_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "maxLength": 160,
+              "minLength": 1,
+              "title": "Plugin Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Plugin Node State Api Design Projects  Project Id  Plugin Nodes  Node Id  State Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Plugin Node State",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/projects/{project_id}/plugin-nodes/{node_id}/state/{key}": {
+      "delete": {
+        "operationId": "delete_plugin_node_state_api_design_projects__project_id__plugin_nodes__node_id__state__key__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "maxLength": 160,
+              "minLength": 1,
+              "title": "Plugin Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_revision",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Expected Revision",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Plugin Node State Api Design Projects  Project Id  Plugin Nodes  Node Id  State  Key  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Plugin Node State",
+        "tags": [
+          "design-studio"
+        ]
+      },
+      "put": {
+        "operationId": "put_plugin_node_state_api_design_projects__project_id__plugin_nodes__node_id__state__key__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginNodeStatePut"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Put Plugin Node State Api Design Projects  Project Id  Plugin Nodes  Node Id  State  Key  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Plugin Node State",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/projects/{project_id}/presence": {
+      "get": {
+        "operationId": "get_project_presence_api_design_projects__project_id__presence_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Project Presence Api Design Projects  Project Id  Presence Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Project Presence",
+        "tags": [
+          "design-studio"
+        ]
+      },
+      "post": {
+        "operationId": "heartbeat_project_presence_api_design_projects__project_id__presence_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CanvasPresenceHeartbeat"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Heartbeat Project Presence Api Design Projects  Project Id  Presence Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Heartbeat Project Presence",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/projects/{project_id}/presence/{client_id}": {
+      "delete": {
+        "operationId": "leave_project_presence_api_design_projects__project_id__presence__client_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client_id",
+            "required": true,
+            "schema": {
+              "title": "Client Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Leave Project Presence Api Design Projects  Project Id  Presence  Client Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Leave Project Presence",
+        "tags": [
+          "design-studio"
+        ]
+      }
+    },
+    "/api/design/skills/{skill_id}/files": {
+      "get": {
+        "operationId": "preview_creative_skill_files_api_design_skills__skill_id__files_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "skill_id",
+            "required": true,
+            "schema": {
+              "title": "Skill Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Preview Creative Skill Files Api Design Skills  Skill Id  Files Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Creative Skill Files",
         "tags": [
           "design-studio"
         ]
@@ -25395,6 +26457,18 @@
     "/api/evolution/budget/breaker/reset": {
       "post": {
         "operationId": "reset_budget_breaker_api_evolution_budget_breaker_reset_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -25446,6 +26520,18 @@
     "/api/evolution/budget/snapshot": {
       "get": {
         "operationId": "budget_snapshot_api_evolution_budget_snapshot_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -25458,6 +26544,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Budget Snapshot",
@@ -25902,6 +26998,18 @@
     "/api/evolution/curriculum/cycle/run": {
       "post": {
         "operationId": "run_curriculum_cycle_api_evolution_curriculum_cycle_run_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -25914,6 +27022,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Run Curriculum Cycle",
@@ -25940,6 +27058,16 @@
                 }
               ],
               "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
             }
           }
         ],
@@ -25979,6 +27107,18 @@
     "/api/evolution/curriculum/goals/decide": {
       "post": {
         "operationId": "decide_curriculum_goal_api_evolution_curriculum_goals_decide_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -26053,6 +27193,18 @@
     "/api/evolution/dispatch/snapshot": {
       "get": {
         "operationId": "dispatch_snapshot_api_evolution_dispatch_snapshot_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -26065,6 +27217,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Dispatch Snapshot",
@@ -27840,6 +29002,18 @@
     "/api/evolution/learn-from-intel": {
       "post": {
         "operationId": "evolution_learn_from_intel_api_evolution_learn_from_intel_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -27852,6 +29026,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Evolution Learn From Intel",
@@ -27874,6 +29058,16 @@
               "minimum": 1,
               "title": "Weeks",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
             }
           }
         ],
@@ -28045,6 +29239,16 @@
               "title": "Index",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -28092,6 +29296,16 @@
               "title": "Days",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -28130,6 +29344,18 @@
     "/api/evolution/overview": {
       "get": {
         "operationId": "evolution_overview_api_evolution_overview_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -28142,6 +29368,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Evolution Overview",
@@ -28199,6 +29435,18 @@
     "/api/evolution/recommendations": {
       "get": {
         "operationId": "evolution_recommendations_api_evolution_recommendations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -28214,6 +29462,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Evolution Recommendations",
@@ -28354,6 +29612,16 @@
               "title": "Index",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -28452,6 +29720,16 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -28490,6 +29768,18 @@
     "/api/evolution/skills/performance": {
       "get": {
         "operationId": "evolution_skill_performance_api_evolution_skills_performance_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -28505,6 +29795,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Evolution Skill Performance",
@@ -28516,6 +29816,18 @@
     "/api/evolution/status": {
       "get": {
         "operationId": "api_evolution_status_api_evolution_status_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -28528,6 +29840,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Api Evolution Status",
@@ -28551,6 +29873,16 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
             }
           }
         ],
@@ -28879,6 +30211,18 @@
       "post": {
         "description": "Apply a task/path-scoped rollback ledger under a project root.",
         "operationId": "api_files_rollback_apply_api_files_rollback_apply_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -28935,6 +30279,16 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
             }
           }
         ],
@@ -29048,6 +30402,16 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -29083,6 +30447,18 @@
     "/api/files/stream": {
       "get": {
         "operationId": "api_files_stream_api_files_stream_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -29093,6 +30469,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Api Files Stream",
@@ -29690,6 +31076,16 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -30021,6 +31417,18 @@
     "/api/intel-evolution/frameworks/benchmarks": {
       "get": {
         "operationId": "framework_benchmarks_api_intel_evolution_frameworks_benchmarks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -30036,6 +31444,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Framework Benchmarks",
@@ -30047,6 +31465,18 @@
     "/api/intel-evolution/mcp/proposals": {
       "get": {
         "operationId": "mcp_proposals_api_intel_evolution_mcp_proposals_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -30062,6 +31492,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Mcp Proposals",
@@ -30073,6 +31513,18 @@
     "/api/intel-evolution/mcp/proposals/install": {
       "post": {
         "operationId": "install_mcp_proposal_api_intel_evolution_mcp_proposals_install_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -30124,6 +31576,18 @@
     "/api/intel-evolution/mcp/proposals/vet": {
       "post": {
         "operationId": "vet_mcp_proposals_api_intel_evolution_mcp_proposals_vet_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -30175,6 +31639,18 @@
     "/api/intel-evolution/models/benchmarks/run": {
       "post": {
         "operationId": "run_model_benchmarks_api_intel_evolution_models_benchmarks_run_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -30187,6 +31663,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Run Model Benchmarks",
@@ -30198,6 +31684,18 @@
     "/api/intel-evolution/models/proposals": {
       "get": {
         "operationId": "model_proposals_api_intel_evolution_models_proposals_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -30213,6 +31711,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Model Proposals",
@@ -30239,6 +31747,16 @@
                 }
               ],
               "title": "Acknowledged"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
             }
           }
         ],
@@ -30278,6 +31796,18 @@
     "/api/intel-evolution/protocols/drift/scan": {
       "post": {
         "operationId": "scan_protocol_drift_api_intel_evolution_protocols_drift_scan_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -30290,6 +31820,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Scan Protocol Drift",
@@ -30309,6 +31849,16 @@
             "schema": {
               "title": "Drift Id",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
             }
           }
         ],
@@ -30361,6 +31911,16 @@
               ],
               "title": "Status"
             }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -30399,6 +31959,18 @@
     "/api/intel-evolution/protocols/repair/sweep": {
       "post": {
         "operationId": "sweep_protocol_repairs_api_intel_evolution_protocols_repair_sweep_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -30411,6 +31983,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Sweep Protocol Repairs",
@@ -30437,6 +32019,16 @@
                 }
               ],
               "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
             }
           }
         ],
@@ -30476,6 +32068,18 @@
     "/api/intel-evolution/skills/proposals/approve": {
       "post": {
         "operationId": "approve_skill_proposal_api_intel_evolution_skills_proposals_approve_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -30527,6 +32131,18 @@
     "/api/intel-evolution/skills/proposals/reject": {
       "post": {
         "operationId": "reject_skill_proposal_api_intel_evolution_skills_proposals_reject_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -30992,6 +32608,16 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -31242,6 +32868,16 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -31321,6 +32957,16 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -31356,6 +33002,18 @@
     "/api/kg/export": {
       "get": {
         "operationId": "api_kg_export_api_kg_export_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -31368,6 +33026,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Api Kg Export",
@@ -31379,6 +33047,18 @@
     "/api/kg/import": {
       "post": {
         "operationId": "api_kg_import_api_kg_import_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -31391,6 +33071,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Api Kg Import",
@@ -31502,6 +33192,16 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -31567,6 +33267,16 @@
               "title": "Max Hops",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -31623,6 +33333,16 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
             }
           }
         ],
@@ -35186,6 +36906,70 @@
         ]
       }
     },
+    "/api/plugin-hub/contributions": {
+      "get": {
+        "description": "List public metadata for active Octopus plugin contributions.",
+        "operationId": "list_contributions_api_plugin_hub_contributions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Owner"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Contributions",
+        "tags": [
+          "plugin-hub"
+        ]
+      }
+    },
     "/api/plugin-hub/plugins": {
       "get": {
         "description": "Return metadata for all loaded plugins.",
@@ -36417,6 +38201,18 @@
     "/api/preview/stream": {
       "get": {
         "operationId": "api_preview_stream_api_preview_stream_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -36427,6 +38223,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Api Preview Stream",
@@ -36453,6 +38259,16 @@
                 }
               ],
               "title": "Task Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
             }
           }
         ],
@@ -37548,9 +39364,219 @@
         ]
       }
     },
+    "/api/reach/cache": {
+      "delete": {
+        "operationId": "clear_cache_api_reach_cache_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Clear Cache Api Reach Cache Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Clear Cache",
+        "tags": [
+          "reach"
+        ]
+      }
+    },
+    "/api/reach/collect": {
+      "post": {
+        "operationId": "collect_api_reach_collect_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Collect Api Reach Collect Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Collect",
+        "tags": [
+          "reach"
+        ]
+      }
+    },
+    "/api/reach/collections": {
+      "get": {
+        "operationId": "collections_api_reach_collections_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Collections Api Reach Collections Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Collections",
+        "tags": [
+          "reach"
+        ]
+      }
+    },
+    "/api/reach/collections/{name}": {
+      "delete": {
+        "operationId": "delete_collection_api_reach_collections__name__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Collection Api Reach Collections  Name  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Collection",
+        "tags": [
+          "reach"
+        ]
+      },
+      "get": {
+        "operationId": "collection_api_reach_collections__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Collection Api Reach Collections  Name  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Collection",
+        "tags": [
+          "reach"
+        ]
+      }
+    },
+    "/api/reach/status": {
+      "get": {
+        "operationId": "status_api_reach_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Status Api Reach Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "reach"
+        ]
+      }
+    },
     "/api/reflect": {
       "get": {
         "operationId": "api_reflect_api_reflect_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -37563,6 +39589,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Api Reflect",
@@ -37598,6 +39634,18 @@
       "get": {
         "description": "Aggregate snapshot of the 6 reflection producers.\n\nUnlike ``/api/reflect`` (which RE-RUNS every producer on each\ncall · expensive), this reads the pre-computed ``learned_*``\nsections off the planner + journal counters. Intended for\nthe Observability panel's heartbeat polling: cheap, stateless,\nsafe to call once per second.\n\nShape: one key per producer; each carries a ``status`` and\nsmall count fields the UI renders as a tile.",
         "operationId": "api_regeneration_summary_api_regeneration_summary_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -37610,6 +39658,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Api Regeneration Summary",
@@ -38627,6 +40685,18 @@
     "/api/run": {
       "post": {
         "operationId": "api_run_api_run_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -38817,78 +40887,6 @@
         "summary": "Api Llm Judge Put",
         "tags": [
           "config"
-        ]
-      }
-    },
-    "/api/searxng/disable": {
-      "post": {
-        "description": "Stop the managed SearXNG container (kept for fast re-enable).",
-        "operationId": "disable_api_searxng_disable_post",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Disable Api Searxng Disable Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Disable",
-        "tags": [
-          "searxng"
-        ]
-      }
-    },
-    "/api/searxng/enable": {
-      "post": {
-        "description": "One-click deploy a local SearXNG container. Returns immediately; the\nimage pull + boot run in the background — poll /api/searxng/status.",
-        "operationId": "enable_api_searxng_enable_post",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Enable Api Searxng Enable Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Enable",
-        "tags": [
-          "searxng"
-        ]
-      }
-    },
-    "/api/searxng/status": {
-      "get": {
-        "description": "Liveness of the optional one-click local SearXNG (private web-search\nbackend). ``up=false`` just means web search uses the default ddg\nbackend; deploy/stop go through the authenticated /api/searxng router.",
-        "operationId": "api_searxng_status_api_searxng_status_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Api Searxng Status Api Searxng Status Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Api Searxng Status",
-        "tags": [
-          "health"
         ]
       }
     },
@@ -39936,6 +41934,18 @@
     "/api/stream": {
       "get": {
         "operationId": "api_stream_api_stream_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -39946,6 +41956,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Api Stream",
@@ -40823,6 +42843,68 @@
         ]
       }
     },
+    "/api/task-runs/{task_id}/resume-execution": {
+      "post": {
+        "description": "Continue one durable ReAct checkpoint on its original thread.\n\nThis is deliberately an adapter into the existing realtime lifecycle,\nnot a second executor.  A normal, server-resident ``turn/start`` with\nthe strict input ``继续`` consumes the selected PauseController record;\nthread claims, task identity, approvals, interruption, checkpoint\nloading and the TaskSupervisor remain authoritative in their existing\nAgent code paths.",
+        "operationId": "api_task_run_resume_execution_api_task_runs__task_id__resume_execution_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/TaskResumeExecutionRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Task Run Resume Execution Api Task Runs  Task Id  Resume Execution Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Task Run Resume Execution",
+        "tags": [
+          "task-runs"
+        ]
+      }
+    },
     "/api/task-runs/{task_id}/takeover": {
       "post": {
         "operationId": "api_task_run_takeover_api_task_runs__task_id__takeover_post",
@@ -41245,6 +43327,16 @@
               "title": "Task Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
           }
         ],
         "requestBody": {
@@ -41302,6 +43394,16 @@
               "title": "Task Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -41332,6 +43434,46 @@
         "tags": [
           "observability"
         ]
+      }
+    },
+    "/api/teach-repeat/record/events": {
+      "post": {
+        "operationId": "append_recording_events_api_teach_repeat_record_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppendRecordingEventsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Append Recording Events Api Teach Repeat Record Events Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Append Recording Events"
       }
     },
     "/api/teach-repeat/record/start": {
@@ -43603,6 +45745,138 @@
         ]
       }
     },
+    "/api/tentacle/devices/{tentacle_id}/health": {
+      "get": {
+        "operationId": "device_health_api_tentacle_devices__tentacle_id__health_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tentacle_id",
+            "required": true,
+            "schema": {
+              "title": "Tentacle Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Device Health Api Tentacle Devices  Tentacle Id  Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Device Health",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/devices/{tentacle_id}/lease": {
+      "get": {
+        "operationId": "device_lease_api_tentacle_devices__tentacle_id__lease_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tentacle_id",
+            "required": true,
+            "schema": {
+              "title": "Tentacle Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Device Lease Api Tentacle Devices  Tentacle Id  Lease Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Device Lease",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/devices/{tentacle_id}/manifest": {
+      "get": {
+        "operationId": "device_manifest_api_tentacle_devices__tentacle_id__manifest_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tentacle_id",
+            "required": true,
+            "schema": {
+              "title": "Tentacle Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Device Manifest Api Tentacle Devices  Tentacle Id  Manifest Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Device Manifest",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
     "/api/tentacle/devices/{tentacle_id}/screenshot": {
       "get": {
         "description": "获取设备最新截图（JPEG）.\n\n返回设备最近推送的 JPEG 帧，若无截图返回 404.",
@@ -43639,6 +45913,95 @@
           }
         },
         "summary": "Device Screenshot",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/devices/{tentacle_id}/telemetry": {
+      "get": {
+        "operationId": "device_telemetry_api_tentacle_devices__tentacle_id__telemetry_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tentacle_id",
+            "required": true,
+            "schema": {
+              "title": "Tentacle Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "metric",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Metric"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Device Telemetry Api Tentacle Devices  Tentacle Id  Telemetry Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Device Telemetry",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/events": {
+      "get": {
+        "operationId": "tentacle_events_api_tentacle_events_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Tentacle Events",
         "tags": [
           "tentacle"
         ]
@@ -43693,7 +46056,7 @@
     },
     "/api/tentacle/mcp/sse": {
       "get": {
-        "description": "MCP SSE 连接端点.\n\n客户端连接此端点获取 SSE 事件流，服务端首先发送 endpoint 事件\n告知客户端消息发送 URL，然后持续推送 JSON-RPC 响应。\n\n账号登录鉴权：网关开启 ``require_auth`` 时，Claude Desktop /\nCursor 等 MCP 客户端必须携带账号登录后的 Bearer Token\n（``Authorization`` 请求头；浏览器也可使用安全会话 Cookie）。\n查询参数中的凭证会被拒绝，避免令牌进入访问日志。会话会\n绑定到该账号，后续 ``/mcp/message`` 也要求同一账号凭证。",
+        "description": "MCP SSE 连接端点.\n\n客户端连接此端点获取 SSE 事件流，服务端首先发送 endpoint 事件\n告知客户端消息发送 URL，然后持续推送 JSON-RPC 响应。\n\n账号登录鉴权：网关开启 ``require_auth`` 时，Claude Desktop /\nCursor 等 MCP 客户端必须携带账号登录后的 Bearer Token\n（``Authorization`` 请求头或 ``?token=`` 查询参数）。会话会\n绑定到该账号，后续 ``/mcp/message`` 也要求同一账号凭证。",
         "operationId": "mcp_sse_api_tentacle_mcp_sse_get",
         "responses": {
           "200": {
@@ -43806,6 +46169,457 @@
           }
         },
         "summary": "Pc Screen Stop",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/procedures": {
+      "get": {
+        "operationId": "list_procedures_api_tentacle_procedures_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Procedures Api Tentacle Procedures Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Procedures",
+        "tags": [
+          "tentacle"
+        ]
+      },
+      "post": {
+        "operationId": "create_procedure_api_tentacle_procedures_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Procedure Api Tentacle Procedures Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Procedure",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/procedures/{procedure_id}/cancel": {
+      "post": {
+        "operationId": "cancel_procedure_api_tentacle_procedures__procedure_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "procedure_id",
+            "required": true,
+            "schema": {
+              "title": "Procedure Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cancel Procedure Api Tentacle Procedures  Procedure Id  Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Procedure",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/procedures/{procedure_id}/dry-run": {
+      "post": {
+        "operationId": "dry_run_procedure_api_tentacle_procedures__procedure_id__dry_run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "procedure_id",
+            "required": true,
+            "schema": {
+              "title": "Procedure Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Dry Run Procedure Api Tentacle Procedures  Procedure Id  Dry Run Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dry Run Procedure",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/procedures/{procedure_id}/emergency-stop": {
+      "post": {
+        "operationId": "emergency_stop_procedure_api_tentacle_procedures__procedure_id__emergency_stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "procedure_id",
+            "required": true,
+            "schema": {
+              "title": "Procedure Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Emergency Stop Procedure Api Tentacle Procedures  Procedure Id  Emergency Stop Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Emergency Stop Procedure",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/procedures/{procedure_id}/pause": {
+      "post": {
+        "operationId": "pause_procedure_api_tentacle_procedures__procedure_id__pause_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "procedure_id",
+            "required": true,
+            "schema": {
+              "title": "Procedure Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Pause Procedure Api Tentacle Procedures  Procedure Id  Pause Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pause Procedure",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/procedures/{procedure_id}/resume": {
+      "post": {
+        "operationId": "resume_procedure_api_tentacle_procedures__procedure_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "procedure_id",
+            "required": true,
+            "schema": {
+              "title": "Procedure Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Resume Procedure Api Tentacle Procedures  Procedure Id  Resume Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Procedure",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/procedures/{procedure_id}/run": {
+      "post": {
+        "operationId": "run_procedure_api_tentacle_procedures__procedure_id__run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "procedure_id",
+            "required": true,
+            "schema": {
+              "title": "Procedure Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Procedure Api Tentacle Procedures  Procedure Id  Run Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Procedure",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/receipts": {
+      "get": {
+        "operationId": "list_execution_receipts_api_tentacle_receipts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "device_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Device Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Execution Receipts Api Tentacle Receipts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Execution Receipts",
         "tags": [
           "tentacle"
         ]
@@ -44122,6 +46936,26 @@
               "title": "Download",
               "type": "boolean"
             }
+          },
+          {
+            "in": "query",
+            "name": "office_preview",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Office Preview",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "office_fidelity_preview",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Office Fidelity Preview",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -44149,6 +46983,77 @@
         "summary": "Api Thread Artifact",
         "tags": [
           "uploads"
+        ]
+      }
+    },
+    "/api/threads/{thread_id}/output-revisions/{artifact_path}": {
+      "post": {
+        "operationId": "api_restore_thread_workspace_output_file_api_threads__thread_id__output_revisions__artifact_path__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "artifact_path",
+            "required": true,
+            "schema": {
+              "title": "Artifact Path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "area",
+            "required": false,
+            "schema": {
+              "default": "output",
+              "title": "Area",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceOutputRestoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceOutputWriteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Restore Thread Workspace Output File",
+        "tags": [
+          "workspaces"
         ]
       }
     },
@@ -44257,6 +47162,26 @@
               "title": "Download",
               "type": "boolean"
             }
+          },
+          {
+            "in": "query",
+            "name": "office_preview",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Office Preview",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "office_fidelity_preview",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Office Fidelity Preview",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -44282,6 +47207,75 @@
           }
         },
         "summary": "Api Thread Workspace Output File",
+        "tags": [
+          "workspaces"
+        ]
+      },
+      "put": {
+        "operationId": "api_write_thread_workspace_output_file_api_threads__thread_id__outputs__artifact_path__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "artifact_path",
+            "required": true,
+            "schema": {
+              "title": "Artifact Path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "area",
+            "required": false,
+            "schema": {
+              "default": "output",
+              "title": "Area",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceOutputWriteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceOutputWriteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Write Thread Workspace Output File",
         "tags": [
           "workspaces"
         ]
@@ -44506,6 +47500,16 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -44550,6 +47554,16 @@
             "schema": {
               "title": "Effect Key",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cross_tenant",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Cross Tenant",
+              "type": "boolean"
             }
           }
         ],
@@ -45636,6 +48650,26 @@
               "title": "Download",
               "type": "boolean"
             }
+          },
+          {
+            "in": "query",
+            "name": "office_preview",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Office Preview",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "office_fidelity_preview",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Office Fidelity Preview",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -45661,6 +48695,75 @@
           }
         },
         "summary": "Api Workspace Output File",
+        "tags": [
+          "workspaces"
+        ]
+      },
+      "put": {
+        "operationId": "api_write_workspace_output_file_api_workspaces__thread_id__outputs__artifact_path__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "artifact_path",
+            "required": true,
+            "schema": {
+              "title": "Artifact Path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "area",
+            "required": false,
+            "schema": {
+              "default": "output",
+              "title": "Area",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceOutputWriteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceOutputWriteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Write Workspace Output File",
         "tags": [
           "workspaces"
         ]

@@ -47,10 +47,10 @@ Operator signal:
 - Recent verifier batches should show whether the command budget was exhausted,
   capped, or stopped by a failure.
 
-For third-party coding CLIs, use the [Local CLI partners](local-cli-partners.md)
-guide as the operator handoff. It documents readiness states, model setup
-gaps, native launch commands, slash-command boundaries, and merge-check
-commands for Claude, Codex, Trae, Qoder, Kimi, and CodeBuddy.
+Automatic third-party CLI discovery has been removed. See the
+[Local CLI migration boundary](local-cli-partners.md) before handling an old
+project that still names one of those backends. For current operation, use the
+built-in Kane/Codex engine or install the OpenCode Zen API adapter explicitly.
 
 ## Permissions
 

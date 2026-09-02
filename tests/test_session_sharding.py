@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 from runtime.memory.threads import SessionIndex, ThreadStateStore
@@ -96,7 +98,7 @@ def test_session_meta_ignored_on_reload(tmp_path: Path) -> None:
 
 def test_existing_thread_cannot_move_to_another_agent_shard(tmp_path: Path) -> None:
     store = ThreadStateStore(per_agent_base=tmp_path)
-    store.ensure_thread("owned-thread", metadata={"agent": "local_opencode_cli"})
+    store.ensure_thread("owned-thread", metadata={"agent": "installed_researcher"})
 
     store.update_state(
         "owned-thread",
@@ -106,8 +108,10 @@ def test_existing_thread_cannot_move_to_another_agent_shard(tmp_path: Path) -> N
 
     thread = store.get("owned-thread")
     assert thread is not None
-    assert thread["metadata"]["agent"] == "local_opencode_cli"
-    assert (tmp_path / "agents" / "local_opencode_cli" / "sessions" / "owned-thread.jsonl").exists()
+    assert thread["metadata"]["agent"] == "installed_researcher"
+    assert (
+        tmp_path / "agents" / "installed_researcher" / "sessions" / "owned-thread.jsonl"
+    ).exists()
     assert not (tmp_path / "agents" / "general" / "sessions" / "owned-thread.jsonl").exists()
 
 
@@ -122,7 +126,7 @@ def test_reload_repairs_conflicting_role_copies_to_original_owner(tmp_path: Path
     owner_path = _write_thread_copy(
         tmp_path,
         thread_id="mixed-thread",
-        agent="local_opencode_cli",
+        agent="installed_researcher",
         created_at="2026-08-13T15:05:58.000000Z",
         updated_at="2026-08-13T15:05:59.000000Z",
         messages=first_messages,
@@ -140,10 +144,74 @@ def test_reload_repairs_conflicting_role_copies_to_original_owner(tmp_path: Path
 
     repaired = store.get("mixed-thread")
     assert repaired is not None
-    assert repaired["metadata"]["agent"] == "local_opencode_cli"
+    assert repaired["metadata"]["agent"] == "installed_researcher"
     assert repaired["values"]["messages"] == latest_messages
     assert owner_path.exists()
     assert not stale_path.exists()
+
+
+def test_startup_role_repair_waits_for_live_update_and_refreshes_latest(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A constructor must not overwrite a newer cross-process mutation."""
+    from runtime.memory.threads import store as store_module
+
+    live = ThreadStateStore(per_agent_base=tmp_path)
+    live.ensure_thread("shared", metadata={"agent": "alpha"})
+    stale_path = _write_thread_copy(
+        tmp_path,
+        thread_id="shared",
+        agent="beta",
+        created_at="2026-08-13T15:05:59.000000Z",
+        updated_at="2026-08-13T15:06:00.000000Z",
+        messages=[],
+    )
+
+    original_lock = store_module.thread_mutation_lock
+    repair_waiting = threading.Event()
+    allow_repair = threading.Event()
+
+    @contextmanager
+    def _gated_lock(**kwargs):
+        if threading.current_thread().name == "repair-loader":
+            repair_waiting.set()
+            assert allow_repair.wait(timeout=3)
+        with original_lock(**kwargs):
+            yield
+
+    monkeypatch.setattr(store_module, "thread_mutation_lock", _gated_lock)
+    loaded: dict[str, ThreadStateStore] = {}
+    errors: list[BaseException] = []
+
+    def _load() -> None:
+        try:
+            loaded["store"] = ThreadStateStore(per_agent_base=tmp_path)
+        except BaseException as exc:  # pragma: no cover - surfaced below
+            errors.append(exc)
+
+    worker = threading.Thread(target=_load, name="repair-loader")
+    worker.start()
+    assert repair_waiting.wait(timeout=3)
+    try:
+        live.update_state(
+            "shared",
+            values={
+                "title": "LIVE",
+                "messages": [{"type": "human", "content": "must survive"}],
+            },
+        )
+    finally:
+        allow_repair.set()
+    worker.join(timeout=3)
+
+    assert not worker.is_alive()
+    assert not errors
+    assert not stale_path.exists()
+    for store in (loaded["store"], ThreadStateStore(per_agent_base=tmp_path)):
+        thread = store.get("shared")
+        assert thread is not None
+        assert thread["values"]["title"] == "LIVE"
+        assert thread["values"]["messages"] == [{"type": "human", "content": "must survive"}]
 
 
 def test_custom_session_origin_is_respected(tmp_path: Path) -> None:

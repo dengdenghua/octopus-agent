@@ -11,6 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from runtime.adapters.instrumentation import trace_stage
 from runtime.memory.journal import Journal, TrajectoryEvent
 from runtime.platform.models import ArmId, Trajectory, now_utc
+from runtime.safety.auth.scope import TenantScope
+from runtime.safety.recovery.tenant_scope import read_learning_events
 
 Tier = Literal["cold", "warm", "hot"]
 
@@ -68,9 +70,12 @@ class MemoryConsolidator:
         self,
         journal: Journal,
         config: ConsolidatorConfig | None = None,
+        *,
+        scope: TenantScope | None = None,
     ) -> None:
         self.journal = journal
         self.config = config or ConsolidatorConfig()
+        self.scope = scope
 
     def consolidate(self) -> ConsolidationReport:
         tagged = self._collect_trajectories()
@@ -131,7 +136,11 @@ class MemoryConsolidator:
             )
 
     def _collect_trajectories(self) -> list[tuple[Trajectory, str | None]]:
-        events = self.journal.read_by_type("trajectory")
+        events = read_learning_events(
+            self.journal,
+            "trajectory",
+            scope=self.scope,
+        )
         # Carry event timestamp into the bucket so we can pick the
         # NEWEST swarm aggregate when a task was resumed/retried and
         # wrote multiple aggregates under the same ``task_id``. The
@@ -211,7 +220,11 @@ class MemoryConsolidator:
         scope: MemoryScope = "global",
         scope_key: str = "",
     ) -> ConsolidatedMemory:
-        success = sum(1 for t in cluster if t.outcome.success)
+        # A degraded completion is useful negative/partial evidence, but it is
+        # not a clean positive sample.  Counting it as success lets cancelled
+        # or bridge-error native turns inflate memories that later bias the
+        # planner, despite SkillForge/WorkflowRewriter rejecting the same run.
+        success = sum(1 for t in cluster if t.outcome.success and not t.outcome.degraded)
         total_cost = sum(t.outcome.cost.usd for t in cluster)
         total_tokens = sum(t.outcome.cost.tokens for t in cluster)
         avg_steps = sum(t.step_count for t in cluster) / len(cluster)

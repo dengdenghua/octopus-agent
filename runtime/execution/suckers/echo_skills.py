@@ -19,7 +19,7 @@ from typing import Any
 from .registry import Skill, SkillRegistry
 from .testing import SkillExpect, SkillTestCase
 
-_DEFAULT_URL = "http://127.0.0.1:8768"
+_DEFAULT_URL = "https://universe.echo-age.com"
 _TIMEOUT_S = 10.0
 _MAX_LIMIT = 100
 

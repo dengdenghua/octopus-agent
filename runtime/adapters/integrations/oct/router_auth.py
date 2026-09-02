@@ -7,7 +7,7 @@ import time
 from typing import Any
 
 try:
-    from fastapi import APIRouter, HTTPException, Request
+    from fastapi import APIRouter, HTTPException, Request, Response
     from pydantic import BaseModel, Field
 
     FASTAPI_AVAILABLE = True
@@ -15,6 +15,7 @@ except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
+    Response = None  # type: ignore[assignment, misc]
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
@@ -106,7 +107,11 @@ def create_auth_router(
         )
 
     @router.post("/email/login", response_model=EmailLoginResponse)
-    def email_login(body: EmailLoginRequest, request: Request) -> EmailLoginResponse:
+    def email_login(
+        body: EmailLoginRequest,
+        request: Request,
+        response: Response,
+    ) -> EmailLoginResponse:
         _require_enabled()
         email_addr = _check_email(body.email)
         t0 = time.perf_counter()
@@ -202,6 +207,16 @@ def create_auth_router(
             logger.error("oct.enabled 但缺 jwt_secret · 不签发会话 token(请配置 oct.jwt_secret)")
             access_token = None
             expires_in = None
+
+        if access_token and expires_in:
+            from runtime.safety.auth.principal import set_session_cookie
+
+            set_session_cookie(
+                response,
+                request,
+                access_token,
+                max_age=expires_in,
+            )
 
         logger.info(
             "oct email_login ok · total_ms=%d created=%s new=%s email=%s",

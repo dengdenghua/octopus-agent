@@ -61,17 +61,17 @@ function openModelsModal() {
             </div>
             <details style="margin-top:8px">
               <summary style="cursor:pointer;color:var(--cephalo-light);font-size:12px">
-                外部端点（绕过 Molili · 用自己的 API key）
+                外部端点（用自己的 API key）
               </summary>
               <div style="margin-top:8px">
                 <label>Base URL（OpenAI-compat · 含 /v1）</label>
-                <input id="add-base" placeholder="https://api.openai.com/v1 · 留空走 Molili">
+                <input id="add-base" placeholder="https://api.openai.com/v1 · 留空走账户网关">
                 <div class="form-hint">例：OpenAI · https://api.openai.com/v1 · DeepSeek · https://api.deepseek.com/v1</div>
                 <label>API Key</label>
                 <input id="add-key" type="password" placeholder="sk-...">
                 <div class="form-hint">
                   ⚠️ 存 localStorage · 仅本浏览器 · 不上传服务器<br>
-                  用这个直连后不扣 Molili 积分 · 按你自己的 provider 计费
+                  使用直连时按你自己的 provider 计费
                 </div>
               </div>
             </details>
@@ -134,7 +134,7 @@ function openModelsModal() {
       const arr = loadCustomModels();
       // Section logic.
       const exist = arr.findIndex(m => m.id === id);
-      const entry = { id, label: label || id, provider: baseUrl ? 'external' : 'molili' };
+      const entry = { id, label: label || id, provider: baseUrl ? 'external' : 'official' };
       if (baseUrl) entry.base_url = baseUrl;
       if (apiKey) entry.api_key = apiKey;
       if (exist >= 0) arr[exist] = entry; else arr.push(entry);
@@ -203,10 +203,10 @@ function renderNoBackend(display) {
           <p style="color:var(--mute);font-size:14px;line-height:1.6;margin:0 0 24px 0">
             你用的是 <b style="color:var(--slate)">本地账号</b> · 没绑任何大模型账号 · 无法聊天。
             <br><br>
-            换"📱 手机号"登录即可 · 会自动绑到 Molili 官方大模型（Kimi / GLM / DeepSeek ...）
+            换"✉️ 邮箱"登录即可 · 会自动接入账户网关支持的模型。
           </p>
           <button class="primary" style="padding:12px 28px;font-size:14px;border:none;border-radius:8px;background:var(--cephalo);color:white;cursor:pointer;font-weight:600" id="switch-btn">
-            🔄 切换到手机号登录
+            🔄 切换到邮箱登录
           </button>
           <p style="color:var(--mute);font-size:11px;margin-top:16px">
             本地账号仍可访问 <code class="hint-kbd">/api/agents</code> · <code class="hint-kbd">/api/skills</code> 等元数据端点

@@ -17,6 +17,7 @@ from typing import Any
 
 from runtime.core.cerebrum._react_execution_dispatch import _execute_action_via_beak
 from runtime.core.cerebrum._react_execution_phase6d import (
+    _approval_could_not_reach_user,
     _can_escalate_sandbox,
     _looks_like_sandbox_violation,
 )
@@ -24,6 +25,7 @@ from runtime.execution.suckers import Skill, SkillRegistry
 from runtime.execution.tool_engine import ToolExecutor
 from runtime.platform.models.pipeline import ParsedIntent
 from runtime.platform.process.session import Session, session_scope
+from runtime.safety.approval.approval_gate import ApprovalDecision
 from runtime.safety.auth import TrustEngine
 
 
@@ -44,6 +46,22 @@ class TestSandboxViolationDetection:
         assert _can_escalate_sandbox("write_file") is False
         assert _can_escalate_sandbox("str_replace") is False
         assert _can_escalate_sandbox("delete_file") is False
+
+    def test_distinguishes_unavailable_approval_from_human_decline(self) -> None:
+        assert _approval_could_not_reach_user(ApprovalDecision(approved=False, reason="timeout"))
+        assert _approval_could_not_reach_user(
+            ApprovalDecision(approved=False, reason="connection_lost")
+        )
+        assert _approval_could_not_reach_user(
+            ApprovalDecision(
+                approved=False,
+                reason="no interactive approval UI is wired in this runtime",
+            )
+        )
+        assert not _approval_could_not_reach_user(
+            ApprovalDecision(approved=False, reason="decline")
+        )
+        assert not _approval_could_not_reach_user(ApprovalDecision(approved=True, reason="accept"))
 
 
 def _make_stack() -> SimpleNamespace:

@@ -25,6 +25,7 @@ from runtime.adapters.integrations.oct import (  # noqa: E402
 from runtime.adapters.integrations.oct.client import (  # noqa: E402
     OctClientError,
     get_auth,
+    get_public,
     is_dead_token,
     is_insufficient_credits,
     mask_email,
@@ -35,6 +36,8 @@ from runtime.adapters.integrations.oct.router_auth import (  # noqa: E402
     actor_from_email,
     create_auth_router,
 )
+from runtime.platform.ui._app_auth_routers import _restore_oct_identities  # noqa: E402
+from runtime.safety.auth import IdentityStore  # noqa: E402
 from runtime.sensing.model_router.actor_context import current_actor  # noqa: E402
 from runtime.sensing.model_router.models import (  # noqa: E402
     CostEntry,
@@ -98,7 +101,7 @@ class _FakeHttp:
 def test_config_defaults() -> None:
     c = OctConfig()
     assert c.enabled is False
-    assert c.base_url == "https://api.octoapk.com"
+    assert c.base_url == "https://api.echo-age.com"
     assert c.default_model == "qwen3.5-flash"
 
 
@@ -137,6 +140,23 @@ def test_get_auth_sends_bearer_and_raises_on_4xx() -> None:
     assert fake.calls[0][2]["Authorization"] == "Bearer jwt"
 
 
+def test_get_public_never_sends_an_empty_bearer_header() -> None:
+    fake = _FakeHttp({"models": _Resp({"data": []})})
+
+    assert get_public("https://x/v1/models", timeout=5, http_client=fake) == {"data": []}
+    assert fake.calls[0][2] is None
+
+
+def test_get_auth_rejects_empty_token_before_network() -> None:
+    fake = _FakeHttp({})
+
+    with pytest.raises(OctClientError) as exc:
+        get_auth("https://x/account/balance", token="  ", timeout=5, http_client=fake)
+
+    assert exc.value.status_code == 401
+    assert fake.calls == []
+
+
 # ─── links store ────────────────────────────────────────
 
 
@@ -153,6 +173,28 @@ def test_link_store_roundtrip(tmp_path: Any) -> None:
     assert store.get("oct:a@b.com").token_invalid is True
     assert store.delete("oct:a@b.com") is True
     assert store.get("oct:a@b.com") is None
+
+
+def test_link_store_restores_oct_identity_after_restart(tmp_path: Any) -> None:
+    links = OctLinkStore(path=tmp_path / "l.json")
+    links.put(
+        OctLink(
+            octopus_user_id="oct:a@b.com",
+            oct_user_id="u1",
+            oct_token="jwt",
+            email="a@b.com",
+        )
+    )
+    identities = IdentityStore()
+
+    restored = _restore_oct_identities(identities, links)
+
+    identity = identities.get("oct:a@b.com")
+    assert restored == 1
+    assert identity is not None
+    assert identity.roles == ("user", "oct")
+    assert identity.metadata["email"] == "a@b.com"
+    assert _restore_oct_identities(identities, links) == 0
 
 
 def test_actor_from_email_lowercases() -> None:
@@ -190,6 +232,11 @@ def test_email_login_stores_link_and_issues_jwt(tmp_path: Any) -> None:
     assert body["success"] is True
     assert body["actor_id"] == "oct:a@b.com"
     assert body["access_token"]  # agent 自有 JWT 已签
+    cookie = r.headers["set-cookie"]
+    assert "octopus_session=" in cookie
+    assert "HttpOnly" in cookie
+    assert "SameSite=lax" in cookie
+    assert "Max-Age=" in cookie
     # 网关 JWT 存进 link
     assert store.get("oct:a@b.com").oct_token == "gw-jwt"
 

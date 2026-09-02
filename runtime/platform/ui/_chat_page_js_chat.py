@@ -7,7 +7,7 @@ _CHAT_JS = r"""
 
 // Section logic.
 const BUILTIN_MODELS = [
-  { id: 'molili',        label: '🎯 自动路由',   provider: 'official' },
+  { id: 'octopus-agent', label: '🎯 自动路由',   provider: 'official' },
   { id: 'kimi-k2.5',     label: 'Kimi K2.5',     provider: 'official' },
   { id: 'glm-4.7',       label: 'GLM-4.7',       provider: 'official' },
   { id: 'deepseek-v3.2', label: 'DeepSeek-V3.2', provider: 'official' },
@@ -58,7 +58,7 @@ function effectiveModelId() {
 }
 
 // Section logic.
-let currentModel = LS.get('octopus.model') || 'molili';
+let currentModel = LS.get('octopus.model') || 'octopus-agent';
 // Section logic.
 // desktop_operator was briefly treated as a legacy/deprecated agent id;
 // since #22 (CUA productization) it is a first-class persona again, so
@@ -113,11 +113,11 @@ let chatMode = LS.get('octopus.chatMode') || 'agent';
 async function renderChat() {
   const provider = LS.get('octopus.provider');
   const display = LS.get('octopus.display') || LS.get('octopus.actor_id');
-  const isMolili = provider === 'molili';
+  const isOct = provider === 'oct';
 
   function getChatEndpoint() {
-    if (chatMode === 'direct' && isMolili) {
-      return '/api/molili/openai/v1/chat/completions';
+    if (chatMode === 'direct' && isOct) {
+      return '/api/oct/openai/v1/chat/completions';
     }
     return '/v1/chat/completions';
   }
@@ -125,13 +125,13 @@ async function renderChat() {
   document.body.classList.add('chatting');
 
   // Section logic.
-  if (!isMolili) {
+  if (!isOct) {
     renderNoBackend(display);
     return;
   }
   // Section logic.
   try {
-    const linkResp = await fetch('/api/account/molili', { headers: authHeaders() });
+    const linkResp = await fetch('/api/account/oct', { headers: authHeaders() });
     if (linkResp.status === 404) {
       renderNoBackend(display);
       return;
@@ -155,20 +155,20 @@ async function renderChat() {
           <div style="min-width:0">
             <h2>Octopus Chat</h2>
             <div class="info">
-              <span class="badge ${isMolili?'accent':'plain'}">${isMolili?'📱 手机号':'💻 本地'}</span>
+              <span class="badge ${isOct?'accent':'plain'}">${isOct?'✉️ 邮箱':'💻 本地'}</span>
               <span style="color:var(--slate)">${escapeHtml(display || '')}</span>
               <span id="credits-badge"></span>
             </div>
           </div>
         </div>
         <div class="header-actions">
-          ${isMolili ? `<button class="icon-btn" id="new-conv-btn" title="新建对话（清当前 agent 的聊天记录）">🗘</button>` : ''}
-          ${isMolili ? `<button class="icon-btn" id="refresh-btn" title="刷新余额">🔄</button>` : ''}
+          ${isOct ? `<button class="icon-btn" id="new-conv-btn" title="新建对话（清当前 agent 的聊天记录）">🗘</button>` : ''}
+          ${isOct ? `<button class="icon-btn" id="refresh-btn" title="刷新余额">🔄</button>` : ''}
           <button class="icon-btn" id="logout-btn" title="退出登录">⏻</button>
         </div>
       </div>
 
-      ${isMolili ? `
+      ${isOct ? `
       <div class="chat-toolbar">
         <div class="mode-pill" id="mode-pill">
           <button data-mode="agent" class="${chatMode==='agent'?'active':''}" title="经 planner + skills · 可调工具">🤖 Agent</button>
@@ -198,17 +198,17 @@ async function renderChat() {
           <textarea
             id="input"
             rows="1"
-            ${isMolili ? '' : 'disabled'}
-            placeholder="${escapeHtml(isMolili ? '给 ' + (modelById(currentModel)?.label || currentModel) + ' 发消息…' : '本地模式不接 LLM · 请切手机号登录')}"
+            ${isOct ? '' : 'disabled'}
+            placeholder="${escapeHtml(isOct ? '给 ' + (modelById(currentModel)?.label || currentModel) + ' 发消息…' : '本地模式不接 LLM · 请切邮箱登录')}"
           ></textarea>
-          <button class="send-btn" id="send-btn" ${isMolili ? '' : 'disabled'} title="发送 (Enter)">
+          <button class="send-btn" id="send-btn" ${isOct ? '' : 'disabled'} title="发送 (Enter)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l7-7 7 7"/><path d="M12 19V5"/></svg>
           </button>
         </div>
         <div class="composer-hint">
-          ${isMolili
-            ? '<span class="hint-kbd">Enter</span> 发送 · <span class="hint-kbd">Shift+Enter</span> 换行 · 每次对话扣 Molili 积分'
-            : '本地账号无 LLM 对话能力 · 点右上角 ⏻ 退出后选"手机号登录"'}
+          ${isOct
+            ? '<span class="hint-kbd">Enter</span> 发送 · <span class="hint-kbd">Shift+Enter</span> 换行 · 用量计入 Oct 账户'
+            : '本地账号无 LLM 对话能力 · 点右上角 ⏻ 退出后选"邮箱登录"'}
         </div>
       </div>
     </div>
@@ -340,7 +340,7 @@ async function renderChat() {
     if (!ta) return;
     const m = modelById(currentModel);
     if (!m) { ta.placeholder = '先选一个模型'; return; }
-    if (m.id === 'molili') ta.placeholder = '🎯 自动路由 · 系统挑最合适的模型';
+    if (m.id === 'octopus-agent') ta.placeholder = '🎯 自动路由 · 系统挑最合适的模型';
     else if (m.base_url) ta.placeholder = `🌐 直连 ${m.label} @ ${new URL(m.base_url).host}`;
     else ta.placeholder = '给 ' + m.label + ' 发消息…';
   }
@@ -364,7 +364,7 @@ async function renderChat() {
   }
 
   // Section logic.
-  if (isMolili) loadAgents();
+  if (isOct) loadAgents();
 
   async function loadAgents() {
     const sel = document.getElementById('agent-sel');
@@ -422,12 +422,12 @@ async function renderChat() {
   };
   sendBtn.onclick = send;
 
-  if (isMolili) loadCredits();
+  if (isOct) loadCredits();
 
   async function loadCredits() {
     try {
-      const r = await api('POST', '/api/account/molili/refresh');
-      credits = r?.credits?.surplusCredits;
+      const r = await api('POST', '/api/account/oct/refresh');
+      credits = r?.credits?.credits ?? r?.credits?.surplusCredits;
       if (typeof credits === 'number') {
         const text = `💎 ${credits.toLocaleString()}`;
         const el = document.getElementById('credits-inline');
@@ -492,7 +492,7 @@ async function renderChat() {
         r = await sendToExternalEndpoint(sel, apiMessages);
       } else {
         const payload = { model: sel.id, messages: apiMessages, stream: false };
-        if (chatMode === 'agent' && isMolili) payload.agent = currentAgent;
+        if (chatMode === 'agent' && isOct) payload.agent = currentAgent;
         r = await api('POST', getChatEndpoint(), payload);
       }
       const reply = r?.choices?.[0]?.message;
@@ -510,7 +510,7 @@ async function renderChat() {
       }
       thinking.remove();
       paintMessages();
-      if (isMolili) loadCredits();
+      if (isOct) loadCredits();
     } catch (e) {
       msgs.push({
         role: 'assistant',
@@ -546,7 +546,7 @@ async function renderChat() {
     const m = modelById(currentModel);
     let routeTxt;
     if (!m) routeTxt = '⚠️ 未选模型';
-    else if (m.id === 'molili') routeTxt = '🎯 自动路由 · 系统挑最合适的模型';
+    else if (m.id === 'octopus-agent') routeTxt = '🎯 自动路由 · 系统挑最合适的模型';
     else if (m.base_url) routeTxt = `🌐 外部直连 · ${m.label} @ ${new URL(m.base_url).host}`;
     else routeTxt = '📌 固定 · ' + m.label;
     inner.innerHTML = `

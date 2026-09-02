@@ -1,6 +1,6 @@
 .PHONY: install install-all quickstart quickstart-serve test test-fast test-unit test-integration test-sharded production-readiness production-readiness-static verify-local verify-full-stack lint lint-invariants lint-mypy lint-ruff format fix clean tree \
         security \
-        dev bootstrap-skills \
+        dev dev-stack-start dev-stack-stop dev-stack-restart dev-stack-status dev-stack-logs bootstrap-skills \
         up up-full down logs restart ps rebuild \
         k8s-apply k8s-delete k8s-status \
         frontend-install frontend-dev frontend-build frontend-clean frontend-typecheck \
@@ -69,13 +69,16 @@ verify-full-stack:  ## Run the FastAPI + Vite localhost/127 smoke only
 	bash scripts/verify_local.sh --full-stack-only
 
 # ─── Lint ────────────────────────────────────────────
-lint: lint-invariants lint-fixtures lint-mypy lint-ruff  ## Run all linters
+lint: lint-invariants lint-fixtures lint-untracked-sources lint-mypy lint-ruff  ## Run all linters
 
 lint-invariants:  ## Run Octopus invariant checks (active: LINT-02/03/04/05/09)
 	$(PYTHON) -m tools.lint.invariant_check runtime/ tests/
 
 lint-fixtures:  ## No test fixture input may be hidden from git by .gitignore
 	$(PYTHON) -m tools.lint.fixture_visibility_check
+
+lint-untracked-sources:  ## No source file may sit untracked in a source root (audit 2026-08-28 P0-1)
+	$(PYTHON) -m tools.lint.untracked_source_check
 
 lint-mypy:  ## Run the mypy ratchet (no NEW type errors on hot packages)
 	$(PYTHON) tools/lint/mypy_ratchet.py
@@ -118,6 +121,21 @@ dev:  ## Run local development server with config.local.yaml and .env
 	@test -f config.local.yaml || { echo "ERROR: config.local.yaml 不存在 · 先建一份真 LLM 配置（可参考 config.example.yaml 然后改 model + mock_response=null）"; exit 1; }
 	@test -f .env || { echo "ERROR: .env 不存在 · 填 ANTHROPIC_API_KEY + ANTHROPIC_BASE_URL 等"; exit 1; }
 	$(PYTHON) -m runtime serve --config config.local.yaml --port 8000
+
+dev-stack-start:  ## Start persistent macOS frontend:3888 + backend:8888 services
+	$(PYTHON) tools/dev_stack.py start
+
+dev-stack-stop:  ## Stop persistent local development services
+	$(PYTHON) tools/dev_stack.py stop
+
+dev-stack-restart:  ## Restart persistent local development services
+	$(PYTHON) tools/dev_stack.py restart
+
+dev-stack-status:  ## Show persistent local development service health
+	$(PYTHON) tools/dev_stack.py status
+
+dev-stack-logs:  ## Show recent persistent local development service logs
+	$(PYTHON) tools/dev_stack.py logs
 
 up:  ## Start the minimal single-container compose stack
 	@if [ ! -f config.yaml ]; then cp config.example.yaml config.yaml; test -f .env || cp .env.example .env; echo "ERROR: created config.yaml/.env; enable oct or local_auth with a strong secret, then rerun make up"; exit 1; fi

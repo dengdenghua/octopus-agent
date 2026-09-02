@@ -20,9 +20,7 @@ def test_browser_desktop_quality_reports_all_local_checks() -> None:
     assert report["ready"] is True
     assert report["passed"] == report["total"]
     chrome_activation = next(
-        row
-        for row in report["checks"]
-        if row["id"] == "thread_native_external_chrome_activation"
+        row for row in report["checks"] if row["id"] == "thread_native_external_chrome_activation"
     )
     assert "echoai browser relay" in chrome_activation["required_terms"]
     assert "octopus chrome sidecar" not in chrome_activation["required_terms"]

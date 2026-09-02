@@ -126,6 +126,7 @@ tier: "core"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | class | `class PathVerdict` |  |
+| func | `def normalize_scoped_relative_path(path, scope_root)` | Strip an accidentally repeated multi-part scope prefix. |
 | func | `def check_path(path, sandbox_dir, allow_sensitive, must_exist)` |  |
 | func | `def is_safe_path(path, sandbox_dir, allow_sensitive)` |  |
 
@@ -186,13 +187,12 @@ tier: "core"
 | --- | --- | --- |
 | func | `def offered_websocket_subprotocols(connection)` | Return the handshake protocols in client order. |
 | func | `def websocket_bearer_token(connection)` | Decode a bearer token offered through WebSocket subprotocols. |
-| func | `def websocket_auth_token(connection)` | Return a bearer credential from production-safe WS transports. |
 | func | `def accepted_auth_subprotocol(connection)` | Select only the non-secret auth marker from the client's offer. |
 
 
 ## Who imports this
 
-**145** file(s) reference this package:
+**169** file(s) reference this package:
 
 - **`runtime/adapters/`** · 5 file(s)
   - `runtime/adapters/integrations/local_auth/router.py`
@@ -210,27 +210,27 @@ tier: "core"
   - `runtime/core/nerves/reflex/actions.py`
   - `runtime/core/nerves/reflex/broadcast.py`
   - `runtime/core/nerves/reflex/tiers.py`
-- **`runtime/execution/`** · 19 file(s)
+- **`runtime/execution/`** · 25 file(s)
   - `runtime/execution/codex_backend/account.py`
   - `runtime/execution/codex_backend/model_profile.py`
   - `runtime/execution/codex_backend/role_runner.py`
-  - `runtime/execution/misc/parallel_runner.py`
-  - `runtime/execution/subagents/bridge.py`
-  - _… and 14 more_
-- **`runtime/memory/`** · 10 file(s)
+  - `runtime/execution/cron_context.py`
+  - `runtime/execution/cron_executor.py`
+  - _… and 20 more_
+- **`runtime/memory/`** · 14 file(s)
   - `runtime/memory/diagnostics/_trace_store_replay_storage.py`
   - `runtime/memory/diagnostics/_trace_store_storage.py`
+  - `runtime/memory/hemolymph/composer.py`
   - `runtime/memory/journal/_journal_base.py`
   - `runtime/memory/journal/journal.py`
-  - `runtime/memory/learning/experience_ledger.py`
-  - _… and 5 more_
-- **`runtime/platform/`** · 20 file(s)
+  - _… and 9 more_
+- **`runtime/platform/`** · 19 file(s)
   - `runtime/platform/capabilities/permission_grants.py`
   - `runtime/platform/capabilities/service.py`
   - `runtime/platform/capabilities/tenant_context.py`
   - `runtime/platform/config/builder.py`
   - `runtime/platform/connectors/credential_store.py`
-  - _… and 15 more_
+  - _… and 14 more_
 - **`runtime/projectos/`** · 6 file(s)
   - `runtime/projectos/_store_message_actions.py`
   - `runtime/projectos/_store_project_deletion.py`
@@ -238,24 +238,23 @@ tier: "core"
   - `runtime/projectos/_store_thread_bindings.py`
   - `runtime/projectos/engine.py`
   - `runtime/projectos/store.py`
-- **`runtime/safety/`** · 8 file(s)
+- **`runtime/safety/`** · 22 file(s)
   - `runtime/safety/evolution/auto_trigger.py`
   - `runtime/safety/evolution/candidate_registry.py`
   - `runtime/safety/evolution/drift_monitor.py`
   - `runtime/safety/evolution/fitness.py`
   - `runtime/safety/evolution/proposal_ledger.py`
-  - _… and 3 more_
-- **`runtime/sensing/`** · 66 file(s)
+  - _… and 17 more_
+- **`runtime/sensing/`** · 68 file(s)
   - `runtime/sensing/gateway/_agent_trace_router_stores.py`
   - `runtime/sensing/gateway/_config_endpoints_codex.py`
   - `runtime/sensing/gateway/_config_endpoints_local_models.py`
   - `runtime/sensing/gateway/_config_endpoints_security.py`
   - `runtime/sensing/gateway/_cowork_group_access.py`
-  - _… and 61 more_
-- **`runtime/tentacle/`** · 3 file(s)
+  - _… and 63 more_
+- **`runtime/tentacle/`** · 2 file(s)
   - `runtime/tentacle/coordinator.py`
   - `runtime/tentacle/dashboard.py`
-  - `runtime/tentacle/dashboard_support.py`
 - **`runtime/tour.py/`** · 1 file(s)
   - `runtime/tour.py`
 - **`runtime/workspace/`** · 1 file(s)

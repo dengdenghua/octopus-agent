@@ -69,6 +69,97 @@ class TestDefaults:
 
 
 class TestBodyContextWins:
+    def test_multi_agent_team_gets_temporary_adaptive_orchestration_contract(self):
+        sess = build_turn_session(
+            actor="u",
+            agent=_StubAgent(),
+            thread_id="team-turn",
+            body={
+                "context": {
+                    "mode": "team",
+                    "team_mode": "cowork",
+                    "serve_mesh": "cluster",
+                    "agent_roster": [
+                        {"agent_id": "general", "role": "tl"},
+                        {"agent_id": "researcher", "role": "participant"},
+                    ],
+                }
+            },
+            store=_StubStore(),
+        )
+
+        assert sess.metadata["adaptive_team_orchestration"] is True
+        contract = sess.metadata["mode_contract"]
+        assert "smallest useful team plan" in contract
+        assert "do not force a preset SOP" in contract
+        assert "reassess the remaining work" in contract
+
+    def test_adaptive_team_contract_preserves_explicit_turn_contract(self):
+        sess = build_turn_session(
+            actor="u",
+            agent=_StubAgent(),
+            thread_id="team-with-review",
+            body={
+                "context": {
+                    "mode": "team",
+                    "serve_mesh": "swarm",
+                    "agent_roster": ["general", "critic"],
+                    "mode_contract": "User-selected strict evidence contract.",
+                }
+            },
+            store=_StubStore(),
+        )
+
+        assert "Adaptive team orchestration" in sess.metadata["mode_contract"]
+        assert "User-selected strict evidence contract." in sess.metadata["mode_contract"]
+
+    def test_persisted_adaptive_contract_is_not_duplicated(self):
+        first = build_turn_session(
+            actor="u",
+            agent=_StubAgent(),
+            thread_id="team-first-turn",
+            body={
+                "context": {
+                    "mode": "team",
+                    "serve_mesh": "cluster",
+                    "agent_roster": ["general", "researcher"],
+                }
+            },
+            store=_StubStore(),
+        )
+        persisted = {
+            "team-repeat": {
+                "metadata": {
+                    "mode": "team",
+                    "serve_mesh": "cluster",
+                    "agent_roster": ["general", "researcher"],
+                    "mode_contract": first.metadata["mode_contract"],
+                }
+            }
+        }
+
+        repeated = build_turn_session(
+            actor="u",
+            agent=_StubAgent(),
+            thread_id="team-repeat",
+            body={},
+            store=_StubStore(persisted),
+        )
+
+        assert repeated.metadata["mode_contract"].count("## Adaptive team orchestration") == 1
+
+    def test_solo_or_duplicate_roster_does_not_get_orchestration_grant(self):
+        for roster in ([{"agent_id": "general"}], ["general", "general"]):
+            sess = build_turn_session(
+                actor="u",
+                agent=_StubAgent(),
+                thread_id="solo-turn",
+                body={"context": {"mode": "team", "agent_roster": roster}},
+                store=_StubStore(),
+            )
+            assert "adaptive_team_orchestration" not in sess.metadata
+            assert "mode_contract" not in sess.metadata
+
     def test_model_resolution_accepts_legacy_top_level_field(self):
         store = _StubStore({"t1": {"metadata": {"model_name": "stored-model"}}})
         sess = build_turn_session(

@@ -1,6 +1,6 @@
 """Tests for message feedback system.
 
-DSH P2 feature parity: feedback system tests.
+Octopus Native feedback system tests.
 """
 
 from __future__ import annotations

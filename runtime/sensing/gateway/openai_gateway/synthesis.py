@@ -106,7 +106,7 @@ def synthesize_reply(
     effective_model = (
         model
         if model and model not in ("octopus-agent", "")
-        else getattr(stack.planner, "planner_model", None) or "molili"
+        else getattr(stack.planner, "planner_model", None) or "octopus-agent"
     )
     request = ModelRequest(
         model=effective_model,

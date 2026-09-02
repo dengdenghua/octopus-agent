@@ -83,6 +83,11 @@ def _call(method: str, path: str, body: dict[str, Any] | None = None) -> dict[st
     base_url = str(diagnostics["base_url"])
     route = path if path.startswith("/") else f"/{path}"
     url = f"{base_url}{route}"
+    if body is not None:
+        body = dict(body)
+        target = _selected_desktop_target()
+        if target is not None:
+            body.setdefault("automation_target", target)
     data = None if body is None else json.dumps(body).encode("utf-8")
     headers = {"Content-Type": "application/json"}
     req = urllib_request.Request(url, data=data, method=method, headers=headers)
@@ -117,6 +122,30 @@ def _call(method: str, path: str, body: dict[str, Any] | None = None) -> dict[st
             "error": f"computer api failed: {type(exc).__name__}: {exc}",
             "computer_api": diagnostics,
         }
+
+
+def _selected_desktop_target() -> dict[str, Any] | None:
+    try:
+        from runtime.platform.process.session import current_session
+
+        session = current_session()
+        metadata = getattr(session, "metadata", None) if session is not None else None
+        raw = (metadata or {}).get("automation_target")
+        if not isinstance(raw, dict) or raw.get("kind") != "desktop_window":
+            return None
+        target_id = str(raw.get("id") or "").strip()
+        if not target_id:
+            return None
+        return {
+            "kind": "desktop_window",
+            "source": str(raw.get("source") or "computer"),
+            "id": target_id,
+            "title": str(raw.get("title") or ""),
+            "app_id": str(raw.get("app_id") or ""),
+            "app_name": str(raw.get("app_name") or ""),
+        }
+    except (AttributeError, TypeError, ImportError):
+        return None
 
 
 def _compact_screenshot(value: Any) -> Any:

@@ -12,8 +12,10 @@ from runtime.execution.suckers.builtins import (
     _hash_text,
     _list_cwd,
     _read_file,
+    _use_chatgpt_connector,
     register_builtins,
 )
+from runtime.platform.process.session import Session
 
 
 class TestRegistration:
@@ -28,6 +30,61 @@ class TestRegistration:
         register_builtins(r)
         for name in BUILTIN_NAMES:
             assert r.get(name).trusted_source.startswith("skill://public/")
+
+
+class TestChatGPTConnectorBridge:
+    def test_requires_an_execution_stack(self):
+        result = _use_chatgpt_connector(
+            "google_drive",
+            "List recent files",
+            session=Session(actor="alice"),
+        )
+        assert result == {
+            "error": "ChatGPT connector bridge is unavailable on this execution surface"
+        }
+
+    def test_delegates_with_principal_session_and_exact_app(
+        self,
+        monkeypatch,
+    ):
+        from runtime.execution.codex_backend import role_runner
+
+        seen = {}
+
+        def _run(stack, agent, goal, *, context):
+            seen.update(stack=stack, agent=agent, goal=goal, context=context)
+            return type(
+                "Result",
+                (),
+                {"success": True, "status": "completed", "output": "Three files"},
+            )()
+
+        monkeypatch.setattr(role_runner, "run_agent_role_sync", _run)
+        stack = object()
+        agent = type("Agent", (), {"agent_id": "researcher"})()
+        session = Session(
+            actor="alice",
+            agent=agent,
+            metadata={"_execution_stack": stack},
+        )
+
+        result = _use_chatgpt_connector(
+            "google_drive",
+            "List recent files",
+            session=session,
+        )
+
+        assert result == {
+            "app_id": "google_drive",
+            "success": True,
+            "status": "completed",
+            "content": "Three files",
+        }
+        assert seen["stack"] is stack
+        assert seen["agent"] is agent
+        assert seen["goal"] == "List recent files"
+        assert seen["context"]["caller_session"] is session
+        assert seen["context"]["_codex_app_id"] == "google_drive"
 
 
 class TestListCwd:

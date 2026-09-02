@@ -83,6 +83,7 @@ from typing import Any
 from uuid import uuid4
 
 from runtime.platform.io import atomic_write_json, read_json_with_backup
+from runtime.safety.auth.scope import TenantScope
 
 _LOG = logging.getLogger("octopus.ambient_suggestions")
 
@@ -521,6 +522,7 @@ def generate_suggestions(
     base_dir: Path | None = None,
     title_lookup: dict[str, str] | None = None,
     locale: str = _DEFAULT_LOCALE,
+    scope: TenantScope | None = None,
 ) -> dict[str, Any]:
     """Produce new ambient suggestions via LLM, merge into bucket.
 
@@ -542,7 +544,7 @@ def generate_suggestions(
     proj = str(Path(project_root).resolve())
     normalized_locale = _normalize_locale(locale)
 
-    scores = read_recent_scores(agent_id, limit=turn_window)
+    scores = read_recent_scores(agent_id, limit=turn_window, scope=scope)
     if not scores:
         return {
             "generated": 0,

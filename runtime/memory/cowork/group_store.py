@@ -693,9 +693,12 @@ class GroupStore:
         async_db = self._dir / "async_work.db"
         from ._group_sqlite_coordination import cowork_storage_write_lock
 
-        with cowork_storage_write_lock(self._dir), self._lock, closing(
-            self._connect()
-        ) as conn, conn:
+        with (
+            cowork_storage_write_lock(self._dir),
+            self._lock,
+            closing(self._connect()) as conn,
+            conn,
+        ):
             from ._group_sqlite_coordination import require_delete_journals
 
             if async_db.exists():
@@ -780,9 +783,12 @@ class GroupStore:
         async_db = self._dir / "async_work.db"
         from ._group_sqlite_coordination import cowork_storage_write_lock
 
-        with cowork_storage_write_lock(self._dir), self._lock, closing(
-            self._connect()
-        ) as conn, conn:
+        with (
+            cowork_storage_write_lock(self._dir),
+            self._lock,
+            closing(self._connect()) as conn,
+            conn,
+        ):
             from ._group_sqlite_coordination import require_delete_journals
 
             if async_db.exists():

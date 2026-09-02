@@ -108,6 +108,7 @@ class TestScreenInfo:
     def test_not_installed(self, monkeypatch):
         monkeypatch.setattr(computer_skills, "pyautogui", None)
         monkeypatch.setattr(computer_skills, "PYAUTOGUI_AVAILABLE", False)
+        monkeypatch.setattr(computer_skills.computer_macos, "MACOS_NATIVE_AVAILABLE", False)
         r = _screen_info()
         assert "error" in r
         assert "pyautogui" in r["error"]
@@ -356,6 +357,7 @@ class TestRegistration:
 
     def test_register_returns_0_when_not_installed(self, monkeypatch):
         monkeypatch.setattr(computer_skills, "PYAUTOGUI_AVAILABLE", False)
+        monkeypatch.setattr(computer_skills.computer_macos, "MACOS_NATIVE_AVAILABLE", False)
         from runtime.execution.suckers import SkillRegistry
         from runtime.execution.suckers.computer_skills import (
             register_computer_skills,

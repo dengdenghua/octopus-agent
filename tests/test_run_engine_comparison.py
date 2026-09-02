@@ -12,6 +12,7 @@ from benchmarks.eval_harness import EvalCase, Trajectory, Verdict
 from benchmarks.execution_metrics import measurement_from_trial
 from benchmarks.fixed_suite_fixtures import PreparedFixtureSuite, prepare_fixture_suite
 from benchmarks.source_provenance import FileDigest, SourceManifest, build_file_manifest
+from runtime.safety.evolution.experiment_protocol import ExperimentStore, build_pair_evidence
 
 
 def _trusted_source_manifest(*, worker_sha256: str = "d" * 64) -> SourceManifest:
@@ -79,8 +80,8 @@ def test_cli_requires_explicit_backend_and_case() -> None:
     )
     assert parsed.backend == ["native", "codex"]
     assert parsed.case == ["coding.path-boundary"]
-    assert parsed.native_agent == "coder"
-    assert parsed.codex_agent == "local_codex_cli"
+    assert parsed.native_agent == "general"
+    assert parsed.codex_agent == "coder"
 
 
 def test_test_runner_preflight_fails_before_realtime_probe(
@@ -601,7 +602,7 @@ def test_backend_case_trials_use_independent_fixture_workspaces(
 
     comparison._run_backend(
         backend="native",
-        agent_id="coder",
+        agent_id="general",
         prepared=native,
         k=2,
         url="ws://octopus.invalid/api/realtime",
@@ -611,7 +612,7 @@ def test_backend_case_trials_use_independent_fixture_workspaces(
     )
     comparison._run_backend(
         backend="codex",
-        agent_id="local_codex_cli",
+        agent_id="coder",
         prepared=codex,
         k=2,
         url="ws://octopus.invalid/api/realtime",
@@ -629,13 +630,13 @@ def test_backend_case_trials_use_independent_fixture_workspaces(
     assert "./.octopus-eval/run-tests" in str(observed[0]["prompt"])
     assert all(row["runner_exists"] is True for row in observed)
     assert [row["agent_id"] for row in observed] == [
+        "general",
+        "general",
         "coder",
         "coder",
-        "local_codex_cli",
-        "local_codex_cli",
     ]
     assert "partner_model" not in observed[0]["context"]
-    assert observed[2]["context"]["partner_model"] == "same-model"
+    assert "partner_model" not in observed[2]["context"]
     assert all(row["approval_action"] == "decline" for row in observed)
     assert all(callable(row["approval_responder"]) for row in observed[:2])
     assert all(row["approval_responder"] is None for row in observed[2:])
@@ -766,6 +767,79 @@ def test_comparison_payload_keeps_raw_measurements_without_synthetic_score() -> 
             "pass_at_k": 1.0,
         }
     ]
+
+
+def test_real_comparison_measurements_feed_strict_experiment_pairs(tmp_path: Path) -> None:
+    measurements = []
+    for backend, agent_id in (("native", "general"), ("codex", "coder")):
+        trajectory = Trajectory(
+            trial_id=f"coding.path-boundary.0.{backend}",
+            case_id="coding.path-boundary",
+        )
+        trajectory.append("turn_result", turn={"status": "completed", "items": []})
+        measurements.append(
+            measurement_from_trial(
+                trajectory,
+                Verdict(passed=True, reason="hidden verifier passed"),
+                backend=backend,
+                agent_id=agent_id,
+                model=None,
+                trial_index=0,
+            )
+        )
+    payload = comparison.build_comparison_payload(
+        measurements,
+        source_revision={"git_commit": "a" * 40, "worktree_dirty": False},
+        controller_source_manifest={
+            "schema": "octopus.source_manifest.v1",
+            "pre_run_sha256": "b" * 64,
+            "post_run_sha256": "b" * 64,
+            "stable_during_run": True,
+        },
+        configuration={
+            "control_plane": "octopus_realtime",
+            "requested_model": None,
+            "timeout_seconds": 900,
+            "hidden_verifier_postflight": {"stable_during_run": True},
+            "cases": [
+                {
+                    "case_id": "coding.path-boundary",
+                    "prompt": "repair the bounded path fixture",
+                    "prompt_sha256": "c" * 64,
+                    "suite_prompt_contract_sha256": "d" * 64,
+                    "grader": {"id": "fixture", "rubric_sha256": "e" * 64},
+                    "verifier": {"sha256": "f" * 64},
+                    "fixture": {"manifest_sha256": "1" * 64},
+                }
+            ],
+        },
+        run_id="comparison-pair-1",
+        requested_k=1,
+        source_stable=True,
+        hardened_runner_stable=True,
+    )
+    store = ExperimentStore(tmp_path / "experiments.jsonl")
+
+    first = comparison.ingest_comparison_measurements(
+        measurements,
+        payload=payload,
+        store=store,
+        artifact_path=tmp_path / "comparison.json",
+    )
+    second = comparison.ingest_comparison_measurements(
+        measurements,
+        payload=payload,
+        store=store,
+    )
+    evidence = build_pair_evidence(store.list_trials())
+
+    assert first["appended"] == 2
+    assert second["skipped_existing"] == 2
+    assert evidence["paired_count"] == 1
+    assert (
+        evidence["pairs"][0]["octopus"]["task_spec_hash"]
+        == evidence["pairs"][0]["codex"]["task_spec_hash"]
+    )
 
 
 def test_comparison_payload_is_invalid_when_valid_trials_do_not_reach_k() -> None:

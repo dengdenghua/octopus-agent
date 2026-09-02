@@ -94,9 +94,7 @@ def _resolve_turn_bootstrap(
     # ``exit_plan_mode`` skill flow is still available for explicit
     # human-in-the-loop approval, but auto-detection no longer strands
     # the turn in plan-only territory.
-    _turn_goal = str(
-        getattr(intent, "normalized_goal", "") or getattr(intent, "raw", "") or ""
-    )
+    _turn_goal = str(getattr(intent, "normalized_goal", "") or getattr(intent, "raw", "") or "")
     _no_tool_turn = _explicit_no_tool_goal(_turn_goal) or _punctuation_only_goal(_turn_goal)
     executor = getattr(stack, "executor", None) if enable_tools and not _no_tool_turn else None
     tools_active = executor is not None

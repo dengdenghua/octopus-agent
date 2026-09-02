@@ -1,5 +1,6 @@
 name: narrative_studio
 display_name: 叙事工坊
+delivery: remote
 version: 0.2.0
 description: 通用 AI 叙事引擎：结构化世界、来源上下文、候选流水线、人工评审投票与不可变正典快照；所有 Agent 写入仍为候选。
 author: Octopus

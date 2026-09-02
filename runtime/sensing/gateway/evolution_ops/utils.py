@@ -12,6 +12,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from runtime.safety.auth.scope import TenantScope
+from runtime.safety.recovery.tenant_scope import (
+    read_learning_events,
+    read_learning_journal,
+)
+
 try:
     from fastapi.responses import PlainTextResponse
 
@@ -49,6 +55,50 @@ def _week_key(value: datetime) -> str:
 
 def _bounded_score(value: float) -> float:
     return max(0.0, min(1.0, value))
+
+
+class _ScopedJournalView:
+    """Read-only ownership projection over a shared Journal.
+
+    Existing evolution projections call ``read_all`` / ``read_by_type`` at
+    several layers.  Passing this view lets those mature projections stay
+    unchanged while enforcing one server-derived tenant boundary at the
+    outer HTTP request.  ``scope=None`` intentionally means legacy-only, not
+    global; only an explicit ``allow_cross_tenant`` scope reads every row.
+    """
+
+    def __init__(self, journal: Any, scope: TenantScope | None) -> None:
+        self._journal = journal
+        self.scope = scope
+
+    def read_all(self, *, scope: TenantScope | None = None) -> list[Any]:
+        del scope  # callers cannot override the request-owned boundary
+        if self._journal is None:
+            return []
+        try:
+            return read_learning_journal(self._journal, scope=self.scope)
+        except (AttributeError, TypeError, OSError):
+            return []
+
+    def read_by_type(
+        self,
+        event_type: Any,
+        *,
+        scope: TenantScope | None = None,
+    ) -> list[Any]:
+        del scope  # callers cannot override the request-owned boundary
+        if self._journal is None:
+            return []
+        try:
+            return read_learning_events(self._journal, event_type, scope=self.scope)
+        except (AttributeError, TypeError, OSError):
+            return []
+
+
+def _scoped_journal(journal: Any, scope: TenantScope | None) -> Any:
+    """Return a fail-closed request projection for evolution read models."""
+
+    return _ScopedJournalView(journal, scope)
 
 
 def _journal_events(journal: Any) -> list[Any]:
@@ -214,6 +264,7 @@ def _learn_from_intel_result(
     registry: Any,
     *,
     suppressed_names: set[str] | None = None,
+    scope: TenantScope | None = None,
 ) -> dict[str, Any]:
     from .curriculum import (
         _curriculum_goal_rows,
@@ -263,6 +314,7 @@ def _learn_from_intel_result(
             journal,
             registry,
             suppressed_names=suppressed_names,
+            scope=scope,
         )
     ]
     curriculum_goals = _curriculum_goal_rows(journal, status="pending")

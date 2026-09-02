@@ -1,6 +1,6 @@
 """Tests for session export to markdown.
 
-DSH P2 feature parity: export tests.
+Octopus Native session-export tests.
 """
 
 from __future__ import annotations

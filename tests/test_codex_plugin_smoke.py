@@ -39,8 +39,6 @@ def test_codex_plugin_discovery_includes_smoke_metadata(tmp_path: Path) -> None:
     assert smoke["permission_resolution"]["status"] == "review_required"
     assert smoke["permission_resolution"]["permissions"] == [
         "mcp:execute:review_required",
-        "capability:execute:review_required",
-        "skill:execute:review_required",
         "ui:metadata:local",
     ]
     assert plugin_dir.name == "research"

@@ -123,7 +123,7 @@ class LocalAuthConfig(BaseModel):
     )
     actor_prefix: str = Field(
         default="local:",
-        description="actor_id 前缀 · 和 molili: 分命名空间",
+        description="actor_id 前缀 · 与其他账号提供方分命名空间",
     )
     default_roles: list[str] = Field(
         default_factory=lambda: ["user", "local"],

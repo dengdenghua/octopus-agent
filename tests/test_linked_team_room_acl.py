@@ -17,6 +17,7 @@ from runtime.memory.cowork.session import link_room
 from runtime.memory.threads.store import ThreadStateStore
 from runtime.projectos.model import Milestone, Project
 from runtime.projectos.store import ProjectStore
+from runtime.protocol import JsonRpcRequest, JsonRpcResponse, decode_message, encode_message
 from runtime.safety.auth import Identity, IdentityStore
 from runtime.sensing.gateway.cowork_group_router import create_cowork_group_router
 from runtime.sensing.gateway.projects_router import create_projects_router
@@ -390,3 +391,107 @@ def test_realtime_viewer_reads_member_turns_and_removal_revokes(tmp_path: Path) 
                 member,
             )
         )
+
+
+def test_realtime_project_command_is_owner_only_before_plan_or_binding(tmp_path: Path) -> None:
+    identities, _rooms, threads, groups, collaboration = _linked_state(tmp_path)
+    from runtime.memory.cowork.service import invite_member
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+
+    invite_member(groups, "project-thread", actor="alice", target_id="builder", kind="agent")
+    projects = ProjectStore(base_dir=tmp_path / "projects")
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "realtime-project-logs"),
+        thread_store=threads,
+        cowork_group_store=groups,
+        collaboration_store=collaboration,
+        project_store=projects,
+    )
+
+    turn = asyncio.run(
+        runtime.start_turn(
+            {
+                "threadId": "project-thread",
+                "approvalPolicy": "never",
+                "input": [{"type": "text", "text": "/project run hijack owner thread"}],
+            },
+            _Emitter("bob"),
+        )
+    )
+
+    assert turn.status == "failed"
+    assert projects.project_for_thread("project-thread") is None
+    assert projects.list_projects() == []
+    errors = [item for item in turn.items if getattr(item, "type", "") == "error"]
+    assert errors
+    assert errors[-1].error_info["exception_type"] == "PermissionError"
+
+
+def test_gateway_member_cannot_bind_project_to_owner_thread(tmp_path: Path) -> None:
+    identities, rooms, threads, groups, collaboration = _linked_state(tmp_path)
+    from runtime.memory.cowork.service import invite_member
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+
+    invite_member(groups, "project-thread", actor="alice", target_id="builder", kind="agent")
+    projects = ProjectStore(base_dir=tmp_path / "gateway-projects")
+    resolver = ThreadAccessResolver(
+        thread_store=threads,
+        group_store=groups,
+        collaboration_store=collaboration,
+        team_rooms_router=rooms,
+        identity_store=identities,
+    )
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "gateway-project-logs"),
+        workspace_root=tmp_path / "gateway-workspaces",
+        thread_store=threads,
+        cowork_group_store=groups,
+        collaboration_store=collaboration,
+        project_store=projects,
+    )
+    gateway = RealtimeGateway(
+        runtime=runtime,
+        identity_store=identities,
+        require_auth=True,
+        thread_access_resolver=resolver,
+    )
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with (
+        TestClient(app) as client,
+        client.websocket_connect(
+            "/api/realtime",
+            headers={"Authorization": "Bearer sk-bob"},
+        ) as ws,
+    ):
+        ws.send_text(
+            encode_message(
+                JsonRpcRequest(
+                    id=1,
+                    method="turn/start",
+                    params={
+                        "threadId": "project-thread",
+                        "approvalPolicy": "never",
+                        "input": [{"type": "text", "text": "/project run hijack"}],
+                    },
+                )
+            )
+        )
+        response = None
+        while response is None:
+            message = decode_message(ws.receive_text())
+            if isinstance(message, JsonRpcRequest):
+                ws.send_text(
+                    encode_message(JsonRpcResponse(id=message.id, result={"action": "decline"}))
+                )
+            elif isinstance(message, JsonRpcResponse) and message.id == 1:
+                response = message
+
+    assert response.result["turn"]["status"] == "failed"
+    assert projects.project_for_thread("project-thread") is None
+    assert projects.list_projects() == []

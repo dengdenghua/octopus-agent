@@ -22,13 +22,21 @@ import threading
 import time
 from types import SimpleNamespace
 
+import pytest
+
 import runtime.sensing.gateway.tool_bridge as tool_bridge
 from runtime.execution.suckers.builtins import _list_cwd, _read_file
 from runtime.execution.suckers.registry import Skill, SkillRegistry
 from runtime.execution.tool_engine.executor import ToolExecutor
-from runtime.platform.models import ParsedIntent
+from runtime.memory.journal import InMemoryJournal, journal_context
+from runtime.platform.models import CostEntry, ParsedIntent
+from runtime.platform.process.session import Session, session_scope
 from runtime.platform.process.streaming import stream_run
-from runtime.safety.approval.cancellation import current_cancellation_token
+from runtime.safety.approval.cancellation import (
+    CancellationSource,
+    current_cancellation_token,
+    scoped_cancellation,
+)
 from runtime.safety.auth import TrustEngine
 from runtime.sensing.gateway._tool_bridge_loop import (
     _native_plan_reconciliation_milestones,
@@ -159,6 +167,411 @@ def test_parallel_path_preserves_emission_order() -> None:
     assert [e[1]["id"] for e in tool_end_events] == ["t-0", "t-1", "t-2"]
     # And every tool_end on the parallel path carries the marker.
     assert all(e[1].get("parallel") is True for e in tool_end_events)
+
+
+def test_native_tool_turn_persists_one_learnable_trajectory() -> None:
+    """Executor step receipts must be grouped into one terminal turn sample."""
+
+    calls = [
+        ToolCall(id=f"traj-{i}", name="slow_sum", input={"a": i, "b": 1, "sleep_ms": 0})
+        for i in range(3)
+    ]
+    stack = _make_stack(_RouterEmitting(calls))
+    # Production app wiring keeps these references identical. Make that
+    # contract explicit for this lightweight stack double.
+    stack.journal = stack.executor.journal
+
+    events = list(stream_agentic_fallback(stack, _intent(), _agent()))
+
+    assert any(event[0] == "done" for event in events)
+    trajectory_events = stack.journal.read_by_type("trajectory")
+    assert len(trajectory_events) == 1
+    trajectory_event = trajectory_events[0]
+    trajectory = trajectory_event.trajectory
+    assert trajectory.strategy_id == "native_tool_loop"
+    assert trajectory.thread_id == "thread-parallel"
+    assert trajectory.outcome.success is True
+    assert trajectory.outcome.degraded is False
+    assert [step.step_id for step in trajectory.steps] == [0, 1, 2]
+    assert [str(step.action.sucker_id) for step in trajectory.steps] == [
+        "slow_sum",
+        "slow_sum",
+        "slow_sum",
+    ]
+    assert trajectory_event.agent_id == "coder"
+    step_events = stack.journal.read_by_type("step")
+    assert {event.task_id for event in step_events} == {trajectory.task_id}
+
+
+def test_native_tool_turn_uses_ordinals_when_provider_reuses_call_id() -> None:
+    calls = [
+        ToolCall(id="reused", name="slow_sum", input={"a": 1, "b": 1, "sleep_ms": 40}),
+        ToolCall(id="reused", name="slow_sum", input={"a": 20, "b": 1, "sleep_ms": 0}),
+    ]
+    stack = _make_stack(_RouterEmitting(calls))
+    stack.journal = stack.executor.journal
+
+    events = list(stream_agentic_fallback(stack, _intent(), _agent()))
+
+    tool_ends = [event for event in events if event[0] == "tool_end"]
+    assert len(tool_ends) == 2
+    assert [event[1]["id"] for event in tool_ends] == ["reused", "reused"]
+    assert '"sum":2' in tool_ends[0][1]["output"].replace(" ", "")
+    assert '"sum":21' in tool_ends[1][1]["output"].replace(" ", "")
+
+    trajectory = stack.journal.read_by_type("trajectory")[0].trajectory
+    assert [step.step_id for step in trajectory.steps] == [0, 1]
+    assert [step.action.args["a"] for step in trajectory.steps] == [1, 20]
+
+
+def test_native_tool_turn_marks_bridge_only_error_as_degraded() -> None:
+    calls = [
+        ToolCall(id="valid", name="slow_sum", input={"a": 1, "b": 1, "sleep_ms": 0}),
+        ToolCall(id="missing", name="not_registered", input={}),
+    ]
+    stack = _make_stack(_RouterEmitting(calls))
+    stack.journal = stack.executor.journal
+
+    events = list(stream_agentic_fallback(stack, _intent(), _agent()))
+
+    tool_ends = [event for event in events if event[0] == "tool_end"]
+    assert [event[1]["is_error"] for event in tool_ends] == [False, True]
+    trajectory = stack.journal.read_by_type("trajectory")[0].trajectory
+    assert trajectory.outcome.success is True
+    assert trajectory.outcome.degraded is True
+    assert trajectory.outcome.disposition == "completed_with_warning"
+    assert [step.step_id for step in trajectory.steps] == [0, 1]
+    assert trajectory.steps[1].result.status == "failed"
+    assert trajectory.steps[1].result.error_type == "skill_not_found"
+
+
+def test_native_tool_turn_persists_missing_only_as_degraded_trajectory() -> None:
+    stack = _make_stack(_RouterEmitting([ToolCall(id="missing", name="not_registered", input={})]))
+    stack.journal = stack.executor.journal
+
+    events = list(stream_agentic_fallback(stack, _intent(), _agent()))
+
+    tool_end = next(event for event in events if event[0] == "tool_end")
+    assert tool_end[1]["is_error"] is True
+    trajectory_events = stack.journal.read_by_type("trajectory")
+    assert len(trajectory_events) == 1
+    trajectory = trajectory_events[0].trajectory
+    assert trajectory.outcome.success is True
+    assert trajectory.outcome.degraded is True
+    assert trajectory.outcome.disposition == "completed_with_warning"
+    assert len(trajectory.steps) == 1
+    assert str(trajectory.steps[0].action.sucker_id) == "not_registered"
+    assert trajectory.steps[0].result.status == "failed"
+    assert trajectory.steps[0].result.error_type == "skill_not_found"
+
+
+def test_native_tool_turn_finalizes_once_when_generator_is_closed() -> None:
+    stack = _make_stack(
+        _RouterEmitting([ToolCall(id="close-me", name="slow_sum", input={"a": 1, "b": 1})])
+    )
+    stack.journal = stack.executor.journal
+    stream = stream_agentic_fallback(stack, _intent(), _agent())
+
+    assert next(event for event in stream if event[0] == "tool_end")[0] == "tool_end"
+    stream.close()
+    stream.close()
+
+    trajectory_events = stack.journal.read_by_type("trajectory")
+    assert len(trajectory_events) == 1
+    trajectory = trajectory_events[0].trajectory
+    assert trajectory.outcome.success is False
+    assert trajectory.outcome.disposition == "cancelled"
+    assert [step.step_id for step in trajectory.steps] == [0]
+
+
+def test_native_tool_turn_finalizes_checkpoint_exception_once(monkeypatch) -> None:
+    class Router:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def call_stream(self, req):
+            del req
+            self.calls += 1
+            if self.calls == 1:
+                yield ModelStreamEvent(
+                    type="tool_use",
+                    tool_call=ToolCall(id="before-checkpoint", name="slow_sum", input={}),
+                )
+                yield ModelStreamEvent(type="done", final=ModelResponse(text=""))
+                return
+            raise ValueError("checkpoint parser exploded")
+
+    monkeypatch.setattr(tool_bridge, "MAX_TOOL_ROUNDS", 1)
+    stack = _make_stack(Router())
+    stack.journal = stack.executor.journal
+
+    with pytest.raises(ValueError, match="checkpoint parser exploded"):
+        list(stream_agentic_fallback(stack, _intent(), _agent()))
+
+    trajectory_events = stack.journal.read_by_type("trajectory")
+    assert len(trajectory_events) == 1
+    trajectory = trajectory_events[0].trajectory
+    assert trajectory.outcome.success is False
+    assert trajectory.outcome.disposition == "failed"
+    assert [step.step_id for step in trajectory.steps] == [0]
+
+
+def test_native_turn_budget_and_trajectory_use_exact_model_plus_step_cost() -> None:
+    first_cost = CostEntry(tokens_in=31, tokens_out=7, usd=0.40)
+    second_cost = CostEntry(tokens_in=19, tokens_out=5, usd=0.20)
+
+    class Router:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def call_stream(self, req):
+            del req
+            self.calls += 1
+            if self.calls == 1:
+                yield ModelStreamEvent(
+                    type="tool_use",
+                    tool_call=ToolCall(id="costed", name="slow_sum", input={"a": 2, "b": 3}),
+                )
+                yield ModelStreamEvent(
+                    type="done",
+                    final=ModelResponse(
+                        text="",
+                        input_tokens=first_cost.tokens_in,
+                        output_tokens=first_cost.tokens_out,
+                        cost=first_cost,
+                    ),
+                )
+                return
+            yield ModelStreamEvent(type="text_delta", delta="done")
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(
+                    text="done",
+                    input_tokens=second_cost.tokens_in,
+                    output_tokens=second_cost.tokens_out,
+                    cost=second_cost,
+                ),
+            )
+
+    class RecordingExecutor(ToolExecutor):
+        def __init__(self, registry, immunity) -> None:
+            super().__init__(registry, immunity)
+            self.seen_budgets = []
+
+        def execute_step(self, *args, **kwargs):
+            self.seen_budgets.append(kwargs["budget"])
+            return super().execute_step(*args, **kwargs)
+
+    stack = _make_stack(Router())
+    recording_executor = RecordingExecutor(stack.executor.registry, TrustEngine())
+    stack.executor = recording_executor
+    stack.journal = recording_executor.journal
+    budget_intent = ParsedIntent(
+        raw="calculate one value",
+        intent_type="task",
+        normalized_goal="calculate one value",
+        user_context={"conversation_id": "thread-budget-cost"},
+    )
+
+    list(stream_agentic_fallback(stack, budget_intent, _agent()))
+
+    trajectory = stack.journal.read_by_type("trajectory")[0].trajectory
+    step_cost = trajectory.steps[0].result.cost
+    expected_model_tokens = first_cost.tokens + second_cost.tokens
+    expected_model_usd = first_cost.usd + second_cost.usd
+    assert trajectory.outcome.cost.tokens == expected_model_tokens + step_cost.tokens
+    assert trajectory.outcome.cost.usd == pytest.approx(expected_model_usd + step_cost.usd)
+    assert len(recording_executor.seen_budgets) == 1
+    turn_budget = recording_executor.seen_budgets[0]
+    assert turn_budget.tokens_spent == trajectory.outcome.cost.tokens
+    assert turn_budget.usd_spent == pytest.approx(trajectory.outcome.cost.usd)
+
+
+def test_model_actual_budget_overrun_blocks_returned_tool_calls() -> None:
+    executed = threading.Event()
+    over_limit = CostEntry(tokens_in=100_001, tokens_out=1, usd=11.0)
+
+    def must_not_run(a: int = 0, b: int = 0, sleep_ms: int = 0) -> dict:
+        del a, b, sleep_ms
+        executed.set()
+        return {"ok": True}
+
+    registry = SkillRegistry()
+    for skill in (
+        Skill(
+            name="slow_sum",
+            description="Must be blocked after model budget overrun.",
+            affinity=["math"],
+            trusted_source="skill://public/slow_sum",
+            handler=must_not_run,
+        ),
+        Skill(
+            name="todo_write",
+            description="Update todo list.",
+            affinity=["meta"],
+            trusted_source="skill://public/todo_write",
+            handler=lambda **_kwargs: {"ok": True},
+        ),
+    ):
+        registry.register(skill, verify_tests=False)
+
+    class Router:
+        def call_stream(self, req):
+            del req
+            yield ModelStreamEvent(
+                type="tool_use",
+                tool_call=ToolCall(id="over-budget", name="slow_sum", input={}),
+            )
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(
+                    text="",
+                    input_tokens=over_limit.tokens_in,
+                    output_tokens=over_limit.tokens_out,
+                    cost=over_limit,
+                ),
+            )
+
+    stack = SimpleNamespace(
+        executor=ToolExecutor(registry, TrustEngine()),
+        planner=SimpleNamespace(router=Router(), planner_model="mock"),
+        metadata={},
+    )
+
+    events = list(stream_agentic_fallback(stack, _intent(), _agent()))
+
+    assert not executed.is_set()
+    assert stack.executor.journal.read_by_type("step") == []
+    assert any(
+        event[0] == "error" and event[1].get("kind") == "budget_exceeded" for event in events
+    )
+    trajectory = stack.executor.journal.read_by_type("trajectory")[0].trajectory
+    assert trajectory.outcome.success is False
+    assert trajectory.outcome.degraded is True
+    assert trajectory.outcome.disposition == "failed"
+    assert trajectory.outcome.cost.tokens == over_limit.tokens
+    assert trajectory.outcome.cost.usd == pytest.approx(over_limit.usd)
+    assert trajectory.steps[0].result.error_type == "budget_exceeded"
+
+
+def test_pure_model_actual_budget_overrun_persists_a_bounded_failed_trajectory() -> None:
+    over_limit = CostEntry(tokens_in=100_001, tokens_out=1, usd=11.0)
+
+    class Router:
+        def call_stream(self, req):
+            del req
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(
+                    text="too expensive",
+                    input_tokens=over_limit.tokens_in,
+                    output_tokens=over_limit.tokens_out,
+                    cost=over_limit,
+                ),
+            )
+
+    stack = _make_stack(Router())
+    stack.journal = stack.executor.journal
+
+    events = list(stream_agentic_fallback(stack, _intent(), _agent()))
+
+    assert any(
+        event[0] == "error" and event[1].get("kind") == "budget_exceeded" for event in events
+    )
+    trajectory = stack.journal.read_by_type("trajectory")[0].trajectory
+    assert trajectory.outcome.success is False
+    assert trajectory.outcome.degraded is True
+    assert trajectory.outcome.disposition == "failed"
+    assert trajectory.outcome.cost.tokens == over_limit.tokens
+    assert len(trajectory.steps) == 1
+    step = trajectory.steps[0]
+    assert str(step.action.sucker_id) == "native_model_response"
+    assert step.result.status == "failed"
+    assert step.result.error_type == "budget_exceeded"
+
+
+def test_native_finalizer_retries_same_frozen_event_after_temporary_write_failure() -> None:
+    class FailOnceJournal(InMemoryJournal):
+        def __init__(self) -> None:
+            super().__init__()
+            self.trajectory_write_calls = 0
+
+        def write_trajectory_once(self, event):
+            self.trajectory_write_calls += 1
+            if self.trajectory_write_calls == 1:
+                raise OSError("temporary journal failure")
+            return super().write_trajectory_once(event)
+
+    stack = _make_stack(
+        _RouterEmitting([ToolCall(id="retry-persist", name="slow_sum", input={"a": 1, "b": 2})])
+    )
+    journal = FailOnceJournal()
+    stack.executor.journal = journal
+    stack.journal = journal
+
+    events = list(stream_agentic_fallback(stack, _intent(), _agent()))
+
+    assert any(event[0] == "done" for event in events)
+    assert journal.trajectory_write_calls == 2
+    trajectories = journal.read_by_type("trajectory")
+    assert len(trajectories) == 1
+    assert trajectories[0].trajectory.outcome.success is True
+
+
+def test_native_tool_turn_preserves_authoritative_realtime_scope() -> None:
+    call = ToolCall(id="scoped", name="slow_sum", input={"a": 1, "b": 1, "sleep_ms": 0})
+    stack = _make_stack(_RouterEmitting([call]))
+    stack.journal = stack.executor.journal
+    agent = _agent()
+    intent = ParsedIntent(
+        raw="run the scoped tool",
+        intent_type="task",
+        normalized_goal="run the scoped tool",
+        user_context={},
+    )
+    turn_session = Session(
+        actor="owner-a",
+        agent=agent,
+        thread_id="real-thread",
+        conversation_id="real-thread",
+        metadata={"tenant_id": "tenant-a", "owner_actor_id": "owner-a"},
+    )
+
+    with (
+        session_scope(turn_session),
+        journal_context(
+            agent_id="coder",
+            conversation_id="real-thread",
+            tenant_id="tenant-a",
+            owner_actor_id="owner-a",
+        ),
+    ):
+        list(stream_agentic_fallback(stack, intent, agent))
+
+    trajectory_event = stack.journal.read_by_type("trajectory")[0]
+    assert trajectory_event.conversation_id == "real-thread"
+    assert trajectory_event.trajectory.thread_id == "real-thread"
+    assert trajectory_event.agent_id == "coder"
+    assert trajectory_event.tenant_id == "tenant-a"
+    assert trajectory_event.owner_actor_id == "owner-a"
+    assert trajectory_event.actor == "owner-a"
+
+
+def test_native_tool_turn_does_not_promote_confidential_trace() -> None:
+    call = ToolCall(id="private", name="slow_sum", input={"a": 1, "b": 1, "sleep_ms": 0})
+    stack = _make_stack(_RouterEmitting([call]))
+    stack.journal = stack.executor.journal
+    intent = ParsedIntent(
+        raw="private calculation",
+        intent_type="task",
+        normalized_goal="private calculation",
+        privacy="confidential",
+    )
+
+    list(stream_agentic_fallback(stack, intent, _agent()))
+
+    assert len(stack.journal.read_by_type("step")) == 1
+    assert stack.journal.read_by_type("trajectory") == []
 
 
 def test_late_steering_supersedes_a_provisional_final_answer() -> None:
@@ -332,6 +745,81 @@ def test_steering_cancels_a_cooperative_tool_and_continues_the_same_turn() -> No
     assert tool_end[1]["is_error"] is True
     assert tool_end[1]["status"] == "cancelled"
     assert "已按新要求继续" in "".join(str(event[1]) for event in events if event[0] == "text")
+    trajectory = stack.executor.journal.read_by_type("trajectory")[0].trajectory
+    assert trajectory.outcome.success is True
+    assert trajectory.outcome.degraded is True
+    assert trajectory.outcome.disposition == "completed_with_warning"
+    assert trajectory.steps[0].result.status == "failed"
+    assert trajectory.steps[0].result.error_type == "cancelled"
+
+
+def test_parent_cancellation_is_not_recorded_as_semantic_error_or_completed() -> None:
+    started = threading.Event()
+
+    def wait_for_parent_cancel(a: int = 0, b: int = 0, sleep_ms: int = 0) -> dict:
+        del a, b, sleep_ms
+        started.set()
+        token = current_cancellation_token()
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline and not token.is_cancelled:
+            time.sleep(0.01)
+        assert token.is_cancelled
+        return {"error": token.reason}
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="slow_sum",
+            description="Wait for an external parent cancellation.",
+            affinity=["io"],
+            trusted_source="skill://public/slow_sum",
+            handler=wait_for_parent_cancel,
+        ),
+        verify_tests=False,
+    )
+    registry.register(
+        Skill(
+            name="todo_write",
+            description="Update todo list.",
+            affinity=["meta"],
+            trusted_source="skill://public/todo_write",
+            handler=lambda **_kwargs: {"ok": True},
+        ),
+        verify_tests=False,
+    )
+    router = _RouterEmitting([ToolCall(id="cancel-parent", name="slow_sum", input={})])
+    stack = SimpleNamespace(
+        executor=ToolExecutor(registry, TrustEngine()),
+        planner=SimpleNamespace(router=router, planner_model="mock"),
+        metadata={},
+    )
+    source = CancellationSource()
+
+    def cancel_after_start() -> None:
+        assert started.wait(timeout=2.0)
+        source.cancel(reason="external interrupt")
+
+    canceller = threading.Thread(
+        target=cancel_after_start,
+        daemon=True,
+    )
+    canceller.start()
+
+    with scoped_cancellation(source.token):
+        events = list(stream_agentic_fallback(stack, _intent(), _agent()))
+    canceller.join(timeout=2.0)
+
+    tool_end = next(event for event in events if event[0] == "tool_end")
+    assert tool_end[1]["is_error"] is True
+    assert tool_end[1]["status"] == "cancelled"
+    step_event = stack.executor.journal.read_by_type("step")[0]
+    assert step_event.step.result.status == "failed"
+    assert step_event.step.result.error_type == "cancelled"
+    trajectory = stack.executor.journal.read_by_type("trajectory")[0].trajectory
+    assert trajectory.outcome.success is False
+    assert trajectory.outcome.degraded is True
+    assert trajectory.outcome.disposition == "cancelled"
+    assert trajectory.steps[0].result.error_type == "cancelled"
 
 
 def test_steering_terminates_a_real_subprocess_tree() -> None:

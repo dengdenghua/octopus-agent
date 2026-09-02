@@ -28,6 +28,158 @@ def _make_plugin(root: Path, name: str = "testplug") -> Path:
     return d
 
 
+def _make_octopus_plugin(root: Path, *, fail_after_register: bool = False) -> Path:
+    plugin = root / "octopusplug"
+    plugin.mkdir(parents=True)
+    (plugin / "plugin.yaml").write_text(
+        "\n".join(
+            [
+                "name: octopusplug",
+                "version: 1.0.0",
+                "host_api: '>=1,<2'",
+                "permissions:",
+                "  - workspace.read",
+                "contributes:",
+                "  octopus:",
+                "    tools:",
+                "      - octopusplug.echo",
+                "    prompts:",
+                "      - octopusplug.identity",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    failure = "        raise RuntimeError('registration failed')\n" if fail_after_register else ""
+    (plugin / "__init__.py").write_text(
+        "from runtime.platform.plugins.plugin_base import ModulePlugin\n"
+        "from runtime.safety.hooks.events import PreToolUseEvent\n\n"
+        "async def echo(args):\n"
+        "    return args\n\n"
+        "def observe(_event):\n"
+        "    return None\n\n"
+        "class OctopusPlugin(ModulePlugin):\n"
+        "    name = 'octopusplug'\n"
+        "    def register_octopus(self):\n"
+        "        self.ctx.register_tool(\n"
+        "            'octopusplug.echo', 'Echo plugin input', {'type': 'object'}, echo\n"
+        "        )\n"
+        "        self.ctx.register_prompt_section(\n"
+        "            'octopusplug.identity', text='Octopus plugin identity'\n"
+        "        )\n"
+        "        self.ctx.register_hook(PreToolUseEvent, observe)\n"
+        "        self.ctx.register_workflow(\n"
+        "            'octopusplug.review', {'steps': ['inspect', 'report']}\n"
+        "        )\n"
+        "        self.ctx.register_ui_surface(\n"
+        "            'octopusplug.panel', {'route': '/workspace/octopusplug'}\n"
+        "        )\n" + failure,
+        encoding="utf-8",
+    )
+    return plugin
+
+
+def test_octopus_contributions_are_owned_introspected_and_disposed(tmp_path: Path) -> None:
+    from runtime.execution.arms.tool_registry import ToolRegistry
+    from runtime.platform.prompts.registry import PromptRegistry
+    from runtime.safety.hooks.events import PreToolUseEvent
+    from runtime.safety.hooks.registry import HookRegistry
+
+    tool_registry = ToolRegistry()
+    prompt_registry = PromptRegistry(tmp_path / "prompts")
+    hook_registry = HookRegistry()
+    _make_octopus_plugin(tmp_path)
+    hub = PluginHub(
+        plugin_dir=tmp_path,
+        tool_registry=tool_registry,
+        prompt_registry=prompt_registry,
+        hook_registry=hook_registry,
+    )
+
+    assert hub.load("octopusplug") is not None
+    detail = hub.get_plugin_detail("octopusplug")
+    assert detail is not None
+    assert detail["lifecycle_state"] == "enabled"
+    assert detail["contributes"]["octopus"]["tools"] == ["octopusplug.echo"]
+    assert "dsh" not in detail["contributes"]
+    assert detail["permissions"] == ["workspace.read"]
+    assert detail["host_api"] == ">=1,<2"
+    assert {cap["type"] for cap in detail["capabilities"]} >= {
+        "octopus",
+        "tool",
+        "prompt_section",
+        "hook",
+        "workflow",
+        "ui_surface",
+    }
+    assert "octopusplug.echo" in tool_registry.tool_names
+    assert any(row["name"] == "octopusplug.identity" for row in prompt_registry.sections())
+    assert len(hook_registry.handlers_for(PreToolUseEvent)) == 1
+    assert hub.contribution_registry.get("workflow", "octopusplug.review") is not None
+    assert hub.contribution_registry.get("ui_surface", "octopusplug.panel") is not None
+    assert {row["kind"] for row in detail["runtime_contributions"]} == {
+        "workflow",
+        "ui_surface",
+    }
+
+    assert hub.unload("octopusplug") is True
+    assert "octopusplug.echo" not in tool_registry.tool_names
+    assert not any(row["name"] == "octopusplug.identity" for row in prompt_registry.sections())
+    assert hook_registry.handlers_for(PreToolUseEvent) == []
+    assert hub.contribution_registry.list(owner="octopusplug") == []
+
+
+def test_failed_octopus_registration_rolls_back_every_contribution(tmp_path: Path) -> None:
+    from runtime.execution.arms.tool_registry import ToolRegistry
+    from runtime.platform.prompts.registry import PromptRegistry
+    from runtime.safety.hooks.events import PreToolUseEvent
+    from runtime.safety.hooks.registry import HookRegistry
+
+    tool_registry = ToolRegistry()
+    prompt_registry = PromptRegistry(tmp_path / "prompts")
+    hook_registry = HookRegistry()
+    _make_octopus_plugin(tmp_path, fail_after_register=True)
+    hub = PluginHub(
+        plugin_dir=tmp_path,
+        tool_registry=tool_registry,
+        prompt_registry=prompt_registry,
+        hook_registry=hook_registry,
+    )
+
+    assert hub.load("octopusplug") is None
+    assert "octopusplug.echo" not in tool_registry.tool_names
+    assert prompt_registry.sections() == []
+    assert hook_registry.handlers_for(PreToolUseEvent) == []
+    assert hub.contribution_registry.list(owner="octopusplug") == []
+
+
+def test_legacy_dsh_manifest_and_hook_are_accepted_but_exposed_as_octopus(
+    tmp_path: Path,
+) -> None:
+    plugin = tmp_path / "legacyplug"
+    plugin.mkdir(parents=True)
+    (plugin / "plugin.yaml").write_text(
+        "name: legacyplug\ncontributes:\n  dsh:\n    tools:\n      - legacyplug.echo\n",
+        encoding="utf-8",
+    )
+    (plugin / "__init__.py").write_text(
+        "from runtime.platform.plugins.plugin_base import ModulePlugin\n\n"
+        "class LegacyPlugin(ModulePlugin):\n"
+        "    name = 'legacyplug'\n"
+        "    def register_dsh(self):\n"
+        "        self.ctx.register_workflow('legacyplug.flow', {'steps': []})\n",
+        encoding="utf-8",
+    )
+
+    hub = PluginHub(plugin_dir=tmp_path)
+    assert hub.load("legacyplug") is not None
+    detail = hub.get_plugin_detail("legacyplug")
+    assert detail is not None
+    assert detail["contributes"] == {
+        "octopus": {"tools": ["legacyplug.echo"]},
+    }
+    assert {cap["type"] for cap in detail["capabilities"]} >= {"octopus", "workflow"}
+
+
 def test_discover_and_manifest(tmp_path: Path) -> None:
     hub = PluginHub(plugin_dir=tmp_path)
     _make_plugin(tmp_path)

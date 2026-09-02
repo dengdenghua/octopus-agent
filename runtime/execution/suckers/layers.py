@@ -18,6 +18,7 @@ ATOMIC_SKILL_NAMES: frozenset[str] = frozenset(
         "file_stats",
         "count_words",
         "hash_text",
+        "use_chatgpt_connector",
         # file discovery/search · read-only project inspection helpers.
         "glob_files",
         "grep_text",

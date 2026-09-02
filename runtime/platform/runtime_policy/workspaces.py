@@ -27,11 +27,16 @@ uses the same layout for the lifetime of the runtime.
 
 from __future__ import annotations
 
+import contextlib
+import errno
 import hashlib
 import json
 import logging
 import os
+import secrets
 import shutil
+import stat
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -83,6 +88,60 @@ _STANDARD_DIRS = (
     "deploy",
     "skills",
 )
+
+
+def _supports_secure_dirfd() -> bool:
+    """Whether this runtime can traverse directories without following links."""
+
+    return bool(
+        hasattr(os, "O_DIRECTORY")
+        and hasattr(os, "O_NOFOLLOW")
+        and os.open in os.supports_dir_fd
+        and os.mkdir in os.supports_dir_fd
+        and os.stat in os.supports_dir_fd
+        and os.unlink in os.supports_dir_fd
+        and os.rename in os.supports_dir_fd
+        and os.link in os.supports_dir_fd
+    )
+
+
+def _directory_open_flags() -> int:
+    flags = os.O_RDONLY | int(getattr(os, "O_DIRECTORY", 0))
+    flags |= int(getattr(os, "O_NOFOLLOW", 0))
+    flags |= int(getattr(os, "O_CLOEXEC", 0))
+    return flags
+
+
+def _file_open_flags() -> int:
+    return int(getattr(os, "O_NOFOLLOW", 0)) | int(getattr(os, "O_CLOEXEC", 0))
+
+
+def _validate_component(component: str) -> None:
+    if (
+        not component
+        or component in {".", ".."}
+        or os.sep in component
+        or (os.altsep is not None and os.altsep in component)
+    ):
+        raise ValueError("workspace path contains an unsafe component")
+
+
+def _write_all(fd: int, payload: bytes) -> None:
+    remaining = memoryview(payload)
+    while remaining:
+        written = os.write(fd, remaining)
+        if written <= 0:
+            raise OSError("short write while persisting workspace metadata")
+        remaining = remaining[written:]
+
+
+def _best_effort_fsync_directory(fd: int) -> None:
+    with contextlib.suppress(OSError):
+        os.fsync(fd)
+
+
+def _temporary_entry_name(name: str) -> str:
+    return f".{name}.tmp-{os.getpid()}-{secrets.token_hex(8)}"
 
 
 def strip_client_workspace_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
@@ -278,28 +337,37 @@ class WorkspaceManager:
         resolved = raw.resolve(strict=False)
         if resolved != normalized:
             raise ValueError("managed workspace path contains a symlink")
-        if not self._contains(resolved):
+        if not self._contains(normalized):
             raise ValueError("managed workspace path is outside the workspace root")
         with self._managed_lock:
             existing = self._managed_paths.get(thread_id)
-            if existing is not None and existing != resolved:
+            if existing is not None and existing != normalized:
                 raise ValueError("thread already has a different managed workspace")
-            self._managed_paths[thread_id] = resolved
-        resolved.mkdir(parents=True, exist_ok=True)
-        self._ensure_layout(resolved, thread_id)
-        return self.layout(thread_id)
+            # Keep the rebind decision and the filesystem allocation in one
+            # critical section. A failed secure allocation must never leave a
+            # poisoned in-memory binding behind.
+            self._ensure_layout(normalized, thread_id)
+            self._managed_paths[thread_id] = normalized
+        return self._layout_for(normalized)
 
     def allocate(self, thread_id: str) -> Path:
         """Create (if needed) and return the workspace dir for a thread."""
         path = self.path_for(thread_id)
-        if not path.exists():
-            path.mkdir(parents=True, exist_ok=True)
-        self._ensure_layout(path, thread_id)
+        # A freshly opened thread triggers several workspace-backed endpoints
+        # in parallel (outputs, uploads, project binding). Serialise layout
+        # publication within this runtime so they cannot race on the manifest
+        # or its standard directories. RLock keeps bind_managed re-entrant.
+        with self._managed_lock:
+            self._ensure_layout(path, thread_id)
         return path
 
     def layout(self, thread_id: str) -> WorkspaceLayout:
         """Return the standard workspace layout, creating it if necessary."""
         root = self.allocate(thread_id)
+        return self._layout_for(root)
+
+    @staticmethod
+    def _layout_for(root: Path) -> WorkspaceLayout:
         return WorkspaceLayout(
             root=root,
             upload=root / "upload",
@@ -315,14 +383,14 @@ class WorkspaceManager:
         """Return the workspace manifest for a thread."""
         layout = self.layout(thread_id)
         try:
-            data = json.loads(layout.manifest.read_text(encoding="utf-8"))
+            data = json.loads(self._read_manifest_text(layout.root))
         except (OSError, json.JSONDecodeError):
             self._write_manifest(layout.root, thread_id)
-            data = json.loads(layout.manifest.read_text(encoding="utf-8"))
+            data = json.loads(self._read_manifest_text(layout.root))
         if isinstance(data, dict):
             return data
         self._write_manifest(layout.root, thread_id)
-        return json.loads(layout.manifest.read_text(encoding="utf-8"))
+        return json.loads(self._read_manifest_text(layout.root))
 
     def discard(self, thread_id: str) -> bool:
         """Remove the thread's workspace. Returns True iff something was deleted.
@@ -371,25 +439,302 @@ class WorkspaceManager:
         except ValueError:
             return False
 
-    def _ensure_layout(self, path: Path, thread_id: str) -> None:
+    def _normalized_parts(self, path: Path) -> tuple[Path, tuple[str, ...]]:
+        normalized = Path(os.path.abspath(path.expanduser()))
         try:
-            (path / ".gitignore").write_text(_GITIGNORE_BODY, encoding="utf-8")
-        except OSError as exc:
-            _logger.debug("could not write .gitignore in %s: %s", path, exc)
-        for rel in _STANDARD_DIRS:
-            try:
-                (path / rel).mkdir(parents=True, exist_ok=True)
-            except OSError as exc:
-                _logger.debug(
-                    "could not create workspace dir %s in %s: %s",
-                    rel,
-                    path,
-                    exc,
-                )
-        if not (path / _MANIFEST_NAME).exists():
-            self._write_manifest(path, thread_id)
+            relative = normalized.relative_to(self.root)
+        except ValueError as exc:
+            raise ValueError("workspace path is outside the workspace root") from exc
+        parts = tuple(relative.parts)
+        if not parts:
+            raise ValueError("workspace path must be below the workspace root")
+        for component in parts:
+            _validate_component(component)
+        return normalized, parts
 
-    def _write_manifest(self, path: Path, thread_id: str) -> None:
+    def _open_root_fd(self) -> int:
+        # The configured data root is trusted deployment state. The workspace
+        # root itself may not be a symlink when opened; O_NOFOLLOW closes the
+        # replacement window after mkdir.
+        self.root.mkdir(parents=True, exist_ok=True)
+        try:
+            fd = os.open(self.root, _directory_open_flags())
+        except OSError as exc:
+            if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
+                raise ValueError("workspace root contains a symlink") from exc
+            raise
+        if not stat.S_ISDIR(os.fstat(fd).st_mode):
+            os.close(fd)
+            raise ValueError("workspace root is not a directory")
+        return fd
+
+    def _open_directory_chain(
+        self,
+        path: Path,
+        *,
+        create: bool,
+    ) -> tuple[int, Path, os.stat_result]:
+        normalized, parts = self._normalized_parts(path)
+        current_fd = self._open_root_fd()
+        try:
+            for component in parts:
+                if create:
+                    with contextlib.suppress(FileExistsError):
+                        os.mkdir(component, mode=0o700, dir_fd=current_fd)
+                try:
+                    next_fd = os.open(
+                        component,
+                        _directory_open_flags(),
+                        dir_fd=current_fd,
+                    )
+                except OSError as exc:
+                    if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
+                        raise ValueError(
+                            "workspace path contains a symlink or non-directory"
+                        ) from exc
+                    raise
+                if not stat.S_ISDIR(os.fstat(next_fd).st_mode):
+                    os.close(next_fd)
+                    raise ValueError("workspace path component is not a directory")
+                os.close(current_fd)
+                current_fd = next_fd
+            return current_fd, normalized, os.fstat(current_fd)
+        except BaseException:
+            os.close(current_fd)
+            raise
+
+    @staticmethod
+    def _validate_regular_entry_at(directory_fd: int, name: str) -> os.stat_result:
+        entry = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        if not stat.S_ISREG(entry.st_mode):
+            raise ValueError(f"workspace metadata entry {name!r} is not a regular file")
+        if entry.st_nlink != 1:
+            raise ValueError(f"workspace metadata entry {name!r} has multiple hard links")
+        return entry
+
+    @classmethod
+    def _validate_published_regular_entry_at(
+        cls,
+        directory_fd: int,
+        name: str,
+    ) -> os.stat_result:
+        """Validate a no-clobber publication without rejecting its tiny link window.
+
+        ``link(temp, target)`` is the portable dirfd-relative no-replace
+        primitive. Between that call and the publisher unlinking ``temp``, the
+        inode legitimately has two links. A competing process may observe that
+        state; retry it briefly, while still rejecting a persistent hard link.
+        """
+        for attempt in range(12):
+            entry = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+            if not stat.S_ISREG(entry.st_mode) or entry.st_nlink == 1:
+                return cls._validate_regular_entry_at(directory_fd, name)
+            if attempt < 11:
+                time.sleep(0.001)
+        return cls._validate_regular_entry_at(directory_fd, name)
+
+    @staticmethod
+    def _write_temporary_file_at(directory_fd: int, name: str, payload: bytes) -> str:
+        temporary = _temporary_entry_name(name)
+        fd = os.open(
+            temporary,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | _file_open_flags(),
+            0o600,
+            dir_fd=directory_fd,
+        )
+        try:
+            _write_all(fd, payload)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        return temporary
+
+    @classmethod
+    def _atomic_replace_file_at(cls, directory_fd: int, name: str, payload: bytes) -> None:
+        temporary = cls._write_temporary_file_at(directory_fd, name, payload)
+        try:
+            # POSIX rename is atomic and replaces the directory entry itself;
+            # it never follows a symlink stored at ``name``.
+            os.rename(
+                temporary,
+                name,
+                src_dir_fd=directory_fd,
+                dst_dir_fd=directory_fd,
+            )
+            _best_effort_fsync_directory(directory_fd)
+        finally:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(temporary, dir_fd=directory_fd)
+
+    @classmethod
+    def _create_file_if_missing_at(cls, directory_fd: int, name: str, payload: bytes) -> None:
+        temporary = cls._write_temporary_file_at(directory_fd, name, payload)
+        try:
+            try:
+                # Linking a complete temporary file is an atomic no-clobber
+                # publish. If another allocator won, validate its entry rather
+                # than overwriting it or following a malicious link.
+                os.link(
+                    temporary,
+                    name,
+                    src_dir_fd=directory_fd,
+                    dst_dir_fd=directory_fd,
+                    follow_symlinks=False,
+                )
+                # End the legitimate two-link publication window before the
+                # directory fsync. Leaving this until ``finally`` made normal
+                # concurrent readers reject the new manifest as hard-linked.
+                os.unlink(temporary, dir_fd=directory_fd)
+                temporary = ""
+            except FileExistsError:
+                cls._validate_published_regular_entry_at(directory_fd, name)
+            _best_effort_fsync_directory(directory_fd)
+        finally:
+            if temporary:
+                with contextlib.suppress(FileNotFoundError):
+                    os.unlink(temporary, dir_fd=directory_fd)
+
+    @staticmethod
+    def _ensure_relative_directory_at(directory_fd: int, relative: str) -> None:
+        current_fd = os.dup(directory_fd)
+        try:
+            for component in Path(relative).parts:
+                _validate_component(component)
+                with contextlib.suppress(FileExistsError):
+                    os.mkdir(component, mode=0o700, dir_fd=current_fd)
+                try:
+                    next_fd = os.open(
+                        component,
+                        _directory_open_flags(),
+                        dir_fd=current_fd,
+                    )
+                except OSError as exc:
+                    if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
+                        raise ValueError(
+                            "workspace layout contains a symlink or non-directory"
+                        ) from exc
+                    raise
+                os.close(current_fd)
+                current_fd = next_fd
+        finally:
+            os.close(current_fd)
+
+    @staticmethod
+    def _verify_directory_binding(
+        path: Path,
+        expected: os.stat_result,
+    ) -> None:
+        try:
+            current = os.lstat(path)
+        except FileNotFoundError as exc:
+            raise ValueError("workspace directory was rebound during allocation") from exc
+        if stat.S_ISLNK(current.st_mode) or not stat.S_ISDIR(current.st_mode):
+            raise ValueError("workspace directory was replaced by a symlink or non-directory")
+        if (current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino):
+            raise ValueError("workspace directory was rebound during allocation")
+        if path.resolve(strict=True) != path:
+            raise ValueError("workspace path contains a symlink")
+
+    def _ensure_layout_dirfd(self, path: Path, thread_id: str) -> None:
+        directory_fd, normalized, expected = self._open_directory_chain(path, create=True)
+        try:
+            self._atomic_replace_file_at(
+                directory_fd,
+                ".gitignore",
+                _GITIGNORE_BODY.encode("utf-8"),
+            )
+            for relative in _STANDARD_DIRS:
+                self._ensure_relative_directory_at(directory_fd, relative)
+            manifest_payload = self._manifest_text(normalized, thread_id).encode("utf-8")
+            try:
+                self._validate_regular_entry_at(directory_fd, _MANIFEST_NAME)
+            except FileNotFoundError:
+                self._create_file_if_missing_at(
+                    directory_fd,
+                    _MANIFEST_NAME,
+                    manifest_payload,
+                )
+            # Re-open every standard directory from the still-pinned root fd.
+            # A replacement between creation steps is rejected before return.
+            for relative in _STANDARD_DIRS:
+                self._ensure_relative_directory_at(directory_fd, relative)
+        finally:
+            os.close(directory_fd)
+        self._verify_directory_binding(normalized, expected)
+
+    def _fallback_validate_directory(self, path: Path, *, create: bool) -> Path:
+        """Portable strict fallback for runtimes without dirfd/O_NOFOLLOW.
+
+        Python does not expose handle-relative directory creation on every
+        platform. This fallback repeatedly uses lstat before and after mkdir
+        and refuses any reparse/symlink entry. Atomic file replacement still
+        prevents final-component link following.
+        """
+
+        normalized, parts = self._normalized_parts(path)
+        self.root.mkdir(parents=True, exist_ok=True)
+        current = self.root
+        for component in parts:
+            current = current / component
+            try:
+                info = os.lstat(current)
+            except FileNotFoundError:
+                if not create:
+                    raise
+                current.mkdir()
+                info = os.lstat(current)
+            if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+                raise ValueError("workspace path contains a symlink or non-directory")
+        if normalized.resolve(strict=True) != normalized:
+            raise ValueError("workspace path contains a symlink")
+        return normalized
+
+    @staticmethod
+    def _atomic_replace_path(path: Path, payload: bytes) -> None:
+        temporary = path.parent / _temporary_entry_name(path.name)
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            _write_all(fd, payload)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        try:
+            os.replace(temporary, path)
+        finally:
+            with contextlib.suppress(FileNotFoundError):
+                temporary.unlink()
+
+    def _ensure_layout_fallback(self, path: Path, thread_id: str) -> None:
+        normalized = self._fallback_validate_directory(path, create=True)
+        self._atomic_replace_path(
+            normalized / ".gitignore",
+            _GITIGNORE_BODY.encode("utf-8"),
+        )
+        for relative in _STANDARD_DIRS:
+            self._fallback_validate_directory(normalized / relative, create=True)
+        manifest = normalized / _MANIFEST_NAME
+        try:
+            info = os.lstat(manifest)
+        except FileNotFoundError:
+            self._atomic_replace_path(
+                manifest,
+                self._manifest_text(normalized, thread_id).encode("utf-8"),
+            )
+        else:
+            if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+                raise ValueError("workspace manifest is not a regular file")
+            if info.st_nlink != 1:
+                raise ValueError("workspace manifest has multiple hard links")
+        self._fallback_validate_directory(normalized, create=False)
+
+    def _ensure_layout(self, path: Path, thread_id: str) -> None:
+        if _supports_secure_dirfd():
+            self._ensure_layout_dirfd(path, thread_id)
+            return
+        self._ensure_layout_fallback(path, thread_id)
+
+    @staticmethod
+    def _manifest_text(path: Path, thread_id: str) -> str:
         payload = {
             "schema": "octopus.workspace.v1",
             "thread_id": thread_id,
@@ -404,13 +749,62 @@ class WorkspaceManager:
                 "skills": "skills",
             },
         }
-        try:
-            (path / _MANIFEST_NAME).write_text(
-                json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
-            )
-        except OSError as exc:
-            _logger.debug("could not write workspace manifest in %s: %s", path, exc)
+        return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+
+    def _write_manifest(self, path: Path, thread_id: str) -> None:
+        payload = self._manifest_text(path, thread_id).encode("utf-8")
+        if _supports_secure_dirfd():
+            directory_fd, normalized, expected = self._open_directory_chain(path, create=False)
+            try:
+                self._atomic_replace_file_at(directory_fd, _MANIFEST_NAME, payload)
+            finally:
+                os.close(directory_fd)
+            self._verify_directory_binding(normalized, expected)
+            return
+        normalized = self._fallback_validate_directory(path, create=False)
+        self._atomic_replace_path(normalized / _MANIFEST_NAME, payload)
+        self._fallback_validate_directory(normalized, create=False)
+
+    @staticmethod
+    def _read_text_from_fd(fd: int) -> str:
+        chunks: list[bytes] = []
+        while True:
+            chunk = os.read(fd, 64 * 1024)
+            if not chunk:
+                return b"".join(chunks).decode("utf-8")
+            chunks.append(chunk)
+
+    def _read_manifest_text(self, path: Path) -> str:
+        if _supports_secure_dirfd():
+            directory_fd, normalized, expected = self._open_directory_chain(path, create=False)
+            try:
+                try:
+                    fd = os.open(
+                        _MANIFEST_NAME,
+                        os.O_RDONLY | _file_open_flags(),
+                        dir_fd=directory_fd,
+                    )
+                except OSError as exc:
+                    if exc.errno == errno.ELOOP:
+                        raise ValueError("workspace manifest is a symlink") from exc
+                    raise
+                try:
+                    info = os.fstat(fd)
+                    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                        raise ValueError("workspace manifest is not a private regular file")
+                    content = self._read_text_from_fd(fd)
+                finally:
+                    os.close(fd)
+            finally:
+                os.close(directory_fd)
+            self._verify_directory_binding(normalized, expected)
+            return content
+        normalized = self._fallback_validate_directory(path, create=False)
+        manifest = normalized / _MANIFEST_NAME
+        info = os.lstat(manifest)
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise ValueError("workspace manifest is not a private regular file")
+        return manifest.read_text(encoding="utf-8")
 
 
 def _safe_slug(thread_id: str) -> str:

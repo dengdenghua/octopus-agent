@@ -49,7 +49,7 @@ runtime/
 │   ├── channels/       Discord/Slack/WeChat/Telegram/Email/...
 │   ├── mcp_client/     MCP protocol client
 │   ├── scheduler/      Cron scheduler
-│   └── integrations/   Third-party integrations (Molili, local auth)
+│   └── integrations/   Account integrations (Oct, local auth)
 ├── platform/           Infrastructure
 │   ├── config/         Config builder + Schema + Presets
 │   ├── process/        Session + EventBus + Streaming + Distributed lock

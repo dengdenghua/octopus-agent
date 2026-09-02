@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from runtime.platform.models import (
     AntigenSignature,
@@ -62,6 +62,68 @@ class Journal:
 
     def write(self, event: JournalEvent) -> None:
         raise NotImplementedError
+
+    def canonicalize_event(self, event: JournalEvent) -> JournalEvent:
+        """Return the exact event representation this backend will persist.
+
+        The base contract applies server-owned journal context. File-backed
+        implementations may additionally apply storage transformations such
+        as secret redaction. Streaming wrappers use the returned value so live
+        subscribers observe the same representation as durable readers.
+        """
+
+        return self._apply_context(event)
+
+    def write_canonical(self, event: JournalEvent) -> JournalEvent:
+        """Write one event and return the representation accepted by storage.
+
+        This combined hook prevents streaming wrappers from reconstructing a
+        committed event with a post-write read (which can race rotation or
+        replay an older row). Backends with non-trivial serialization should
+        override it so canonicalization happens exactly once.
+        """
+
+        canonical = self.canonicalize_event(event)
+        self.write(canonical)
+        return canonical
+
+    def write_trajectory_once(self, event: TrajectoryEvent) -> bool:
+        """Atomically append a trajectory when its durable key is absent.
+
+        Implementations must treat ``(task_id, strategy_id, tenant_id,
+        owner_actor_id)`` as the idempotency key and cover the absence check
+        plus append with the same storage transaction.  Returning ``False``
+        means that key was already present.  Backends which cannot provide
+        that guarantee deliberately fail closed instead of falling back to a
+        racy ``read_by_task`` followed by ``write``.
+        """
+
+        del event
+        raise NotImplementedError("journal backend has no atomic trajectory append")
+
+    def canonicalize_trajectory_event(self, event: TrajectoryEvent) -> TrajectoryEvent:
+        """Return the exact event representation this backend will persist.
+
+        Streaming wrappers use this hook so subscribers see the same
+        server-owned scope as durable storage. File-backed journals may also
+        apply their configured redactor here.
+        """
+
+        return cast(TrajectoryEvent, self.canonicalize_event(event))
+
+    def write_trajectory_once_canonical(
+        self,
+        event: TrajectoryEvent,
+    ) -> tuple[bool, TrajectoryEvent]:
+        """Atomically write and return the backend's canonical event.
+
+        The default implementation preserves compatibility for third-party
+        journals. Concrete backends can override it to avoid applying a
+        non-idempotent canonicalizer twice.
+        """
+
+        canonical = self.canonicalize_trajectory_event(event)
+        return self.write_trajectory_once(canonical), canonical
 
     def read_all(self, *, scope: TenantScope | None = None) -> list[JournalEvent]:
         raise NotImplementedError

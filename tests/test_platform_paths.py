@@ -145,7 +145,7 @@ def test_project_root_survives_a_deleted_cwd(monkeypatch, tmp_path):
     monkeypatch.delenv("OCTOPUS_DATA_DIR", raising=False)
     monkeypatch.delenv("OCTOPUS_HOME", raising=False)
 
-    previous = Path(__file__).parent
+    previous = Path.cwd()
     os.chdir(doomed)
     try:
         doomed.rmdir()

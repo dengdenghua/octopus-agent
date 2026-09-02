@@ -17,6 +17,7 @@ from typing import Any
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
+from ._observability_auth import _require_global_control
 from ._observability_helpers import HTTPException, Query, Request
 from ._observability_state import ObservabilityContext
 
@@ -39,7 +40,11 @@ def register_kg_endpoints(router: Any, ctx: ObservabilityContext) -> None:
 
         return app_paths().data_dir / "knowledge_graph.sqlite"
 
-    def _open_synced_kg(*, force_sync: bool = False) -> tuple[Any, bool, Any]:
+    def _open_synced_kg(
+        *,
+        scope: Any = None,
+        force_sync: bool = False,
+    ) -> tuple[Any, bool, Any]:
         from runtime.memory.knowledge_graph import KnowledgeGraph, SqliteKnowledgeGraph
         from runtime.safety.recovery import KGUpdater
 
@@ -56,7 +61,7 @@ def register_kg_endpoints(router: Any, ctx: ObservabilityContext) -> None:
             if cache_fresh and not force_sync:
                 report = kg_sync_cache["report"]
             else:
-                report = KGUpdater(journal, kg).update()
+                report = KGUpdater(journal, kg, scope=scope).update()
                 if persistent:
                     kg_sync_cache["report"] = report
                     kg_sync_cache["expires_at"] = now + kg_sync_ttl_seconds
@@ -102,8 +107,12 @@ def register_kg_endpoints(router: Any, ctx: ObservabilityContext) -> None:
             "superseded_by": (str(t.superseded_by) if getattr(t, "superseded_by", None) else None),
         }
 
-    def _build_kg_view(limit: int = 200) -> tuple[list, list, dict]:
-        kg, persistent, update_report = _open_synced_kg()
+    def _build_kg_view(
+        limit: int = 200,
+        *,
+        scope: Any = None,
+    ) -> tuple[list, list, dict]:
+        kg, persistent, update_report = _open_synced_kg(scope=scope)
         try:
             triples = kg.query()[:limit]
 
@@ -220,14 +229,18 @@ def register_kg_endpoints(router: Any, ctx: ObservabilityContext) -> None:
     # ─── /api/kg ────────────────────────────────────────────
     @router.get("/api/kg")
     def api_kg(
+        request: Request,
         subject: str | None = None,
         predicate: str | None = None,
         limit: int = Query(default=50, ge=1, le=500),
+        cross_tenant: bool = Query(default=False),
     ) -> dict[str, Any]:
-        kg, persistent, update_report = _open_synced_kg()
+        scope = _require_global_control(request, ctx, cross_tenant=cross_tenant)
+        kg, persistent, update_report = _open_synced_kg(scope=scope)
         try:
             triples = kg.query(subject=subject, predicate=predicate)[:limit]
             return {
+                "global_control_plane": True,
                 "count": len(triples),
                 "kg_size": kg.count(),
                 "persistent": persistent,
@@ -239,11 +252,16 @@ def register_kg_endpoints(router: Any, ctx: ObservabilityContext) -> None:
 
     # ─── /api/kg/export + /api/kg/import ───────────────────
     @router.get("/api/kg/export")
-    def api_kg_export() -> dict[str, Any]:
-        kg, persistent, update_report = _open_synced_kg()
+    def api_kg_export(
+        request: Request,
+        cross_tenant: bool = Query(default=False),
+    ) -> dict[str, Any]:
+        scope = _require_global_control(request, ctx, cross_tenant=cross_tenant)
+        kg, persistent, update_report = _open_synced_kg(scope=scope)
         try:
             triples = kg.export_triples(active_only=True)
             return {
+                "global_control_plane": True,
                 "count": len(triples),
                 "persistent": persistent,
                 "update_report": _model_dump(update_report),
@@ -253,13 +271,17 @@ def register_kg_endpoints(router: Any, ctx: ObservabilityContext) -> None:
             _close_kg(kg)
 
     @router.post("/api/kg/import")
-    async def api_kg_import(request: Request) -> dict[str, Any]:
+    async def api_kg_import(
+        request: Request,
+        cross_tenant: bool = Query(default=False),
+    ) -> dict[str, Any]:
+        scope = _require_global_control(request, ctx, cross_tenant=cross_tenant)
         try:
             body = await request.json()
         except (OSError, json.JSONDecodeError, ValueError, TypeError) as e:
             raise HTTPException(400, f"body: {e}") from e
 
-        kg, persistent, update_report = _open_synced_kg()
+        kg, persistent, update_report = _open_synced_kg(scope=scope)
         try:
             obsidian_text = body.get("obsidian")
             if isinstance(obsidian_text, str):
@@ -277,6 +299,7 @@ def register_kg_endpoints(router: Any, ctx: ObservabilityContext) -> None:
                     default_confidence=float(body.get("confidence", 0.75)),
                 )
             return {
+                "global_control_plane": True,
                 **result,
                 "persistent": persistent,
                 "update_report": _model_dump(update_report),
@@ -286,10 +309,14 @@ def register_kg_endpoints(router: Any, ctx: ObservabilityContext) -> None:
 
     @router.get("/api/knowledge/graph")
     def api_knowledge_graph(
+        request: Request,
         limit: int = Query(default=200, ge=1, le=1000),
+        cross_tenant: bool = Query(default=False),
     ) -> dict[str, Any]:
-        entities, relationships, stats = _build_kg_view(limit)
+        scope = _require_global_control(request, ctx, cross_tenant=cross_tenant)
+        entities, relationships, stats = _build_kg_view(limit, scope=scope)
         return {
+            "global_control_plane": True,
             "entities": entities,
             "relationships": relationships,
             "stats": stats,
@@ -300,17 +327,24 @@ def register_kg_endpoints(router: Any, ctx: ObservabilityContext) -> None:
         }
 
     @router.get("/api/knowledge/stats")
-    def api_knowledge_stats() -> dict[str, Any]:
-        _, _, stats = _build_kg_view(500)
-        return stats
+    def api_knowledge_stats(
+        request: Request,
+        cross_tenant: bool = Query(default=False),
+    ) -> dict[str, Any]:
+        scope = _require_global_control(request, ctx, cross_tenant=cross_tenant)
+        _, _, stats = _build_kg_view(500, scope=scope)
+        return {"global_control_plane": True, **stats}
 
     @router.get("/api/knowledge/neighbors")
     def api_knowledge_neighbors(
+        request: Request,
         entity: str = Query(...),
         hops: int = Query(default=1, ge=1, le=3),
         limit: int = Query(default=50, ge=1, le=200),
+        cross_tenant: bool = Query(default=False),
     ) -> dict[str, Any]:
-        kg, persistent, update_report = _open_synced_kg()
+        scope = _require_global_control(request, ctx, cross_tenant=cross_tenant)
+        kg, persistent, update_report = _open_synced_kg(scope=scope)
         try:
             triples = kg.neighbors(entity, hops=hops)[:limit]
             nodes: dict[str, dict[str, Any]] = {}
@@ -338,6 +372,7 @@ def register_kg_endpoints(router: Any, ctx: ObservabilityContext) -> None:
                     }
                 )
             return {
+                "global_control_plane": True,
                 "center": entity,
                 "nodes": list(nodes.values()),
                 "edges": edges,
@@ -349,13 +384,21 @@ def register_kg_endpoints(router: Any, ctx: ObservabilityContext) -> None:
 
     @router.get("/api/knowledge/search")
     def api_knowledge_search(
+        request: Request,
         q: str = Query(default=""),
         limit: int = Query(default=50, ge=1, le=200),
+        cross_tenant: bool = Query(default=False),
     ) -> dict[str, Any]:
+        scope = _require_global_control(request, ctx, cross_tenant=cross_tenant)
         query = " ".join(q.split()).casefold()
         if not query:
-            return {"nodes": [], "edges": [], "count": 0}
-        kg, persistent, update_report = _open_synced_kg()
+            return {
+                "global_control_plane": True,
+                "nodes": [],
+                "edges": [],
+                "count": 0,
+            }
+        kg, persistent, update_report = _open_synced_kg(scope=scope)
         try:
             matches = [
                 t for t in kg.query() if query in f"{t.subject} {t.predicate} {t.object}".casefold()
@@ -374,6 +417,7 @@ def register_kg_endpoints(router: Any, ctx: ObservabilityContext) -> None:
                     )
                 edges.append(_relationship_payload(t))
             return {
+                "global_control_plane": True,
                 "nodes": list(nodes.values()),
                 "edges": edges,
                 "count": len(edges),
@@ -385,11 +429,14 @@ def register_kg_endpoints(router: Any, ctx: ObservabilityContext) -> None:
 
     @router.get("/api/knowledge/path")
     def api_knowledge_path(
+        request: Request,
         source: str = Query(...),
         target: str = Query(...),
         max_hops: int = Query(default=3, ge=1, le=6),
+        cross_tenant: bool = Query(default=False),
     ) -> dict[str, Any]:
-        kg, persistent, update_report = _open_synced_kg()
+        scope = _require_global_control(request, ctx, cross_tenant=cross_tenant)
+        kg, persistent, update_report = _open_synced_kg(scope=scope)
         try:
             triples = kg.query()
             by_entity: dict[str, list[Any]] = {}
@@ -426,6 +473,7 @@ def register_kg_endpoints(router: Any, ctx: ObservabilityContext) -> None:
                         },
                     )
             return {
+                "global_control_plane": True,
                 "source": source,
                 "target": target,
                 "found": bool(path),

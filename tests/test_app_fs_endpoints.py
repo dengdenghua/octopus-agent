@@ -22,6 +22,7 @@ an identity store is wired and ``require_auth`` is set (``TestFsAuth``).
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -330,6 +331,48 @@ class TestFsWrite:
         )
         assert f.read_text(encoding="utf-8") == "second"
 
+    def test_write_with_matching_digest_preserves_optimistic_lock(
+        self,
+        client: TestClient,
+        tmp_path: Path,
+    ) -> None:
+        f = tmp_path / "shared.html"
+        original = "<h1>old</h1>"
+        f.write_text(original, encoding="utf-8")
+
+        r = client.post(
+            "/api/fs/write",
+            json={
+                "path": str(f),
+                "content": "<h1>new</h1>",
+                "expected_sha256": hashlib.sha256(original.encode()).hexdigest(),
+            },
+        )
+
+        assert r.status_code == 200
+        assert f.read_text(encoding="utf-8") == "<h1>new</h1>"
+
+    def test_write_rejects_stale_digest_without_overwriting(
+        self,
+        client: TestClient,
+        tmp_path: Path,
+    ) -> None:
+        f = tmp_path / "shared.html"
+        f.write_text("agent version", encoding="utf-8")
+
+        r = client.post(
+            "/api/fs/write",
+            json={
+                "path": str(f),
+                "content": "human stale version",
+                "expected_sha256": hashlib.sha256(b"older version").hexdigest(),
+            },
+        )
+
+        assert r.status_code == 409
+        assert r.json()["detail"]["error"] == "file_changed"
+        assert f.read_text(encoding="utf-8") == "agent version"
+
     def test_workspace_path_rejects_outside_write(
         self,
         tmp_path: Path,
@@ -522,7 +565,7 @@ class TestFsAuth:
     rejects unauthenticated requests.
     """
 
-    def _client(self, require_auth: bool):
+    def _client(self, require_auth: bool, *, allow_local_workspace_access: bool = False):
         from runtime.safety.auth import Identity, IdentityStore
 
         store = IdentityStore()
@@ -532,6 +575,7 @@ class TestFsAuth:
             create_fs_router(
                 identity_store=store,
                 require_auth=require_auth,
+                allow_local_workspace_access=allow_local_workspace_access,
             )
         )
         return TestClient(app)
@@ -554,3 +598,44 @@ class TestFsAuth:
         # server-owned thread scope.  The direct router has no thread store,
         # so it must fail closed after the 401 boundary.
         assert r.status_code == 403
+
+    def test_authenticated_loopback_mode_can_pick_before_thread_exists(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from runtime.sensing.gateway import _fs_router_endpoints as endpoints
+
+        selected = "/Users/alice/project"
+        monkeypatch.setattr(endpoints, "_pick_directory_macos", lambda _default: selected)
+        monkeypatch.setattr(endpoints, "_pick_directory_tk", lambda _default: selected)
+        monkeypatch.setattr(endpoints, "_pick_directory_windows", lambda _default: selected)
+        client = self._client(require_auth=True, allow_local_workspace_access=True)
+
+        roots = client.get(
+            "/api/fs/roots",
+            headers={"Authorization": "Bearer sk-alice"},
+        )
+        picked = client.get(
+            "/api/fs/pick-directory",
+            headers={"Authorization": "Bearer sk-alice"},
+        )
+
+        assert roots.status_code == 200
+        assert picked.status_code == 200
+        assert picked.json() == {
+            "success": True,
+            "path": selected,
+            "canceled": False,
+            "error": None,
+        }
+
+    def test_shared_mode_still_rejects_picker_without_thread_scope(self) -> None:
+        client = self._client(require_auth=True)
+
+        picked = client.get(
+            "/api/fs/pick-directory",
+            headers={"Authorization": "Bearer sk-alice"},
+        )
+
+        assert picked.status_code == 403
+        assert picked.json()["detail"]["error"] == "thread_scope_required"

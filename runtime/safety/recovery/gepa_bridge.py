@@ -60,9 +60,16 @@ from __future__ import annotations
 import json
 import logging
 import os
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from runtime.safety.auth.scope import TenantScope, tenant_scoped_path
 from runtime.safety.evolution.canary import CanaryManager
+from runtime.safety.evolution.candidate_registry import (
+    CandidateRegistry,
+    CandidateStatus,
+    EvolutionCandidate,
+)
 from runtime.safety.evolution.proposal_ledger import ProposalLedger
 from runtime.safety.recovery._gepa_failures import (
     collect_failures_from_journal,
@@ -101,8 +108,6 @@ from runtime.safety.recovery.native_replay_sandbox import run_sandbox_replay
 from runtime.safety.recovery.native_turn_replay import replay_turn_candidates
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from runtime.safety.evolution.canary import CanaryConfig
     from runtime.safety.recovery.gepa_optimizer import GepaResult
     from runtime.safety.recovery.native_llm_replay import LLMReplayReport
@@ -111,6 +116,88 @@ if TYPE_CHECKING:
     from runtime.safety.recovery.native_turn_replay import TurnReplayReport
 
 _LOG = logging.getLogger("octopus.gepa.bridge")
+
+
+def _record_gepa_candidate(
+    *,
+    ledger_path: Any,
+    recipe_id: str | None,
+    prompt: str,
+    optimizer_candidate_id: str,
+    avg_score: float,
+    native_score: dict[str, Any],
+    replay_summary: dict[str, Any] | None,
+    sandbox_replay_summary: dict[str, Any] | None,
+    turn_replay_summary: dict[str, Any] | None,
+    llm_replay_summary: dict[str, Any] | None,
+    failures: list[dict[str, Any]] | None,
+    metadata: dict[str, Any],
+    tenant_scope: TenantScope | None = None,
+) -> EvolutionCandidate:
+    """Project a GEPA winner into the authoritative typed candidate registry."""
+
+    registry_path = Path(ledger_path).expanduser().parent / "evolution_candidates.jsonl"
+    if tenant_scope is not None:
+        registry_path = tenant_scoped_path(registry_path, tenant_scope)
+    registry = CandidateRegistry(registry_path, tenant_scope=tenant_scope)
+    scope = recipe_id or "__global__"
+    candidate = registry.propose(
+        gene_type="prompt",
+        scope=f"planner.prompt:{scope}",
+        patch={"op": "replace", "target": scope, "value": prompt},
+        proposer="gepa",
+        lineage_id=f"gepa:{scope}",
+        role_id="general",
+        task_domain=f"planner:{scope}",
+        risk_level="medium",
+        source_failures=list(
+            dict.fromkeys(
+                str(row.get("failure_cluster") or row.get("failure_source") or "").strip()
+                for row in failures or []
+                if str(row.get("failure_cluster") or row.get("failure_source") or "").strip()
+            )
+        ),
+        metadata={
+            **metadata,
+            "optimizer_candidate_id": optimizer_candidate_id,
+            "legacy_proposal_ledger": str(ledger_path),
+        },
+        tenant_id=tenant_scope.tenant_id if tenant_scope is not None else None,
+        owner_actor_id=tenant_scope.actor_id if tenant_scope is not None else None,
+    )
+    gates = {
+        "constraints": True,
+        "native_score": str(native_score.get("verdict") or "") != "reject",
+        "native_replay": replay_summary is not None,
+        "sandbox_replay": sandbox_replay_summary is not None,
+        "turn_replay": turn_replay_summary is not None,
+    }
+    metrics = {"optimizer_avg_score": avg_score}
+    for name, summary in (
+        ("native_replay", replay_summary),
+        ("sandbox_replay", sandbox_replay_summary),
+        ("turn_replay", turn_replay_summary),
+        ("llm_replay", llm_replay_summary),
+    ):
+        value = (summary or {}).get("total")
+        if isinstance(value, (int, float)):
+            metrics[name] = float(value)
+    candidate = registry.record_evidence(
+        candidate.candidate_id,
+        hard_gate_results=gates,
+        metric_vector=metrics,
+        metadata={
+            "awaiting_gates": [name for name, passed in gates.items() if not passed],
+            "next_stage": "structured_shadow" if all(gates.values()) else "native_validation",
+        },
+    )
+    if candidate.status == CandidateStatus.PROPOSED and all(gates.values()):
+        candidate = registry.transition(
+            candidate.candidate_id,
+            CandidateStatus.VALIDATED,
+            metadata={"next_stage": "structured_shadow"},
+        )
+    return candidate
 
 
 def write_applied_winner_sidecar(
@@ -317,8 +404,12 @@ def record_winner_proposal_and_canary(
     min_sandbox_replay_score: float = 0.50,
     min_turn_replay_score: float = 0.50,
     min_llm_replay_score: float = 0.50,
+    tenant_scope: TenantScope | None = None,
 ) -> dict[str, Any]:
     """Materialize the optimizer winner as an auditable proposal."""
+    effective_ledger_path = (
+        tenant_scoped_path(ledger_path, tenant_scope) if tenant_scope is not None else ledger_path
+    )
     best = result.best_avg
     if best is None:
         return {"ok": False, "skipped": True, "reason": "no winner"}
@@ -479,8 +570,31 @@ def record_winner_proposal_and_canary(
         "run_ts": run_ts,
         "canary_key": canary_key,
     }
-    ledger = ProposalLedger(ledger_path)
-    for existing in reversed(ledger.query(kind="prompt_optimizer_winner", limit=200)):
+    evolution_candidate = _record_gepa_candidate(
+        ledger_path=ledger_path,
+        recipe_id=recipe_id,
+        prompt=prompt,
+        optimizer_candidate_id=candidate_id,
+        avg_score=avg_score,
+        native_score=native_score.to_dict(),
+        replay_summary=replay_summary,
+        sandbox_replay_summary=sandbox_replay_summary,
+        turn_replay_summary=turn_replay_summary,
+        llm_replay_summary=llm_replay_summary,
+        failures=failures,
+        metadata=metadata,
+        tenant_scope=tenant_scope,
+    )
+    metadata["evolution_candidate_id"] = evolution_candidate.candidate_id
+    metadata["evolution_candidate_status"] = evolution_candidate.status.value
+    ledger = ProposalLedger(effective_ledger_path)
+    for existing in reversed(
+        ledger.query(
+            kind="prompt_optimizer_winner",
+            limit=200,
+            scope=tenant_scope,
+        )
+    ):
         existing_metadata = existing.metadata if isinstance(existing.metadata, dict) else {}
         if (
             existing_metadata.get("recipe_id") == recipe_id
@@ -496,6 +610,7 @@ def record_winner_proposal_and_canary(
                     "avg_score": avg_score,
                     "trigger": trigger,
                     "run_ts": run_ts,
+                    "evolution_candidate_id": evolution_candidate.candidate_id,
                 },
             )
             return {
@@ -509,15 +624,18 @@ def record_winner_proposal_and_canary(
                 "canary_phase": state.phase.value,
                 "candidate_id": candidate_id,
                 "avg_score": avg_score,
+                "evolution_candidate_id": evolution_candidate.candidate_id,
+                "evolution_candidate_status": evolution_candidate.status.value,
             }
-    scope = recipe_id or "__global__"
+    recipe_scope = recipe_id or "__global__"
     proposal = ledger.propose(
         kind="prompt_optimizer_winner",
         description=(
-            f"Prompt optimizer winner {candidate_id} for {scope} avg_score={avg_score:.3f}"
+            f"Prompt optimizer winner {candidate_id} for {recipe_scope} avg_score={avg_score:.3f}"
         ),
         proposer="gepa_bridge",
         metadata=metadata,
+        scope=tenant_scope,
     )
     canary_metadata = {
         "proposal_id": proposal.proposal_id,
@@ -527,6 +645,7 @@ def record_winner_proposal_and_canary(
         "avg_score": avg_score,
         "trigger": trigger,
         "run_ts": run_ts,
+        "evolution_candidate_id": evolution_candidate.candidate_id,
     }
     state = CanaryManager(canary_config).register(
         canary_key,
@@ -541,6 +660,8 @@ def record_winner_proposal_and_canary(
         "canary_phase": state.phase.value,
         "candidate_id": candidate_id,
         "avg_score": avg_score,
+        "evolution_candidate_id": evolution_candidate.candidate_id,
+        "evolution_candidate_status": evolution_candidate.status.value,
     }
 
 
@@ -562,6 +683,7 @@ def optimize_for_recipe(
     ledger_path: Any = "data/proposal_ledger.jsonl",
     trigger: str = "manual",
     record_winner: bool = True,
+    scope: TenantScope | None = None,
 ) -> GepaResult:
     """End-to-end · pulls failures, builds eval_fn, runs gepa.
 
@@ -571,17 +693,26 @@ def optimize_for_recipe(
     a ``GepaResult`` so the operator can inspect candidates
     before deciding to apply.
     """
+    effective_ledger_path = (
+        tenant_scoped_path(ledger_path, scope) if scope is not None else ledger_path
+    )
     journal_failures = collect_failures_from_journal(
         journal,
         recipe_id=recipe_id,
         limit=eval_tasks * 2,
+        scope=scope,
     )
     ledger_failures = collect_failures_from_ledger(
-        ledger_path=ledger_path,
+        ledger_path=effective_ledger_path,
         recipe_id=recipe_id,
         limit=eval_tasks * 2,
+        scope=scope,
     )
-    external_failures = collect_external_session_failures(limit=eval_tasks * 2)
+    external_failures = (
+        collect_external_session_failures(limit=eval_tasks * 2)
+        if scope is None or scope.allow_cross_tenant
+        else []
+    )
     failures = _merge_failure_samples(
         _merge_failure_samples(
             journal_failures,
@@ -660,15 +791,17 @@ def optimize_for_recipe(
     )
     positive_dataset = dataset_builder.build_positive_examples(
         journal=journal,
-        ledger_path=ledger_path,
+        ledger_path=effective_ledger_path,
         recipe_id=recipe_id,
         limit=eval_tasks * 2,
+        scope=scope,
     )
-    positive_dataset = _merge_positive_datasets(
-        positive_dataset,
-        build_external_session_dataset(limit=eval_tasks * 2),
-        limit=eval_tasks * 3,
-    )
+    if scope is None or scope.allow_cross_tenant:
+        positive_dataset = _merge_positive_datasets(
+            positive_dataset,
+            build_external_session_dataset(limit=eval_tasks * 2),
+            limit=eval_tasks * 3,
+        )
     native_evaluation = evaluate_front_native(
         list(result.final_front or []),
         baseline_prompt=seed_prompt,
@@ -723,6 +856,7 @@ def optimize_for_recipe(
                 sandbox_replay_report=sandbox_replay_report,
                 turn_replay_report=turn_replay_report,
                 llm_replay_report=llm_replay_report,
+                tenant_scope=scope,
             )
         except Exception as exc:  # noqa: BLE001
             lifecycle = {
@@ -789,6 +923,7 @@ def propose_for_losing_recipes(
     eval_tasks: int = 4,
     max_recipes: int = 3,
     ledger_path: Any = "data/proposal_ledger.jsonl",
+    scope: TenantScope | None = None,
 ) -> list[dict[str, Any]]:
     from runtime.safety.recovery.gepa_runs import (
         get_default_store,
@@ -801,7 +936,11 @@ def propose_for_losing_recipes(
 
     # 1. Find recipes RecipeEvaluator considers losing.
     try:
-        evaluator = RecipeEvaluator(journal, RecipeEvaluatorConfig())
+        evaluator = RecipeEvaluator(
+            journal,
+            RecipeEvaluatorConfig(),
+            scope=scope,
+        )
         report = evaluator.evaluate()
     except Exception as exc:  # noqa: BLE001
         return [
@@ -842,6 +981,7 @@ def propose_for_losing_recipes(
                 eval_tasks=eval_tasks,
                 ledger_path=ledger_path,
                 trigger="auto_propose",
+                scope=scope,
             )
             rec = record_from_result(
                 result,

@@ -291,7 +291,7 @@ class TestBundledTier:
 
 class TestProjectExpansionGuard:
     """``/project ...`` must never be expanded as a generic slash template —
-    the project-mode driver owns that namespace."""
+    the explicit Project OS command driver owns that namespace."""
 
     def test_project_control_passes_through(self) -> None:
         from runtime.sensing.gateway.slash_command_expansion import (

@@ -12,12 +12,6 @@ make test        # 或 python -m pytest tests/ -q
 
 目标：**测试全绿 · lint 0 error**。
 
-> **已知环境限制**：`tests/test_agents_router.py` 的 local-partner 测试
-> （`registered_count` 期望 1）依赖对真实 CLI（Claude Code / Codex / Trae / Qoder）
-> 的 readiness 探测。在未安装这些 CLI 或网络受限的沙箱 / CI 环境中，探测不通过
-> 会导致这 2 条测试失败——这是环境限制，不是回归；本地安装对应 CLI 后即恢复通过。
-> 跑全量测试前请先确认环境具备对应 CLI，避免把环境红误判为代码回归。
-
 ## 提交前硬性要求
 
 - [ ] `python -m pytest tests/` 全绿
@@ -34,7 +28,7 @@ make test        # 或 python -m pytest tests/ -q
 - **聚焦 PR**：一个 PR 只解决一个主题。不夹带与主题无关的重构、格式调整或依赖升级；确需重构请在独立 PR 进行。
 - **禁止巨型 commit**：超过 ~500 个文件或几千行 diff 的 commit 应拆分。历史教训：一次"批量拆分"出现过 422 文件 / 79896 行的巨型提交，难以 review 与回滚。
 - **Conventional Commits 格式**：commit message 使用 `feat` / `fix` / `docs` / `refactor` / `chore` / `test` / `perf` 等类型前缀，由 **commitlint**（`.husky/commit-msg`）在提交时强制校验，不符合格式的提交会被拒绝。
-- 该规则与 [.trae/specs/scale-focus-control/spec.md](.trae/specs/scale-focus-control/spec.md) 的 **Delta 2** 目标一致。
+- 该规则与项目的小步可回滚、可审查变更目标一致。
 
 ## 提 PR 的 checklist
 

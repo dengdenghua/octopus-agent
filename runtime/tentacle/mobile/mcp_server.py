@@ -44,7 +44,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .vlm import VlmConfig
 
-from ..base import ToolCall, ToolResult
+from ..base import ToolCall
 from ..coordinator import TentacleCoordinator
 from ._mcp_skill_tools import (
     _build_management_tools,
@@ -152,7 +152,17 @@ class TentacleMcpServer:
 
         # 执行
         try:
-            result: ToolResult = await device.execute(tool_call)
+            executor = getattr(self.coordinator, "device_executor", None)
+            if executor is not None:
+                guarded = await executor.execute_sequence(
+                    device,
+                    [tool_call],
+                    owner=f"mcp:{call_id}",
+                    task_id=call_id,
+                )
+                result = guarded[0]
+            else:
+                result = await device.execute(tool_call)
         except Exception as e:
             logger.exception("tool call failed: %s", skill_name)
             return self._error_result(f"Tool execution error: {e}")

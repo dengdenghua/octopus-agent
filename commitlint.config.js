@@ -2,7 +2,7 @@ export default {
   extends: ['@commitlint/config-conventional'],
   rules: {
     // 常见提交类型显式声明，方便新人即看即用。
-    // 打字错误不会让 commit 失败（config-conventional 只检查格式）。
+    // type 必须命中以下白名单；拼写错误会导致提交校验失败。
     'type-enum': [
       2,
       'always',
@@ -23,13 +23,13 @@ export default {
         'deps',     // 依赖升级/回退
       ],
     ],
-    // header/body 行宽压到 72，超过则 GitHub/GitLab 预览会截断。
+    // header 保持简洁；body/footer 控制行宽，便于终端与代码审查阅读。
     'header-max-length': [2, 'always', 72],
-    'body-max-line-length': [2, 'always', 72],
+    'body-max-line-length': [2, 'always', 120],
     'footer-max-line-length': [2, 'always', 72],
     // body/footer 与 header 之间保留空行，Conventional Commits 规范要求。
     'body-leading-blank': [2, 'always'],
-    'footer-leading-blank': [2, 'always'],
+    'footer-leading-blank': [1, 'always'], // warning：正文行首 `word:` 常被误判为 footer token 导致假失败，见 .octopus/imported/claude/memory/commitlint-body-token-false-positive.md
     // 关闭 subject 大小写检查：团队大量使用中文 subject，
     // 比如 `feat: 新增登录页` 不应被强制要求小写开头。
     'subject-case': [0],

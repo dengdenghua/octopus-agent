@@ -830,6 +830,88 @@ class TestRequestShape:
             "drop_unsupported_fields:response_format",
         ]
 
+    def test_stream_cancel_closes_blocked_provider_response(self):
+        """Cancellation must abort a silent socket, not wait for read timeout."""
+        import threading
+        import time
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        from runtime.safety.approval.cancellation import (
+            CancellationSource,
+            scoped_cancellation,
+        )
+
+        response_started = threading.Event()
+        first_stream_event = threading.Event()
+        release_server = threading.Event()
+
+        class _SilentSSEHandler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def do_POST(self) -> None:  # noqa: N802 — stdlib handler contract
+                body_length = int(self.headers.get("Content-Length", "0"))
+                if body_length:
+                    self.rfile.read(body_length)
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Transfer-Encoding", "chunked")
+                self.end_headers()
+                self.wfile.flush()
+                chunk = b'data: {"choices":[{"delta":{"content":"ready"}}]}\n\n'
+                self.wfile.write(f"{len(chunk):X}\r\n".encode() + chunk + b"\r\n")
+                self.wfile.flush()
+                response_started.set()
+                release_server.wait(timeout=5.0)
+                try:
+                    self.wfile.write(b"0\r\n\r\n")
+                    self.wfile.flush()
+                except OSError:
+                    pass
+
+            def log_message(self, _format: str, *_args: object) -> None:
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), _SilentSSEHandler)
+        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+        server_thread.start()
+
+        source = CancellationSource()
+        stream_done = threading.Event()
+        stream_errors: list[BaseException] = []
+        stream_events: list[Any] = []
+        router = OpenAIModelRouter(
+            base_url=f"http://127.0.0.1:{server.server_address[1]}/v1",
+        )
+
+        def _consume() -> None:
+            try:
+                with scoped_cancellation(source.token):
+                    for event in router.call_stream(_req()):
+                        stream_events.append(event)
+                        first_stream_event.set()
+            except BaseException as exc:  # noqa: BLE001 — asserted below
+                stream_errors.append(exc)
+            finally:
+                stream_done.set()
+
+        worker = threading.Thread(target=_consume, daemon=True)
+        worker.start()
+        try:
+            assert response_started.wait(timeout=2.0)
+            assert first_stream_event.wait(timeout=2.0)
+            cancel_started = time.monotonic()
+            source.cancel(reason="test user stop")
+            assert stream_done.wait(timeout=1.0)
+            assert time.monotonic() - cancel_started < 1.0
+            assert stream_errors == []
+            assert [event.type for event in stream_events] == ["text_delta"]
+        finally:
+            release_server.set()
+            worker.join(timeout=2.0)
+            server.shutdown()
+            server.server_close()
+            server_thread.join(timeout=2.0)
+
     def test_final_http_error_includes_compat_retry_summary(self):
         fake = _FakeClient(
             responses=[

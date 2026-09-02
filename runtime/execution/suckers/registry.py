@@ -38,6 +38,9 @@ class Skill(BaseModel):
     # keeps the built-in/local skill surface process-wide; a populated value
     # is filtered by the ambient turn session before discovery or execution.
     tenant_id: str | None = None
+    # Governed evolution candidates can be present in the process-wide
+    # catalog while remaining visible only to their sticky canary cohort.
+    rollout_candidate_id: str | None = None
     handler: Callable[..., Any]
     tests: list[SkillTestCase] = Field(default_factory=list)
     # ADR-010 · the exclusive resource this skill must hold while running, e.g.
@@ -127,7 +130,18 @@ class SkillRegistry:
     @classmethod
     def _visible_to_ambient_tenant(cls, skill: Skill) -> bool:
         tenant_id = cls._ambient_tenant_id()
-        return tenant_id is None or skill.tenant_id in (None, tenant_id)
+        if tenant_id is not None and skill.tenant_id not in (None, tenant_id):
+            return False
+        if skill.rollout_candidate_id:
+            try:
+                from runtime.safety.evolution.runtime_deployment import (
+                    is_rollout_candidate_visible,
+                )
+
+                return is_rollout_candidate_visible(skill.rollout_candidate_id)
+            except (ImportError, OSError, TypeError, ValueError):
+                return False
+        return True
 
     def _get_visible(self, name: str) -> Skill:
         lookup_name = self._canonical_lookup(name)

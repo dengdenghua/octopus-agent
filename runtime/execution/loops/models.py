@@ -48,9 +48,13 @@ class LoopPolicy(BaseModel):
     max_attempts: int = Field(default=2, ge=1, le=10)
     max_iterations: int = Field(default=8, ge=1, le=50)
     goal_mode: bool = False
-    max_tokens_budget: int = Field(default=50_000, ge=1, le=2_000_000)
-    max_usd_budget: float = Field(default=0.5, ge=0.0, le=100.0)
-    budget_auto_pause: bool = True
+    max_tokens_budget: int = Field(default=100_000, ge=1, le=2_000_000)
+    max_usd_budget: float = Field(default=1.0, ge=0.0, le=100.0)
+    # Keep controller-launched work consistent with direct ReAct turns:
+    # accounting budgets are telemetry unless the user explicitly opts into
+    # an automatic pause. A controller entry point must not silently turn a
+    # recoverable long task into a "budget near limit" interruption.
+    budget_auto_pause: bool = False
     verifier_profile: str = "auto"
     auto_approve: bool = True
     sandbox_mode: str = "full"
@@ -97,6 +101,8 @@ class LoopAttempt(BaseModel):
     terminated_reason: str = ""
     final_answer: str = ""
     completion_receipt: dict[str, Any] = Field(default_factory=dict)
+    completion_decision: dict[str, Any] = Field(default_factory=dict)
+    effect_summary: dict[str, Any] = Field(default_factory=dict)
     verifier_result: VerifierResult | None = None
     error: str = ""
 
@@ -105,6 +111,7 @@ class LoopRun(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     run_id: str = Field(default_factory=_new_run_id)
+    tenant_id: str | None = None
     owner_id: str | None = None
     parent_run_id: str | None = None
     origin_run_id: str | None = None
@@ -119,6 +126,7 @@ class LoopRun(BaseModel):
     last_verifier_result: VerifierResult | None = None
     last_review: dict[str, Any] | None = None
     last_review_queue_result: dict[str, Any] | None = None
+    last_evolution_candidate_result: dict[str, Any] | None = None
     cancel_requested_at: str | None = None
     cancel_reason: str = ""
     last_error: str = ""
@@ -129,6 +137,7 @@ class LoopRun(BaseModel):
 
     @field_validator(
         "owner_id",
+        "tenant_id",
         "parent_run_id",
         "origin_run_id",
         "resume_checkpoint_id",

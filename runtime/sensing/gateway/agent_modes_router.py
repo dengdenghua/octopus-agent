@@ -155,6 +155,7 @@ def create_agent_modes_router(
     *,
     identity_store: Any = None,
     require_auth: bool = False,
+    allow_local_workspace_access: bool = False,
     jwt_secret: str | None = None,
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
@@ -185,6 +186,17 @@ def create_agent_modes_router(
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
         )
+
+    def _workspace_detection_dep(request: Request) -> None:
+        # Scanning an arbitrary host path remains operator-only in shared
+        # deployments. On the authenticated, loopback-only desktop server the
+        # signed-in user is already allowed to choose and execute inside a
+        # local workspace, so requiring an operator role here only breaks the
+        # mode detector for ordinary Echo accounts.
+        if allow_local_workspace_access:
+            _auth_dep(request)
+            return
+        _operator_dep(request)
 
     router = APIRouter(tags=["agent-modes"], dependencies=[Depends(_auth_dep)])
 
@@ -236,7 +248,7 @@ def create_agent_modes_router(
     @router.get(
         "/api/agent-modes/detect",
         response_model=DetectResponse,
-        dependencies=[Depends(_operator_dep)],
+        dependencies=[Depends(_workspace_detection_dep)],
     )
     def detect_agent_mode(
         workspace_path: str = Query(..., min_length=1),

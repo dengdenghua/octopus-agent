@@ -8,6 +8,7 @@ not a structured XML container and needs an optional parser.
 from __future__ import annotations
 
 import csv
+import posixpath
 import re
 import zipfile
 from collections.abc import Callable
@@ -263,15 +264,24 @@ def _extract_xlsx(data: bytes) -> str | None:
             ),
             key=_natural_xml_key,
         )
+        sheet_titles = _xlsx_sheet_titles(archive)
         sheets: list[str] = []
         for index, name in enumerate(sheet_names, start=1):
             root = _xml_root(archive, name)
             if root is None:
                 continue
             rows: list[str] = []
-            for row in (node for node in root.iter() if node.tag.endswith("}row")):
+            for fallback_row, row in enumerate(
+                (node for node in root.iter() if node.tag.endswith("}row")),
+                start=1,
+            ):
                 cells: list[str] = []
                 for cell in (node for node in row if node.tag.endswith("}c")):
+                    reference = cell.attrib.get("r", "")
+                    column_index = _xlsx_column_index(reference)
+                    if column_index is not None:
+                        while len(cells) < column_index:
+                            cells.append("")
                     cell_type = cell.attrib.get("t")
                     value_node = next((node for node in cell if node.tag.endswith("}v")), None)
                     if cell_type == "inlineStr":
@@ -287,12 +297,65 @@ def _extract_xlsx(data: bytes) -> str | None:
                             value = shared[shared_index] if shared_index < len(shared) else value
                     cells.append(value)
                 if cells:
-                    rows.append("\t".join(cells))
+                    row_number = _xlsx_row_number(row, fallback_row)
+                    rows.append(f"Row {row_number}\t" + "\t".join(cells))
             if rows:
-                sheets.append(f"--- sheet {index} ---\n" + "\n".join(rows))
+                title = sheet_titles.get(name, f"Sheet {index}")
+                sheets.append(f"--- sheet {index}: {title} ---\n" + "\n".join(rows))
         return "\n\n".join(sheets) or None
     finally:
         archive.close()
+
+
+def _xlsx_sheet_titles(archive: zipfile.ZipFile) -> dict[str, str]:
+    """Map worksheet archive paths to their user-visible workbook names."""
+
+    workbook = _xml_root(archive, "xl/workbook.xml")
+    relationships = _xml_root(archive, "xl/_rels/workbook.xml.rels")
+    if workbook is None or relationships is None:
+        return {}
+    targets: dict[str, str] = {}
+    for relationship in relationships:
+        relationship_id = relationship.attrib.get("Id", "")
+        target = relationship.attrib.get("Target", "")
+        if not relationship_id or not target:
+            continue
+        normalized = posixpath.normpath(
+            target.lstrip("/") if target.startswith("/xl/") else f"xl/{target}"
+        )
+        targets[relationship_id] = normalized
+    titles: dict[str, str] = {}
+    for sheet in (node for node in workbook.iter() if node.tag.endswith("}sheet")):
+        relationship_id = next(
+            (value for key, value in sheet.attrib.items() if key.endswith("}id")),
+            "",
+        )
+        target = targets.get(relationship_id)
+        title = sheet.attrib.get("name", "").strip()
+        if target and title:
+            titles[target] = title
+    return titles
+
+
+def _xlsx_column_index(reference: str) -> int | None:
+    match = re.match(r"([A-Za-z]+)", reference)
+    if match is None:
+        return None
+    value = 0
+    for character in match.group(1).upper():
+        value = value * 26 + (ord(character) - ord("A") + 1)
+    return value - 1
+
+
+def _xlsx_row_number(row: ET.Element, fallback: int) -> str:
+    explicit = row.attrib.get("r", "").strip()
+    if explicit.isdigit():
+        return explicit
+    for cell in (node for node in row if node.tag.endswith("}c")):
+        match = re.search(r"(\d+)$", cell.attrib.get("r", ""))
+        if match:
+            return match.group(1)
+    return str(fallback)
 
 
 def _extract_pdf(data: bytes) -> str | None:

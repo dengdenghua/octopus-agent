@@ -20,6 +20,7 @@ import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from typing import Any
+from uuid import uuid4
 
 from runtime.core.cerebrum.capability_router import activate_capabilities
 from runtime.core.cerebrum.react_native import require_public_update_on_tool_specs
@@ -29,7 +30,16 @@ from runtime.core.cerebrum.todo_protocol import (
     should_require_todo_protocol,
 )
 from runtime.execution.tool_spec_builder import build_anthropic_tool_specs
-from runtime.platform.models import ParsedIntent
+from runtime.platform.models import (
+    ArmId,
+    Budget,
+    BudgetLimits,
+    CostEntry,
+    InsufficientBudget,
+    ParsedIntent,
+    TaskId,
+    now_utc,
+)
 from runtime.platform.models.llm import model_supports_thinking
 from runtime.sensing.model_router.models import (
     Message,
@@ -77,13 +87,17 @@ from ._tool_bridge_protocol import (
     _NATIVE_TEXT_STREAM_TAIL_MARGIN,
     _generate_native_action_checkpoint,
     _generate_native_evidence_checkpoint,
+    _model_response_actual_cost,
     _native_calls_with_public_checkpoint,
     _native_public_checkpoint,
     _native_result_checkpoint,
     _ordered_read_handoffs_requested,
     _public_narrative_silence_s,
 )
-from ._tool_bridge_scoring import _record_score_safe
+from ._tool_bridge_scoring import (
+    _persist_native_trajectory_safe,
+    _record_score_safe,
+)
 from ._tool_bridge_session import (
     _browser_action_evidence,
     _browser_operation_guidance,
@@ -132,6 +146,24 @@ def _native_plan_reconciliation_milestones(
     return milestones
 
 
+def _native_tool_failure_type(output: str) -> str:
+    """Classify bridge/preflight failures without trusting provider text."""
+
+    normalized = output.strip().casefold()
+    markers = (
+        ("(executor unavailable", "executor_unavailable"),
+        ("(invalid tool call:", "invalid_tool_call"),
+        ("(skill not found:", "skill_not_found"),
+        ("(skill disabled:", "skill_disabled"),
+        ("(registry error:", "registry_error"),
+        ("(cancelled", "cancelled"),
+    )
+    return next(
+        (failure_type for marker, failure_type in markers if normalized.startswith(marker)),
+        "native_tool_error",
+    )
+
+
 def stream_agentic_fallback(
     stack: Any,
     intent: ParsedIntent,
@@ -140,6 +172,54 @@ def stream_agentic_fallback(
     model: str | None = None,
     sub_event_queue: Any = None,
     steering_drain: Callable[[], list[str]] | None = None,
+) -> Iterator[tuple[str, Any, Any]]:
+    """Run the native tool loop with a fail-closed terminal finalizer.
+
+    ``yield from`` deliberately lives in this small wrapper.  Closing an SSE
+    consumer injects ``GeneratorExit`` at the current yield point, while an
+    unexpected checkpoint/model exception escapes the implementation.  The
+    implementation registers its idempotent trajectory finalizer as soon as
+    the per-turn task exists, letting this wrapper settle either path without
+    indenting the entire (large) generator body under a fragile ``try`` block.
+    """
+
+    native_finalizer: Callable[..., bool] | None = None
+    fallback_disposition = "failed"
+
+    def _register_native_finalizer(finalizer: Callable[..., bool]) -> None:
+        nonlocal native_finalizer
+        native_finalizer = finalizer
+
+    try:
+        yield from _stream_agentic_fallback_impl(
+            stack,
+            intent,
+            agent,
+            model=model,
+            sub_event_queue=sub_event_queue,
+            steering_drain=steering_drain,
+            _register_native_finalizer=_register_native_finalizer,
+        )
+    except GeneratorExit:
+        fallback_disposition = "cancelled"
+        raise
+    finally:
+        # Normal terminal paths finalize before their last public event.  This
+        # call is therefore a no-op there, but closes the audit gap for client
+        # disconnects, generator.close(), and exceptions in checkpoint code.
+        if native_finalizer is not None:
+            native_finalizer(success=False, disposition=fallback_disposition)
+
+
+def _stream_agentic_fallback_impl(
+    stack: Any,
+    intent: ParsedIntent,
+    agent: Any,
+    *,
+    model: str | None = None,
+    sub_event_queue: Any = None,
+    steering_drain: Callable[[], list[str]] | None = None,
+    _register_native_finalizer: Callable[[Callable[..., bool]], None] | None = None,
 ) -> Iterator[tuple[str, Any, Any]]:
     """Agentic streaming · same ``(kind, delta, final)`` shape as
     ``_stream_direct_llm_fallback`` so the SSE loop can consume
@@ -679,19 +759,30 @@ def stream_agentic_fallback(
     # here would lose turn metadata because the pump thread inherits
     # no ContextVar from its parent. Scoped to this function so it
     # tears down cleanly when the stream ends.
-    from runtime.platform.process.session import Session
+    from runtime.platform.process.session import Session, current_session
 
     user_context = _intent_user_context
+    _outer_session = current_session()
+    _session_metadata = {
+        **_session_metadata_from_intent(intent),
+        **dict(getattr(_outer_session, "metadata", None) or {}),
+        "_execution_stack": stack,
+    }
+    _authoritative_thread_id = (
+        getattr(_outer_session, "thread_id", None)
+        or getattr(_outer_session, "conversation_id", None)
+        or getattr(intent, "thread_id", None)
+        or getattr(intent, "conversation_id", None)
+        or user_context.get("thread_id")
+        or user_context.get("conversation_id")
+    )
     _session_obj = Session(
-        actor=getattr(intent, "actor", None),
+        actor=getattr(_outer_session, "actor", None) or getattr(intent, "actor", None),
         agent=agent,
-        thread_id=(
-            getattr(intent, "thread_id", None)
-            or getattr(intent, "conversation_id", None)
-            or user_context.get("thread_id")
-            or user_context.get("conversation_id")
-        ),
-        metadata=_session_metadata_from_intent(intent),
+        thread_id=_authoritative_thread_id,
+        conversation_id=_authoritative_thread_id,
+        turn_id=getattr(_outer_session, "turn_id", None) or uuid4().hex,
+        metadata=_session_metadata,
     )
     # Stash the SSE pump queue on the Session so sub-agents spawned
     # via ``call_agent`` / ``call_agent_parallel`` can push their
@@ -710,7 +801,7 @@ def stream_agentic_fallback(
     effective_model = (
         model
         if model and model not in ("octopus-agent", "", "auto")
-        else getattr(stack.planner, "planner_model", None) or "molili"
+        else getattr(stack.planner, "planner_model", None) or "octopus-agent"
     )
 
     tool_specs = build_anthropic_tool_specs(
@@ -800,6 +891,17 @@ def stream_agentic_fallback(
     # + wall-clock duration). Per-round tokens come from the Anthropic
     # SDK's `final.usage` object; we just sum.
     _started_at = time.monotonic()
+    # Every native tool invocation in this turn shares one durable task id.
+    # ToolExecutor still writes each exact StepEvent; the terminal path below
+    # aggregates those receipts into one trajectory consumed by regeneration.
+    _native_trajectory_task_id = TaskId(uuid4())
+    _native_trajectory_arm_id = ArmId("agentic")
+    _native_trajectory_budget = Budget(
+        _native_trajectory_task_id,
+        BudgetLimits(tokens=100_000, usd=10.0),
+    )
+    _native_trajectory_started_at = now_utc()
+    _native_next_step_id = 0
     _last_public_checkpoint_at = _started_at
     _realtime_public_narrative = bool(_intent_user_context.get("realtime_public_narrative"))
     _public_narrative_interval = _public_narrative_silence_s(_intent_user_context)
@@ -807,6 +909,30 @@ def stream_agentic_fallback(
     _result_handoff_ready = False
     _total_in_tokens = 0
     _total_out_tokens = 0
+    _native_model_cost = CostEntry()
+
+    def _accumulate_native_model_cost(actual: CostEntry) -> None:
+        nonlocal _native_model_cost, _total_in_tokens, _total_out_tokens
+        _native_model_cost = _native_model_cost + actual
+        _total_in_tokens += actual.tokens_in
+        _total_out_tokens += actual.tokens_out
+
+    def _reserve_native_model_budget(request: ModelRequest) -> Any:
+        # Input size is provider-tokenizer dependent and unknown until the
+        # response receipt arrives. Reserve the hard output ceiling up front;
+        # commit() applies the full actual input+output+USD and freezes on an
+        # underestimate, before any returned tool call may execute.
+        max_output_tokens = request.max_tokens or 2048
+        return _native_trajectory_budget.reserve(
+            CostEntry(tokens_out=max(1, int(max_output_tokens))),
+        )
+
+    def _settle_native_model_response(reservation_id: Any, final: Any) -> bool:
+        actual = _model_response_actual_cost(final) if final is not None else CostEntry()
+        _native_trajectory_budget.commit(reservation_id, actual)
+        _accumulate_native_model_cost(actual)
+        return _native_trajectory_budget.status == "active"
+
     _todo_seen = False
     _tool_work_since_todo = False
     _todo_guard_nudges = 0
@@ -842,6 +968,76 @@ def stream_agentic_fallback(
     _repeated_failure_guard_hits = 0
     _pending_steering: list[str] = []
     _last_steering_probe_at = 0.0
+    _native_step_failures: dict[int, str] = {}
+    _native_step_attempts: dict[int, ToolCall] = {}
+    _external_cancellation_seen = False
+    _native_trajectory_finalized = False
+    _native_terminal_request: tuple[bool, str] | None = None
+    _native_terminal_completed_at: Any = None
+    _native_terminal_model_cost: CostEntry | None = None
+    _native_prepared_event_cache: dict[str, Any] = {}
+    _native_persistence_state: dict[str, bool] = {}
+
+    def _record_unexecuted_native_attempts(
+        calls: list[ToolCall],
+        *,
+        failure_type: str,
+    ) -> list[int]:
+        nonlocal _native_next_step_id
+        step_ids = [_native_next_step_id + index for index in range(len(calls))]
+        _native_next_step_id += len(calls)
+        _native_step_attempts.update(zip(step_ids, calls, strict=True))
+        _native_step_failures.update({step_id: failure_type for step_id in step_ids})
+        return step_ids
+
+    def _finalize_native_trajectory(*, success: bool, disposition: str) -> bool:
+        """Persist one frozen terminal payload, retrying transient failures."""
+
+        nonlocal _native_trajectory_finalized
+        nonlocal _native_terminal_completed_at
+        nonlocal _native_terminal_model_cost
+        nonlocal _native_terminal_request
+        if _native_trajectory_finalized:
+            return False
+        if _native_terminal_request is None:
+            if _external_cancellation_seen:
+                success = False
+                disposition = "cancelled"
+            _native_terminal_request = (success, disposition)
+            _native_terminal_completed_at = now_utc()
+            _native_terminal_model_cost = _native_model_cost.model_copy(
+                update={
+                    "latency_ms": max(
+                        _native_model_cost.latency_ms,
+                        max(0.0, (time.monotonic() - _started_at) * 1000),
+                    )
+                }
+            )
+        terminal_success, terminal_disposition = _native_terminal_request
+        inserted = _persist_native_trajectory_safe(
+            stack=stack,
+            agent=agent,
+            intent=intent,
+            task_id=_native_trajectory_task_id,
+            success=terminal_success,
+            disposition=terminal_disposition,
+            step_failures=_native_step_failures,
+            step_attempts=_native_step_attempts,
+            model_cost=_native_terminal_model_cost,
+            started_at=_native_trajectory_started_at,
+            completed_at=_native_terminal_completed_at,
+            _prepared_event_cache=_native_prepared_event_cache,
+            _persistence_state=_native_persistence_state,
+        )
+        # An inserted row and the idempotent already-committed result are both
+        # durable terminal states. A swallowed I/O failure leaves the latch
+        # open so the wrapper's ``finally`` can retry the exact frozen event.
+        if _native_persistence_state.get("durable"):
+            _native_trajectory_finalized = True
+        return inserted
+
+    if _register_native_finalizer is not None:
+        _register_native_finalizer(_finalize_native_trajectory)
 
     if (intent.user_context or {}).get("live_steering"):
         from runtime.core.cerebrum.live_steering import (
@@ -1061,6 +1257,18 @@ def stream_agentic_fallback(
         if _round_convergence_mode:
             _round_timeout_s = _native_model_recovery_timeout_s(_round_timeout_s)
         try:
+            _round_model_reservation = _reserve_native_model_budget(req)
+        except InsufficientBudget as exc:
+            _finalize_native_trajectory(success=False, disposition="failed")
+            yield (
+                "error",
+                {"kind": "budget_exceeded", "message": str(exc)},
+                None,
+            )
+            return
+        _round_model_reservation_settled = False
+        _round_model_budget_exceeded = False
+        try:
             for event in _iter_native_model_stream_with_deadline(
                 router,
                 req,
@@ -1190,8 +1398,11 @@ def stream_agentic_fallback(
                             # corrupt cross-provider tool continuation state.
                             effective_model = response_model
                             _attempted_models.add(response_model)
-                        _total_in_tokens += int(getattr(fin, "input_tokens", 0) or 0)
-                        _total_out_tokens += int(getattr(fin, "output_tokens", 0) or 0)
+                    _round_model_reservation_settled = True
+                    _round_model_budget_exceeded = not _settle_native_model_response(
+                        _round_model_reservation,
+                        fin,
+                    )
                     break
         except Exception as exc:  # noqa: BLE001 — classify before re-raising
             _rescue_is_unavailable, _rescue_fallback = _rescue_policy_names()
@@ -1215,9 +1426,50 @@ def stream_agentic_fallback(
                     _provider_failovers += 1
                     continue
             if not isinstance(exc, (ConnectionError, TimeoutError, OSError)):
+                _finalize_native_trajectory(success=False, disposition="failed")
                 raise
             _logger.warning("agentic round %d stream failed: %s", round_i, exc)
             break
+        finally:
+            if not _round_model_reservation_settled:
+                _round_model_reservation_settled = True
+                _settle_native_model_response(_round_model_reservation, None)
+
+        if _round_model_budget_exceeded:
+            # The provider may have emitted tool_use blocks before the final
+            # actual-cost receipt.  Once commit() freezes/exceeds the budget,
+            # those calls are audit attempts only and must never execute.
+            budget_attempts = round_tool_calls
+            if not budget_attempts:
+                # A pure-model response can itself exceed the actual-token or
+                # USD ceiling. Preserve that terminal failure as one bounded
+                # synthetic attempt so the turn does not disappear from
+                # trajectory learning merely because no tool_use was emitted.
+                budget_attempts = [
+                    ToolCall(
+                        id=f"native-model-budget-{round_i}",
+                        name="native_model_response",
+                        input={"round": round_i + 1},
+                    )
+                ]
+            _record_unexecuted_native_attempts(
+                budget_attempts,
+                failure_type="budget_exceeded",
+            )
+            _tool_error_count += len(budget_attempts)
+            _finalize_native_trajectory(success=False, disposition="failed")
+            yield (
+                "error",
+                {
+                    "kind": "budget_exceeded",
+                    "message": (
+                        "model response actual cost exceeded the native turn budget; "
+                        "returned tool calls were not executed"
+                    ),
+                },
+                None,
+            )
+            return
 
         round_text = "".join(round_text_chunks)
         if _round_redirected and not round_tool_calls:
@@ -1233,6 +1485,7 @@ def stream_agentic_fallback(
                     "已经完成的工具结果仍保留在过程记录中，但这次无法可靠完成汇总；"
                     "可以点击继续，从现有进度重新收敛。"
                 )
+                _finalize_native_trajectory(success=False, disposition="failed")
                 yield (
                     "error",
                     {"kind": "model_stall", "message": stall_message},
@@ -1446,20 +1699,19 @@ def stream_agentic_fallback(
                 model=effective_model,
                 messages=messages,
                 calls=round_tool_calls,
+                budget=_native_trajectory_budget,
             )
 
         def _take_action_narration(*, wait_for_completion: bool = False) -> str:
             """Collect one in-flight action update without delaying tool start."""
             nonlocal _action_narration_future, _action_narration_pool
             nonlocal _last_public_checkpoint_at, _round_commentary_emitted
-            nonlocal _total_in_tokens, _total_out_tokens
             future = _action_narration_future
             if future is None or (not wait_for_completion and not future.done()):
                 return ""
             try:
-                checkpoint, checkpoint_in_tokens, checkpoint_out_tokens = future.result()
-                _total_in_tokens += checkpoint_in_tokens
-                _total_out_tokens += checkpoint_out_tokens
+                checkpoint, checkpoint_cost = future.result()
+                _accumulate_native_model_cost(checkpoint_cost)
             except Exception as exc:  # noqa: BLE001 — optional narration
                 _logger.warning("public action narration failed: %s", exc)
                 checkpoint = ""
@@ -1483,6 +1735,26 @@ def stream_agentic_fallback(
         checkpoint = _take_action_narration(wait_for_completion=True)
         if checkpoint:
             yield ("commentary", checkpoint, None)
+
+        if round_tool_calls and _native_trajectory_budget.status != "active":
+            _record_unexecuted_native_attempts(
+                round_tool_calls,
+                failure_type="budget_exceeded",
+            )
+            _tool_error_count += len(round_tool_calls)
+            _finalize_native_trajectory(success=False, disposition="failed")
+            yield (
+                "error",
+                {
+                    "kind": "budget_exceeded",
+                    "message": (
+                        "public narration actual cost exceeded the native turn budget; "
+                        "pending tool calls were not executed"
+                    ),
+                },
+                None,
+            )
+            return
 
         for call in round_tool_calls:
             yield (
@@ -1652,9 +1924,13 @@ def stream_agentic_fallback(
             # Chunks up to ``_round_text_streamed`` already went out live
             # during the round — deliver only the held-back tail. Content
             # is identical to the old full dump; only timing changed.
+            _final_duration = int((time.monotonic() - _started_at) * 1000)
+            _finalize_native_trajectory(
+                success=bool(accumulated_text),
+                disposition="completed",
+            )
             if _round_text_streamed < len(round_text):
                 yield ("text", round_text[_round_text_streamed:], None)
-            _final_duration = int((time.monotonic() - _started_at) * 1000)
             yield (
                 "stats",
                 {
@@ -1727,6 +2003,14 @@ def stream_agentic_fallback(
         # Output ordering of tool_result blocks matches round_tool_calls
         # so the assistant ↔ tool_result pairing stays correct.
         tool_result_blocks: list[dict[str, Any]] = []
+        # Provider call ids are protocol labels, not unique internal keys. Some
+        # providers reuse one id inside a streamed turn, so every execution is
+        # tracked by its emission-order ordinal instead.
+        _native_step_ids = [_native_next_step_id + index for index in range(len(round_tool_calls))]
+        _native_next_step_id += len(round_tool_calls)
+        _native_step_attempts.update(
+            zip(_native_step_ids, round_tool_calls, strict=True),
+        )
         _parallel_enabled = (
             PARALLEL_TOOL_USE_DEFAULT
             and len(round_tool_calls) >= 2
@@ -1753,9 +2037,9 @@ def stream_agentic_fallback(
             else _parent_cancellation.link()
         )
         _tool_batch_redirected = _round_redirected
-        _redirected_tool_ids: set[str] = set()
+        _redirected_step_ids: set[int] = set()
         if _tool_batch_redirected:
-            _redirected_tool_ids.update(call.id for call in round_tool_calls)
+            _redirected_step_ids.update(_native_step_ids)
             _tool_batch_source.cancel(reason="user redirected before tool execution")
 
         if _parallel_enabled:
@@ -1768,12 +2052,13 @@ def stream_agentic_fallback(
             # list before workers start so simultaneous first reads cannot
             # each install a different list and lose another worker's proof.
             _session_obj.metadata.setdefault("_read_file_paths_this_turn", [])
-            _outputs: dict[str, tuple[str, bool]] = {}
+            _outputs: dict[int, tuple[str, bool]] = {}
 
             def _run_one(
                 call: ToolCall,
+                native_step_id: int,
                 tool_batch_source: Any = _tool_batch_source,
-            ) -> tuple[str, tuple[str, bool]]:
+            ) -> tuple[int, tuple[str, bool]]:
                 # ContextVars do not propagate into ThreadPoolExecutor
                 # workers.  Bind the parent Session explicitly; otherwise
                 # scope-aware skills resolve relative paths against the
@@ -1798,19 +2083,26 @@ def stream_agentic_fallback(
                                 True,
                             )
                         else:
-                            out, err = _execute_tool_call(stack, call)
+                            out, err = _execute_tool_call(
+                                stack,
+                                call,
+                                task_id=_native_trajectory_task_id,
+                                step_id=native_step_id,
+                                arm_id=_native_trajectory_arm_id,
+                                budget=_native_trajectory_budget,
+                            )
                 finally:
                     _current_session.reset(_call_session_token)
-                return call.id, (out, err)
+                return native_step_id, (out, err)
 
             if _tool_batch_redirected:
                 _outputs.update(
                     {
-                        call.id: (
+                        native_step_id: (
                             "(cancelled before execution: user redirected active work)",
                             True,
                         )
-                        for call in round_tool_calls
+                        for native_step_id in _native_step_ids
                     }
                 )
             else:
@@ -1826,8 +2118,13 @@ def stream_agentic_fallback(
                             contextvars.copy_context().run,
                             _run_one,
                             call,
-                        ): call
-                        for call in round_tool_calls
+                            native_step_id,
+                        ): (call, native_step_id)
+                        for call, native_step_id in zip(
+                            round_tool_calls,
+                            _native_step_ids,
+                            strict=True,
+                        )
                     }
                     pending = set(future_calls)
                     while pending:
@@ -1837,20 +2134,24 @@ def stream_agentic_fallback(
                             return_when=FIRST_COMPLETED,
                         )
                         for future in done:
-                            call = future_calls[future]
+                            call, native_step_id = future_calls[future]
                             try:
-                                cid, (out, err) = future.result()
+                                completed_step_id, (out, err) = future.result()
                             except Exception as exc:  # noqa: BLE001 — surface as tool failure
-                                cid, out, err = call.id, f"(parallel exec error: {exc})", True
+                                completed_step_id, out, err = (
+                                    native_step_id,
+                                    f"(parallel exec error: {exc})",
+                                    True,
+                                )
                                 _logger.warning(
                                     "parallel tool exec future failed: %s",
                                     exc,
                                 )
-                            _outputs[cid] = (out, err)
+                            _outputs[completed_step_id] = (out, err)
                         if pending and _capture_steering():
                             _tool_batch_redirected = True
-                            _redirected_tool_ids.update(
-                                future_calls[future].id for future in pending
+                            _redirected_step_ids.update(
+                                future_calls[future][1] for future in pending
                             )
                             _tool_batch_source.cancel(reason="user redirected active tool batch")
 
@@ -1868,18 +2169,33 @@ def stream_agentic_fallback(
             # Emit tool_end events + build tool_result blocks IN
             # round_tool_calls order so the model sees a stable
             # narrative even though execution was parallel.
-            for call in round_tool_calls:
+            for call, native_step_id in zip(
+                round_tool_calls,
+                _native_step_ids,
+                strict=True,
+            ):
                 if call.name == "todo_write":
                     _todo_seen = True
                     _tool_work_since_todo = False
                 else:
                     _tool_work_since_todo = True
                 output, is_error = _outputs.get(
-                    call.id,
+                    native_step_id,
                     ("(no result)", True),
                 )
-                if call.id in _redirected_tool_ids:
+                _redirected_cancelled = native_step_id in _redirected_step_ids
+                _externally_cancelled = bool(
+                    is_error and _tool_batch_source.is_cancelled and not _redirected_cancelled
+                )
+                _cancelled = _redirected_cancelled or _externally_cancelled
+                if _cancelled:
                     is_error = True
+                if _externally_cancelled:
+                    _external_cancellation_seen = True
+                if is_error:
+                    _native_step_failures[native_step_id] = (
+                        "cancelled" if _cancelled else _native_tool_failure_type(output)
+                    )
                 _observe_code_tool_result(call, is_error, output, round_i + 1)
                 if not is_error:
                     _browser_observed_evidence.update(_browser_action_evidence(call))
@@ -1890,7 +2206,7 @@ def stream_agentic_fallback(
                         "name": call.name,
                         "output": output[:200],
                         "is_error": is_error,
-                        **({"status": "cancelled"} if call.id in _redirected_tool_ids else {}),
+                        **({"status": "cancelled"} if _cancelled else {}),
                         "iteration": round_i + 1,
                         "parallel": True,
                     },
@@ -1913,6 +2229,7 @@ def stream_agentic_fallback(
             #   - stack.metadata['parallel_tool_use']=False
             def _run_serial_one(
                 call: ToolCall,
+                native_step_id: int,
                 tool_batch_source: Any = _tool_batch_source,
             ) -> tuple[str, bool]:
                 from runtime.platform.process.session import parent_tool_use_scope
@@ -1929,7 +2246,14 @@ def stream_agentic_fallback(
                                 f"(cancelled before execution: {tool_batch_source.token.reason})",
                                 True,
                             )
-                        return _execute_tool_call(stack, call)
+                        return _execute_tool_call(
+                            stack,
+                            call,
+                            task_id=_native_trajectory_task_id,
+                            step_id=native_step_id,
+                            arm_id=_native_trajectory_arm_id,
+                            budget=_native_trajectory_budget,
+                        )
                 finally:
                     _session_obj.metadata.pop(
                         "_active_parent_tool_use_id",
@@ -1948,7 +2272,9 @@ def stream_agentic_fallback(
                 else None
             )
             try:
-                for call_index, call in enumerate(round_tool_calls):
+                for call_index, (call, native_step_id) in enumerate(
+                    zip(round_tool_calls, _native_step_ids, strict=True)
+                ):
                     if call.name == "todo_write":
                         _todo_seen = True
                         _tool_work_since_todo = False
@@ -1960,12 +2286,13 @@ def stream_agentic_fallback(
                             True,
                         )
                     elif serial_pool is None:
-                        output, is_error = _run_serial_one(call)
+                        output, is_error = _run_serial_one(call, native_step_id)
                     else:
                         future = serial_pool.submit(
                             contextvars.copy_context().run,  # type: ignore[arg-type]
                             _run_serial_one,
                             call,
+                            native_step_id,
                         )
                         while not future.done():
                             wait((future,), timeout=0.1)
@@ -1974,10 +2301,7 @@ def stream_agentic_fallback(
                                 yield ("commentary", checkpoint, None)
                             if not future.done() and _capture_steering():
                                 _tool_batch_redirected = True
-                                _redirected_tool_ids.update(
-                                    pending_call.id
-                                    for pending_call in round_tool_calls[call_index:]
-                                )
+                                _redirected_step_ids.update(_native_step_ids[call_index:])
                                 _tool_batch_source.cancel(
                                     reason="user redirected active tool batch"
                                 )
@@ -1989,8 +2313,19 @@ def stream_agentic_fallback(
                     checkpoint = _take_action_narration(wait_for_completion=True)
                     if checkpoint:
                         yield ("commentary", checkpoint, None)
-                    if call.id in _redirected_tool_ids:
+                    _redirected_cancelled = native_step_id in _redirected_step_ids
+                    _externally_cancelled = bool(
+                        is_error and _tool_batch_source.is_cancelled and not _redirected_cancelled
+                    )
+                    _cancelled = _redirected_cancelled or _externally_cancelled
+                    if _cancelled:
                         is_error = True
+                    if _externally_cancelled:
+                        _external_cancellation_seen = True
+                    if is_error:
+                        _native_step_failures[native_step_id] = (
+                            "cancelled" if _cancelled else _native_tool_failure_type(output)
+                        )
                     _observe_code_tool_result(call, is_error, output, round_i + 1)
                     if not is_error:
                         _browser_observed_evidence.update(_browser_action_evidence(call))
@@ -2001,7 +2336,7 @@ def stream_agentic_fallback(
                             "name": call.name,
                             "output": output[:200],
                             "is_error": is_error,
-                            **({"status": "cancelled"} if call.id in _redirected_tool_ids else {}),
+                            **({"status": "cancelled"} if _cancelled else {}),
                             "iteration": round_i + 1,
                         },
                         None,
@@ -2106,18 +2441,27 @@ def stream_agentic_fallback(
             )
         ):
             try:
-                checkpoint, checkpoint_in_tokens, checkpoint_out_tokens = (
-                    _generate_native_evidence_checkpoint(
-                        router,
-                        model=effective_model,
-                        messages=messages,
-                    )
+                checkpoint, checkpoint_cost = _generate_native_evidence_checkpoint(
+                    router,
+                    model=effective_model,
+                    messages=messages,
+                    budget=_native_trajectory_budget,
                 )
-                _total_in_tokens += checkpoint_in_tokens
-                _total_out_tokens += checkpoint_out_tokens
+                _accumulate_native_model_cost(checkpoint_cost)
             except Exception as exc:  # noqa: BLE001 — optional narration
                 _logger.warning("public progress synthesis failed: %s", exc)
                 checkpoint = ""
+            if _native_trajectory_budget.status != "active":
+                _finalize_native_trajectory(success=False, disposition="failed")
+                yield (
+                    "error",
+                    {
+                        "kind": "budget_exceeded",
+                        "message": "public progress synthesis exhausted the native turn budget",
+                    },
+                    None,
+                )
+                return
             if checkpoint:
                 yield ("commentary", checkpoint, None)
                 _round_commentary_emitted = True
@@ -2229,6 +2573,17 @@ def stream_agentic_fallback(
     )
     checkpoint_visible = {"started": False}
     try:
+        checkpoint_model_reservation = _reserve_native_model_budget(checkpoint_req)
+    except InsufficientBudget as exc:
+        _finalize_native_trajectory(success=False, disposition="failed")
+        yield (
+            "error",
+            {"kind": "budget_exceeded", "message": str(exc)},
+            None,
+        )
+        return
+    checkpoint_model_reservation_settled = False
+    try:
         for event in _iter_native_model_stream_with_deadline(
             router,
             checkpoint_req,
@@ -2251,17 +2606,32 @@ def stream_agentic_fallback(
                 yield ("reasoning", event.delta, None)
             elif etype == "done":
                 fin = getattr(event, "final", None)
-                if fin is not None:
-                    _total_in_tokens += int(getattr(fin, "input_tokens", 0) or 0)
-                    _total_out_tokens += int(getattr(fin, "output_tokens", 0) or 0)
-                    if not checkpoint_chunks:
-                        checkpoint_text = getattr(fin, "text", "") or ""
-                        if checkpoint_text:
-                            checkpoint_chunks.append(checkpoint_text)
-                            yield ("text", checkpoint_text, None)
+                checkpoint_model_reservation_settled = True
+                _settle_native_model_response(checkpoint_model_reservation, fin)
+                if fin is not None and not checkpoint_chunks:
+                    checkpoint_text = getattr(fin, "text", "") or ""
+                    if checkpoint_text:
+                        checkpoint_chunks.append(checkpoint_text)
+                        yield ("text", checkpoint_text, None)
                 break
     except (ConnectionError, TimeoutError, OSError) as exc:
         _logger.warning("agentic checkpoint synthesis failed: %s", exc)
+    finally:
+        if not checkpoint_model_reservation_settled:
+            checkpoint_model_reservation_settled = True
+            _settle_native_model_response(checkpoint_model_reservation, None)
+
+    if _native_trajectory_budget.status != "active":
+        _finalize_native_trajectory(success=False, disposition="failed")
+        yield (
+            "error",
+            {
+                "kind": "budget_exceeded",
+                "message": "checkpoint synthesis exhausted the native turn budget",
+            },
+            None,
+        )
+        return
 
     checkpoint_text = "".join(checkpoint_chunks).strip()
     final_text = checkpoint_text or (
@@ -2270,6 +2640,10 @@ def stream_agentic_fallback(
     )
 
     _final_duration = int((time.monotonic() - _started_at) * 1000)
+    _finalize_native_trajectory(
+        success=False,
+        disposition="blocked_on_user",
+    )
     yield (
         "stats",
         {

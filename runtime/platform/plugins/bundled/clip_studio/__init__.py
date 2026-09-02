@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from runtime.execution.suckers.registry import Skill
@@ -23,6 +23,7 @@ from .project_store import (
     step_history,
 )
 from .snapshot_renderer import render_project_frames, sample_times
+from .video_export import encode_project_video
 
 
 class ProjectEditBody(BaseModel):
@@ -66,6 +67,21 @@ class ProjectSnapshotBody(BaseModel):
     )
 
 
+class ProjectExportBody(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    max_dim: int = Field(
+        default=1280,
+        ge=160,
+        le=1280,
+        validation_alias=AliasChoices("max_dim", "maxDim"),
+    )
+    include_audio: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("include_audio", "includeAudio"),
+    )
+
+
 def _projects_dir() -> Path:
     target = app_paths().data_dir / "design" / "clip-studio-projects"
     target.mkdir(parents=True, exist_ok=True)
@@ -78,10 +94,16 @@ def _snapshots_dir(project_id: str) -> Path:
     return target
 
 
+def _exports_dir(project_id: str) -> Path:
+    target = app_paths().data_dir / "design" / "clip-studio-exports" / project_id
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
 class ClipStudioPlugin(ModulePlugin):
     name = "clip_studio"
     display_name = "AI 剪辑工坊"
-    version = "0.6.0"
+    version = "0.7.0"
     description = "本地多轨视频剪辑、字幕与项目编排工作台"
     author = "Octopus"
 
@@ -164,6 +186,19 @@ class ClipStudioPlugin(ModulePlugin):
                 cost_profile="low",
                 trusted_source="plugin://clip_studio",
                 handler=self._project_view_skill,
+            ),
+            Skill(
+                name="clip_studio.project_export",
+                description=(
+                    "把本地剪辑时间线编码成真实 MP4。参数 project_id 必填；max_dim 最大 "
+                    "1280，include_audio 默认 true。导出会合成可见多层、关键帧、效果、转场、"
+                    "字幕和可用音轨，最长 120 秒，返回本地文件路径。"
+                ),
+                summary="导出剪辑成片(project_id 必填)",
+                affinity=["design", "video", "editing", "export", "render", "write"],
+                cost_profile="high",
+                trusted_source="plugin://clip_studio",
+                handler=self._project_export_skill,
             ),
         ]
         for skill in skills:
@@ -296,6 +331,23 @@ class ClipStudioPlugin(ModulePlugin):
         except (TypeError, ValueError) as exc:
             return {"ok": False, "error": str(exc)}
 
+    def _project_export_skill(
+        self,
+        project_id: str = "",
+        max_dim: int = 1280,
+        include_audio: bool = True,
+        **_kwargs: Any,
+    ) -> dict[str, Any]:
+        try:
+            return encode_project_video(
+                load_project(_projects_dir(), project_id),
+                _exports_dir(project_id),
+                max_dim=max_dim,
+                include_audio=include_audio,
+            )
+        except (TypeError, ValueError) as exc:
+            return {"ok": False, "error": str(exc)}
+
     def register_routes(self) -> None:
         if self.ctx is None or self.ctx.fastapi_app is None:
             return
@@ -322,6 +374,7 @@ class ClipStudioPlugin(ModulePlugin):
                     "project.view",
                     "project.snapshot",
                     "project.diagnostics",
+                    "project.export",
                 ],
             }
 
@@ -418,6 +471,25 @@ class ClipStudioPlugin(ModulePlugin):
                 return diagnose_project(load_project(_projects_dir(), project_id))
             except ValueError as exc:
                 raise HTTPException(404, "project not found") from exc
+
+        @router.post("/projects/{project_id}/export")
+        def export_project(project_id: str, body: ProjectExportBody) -> dict[str, Any]:
+            result = self._project_export_skill(
+                project_id=project_id,
+                max_dim=body.max_dim,
+                include_audio=body.include_audio,
+            )
+            if not result.get("ok"):
+                raise HTTPException(400, str(result.get("error") or "export failed"))
+            return result
+
+        @router.get("/projects/{project_id}/export/file")
+        def export_file(project_id: str) -> FileResponse:
+            load_project(_projects_dir(), project_id)  # validates the scoped project id
+            path = _exports_dir(project_id) / "export.mp4"
+            if not path.is_file():
+                raise HTTPException(404, "export not found")
+            return FileResponse(path, media_type="video/mp4", filename=f"{project_id}.mp4")
 
         self.ctx.fastapi_app.include_router(router)
 

@@ -27,6 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from runtime.platform.models.primitives import CostEntry
 
 MessageRole = Literal["system", "user", "assistant"]
+MessagePhase = Literal["commentary", "final_answer"]
 
 
 class Message(BaseModel):
@@ -47,9 +48,14 @@ class Message(BaseModel):
     #
     # The anthropic_router passes ``content`` through verbatim, so
     # a well-formed list flows to the API unchanged. Providers that
-    # don't understand block lists (Molili legacy, Mock) should
+    # don't understand block lists (legacy gateways, Mock) should
     # flatten via ``str(content)`` before building their request.
     content: str | list[dict[str, Any]]
+    # Responses/Codex classifies assistant output structurally. Preserve that
+    # lane across proxy translation and checkpoint restore so process updates
+    # cannot be reconstructed as terminal answers. Generic providers may
+    # ignore this optional metadata.
+    phase: MessagePhase | None = None
 
 
 ModelStrength = Literal["default", "strong"]
@@ -223,7 +229,7 @@ class ModelRequest(BaseModel):
     thinking_budget: int = Field(default=1024, ge=1024)
     # Native tool_use catalog. When non-empty, the provider is asked
     # to emit ``tool_use`` content blocks instead of / alongside
-    # text. Providers that don't support tool_use (Molili legacy,
+    # text. Providers that don't support tool_use (legacy gateways,
     # pre-o1 OpenAI, Mock) silently ignore this field — the caller
     # is responsible for falling back to prose-based skill parsing
     # (ReAct) in that case. Anthropic's constraint: ``tools`` AND
@@ -245,7 +251,7 @@ class ModelResponse(BaseModel):
     text: str
     # Extended-thinking trace · populated when the provider supports
     # it AND ``ModelRequest.enable_thinking`` was set. Empty string
-    # on providers that don't emit thinking blocks (Mock / Molili /
+    # on providers that don't emit thinking blocks (Mock / legacy gateways /
     # OpenAI pre-o1) so downstream UI code can treat "no thinking"
     # and "feature not enabled" uniformly.
     thinking: str = ""

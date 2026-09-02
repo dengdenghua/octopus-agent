@@ -135,6 +135,9 @@ def _get_promotion_applier(
     review_queue_path: Path | None = None,
     promotion_audit_path: Path | None = None,
     proposal_ledger_path: Path | None = None,
+    journal: Any = None,
+    registry: Any = None,
+    auto_persist_dir: Path | str | None = None,
     scope: TenantScope | None = None,
 ) -> PromotionApplier:
     return PromotionApplier(
@@ -154,10 +157,10 @@ def _get_promotion_applier(
                 scope,
             ),
         ),
-        audit_path=tenant_scoped_path(
-            promotion_audit_path or _default_promotion_audit_path(),
-            scope,
-        ),
+        audit_path=promotion_audit_path or _default_promotion_audit_path(),
+        journal=journal,
+        registry=registry,
+        auto_persist_dir=auto_persist_dir,
         scope=scope,
     )
 
@@ -285,6 +288,9 @@ class RouterDeps:
     promotion_audit_path: Path | None = None
     proposal_ledger_path: Path | None = None
     approval_policy_path: Path | None = None
+    journal: Any = None
+    registry: Any = None
+    auto_persist_dir: Path | str | None = None
     identity_store: Any = None
     require_auth: bool = False
     jwt_secret: str | None = None

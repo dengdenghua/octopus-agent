@@ -13,6 +13,7 @@ from .journal import (
     Journal,
     JournalEvent,
     JournalEventType,
+    JournalTransactionError,
     JSONLJournal,
     McpProposalDecisionEvent,
     NodeStartedEvent,
@@ -29,6 +30,7 @@ from .journal import (
     TaskStartedEvent,
     ToolEffectIntentEvent,
     ToolEffectReconciliationEvent,
+    TrajectoryConflictError,
     TrajectoryEvent,
 )
 from .journal_context import (
@@ -64,6 +66,7 @@ __all__ = [
     "Journal",
     "JournalEvent",
     "JournalEventType",
+    "JournalTransactionError",
     "JSONLJournal",
     "JournalIndex",
     "McpProposalDecisionEvent",
@@ -86,6 +89,7 @@ __all__ = [
     "TaskStartedEvent",
     "ToolEffectIntentEvent",
     "ToolEffectReconciliationEvent",
+    "TrajectoryConflictError",
     "TrajectoryEvent",
     "all_task_progress",
     "current_agent_id",

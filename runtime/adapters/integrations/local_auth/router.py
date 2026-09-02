@@ -272,7 +272,11 @@ def create_local_auth_router(
             return
 
     @router.post("/login", response_model=LoginResponse)
-    def login(body: LoginRequest, request: Request) -> LoginResponse:
+    def login(
+        body: LoginRequest,
+        request: Request,
+        response: Response,
+    ) -> LoginResponse:
         _require_enabled()
         _check_credentials(body.username, body.password, request)
 
@@ -323,6 +327,16 @@ def create_local_auth_router(
             access_token = encode_jwt_hs256(claims, secret=config.jwt_secret)
             expires_in = config.jwt_expire_seconds
 
+        if access_token and expires_in:
+            from runtime.safety.auth.principal import set_session_cookie
+
+            set_session_cookie(
+                response,
+                request,
+                access_token,
+                max_age=expires_in,
+            )
+
         logger.info(
             "local_auth login · actor=%s created=%s",
             actor_id,
@@ -343,8 +357,10 @@ def create_local_auth_router(
         )
 
     @router.post("/logout", status_code=204, response_class=Response, response_model=None)
-    def logout():
-        return None
+    def logout(request: Request, response: Response):
+        from runtime.safety.auth.principal import clear_session_cookie
+
+        clear_session_cookie(response, request)
 
     @router.get("/whoami", response_model=WhoamiResponse)
     def whoami(request: Request) -> WhoamiResponse:

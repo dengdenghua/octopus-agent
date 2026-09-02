@@ -59,6 +59,7 @@ class _BrowserBackend(
             "extension_version": "",
             "last_seen": 0,
             "active_tab": None,
+            "recent_human_activity": [],
             "pending_commands": [],
             "command_results": {},
             "control_lease": None,

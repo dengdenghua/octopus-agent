@@ -176,12 +176,8 @@ def test_real_linux_attack_suite_precedes_service_and_is_provenance_bound() -> N
 
 def test_protected_runtime_inputs_are_rechecked_without_publishing_auth_identity() -> None:
     job = _job()
-    initialize = _step("Initialize isolated runner paths")["run"]
-    assert (
-        "OCTOPUS_PROTECTED_IDENTITY_BASELINE=${RUNNER_TEMP}/"
-        "octopus-protected-identities-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-    ) in initialize
-    assert '>> "${GITHUB_ENV}"' in initialize
+    baseline = job["env"]["OCTOPUS_PROTECTED_IDENTITY_BASELINE"]
+    assert baseline.startswith("${{ runner.temp }}/octopus-protected-identities-")
     preflight = _step("Fail closed unless protected runner identities are complete")["run"]
     for value in (
         "OCTOPUS_EVAL_CONFIG",

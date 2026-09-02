@@ -857,13 +857,13 @@ def test_windows_codex_third_party_reports_are_reproducibly_pinned() -> None:
     generator = CODEX_LICENSE_GENERATOR.read_text(encoding="utf-8")
     reports = {
         "THIRD_PARTY_LICENSES-codex-cli.html": (
-            "841d5072916479fc3d6fbe8c4b240b66d468de9f625a2fcb658c34fe1a4ec771"
+            "085bfd0627d8011777788beb1c74a7399c5acba157bac3eb766e0562f58a432b"
         ),
         "THIRD_PARTY_LICENSES-code-mode-host.html": (
-            "6b562200ef39938051e8eca39ce61a4d032752e04e1d21ba0fe216bd0ad91434"
+            "df6e9546efb4f6a30f06cc7417bb81beeee81bc2e9ea5c670cdfd04a2e9a1503"
         ),
         "THIRD_PARTY_LICENSES-windows-sandbox.html": (
-            "8858ef427eb901498d06d12d14ce6c3ef53fdeb352251006276dac8ec53ac5e4"
+            "df32d1e635d49d3b86caa4b56e0015dcf116025792ef3c0957dec342a1909721"
         ),
     }
 

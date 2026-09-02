@@ -32,6 +32,7 @@ def load() -> Capabilities:
 def save(caps: Capabilities) -> None:
     _runtime_policy._save_path(_store_path(), caps)
 
+
 __all__ = [
     "CAPABILITY_SERVICE_SCHEMA",
     "CapabilityLifecycleService",

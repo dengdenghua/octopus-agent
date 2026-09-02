@@ -98,6 +98,9 @@ def build_bugfix_graph(proj: Path) -> TaskGraph:
         TaskNode(
             node_id="n2",
             skill_ref=SkillId("exec_shell"),
+            # This is the red phase of the red/green repair loop.  A failing
+            # test is expected evidence and must not terminate the fix graph.
+            continue_on_failure=True,
             args_template={
                 # -B is load-bearing: the n4 fix edit is same-length and
                 # lands in the same wall-clock second as this run, so a

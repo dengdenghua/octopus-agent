@@ -43,17 +43,6 @@ def _json_safe(value: Any) -> Any:
     return str(value)
 
 
-def _limit_text(text: str, limit: int) -> str:
-    """Truncate a long text, keeping the head and marking the omitted tail.
-
-    Progress anchors injected for failed turns must stay cheap; the tail is
-    the least likely to carry actionable state (the conclusion preamble is).
-    """
-    if len(text) <= limit:
-        return text
-    return f"{text[:limit]}\n…（后文已省略）"
-
-
 def _collapse_near_identical_ai(messages: list[dict[str, Any]], incoming: dict[str, Any]) -> bool:
     """Collapse a re-sent, near-identical assistant message (latest wins).
 
@@ -172,9 +161,21 @@ def _flatten_turns_to_messages(
             if last_answer:
                 messages.append(
                     {
-                        "type": "ai",
+                        # This is private continuity data, not prior assistant
+                        # speech. A system role prevents providers from
+                        # imitating the truncation scaffold in the next public
+                        # answer (the source of visible "后文已省略" leaks).
+                        "type": "system",
                         "id": None,
-                        "content": (f"[上一轮任务进行到：]\n{_limit_text(last_answer, 600)}"),
+                        "content": (
+                            "Internal recovery context from an incomplete prior turn; "
+                            "use it for continuity but never quote this note.\n"
+                            f"{last_answer[:600]}"
+                        ),
+                        # Recovery-only context for the next model turn. It is
+                        # deliberately bounded and must never render as a new
+                        # assistant answer in the conversation.
+                        "additional_kwargs": {"hide_from_ui": True},
                     }
                 )
             if error_item is not None:

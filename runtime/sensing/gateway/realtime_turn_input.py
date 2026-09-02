@@ -763,7 +763,11 @@ def _is_explicit_change_request(text: str) -> bool:
     """Whether the current turn clearly requests a state-changing action."""
 
     normalized = " ".join(str(text or "").strip().split())
-    if not normalized or ("问题" in normalized and "需要修复" in normalized and not re.search(r"(?:请|帮我|直接|把|将)", normalized)):
+    if not normalized or (
+        "问题" in normalized
+        and "需要修复" in normalized
+        and not re.search(r"(?:请|帮我|直接|把|将)", normalized)
+    ):
         return False
     return bool(_EXPLICIT_CHANGE_RE.search(normalized))
 

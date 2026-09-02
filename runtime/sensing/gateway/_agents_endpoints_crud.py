@@ -12,6 +12,8 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import threading
+import time
 from typing import TYPE_CHECKING, Any
 
 try:
@@ -66,12 +68,41 @@ def _register_agents_crud(router: Any, ctx: _AgentsCtx, auth: _AuthActions) -> N
     # #22 (CUA productization) — the Raven persona shows in the picker.
     _AGENT_GALLERY_SKIP_IDS = frozenset({"admin"})  # noqa: N806
 
+    # The roster is read on every workspace bootstrap and can contain well over
+    # one hundred personas.  Building the wire payload repeatedly is wasteful;
+    # the visual variant also probes profile/avatar files for every agent.  A
+    # per-router cache keeps the hot path allocation-free and the lock folds a
+    # burst of identical cold requests into one build.  Registry mutations
+    # publish replacement Agent objects, so tuple identity/equality is a cheap
+    # and reliable invalidation key.  Visual metadata additionally expires to
+    # preserve the existing "new avatar appears without reload" behaviour.
+    _list_cache_lock = threading.Lock()
+    _list_cache: dict[bool, tuple[tuple[Any, ...], float, tuple[AgentWire, ...]]] = {}
+    _visual_cache_ttl_seconds = 2.0
+
+    def _cached_agent_wires(*, include_visuals: bool) -> list[AgentWire]:
+        snapshot = tuple(
+            agent
+            for agent in registry.all_agents()
+            if agent.agent_id not in _AGENT_GALLERY_SKIP_IDS
+        )
+        now = time.monotonic()
+        with _list_cache_lock:
+            cached = _list_cache.get(include_visuals)
+            if cached is not None:
+                cached_snapshot, expires_at, cached_wires = cached
+                if cached_snapshot == snapshot and now < expires_at:
+                    return list(cached_wires)
+
+            wires = tuple(_to_wire(agent, include_visuals=include_visuals) for agent in snapshot)
+            expires_at = now + _visual_cache_ttl_seconds if include_visuals else float("inf")
+            _list_cache[include_visuals] = (snapshot, expires_at, wires)
+            return list(wires)
+
     @router.get("/api/agents")
-    def list_agents(request: Request) -> list[AgentWire]:
+    def list_agents(request: Request, include_visuals: bool = True) -> list[AgentWire]:
         _auth(request)  # AUTH-OK: actor-agnostic — agent registry is server-global
-        return [
-            _to_wire(a) for a in registry.all_agents() if a.agent_id not in _AGENT_GALLERY_SKIP_IDS
-        ]
+        return _cached_agent_wires(include_visuals=include_visuals)
 
     @router.post("/api/agents", status_code=201)
     def create_agent(request: Request, body: CreateAgentRequest) -> AgentDetailWire:
@@ -128,10 +159,14 @@ def _register_agents_crud(router: Any, ctx: _AgentsCtx, auth: _AuthActions) -> N
                 500, f"failed to create agent directories: {type(exc).__name__}: {exc}"
             ) from exc
 
-        # Generate a unique DID
-        import uuid
+        # Generate one immutable identity code. Display names and professions
+        # may change; this code must not.
+        from runtime.execution.agents.identity import (
+            build_identity_profile,
+            generate_identity_code,
+        )
 
-        did = f"DID-{uuid.uuid4().hex[:12].upper()}-{uuid.uuid4().hex[:6].upper()}"
+        identity_code = generate_identity_code(root)
 
         # Build profile.jsonc
         import json
@@ -144,7 +179,9 @@ def _register_agents_crud(router: Any, ctx: _AgentsCtx, auth: _AuthActions) -> N
             "templateVersion": "1.0.0",
             "name": agent_id.replace("-", " ").replace("_", " ").title(),
             "icon": "🤖",
-            "did": did,
+            "did": identity_code,  # backward-compatible alias
+            "identity_code": identity_code,
+            "identity": build_identity_profile(identity_code, body.personality_anchors),
             "description": body.description or f"A custom agent named {agent_id}.",
             "avatar": "avatar.svg",
             "model": {"provider": "auto", "name": body.model or "auto"},
@@ -342,6 +379,17 @@ When making changes, first read the surrounding code.
             profile["model"] = {"provider": "auto", "name": (body.model or "").strip() or "auto"}
         if "capabilities" in provided_fields:
             profile["capabilities"] = body.capabilities or {}
+        if "personality_anchors" in provided_fields:
+            from runtime.execution.agents.identity import build_identity_profile
+
+            identity_code = str(profile.get("identity_code") or profile.get("did") or "").strip()
+            if not identity_code:
+                from runtime.execution.agents.identity import generate_identity_code
+
+                identity_code = generate_identity_code(root)
+                profile["identity_code"] = identity_code
+                profile["did"] = identity_code
+            profile["identity"] = build_identity_profile(identity_code, body.personality_anchors)
 
         try:
             profile_text = f"// Octopus Agent profile · {agent_id}\n\n" + json.dumps(

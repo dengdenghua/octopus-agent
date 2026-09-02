@@ -5,6 +5,7 @@ import importlib.util
 from pathlib import Path
 from typing import Any
 
+from . import computer_macos
 from .computer_api_skills import register_computer_api_skills
 from .computer_uia_skills import UIA_SKILL_NAMES, register_computer_uia_skills
 from .registry import Skill, SkillRegistry
@@ -41,12 +42,24 @@ def _check_pyautogui() -> str | None:
     return None
 
 
+def _native_available() -> bool:
+    return PYAUTOGUI_AVAILABLE or computer_macos.MACOS_NATIVE_AVAILABLE
+
+
 def _check_coord(x: int, y: int) -> str | None:
+    if not isinstance(x, int) or not isinstance(y, int):
+        return f"x/y must be int, got ({type(x).__name__}, {type(y).__name__})"
+    if not PYAUTOGUI_AVAILABLE and computer_macos.MACOS_NATIVE_AVAILABLE:
+        info = computer_macos.screen_info()
+        if "error" in info:
+            return str(info["error"])
+        w, h = int(info.get("width") or 0), int(info.get("height") or 0)
+        if not (0 <= x < w and 0 <= y < h):
+            return f"coord ({x},{y}) out of bounds (screen is {w}x{h})"
+        return None
     err = _check_pyautogui()
     if err:
         return err
-    if not isinstance(x, int) or not isinstance(y, int):
-        return f"x/y must be int, got ({type(x).__name__}, {type(y).__name__})"
     try:
         w, h = pyautogui.size()
     except Exception as e:  # noqa: BLE001
@@ -78,10 +91,6 @@ def _screen_capture(
         return {"error": f"path_blocked: {verdict.reason}"}
     resolved = verdict.resolved or path
 
-    err = _check_pyautogui()
-    if err:
-        return {"error": err}
-
     if region is not None:
         if not isinstance(region, list) or len(region) != 4:
             return {"error": "region must be [x, y, w, h]"}
@@ -91,14 +100,22 @@ def _screen_capture(
         if x < 0 or y < 0 or w <= 0 or h <= 0:
             return {"error": f"region invalid: {region}"}
 
-    try:
-        if region is not None:
-            img = pyautogui.screenshot(region=tuple(region))
-        else:
-            img = pyautogui.screenshot()
-        img.save(str(resolved))
-    except Exception as e:  # noqa: BLE001
-        return {"error": f"capture_failed: {type(e).__name__}: {e}"}
+    if not PYAUTOGUI_AVAILABLE and computer_macos.MACOS_NATIVE_AVAILABLE:
+        result = computer_macos.capture_screen(str(resolved), region)
+        if "error" in result:
+            return result
+    else:
+        err = _check_pyautogui()
+        if err:
+            return {"error": err}
+        try:
+            if region is not None:
+                img = pyautogui.screenshot(region=tuple(region))
+            else:
+                img = pyautogui.screenshot()
+            img.save(str(resolved))
+        except Exception as e:  # noqa: BLE001
+            return {"error": f"capture_failed: {type(e).__name__}: {e}"}
 
     size = 0
     with contextlib.suppress(OSError):
@@ -118,6 +135,8 @@ def _screen_capture(
 
 
 def _screen_info(**_kw: Any) -> dict[str, Any]:
+    if not PYAUTOGUI_AVAILABLE and computer_macos.MACOS_NATIVE_AVAILABLE:
+        return computer_macos.screen_info()
     err = _check_pyautogui()
     if err:
         return {"error": err}
@@ -157,6 +176,8 @@ def _mouse_click(
         return {"error": f"clicks must be int in [1,5], got {clicks!r}"}
     if not isinstance(duration, (int, float)) or duration < 0:
         return {"error": f"duration must be >= 0, got {duration!r}"}
+    if not PYAUTOGUI_AVAILABLE and computer_macos.MACOS_NATIVE_AVAILABLE:
+        return computer_macos.click_mouse(x, y, button=button, clicks=clicks)
     try:
         pyautogui.click(
             x=x,
@@ -186,6 +207,11 @@ def _mouse_move(
         return {"error": err}
     if not isinstance(duration, (int, float)) or duration < 0:
         return {"error": f"duration must be >= 0, got {duration!r}"}
+    if not PYAUTOGUI_AVAILABLE and computer_macos.MACOS_NATIVE_AVAILABLE:
+        result = computer_macos.move_mouse(x, y)
+        if "error" not in result:
+            result["duration"] = duration
+        return result
     try:
         pyautogui.moveTo(x=x, y=y, duration=duration)
     except Exception as e:  # noqa: BLE001
@@ -212,6 +238,11 @@ def _keyboard_type(
         return {"error": f"text too long: {len(text)} > {_MAX_TYPE_CHARS}"}
     if not isinstance(interval, (int, float)) or interval < 0:
         return {"error": f"interval must be >= 0, got {interval!r}"}
+    if not PYAUTOGUI_AVAILABLE and computer_macos.MACOS_NATIVE_AVAILABLE:
+        result = computer_macos.type_text(text)
+        if "error" not in result:
+            result["interval"] = interval
+        return result
     err = _check_pyautogui()
     if err:
         return {"error": err}
@@ -233,6 +264,8 @@ def _keyboard_press(
     for k in keys:
         if not isinstance(k, str) or not k:
             return {"error": f"invalid key: {k!r}"}
+    if not PYAUTOGUI_AVAILABLE and computer_macos.MACOS_NATIVE_AVAILABLE:
+        return computer_macos.press_keys(keys)
     err = _check_pyautogui()
     if err:
         return {"error": err}
@@ -270,7 +303,7 @@ def register_computer_skills(
     *,
     verify_tests: bool = True,
 ) -> int:
-    if not PYAUTOGUI_AVAILABLE:
+    if not _native_available():
         return 0
 
     registry.register(

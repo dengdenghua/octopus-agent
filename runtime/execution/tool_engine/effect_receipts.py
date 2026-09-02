@@ -60,6 +60,16 @@ _VOLATILE_RUNTIME_ARG_KEYS = frozenset(
     }
 )
 
+EFFECT_RECEIPT_SCHEMA = "octopus.tool.effect_receipt.v1"
+EffectClass = Literal[
+    "none",
+    "read_only",
+    "workspace_write",
+    "local_state",
+    "external_or_unknown",
+]
+EffectState = Literal["not_executed", "committed", "failed", "indeterminate", "replayed"]
+
 
 def args_fingerprint(args: dict[str, Any]) -> str:
     encoded = json.dumps(
@@ -91,6 +101,143 @@ def is_side_effecting(affinity: list[str] | None) -> bool:
     if tags & _SIDE_EFFECT_AFFINITIES:
         return True
     return not bool(tags & _READ_ONLY_AFFINITIES)
+
+
+def _canonical_effect_class(skill: Any, *, handler_executed: bool) -> EffectClass:
+    """Classify only exact in-tree handlers; every replaceable handler fails closed.
+
+    Skill names, affinity tags and ``trusted_source`` are registry metadata and
+    can be supplied by plugins.  Object identity of the handler captured by
+    ToolExecutor is the only signal used to grant the narrow ``read_only`` or
+    ``workspace_write``/``local_state`` classes needed by automatic Loop repair.
+    """
+
+    if not handler_executed:
+        return "none"
+    name = str(getattr(skill, "name", "") or getattr(skill, "skill_id", ""))
+    handler = getattr(skill, "handler", None)
+
+    from runtime.execution.suckers.agent_meta_skills import _todo_read, _todo_write
+    from runtime.execution.suckers.builtins import (
+        _count_words,
+        _file_stats,
+        _hash_text,
+        _list_cwd,
+        _read_file,
+    )
+    from runtime.execution.suckers.fs_search_skills import (
+        _glob_files,
+        _grep_text,
+        _read_file_range,
+        _tree,
+    )
+    from runtime.execution.suckers.write_skills import _edit_file
+
+    read_only_handlers = {
+        "list_cwd": _list_cwd,
+        "read_file": _read_file,
+        "read_file_range": _read_file_range,
+        "file_stats": _file_stats,
+        "count_words": _count_words,
+        "hash_text": _hash_text,
+        "glob_files": _glob_files,
+        "grep_text": _grep_text,
+        "tree": _tree,
+        "todo_read": _todo_read,
+    }
+    workspace_write_handlers = {"edit_file": _edit_file}
+    local_state_handlers = {"todo_write": _todo_write}
+    if read_only_handlers.get(name) is handler:
+        return "read_only"
+    if workspace_write_handlers.get(name) is handler:
+        return "workspace_write"
+    if local_state_handlers.get(name) is handler:
+        return "local_state"
+    return "external_or_unknown"
+
+
+def not_executed_effect_receipt(
+    *,
+    call_id: Any,
+    tool_name: Any,
+    reason: str = "",
+) -> dict[str, object]:
+    """Return the server-owned proof used by pre-dispatch rejection paths."""
+
+    return {
+        "schema": EFFECT_RECEIPT_SCHEMA,
+        "sealed": True,
+        "emitted_by": "tool_executor",
+        "tool_name": str(tool_name),
+        "call_id": str(call_id),
+        "effect_class": "none",
+        "state": "not_executed",
+        "handler_entered": False,
+        "retry_safe": False,
+        **({"reason": str(reason)[:240]} if reason else {}),
+    }
+
+
+def build_server_effect_receipt(
+    *,
+    skill: Any,
+    call_id: Any,
+    handler_executed: bool,
+    result_status: str,
+    resolution: EffectResolution | None,
+    receipt_rewrite_source: str | None = None,
+) -> dict[str, object]:
+    """Seal one conservative execution-effect classification.
+
+    ``committed`` means either no side effect was possible or the ReAct
+    effect coordinator owns a durable execution resolution.  A handler/post
+    hook replacement, a failed local/external handler, or a side effect that
+    bypassed the coordinator is always indeterminate.
+    """
+
+    tool_name = str(getattr(skill, "name", "") or getattr(skill, "skill_id", ""))
+    if not handler_executed:
+        return not_executed_effect_receipt(
+            call_id=call_id,
+            tool_name=tool_name,
+            reason=receipt_rewrite_source or "handler_not_executed",
+        )
+
+    effect_class = _canonical_effect_class(skill, handler_executed=True)
+    if receipt_rewrite_source is not None:
+        effect_class = "external_or_unknown"
+        state: EffectState = "indeterminate"
+    elif result_status == "success":
+        if effect_class == "read_only" or resolution is not None:
+            state = "committed"
+        else:
+            state = "indeterminate"
+    elif effect_class == "read_only":
+        state = "failed"
+    else:
+        state = "indeterminate"
+
+    receipt: dict[str, object] = {
+        "schema": EFFECT_RECEIPT_SCHEMA,
+        "sealed": True,
+        "emitted_by": "tool_executor",
+        "tool_name": tool_name,
+        "call_id": str(call_id),
+        "effect_class": effect_class,
+        "state": state,
+        "handler_entered": True,
+        "retry_safe": effect_class == "read_only" and state == "failed",
+    }
+    if resolution is not None:
+        receipt.update(
+            {
+                "effect_key": resolution.key,
+                "fencing_token": max(0, int(resolution.fencing_token)),
+            }
+        )
+    if receipt_rewrite_source:
+        receipt["reason"] = receipt_rewrite_source
+    return receipt
 
 
 @dataclass(frozen=True)
@@ -173,7 +320,7 @@ class ToolEffectReceiptIndex:
                     "replay",
                     key,
                     fingerprint,
-                    step=_replayed_step(committed),
+                    step=_replayed_step(committed, effect_key=key),
                 )
             if committed is not None and self._store is not None:
                 # A journal row alone cannot overrule a live fenced lease.
@@ -213,7 +360,7 @@ class ToolEffectReceiptIndex:
                             "replay",
                             key,
                             fingerprint,
-                            step=_replayed_step(decision.step),
+                            step=_replayed_step(decision.step, effect_key=key),
                         )
                     if decision.kind == "indeterminate":
                         return EffectResolution(
@@ -429,6 +576,20 @@ def indeterminate_step(
         error_type="indeterminate_side_effect",
         stderr_tags=["durable_effect_indeterminate", "manual_reconciliation_required"],
         cost=CostEntry(),
+        effect_receipt={
+            "schema": EFFECT_RECEIPT_SCHEMA,
+            "sealed": True,
+            "emitted_by": "tool_executor",
+            "tool_name": str(call.sucker_id),
+            "call_id": str(call.call_id),
+            "effect_key": effect_key,
+            "fencing_token": max(0, int(fencing_token)),
+            "effect_class": "external_or_unknown",
+            "state": "indeterminate",
+            "handler_entered": True,
+            "retry_safe": False,
+            "reason": reason[:240],
+        },
     )
     return Step(
         step_id=step_id,
@@ -439,14 +600,44 @@ def indeterminate_step(
     )
 
 
-def _replayed_step(step: Step) -> Step:
+def _replayed_step(step: Step, *, effect_key: str) -> Step:
     tags = list(step.result.stderr_tags)
     if "durable_effect_replay" not in tags:
         tags.append("durable_effect_replay")
+    existing = step.result.effect_receipt
+    if (
+        isinstance(existing, dict)
+        and existing.get("schema") == EFFECT_RECEIPT_SCHEMA
+        and existing.get("sealed") is True
+        and existing.get("emitted_by") == "tool_executor"
+    ):
+        effect_receipt = {
+            **existing,
+            "state": "replayed",
+            "replayed_from_state": str(existing.get("state") or "committed"),
+            "retry_safe": False,
+        }
+    else:
+        # Legacy journal/store rows did not carry a server-owned effect
+        # classification. Replaying them remains transport-safe, but they are
+        # ineligible as evidence for autonomous repair learning.
+        effect_receipt = {
+            "schema": EFFECT_RECEIPT_SCHEMA,
+            "sealed": False,
+            "emitted_by": "legacy_effect_replay",
+            "tool_name": str(step.action.sucker_id),
+            "call_id": str(step.action.call_id),
+            "effect_key": effect_key,
+            "effect_class": "external_or_unknown",
+            "state": "replayed",
+            "handler_entered": True,
+            "retry_safe": False,
+        }
     result = step.result.model_copy(
         update={
             "stderr_tags": tags,
             "cost": CostEntry(),
+            "effect_receipt": effect_receipt,
             "ts": now_utc(),
         }
     )
@@ -498,11 +689,14 @@ def _canonical_effect_value(value: Any) -> Any:
 
 
 __all__ = [
+    "EFFECT_RECEIPT_SCHEMA",
     "EffectLeaseLost",
     "EffectResolution",
     "ToolEffectReceiptIndex",
     "args_fingerprint",
+    "build_server_effect_receipt",
     "effect_key",
     "indeterminate_step",
     "is_side_effecting",
+    "not_executed_effect_receipt",
 ]

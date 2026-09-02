@@ -136,8 +136,8 @@ class MockModelRouter(ModelRouter):
 class UnconfiguredModelRouter(ModelRouter):
     """Last-resort dispatch fallback when no model is configured.
 
-    Replaces the old Molili fallback, which required a logged-in actor and
-    failed with a confusing "no current_actor set · 需要登录态". This raises a
+    Replaces the old login-gated fallback, which required an actor and failed
+    with a confusing "no current_actor set · 需要登录态". This raises a
     clear, actionable error instead — reached only when a request resolves to
     no registered sub-router AND no self-configured model exists.
     """

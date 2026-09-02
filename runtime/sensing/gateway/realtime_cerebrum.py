@@ -873,6 +873,7 @@ class CerebrumRuntime:
             text=text,
         )
 
+
 # Static check: this class fulfills the realtime contract.
 _: RealtimeRuntime = CerebrumRuntime.__new__(CerebrumRuntime)  # type: ignore[arg-type]
 del _

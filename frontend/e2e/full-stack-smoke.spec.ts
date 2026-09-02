@@ -225,16 +225,19 @@ test.describe("Full-stack golden smoke", () => {
       await page.goto(`${origin}/#/workspace/agents?surface=chat`);
       await page.waitForLoadState("domcontentloaded");
       await expect(
-        page
-          .getByTestId("agents-card-grid")
-          .or(page.getByTestId("agents-empty-state")),
+        page.getByPlaceholder(
+          /搜索角色、应用或 Skills|Search roles, apps or Skills/i,
+        ),
       ).toBeVisible({ timeout: 20_000 });
 
       await page.goto(`${origin}/#/workspace/intelligence?surface=chat`);
       await page.waitForLoadState("domcontentloaded");
-      await expect(page.getByTestId("intelligence-panel")).toBeVisible({
-        timeout: 20_000,
-      });
+      const intelligenceSurface = page.getByTestId("intelligence-panel").or(
+        page.getByRole("heading", {
+          name: /订阅暂时不可用|Subscriptions unavailable/i,
+        }),
+      );
+      await expect(intelligenceSurface).toBeVisible({ timeout: 20_000 });
     }
     expect(originSnapshots).toHaveLength(2);
     expect(originSnapshots[1].status).toMatchObject({
@@ -259,10 +262,13 @@ test.describe("Full-stack golden smoke", () => {
     });
 
     await page.getByTestId("chat-tools-trigger").click();
+    await page.getByTestId("chat-commands-submenu").hover();
+    await expect(page.getByTestId("chat-insert-codex-plan")).toBeVisible();
     await page.getByTestId("chat-insert-codex-plan").click();
-    await expect
-      .poll(() => inputValue(page, '[data-testid="chat-composer-input"]'))
-      .toBe("/codex plan\n");
+    await expect(page.getByTestId("composer-command-prefix")).toHaveText(
+      "Plan",
+    );
+    await expect(page.getByTestId("chat-composer-input")).toHaveValue("");
     await expect(page.getByTestId("chat-send-button")).toBeDisabled();
 
     const agents = await request.get(`${backendBase}/api/agents`);

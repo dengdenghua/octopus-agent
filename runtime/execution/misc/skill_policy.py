@@ -305,11 +305,7 @@ def filter_tool_specs_for_workspace_contract(
                 tool_specs,
                 context=user_context,
             ),
-            (
-                "audit_read_only"
-                if is_audit_read_only_context(user_context)
-                else "read_only"
-            ),
+            ("audit_read_only" if is_audit_read_only_context(user_context) else "read_only"),
         )
     if goal_forbids_local_workspace_access(goal):
         allowed = [

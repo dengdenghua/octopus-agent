@@ -5,7 +5,7 @@ the runtime's ``ModelRouter`` abstraction.
 ``judge.py`` deliberately doesn't import ``ModelRouter`` · it
 defines the interface. This module does the binding · so tests
 of the judge parser stay free of LLM dependencies, and
-deployments can wire any router (Anthropic / OpenAI / Molili /
+deployments can wire any router (Anthropic / OpenAI / Oct /
 mock) without modifying the judge layer.
 
 Features
@@ -130,7 +130,7 @@ def build_judge_from_router(
     ----------
     router :
         Any ``runtime.sensing.model_router.ModelRouter`` subclass ·
-        Mock / Anthropic / OpenAI / Molili all work.
+        Mock / Anthropic / OpenAI / Oct all work.
     model :
         Model string the router understands. Default Haiku ·
         judge wants low latency · not deep reasoning.

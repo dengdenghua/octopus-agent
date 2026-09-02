@@ -79,8 +79,7 @@ class Capabilities:
 # ═══════════════════════════════════════════════════════════
 
 
-def load() -> Capabilities:
-    path = _store_path()
+def _load_path(path: Path) -> Capabilities:
     if not path.is_file():
         return Capabilities.defaults()
     try:
@@ -102,5 +101,13 @@ def load() -> Capabilities:
         return Capabilities.defaults()
 
 
+def load() -> Capabilities:
+    return _load_path(_store_path())
+
+
+def _save_path(path: Path, caps: Capabilities) -> None:
+    atomic_write_json(path, caps.to_dict())
+
+
 def save(caps: Capabilities) -> None:
-    atomic_write_json(_store_path(), caps.to_dict())
+    _save_path(_store_path(), caps)

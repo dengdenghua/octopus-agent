@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Root-level commitlint configuration and git hooks for the octopus-agent repository",
   "scripts": {
-    "prepare": "husky"
+    "prepare": "husky",
+    "lint:commit": "commitlint"
   },
   "devDependencies": {
     "@commitlint/config-conventional": "^21.2.0",

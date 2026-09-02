@@ -54,10 +54,7 @@ def test_first_research_candidate_is_withheld_before_any_tool_runs(
     monkeypatch.setenv("OCTOPUS_DISABLE_GUARD_TELEMETRY", "1")
     _reset_guard_telemetry_for_tests()
     rejected = "UNPUBLISHED_DRAFT：调研结论：事件流采用显式阶段，主要风险已经确认。"
-    accepted = (
-        "最终报告：事件流使用显式阶段，"
-        "来源见[官方说明](https://observed.example/report)。"
-    )
+    accepted = "最终报告：事件流使用显式阶段，来源见[官方说明](https://observed.example/report)。"
     router = _ScriptedRouter(
         [
             f"Final Answer: {rejected}",
@@ -77,9 +74,7 @@ def test_first_research_candidate_is_withheld_before_any_tool_runs(
 
     assert result is not None and result.success
     assert result.final_answer == accepted
-    assert "".join(
-        event["delta"] for event in events if event["type"] == "text_delta"
-    ) == accepted
+    assert "".join(event["delta"] for event in events if event["type"] == "text_delta") == accepted
     assert rejected not in str(events)
     assert any("inspection-evidence guard" in step.observation for step in result.steps)
 
@@ -89,9 +84,7 @@ def test_first_research_candidate_is_withheld_before_any_tool_runs(
     [
         ('Action: echo({"text":"done"})', {"echo"}),
         (
-            "Action:\n"
-            'echo({"text":"done"})\n'
-            'web_search({"q":"Octopus realtime architecture"})',
+            'Action:\necho({"text":"done"})\nweb_search({"q":"Octopus realtime architecture"})',
             {"echo", "web_search"},
         ),
     ],
@@ -133,14 +126,10 @@ def test_same_response_pending_actions_keep_final_candidate_private(
 
     assert result is not None and result.success
     assert result.final_answer == accepted
-    assert "".join(
-        event["delta"] for event in events if event["type"] == "text_delta"
-    ) == accepted
+    assert "".join(event["delta"] for event in events if event["type"] == "text_delta") == accepted
     assert rejected not in str(events)
     started_tools = {
-        str(event.get("tool_name"))
-        for event in events
-        if event["type"] == "tool_start"
+        str(event.get("tool_name")) for event in events if event["type"] == "tool_start"
     }
     assert expected_tool_names <= started_tools
 
@@ -155,10 +144,7 @@ async def test_guard_rejected_report_never_becomes_realtime_agent_message(
         "UNPUBLISHED_DRAFT：这是校验前候选报告，"
         "引用了[未抓取来源](https://not-fetched.example/report)。"
     )
-    accepted = (
-        "最终报告：事件流使用显式阶段，"
-        "来源见[官方说明](https://observed.example/report)。"
-    )
+    accepted = "最终报告：事件流使用显式阶段，来源见[官方说明](https://observed.example/report)。"
     router = _ScriptedRouter(
         [
             (
@@ -183,9 +169,7 @@ async def test_guard_rejected_report_never_becomes_realtime_agent_message(
         and "[citation-grounding guard]" in str(event.get("observation") or "")
         for event in events
     )
-    assert "".join(
-        event["delta"] for event in events if event["type"] == "text_delta"
-    ) == accepted
+    assert "".join(event["delta"] for event in events if event["type"] == "text_delta") == accepted
 
     turn = _make_turn()
     state = _ReactBridgeState()
@@ -207,9 +191,7 @@ async def test_guard_rejected_report_never_becomes_realtime_agent_message(
         )
 
     answers = [
-        item
-        for item in turn.items
-        if item.type == "agentMessage" and item.message_kind == "answer"
+        item for item in turn.items if item.type == "agentMessage" and item.message_kind == "answer"
     ]
     assert len(answers) == 1
     assert answers[0].text == accepted
@@ -240,10 +222,7 @@ def test_length_limited_research_segments_are_guarded_and_published_atomically(
         "[官方说明](https://observed.example/report)作为补充，"
         "结论是事件流使用显式阶段。"
     )
-    accepted = (
-        "最终报告：事件流使用显式阶段，"
-        "来源见[官方说明](https://observed.example/report)。"
-    )
+    accepted = "最终报告：事件流使用显式阶段，来源见[官方说明](https://observed.example/report)。"
     router = _ScriptedRouter(
         [
             (
@@ -271,8 +250,6 @@ def test_length_limited_research_segments_are_guarded_and_published_atomically(
         and "[citation-grounding guard]" in str(event.get("observation") or "")
         for event in events
     )
-    visible_answer = "".join(
-        event["delta"] for event in events if event["type"] == "text_delta"
-    )
+    visible_answer = "".join(event["delta"] for event in events if event["type"] == "text_delta")
     assert visible_answer == accepted
     assert "UNPUBLISHED_DRAFT" not in visible_answer

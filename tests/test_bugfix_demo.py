@@ -76,6 +76,8 @@ class TestPlan:
         assert str(skills[0]) == "list_cwd"
         assert str(skills[4]) == "edit_text_file"
         assert str(skills[7]) == "git_commit"
+        assert graph.nodes[2].continue_on_failure is True
+        assert all(not node.continue_on_failure for node in graph.nodes if node.node_id != "n2")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -125,15 +127,16 @@ class TestRunDemoE2E:
         # Implementation note.
         assert "fix" in commits[0].lower()
 
-    def test_all_steps_succeeded(self, tmp_path: Path):
-        """Implementation note."""
+    def test_only_expected_red_phase_fails(self, tmp_path: Path):
+        """The initial failing test is evidence; every repair step succeeds."""
         result = run_demo(workdir=tmp_path, color=False, verbose=False)
         for step in result["steps"]:
-            assert step.success, (
+            assert step.success or step.node_id == "n2", (
                 f"step {step.node_id} failed · "
                 f"skill={step.action.sucker_id} · "
                 f"error_type={step.result.error_type}"
             )
+        assert result["trajectory"].outcome.success is True
 
     def test_journal_records_all_events(self, tmp_path: Path):
         run_demo(workdir=tmp_path, color=False, verbose=False)

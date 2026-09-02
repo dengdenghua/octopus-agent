@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from runtime.safety.evolution.canary import CanaryConfig, CanaryManager
+from runtime.safety.evolution.candidate_registry import CandidateRegistry, CandidateStatus
 from runtime.safety.evolution.proposal_ledger import ProposalLedger
 from runtime.safety.recovery.evolution_dataset import (
     EvolutionDataset,
@@ -132,6 +133,15 @@ def test_record_winner_proposal_and_canary_materializes_lifecycle(tmp_path) -> N
     assert state is not None
     assert state.metadata["proposal_id"] == lifecycle["proposal_id"]
     assert state.metadata["candidate_id"] == candidate.candidate_id
+    typed = CandidateRegistry(tmp_path / "evolution_candidates.jsonl").get(
+        lifecycle["evolution_candidate_id"]
+    )
+    assert typed is not None and typed.status == CandidateStatus.PROPOSED
+    assert set(typed.metadata["awaiting_gates"]) == {
+        "native_replay",
+        "sandbox_replay",
+        "turn_replay",
+    }
 
 
 def test_record_winner_persists_native_replay_summary(tmp_path) -> None:

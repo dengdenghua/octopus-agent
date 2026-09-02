@@ -601,8 +601,7 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help=(
-            "output tar.gz path (default: backup-<timestamp>.tar.gz below "
-            "the active Octopus home)"
+            "output tar.gz path (default: backup-<timestamp>.tar.gz below the active Octopus home)"
         ),
     )
     backupp.add_argument(

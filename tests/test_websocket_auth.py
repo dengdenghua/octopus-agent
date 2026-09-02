@@ -5,7 +5,6 @@ import base64
 from runtime.safety.auth.websocket import (
     accepted_auth_subprotocol,
     offered_websocket_subprotocols,
-    websocket_auth_token,
     websocket_bearer_token,
 )
 
@@ -16,14 +15,9 @@ class _Connection:
         *,
         subprotocols: list[str] | None = None,
         header: str = "",
-        authorization: str = "",
-        query_token: str = "",
     ) -> None:
         self.scope = {"subprotocols": subprotocols} if subprotocols is not None else {}
         self.headers = {"sec-websocket-protocol": header} if header else {}
-        if authorization:
-            self.headers["authorization"] = authorization
-        self.query_params = {"token": query_token} if query_token else {}
 
 
 def _encoded(value: str) -> str:
@@ -36,6 +30,15 @@ def test_websocket_bearer_token_decodes_arbitrary_utf8_without_url_transport() -
     )
 
     assert websocket_bearer_token(connection) == "令牌 with spaces/(test)"
+    assert accepted_auth_subprotocol(connection) == "bearer.b64"
+
+
+def test_websocket_bearer_token_handles_proxy_collapsed_protocol_header() -> None:
+    token = "sk-alice"
+    encoded = _encoded(token)
+    connection = _Connection(subprotocols=[f"bearer.b64, {encoded}"])
+
+    assert websocket_bearer_token(connection) == token
     assert accepted_auth_subprotocol(connection) == "bearer.b64"
 
 
@@ -60,15 +63,3 @@ def test_accepted_auth_subprotocol_never_echoes_the_credential() -> None:
 
     assert accepted_auth_subprotocol(connection) == "Bearer.B64"
     assert accepted_auth_subprotocol(connection) != encoded
-
-
-def test_websocket_auth_token_prefers_header_and_never_reads_query_string() -> None:
-    header = _Connection(
-        subprotocols=["bearer", "subprotocol-secret"],
-        authorization="Bearer header-secret",
-        query_token="query-secret",
-    )
-    query_only = _Connection(query_token="query-secret")
-
-    assert websocket_auth_token(header) == "header-secret"
-    assert websocket_auth_token(query_only) is None

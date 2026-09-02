@@ -31,6 +31,7 @@ def test_realtime_react_lifecycle_projects_to_task_supervisor(tmp_path):
     runtime = SimpleNamespace(_task_supervisor=supervisor, _trace_store=None)
     params = TurnParams(threadId="thread-1", input=[], cwd=str(tmp_path))
     turn = Turn(id="turn-1", threadId="thread-1", params=params)
+    turn.execution_workspace_path = str(tmp_path / "resolved-workspace")
 
     _record_react_trace_event(
         runtime,
@@ -41,6 +42,8 @@ def test_realtime_react_lifecycle_projects_to_task_supervisor(tmp_path):
     assert started is not None
     assert started.status == TaskRunStatus.RUNNING
     assert started.origin_task_id == "turn-1"
+    assert started.workspace_path == str(tmp_path / "resolved-workspace")
+    assert started.capabilities.workspace_paths == [str(tmp_path / "resolved-workspace")]
 
     turn.task_id = "react-task-1"
     turn.objective_id = "react-task-1"

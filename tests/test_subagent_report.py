@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 import pytest
@@ -370,6 +371,40 @@ def test_queued_report_round_trips_across_instances(tmp_path: Path) -> None:
 
 
 # ─── thread-scoped busy state (react-loop production wiring) ─────────────
+
+
+def test_thread_busy_markers_do_not_wait_for_durable_store_lock(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    session = store.create(agent_id="researcher", thread_id="th-parent")
+    durable_locked = threading.Event()
+    release_durable = threading.Event()
+
+    def _hold_durable_lock() -> None:
+        with store._lock:  # noqa: SLF001 - intentional lock-contention regression
+            durable_locked.set()
+            release_durable.wait(2.0)
+
+    holder = threading.Thread(target=_hold_durable_lock, daemon=True)
+    holder.start()
+    assert durable_locked.wait(1.0)
+    markers_finished = threading.Event()
+
+    def _mark_live_state() -> None:
+        store.mark_thread_busy("th-parent")
+        store.mark_thread_idle("th-parent")
+        store.mark_owner_busy(session.session_id)
+        store.mark_owner_idle(session.session_id)
+        store.refill_wake_budget(session.session_id)
+        markers_finished.set()
+
+    marker = threading.Thread(target=_mark_live_state, daemon=True)
+    marker.start()
+    try:
+        assert markers_finished.wait(0.25), "live busy markers waited for durable store lock"
+    finally:
+        release_durable.set()
+        holder.join(timeout=2.0)
+        marker.join(timeout=2.0)
 
 
 def test_thread_busy_queues_reports_for_all_sessions(tmp_path: Path) -> None:

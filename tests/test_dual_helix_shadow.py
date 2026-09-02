@@ -6,6 +6,7 @@ import pytest
 from runtime.safety.evolution.dual_helix_shadow import (
     DualHelixShadowService,
     materialize_shadow_snapshot,
+    parse_shadow_review,
 )
 
 
@@ -65,9 +66,7 @@ async def test_opt_in_shadow_run_uses_opposite_engine_on_isolated_snapshot(
     )
     for _ in range(50):
         await asyncio.sleep(0.01)
-        row = next(
-            item for item in service.status()["runs"] if item["run_id"] == queued["run_id"]
-        )
+        row = next(item for item in service.status()["runs"] if item["run_id"] == queued["run_id"])
         if row["status"] in {"completed", "failed"}:
             break
 
@@ -76,6 +75,8 @@ async def test_opt_in_shadow_run_uses_opposite_engine_on_isolated_snapshot(
     assert row["source_thread_id"] == "thread-1"
     assert row["source_message_id"] == "answer-1"
     assert row["result"].startswith("PASS")
+    assert row["verdict"] == "pass"
+    assert row["hard_gates"] == {"legacy_review_verdict": True}
     assert len(calls) == 1
 
 
@@ -97,3 +98,23 @@ def test_rejects_workspace_outside_allowed_root(tmp_path: Path) -> None:
             primary_output="",
             workspace_path=str(outside),
         )
+
+
+def test_structured_shadow_review_cannot_pass_with_a_failed_hard_gate() -> None:
+    review = parse_shadow_review(
+        '{"verdict":"pass","hard_gates":{"correctness":true,"safety":false},'
+        '"evidence":["unsafe write"],"recommendations":["remove write"]}'
+    )
+    assert review["verdict"] == "fail"
+    assert review["hard_gates"]["safety"] is False
+
+
+def test_structured_shadow_review_accepts_fenced_json() -> None:
+    review = parse_shadow_review(
+        "```json\n"
+        '{"verdict":"pass","hard_gates":{"correctness":true,"verification":true},'
+        '"evidence":["tests passed"],"recommendations":[]}\n'
+        "```"
+    )
+    assert review["verdict"] == "pass"
+    assert review["evidence"] == ["tests passed"]

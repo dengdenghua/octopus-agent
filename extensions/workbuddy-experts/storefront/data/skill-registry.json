@@ -1,25 +1,22 @@
 {
  "meta": {
   "title": "Octopus Skill Hub — 云商城技能",
-  "count": 121,
+  "count": 178,
   "workbuddy_skills": 19,
-  "octopus_skills": 102,
-  "source": "https://raw.githubusercontent.com/dengdenghua/workbuddy-expert-market/gh-pages/data/skill-registry.json",
-  "generated_at": "2026-08-19T13:48:06.885498+00:00"
+  "octopus_skills": 178,
+  "source": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/skill-registry.json",
+  "generated_at": "2026-08-29T05:12:21.278141+00:00"
  },
  "skills": [
   {
    "name": "academic-paper-expert",
-   "version": "0.1.0",
-   "author": "workbuddy-builtin:tencent-docx",
-   "description": "WorkBuddy writing expert: academic-paper-expert",
+   "version": "1.0.0",
+   "author": "octopus-agent",
+   "description": "|",
    "tags": [
-    "writing",
-    "docx",
-    "workbuddy",
-    "expert"
+    "octopus"
    ],
-   "source": "workbuddy",
+   "source": "octopus-repository",
    "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
   },
   {
@@ -200,29 +197,24 @@
   },
   {
    "name": "browser-use",
-   "version": "0.1.0",
-   "author": "workbuddy-builtin:senior-developer",
-   "description": "Browser automation: navigate, click, screenshot, extract",
+   "version": "2.0.0",
+   "author": "octopus-agent",
+   "description": "Automates browser interactions for web testing, form filling, screenshots, and data extraction. Use when the user needs to navigate websites, interact with web pages, fill forms, take screenshots,",
    "tags": [
-    "automation",
-    "workbuddy",
-    "senior-developer"
+    "octopus"
    ],
-   "source": "workbuddy",
+   "source": "octopus-repository",
    "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
   },
   {
    "name": "business-copy-expert",
-   "version": "0.1.0",
-   "author": "workbuddy-builtin:tencent-docx",
-   "description": "WorkBuddy writing expert: business-copy-expert",
+   "version": "2.0.0",
+   "author": "octopus-agent",
+   "description": "|",
    "tags": [
-    "writing",
-    "docx",
-    "workbuddy",
-    "expert"
+    "octopus"
    ],
-   "source": "workbuddy",
+   "source": "octopus-repository",
    "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
   },
   {
@@ -237,27 +229,14 @@
    "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
   },
   {
-   "name": "canva",
-   "version": "1.0.0",
+   "name": "capability-evolver",
+   "version": "1.51.3",
    "author": "octopus-agent",
-   "description": "Use Canva's design capabilities: create and edit designs, manage assets and brand resources, search the asset library, export designs, and add comments.",
+   "description": "GitHub API token for auto-issue reporting and releases.",
    "tags": [
     "octopus"
    ],
-   "source": "octopus-local",
-   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
-  },
-  {
-   "name": "capability-evolver",
-   "version": "0.1.0",
-   "author": "workbuddy-builtin:senior-developer",
-   "description": "AI agent self-evolution engine over run history",
-   "tags": [
-    "meta",
-    "workbuddy",
-    "senior-developer"
-   ],
-   "source": "workbuddy",
+   "source": "octopus-repository",
    "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
   },
   {
@@ -363,27 +342,719 @@
   {
    "name": "content-writing",
    "version": "0.1.0",
-   "author": "workbuddy-builtin:seo-content-team",
-   "description": "SEO long-form content writing workflow",
+   "author": "octopus-agent",
+   "description": "|",
    "tags": [
-    "marketing",
-    "workbuddy",
-    "seo-content-team"
+    "octopus"
    ],
-   "source": "workbuddy",
+   "source": "octopus-repository",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-3d-animation",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "把故事创意转成角色、场景、镜头、动作与合成一致的 3D 动画短片制作方案。",
+   "tags": [
+    "octopus",
+    "动画"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-anime-pv",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "为动画、游戏或虚拟 IP 设计短篇 PV，包括卖点提炼、分镜、节奏、音乐方向与生成执行清单。",
+   "tags": [
+    "octopus",
+    "动画"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-anime-style-forge",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "将角色与场景锻造成一致的原创动画视觉体系，覆盖线条、比例、上色、材质和镜头规则。",
+   "tags": [
+    "octopus",
+    "动画"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-audiobook",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "将书稿组织为多角色有声书制作包，覆盖脚本清理、选角、表演、环境声、章节与质检。",
+   "tags": [
+    "octopus",
+    "音频音乐"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-beat-sync-edit",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "按音乐结构、拍点与情绪变化设计镜头卡点、速度变化和声音衔接。",
+   "tags": [
+    "octopus",
+    "音频音乐"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-brand-film",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "把品牌策略和产品卖点转成可执行的品牌宣传片、产品广告与多渠道视觉资产。",
+   "tags": [
+    "octopus",
+    "商业广告"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-brand-flow-mg",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "基于品牌标志、IP 与主题制作流线引导、节点连接和标志收束的 MG 动效。",
+   "tags": [
+    "octopus",
+    "ui-动效"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-broll-planner",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "把口播逐字稿拆成可审片的 B-roll 镜头、素材来源、时长和覆盖关系。",
+   "tags": [
+    "octopus",
+    "平台工具"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-character-performance",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "根据角色图、剧本与情绪设计自然的微表情、视线、呼吸和肢体表演提示。",
+   "tags": [
+    "octopus",
+    "专业影视"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-cinematic-shot-cards",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "为叙事场景生成可执行的电影镜头卡与角色卡，明确机位、焦段、调度、光线和连续性。",
+   "tags": [
+    "octopus",
+    "专业影视"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-cinematic-style-extractor",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "从电影名称、剧照或参考片段提炼可复用的构图、镜头、光色、材质和声音规则，并生成原创执行方案。",
+   "tags": [
+    "octopus",
+    "专业影视"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-comfyui-workflow",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "使用 Octopus ComfyUI 工作流桥接诊断、编辑、保存和运行本机节点工作流，并核对真实生成结果；适用于文生图、图生图、放大和用户已安装扩展支持的图像、视频或音频流程。",
+   "tags": [
+    "octopus",
+    "平台工具"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-course-landing-page",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "将课程定位、学习成果和课程结构设计成信息清楚、可转化且可实现的技能课程详情页。",
+   "tags": [
+    "octopus",
+    "教育"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-digital-product-film",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "把真实产品页面、交互路径和动效参考转成准确呈现界面的电影感数字产品宣传片。",
+   "tags": [
+    "octopus",
+    "商业广告"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-director-stage",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "使用 Octopus 3D 导演台编排角色、场景、机位、姿态、走位和运镜；适用于分镜预演、镜头构图和生成视频前的空间验证。",
+   "tags": [
+    "octopus",
+    "平台工具"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-documentary",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "将主题研究、采访与素材组织为事实可追溯的纪录片结构、旁白和镜头计划。",
+   "tags": [
+    "octopus",
+    "专业影视"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-dodge-game-video",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "从角色参考图制作四向躲闪关键帧、游戏反馈和短时反应挑战视频。",
+   "tags": [
+    "octopus",
+    "动画"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-dotmatrix-brand-motion",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "根据品牌标志、名称与标语设计点阵字形系统、横版品牌图和动态字效。",
+   "tags": [
+    "octopus",
+    "ui-动效"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-dreamcore-space",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "设计梦核、阈限空间与超现实后室场景，控制空间规则、情绪线索、镜头漫游和声音氛围。",
+   "tags": [
+    "octopus",
+    "创意实验"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-dual-player-intro",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "根据两位玩家名称、角色参考和游戏世界观设计双人游戏菜单开场、选角确认与短视频生成方案。",
+   "tags": [
+    "octopus",
+    "动画"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-dynamic-poster",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "将静态海报转为文字清晰、主体关系稳定且可循环的一镜到底动态海报。",
+   "tags": [
+    "octopus",
+    "商业广告"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-ecommerce-images",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "从真实商品素材规划平台合规的电商主图、卖点图、场景图和细节图组。",
+   "tags": [
+    "octopus",
+    "电商"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-editor-export",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "将时间线工程整理为可迁移的剪辑交付包，包含媒体、字幕、代理、命名与兼容性检查。",
+   "tags": [
+    "octopus",
+    "平台工具"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-education-video",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "把知识目标转成讲解脚本、图解、示例、练习和理解验证，适合课程与科普视频。",
+   "tags": [
+    "octopus",
+    "教育"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-film-score",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "为角色、场景和叙事段落设计主题动机、配器、速度、动态与音乐进出点。",
+   "tags": [
+    "octopus",
+    "音频音乐"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-fpv-video",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "设计连续沉浸的第一视角或 FPV 穿越路线、速度曲线、空间节点与一镜到底提示。",
+   "tags": [
+    "octopus",
+    "创意实验"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-h3-prompt-director",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "把零散的视频目标、参考素材和限制整理成可控的多模态视频生成指令，适合 H3 类视频模型或兼容模型。",
+   "tags": [
+    "octopus",
+    "平台工具"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-image-inpaint",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "根据遮罩或区域描述完成局部重绘，保持透视、光线、材质、边缘与未编辑区域稳定。",
+   "tags": [
+    "octopus",
+    "平台工具"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-image-remix",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "从参考图提取构图、光线、材质与色彩关系，生成保持目标内容原创的新图方案。",
+   "tags": [
+    "octopus",
+    "创意实验"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-intentional-lowpoly-film",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "将人物或场景转成有控制的早期低模、笨拙绑定和生硬运镜短片，同时保持主体可识别与审美一致。",
+   "tags": [
+    "octopus",
+    "创意实验"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-koc-video",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "为 KOC、口播和电商短视频设计开场钩子、自然脚本、镜头、B-roll 与平台版本。",
+   "tags": [
+    "octopus",
+    "电商"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-lighting-studio",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "为人物、产品与场景设计有动机的光线方向、软硬、比例、色温和空间层次。",
+   "tags": [
+    "octopus",
+    "专业影视"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-line-explainer",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "把教材、知识主题或抽象概念转成线条人物、图标和关系图驱动的科普视频。",
+   "tags": [
+    "octopus",
+    "教育"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-lip-makeup-ad",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "为唇部彩妆与近景美妆产品设计人物、产品、道具互动自然的横屏或竖屏广告。",
+   "tags": [
+    "octopus",
+    "商业广告"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-liveaction-drawing-reveal",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "让真实照片或视频先自然运动，再由绘制动作把主体显影为手绘层并保持空间一致。",
+   "tags": [
+    "octopus",
+    "创意实验"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-localization-dubbing",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "将短剧或视频本地化为目标语言，保持角色音色、语气、时长、口型与字幕同步。",
+   "tags": [
+    "octopus",
+    "音频音乐"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-microdrama-writer",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "从选题和人物关系开发可连续生产的微短剧剧集，覆盖钩子、冲突、反转、集尾与制作约束。",
+   "tags": [
+    "octopus",
+    "短剧漫剧"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-multi-angle-render",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "从单张或少量参考建立主体结构假设并生成前后左右、俯仰与三分之四视角。",
+   "tags": [
+    "octopus",
+    "平台工具"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-multiboard",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "将故事拆成多宫格分镜整图，保持镜头顺序、角色一致、空间方向和阅读节奏。",
+   "tags": [
+    "octopus",
+    "专业影视"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-music-video",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "从歌曲结构设计 MV 的表演、空间、造型、剪辑、动态字幕与生成路线。",
+   "tags": [
+    "octopus",
+    "音频音乐"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-paper-collage",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "将文案或知识主题转成纸张拼贴、分层布景与触感声音统一的讲解动画。",
+   "tags": [
+    "octopus",
+    "教育"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-paper-stopmotion-explainer",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "把知识主题转成纸偶、分层布景、逐帧动作和实物音效统一的定格科普视频制作包。",
+   "tags": [
+    "octopus",
+    "教育"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-pixel-block-art",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "将图像或概念转换为可搭建的体素/方块画，控制网格、调色板、轮廓与材料数量。",
+   "tags": [
+    "octopus",
+    "创意实验"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-podcast-kit",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "将播客录音或转录稿整理为节目说明、章节、短视频切片、文章与社媒内容包。",
+   "tags": [
+    "octopus",
+    "平台工具"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-product-ad",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "从产品图片与卖点制作极简、可信、可转化的产品广告镜头与多渠道变体。",
+   "tags": [
+    "octopus",
+    "商业广告"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-promo-video",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "把产品或服务简介转成可执行的宣传视频方案，覆盖受众、卖点、证据、镜头与多渠道版本。",
+   "tags": [
+    "octopus",
+    "商业广告"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-silkscreen-film",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "将主题转成丝印装饰插画、有限色版、颗粒套印与同步音效统一的短片。",
+   "tags": [
+    "octopus",
+    "创意实验"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-sleep-audio",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "设计助眠冥想、环境声与轻声引导音频，控制节奏、动态、循环与刺激性。",
+   "tags": [
+    "octopus",
+    "音频音乐"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-storyboard-assets",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "把剧本与参考图整理为角色、场景、道具和镜头统一的综合设定板。",
+   "tags": [
+    "octopus",
+    "专业影视"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-title-sequence",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "设计电影、短剧或节目片头，包括叙事母题、字体系统、演职员表、转场和视效节奏。",
+   "tags": [
+    "octopus",
+    "专业影视"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-toy-grid-poster",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "将角色参考制作成身份一致的 3D 潮玩六宫格动态海报，适合 IP 提案和社媒展示。",
+   "tags": [
+    "octopus",
+    "电商"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-ui-motion",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "将产品界面和功能流程转成品牌一致的 UI 动效广告、功能演示与动态分镜。",
+   "tags": [
+    "octopus",
+    "商业广告"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-video-deconstruct",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "逆向拆解参考视频的镜头、节奏、视觉技术、声音、制作难度与可复用创作规则。",
+   "tags": [
+    "octopus",
+    "平台工具"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-video-editor",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "在 Octopus AI 剪辑工坊中读取和修改多轨视频项目，并对节奏、转场、字幕、调色、效果、关键帧、变速和成片导出做基于真实画面的编辑判断；适用于剪辑、时间线诊断、视觉复核与可撤销批量编辑。",
+   "tags": [
+    "octopus",
+    "平台工具"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-visual-direction",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "为图像、视频和动态设计建立统一的构图、色彩、材质、字体、光线与运动语言。",
+   "tags": [
+    "octopus",
+    "创意实验"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-voice-design",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "用角色背景、表演意图和声学参数设计可试听的原创音色方向。",
+   "tags": [
+    "octopus",
+    "音频音乐"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-vox-explainer",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "把主题、文章或报告转成带旁白、字幕、图解和拼贴节奏的高密度科普短片。",
+   "tags": [
+    "octopus",
+    "教育"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "creative-zodiac-english-series",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "围绕十二生肖或其他文化角色体系设计儿童英语故事、儿歌、重复句型和连续剧集资产。",
+   "tags": [
+    "octopus",
+    "教育"
+   ],
+   "source": "octopus",
    "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
   },
   {
    "name": "cro-optimization",
    "version": "0.1.0",
-   "author": "workbuddy-builtin:seo-content-team",
-   "description": "CRO & landing-page conversion optimization",
+   "author": "octopus-agent",
+   "description": "|",
    "tags": [
-    "marketing",
-    "workbuddy",
-    "seo-content-team"
+    "octopus"
    ],
-   "source": "workbuddy",
+   "source": "octopus-repository",
    "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
   },
   {
@@ -575,15 +1246,14 @@
   },
   {
    "name": "frontend-dev",
-   "version": "0.1.0",
-   "author": "workbuddy-builtin:senior-developer",
-   "description": "Frontend UI/CSS/component development with AI media generation",
+   "version": "1.0.0",
+   "author": "octopus-agent",
+   "description": "|",
    "tags": [
-    "engineering",
-    "workbuddy",
-    "senior-developer"
+    "octopus",
+    "frontend"
    ],
-   "source": "workbuddy",
+   "source": "octopus-repository",
    "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
   },
   {
@@ -599,15 +1269,14 @@
   },
   {
    "name": "fullstack-dev",
-   "version": "0.1.0",
-   "author": "workbuddy-builtin:senior-developer",
-   "description": "Full-stack development architecture & build guide",
+   "version": "1.0.0",
+   "author": "octopus-agent",
+   "description": "|",
    "tags": [
-    "engineering",
-    "workbuddy",
-    "senior-developer"
+    "octopus",
+    "full-stack"
    ],
-   "source": "workbuddy",
+   "source": "octopus-repository",
    "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
   },
   {
@@ -624,15 +1293,12 @@
   {
    "name": "general-writer",
    "version": "0.1.0",
-   "author": "workbuddy-builtin:tencent-docx",
-   "description": "WorkBuddy writing expert: general-writer",
+   "author": "octopus-agent",
+   "description": "L1 通用写作兜底专家。覆盖公文、周报、方案、邮件、文案、散文、新媒体稿件等场景，采用 7 维质量评分框架（事实/逻辑/结构/语言/风格/受众/洞察）与 10 种文体适配矩阵。当 L0 路由未命中任何 L2 专家时作为兜底触发。适用于没有特定领域严格规范的通用写作任务。",
    "tags": [
-    "writing",
-    "docx",
-    "workbuddy",
-    "expert"
+    "octopus"
    ],
-   "source": "workbuddy",
+   "source": "octopus-repository",
    "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
   },
   {
@@ -803,15 +1469,12 @@
   {
    "name": "legal-contract-expert",
    "version": "0.1.0",
-   "author": "workbuddy-builtin:tencent-docx",
-   "description": "WorkBuddy writing expert: legal-contract-expert",
+   "author": "octopus-agent",
+   "description": "L2 法律合同专家。覆盖各类合同、协议、条款、契约的起草与审查，包含必备条款完整性检查（标的/价款/违约/争议解决/生效条件）、权利义务对称性审核、高风险点防范（不可抗力/知识产权归属/保密期限）。采用严格 Critic 审查，涉及法律责任任务**强制**走 per-section 模式分章审查。触发关键词：合同、契约、协议、条款、甲乙方、违约金、不可抗力、争议解决。",
    "tags": [
-    "writing",
-    "docx",
-    "workbuddy",
-    "expert"
+    "octopus"
    ],
-   "source": "workbuddy",
+   "source": "octopus-repository",
    "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
   },
   {
@@ -872,14 +1535,12 @@
   {
    "name": "md-to-html",
    "version": "0.1.0",
-   "author": "workbuddy-builtin:stock-partner-team",
-   "description": "Render markdown research reports to styled HTML",
+   "author": "octopus-agent",
+   "description": "把腾讯自选股股票投研圆桌报告渲染成 Anthropic 浅色风的单文件 HTML。主理人写完 <主题>-圆桌报告.md 后，再写一份 body 片段，调用本 skill 的 render.py 合成最终 HTML（CSS 内联、头像 base64 嵌入，可直接双击打开或微信/邮件分享）。",
    "tags": [
-    "finance",
-    "workbuddy",
-    "stock-partner-team"
+    "octopus"
    ],
-   "source": "workbuddy",
+   "source": "octopus-repository",
    "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
   },
   {
@@ -950,16 +1611,13 @@
   },
   {
    "name": "poetry-prose-expert",
-   "version": "0.1.0",
-   "author": "workbuddy-builtin:tencent-docx",
-   "description": "WorkBuddy writing expert: poetry-prose-expert",
+   "version": "1.0.0",
+   "author": "octopus-agent",
+   "description": "|",
    "tags": [
-    "writing",
-    "docx",
-    "workbuddy",
-    "expert"
+    "octopus"
    ],
-   "source": "workbuddy",
+   "source": "octopus-repository",
    "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
   },
   {
@@ -1075,16 +1733,13 @@
   },
   {
    "name": "science-writing-expert",
-   "version": "0.1.0",
-   "author": "workbuddy-builtin:tencent-docx",
-   "description": "WorkBuddy writing expert: science-writing-expert",
+   "version": "1.0.0",
+   "author": "octopus-agent",
+   "description": "|",
    "tags": [
-    "writing",
-    "docx",
-    "workbuddy",
-    "expert"
+    "octopus"
    ],
-   "source": "workbuddy",
+   "source": "octopus-repository",
    "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
   },
   {
@@ -1112,14 +1767,12 @@
   {
    "name": "seo-analysis",
    "version": "0.1.0",
-   "author": "workbuddy-builtin:seo-content-team",
-   "description": "SEO on-page analysis & keyword clustering",
+   "author": "octopus-agent",
+   "description": "|",
    "tags": [
-    "marketing",
-    "workbuddy",
-    "seo-content-team"
+    "octopus"
    ],
-   "source": "workbuddy",
+   "source": "octopus-repository",
    "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
   },
   {
@@ -1191,15 +1844,12 @@
   {
    "name": "stock-research-report-expert",
    "version": "0.1.0",
-   "author": "workbuddy-builtin:tencent-docx",
-   "description": "WorkBuddy writing expert: stock-research-report-expert",
+   "author": "octopus-agent",
+   "description": "L2 证券/行业研究报告专家。生成专业的行业深度报告、个股研究、动态点评等金融研究文档。内置标准化报告结构框架，覆盖深度研报、常规点评、商业计划书、咨询交付物四档体量。触发关键词：行业研究、深度报告、个股研究、研报、券商报告、产业分析、行业跟踪、投资分析。",
    "tags": [
-    "writing",
-    "docx",
-    "workbuddy",
-    "expert"
+    "octopus"
    ],
-   "source": "workbuddy",
+   "source": "octopus-repository",
    "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
   },
   {
@@ -1237,16 +1887,13 @@
   },
   {
    "name": "tech-blog-expert",
-   "version": "0.1.0",
-   "author": "workbuddy-builtin:tencent-docx",
-   "description": "WorkBuddy writing expert: tech-blog-expert",
+   "version": "2.0.0",
+   "author": "octopus-agent",
+   "description": "|",
    "tags": [
-    "writing",
-    "docx",
-    "workbuddy",
-    "expert"
+    "octopus"
    ],
-   "source": "workbuddy",
+   "source": "octopus-repository",
    "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
   },
   {
@@ -1340,27 +1987,23 @@
   {
    "name": "westock-data",
    "version": "0.1.0",
-   "author": "workbuddy-builtin:stock-partner-team",
-   "description": "Fetch quotes/financials via Tencent westock connector",
+   "author": "octopus-agent",
+   "description": "通过 westock-mcp 连接器查询 A股/港股/美股个股/指数/ETF 数据——行情、K线、财报、资金、技术指标、板块成份、宏观等。触发词：查行情、看K线、查财报、资金流向、板块概念、宏观数据。需已连接 westock-mcp 连接器。",
    "tags": [
-    "finance",
-    "workbuddy",
-    "stock-partner-team"
+    "octopus"
    ],
-   "source": "workbuddy",
+   "source": "octopus-repository",
    "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
   },
   {
    "name": "westock-tool",
    "version": "0.1.0",
-   "author": "workbuddy-builtin:stock-partner-team",
-   "description": "Stock screening & watchlist tools via westock",
+   "author": "octopus-agent",
+   "description": "通过 westock-mcp 连接器进行条件选股/策略选股/标签选股。触发词：筛选股票、选股、MACD金叉策略、央企有哪些、破净股、低PE高ROE。需已连接 westock-mcp 连接器。查个股详情用 westock-data，查概念成份股用 data_sector。",
    "tags": [
-    "finance",
-    "workbuddy",
-    "stock-partner-team"
+    "octopus"
    ],
-   "source": "workbuddy",
+   "source": "octopus-repository",
    "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
   },
   {
@@ -1376,16 +2019,13 @@
   },
   {
    "name": "work-report-expert",
-   "version": "0.1.0",
-   "author": "workbuddy-builtin:tencent-docx",
-   "description": "WorkBuddy writing expert: work-report-expert",
+   "version": "1.0.0",
+   "author": "octopus-agent",
+   "description": "|",
    "tags": [
-    "writing",
-    "docx",
-    "workbuddy",
-    "expert"
+    "octopus"
    ],
-   "source": "workbuddy",
+   "source": "octopus-repository",
    "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
   }
  ]

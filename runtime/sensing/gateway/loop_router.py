@@ -34,6 +34,7 @@ from runtime.execution.loops.replay import (
 )
 from runtime.execution.loops.store import LoopRunStore
 from runtime.platform.process.task_supervisor import TaskSupervisor, task_lease_health
+from runtime.safety.auth.scope import scope_from_request
 from runtime.sensing._fastapi_guard import require_fastapi
 
 
@@ -377,9 +378,11 @@ def create_loop_router(
     ) -> dict[str, Any]:
         _operator(request)
         actor = _auth(request)
+        tenant_scope = scope_from_request(request)
         if body.execute and controller is None:
             raise HTTPException(503, "loop controller unavailable")
         run = LoopRun(
+            tenant_id=(tenant_scope.tenant_id if tenant_scope is not None else None),
             owner_id=actor,
             goal=body.goal.strip(),
             mode=body.mode,

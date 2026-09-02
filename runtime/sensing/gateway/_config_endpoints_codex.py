@@ -92,9 +92,7 @@ def _register_coder_codex(router: Any, ctx: _ConfigCtx) -> None:
     async def api_coder_codex_account(request: Request) -> dict[str, object]:
         scope = scope_from_request(request)
         try:
-            status = await accounts.run_on_runtime_loop(
-                scope, lambda: accounts.read_account(scope)
-            )
+            status = await accounts.run_on_runtime_loop(scope, lambda: accounts.read_account(scope))
         except Exception as exc:
             raise _account_http_error(exc, operation="read") from None
         return status.to_wire()
@@ -189,9 +187,7 @@ def _register_coder_codex(router: Any, ctx: _ConfigCtx) -> None:
             # cannot leave a stale Codex-account model selected; conversely a
             # preference write failure aborts before authentication changes.
             preferences.write(scope, CodexModelPreference(mode="follow_system"))
-            return await accounts.run_on_runtime_loop(
-                scope, lambda: accounts.logout(scope)
-            )
+            return await accounts.run_on_runtime_loop(scope, lambda: accounts.logout(scope))
         except Exception as exc:
             raise _account_http_error(exc, operation="logout") from None
 
@@ -236,9 +232,7 @@ def _register_coder_codex(router: Any, ctx: _ConfigCtx) -> None:
     async def api_coder_codex_usage(request: Request) -> dict[str, object]:
         try:
             scope = scope_from_request(request)
-            return await accounts.run_on_runtime_loop(
-                scope, lambda: accounts.read_usage(scope)
-            )
+            return await accounts.run_on_runtime_loop(scope, lambda: accounts.read_usage(scope))
         except Exception as exc:
             raise _account_http_error(exc, operation="usage") from None
 

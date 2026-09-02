@@ -132,18 +132,17 @@ def create_stub_router(
                         required_audience=jwt_audience,
                     )
                     sub = claims.get("sub", "unknown")
-                    # Molili token: sub = "molili:<phone>"
+                    # Oct token: sub = "oct:<email>"
                     # Local token: sub = "local:<username>"
-                    if sub.startswith("molili:"):
-                        phone = sub[7:]
+                    if sub.startswith("oct:"):
+                        email = sub[4:]
                         return {
                             "user_id": sub,
-                            "username": phone,
-                            "email": None,
+                            "username": email,
+                            "email": email,
                             "roles": ["user"],
                             "permissions": [],
-                            "mobile": phone,
-                            "provider": "molili",
+                            "provider": "oct",
                         }
                     if sub.startswith("local:"):
                         username = sub[6:]

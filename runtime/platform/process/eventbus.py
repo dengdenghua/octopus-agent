@@ -54,6 +54,9 @@ class FitnessComputed(DomainEvent):
     combined_score: float = 0.0
     verdict: str = ""
     trend: str = ""
+    tenant_id: str = ""
+    owner_actor_id: str = ""
+    scope_mode: str = "legacy"
 
 
 class DriftDetected(DomainEvent):
@@ -61,6 +64,9 @@ class DriftDetected(DomainEvent):
     drift_kind: str = ""
     severity: str = ""
     detail: str = ""
+    tenant_id: str = ""
+    owner_actor_id: str = ""
+    scope_mode: str = "legacy"
 
 
 class SkillUsed(DomainEvent):

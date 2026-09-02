@@ -76,17 +76,10 @@ def test_ws_rejects_wrong_token_when_required():
     client = _client(require_auth=True, store=_store())
     with (
         pytest.raises(WebSocketDisconnect) as ei,
-        client.websocket_connect("/api/terminal/ws/s1?token=nope") as ws,
-    ):
-        ws.receive_text()
-    assert ei.value.code == 4401
-
-
-def test_ws_rejects_valid_token_in_query_string_when_required():
-    client = _client(require_auth=True, store=_store())
-    with (
-        pytest.raises(WebSocketDisconnect) as ei,
-        client.websocket_connect("/api/terminal/ws/s1?token=sk-alice") as ws,
+        client.websocket_connect(
+            "/api/terminal/ws/s1",
+            headers={"Authorization": "Bearer nope"},
+        ) as ws,
     ):
         ws.receive_text()
     assert ei.value.code == 4401
@@ -97,7 +90,10 @@ def test_ws_require_auth_without_identity_store_rejects():
     client = _client(require_auth=True, store=None)
     with (
         pytest.raises(WebSocketDisconnect) as ei,
-        client.websocket_connect("/api/terminal/ws/s1?token=anything") as ws,
+        client.websocket_connect(
+            "/api/terminal/ws/s1",
+            headers={"Authorization": "Bearer anything"},
+        ) as ws,
     ):
         ws.receive_text()
     assert ei.value.code == 4401
@@ -128,7 +124,7 @@ def test_ws_rejects_foreign_owner_before_spawn():
         pytest.raises(WebSocketDisconnect) as ei,
         client.websocket_connect(
             "/api/terminal/ws/agent-workbench-thread-alice",
-            subprotocols=["bearer", "sk-bob"],
+            headers={"Authorization": "Bearer sk-bob"},
         ) as ws,
     ):
         ws.receive_text()

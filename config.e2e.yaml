@@ -47,9 +47,6 @@ journal_file: null
 enable_web_skills: true
 default_arm_id: code_arm
 
-molili:
-  enabled: false
-
 local_auth:
   enabled: false
 

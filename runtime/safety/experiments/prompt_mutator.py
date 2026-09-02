@@ -9,6 +9,8 @@ from typing import Any
 from runtime.adapters.instrumentation import trace_stage
 from runtime.platform.models.llm import Message, ModelRequest, ModelRouter
 from runtime.platform.prompts import get_prompt
+from runtime.safety.auth.scope import TenantScope
+from runtime.safety.recovery.tenant_scope import read_learning_events
 
 from .prompt_optimizer import PromptVariant
 
@@ -61,6 +63,7 @@ class PromptMutator:
         max_samples: int = 5,
         initial_weight: float = 0.1,
         guard_digest: dict[str, Any] | None = None,
+        scope: TenantScope | None = None,
     ) -> MutationProposal | None:
         with trace_stage("camouflage.prompt_mutator.propose") as span:
             span.set_attribute("octopus.mutator.base_variant", base.name)
@@ -69,6 +72,7 @@ class PromptMutator:
                 journal,
                 max_samples,
                 recipe_id=recipe_id,
+                scope=scope,
             )
             if not losing_summaries:
                 span.set_attribute("octopus.mutator.skip", "no_failures_to_learn_from")
@@ -216,8 +220,14 @@ def _extract_losing_samples(
     *,
     recipe_id: str | None = None,
     max_arg_chars: int = 80,
+    scope: TenantScope | None = None,
 ) -> list[str]:
-    traj_events = journal.read_by_type("trajectory")
+    # Prompt mutation is a learning boundary, not an operator inspection
+    # surface.  An omitted scope deliberately means legacy-only; only an
+    # explicit cross-tenant TenantScope may mine the shared journal.  This is
+    # especially important here because compacted tool arguments are sent to
+    # the mutator model below.
+    traj_events = read_learning_events(journal, "trajectory", scope=scope)
 
     # Bucket failures in two passes:
     #   narrow = only this recipe's failures (targeted · mutator
@@ -231,7 +241,8 @@ def _extract_losing_samples(
     narrow_buckets: dict[object, list[Any]] = defaultdict(list)
     broad_buckets: dict[object, list[Any]] = defaultdict(list)
     for idx, event in enumerate(traj_events):
-        if event.trajectory.outcome.success:
+        outcome = event.trajectory.outcome
+        if outcome.success and not outcome.degraded:
             continue
         broad_buckets[event.trajectory.task_id].append((idx, event))
         if recipe_id is not None and event.trajectory.recipe_id == recipe_id:

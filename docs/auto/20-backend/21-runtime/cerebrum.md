@@ -136,6 +136,8 @@ tier: "core"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def context_budget_tokens_for_model(model)` | Return the coarse context budget used by pressure + compression. |
+| func | `def context_compaction_target_tokens(current_tokens, capacity_tokens)` | Return the working-set target for the next in-turn compaction. |
+| func | `def context_compaction_message_target_tokens(message_tokens, provider_context_tokens, capacity_tokens)` | Map real provider pressure back onto the local message working set. |
 
 ### `_react_execution_results.py`
 
@@ -200,8 +202,9 @@ tier: "core"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
+| func | `def browser_tools_requested(user_context, goal)` | Return whether this turn genuinely needs an interactive browser lane. |
 | func | `def isolated_code_ui_regression(user_context)` | Return whether UI verification should use the isolated browser lane. |
-| func | `def filter_surface_compatible_skills(names, user_context)` | Remove tools that are incompatible with the active runtime surface. |
+| func | `def filter_surface_compatible_skills(names, user_context, goal)` | Remove tools that are incompatible with or unnecessary for this turn. |
 | class | `class CapabilityActivation` |  |
 | func | `def capability_index()` | A lightweight "capability map" for the prompt, shown when no capability is activated for the turn (e.g. a vague goal). It lists each capabil |
 | func | `def activate_capabilities(goal, user_context, registry)` |  |
@@ -372,7 +375,7 @@ tier: "core"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def stream_react_loop(stack, intent, agent, model, max_iterations, temperature, enable_tools, resume_task_id, thread_id, max_tokens_budget, max_usd_budget, approval_provider, output_chunk_sink, step_evaluator, planning_mode, reasoning_effort, steering_drain, on_auto_parallel_batch)` | Drive one parent ReAct turn (see ``_stream_react_loop_impl``). |
-| func | `def run_react_loop(stack, intent, agent, model, max_iterations, temperature, enable_tools, resume_task_id, thread_id, max_tokens_budget, max_usd_budget, approval_provider)` |  |
+| func | `def run_react_loop(stack, intent, agent, model, max_iterations, temperature, enable_tools, resume_task_id, thread_id, max_tokens_budget, max_usd_budget, approval_provider, step_evaluator)` |  |
 
 ### `react_loop_controls.py`
 
@@ -517,7 +520,7 @@ tier: "core"
 
 ## Who imports this
 
-**60** file(s) reference this package:
+**61** file(s) reference this package:
 
 - **`runtime/cli_code.py/`** · 1 file(s)
   - `runtime/cli_code.py`
@@ -557,13 +560,13 @@ tier: "core"
   - `runtime/safety/recovery/gepa_bridge.py`
   - `runtime/safety/recovery/workflow_applier.py`
   - `runtime/safety/validation/trust_signal.py`
-- **`runtime/sensing/`** · 26 file(s)
+- **`runtime/sensing/`** · 27 file(s)
   - `runtime/sensing/gateway/_agents_endpoints.py`
   - `runtime/sensing/gateway/_agents_endpoints_conversations.py`
   - `runtime/sensing/gateway/_agents_endpoints_tasks.py`
   - `runtime/sensing/gateway/_config_endpoints_system.py`
   - `runtime/sensing/gateway/_observability_journal.py`
-  - _… and 21 more_
+  - _… and 22 more_
 - **`runtime/tentacle/`** · 2 file(s)
   - `runtime/tentacle/coordinator.py`
   - `runtime/tentacle/mobile/cerebrum_adapter.py`

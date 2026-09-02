@@ -18,7 +18,7 @@ from runtime.tentacle.mobile.device import MobileDevice
 
 
 @pytest.fixture
-def app_and_coord():
+def app_and_coord(tmp_path):
     """创建 FastAPI app + coordinator（不启动真实服务器）."""
     planner = StaticPlanner(
         rules=[
@@ -41,6 +41,7 @@ def app_and_coord():
         port=18771,
         decision_engine=_engine,
         dashboard_port=None,  # 不启动真实 Dashboard
+        procedure_checkpoint_dir=tmp_path / "procedures",
     )
 
     # 注册 mock 设备
@@ -156,3 +157,77 @@ def test_task_history(client):
     data = r.json()
     assert len(data) >= 1
     assert data[0]["task"] == "打开应用"
+
+
+def test_device_contract_and_lease_are_visible(client):
+    manifest = client.get("/api/tentacle/devices/android-dash-001/manifest")
+    lease = client.get("/api/tentacle/devices/android-dash-001/lease")
+
+    assert manifest.status_code == 200
+    assert manifest.json()["contract_version"] == "1.0"
+    assert lease.status_code == 200
+    assert lease.json() == {"leased": False, "lease": None}
+
+    health = client.get("/api/tentacle/devices/android-dash-001/health")
+    assert health.status_code == 200
+    assert health.json()["level"] == "healthy"
+
+
+def test_procedure_control_plane_runs_and_exposes_receipt(client):
+    created = client.post(
+        "/api/tentacle/procedures",
+        json={
+            "procedure_id": "dashboard-proc-1",
+            "device_id": "android-dash-001",
+            "steps": [
+                {
+                    "step_id": "open-1",
+                    "action": "android.open_app",
+                    "arguments": {"package": "com.example.app"},
+                }
+            ],
+        },
+    )
+    assert created.status_code == 200
+    assert created.json()["status"] == "draft"
+
+    simulated = client.post(
+        "/api/tentacle/procedures/dashboard-proc-1/dry-run",
+        json={"initial_state": {}},
+    )
+    assert simulated.status_code == 200
+    assert simulated.json()["success"] is True
+    assert simulated.json()["steps"][0]["warnings"] == [
+        "action declares no simulated state effects"
+    ]
+    assert client.get("/api/tentacle/receipts").json() == []
+
+    finished = client.post("/api/tentacle/procedures/dashboard-proc-1/run", json={"wait": True})
+    assert finished.status_code == 200
+    assert finished.json()["status"] == "succeeded"
+    assert finished.json()["current_step"] == 1
+
+    listed = client.get("/api/tentacle/procedures").json()
+    assert listed[0]["procedure_id"] == "dashboard-proc-1"
+    receipts = client.get("/api/tentacle/receipts", params={"device_id": "android-dash-001"}).json()
+    assert receipts[0]["action"] == "android.open_app"
+    assert receipts[0]["lease_id"]
+    telemetry = client.get(
+        "/api/tentacle/devices/android-dash-001/telemetry",
+        params={"metric": "action_success"},
+    ).json()
+    assert telemetry["samples"][0]["value"] is True
+
+
+def test_invalid_procedure_is_rejected_before_registration(client):
+    response = client.post(
+        "/api/tentacle/procedures",
+        json={
+            "procedure_id": "bad-proc",
+            "device_id": "android-dash-001",
+            "steps": [{"step_id": "bad", "action": "android.not_real"}],
+        },
+    )
+
+    assert response.status_code == 400
+    assert client.get("/api/tentacle/procedures").json() == []

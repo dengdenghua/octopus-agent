@@ -371,13 +371,30 @@ def test_realtime_rejects_unauthenticated_when_required(
 def test_realtime_rejects_query_token_when_required(
     authenticated_gateway_client: Any,
 ) -> None:
+    """``?token=`` lands in access/proxy logs, so the gateway must NOT accept
+    it. Query-token auth was removed (audit 2026-08-28 P0-3); clients use the
+    subprotocol or an Authorization header instead."""
     client, _ = authenticated_gateway_client
-    assert WebSocketDisconnect is not None
     with (
         pytest.raises(WebSocketDisconnect),
-        client.websocket_connect("/api/realtime?token=sk-alice"),
+        client.websocket_connect(
+            "/api/realtime?token=sk-alice",
+        ),
     ):
         pass
+
+
+def test_realtime_accepts_header_token_when_required(
+    authenticated_gateway_client: Any,
+) -> None:
+    client, _ = authenticated_gateway_client
+    with client.websocket_connect(
+        "/api/realtime",
+        headers={"Authorization": "Bearer sk-alice"},
+    ) as ws:
+        outcome = _drive_turn(ws, thread_id="auth_th", text="hello auth")
+
+    assert outcome["response"].result["turn"]["status"] == "completed"
 
 
 def test_realtime_accepts_subprotocol_token_when_required(
@@ -414,11 +431,26 @@ def test_realtime_accepts_base64url_subprotocol_token_when_required(
     assert outcome["response"].result["turn"]["status"] == "completed"
 
 
+def test_realtime_accepts_http_only_session_cookie_when_required(
+    authenticated_gateway_client: Any,
+) -> None:
+    client, _ = authenticated_gateway_client
+    client.cookies.set("octopus_session", "sk-alice")
+
+    with client.websocket_connect("/api/realtime") as ws:
+        outcome = _drive_turn(ws, thread_id="auth_th_cookie", text="hello cookie auth")
+
+    assert outcome["response"].result["turn"]["status"] == "completed"
+
+
 def test_realtime_thread_resume_rejects_other_actor(
     two_actor_gateway_client: Any,
 ) -> None:
     client, _ = two_actor_gateway_client
-    with client.websocket_connect("/api/realtime", subprotocols=["bearer", "sk-alice"]) as ws:
+    with client.websocket_connect(
+        "/api/realtime",
+        headers={"Authorization": "Bearer sk-alice"},
+    ) as ws:
         _drive_turn(
             ws,
             thread_id="auth_owner_thread",
@@ -426,7 +458,10 @@ def test_realtime_thread_resume_rejects_other_actor(
             approval_policy="never",
         )
 
-    with client.websocket_connect("/api/realtime", subprotocols=["bearer", "sk-bob"]) as ws:
+    with client.websocket_connect(
+        "/api/realtime",
+        headers={"Authorization": "Bearer sk-bob"},
+    ) as ws:
         _send(
             ws,
             JsonRpcRequest(

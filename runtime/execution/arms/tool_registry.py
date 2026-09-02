@@ -11,7 +11,8 @@ Key features
 - **Event hooks**: on_will_call_tool / on_did_call_tool for observability.
 - **Provider abstraction**: Tools are grouped into providers.
 
-dsh-style pipeline (absorbed from DeepSeek Harness, 2026-08-14)
+Octopus Native tool pipeline (implementation lineage: DeepSeek Harness,
+absorbed 2026-08-14)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 - **Canonical output contract**: a tool may declare ``output_schema``
   (JSON Schema enforced against every successful value) plus a pure
@@ -253,7 +254,7 @@ class ToolRegistry:
         timeout_ms: int | None = None,
         is_concurrency_safe: Callable[[dict[str, Any]], bool] | None = None,
         finalize_content: Callable[[Any], Any | None] | None = None,
-    ) -> None:
+    ) -> Callable[[], None]:
         """Register a tool.
 
         Args:
@@ -305,15 +306,87 @@ class ToolRegistry:
 
         _logger.info("registered tool: %s", name)
 
-    def on_will_call_tool(self, handler: WillCallToolHandler) -> None:
+        # A disposer is the ownership primitive used by dynamically loaded
+        # plugins.  It is identity-aware so a stale disposer from an older
+        # plugin generation can never remove a newer registration that reused
+        # the same public name after a reload.
+        def dispose() -> None:
+            self._unregister_tool_if_same(name, tool, scope=scope)
+
+        return dispose
+
+    def unregister_tool(self, name: str, *, scope: str | None = None) -> bool:
+        """Remove one exact tool registration.
+
+        ``scope`` mirrors :meth:`register_tool`; omitting it only touches the
+        global layer.  Provider membership is cleaned at the same time so
+        introspection cannot retain a ghost tool after a plugin unload.
+        """
+
+        layer = self._tools if scope is None else self._scoped_tools.get(scope)
+        if layer is None:
+            return False
+        tool = layer.pop(name, None)
+        if tool is None:
+            return False
+        if scope is not None and not layer:
+            self._scoped_tools.pop(scope, None)
+        self._remove_tool_from_providers(tool)
+        _logger.info("unregistered tool: %s", name)
+        return True
+
+    def _unregister_tool_if_same(
+        self,
+        name: str,
+        expected: ToolDefinition,
+        *,
+        scope: str | None,
+    ) -> bool:
+        layer = self._tools if scope is None else self._scoped_tools.get(scope)
+        if layer is None or layer.get(name) is not expected:
+            return False
+        layer.pop(name, None)
+        if scope is not None and not layer:
+            self._scoped_tools.pop(scope, None)
+        self._remove_tool_from_providers(expected)
+        _logger.info("unregistered tool: %s", name)
+        return True
+
+    def _remove_tool_from_providers(self, tool: ToolDefinition) -> None:
+        for provider in self._providers.values():
+            provider.tools[:] = [
+                registered for registered in provider.tools if registered is not tool
+            ]
+
+    def unregister_provider(self, provider_id: str) -> bool:
+        """Remove provider metadata without deleting its tool definitions."""
+
+        return self._providers.pop(provider_id, None) is not None
+
+    @staticmethod
+    def _register_handler(
+        handlers: list[Any],
+        handler: Any,
+    ) -> Callable[[], None]:
+        handlers.append(handler)
+
+        def dispose() -> None:
+            for index, registered in enumerate(handlers):
+                if registered is handler:
+                    handlers.pop(index)
+                    break
+
+        return dispose
+
+    def on_will_call_tool(self, handler: WillCallToolHandler) -> Callable[[], None]:
         """Register a pre-call event handler."""
-        self._on_will_call.append(handler)
+        return self._register_handler(self._on_will_call, handler)
 
-    def on_did_call_tool(self, handler: DidCallToolHandler) -> None:
+    def on_did_call_tool(self, handler: DidCallToolHandler) -> Callable[[], None]:
         """Register a post-call event handler."""
-        self._on_did_call.append(handler)
+        return self._register_handler(self._on_did_call, handler)
 
-    def on_pre_execute(self, handler: PreExecuteHandler) -> None:
+    def on_pre_execute(self, handler: PreExecuteHandler) -> Callable[[], None]:
         """Register a pre-execute gate (dsh ``tools/pre-execute``).
 
         Gates run in registration order. The first ``deny`` rejects the
@@ -321,18 +394,18 @@ class ToolRegistry:
         (missing approval support turns ``ask`` into denial); an empty
         result or ``allow`` defers to the next gate.
         """
-        self._on_pre_execute.append(handler)
+        return self._register_handler(self._on_pre_execute, handler)
 
-    def on_execute(self, wrapper: ExecuteWrapperHandler) -> None:
+    def on_execute(self, wrapper: ExecuteWrapperHandler) -> Callable[[], None]:
         """Register an around-dispatch wrapper (dsh ``tools/execute``).
 
         Wrappers run in registration order and must call ``next()`` to
         delegate to the underlying handler (or the next wrapper). They
         may add timeout, retry, metrics, or argument rewriting.
         """
-        self._on_execute.append(wrapper)
+        return self._register_handler(self._on_execute, wrapper)
 
-    def on_post_execute(self, handler: PostExecuteHandler) -> None:
+    def on_post_execute(self, handler: PostExecuteHandler) -> Callable[[], None]:
         """Register a post-execute gate (dsh ``tools/post-execute``).
 
         Gates run in registration order over the normalized result; a
@@ -340,11 +413,11 @@ class ToolRegistry:
         ``block`` gate turns the outcome into a failure (it may set
         ``result.error`` first). The first ``block`` short-circuits.
         """
-        self._on_post_execute.append(handler)
+        return self._register_handler(self._on_post_execute, handler)
 
-    def on_result(self, handler: ResultHandler) -> None:
+    def on_result(self, handler: ResultHandler) -> Callable[[], None]:
         """Register a final result observer (dsh ``tools/result``)."""
-        self._on_result.append(handler)
+        return self._register_handler(self._on_result, handler)
 
     async def call_tool(
         self,

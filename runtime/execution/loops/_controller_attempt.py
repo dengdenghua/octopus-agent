@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import threading
 
 from runtime.core.cerebrum.react_types import ReActResult
@@ -16,11 +18,144 @@ from runtime.execution.loops.models import (
     VerifierResult,
 )
 from runtime.platform.process.session import Session, session_scope
+from runtime.platform.process.task_supervisor import TaskCapabilityManifest
 from runtime.safety.approval.cancellation import (
     CancellationSource,
     CancellationToken,
     scoped_cancellation,
 )
+
+_REPAIR_ATTEMPT_ALLOWED_SKILL_IDS: tuple[str, ...] = (
+    # Local, read-only workspace inspection.
+    "list_cwd",
+    "read_file",
+    "read_file_range",
+    "file_stats",
+    "count_words",
+    "hash_text",
+    "glob_files",
+    "grep_text",
+    "tree",
+    # One exact, unique replacement in an existing workspace file.
+    "edit_file",
+    # Turn-local progress bookkeeping only.
+    "todo_read",
+    "todo_write",
+)
+
+_SEALED_EFFECT_CLASSES = frozenset(
+    {"none", "read_only", "workspace_write", "local_state", "external_or_unknown"}
+)
+_SEALED_EFFECT_STATES = frozenset(
+    {"not_executed", "committed", "failed", "indeterminate", "replayed"}
+)
+
+
+def _sealed_effect_coordinates(receipt: dict[str, object]) -> tuple[str, str] | None:
+    proof = receipt.get("effect_receipt")
+    if not isinstance(proof, dict):
+        return None
+    if proof.get("schema") != "octopus.tool.effect_receipt.v1":
+        return None
+    if proof.get("sealed") is not True or proof.get("emitted_by") != "tool_executor":
+        return None
+    effect_class = str(proof.get("effect_class") or "")
+    state = str(proof.get("state") or "")
+    if effect_class not in _SEALED_EFFECT_CLASSES or state not in _SEALED_EFFECT_STATES:
+        return None
+    proof_tool = str(proof.get("tool_name") or "")
+    receipt_tool = str(receipt.get("tool_name") or "")
+    if not proof_tool or proof_tool != receipt_tool:
+        return None
+    return effect_class, state
+
+
+def _react_result_effect_summary(
+    result: ReActResult | None,
+    *,
+    runtime_owned: bool,
+) -> dict[str, object]:
+    """Persist counts and a digest, never raw actions, args, or observations."""
+
+    if result is None:
+        return {
+            "schema": "octopus.loop.attempt_effect_summary.v2",
+            "emitted_by": "react_runtime" if runtime_owned else "legacy_runner",
+            "complete": False,
+            "sealed": False,
+            "total_tool_count": 0,
+            "read_only_effect_count": 0,
+            "workspace_write_effect_count": 0,
+            "local_state_effect_count": 0,
+            "external_effect_count": 0,
+            "indeterminate_effect_count": 0,
+            "unsealed_receipt_count": 0,
+            "unknown_effect_count": 1,
+        }
+    receipts: list[dict[str, object]] = []
+    for step in result.steps:
+        receipts.extend(dict(item) for item in step.action_results if isinstance(item, dict))
+    fingerprint_rows: list[tuple[str, bool, str, str, str]] = []
+    failed_count = 0
+    handler_not_executed_count = 0
+    trusted_count = 0
+    read_only_effect_count = 0
+    workspace_write_effect_count = 0
+    local_state_effect_count = 0
+    external_effect_count = 0
+    indeterminate_effect_count = 0
+    unsealed_receipt_count = 0
+    unknown_effect_count = 0
+    for receipt in receipts:
+        ok = receipt.get("ok") is True
+        source = str(receipt.get("execution_source") or "unknown")
+        tool_name = str(receipt.get("tool_name") or "unknown")
+        coordinates = _sealed_effect_coordinates(receipt) if runtime_owned else None
+        effect_class, effect_state = coordinates or ("unknown", "unknown")
+        fingerprint_rows.append((tool_name, ok, source, effect_class, effect_state))
+        if not ok:
+            failed_count += 1
+        if source == "handler_not_executed":
+            handler_not_executed_count += 1
+        if coordinates is None:
+            unsealed_receipt_count += 1
+            unknown_effect_count += 1
+        else:
+            if effect_class == "read_only":
+                read_only_effect_count += 1
+            elif effect_class == "workspace_write":
+                workspace_write_effect_count += 1
+            elif effect_class == "local_state":
+                local_state_effect_count += 1
+            elif effect_class == "external_or_unknown":
+                external_effect_count += 1
+            elif effect_class != "none":
+                unknown_effect_count += 1
+            if effect_state == "indeterminate":
+                indeterminate_effect_count += 1
+        if receipt.get("trusted_execution") is True:
+            trusted_count += 1
+    digest = hashlib.sha256(
+        json.dumps(fingerprint_rows, ensure_ascii=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return {
+        "schema": "octopus.loop.attempt_effect_summary.v2",
+        "emitted_by": "react_runtime" if runtime_owned else "legacy_runner",
+        "complete": bool(runtime_owned and unsealed_receipt_count == 0),
+        "sealed": bool(runtime_owned and unsealed_receipt_count == 0),
+        "total_tool_count": len(receipts),
+        "failed_effect_count": failed_count,
+        "handler_not_executed_count": handler_not_executed_count,
+        "trusted_receipt_count": trusted_count,
+        "read_only_effect_count": read_only_effect_count,
+        "workspace_write_effect_count": workspace_write_effect_count,
+        "local_state_effect_count": local_state_effect_count,
+        "external_effect_count": external_effect_count,
+        "indeterminate_effect_count": indeterminate_effect_count,
+        "unsealed_receipt_count": unsealed_receipt_count,
+        "unknown_effect_count": unknown_effect_count,
+        "effect_fingerprint": digest,
+    }
 
 
 class LoopControllerAttemptMixin:
@@ -29,6 +164,7 @@ class LoopControllerAttemptMixin:
         run: LoopRun,
         prompt: str,
         workspace_path: str,
+        attempt_index: int = 1,
         cancellation_token: CancellationToken | None = None,
     ) -> ReActResult | None:
         if self.stack is None:
@@ -83,6 +219,27 @@ class LoopControllerAttemptMixin:
             metadata["task_supervisor_holder_id"] = self.task_supervisor.holder_id
             metadata["task_supervisor_lease_ttl_seconds"] = self.task_supervisor.lease_ttl_seconds
             metadata["enforce_executor_approval"] = True
+        if attempt_index > 1:
+            # Automatic repair attempts run inside the same workspace but on
+            # a much smaller server-enforced tool surface.  The exact skill
+            # allowlist is authoritative even for tools whose capability
+            # group is unknown (including dynamically loaded plugins).
+            repair_manifest = TaskCapabilityManifest(
+                source="loop_repair_attempt",
+                workspace_paths=[workspace_path] if workspace_path else [],
+                allowed_skill_ids=list(_REPAIR_ATTEMPT_ALLOWED_SKILL_IDS),
+                groups={
+                    "builtin": True,
+                    "web": False,
+                    "browser": False,
+                    "computer": False,
+                    "fs_write": True,
+                    "git": False,
+                    "shell": False,
+                    "memory": False,
+                },
+            )
+            metadata["task_capability_manifest"] = repair_manifest.model_dump(mode="json")
         # One ReAct attempt can outlive the default supervisor lease TTL.
         # Heartbeat from a separate daemon thread while the attempt is in
         # flight; otherwise another worker can take over the same run and
@@ -137,10 +294,15 @@ class LoopControllerAttemptMixin:
                     "thread_id": thread_id,
                 }
                 if self.react_runner is None:
+                    from runtime.core.cerebrum.react_step_evaluator import (
+                        build_runtime_step_evaluator,
+                    )
+
                     runner_kwargs.update(
                         {
                             "max_tokens_budget": run.policy.max_tokens_budget,
                             "max_usd_budget": run.policy.max_usd_budget,
+                            "step_evaluator": build_runtime_step_evaluator(),
                         }
                     )
                 return runner(
@@ -208,7 +370,10 @@ class LoopControllerAttemptMixin:
         self,
         run_id: str,
         attempt_index: int,
-        exc: Exception,
+        error_text: str,
+        *,
+        category: str,
+        effect_summary: dict[str, object],
     ) -> LoopRun:
         return self.store.mutate(
             run_id,
@@ -219,8 +384,10 @@ class LoopControllerAttemptMixin:
                             update={
                                 "completed_at": _now_iso(),
                                 "status": "failed",
-                                "error": str(exc),
+                                "error": error_text,
                                 "success": False,
+                                "terminated_reason": f"exception:{category}",
+                                "effect_summary": effect_summary,
                             }
                         )
                         if attempt.attempt_index == attempt_index
@@ -243,6 +410,11 @@ class LoopControllerAttemptMixin:
             react_result.terminated_reason if react_result is not None else "runner_returned_none"
         )
         completion_receipt = react_result.completion_receipt if react_result is not None else {}
+        completion_decision = react_result.completion_decision if react_result is not None else {}
+        effect_summary = _react_result_effect_summary(
+            react_result,
+            runtime_owned=self.react_runner is None,
+        )
         return self.store.mutate(
             run_id,
             lambda current: current.model_copy(
@@ -262,6 +434,8 @@ class LoopControllerAttemptMixin:
                                 "terminated_reason": terminated_reason,
                                 "final_answer": _truncate_text(final_answer),
                                 "completion_receipt": completion_receipt,
+                                "completion_decision": completion_decision,
+                                "effect_summary": effect_summary,
                             }
                         )
                         if attempt.attempt_index == attempt_index

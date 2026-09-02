@@ -37,7 +37,6 @@
   "exclude": [
     "node_modules",
     "dist",
-    "src/pages",
     "src/test/setup.ts",
     "src/**/*.test.ts",
     "src/**/*.test.tsx"

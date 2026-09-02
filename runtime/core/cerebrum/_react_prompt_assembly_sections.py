@@ -71,6 +71,26 @@ _CONTENT_TRUST_CONTRACT = (
 )
 
 
+# Evidence rules for external research.  This is static so it preserves the
+# prompt-cache prefix while giving every provider the same disambiguation and
+# source-display contract, including low-cost models that otherwise turn the
+# first search snippet into a confident uncited answer.
+_RESEARCH_EVIDENCE_CONTRACT = (
+    "\n<research-evidence>\n"
+    "外部检索与事实核验规则：\n"
+    "- 遇到缩写、简称或可能有多个含义的术语，不要在搜索词中擅自补全某一个含义。"
+    "先用原词和用户已给出的公司、领域、时间等上下文做消歧检索；上下文仍不足时，"
+    "简短询问用户，而不是猜测。\n"
+    "- 公司发布、协议、产品、法律、价格、新闻及其他会变化的事实，优先打开并核对"
+    "官方或一手来源；搜索摘要只能用于定位页面，不能独立作为最终证据。\n"
+    "- 只要本轮使用了 web_search / fetch / browser 等外部检索工具，最终答案必须展示"
+    "至少一个本轮实际检索到的可点击来源链接，并把链接放在所支持的结论附近。"
+    "若没有找到可验证来源，要明确说未能验证，不得把推测写成事实。\n"
+    "- 把已验证事实、基于事实的推断和产品脑暴明确区分。\n"
+    "</research-evidence>"
+)
+
+
 # Default tool-use contract: by default the model MUST actually call tools to
 # gather evidence before answering. The final-answer guard (which rejects
 # announce-only "我将…/我继续…" placeholders) is a last-resort backstop, not the
@@ -88,6 +108,9 @@ _TOOL_USE_CONTRACT = (
     "收尾本轮。\n"
     "仅当用户显式进入「聊天（chat）/ flash / 灵感（inspiration）」或「审计（audit）」"
     "等直答模式时才允许不调用工具直接回答；除此之外一律默认工具优先执行。\n"
+    "项目检查时，单个关键词或文件后缀没有命中，不等于工作区没有项目资料。"
+    "先列出工作区根目录并识别技术栈，再扩大文件模式，最后读取与问题最相关的少量文件。"
+    "目录列表只是发现证据，不是内容证据；不得只凭文件名或空搜索结果给出项目结论。\n"
     "</tool-use-contract>"
 )
 
@@ -144,6 +167,7 @@ def _assemble_early_sections(state: _AssemblyState) -> None:
     # Content-trust contract applies to every turn: it costs no execution
     # latency (pure prompt), only sharpens how the model weighs sources.
     state.system_parts.append(_CONTENT_TRUST_CONTRACT)
+    state.system_parts.append(_RESEARCH_EVIDENCE_CONTRACT)
     if state.no_tool_turn:
         state.system_parts.append(
             "\n<direct-answer-contract>\n"

@@ -20,6 +20,7 @@ reply must contain — a rough quality proxy, not a full rubric.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -27,6 +28,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from runtime.safety.auth.scope import TenantScope, tenant_scoped_path
 
 _LOG = logging.getLogger("octopus.soul_holdout")
 
@@ -79,23 +82,38 @@ def _project_root() -> Path:
     return project_root()
 
 
-def _holdout_path(agent_id: str, root: Path | None = None) -> Path:
+def _holdout_path(
+    agent_id: str,
+    root: Path | None = None,
+    scope: TenantScope | None = None,
+) -> Path:
     base = root if root is not None else _project_root()
-    return base / "data" / "soul_holdout" / f"{agent_id}.jsonl"
+    path = base / "data" / "soul_holdout" / f"{agent_id}.jsonl"
+    return tenant_scoped_path(path, scope) if scope is not None else path
 
 
-def _scores_path(agent_id: str, root: Path | None = None) -> Path:
+def _scores_path(
+    agent_id: str,
+    root: Path | None = None,
+    scope: TenantScope | None = None,
+) -> Path:
     base = root if root is not None else _project_root()
-    return base / "agents" / agent_id / "agent-core" / ".scores.jsonl"
+    path = base / "agents" / agent_id / "agent-core" / ".scores.jsonl"
+    return tenant_scoped_path(path, scope) if scope is not None else path
 
 
 def _session_path(
     agent_id: str,
     thread_id: str,
     root: Path | None = None,
+    scope: TenantScope | None = None,
 ) -> Path:
     base = root if root is not None else _project_root()
-    return base / "agents" / agent_id / "sessions" / f"{thread_id}.jsonl"
+    if scope is None:
+        return base / "agents" / agent_id / "sessions" / f"{thread_id}.jsonl"
+    opaque_thread = hashlib.sha256(thread_id.encode("utf-8")).hexdigest()[:32]
+    path = base / "agents" / agent_id / "sessions" / f"{opaque_thread}.jsonl"
+    return tenant_scoped_path(path, scope)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -143,11 +161,24 @@ def _parse_entries(rows: list[dict[str, Any]]) -> list[HoldoutEntry]:
     return out
 
 
+def _score_row_visible(row: dict[str, Any], scope: TenantScope | None) -> bool:
+    tenant_id = str(row.get("tenant_id") or "").strip()
+    owner_actor_id = str(row.get("owner_actor_id") or "").strip()
+    if bool(tenant_id) != bool(owner_actor_id):
+        return False
+    if scope is None:
+        return not tenant_id and not owner_actor_id
+    if scope.allow_cross_tenant:
+        return True
+    return tenant_id == scope.tenant_id and owner_actor_id == scope.actor_id
+
+
 def load_holdout(
     agent_id: str,
     *,
     journal_root: Path | None = None,
     auto_seed: bool = True,
+    scope: TenantScope | None = None,
 ) -> list[HoldoutEntry]:
     """Load holdout entries for ``agent_id``.
 
@@ -157,12 +188,12 @@ def load_holdout(
     """
     if not agent_id:
         return []
-    path = _holdout_path(agent_id, root=journal_root)
+    path = _holdout_path(agent_id, root=journal_root, scope=scope)
     if path.exists():
         return _parse_entries(_read_jsonl(path))
     if not auto_seed:
         return []
-    seeded = auto_seed_holdout(agent_id, journal_root=journal_root)
+    seeded = auto_seed_holdout(agent_id, journal_root=journal_root, scope=scope)
     if seeded > 0:
         _LOG.info(
             "auto-seeded %d holdout entries from past successes — review and edit %s",
@@ -208,6 +239,7 @@ def auto_seed_holdout(
     *,
     journal_root: Path | None = None,
     target_count: int = _TARGET_AUTO_SEED_COUNT,
+    scope: TenantScope | None = None,
 ) -> int:
     """Build a holdout file from the agent's recent successes.
 
@@ -221,7 +253,16 @@ def auto_seed_holdout(
     """
     if not agent_id:
         return 0
-    scores = _read_jsonl(_scores_path(agent_id, root=journal_root))
+    if scope is not None and scope.allow_cross_tenant:
+        # A global operator view cannot safely decide which tenant should own
+        # a newly minted holdout.  It may inspect scores, but materialization
+        # must target one exact normal scope.
+        return 0
+    scores = [
+        row
+        for row in _read_jsonl(_scores_path(agent_id, root=journal_root, scope=scope))
+        if _score_row_visible(row, scope) and str(row.get("agent_id") or "") == agent_id
+    ]
     if not scores:
         return 0
     # Newest first.
@@ -242,7 +283,7 @@ def auto_seed_holdout(
             continue
         seen_threads.add(thread_id)
         sess = _extract_prompt_and_reply(
-            _session_path(agent_id, thread_id, root=journal_root),
+            _session_path(agent_id, thread_id, root=journal_root, scope=scope),
         )
         if sess is None:
             continue
@@ -259,7 +300,7 @@ def auto_seed_holdout(
         )
     if not picked:
         return 0
-    out_path = _holdout_path(agent_id, root=journal_root)
+    out_path = _holdout_path(agent_id, root=journal_root, scope=scope)
     try:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with out_path.open("w", encoding="utf-8") as fh:
@@ -305,6 +346,7 @@ def evaluate_against_holdout(
     entries: list[HoldoutEntry] | None = None,
     *,
     journal_root: Path | None = None,
+    scope: TenantScope | None = None,
 ) -> HoldoutResult:
     """Run each holdout prompt with ``soul_text`` via ``runner``.
 
@@ -314,7 +356,7 @@ def evaluate_against_holdout(
     """
     items = entries
     if items is None:
-        items = load_holdout(agent_id, journal_root=journal_root)
+        items = load_holdout(agent_id, journal_root=journal_root, scope=scope)
     if not items:
         return HoldoutResult(pass_rate=0.0, detail=[])
     detail: list[dict[str, Any]] = []

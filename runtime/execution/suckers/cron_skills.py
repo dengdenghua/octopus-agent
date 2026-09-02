@@ -9,7 +9,9 @@ Persistence
 We write to ``app_paths().cron_jobs_path`` using the *same* on-disk shape as
 ``cron_router._read_cron_jobs`` / ``_write_cron_jobs`` so the existing settings
 UI sees model-scheduled tasks alongside user-created ones. Each agent-created
-record carries ``creator_actor="agent_self"`` so the UI can distinguish.
+record carries ``created_by="agent_self"``. Authenticated turns bind
+``tenant_id`` + ``owner_actor_id`` from the server-stamped Session; anonymous
+local turns retain the historical ``creator_actor="agent_self"`` shape.
 
 Scheduling shapes
 -----------------
@@ -32,10 +34,14 @@ from pathlib import Path
 from typing import Any
 
 from runtime.execution.cron_store import (
+    _mutate_cron_jobs,
     _read_cron_jobs,
-    _write_cron_jobs,
+    bind_cron_job_scope,
+    cron_job_visible_to_scope,
 )
 from runtime.platform.process.paths import app_paths
+from runtime.safety.auth.scope import TenantScope
+from runtime.safety.recovery.tenant_scope import trusted_scope_from_user_context
 
 from .registry import Skill, SkillRegistry
 from .testing import SkillExpect, SkillTestCase
@@ -51,6 +57,26 @@ _AGENT_CREATOR = "agent_self"
 
 def _cron_path() -> Path:
     return app_paths().cron_jobs_path
+
+
+def _current_tenant_scope() -> TenantScope | None:
+    """Read only the server-stamped scope carried by the active Session.
+
+    Ordinary ``tenant_id``/``owner_actor_id`` tool arguments and presentation
+    metadata are intentionally ignored.  HTTP/realtime boundaries overwrite
+    the private marker after authenticating the principal; a local CLI turn
+    has no marker and remains in the legacy-unowned compatibility bucket.
+    """
+
+    try:
+        from runtime.platform.process.session import current_session
+
+        session = current_session()
+    except Exception:  # noqa: BLE001 — session support is optional in direct tests
+        return None
+    if session is None:
+        return None
+    return trusted_scope_from_user_context(getattr(session, "metadata", None))
 
 
 def _validate_cron_expression(expr: str) -> str | None:
@@ -174,8 +200,7 @@ def _schedule_task(
         return _err("name cannot contain path separators")
 
     path = _cron_path()
-    jobs = _read_cron_jobs(path)
-    jobs = [j for j in jobs if j.get("name") != task_id]
+    scope = _current_tenant_scope()
     record: dict[str, Any] = {
         "name": task_id,
         # Reuse the UI's ``command`` slot to carry the agent prompt so the
@@ -184,7 +209,10 @@ def _schedule_task(
         "cron_expression": final_cron,
         "last_run": None,
         "last_status": "created",
-        "creator_actor": _AGENT_CREATOR,
+        # Pre-scope local tasks keep the old marker. Authenticated tasks retain
+        # the actual owner and keep agent provenance in a separate field.
+        "creator_actor": scope.actor_id if scope is not None else _AGENT_CREATOR,
+        "created_by": _AGENT_CREATOR,
         # Optional fields the UI ignores but the skill round-trips.
         "fire_at": fire_at_iso,
         "recurring": is_recurring,
@@ -193,8 +221,19 @@ def _schedule_task(
         "channel_id": channel_id,
         "thread_id": thread_id,
     }
-    jobs.append(record)
-    _write_cron_jobs(path, jobs)
+    bind_cron_job_scope(record, scope)
+
+    def _upsert(jobs: list[dict[str, Any]]) -> None:
+        # Names are unique only inside one tenant+owner scope. Two tenants can
+        # both schedule ``daily-report`` without overwriting each other.
+        jobs[:] = [
+            job
+            for job in jobs
+            if not (job.get("name") == task_id and cron_job_visible_to_scope(job, scope))
+        ]
+        jobs.append(record)
+
+    _mutate_cron_jobs(path, _upsert)
 
     return {
         "ok": True,
@@ -206,28 +245,12 @@ def _schedule_task(
 
 
 def _list_scheduled_tasks(**_: Any) -> dict[str, Any]:
-    """List every persisted task with its schedule and creator."""
+    """List tasks visible to the active server-authenticated scope."""
     path = _cron_path()
-    jobs = _read_cron_jobs(path)
+    scope = _current_tenant_scope()
+    jobs = [job for job in _read_cron_jobs(path) if cron_job_visible_to_scope(job, scope)]
     out: list[dict[str, Any]] = []
-    # ``_read_cron_jobs`` strips unknown keys to a fixed projection, so we
-    # re-read the raw file ourselves to surface ``fire_at`` / ``recurring``
-    # / ``prompt`` for agent-created tasks. Falls back to the projection on
-    # any read error.
-    raw_extras: dict[str, dict[str, Any]] = {}
-    try:
-        import json as _json
-
-        raw = _json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(raw, list):
-            for item in raw:
-                if isinstance(item, dict) and item.get("name"):
-                    raw_extras[str(item["name"])] = item
-    except (OSError, ValueError):
-        raw_extras = {}
-
     for job in jobs:
-        extra = raw_extras.get(job.get("name", ""), {})
         out.append(
             {
                 "task_id": job.get("name"),
@@ -236,9 +259,9 @@ def _list_scheduled_tasks(**_: Any) -> dict[str, Any]:
                 "last_run": job.get("last_run"),
                 "last_status": job.get("last_status"),
                 "next_run_at": _next_run_iso(job.get("cron_expression") or ""),
-                "fire_at": extra.get("fire_at"),
-                "recurring": extra.get("recurring", True),
-                "prompt": extra.get("prompt") or job.get("command"),
+                "fire_at": job.get("fire_at"),
+                "recurring": job.get("recurring", True),
+                "prompt": job.get("prompt") or job.get("command"),
             }
         )
     return {"ok": True, "tasks": out, "count": len(out)}
@@ -250,11 +273,20 @@ def _cancel_scheduled_task(task_id: str = "", **_: Any) -> dict[str, Any]:
     if not tid:
         return _err("task_id is required")
     path = _cron_path()
-    jobs = _read_cron_jobs(path)
-    next_jobs = [j for j in jobs if j.get("name") != tid]
-    if len(next_jobs) == len(jobs):
+    scope = _current_tenant_scope()
+
+    def _remove(jobs: list[dict[str, Any]]) -> bool:
+        before = len(jobs)
+        jobs[:] = [
+            job
+            for job in jobs
+            if not (job.get("name") == tid and cron_job_visible_to_scope(job, scope))
+        ]
+        return len(jobs) != before
+
+    removed = _mutate_cron_jobs(path, _remove)
+    if not removed:
         return {"ok": False, "error": f"task {tid!r} not found", "error_type": "not_found"}
-    _write_cron_jobs(path, next_jobs)
     return {"ok": True, "task_id": tid, "deleted": True}
 
 
@@ -269,7 +301,8 @@ def register_cron_skills(registry: SkillRegistry) -> int:
             description=(
                 "Schedule a future agent turn. Persists into the same cron "
                 "store the settings UI uses so model-scheduled tasks show up "
-                "alongside user-created ones (creator_actor=agent_self). "
+                "alongside user-created ones. Authenticated tasks are bound "
+                "to the current server-resolved tenant and owner. "
                 "Args: {prompt: str (required), cron_expression: 5-field "
                 "cron string for recurring runs, fire_at: ISO 8601 timestamp "
                 "with timezone offset for one-shot, recurring: bool (default "
@@ -304,8 +337,8 @@ def register_cron_skills(registry: SkillRegistry) -> int:
         Skill(
             name="list_scheduled_tasks",
             description=(
-                "List every scheduled task currently persisted, including "
-                "user-created and agent-created ones. Returns "
+                "List scheduled tasks owned by the current authenticated "
+                "tenant and actor (or legacy local tasks in local mode). Returns "
                 "{ok, tasks: [{task_id, cron_expression, creator_actor, "
                 "next_run_at, fire_at, recurring, prompt, last_run, "
                 "last_status}], count}."

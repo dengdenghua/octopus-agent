@@ -12,9 +12,16 @@ from typing import Any
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
+from ._observability_auth import (
+    _journal_scope_context,
+    _observability_scope,
+    _require_global_control,
+    _scoped_observability_journal,
+)
 from ._observability_helpers import (
     HTTPException,
     Query,
+    Request,
     _serialize_file_rollback_event,
     _serialize_rollback_result,
 )
@@ -30,6 +37,7 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
     planner = ctx.planner
 
     def _rollback_file_events(
+        source_journal: Any,
         *,
         event_id: str | None = None,
         task_id: str | None = None,
@@ -37,7 +45,7 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
         limit: int = 500,
     ) -> list[Any]:
         events: list[Any] = []
-        for event in journal.read_by_type("file_op"):
+        for event in source_journal.read_by_type("file_op"):
             if event_id and str(getattr(event, "event_id", "") or "") != event_id:
                 continue
             if task_id and str(getattr(event, "task_id", "") or "") != task_id:
@@ -48,6 +56,8 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
         return events[-limit:]
 
     def _rollback_result(
+        source_journal: Any,
+        scope: Any,
         *,
         event_id: str | None,
         task_id: str | None,
@@ -61,6 +71,7 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
         )
 
         events = _rollback_file_events(
+            source_journal,
             event_id=event_id,
             task_id=task_id,
             path=path,
@@ -74,29 +85,30 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
         if not dry_run:
             from runtime.memory.journal import FileRollbackEvent
 
-            journal.write(
-                FileRollbackEvent(
-                    dry_run=False,
-                    project_root=project_root or "",
-                    event_id_filter=event_id,
-                    task_id_filter=task_id,
-                    path_filter=path,
-                    applied=int(getattr(result, "applied", 0) or 0),
-                    skipped=int(getattr(result, "skipped", 0) or 0),
-                    failed=int(getattr(result, "failed", 0) or 0),
-                    source_event_ids=[
-                        str(getattr(entry, "source_event_id", "") or "")
-                        for entry in getattr(result, "entries", ()) or ()
-                        if getattr(entry, "source_event_id", "") or ""
-                    ],
-                    paths=[
-                        str(getattr(entry, "path", "") or "")
-                        for entry in getattr(result, "entries", ()) or ()
-                        if getattr(entry, "path", "") or ""
-                    ],
-                    errors=list(getattr(result, "errors", ()) or ()),
+            with _journal_scope_context(scope):
+                journal.write(
+                    FileRollbackEvent(
+                        dry_run=False,
+                        project_root=project_root or "",
+                        event_id_filter=event_id,
+                        task_id_filter=task_id,
+                        path_filter=path,
+                        applied=int(getattr(result, "applied", 0) or 0),
+                        skipped=int(getattr(result, "skipped", 0) or 0),
+                        failed=int(getattr(result, "failed", 0) or 0),
+                        source_event_ids=[
+                            str(getattr(entry, "source_event_id", "") or "")
+                            for entry in getattr(result, "entries", ()) or ()
+                            if getattr(entry, "source_event_id", "") or ""
+                        ],
+                        paths=[
+                            str(getattr(entry, "path", "") or "")
+                            for entry in getattr(result, "entries", ()) or ()
+                            if getattr(entry, "path", "") or ""
+                        ],
+                        errors=list(getattr(result, "errors", ()) or ()),
+                    )
                 )
-            )
         return _serialize_rollback_result(
             result,
             dry_run=dry_run,
@@ -108,23 +120,28 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
         )
 
     # ═══════════════════════════════════════════════════════
-    # Observability panels · feed the /workspace/observability UI
-    # page with four focused endpoints. None require identity /
-    # scope · they're read-only views of already-ambient state.
+    # Observability panels · feed the /workspace/observability UI.
+    # Journal-backed views are request-scoped; process-global in-memory
+    # panels require the explicit privileged cross-tenant control mode.
     # ═══════════════════════════════════════════════════════
 
     # ─── /api/blackboard · turn-scoped KV viewer ────────────
     # File rollback endpoints expose reversible file_op ledgers.
     @router.get("/api/files/rollback/preview")
     def api_files_rollback_preview(
+        request: Request,
         event_id: str | None = Query(default=None),
         task_id: str | None = Query(default=None),
         path: str | None = Query(default=None),
         project_root: str | None = Query(default=None),
         limit: int = Query(default=500, ge=1, le=2000),
+        cross_tenant: bool = Query(default=False),
     ) -> dict[str, Any]:
         """Dry-run reversible file operations from the journal."""
+        scope = _observability_scope(request, ctx, cross_tenant=cross_tenant)
         return _rollback_result(
+            _scoped_observability_journal(journal, scope),
+            scope,
             event_id=event_id,
             task_id=task_id,
             path=path,
@@ -134,8 +151,13 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
         )
 
     @router.post("/api/files/rollback/apply")
-    def api_files_rollback_apply(body: dict[str, Any]) -> dict[str, Any]:
+    def api_files_rollback_apply(
+        body: dict[str, Any],
+        request: Request,
+        cross_tenant: bool = Query(default=False),
+    ) -> dict[str, Any]:
         """Apply a task/path-scoped rollback ledger under a project root."""
+        scope = _observability_scope(request, ctx, cross_tenant=cross_tenant)
         project_root = body.get("project_root")
         if not isinstance(project_root, str) or not project_root.strip():
             raise HTTPException(400, "project_root required for rollback apply")
@@ -159,6 +181,8 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
             raise HTTPException(400, "limit must be between 1 and 2000")
 
         return _rollback_result(
+            _scoped_observability_journal(journal, scope),
+            scope,
             event_id=event_filter,
             task_id=task_filter,
             path=path_filter,
@@ -169,9 +193,14 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
 
     @router.get("/api/files/rollback/history")
     def api_files_rollback_history(
+        request: Request,
         limit: int = Query(default=50, ge=1, le=500),
+        cross_tenant: bool = Query(default=False),
     ) -> dict[str, Any]:
-        events = journal.read_by_type("file_rollback")[-limit:]
+        scope = _observability_scope(request, ctx, cross_tenant=cross_tenant)
+        events = _scoped_observability_journal(journal, scope).read_by_type("file_rollback")[
+            -limit:
+        ]
         serialized = [_serialize_file_rollback_event(event) for event in reversed(events)]
         return {
             "count": len(serialized),
@@ -184,7 +213,11 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
     # ergonomics). Reuses ``apply_file_rollback_ledger`` but slices
     # the file_op stream by checkpoint ``ts`` instead of by event_id.
     @router.get("/api/tasks/{task_id}/rewind/points")
-    def api_task_rewind_points(task_id: str) -> dict[str, Any]:
+    def api_task_rewind_points(
+        task_id: str,
+        request: Request,
+        cross_tenant: bool = Query(default=False),
+    ) -> dict[str, Any]:
         """List every ``react_checkpoint`` anchor for ``task_id``.
 
         Each entry is a valid rewind target. The last one is the
@@ -192,7 +225,8 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
         """
         from runtime.core.cerebrum.rewind import list_rewind_points
 
-        points = list_rewind_points(journal, task_id)
+        scope = _observability_scope(request, ctx, cross_tenant=cross_tenant)
+        points = list_rewind_points(_scoped_observability_journal(journal, scope), task_id)
         return {
             "task_id": task_id,
             "count": len(points),
@@ -203,6 +237,8 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
     def api_task_rewind_apply(
         task_id: str,
         body: dict[str, Any],
+        request: Request,
+        cross_tenant: bool = Query(default=False),
     ) -> dict[str, Any]:
         """Rewind ``task_id`` to the checkpoint at ``iteration``.
 
@@ -225,9 +261,11 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
 
         dry_run = bool(body.get("dry_run", False))
 
+        scope = _observability_scope(request, ctx, cross_tenant=cross_tenant)
+        scoped_journal = _scoped_observability_journal(journal, scope)
         try:
             result = rewind_to_checkpoint(
-                journal,
+                scoped_journal,
                 task_id,
                 iteration,
                 project_root=project_root,
@@ -241,35 +279,38 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
             # /api/files/rollback/history still surfaces rewinds.
             from runtime.memory.journal import FileRollbackEvent
 
-            journal.write(
-                FileRollbackEvent(
-                    dry_run=False,
-                    project_root=project_root or "",
-                    event_id_filter=None,
-                    task_id_filter=task_id,
-                    path_filter=None,
-                    applied=int(getattr(result.file_rollback, "applied", 0) or 0),
-                    skipped=int(getattr(result.file_rollback, "skipped", 0) or 0),
-                    failed=int(getattr(result.file_rollback, "failed", 0) or 0),
-                    source_event_ids=[
-                        str(getattr(entry, "source_event_id", "") or "")
-                        for entry in getattr(result.file_rollback, "entries", ()) or ()
-                        if getattr(entry, "source_event_id", "") or ""
-                    ],
-                    paths=[
-                        str(getattr(entry, "path", "") or "")
-                        for entry in getattr(result.file_rollback, "entries", ()) or ()
-                        if getattr(entry, "path", "") or ""
-                    ],
-                    errors=list(getattr(result.file_rollback, "errors", ()) or ()),
+            with _journal_scope_context(scope):
+                journal.write(
+                    FileRollbackEvent(
+                        dry_run=False,
+                        project_root=project_root or "",
+                        event_id_filter=None,
+                        task_id_filter=task_id,
+                        path_filter=None,
+                        applied=int(getattr(result.file_rollback, "applied", 0) or 0),
+                        skipped=int(getattr(result.file_rollback, "skipped", 0) or 0),
+                        failed=int(getattr(result.file_rollback, "failed", 0) or 0),
+                        source_event_ids=[
+                            str(getattr(entry, "source_event_id", "") or "")
+                            for entry in getattr(result.file_rollback, "entries", ()) or ()
+                            if getattr(entry, "source_event_id", "") or ""
+                        ],
+                        paths=[
+                            str(getattr(entry, "path", "") or "")
+                            for entry in getattr(result.file_rollback, "entries", ()) or ()
+                            if getattr(entry, "path", "") or ""
+                        ],
+                        errors=list(getattr(result.file_rollback, "errors", ()) or ()),
+                    )
                 )
-            )
 
         return result.to_dict()
 
     @router.get("/api/blackboard")
     def api_blackboard(
+        request: Request,
         turn_id: str | None = None,
+        cross_tenant: bool = Query(default=False),
     ) -> dict[str, Any]:
         """Return either the list of active turns (no ``turn_id``)
         or a single turn's full snapshot (with ``turn_id``).
@@ -284,8 +325,9 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
             list_active_turns,
         )
 
+        _require_global_control(request, ctx, cross_tenant=cross_tenant)
         if not turn_id:
-            return {"turns": list_active_turns()}
+            return {"global_control_plane": True, "turns": list_active_turns()}
         bb = get_blackboard(turn_id)
         if bb is None:
             raise HTTPException(404, f"no blackboard for turn_id={turn_id!r}")
@@ -301,6 +343,7 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
             except (TypeError, ValueError):
                 safe[k] = repr(v)[:500]
         return {
+            "global_control_plane": True,
             "turn_id": turn_id,
             "key_count": len(safe),
             "entries": safe,
@@ -310,7 +353,9 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
     # ─── /api/hemolymph/recent · compose ring-buffer ────────
     @router.get("/api/hemolymph/recent")
     def api_hemolymph_recent(
+        request: Request,
         limit: int = Query(default=20, ge=1, le=50),
+        cross_tenant: bool = Query(default=False),
     ) -> dict[str, Any]:
         """Recent ``ContextComposer.compose()`` snapshots.
 
@@ -324,8 +369,10 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
             get_recent_compose_snapshots,
         )
 
+        _require_global_control(request, ctx, cross_tenant=cross_tenant)
         snaps = get_recent_compose_snapshots(limit=limit)
         return {
+            "global_control_plane": True,
             "count": len(snaps),
             "max_tracked": 50,
             "snapshots": snaps,
@@ -333,7 +380,10 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
 
     # ─── /api/regeneration/summary · 6-producer aggregate ───
     @router.get("/api/regeneration/summary")
-    def api_regeneration_summary() -> dict[str, Any]:
+    def api_regeneration_summary(
+        request: Request,
+        cross_tenant: bool = Query(default=False),
+    ) -> dict[str, Any]:
         """Aggregate snapshot of the 6 reflection producers.
 
         Unlike ``/api/reflect`` (which RE-RUNS every producer on each
@@ -345,6 +395,7 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
         Shape: one key per producer; each carries a ``status`` and
         small count fields the UI renders as a tile.
         """
+        scope = _require_global_control(request, ctx, cross_tenant=cross_tenant)
         from runtime.memory.journal import TrajectoryEvent
 
         # Trajectory counts · drive most producers' freshness signal
@@ -395,7 +446,7 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
             from runtime.safety.recovery import KGUpdater
 
             kg = KnowledgeGraph()
-            KGUpdater(journal, kg).update()
+            KGUpdater(journal, kg, scope=scope).update()
             kg_size = kg.count()
         except (OSError, ImportError, AttributeError):  # noqa: BLE001 — observability metric source unavailable; skip
             pass
@@ -412,6 +463,7 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
             pass
 
         return {
+            "global_control_plane": True,
             "skill_forge": {
                 "status": "ready" if forged_count else "idle",
                 "forged_count": forged_count,
@@ -448,7 +500,9 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
     # ─── /api/budget/summary · per-task cost roll-up ────────
     @router.get("/api/budget/summary")
     def api_budget_summary(
+        request: Request,
         limit: int = Query(default=20, ge=1, le=200),
+        cross_tenant: bool = Query(default=False),
     ) -> dict[str, Any]:
         """Aggregate cost across recent tasks.
 
@@ -457,12 +511,14 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
         Returns the latest ``limit`` tasks (most recent first) plus
         a grand total. Cheap enough for a 2s heartbeat.
         """
+        scope = _observability_scope(request, ctx, cross_tenant=cross_tenant)
+        scoped_journal = _scoped_observability_journal(journal, scope)
         per_task: dict[str, dict[str, Any]] = {}
         total_tokens = 0
         total_usd = 0.0
         commit_count = 0
         try:
-            for ev in journal.read_by_type("budget_commit"):
+            for ev in scoped_journal.read_by_type("budget_commit"):
                 commit_count += 1
                 tid = str(ev.task_id) if ev.task_id else "(unbound)"
                 cost = getattr(ev, "cost", None)
@@ -506,7 +562,11 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
 
     # ─── /api/run (probe) ───────────────────────────────────
     @router.post("/api/run")
-    def api_run(body: dict[str, Any]) -> dict[str, Any]:
+    def api_run(
+        body: dict[str, Any],
+        request: Request,
+        cross_tenant: bool = Query(default=False),
+    ) -> dict[str, Any]:
         from runtime.core.cerebrum import StaticPlanner
         from runtime.core.cerebrum.planner import Rule
         from runtime.core.graph_runtime import GraphRuntime
@@ -521,6 +581,7 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
         )
         from runtime.safety.auth import TrustEngine
 
+        scope = _require_global_control(request, ctx, cross_tenant=cross_tenant)
         goal = str(body.get("goal", "")).strip()
         if not goal:
             raise HTTPException(400, "goal required")
@@ -554,13 +615,15 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
             task_id=graph.task_id,
             limits=BudgetLimits(tokens=10_000, usd=0.10),
         )
-        traj = runtime.run(
-            graph,
-            budget=budget,
-            caller="arms/ui",
-            arm_id=ArmId("ui_arm"),
-        )
+        with _journal_scope_context(scope):
+            traj = runtime.run(
+                graph,
+                budget=budget,
+                caller="arms/ui",
+                arm_id=ArmId("ui_arm"),
+            )
         return {
+            "global_control_plane": True,
             "success": traj.outcome.success,
             "steps": traj.step_count,
             "tokens_spent": budget.tokens_spent,

@@ -41,10 +41,7 @@ def mount_meta(
             registry=state.registry,
             tool_registry=get_tool_registry(),
             skill_library_dirs=list(dict.fromkeys(_skill_library_dirs)),
-            # Always merge the packaged file-backed catalog.  A runtime
-            # registry may contain executable tools, but it is not a complete
-            # inventory of domain workflow skills (for example ``pdf``).
-            include_default_skill_library=True,
+            include_default_skill_library=(state.registry is None or stack is not None),
             oct_config=oct_config,
             local_auth_config=ctx.local_auth_runtime_config,
             identity_store=ctx.identity_store,

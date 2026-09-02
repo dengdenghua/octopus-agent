@@ -135,7 +135,7 @@ class TestEnvironmentScrub:
             SandboxPolicy(
                 workspace=workspace,
                 timeout_s=10.0,
-                inference_domains=("api.octoapk.com", "ark.cn-beijing.volces.com"),
+                inference_domains=("octopus.aurest.ai", "ark.cn-beijing.volces.com"),
             )
         )
         result = runner.run(
@@ -148,7 +148,7 @@ class TestEnvironmentScrub:
         )
         lines = result.stdout.splitlines()
         # Inference domains are in no_proxy → direct connect, not blocked.
-        assert "api.octoapk.com" in lines[0]
+        assert "octopus.aurest.ai" in lines[0]
         assert "ark.cn-beijing.volces.com" in lines[0]
         # Other hosts still go through the dead proxy → blocked.
         assert "127.0.0.1:1" in lines[1]
@@ -175,7 +175,7 @@ class TestEnvironmentScrub:
             SandboxPolicy(
                 workspace=workspace,
                 timeout_s=10.0,
-                inference_domains=("api.octoapk.com",),
+                inference_domains=("octopus.aurest.ai",),
                 egress_allow_common=True,
             )
         )
@@ -189,7 +189,7 @@ class TestEnvironmentScrub:
         lines = result.stdout.splitlines()
         no_proxy = set(lines[0].split(","))
         # Inference + pre-bundled dev-tool hosts are reachable.
-        assert "api.octoapk.com" in no_proxy
+        assert "octopus.aurest.ai" in no_proxy
         assert "registry.npmjs.org" in no_proxy
         assert "pypi.org" in no_proxy
         assert "github.com" in no_proxy
@@ -202,7 +202,7 @@ class TestEnvironmentScrub:
             SandboxPolicy(
                 workspace=workspace,
                 timeout_s=10.0,
-                inference_domains=("api.octoapk.com",),
+                inference_domains=("octopus.aurest.ai",),
                 egress_allow_common=False,
             )
         )
@@ -213,7 +213,7 @@ class TestEnvironmentScrub:
             )
         )
         # Only inference is pre-allowed; npm etc. must NOT appear.
-        assert result.stdout.strip() == "api.octoapk.com"
+        assert result.stdout.strip() == "octopus.aurest.ai"
 
     def test_allow_network_keeps_real_proxy(
         self, workspace: Path, monkeypatch: pytest.MonkeyPatch

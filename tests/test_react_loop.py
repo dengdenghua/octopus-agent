@@ -605,6 +605,7 @@ class _FakeResponse:
     input_tokens: int = 0
     output_tokens: int = 0
     finish_reason: str = "stop"
+    cost_usd: float = 0.0
 
 
 class _ScriptedRouter:
@@ -615,10 +616,12 @@ class _ScriptedRouter:
         scripts: list[str],
         *,
         usage: list[tuple[int, int]] | None = None,
+        costs: list[float] | None = None,
         finish_reasons: list[str] | None = None,
     ) -> None:
         self.scripts = list(scripts)
         self.usage = list(usage or [])
+        self.costs = list(costs or [])
         self.finish_reasons = list(finish_reasons or [])
         self.calls = 0
 
@@ -628,11 +631,13 @@ class _ScriptedRouter:
         text = self.scripts[self.calls]
         usage = self.usage[self.calls] if self.calls < len(self.usage) else (0, 0)
         fr = self.finish_reasons[self.calls] if self.calls < len(self.finish_reasons) else "stop"
+        cost_usd = self.costs[self.calls] if self.calls < len(self.costs) else 0.0
         self.calls += 1
         return _FakeResponse(
             text=text,
             input_tokens=usage[0],
             output_tokens=usage[1],
+            cost_usd=cost_usd,
             finish_reason=fr,
         )
 
@@ -651,7 +656,7 @@ class _ScriptedRouter:
                 input_tokens=resp.input_tokens,
                 output_tokens=resp.output_tokens,
                 finish_reason=resp.finish_reason,
-                cost=CostEntry(),
+                cost=CostEntry(usd=resp.cost_usd),
             ),
         )
 
@@ -775,6 +780,33 @@ def test_completeness_guard_uses_existing_tool_evidence_instead_of_repeating_wor
     repair_context = "\n".join(str(message.content) for message in router.requests[2].messages)
     assert "Successful tool evidence already exists" in repair_context
     assert "Do not call another tool" in repair_context
+
+
+def test_completeness_guard_auto_starts_promised_project_inspection(tmp_path) -> None:
+    router = _ScriptedRouter(
+        [
+            "Final Answer: 我先检查项目文件，再回答。",
+            (
+                "Thought: Read a relevant project file after root discovery\n"
+                'Action: read_file({"path": "README.md"})'
+            ),
+            "Final Answer: 已根据工作区结构和 README 内容完成针对性分析。",
+        ]
+    )
+    intent = _intent("结合当前项目分析这项技术有什么启发")
+    intent.user_context.update({"mode": "react", "workspace_path": str(tmp_path)})
+
+    result = run_react_loop(
+        _build_stack_with_executor(router), intent, agent=None, max_iterations=4
+    )
+
+    assert result is not None and result.success
+    assert result.terminated_reason == "final_answer"
+    assert any(step.action == "list_cwd({})" for step in result.steps), [
+        (step.action, step.observation) for step in result.steps
+    ]
+    assert any(step.action.startswith("read_file") for step in result.steps)
+    assert "完成针对性分析" in result.final_answer
 
 
 def test_react_loop_recovers_from_transient_model_error_after_progress() -> None:
@@ -1351,19 +1383,20 @@ def test_long_research_budget_gets_enough_runway() -> None:
     assert threshold == 0.95
 
 
-def test_budget_usage_accounting_auto_pauses_when_opted_in() -> None:
-    # 能力增强型调度：普通任务默认不自动暂停（超限仅告警、不阻塞长任务）。
-    # 仅当用户显式开启 budget_auto_pause 时才真正暂停，作为最终兜底而不是默认行为。
+def test_budget_usage_accounting_auto_pauses_only_in_strict_token_mode() -> None:
+    # Cumulative accounting is not current context pressure. Token-based
+    # auto-pause therefore requires a second, explicit strict-mode opt-in.
     router = _ScriptedRouter(
         [
             'Thought: gather evidence\nAction: echo({"text": "done"})\n',
-            "Final Answer: report delivered",
+            "Final Answer: Result: the echo tool returned `done`, completing the requested action.",
         ],
         usage=[(99, 5), (0, 0)],
     )
     stack = _build_stack_with_executor(router)
     intent = _intent("echo once")
     intent.user_context["budget_auto_pause"] = True
+    intent.user_context["cumulative_token_auto_pause"] = True
 
     events, result = _drain(
         stream_react_loop(
@@ -1381,13 +1414,112 @@ def test_budget_usage_accounting_auto_pauses_when_opted_in() -> None:
     assert any(event["type"] == "react_paused" for event in events)
 
 
+def test_budget_auto_pause_alone_does_not_confuse_cumulative_tokens_with_context() -> None:
+    router = _ScriptedRouter(
+        [
+            'Thought: gather evidence\nAction: echo({"text": "done"})\n',
+            "Final Answer: Result: the echo tool returned `done`, completing the requested action.",
+        ],
+        usage=[(99, 5), (0, 0)],
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("echo once")
+    intent.user_context["budget_auto_pause"] = True
+
+    events, result = _drain(
+        stream_react_loop(
+            stack,
+            intent,
+            agent=None,
+            thread_id="budget-accounting-only",
+            max_iterations=3,
+            max_tokens_budget=100,
+        )
+    )
+
+    assert result is not None
+    assert result.terminated_reason == "final_answer"
+    assert result.final_answer == (
+        "Result: the echo tool returned `done`, completing the requested action."
+    )
+    assert not any(event["type"] == "react_paused" for event in events)
+
+
+def test_long_chain_cumulative_usage_does_not_pause_with_healthy_context() -> None:
+    scripts = [
+        f'Thought: continue step {index}\nAction: echo({{"text": "step-{index}"}})\n'
+        for index in range(1, 13)
+    ]
+    scripts.append("Final Answer: all twelve steps completed")
+    router = _ScriptedRouter(
+        scripts,
+        # Each value represents the provider-reported live request context, while
+        # accounting accumulates the values across the whole task.  The total
+        # therefore crosses the old 100-token cliff after four calls even though
+        # no individual request is under context pressure.
+        usage=[(30, 2)] * 12 + [(30, 3)],
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("complete twelve distinct evidence steps")
+    intent.user_context["budget_auto_pause"] = True
+
+    events, result = _drain(
+        stream_react_loop(
+            stack,
+            intent,
+            agent=None,
+            thread_id="healthy-long-chain",
+            max_iterations=15,
+            max_tokens_budget=100,
+        )
+    )
+
+    assert result is not None
+    assert result.terminated_reason == "final_answer"
+    assert result.final_answer == "all twelve steps completed"
+    assert router.calls == 13
+    assert not any(event["type"] == "react_paused" for event in events)
+
+
+def test_budget_auto_pause_still_enforces_explicit_usd_cost_ceiling() -> None:
+    router = _ScriptedRouter(
+        [
+            'Thought: gather evidence\nAction: echo({"text": "done"})\n',
+            "Final Answer: cost limit should pause before this response",
+        ],
+        usage=[(10, 2), (0, 0)],
+        costs=[0.81, 0.0],
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("echo once")
+    intent.user_context["budget_auto_pause"] = True
+
+    events, result = _drain(
+        stream_react_loop(
+            stack,
+            intent,
+            agent=None,
+            thread_id="budget-usd-hard-limit",
+            max_iterations=3,
+            max_tokens_budget=100_000,
+            max_usd_budget=1.0,
+        )
+    )
+
+    assert result is not None
+    assert result.terminated_reason == "paused"
+    paused = next(event for event in events if event["type"] == "react_paused")
+    assert paused["reason"] == "budget_near_limit"
+    assert "成本预算临界" in paused["note"]
+
+
 def test_budget_usage_accounting_does_not_auto_pause_by_default() -> None:
     """能力增强：未显式开启 budget_auto_pause 时，预算超限只记录告警而不暂停，
     避免长任务在合成答案前被预算硬切断。"""
     router = _ScriptedRouter(
         [
             'Thought: gather evidence\nAction: echo({"text": "done"})\n',
-            "Final Answer: report delivered",
+            "Final Answer: Result: the echo tool returned `done`, completing the requested action.",
         ],
         usage=[(99, 5), (0, 0)],
     )
@@ -1406,7 +1538,9 @@ def test_budget_usage_accounting_does_not_auto_pause_by_default() -> None:
 
     assert result is not None
     assert result.terminated_reason == "final_answer"
-    assert result.final_answer == "report delivered"
+    assert result.final_answer == (
+        "Result: the echo tool returned `done`, completing the requested action."
+    )
     assert not any(event["type"] == "react_paused" for event in events)
 
 
@@ -2400,8 +2534,7 @@ def test_rejected_research_candidate_is_never_published() -> None:
         "但这里引用了[未抓取来源](https://not-fetched.example/report)。"
     )
     accepted = (
-        "最终报告：事件流使用显式阶段，"
-        "来源见[官方说明](https://example.com/octopus-streaming)。"
+        "最终报告：事件流使用显式阶段，来源见[官方说明](https://example.com/octopus-streaming)。"
     )
     router = _ScriptedRouter(
         [
@@ -2440,9 +2573,7 @@ def test_rejected_research_candidate_is_never_published() -> None:
     assert result is not None and result.success
     assert result.final_answer == accepted
     assert router.calls == 3
-    visible_answer = "".join(
-        event["delta"] for event in events if event["type"] == "text_delta"
-    )
+    visible_answer = "".join(event["delta"] for event in events if event["type"] == "text_delta")
     assert visible_answer == accepted
     assert rejected not in visible_answer
     assert any("citation-grounding guard" in step.observation for step in result.steps)
@@ -4343,10 +4474,8 @@ def test_format_skill_catalog_hides_serial_call_agent_but_keeps_parallel() -> No
     assert "\n  - call_agent_parallel:" in out
 
 
-def test_format_skill_catalog_drops_capability_conditional_tools_for_plain_turn() -> None:
-    """Capability-aware priority trimming: a plain prose turn must NOT front-load
-    browser / git / delegation tools it will never use. They stay discoverable
-    via search_capabilities / query_skill, which are always present."""
+def test_format_skill_catalog_drops_browser_tools_for_plain_turn() -> None:
+    """A plain turn keeps search primitives but does not expose browser tools."""
     reg = SkillRegistry()
     for name in (
         "search_capabilities",
@@ -4377,18 +4506,13 @@ def test_format_skill_catalog_drops_capability_conditional_tools_for_plain_turn(
     assert any(line.startswith("  - web_search:") for line in lines)
     assert any(line.startswith("  - exec_shell:") for line in lines)
     assert any(line.startswith("  - search_capabilities:") for line in lines)
-    # Capability-conditional tools must NOT be front-loaded for a plain turn:
-    # every always-on primitive precedes every browser/git/delegation tool.
+    # Browser tools are absent rather than merely buried at the catalog tail.
+    assert not any(line.startswith("  - browser_") for line in lines)
+    assert not any(line.startswith("  - live_browser_") for line in lines)
+    # Other conditional tools remain discoverable but are not front-loaded.
     idx = {line.split(":")[0].strip().lstrip("- "): i for i, line in enumerate(lines)}
     for always in ("read_file", "web_search", "exec_shell", "search_capabilities"):
-        for cond in (
-            "browser_navigate",
-            "live_browser_state",
-            "git_status",
-            "git_diff",
-            "call_agent_parallel",
-            "bb_write",
-        ):
+        for cond in ("git_status", "git_diff", "call_agent_parallel", "bb_write"):
             assert idx[always] < idx[cond], (
                 f"{cond} front-loaded ahead of always-on {always} in a plain turn"
             )
@@ -6252,6 +6376,15 @@ class _ApprovingApprovalProvider:
         return ApprovalDecision(approved=True, reason="approved")
 
 
+class _UnavailableApprovalProvider:
+    def __init__(self) -> None:
+        self.requests: list[Any] = []
+
+    def request(self, req: Any, *, timeout: float = 120.0) -> ApprovalDecision:  # noqa: ARG002
+        self.requests.append(req)
+        return ApprovalDecision(approved=False, reason="connection_lost")
+
+
 class _ScopeAgent:
     agent_id = "general"
     capabilities = {"code_mode_unlock": True}
@@ -6367,6 +6500,50 @@ def test_code_mode_file_write_still_requires_approval(
     assert approval_events
     assert approval_events[0]["risk"]["level"] == "high"
     assert approval_events[0]["approval_action"] == "ask"
+    assert not (project / "src" / "new.py").exists()
+
+
+def test_unavailable_approval_pauses_instead_of_failing_turn(
+    tmp_path: Any,
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path))
+    project = tmp_path / "project"
+    project.mkdir()
+    stack = _build_stack_with_executor(
+        _ScriptedRouter(
+            [
+                'Thought: edit code\nAction: write_text_file({"path": "src/new.py", "content": "x"})\n'
+            ]
+        )
+    )
+    provider = _UnavailableApprovalProvider()
+    session = Session(
+        agent=_ScopeAgent(),
+        thread_id="thread-approval-offline",
+        metadata={"mode": "code", "workspace_path": str(project)},
+    )
+
+    with session_scope(session):
+        events, result = _drain(
+            stream_react_loop(
+                stack,
+                _intent("write code"),
+                agent=session.agent,
+                thread_id="thread-approval-offline",
+                max_iterations=1,
+                approval_provider=provider,
+            )
+        )
+
+    assert len(provider.requests) == 1
+    assert result is not None
+    assert result.terminated_reason == "paused"
+    assert any(event["type"] == "react_paused" for event in events)
+    assert any(
+        event["type"] == "tool_end" and event.get("status") == "waiting_approval"
+        for event in events
+    )
     assert not (project / "src" / "new.py").exists()
 
 

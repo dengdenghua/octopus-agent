@@ -30,14 +30,17 @@ import json
 import logging
 import time
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .mobile.vlm import VlmConfig
 
 from runtime.pet import PetUdpBridge
+from runtime.platform.process.paths import app_paths
 
 from .base import Heartbeat, ToolCall, ToolResult
+from .execution import DeviceActionExecutor, ExecutionReceiptLedger
 from .mobile.cerebrum_adapter import CerebrumDecisionAdapter
 from .mobile.device import MobileDevice
 from .mobile.pc_screen_capture import (
@@ -47,6 +50,8 @@ from .mobile.pc_screen_capture import (
 )
 from .mobile.screen_relay import ScreenRelay
 from .pool import TentaclePool
+from .procedure import Procedure, ProcedureCheckpointStore, ProcedureExecutor
+from .telemetry import TelemetryHub
 from .transport import DeviceHello, TaskExecuteRequest, TentacleWebSocketServer
 from .transport.ws_server import WebSocketConnection
 
@@ -117,8 +122,22 @@ class TentacleCoordinator:
         dashboard_jwt_secret: str | None = None,
         dashboard_jwt_issuer: str | None = None,
         dashboard_jwt_audience: str | None = None,
+        procedure_checkpoint_dir: Path | None = None,
     ) -> None:
         self.pool = TentaclePool()
+        self.telemetry = TelemetryHub()
+        self.device_executor = DeviceActionExecutor(
+            self.pool, ExecutionReceiptLedger(on_append=self.telemetry.record_receipt)
+        )
+        checkpoint_dir = procedure_checkpoint_dir or (
+            app_paths().data_dir / "tentacle" / "procedures"
+        )
+        self.procedure_store = ProcedureCheckpointStore(checkpoint_dir)
+        self.procedure_executor = ProcedureExecutor(
+            self.device_executor, self.procedure_store, self.telemetry.publish
+        )
+        self.procedures: dict[str, Procedure] = {}
+        self.procedure_tasks: dict[str, asyncio.Task[Procedure]] = {}
         self._pet_bridge = PetUdpBridge()
         self.pool.subscribe_screen_changes(self._pet_bridge.on_pool_event)
         # 屏幕流中继服务
@@ -160,6 +179,9 @@ class TentacleCoordinator:
 
     async def start(self) -> None:
         """启动协调器（WebSocket + 可选 Dashboard + 可选 PC屏幕捕获）."""
+        self.procedures = {
+            procedure.procedure_id: procedure for procedure in self.procedure_store.load_all()
+        }
         await self.ws_server.start()
         logger.info("TentacleCoordinator started (ws port=%d)", self.ws_server.port)
 
@@ -235,6 +257,29 @@ class TentacleCoordinator:
             except ImportError:
                 logger.warning("Dashboard disabled: fastapi/uvicorn not installed")
 
+    def register_procedure(self, procedure: Procedure) -> None:
+        if procedure.procedure_id in self.procedures:
+            raise ValueError(f"procedure already exists: {procedure.procedure_id}")
+        self.procedures[procedure.procedure_id] = procedure
+        self.procedure_store.save(procedure)
+
+    async def run_procedure(self, procedure_id: str) -> Procedure:
+        procedure = self.procedures[procedure_id]
+        device = self.pool.get(procedure.device_id)
+        if device is None:
+            procedure.error = f"device not connected: {procedure.device_id}"
+            self.procedure_executor.pause(procedure)
+            return procedure
+        return await self.procedure_executor.run(procedure, device)
+
+    def schedule_procedure(self, procedure_id: str) -> asyncio.Task[Procedure]:
+        current = self.procedure_tasks.get(procedure_id)
+        if current is not None and not current.done():
+            return current
+        task = asyncio.create_task(self.run_procedure(procedure_id))
+        self.procedure_tasks[procedure_id] = task
+        return task
+
     async def stop(self) -> None:
         """停止协调器."""
         # 停止 PC 屏幕捕获
@@ -287,6 +332,7 @@ class TentacleCoordinator:
 
     async def _on_heartbeat(self, hb: Heartbeat) -> None:
         """心跳 —— 更新设备元信息."""
+        self.telemetry.record_heartbeat(hb)
         device = self.pool.get(hb.tentacle_id)
         if device is None:
             return
@@ -382,13 +428,14 @@ class TentacleCoordinator:
             logger.info("decision engine generated %d tool calls", len(tool_calls))
 
             # 逐个执行
-            results: list[ToolResult] = []
-            for call in tool_calls:
-                result = await device.execute(call)
-                results.append(result)
-                if not result.success:
-                    logger.warning("tool call failed: %s error=%s", call.tool, result.error_message)
-                    break  # 有错误时停止
+            results = await self.device_executor.execute_sequence(
+                device,
+                tool_calls,
+                owner=f"coordinator:{request.task_id}",
+                task_id=request.task_id,
+            )
+            if results and not results[-1].success:
+                logger.warning("tool call failed: error=%s", results[-1].error_message)
 
             # 汇总结果
             success = all(r.success for r in results)

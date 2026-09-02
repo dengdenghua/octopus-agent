@@ -36,7 +36,7 @@ except Exception:  # pragma: no cover - fastapi optional at import time
 from runtime.sensing._fastapi_guard import require_fastapi
 
 # registry 除 skill 外还托管 role / twin-role(数字分身岗位模板)/ plugin / task /
-# twin / experience(见 asset.type,api.octoapk.com 实测 473 条)。角色类(role/
+# twin / experience(见 asset.type,octopus.aurest.ai 实测 473 条)。角色类(role/
 # twin-role)与 skill 同属 kind=data 声明式 prompt,落地规则等价 → 直接可"安装"成
 # 本地可用 agent(同 enterprise_assets_router._scaffold_local_agent 的落地形状)。
 # plugin 类目前统一标 kind=code(codex-plugin 集成说明)。它们的 registry body
@@ -119,11 +119,16 @@ def _scaffold_local_agent_from_registry_asset(asset: Any) -> tuple[str, Path]:
     core = agent_root / "agent-core"
     _ensure_safe_dir(agent_root)
     _ensure_safe_dir(core)
+    from runtime.execution.agents.identity import build_identity_profile, generate_identity_code
+
+    identity_code = generate_identity_code(default_agents_root())
     profile = {
         "id": agent_id,
         "name": name,
         "icon": "🌐",
-        "did": f"DID-{agent_id.upper()}-REGISTRY",
+        "did": identity_code,
+        "identity_code": identity_code,
+        "identity": build_identity_profile(identity_code),
         "description": description,
         "category": category,
         "tags": tags,
@@ -404,7 +409,7 @@ def create_registry_consumer_router(
     import os
 
     base = (
-        registry_base or os.environ.get("OCTOPUS_REGISTRY_URL") or "https://api.octoapk.com"
+        registry_base or os.environ.get("OCTOPUS_REGISTRY_URL") or "https://os.echo-age.com"
     ).rstrip("/")
     if skills_root is None:
         try:

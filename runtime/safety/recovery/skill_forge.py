@@ -24,7 +24,15 @@ from runtime.execution.suckers import (  # noqa: E402
 )
 from runtime.memory.journal import Journal, TrajectoryEvent  # noqa: E402
 from runtime.platform.models import Trajectory  # noqa: E402
+from runtime.platform.process.paths import app_paths  # noqa: E402
 from runtime.safety.approval.approval_gate import is_dangerous_tool  # noqa: E402
+from runtime.safety.auth.scope import TenantScope, tenant_scoped_path  # noqa: E402
+from runtime.safety.evolution.candidate_registry import (  # noqa: E402
+    CandidateRegistry,
+    CandidateStatus,
+    EvolutionCandidate,
+)
+from runtime.safety.recovery.tenant_scope import read_learning_events  # noqa: E402
 
 # ═══════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════
@@ -51,6 +59,12 @@ def pattern_signature(traj: Trajectory) -> str:
 
 def path_of(traj: Trajectory) -> list[str]:
     return [s.action.sucker_id for s in traj.steps]
+
+
+def _is_clean_success(traj: Trajectory) -> bool:
+    """Return whether a trajectory is safe to use as positive evidence."""
+
+    return traj.outcome.success and not traj.outcome.degraded
 
 
 # ═══════════════════════════════════════════════════════════
@@ -91,6 +105,8 @@ class SkillForgeResult(BaseModel):
     # Not dropped — routed to governed human approval. Also appear in
     # ``retired`` so they are not re-promoted next tick.
     quarantined: list[str] = Field(default_factory=list)
+    governed: list[str] = Field(default_factory=list)
+    evolution_candidates: list[dict[str, Any]] = Field(default_factory=list)
     reports: dict[str, SkillTestReport] = Field(default_factory=dict)
 
 
@@ -109,6 +125,8 @@ class ForgeConfig:
     shadow_runs: int = 5
     shadow_success_threshold: float = 0.80
     max_candidates_per_run: int = 10
+    governed_rollout: bool = False
+    candidate_registry_path: Any = None
 
 
 class SkillForge:
@@ -120,12 +138,47 @@ class SkillForge:
         name_generator: Callable[[list[str]], str] | None = None,
         *,
         auto_persist_dir: Any = None,  # Path | str | None
+        scope: TenantScope | None = None,
     ) -> None:
         self.journal = journal
         self.registry = registry
         self.config = config or ForgeConfig()
         self._name_generator = name_generator or _default_name_for
-        self.auto_persist_dir = auto_persist_dir
+        self.scope = scope
+        self.auto_persist_dir = (
+            tenant_scoped_path(auto_persist_dir, scope)
+            if auto_persist_dir is not None and scope is not None
+            else auto_persist_dir
+        )
+
+    @classmethod
+    def for_governed_rollout(
+        cls,
+        *,
+        journal: Journal,
+        registry: SkillRegistry,
+        candidate_registry_path: Any = None,
+        name_generator: Callable[[list[str]], str] | None = None,
+        scope: TenantScope | None = None,
+    ) -> SkillForge:
+        """Build a forge that can only stage typed evolution candidates.
+
+        The scheduler uses this capability-based constructor instead of
+        importing and assembling :class:`ForgeConfig` itself.  That keeps the
+        scheduler compatible with mixed-version modules while making the safe
+        behaviour explicit: if this factory is absent, the scheduler refuses
+        to run SkillForge rather than falling back to direct live promotion.
+        """
+        return cls(
+            journal=journal,
+            registry=registry,
+            config=ForgeConfig(
+                governed_rollout=True,
+                candidate_registry_path=candidate_registry_path,
+            ),
+            name_generator=name_generator,
+            scope=scope,
+        )
 
     # ─── propose ────────────────────────────────────
 
@@ -145,10 +198,11 @@ class SkillForge:
                 hits = len(cluster)
                 if hits < self.config.min_hits:
                     continue
-                success_rate = sum(1 for t in cluster if t.outcome.success) / hits
-                if success_rate < self.config.min_success_rate:
+                clean_cluster = [t for t in cluster if _is_clean_success(t)]
+                success_rate = len(clean_cluster) / hits
+                if not clean_cluster or success_rate < self.config.min_success_rate:
                     continue
-                candidates.append(self._make_candidate(sig, cluster, success_rate))
+                candidates.append(self._make_candidate(sig, clean_cluster, success_rate))
 
             candidates.sort(key=lambda c: -(c.source_sample_count * c.source_success_rate))
             return candidates[: self.config.max_candidates_per_run]
@@ -232,14 +286,13 @@ class SkillForge:
         """
         clusters: dict[str, list[Trajectory]] = {}
         for t in trajectories:
-            if t.step_count < min_steps:
+            if not _is_clean_success(t) or t.step_count < min_steps:
                 continue  # a <2-step "macro" is not a reusable skill
             clusters.setdefault(pattern_signature(t), []).append(t)
 
         candidates: list[ForgedSkillCandidate] = []
         for sig, cluster in clusters.items():
-            success_rate = sum(1 for t in cluster if t.outcome.success) / len(cluster)
-            candidates.append(self._make_candidate(sig, cluster, success_rate))
+            candidates.append(self._make_candidate(sig, cluster, 1.0))
         return self._forge_candidates(candidates)
 
     def _forge_candidates(self, candidates: list[ForgedSkillCandidate]) -> SkillForgeResult:
@@ -249,6 +302,8 @@ class SkillForge:
         retired: list[str] = []
         shadow_failed: list[str] = []
         quarantined: list[str] = []
+        governed: list[str] = []
+        evolution_candidates: list[dict[str, Any]] = []
         reports: dict[str, SkillTestReport] = {}
 
         for cand in candidates:
@@ -264,6 +319,28 @@ class SkillForge:
             if not passed:
                 shadow_failed.append(cand.name)
                 retired.append(cand.name)
+                continue
+            dangerous = self._dangerous_underlying_skills(cand)
+            if dangerous:
+                exc = UnsafeSkillPromotionError(
+                    f"refusing to promote forged skill {cand.name!r}; "
+                    f"underlying sequence includes dangerous skill(s): {', '.join(dangerous)}"
+                )
+                quarantined.append(cand.name)
+                retired.append(cand.name)
+                self._record_quarantine_decision(cand, dangerous, exc)
+                continue
+            # A tenant-scoped request cannot safely register executable code
+            # in the process-global SkillRegistry.  Until registries are
+            # tenant-partitioned, stage an auditable candidate instead.  An
+            # explicitly cross-tenant operator retains the legacy global
+            # promotion capability; local scope=None behaviour is unchanged.
+            if self.config.governed_rollout or (
+                self.scope is not None and not self.scope.allow_cross_tenant
+            ):
+                evolution_candidate = self._record_evolution_candidate(cand, shadow_report)
+                governed.append(cand.name)
+                evolution_candidates.append(evolution_candidate.to_wire())
                 continue
             if self.registry.has(cand.name):
                 # Already promoted on an earlier tick. The forge re-proposes
@@ -321,12 +398,80 @@ class SkillForge:
             retired=retired,
             shadow_failed=shadow_failed,
             quarantined=quarantined,
+            governed=governed,
+            evolution_candidates=evolution_candidates,
             reports=reports,
         )
 
+    def _record_evolution_candidate(
+        self,
+        candidate: ForgedSkillCandidate,
+        shadow_report: SkillTestReport,
+    ) -> EvolutionCandidate:
+        registry_path = self.config.candidate_registry_path or app_paths().evolution_candidates_path
+        if self.scope is not None:
+            registry_path = tenant_scoped_path(registry_path, self.scope)
+        registry = CandidateRegistry(registry_path, tenant_scope=self.scope)
+        evolution_candidate = registry.propose(
+            gene_type="skill",
+            scope=f"skill.{candidate.name}",
+            patch={
+                "op": "register_forged_skill",
+                "name": candidate.name,
+                "description": candidate.description,
+                "underlying_sequence": list(candidate.underlying_sequence),
+                "step_templates": list(candidate.step_templates),
+                "path_signature": candidate.path_signature,
+            },
+            proposer="skill_forge",
+            lineage_id=f"skill_forge:{candidate.path_signature}",
+            role_id="general",
+            task_domain="workflow_automation",
+            risk_level="medium",
+            source_failures=[],
+            metadata={
+                "forge_candidate_id": candidate.candidate_id,
+                "source_trajectory_ids": list(candidate.source_trajectory_ids),
+                "source_sample_count": candidate.source_sample_count,
+                "source_success_rate": candidate.source_success_rate,
+                "shadow_report": shadow_report.model_dump(mode="json"),
+            },
+            tenant_id=self.scope.tenant_id if self.scope is not None else None,
+            owner_actor_id=self.scope.actor_id if self.scope is not None else None,
+        )
+        gates = {
+            "source_evidence": candidate.source_sample_count >= self.config.min_hits,
+            "source_success_rate": candidate.source_success_rate >= self.config.min_success_rate,
+            "deterministic_shadow": shadow_report.overall_passed,
+            "dangerous_primitive_free": True,
+        }
+        evolution_candidate = registry.record_evidence(
+            evolution_candidate.candidate_id,
+            hard_gate_results=gates,
+            metric_vector={
+                "source_success_rate": candidate.source_success_rate,
+                "source_sample_count": float(candidate.source_sample_count),
+            },
+            metadata={
+                "awaiting_gates": [name for name, passed in gates.items() if not passed],
+                "next_stage": "structured_shadow" if all(gates.values()) else "validation",
+            },
+        )
+        if evolution_candidate.status == CandidateStatus.PROPOSED and all(gates.values()):
+            evolution_candidate = registry.transition(
+                evolution_candidate.candidate_id,
+                CandidateStatus.VALIDATED,
+                metadata={"next_stage": "structured_shadow"},
+            )
+        return evolution_candidate
+
     def _has_existing_quarantine_decision(self, candidate: ForgedSkillCandidate) -> bool:
         try:
-            events = self.journal.read_by_type("skill_proposal_decision")
+            events = read_learning_events(
+                self.journal,
+                "skill_proposal_decision",
+                scope=self.scope,
+            )
         except Exception as exc:  # noqa: BLE001 — journal lookup must not break forge.
             _LOG.debug("forge quarantine dedupe skipped: %s", exc)
             return False
@@ -351,20 +496,31 @@ class SkillForge:
         must not break the regeneration tick.
         """
         try:
-            self.journal.write_skill_proposal_decision(
-                proposal_name=candidate.name,
-                decision="quarantined",
-                candidate_id=candidate.candidate_id,
-                proposal_kind="skill_forge",
-                reason=str(exc),
-                details={
-                    "dangerous_underlying": dangerous,
-                    "underlying_sequence": list(candidate.underlying_sequence),
-                    "source_sample_count": candidate.source_sample_count,
-                    "source_success_rate": candidate.source_success_rate,
-                },
-                actor="skill_forge",
+            from runtime.memory.journal import journal_context
+
+            context = (
+                journal_context(
+                    tenant_id=self.scope.tenant_id,
+                    owner_actor_id=self.scope.actor_id,
+                )
+                if self.scope is not None
+                else journal_context()
             )
+            with context:
+                self.journal.write_skill_proposal_decision(
+                    proposal_name=candidate.name,
+                    decision="quarantined",
+                    candidate_id=candidate.candidate_id,
+                    proposal_kind="skill_forge",
+                    reason=str(exc),
+                    details={
+                        "dangerous_underlying": dangerous,
+                        "underlying_sequence": list(candidate.underlying_sequence),
+                        "source_sample_count": candidate.source_sample_count,
+                        "source_success_rate": candidate.source_success_rate,
+                    },
+                    actor="skill_forge",
+                )
         except Exception as _exc:  # noqa: BLE001 — recording must not break tick
             _LOG.debug("forge quarantine decision not recorded: %s", _exc)
 
@@ -384,7 +540,11 @@ class SkillForge:
         return dangerous
 
     def _collect_successful_trajectories(self) -> list[Trajectory]:
-        events = self.journal.read_by_type("trajectory")
+        events = read_learning_events(
+            self.journal,
+            "trajectory",
+            scope=self.scope,
+        )
         trajs = [e.trajectory for e in events if isinstance(e, TrajectoryEvent)]
 
         # Swarm tasks can emit both per-arm GraphRuntime trajectories

@@ -105,18 +105,18 @@ async function renderLogin() {
       <div class="err">
         ⚠️ 服务端没开启任何登录方式<br>
         <span style="font-size:11px;color:var(--mute);margin-top:8px;display:block">
-          设 <code>config.molili.enabled=true</code> 或 <code>config.local_auth.enabled=true</code>
+          设 <code>config.oct.enabled=true</code> 或 <code>config.local_auth.enabled=true</code>
         </span>
       </div>
     `;
     return;
   }
 
-  const hasMolili = providers.find(p => p.id === 'molili');
+  const hasOct = providers.find(p => p.id === 'oct');
   const hasLocal = providers.find(p => p.id === 'local');
-  let activeTab = hasMolili ? 'molili' : 'local';
+  let activeTab = hasOct ? 'oct' : 'local';
 
-  const mockMode = hasMolili?.mock_mode;
+  const mockMode = hasOct?.mock_mode;
   const localPwRequired = Boolean(hasLocal?.password_required);
 
   function paint() {
@@ -124,7 +124,7 @@ async function renderLogin() {
     c.innerHTML = `
       ${providers.length > 1 ? `
         <div class="tabs">
-          ${hasMolili ? `<button class="${activeTab==='molili'?'active':''}" data-tab="molili">📱 手机号</button>` : ''}
+          ${hasOct ? `<button class="${activeTab==='oct'?'active':''}" data-tab="oct">✉️ 邮箱</button>` : ''}
           ${hasLocal ? `<button class="${activeTab==='local'?'active':''}" data-tab="local">💻 本地</button>` : ''}
         </div>
       ` : ''}
@@ -133,24 +133,24 @@ async function renderLogin() {
     c.querySelectorAll('[data-tab]').forEach(b => {
       b.onclick = () => { activeTab = b.dataset.tab; paint(); };
     });
-    if (activeTab === 'molili') smsForm(mockMode);
+    if (activeTab === 'oct') emailForm(mockMode);
     else localForm(localPwRequired);
   }
   paint();
 }
 
-function smsForm(mockMode) {
+function emailForm(mockMode) {
   const body = document.getElementById('tab-body');
   body.innerHTML = `
     ${mockMode ? `<div class="mock-hint">⚙️ Mock 模式 · 无真实短信 · 仅 dev/demo</div>` : ''}
-    <div id="sms-step-phone">
-      <label>手机号</label>
-      <input id="phone" type="tel" placeholder="13800001234" autocomplete="tel" autofocus>
+    <div id="email-step-address">
+      <label>邮箱</label>
+      <input id="email" type="email" placeholder="name@example.com" autocomplete="email" autofocus>
       <button class="primary" id="send-btn">获取验证码</button>
     </div>
-    <div id="sms-step-code" style="display:none">
+    <div id="email-step-code" style="display:none">
       <div class="info" style="font-size:12px;color:var(--mute);margin-bottom:6px">
-        已发至 <span id="phone-mask" style="color:var(--slate);font-family:monospace"></span> ·
+        已发至 <span id="email-mask" style="color:var(--slate);font-family:monospace"></span> ·
         <button class="link" id="resend-btn">重发</button>
       </div>
       <div id="dev-code-hint" style="display:none"></div>
@@ -161,16 +161,16 @@ function smsForm(mockMode) {
         <button class="primary" id="verify-btn" style="flex:2;margin-top:0">登录</button>
       </div>
     </div>
-    <div id="sms-err"></div>
+    <div id="email-err"></div>
   `;
 
-  const phoneInput = document.getElementById('phone');
+  const emailInput = document.getElementById('email');
   const codeInput = document.getElementById('code');
   const sendBtn = document.getElementById('send-btn');
   const verifyBtn = document.getElementById('verify-btn');
   const backBtn = document.getElementById('back-btn');
   const resendBtn = document.getElementById('resend-btn');
-  const errBox = document.getElementById('sms-err');
+  const errBox = document.getElementById('email-err');
   let cooldown = 0, cooldownTimer = null;
 
   function showErr(msg) {
@@ -191,32 +191,34 @@ function smsForm(mockMode) {
       clearInterval(cooldownTimer);
     }
   }
-  function cleanPhone() {
-    return (phoneInput.value || '').replace(/\D/g, '');
+  function cleanEmail() {
+    return (emailInput.value || '').trim().toLowerCase();
   }
-  function maskPhone(p) {
-    return p.length >= 7 ? p.slice(0,3) + '****' + p.slice(-4) : p;
+  function maskEmail(value) {
+    const [name, domain] = value.split('@');
+    if (!domain) return value;
+    return `${name.slice(0, 2)}***@${domain}`;
   }
 
   async function doSend() {
-    const phone = cleanPhone();
-    if (phone.length < 11) return;
+    const email = cleanEmail();
+    if (!email.includes('@')) return;
     showErr('');
     sendBtn.disabled = true; resendBtn.disabled = true;
     try {
-      const r = await api('POST', '/api/auth/molili/sms/send', { phone });
-      document.getElementById('sms-step-phone').style.display = 'none';
-      document.getElementById('sms-step-code').style.display = '';
-      document.getElementById('phone-mask').textContent = maskPhone(phone);
+      const r = await api('POST', '/api/auth/oct/email/send', { email });
+      document.getElementById('email-step-address').style.display = 'none';
+      document.getElementById('email-step-code').style.display = '';
+      document.getElementById('email-mask').textContent = maskEmail(email);
       const hint = document.getElementById('dev-code-hint');
-      if (mockMode && r?.upstream?.code_for_dev) {
+      if (mockMode && r?.dev_code) {
         hint.style.display = '';
         hint.className = 'dev-code';
-        hint.textContent = '[mock] 验证码 · ' + r.upstream.code_for_dev;
+        hint.textContent = '[mock] 验证码 · ' + r.dev_code;
       } else if (mockMode) {
         hint.style.display = '';
         hint.className = 'dev-code';
-        hint.textContent = '[mock] 服务端 log 里看验证码 · 搜 [MOCK SMS]';
+        hint.textContent = '[mock] 请使用网关返回的开发验证码';
       }
       codeInput.focus();
       cooldown = 60;
@@ -227,18 +229,18 @@ function smsForm(mockMode) {
     }
   }
   async function doVerify() {
-    const phone = cleanPhone();
+    const email = cleanEmail();
     const code = (codeInput.value || '').trim();
     if (code.length < 4) return;
     showErr('');
     verifyBtn.disabled = true;
     try {
-      const r = await api('POST', '/api/auth/molili/sms/verify', { phone, code });
+      const r = await api('POST', '/api/auth/oct/email/login', { email, code });
       if (!r?.access_token) throw new Error('no access_token');
       LS.set('octopus.jwt', r.access_token);
       LS.set('octopus.actor_id', r.actor_id);
-      LS.set('octopus.provider', 'molili');
-      LS.set('octopus.display', r.user?.mobile || phone);
+      LS.set('octopus.provider', 'oct');
+      LS.set('octopus.display', r.user?.email || email);
       render();
     } catch (e) {
       showErr(explainErr(e));
@@ -250,11 +252,11 @@ function smsForm(mockMode) {
   resendBtn.onclick = doSend;
   verifyBtn.onclick = doVerify;
   backBtn.onclick = () => {
-    document.getElementById('sms-step-phone').style.display = '';
-    document.getElementById('sms-step-code').style.display = 'none';
+    document.getElementById('email-step-address').style.display = '';
+    document.getElementById('email-step-code').style.display = 'none';
     codeInput.value = '';
   };
-  phoneInput.onkeydown = (e) => { if (e.key === 'Enter') doSend(); };
+  emailInput.onkeydown = (e) => { if (e.key === 'Enter') doSend(); };
   codeInput.onkeydown = (e) => { if (e.key === 'Enter') doVerify(); };
 }
 

@@ -6,6 +6,67 @@ import logging
 from pathlib import Path
 from typing import Any
 
+_ADAPTIVE_TEAM_ORCHESTRATION_CONTRACT = """## Adaptive team orchestration
+
+This is a temporary coordination capability granted because the current turn has a real multi-agent roster. It does not change any agent's permanent identity or skills.
+
+- Start from the user's outcome and acceptance criteria. Build the smallest useful team plan for this turn; do not force a preset SOP or involve every member.
+- Choose specialists by capability, tools, evidence access, cost, and independence. State each active member's scope and expected output; avoid overlapping assignments unless deliberate cross-checking is useful.
+- Infer real dependencies. Run independent work in parallel and dependent work in sequence. Use the available team, delegation, task, and shared-context mechanisms rather than impersonating specialists.
+- Treat the plan as provisional. After each material result, failure, user correction, or missing-evidence signal, reassess the remaining work and add, remove, retry, reroute, merge, or stop work as needed.
+- Keep coordination state compact: objective, constraints, decisions, evidence/artifacts, unresolved questions, and next actions. Prefer shared task/blackboard state over repeatedly copying the full conversation.
+- Add review only where risk or uncertainty justifies it. A reviewer must be independent from the producer when practical. Define pass/return/conditional-pass criteria from the requested deliverable, not from a hard-coded role chain.
+- Report meaningful phase changes and blockers without narrating internal chatter. Finish only when the user's acceptance criteria are met or clearly explain the remaining gap and safest recovery path.
+- Only the coordinating/owner agent manages this plan. A participating member executes its assigned scope and must not create a nested team unless the coordinator explicitly delegates that authority.
+"""
+
+
+def _unique_roster_agent_ids(roster: list[Any]) -> list[str]:
+    """Return stable unique agent ids from the permissive frontend roster wire."""
+
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in roster:
+        if isinstance(item, str):
+            raw = item
+        elif isinstance(item, dict):
+            raw = str(item.get("agent_id") or item.get("id") or item.get("name") or "")
+        else:
+            raw = ""
+        agent_id = raw.strip()
+        if not agent_id or agent_id in seen:
+            continue
+        seen.add(agent_id)
+        result.append(agent_id)
+    return result
+
+
+def _grant_adaptive_team_orchestration(metadata: dict[str, Any]) -> None:
+    """Grant the coordinator contract for a real multi-agent turn.
+
+    The grant is derived server-side from the canonical turn metadata. The
+    client cannot turn a solo role into an orchestrator by sending a magic
+    skill id, and nothing is persisted into the role's permanent profile.
+    """
+
+    roster = metadata.get("agent_roster")
+    if not isinstance(roster, list) or len(_unique_roster_agent_ids(roster)) < 2:
+        return
+    mode = str(metadata.get("mode") or "").strip().lower()
+    mesh = str(metadata.get("serve_mesh") or "").strip().lower()
+    team_mode = str(metadata.get("team_mode") or "").strip().lower()
+    if mode != "team" and mesh not in {"cluster", "swarm"} and team_mode != "cowork":
+        return
+
+    existing = str(metadata.get("mode_contract") or "").strip()
+    metadata["adaptive_team_orchestration"] = True
+    adaptive = _ADAPTIVE_TEAM_ORCHESTRATION_CONTRACT.strip()
+    metadata["mode_contract"] = (
+        existing
+        if existing.startswith("## Adaptive team orchestration")
+        else "\n\n".join(part for part in (adaptive, existing) if part)
+    )
+
 
 def thread_owner_agent_id(*, thread_id: str, store: Any) -> str:
     """Return the immutable persona bound to an existing solo thread.
@@ -252,10 +313,7 @@ def build_turn_metadata(
     # single-agent ReAct: serve_mesh drives 蜂群 (fan-out) vs 集群 routing,
     # team_mode tags the turn, and agent_roster is the member list the
     # fan-out / planner / swarm need.
-    # ``partner_model`` lets the UI override a local CLI partner's model
-    # (codex/claude), passed straight to ``-m``. It is the CLI's own model
-    # namespace — kept separate from ``model_name`` (octopus's) on purpose.
-    for key in ("serve_mesh", "team_mode", "partner_model"):
+    for key in ("serve_mesh", "team_mode"):
         value = ctx.get(key) or stored_meta.get(key)
         if isinstance(value, str) and value.strip():
             metadata[key] = value.strip()
@@ -268,6 +326,11 @@ def build_turn_metadata(
     roster = ctx.get("agent_roster") or stored_meta.get("agent_roster")
     if isinstance(roster, list) and roster:
         metadata["agent_roster"] = roster
+
+    # Real multi-agent turns temporarily grant their owner the ability to
+    # plan, route, review, and re-plan work. Run this after effective roster
+    # and mode merging; role profiles remain untouched.
+    _grant_adaptive_team_orchestration(metadata)
 
     return metadata
 

@@ -1,8 +1,8 @@
 """oct 账号网关集成配置。
 
-oct = octopus 自己的账号网关(octopus-mobile server,线上 https://api.octoapk.com):
+oct = EchoAI 自己的账号网关(octopus-mobile server,线上 https://api.echo-age.com):
 邮箱验证码登录→JWT、/account/* 积分会员、/billing/* 商品订单、/v1/chat/completions LLM 中转。
-本集成替代旧的 molili 集成,把母本生态的账号体系统一到 oct 网关。
+本集成把账号、会员、计费和模型调用统一到 oct 网关。
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ class OctConfig(BaseModel):
         description="总开关 · false 时所有 /api/*/oct 返 503",
     )
     base_url: str = Field(
-        default="https://api.octoapk.com",
+        default="https://api.echo-age.com",
         description="oct 账号网关根地址(octopus-mobile server)· 无尾斜杠",
     )
     default_model: str = Field(

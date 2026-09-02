@@ -27,7 +27,6 @@ from fastapi import APIRouter, HTTPException, Request, WebSocket
 
 from runtime.safety.auth.principal import require_operator, resolve_principal
 from runtime.safety.auth.url_guard import check_url
-from runtime.safety.auth.websocket import accepted_auth_subprotocol, websocket_auth_token
 from runtime.sensing.gateway.remote_transport import (
     BackendRegistry,
     SshTunnel,
@@ -124,7 +123,15 @@ def create_remote_backends_router(
                 raise _WsAuthError("identity store required for remote backend auth")
             return None
 
-        token = websocket_auth_token(ws)
+        token: str | None = None
+        auth_header = ws.headers.get("authorization") or ""
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header[7:].strip()
+        if token is None:
+            subproto = ws.headers.get("sec-websocket-protocol") or ""
+            parts = [p.strip() for p in subproto.split(",") if p.strip()]
+            if len(parts) >= 2 and parts[0].lower() == "bearer":
+                token = parts[1]
         if not token:
             if require_auth:
                 raise _WsAuthError("missing remote backend auth token")
@@ -271,7 +278,7 @@ def create_remote_backends_router(
             await ws.close(code=4401)
             return
 
-        await ws.accept(subprotocol=accepted_auth_subprotocol(ws))
+        await ws.accept()
         from runtime.platform import feature_flags as _ff
 
         if not _ff.is_on("ui.remote_transport"):

@@ -310,6 +310,7 @@ def register_market_skills(
     all_skills_dir: Path | None = None,
     respect_enabled_flag: bool = True,
     verify_tests: bool = True,
+    skip_registered_directories: bool = False,
 ) -> int:
     if all_skills_dir is None:
         # runtime/execution/suckers/market_skills.py → runtime/execution/all_skills
@@ -333,10 +334,18 @@ def register_market_skills(
     enabled_map = _load_enabled_set(all_skills_dir) if respect_enabled_flag else None
     registered = 0
     seen_names: set[str] = set()
+    registered_names = set(registry.all_names()) if skip_registered_directories else set()
 
     for skill_md in sorted(all_skills_dir.glob("*/SKILL.md")):
         skill_dir = skill_md.parent
         dir_name = skill_dir.name
+        # Bundled prompt skills are required to use their directory slug as
+        # the canonical name.  register_all() deliberately makes one final
+        # pass with the enabled flag ignored so disabled bundled fallbacks can
+        # fill gaps.  Almost every entry is already present by then, so avoid
+        # reopening and reparsing the same SKILL.md files in that pass.
+        if dir_name in registered_names:
+            continue
         try:
             text = skill_md.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as exc:

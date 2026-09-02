@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from runtime.execution.loops._controller_helpers import (
+    _attempt_execution_completed,
     _now_iso,
+    _runner_incomplete_after_verification_error,
     _verifier_error_text,
     _verifier_failure_repairable,
 )
@@ -46,6 +48,42 @@ class LoopControllerVerifyMixin:
             cancellation_token=cancellation_token,
         ):
             return cancelled
+        verified_attempt = next(
+            (attempt for attempt in run.attempts if attempt.attempt_index == attempt_index),
+            None,
+        )
+        if verifier_result.passed and (
+            verified_attempt is None
+            or not _attempt_execution_completed(
+                verified_attempt,
+                allow_legacy_runner=self.react_runner is not None,
+            )
+        ):
+            error_text = _runner_incomplete_after_verification_error()
+            if not self._supervisor_heartbeat(run_id):
+                return self._latest_run(run_id)
+            run = self.store.mutate(
+                run_id,
+                lambda current, error_text=error_text: current.model_copy(
+                    update={
+                        "status": LoopRunStatus.FAILED,
+                        "completed_at": _now_iso(),
+                        "last_error": error_text,
+                        "attempts": [
+                            attempt.model_copy(
+                                update={
+                                    "status": "failed",
+                                    "error": error_text,
+                                }
+                            )
+                            if attempt.attempt_index == attempt_index
+                            else attempt
+                            for attempt in current.attempts
+                        ],
+                    }
+                ),
+            )
+            return self._finalize_learning(run)
         if verifier_result.passed:
             if not self._supervisor_heartbeat(run_id):
                 return self._latest_run(run_id)

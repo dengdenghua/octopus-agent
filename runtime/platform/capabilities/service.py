@@ -518,9 +518,7 @@ class CapabilityLifecycleService:
                 if isinstance(field, Mapping)
             }
             if normalized_tokens and not set(normalized_tokens) <= credential_fields:
-                raise CapabilityServiceError(
-                    "INVALID_CREDENTIALS", "credential fields are invalid"
-                )
+                raise CapabilityServiceError("INVALID_CREDENTIALS", "credential fields are invalid")
             if len(normalized_tokens or {}) < int(profile.get("minimum_credentials") or 0):
                 raise CapabilityServiceError(
                     "INVALID_CREDENTIALS", "required credentials are missing"

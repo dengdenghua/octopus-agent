@@ -436,6 +436,63 @@ def test_plain_continue_resumes_latest_paused_task_and_adds_iteration_budget(
         trace.close()
 
 
+def test_short_question_resumes_single_budget_paused_task_with_token_runway(
+    tmp_path: Path,
+) -> None:
+    from fastapi import FastAPI
+
+    from runtime.core.cerebrum.pause_control import get_pause_controller
+    from runtime.memory.diagnostics.trace_store import AgentTraceStore
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    thread_id = "th-budget-question-continue"
+    task_id = str(uuid4())
+    trace = AgentTraceStore(tmp_path / "trace.sqlite")
+    trace.record_checkpoint(
+        task_id=task_id,
+        thread_id=thread_id,
+        checkpoint_type="react",
+        iteration=6,
+        state={"iteration_completed": 6, "current_phase": "verify"},
+    )
+    controller = get_pause_controller()
+    controller.request_pause(
+        task_id,
+        reason="budget_near_limit",
+        requested_by="system",
+        thread_id=thread_id,
+    )
+    controller.mark_paused(task_id)
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=None,
+        logs_root=str(tmp_path / "threads"),
+        trace_store=trace,
+    )
+    app = FastAPI()
+    app.include_router(RealtimeGateway(runtime=runtime, approval_timeout=5.0).router)
+    try:
+        with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+            _set_script([{"type": "react_completed"}])
+            _drive(
+                ws,
+                {
+                    "threadId": thread_id,
+                    "input": [{"type": "text", "text": "？"}],
+                    "approvalPolicy": "on-request",
+                },
+            )
+
+        assert str(_LAST_STREAM_KWARGS["resume_task_id"]) == task_id
+        grant = controller.consume_grant(task_id)
+        assert grant["extra_tokens"] == 100_000
+        assert grant["extra_usd"] == 0.0
+    finally:
+        controller.clear(task_id)
+        trace.close()
+
+
 def test_longer_continue_instruction_does_not_hijack_a_paused_task(
     tmp_path: Path,
 ) -> None:

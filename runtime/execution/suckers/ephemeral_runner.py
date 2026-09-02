@@ -519,7 +519,7 @@ def make_llm_ephemeral_runner(
     ----------
     router :
         Any ``runtime.sensing.model_router.ModelRouter`` subclass · Anthropic /
-        OpenAI / Molili / Mock.
+        OpenAI / Oct / Mock.
     registry :
         Optional ``SkillRegistry``. When provided, the runner switches
         from single-shot mode to a mini agentic loop (see module

@@ -48,7 +48,6 @@ from runtime.execution.arms.safe_rm import SafeRmConfig, SafeRmProtector
 from runtime.execution.arms.shell_state import ShellEnvState
 from runtime.execution.arms.shell_state_manager import ShellStateManager
 from runtime.platform.process.sliding_window_limiter import SlidingWindowLimiter
-from runtime.safety.auth.websocket import accepted_auth_subprotocol, websocket_auth_token
 from runtime.safety.env_scrub import scrub_credential_env
 
 _logger = logging.getLogger(__name__)
@@ -425,7 +424,22 @@ def mount_terminal_routes(
             if require_auth:
                 raise PermissionError("identity store required for terminal auth")
             return None
-        token = websocket_auth_token(ws)
+        token: str | None = None
+        auth_header = ""
+        try:
+            auth_header = ws.headers.get("authorization") or ""
+        except Exception:  # noqa: BLE001
+            auth_header = ""
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header[7:].strip()
+        if token is None:
+            try:
+                subproto = ws.headers.get("sec-websocket-protocol") or ""
+            except Exception:  # noqa: BLE001
+                subproto = ""
+            parts = [p.strip() for p in subproto.split(",") if p.strip()]
+            if len(parts) >= 2 and parts[0].lower() == "bearer":
+                token = parts[1]
         if not token:
             if require_auth:
                 raise PermissionError("missing terminal auth token")
@@ -503,7 +517,7 @@ def mount_terminal_routes(
             with suppress(Exception):
                 await ws.close(code=4401, reason=str(exc))
             return
-        await ws.accept(subprotocol=accepted_auth_subprotocol(ws))
+        await ws.accept()
         # Bound _sessions growth: free shells abandoned by clients that
         # disconnected without calling /api/terminal/kill. Never touches the
         # session we're about to (re)connect to.

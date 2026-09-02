@@ -9,7 +9,11 @@ cover the router wiring that closes that gap.
 
 from __future__ import annotations
 
+import json
+import shutil
+import subprocess
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
@@ -81,6 +85,7 @@ class TestOAuthAuthorize:
         assert r.status_code == 200
         body = r.json()
         assert body["ok"] is True
+        assert body["callback_transport"] == "standard"
         url = body["authorize_url"]
         assert url.startswith("https://auth.example.com/authorize?")
         assert "client_id=dcr-client-id" in url
@@ -119,6 +124,35 @@ class TestOAuthAuthorize:
         assert r.status_code == 200
         assert "client_id=cached-client-id" in r.json()["authorize_url"]
         assert calls["n"] == 0
+
+    def test_tdx_requires_desktop_deep_link_callback(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        tdx = OAuthEndpoints(
+            issuer="https://auth.tdx.com.cn",
+            authorize_url=("https://auth.tdx.com.cn/tdx-oauth/page_workbuddy_oauth.html"),
+            token_url="https://auth.tdx.com.cn/token",
+            registration_url="https://auth.tdx.com.cn/register",
+            scopes=("mcp.read", "mcp.write"),
+        )
+        monkeypatch.setattr(
+            "runtime.adapters.mcp_client.oauth_discovery.discover",
+            lambda url, **kw: tdx,
+        )
+        monkeypatch.setattr(
+            "runtime.adapters.mcp_client.oauth_discovery.register_client",
+            lambda *args, **kwargs: "tdx-client-id",
+        )
+
+        body = client.post(
+            "/api/mcp/oauth/authorize",
+            json={"server": "tdx-finance", "url": "https://tdx.example/mcp"},
+        ).json()
+
+        assert body["ok"] is True
+        assert body["callback_transport"] == "desktop-deep-link"
 
     def test_discovery_failure_returns_400(
         self,
@@ -215,9 +249,19 @@ class TestOAuthCallback:
         assert "Invalid or expired" in r.text
 
     def test_provider_error_param_shows_error_page(self, client: TestClient) -> None:
-        r = client.get("/api/mcp/oauth/callback?error=access_denied")
+        state = self._start_pending()
+        r = client.get(
+            f"/api/mcp/oauth/callback?error=access_denied&state={state}",
+        )
         assert r.status_code == 200
         assert "Authorization failed" in r.text
+        replay = client.get(f"/api/mcp/oauth/callback?code=C&state={state}")
+        assert "Invalid or expired" in replay.text
+
+    def test_provider_error_without_state_is_rejected(self, client: TestClient) -> None:
+        r = client.get("/api/mcp/oauth/callback?error=access_denied")
+        assert r.status_code == 200
+        assert "Missing code/state" in r.text
 
     def test_token_exchange_exception_shows_error_page_not_500(
         self,
@@ -233,6 +277,56 @@ class TestOAuthCallback:
         r = client.get(f"/api/mcp/oauth/callback?code=C&state={state}")
         assert r.status_code == 200
         assert "Token exchange failed" in r.text
+
+    def test_tdx_desktop_deep_link_completes_full_callback_chain(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        node = shutil.which("node")
+        if node is None:
+            pytest.skip("Node.js is required for the desktop bridge contract")
+        state = self._start_pending()
+        root = Path(__file__).resolve().parents[1]
+        bridge = root / "frontend" / "electron" / "mcp-oauth-deep-link.cjs"
+        fixture = {
+            "sourceURL": (
+                "https://auth.tdx.com.cn/tdx-oauth/page_workbuddy_oauth.html?client_id=test"
+            ),
+            "deepLinkURL": ("workbuddy://mcp/oauth/callback?code=TDX-CODE&state=" + state),
+            "backendBaseURL": "http://127.0.0.1:8000",
+        }
+        script = (
+            "const h=require(process.argv[1]);"
+            "const input=JSON.parse(process.argv[2]);"
+            "process.stdout.write(h.buildMcpOAuthCallbackURL(input)||'');"
+        )
+        completed = subprocess.run(
+            [node, "-e", script, str(bridge), json.dumps(fixture)],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        parsed = urlsplit(completed)
+        assert parsed.path == "/api/mcp/oauth/callback"
+
+        monkeypatch.setattr(
+            "runtime.adapters.mcp_client.oauth.exchange_code",
+            lambda **kw: {
+                "access_token": "TDX-ACCESS",
+                "refresh_token": "TDX-REFRESH",
+                "expires_in": 3600,
+            },
+        )
+        response = client.get(f"{parsed.path}?{parsed.query}")
+
+        assert response.status_code == 200
+        assert "Authorized acme" in response.text
+        assert oauth.get_oauth_store().bearer("acme") == "TDX-ACCESS"
+        assert client.get("/api/mcp/oauth/status?server=acme").json() == {
+            "server": "acme",
+            "authorized": True,
+        }
 
 
 class TestOAuthStatusAndForget:

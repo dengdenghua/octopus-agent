@@ -218,8 +218,8 @@ class SandboxPolicy:
 
     Mirrors Claude Desktop's "allowed egress hosts" behaviour: a network-
     denied sandbox still lets the agent reach the LLM inference endpoint(s)
-    (the model API), otherwise a sandboxed local partner (claude/codex CLI)
-    would be unable to call the model at all. When non-empty and network is
+    (the model API), otherwise a sandboxed embedded engine would be unable to
+    call the model at all. When non-empty and network is
     denied, ``no_proxy`` is set to these domains (direct connect) while the
     HTTP(S) proxy still points at the dead short-circuit address, so every
     other host is blocked.

@@ -1,7 +1,7 @@
 """Shared OpenAI-compatible SSE stream parser.
 
 Every provider that speaks the ``/v1/chat/completions`` wire format
-(Molili, OpenAI, DeepSeek, Kimi, Gemini-compat, vLLM, Ollama, …)
+(Oct, OpenAI, DeepSeek, Kimi, Gemini-compat, vLLM, Ollama, …)
 emits the same SSE shape::
 
     data: {"choices":[{"delta":{"content":"tok"}}]}
@@ -26,7 +26,7 @@ Adding a new OpenAI-compat provider
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 
 from .models import CostEntry, ModelResponse, ModelStreamEvent
@@ -44,6 +44,7 @@ def iter_openai_sse(
     model: str = "",
     provider: str = "openai_compat",
     cost_usd: float = 0.0,
+    cancelled: Callable[[], bool] | None = None,
 ) -> Iterator[ModelStreamEvent]:
     """Parse an httpx streaming response of OpenAI-compat SSE chunks.
 
@@ -59,6 +60,10 @@ def iter_openai_sse(
     cost_usd
         Per-request cost estimate (most proxies don't report usage in
         streaming mode · caller can fill this from a post-hoc lookup).
+    cancelled
+        Optional probe for an explicit caller cancellation. A cancelled
+        transport exits without logging a provider warning or emitting a
+        synthetic ``done`` event.
 
     Yields
     ------
@@ -257,6 +262,8 @@ def iter_openai_sse(
         except StopIteration:
             break
         except Exception as exc:  # noqa: BLE001
+            if cancelled is not None and cancelled():
+                return
             # httpx.ReadTimeout, httpx.RemoteProtocolError, transport
             # errors all land here. Don't propagate — the caller (ReAct
             # loop) treats an empty "done" as a finished step and can
@@ -288,6 +295,9 @@ def iter_openai_sse(
             continue
         if not event_data_lines and (yield from dispatch_payload(line)):
             break
+
+    if cancelled is not None and cancelled():
+        return
 
     if event_data_lines:
         yield from flush_event()

@@ -72,7 +72,7 @@ def test_chat_and_login_dynamic_labels_icons_and_errors_are_not_html() -> None:
         "${escapeHtml(agentIcon)}",
         "${escapeHtml(icon)}",
         "${escapeHtml(a.icon || '🤖')}",
-        'placeholder="${escapeHtml(isMolili ?',
+        'placeholder="${escapeHtml(isOct ?',
     ):
         assert expression in _CHAT_HTML
 

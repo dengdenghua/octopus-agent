@@ -390,7 +390,7 @@ def _write_agnes_image_result(data: dict[str, Any], output: Path, *, timeout: in
 def _postprocess_agent_visual(path: Path) -> None:
     """Remove flat generated backgrounds, crop to subject, and add safe padding."""
     try:
-        from PIL import Image  # noqa: F401 — ImageFilter, ImageOps kept for availability check
+        from PIL import Image  # noqa: F401 — availability check
     except ImportError:
         return
 
@@ -483,7 +483,7 @@ def _postprocess_avatar_image(path: Path) -> None:
 
 def _keep_primary_alpha_component(image: Any) -> Any:
     try:
-        from PIL import Image, ImageFilter
+        from PIL import Image
     except ImportError:
         return image
 
@@ -541,15 +541,28 @@ def _keep_primary_alpha_component(image: Any) -> Any:
     while queue:
         x, y = queue.popleft()
         keep_px[x, y] = alpha_px[x, y]
-        for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+        # The high-alpha scan above finds the authoritative subject. Expand
+        # from that seed across every original non-transparent edge pixel so
+        # antialiasing is preserved exactly, including diagonal hair and strap
+        # details. Detached prompt artifacts have no alpha-connected path and
+        # are therefore removed without dilating or redrawing the silhouette.
+        for nx, ny in (
+            (x - 1, y - 1),
+            (x, y - 1),
+            (x + 1, y - 1),
+            (x - 1, y),
+            (x + 1, y),
+            (x - 1, y + 1),
+            (x, y + 1),
+            (x + 1, y + 1),
+        ):
             if nx < 0 or ny < 0 or nx >= width or ny >= height:
                 continue
             idx = ny * width + nx
-            if visited[idx] or alpha_px[nx, ny] <= 24:
+            if visited[idx] or alpha_px[nx, ny] == 0:
                 continue
             visited[idx] = 1
             queue.append((nx, ny))
-    keep = keep.filter(ImageFilter.MaxFilter(3))
     out = image.copy()
     out.putalpha(keep)
     return out

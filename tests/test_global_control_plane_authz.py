@@ -38,10 +38,6 @@ def control_client(
         lambda: {"ok": True, "count": 0},
     )
     monkeypatch.setattr(
-        "runtime.sensing.gateway.searxng_supervisor.enable_searxng",
-        lambda: {"ok": True},
-    )
-    monkeypatch.setattr(
         "runtime.sensing.model_router.hwfit.start_pull",
         lambda tag: {"ok": True, "tag": tag},
     )
@@ -127,10 +123,8 @@ def test_global_control_plane_matrix_rejects_ordinary_users(
         ("POST", "/api/prompts/reload", {}),
         ("POST", "/api/registry/skills/missing/install", {}),
         ("POST", "/api/assets/sync", {}),
-        ("POST", "/api/searxng/enable", {}),
         ("POST", "/api/cookbook/pull", {"json": {"tag": "demo"}}),
         ("PUT", "/api/team/role-models", {"json": {"overrides": {}}}),
-        ("GET", "/api/cli-team/status", {}),
         (
             "GET",
             "/api/debug/session-info",
@@ -188,7 +182,7 @@ def test_android_websocket_rejects_authenticated_non_operator(
         pytest.raises(WebSocketDisconnect) as exc_info,
         client.websocket_connect(
             "/api/android/ws/device-a",
-            subprotocols=["bearer", "sk-alice"],
+            headers={"Authorization": "Bearer sk-alice"},
         ),
     ):
         pass

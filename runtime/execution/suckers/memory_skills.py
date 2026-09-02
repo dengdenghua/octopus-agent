@@ -85,6 +85,21 @@ def _agent_core_dir() -> Path:
     return _PROJECT_ROOT / "agents" / agent_id / "agent-core"
 
 
+def _current_turn_score_scope() -> Any:
+    """Return the exact score namespace bound to the active Session.
+
+    A missing Session is already rejected by ``_agent_core_dir``.  A Session
+    without ownership is the local legacy namespace; a partially populated or
+    inconsistent authenticated Session raises instead of leaking legacy or a
+    neighbouring tenant's quality history.
+    """
+
+    from runtime.platform.process.session import current_session
+    from runtime.safety.recovery.tenant_scope import trusted_scope_from_session
+
+    return trusted_scope_from_session(current_session())
+
+
 def _current_agent_and_metadata() -> tuple[str, dict[str, Any]]:
     from runtime.platform.process.session import current_session
 
@@ -467,6 +482,7 @@ def _recall_scores(limit: int = 20, **_kw: Any) -> dict[str, Any]:
     rows = read_recent_scores(
         agent_id,
         limit=max(1, int(limit) if limit else 20),
+        scope=_current_turn_score_scope(),
     )
     return {
         "ok": True,
@@ -489,6 +505,7 @@ def _analyze_soul_impact(
         agent_id,
         window=max(1, int(window) if window else 20),
         drop_threshold=float(drop_threshold) if drop_threshold else 0.2,
+        scope=_current_turn_score_scope(),
     )
 
 
@@ -497,6 +514,7 @@ def _auto_regression_check(
     drop_threshold: float = 0.2,
     min_samples: int = 5,
     dry_run: bool = False,
+    _scope: Any = None,
     **_kw: Any,
 ) -> dict[str, Any]:
     """Auto-revert SOUL if the most recent lesson caused a score drop.
@@ -527,7 +545,17 @@ def _auto_regression_check(
         panic). The 5-sample floor is what keeps this from auto-reverting
         after one bad turn.
     """
-    res = _analyze_soul_impact(window=window, drop_threshold=drop_threshold)
+    core = _agent_core_dir()
+    agent_id = core.parent.name
+    from runtime.memory.learning.turn_scoring import analyze_soul_impact
+
+    scope = _current_turn_score_scope() if _scope is None else _scope
+    res = analyze_soul_impact(
+        agent_id,
+        window=max(1, int(window) if window else 20),
+        drop_threshold=float(drop_threshold) if drop_threshold else 0.2,
+        scope=scope,
+    )
     analysis = dict(res)
     action = "no_action"
     revert_result: dict[str, Any] | None = None
@@ -588,6 +616,7 @@ def _deep_reflect(
         agent_id=agent_id,
         window=max(1, int(window) if window else 20),
         model=(model or None),
+        scope=_current_turn_score_scope(),
     )
 
 
@@ -601,10 +630,9 @@ def _deep_evolve(
 ) -> dict[str, Any]:
     """MiniMax-style autonomous self-improvement loop (B3 · expensive).
 
-    Default ``dry_run=True`` is the safety knob — the agent gets the
-    full proposed plan + reasoning WITHOUT mutation. Pass
-    ``dry_run=False`` to actually mutate SOUL.md (snapshots are
-    auto-taken so revert_soul still works).
+    Default ``dry_run=True`` returns a preview only. Pass
+    ``dry_run=False`` to register a typed evolution candidate; it still
+    requires structured shadow review and staged canary before SOUL changes.
     """
     core = _agent_core_dir()
     agent_id = core.parent.name
@@ -623,6 +651,7 @@ def _deep_evolve(
         max_rounds=max(1, min(10, int(max_rounds) if max_rounds else 1)),
         dry_run=bool(dry_run),
         model=(model or None),
+        scope=_current_turn_score_scope(),
     )
 
 

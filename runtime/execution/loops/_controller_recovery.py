@@ -4,7 +4,9 @@ from typing import Any
 
 from runtime.execution.loops._controller_helpers import (
     _ACTIVE_LOOP_STATUSES,
+    _attempt_execution_completed,
     _now_iso,
+    _runner_incomplete_after_verification_error,
     _truncate_text,
     _verifier_error_text,
     _verifier_failure_repairable,
@@ -53,6 +55,7 @@ class LoopControllerRecoveryMixin:
             else source.policy.model_copy(deep=True)
         )
         child = LoopRun(
+            tenant_id=source.tenant_id,
             owner_id=source.owner_id,
             parent_run_id=source.run_id,
             origin_run_id=source.origin_run_id or source.run_id,
@@ -121,7 +124,12 @@ class LoopControllerRecoveryMixin:
             return current
         return current.model_copy(
             update={
-                "status": LoopRunStatus.VERIFYING if recovered else LoopRunStatus.REPAIRING,
+                "status": (LoopRunStatus.VERIFYING if recovered else LoopRunStatus.INTERRUPTED),
+                "completed_at": (
+                    current.completed_at or _now_iso()
+                    if interrupted and not recovered
+                    else current.completed_at
+                ),
                 "last_error": reason if interrupted and not recovered else "",
                 "attempts": attempts,
             }
@@ -161,6 +169,25 @@ class LoopControllerRecoveryMixin:
             verifier_result = current_attempt.verifier_result
             if verifier_result.passed:
                 should_finalize = True
+                if not _attempt_execution_completed(
+                    current_attempt,
+                    allow_legacy_runner=self.react_runner is not None,
+                ):
+                    error_text = _runner_incomplete_after_verification_error()
+                    return current.model_copy(
+                        update={
+                            "status": LoopRunStatus.FAILED,
+                            "completed_at": current.completed_at or _now_iso(),
+                            "last_error": error_text,
+                            "last_verifier_result": verifier_result,
+                            "attempts": [
+                                attempt.model_copy(update={"status": "failed", "error": error_text})
+                                if attempt.attempt_index == current_attempt.attempt_index
+                                else attempt
+                                for attempt in current.attempts
+                            ],
+                        }
+                    )
                 return current.model_copy(
                     update={
                         "status": LoopRunStatus.COMPLETED,

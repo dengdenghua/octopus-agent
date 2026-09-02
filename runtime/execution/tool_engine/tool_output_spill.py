@@ -25,11 +25,12 @@ Design mirrors dsh:
 - ``read_file`` results are skipped to avoid a ``read -> spill -> read again``
   loop.
 
-Unlike the pruner (default on, dsh compaction default), the spill policy is
-opt-in in dsh (``maxInlineBytes`` omitted disables it), so the master switch
-defaults OFF: set ``OCTOPUS_TOOL_SPILL=1`` to enable. The cap defaults to the
-same budget as the pruner threshold, so when both are on the spill replacement
-(preview + notice, at or under the cap) always fits before the pruner runs.
+The spill policy defaults ON in Octopus because long-running agents must be
+able to retrieve omitted output instead of rerunning expensive tools. Operators
+can set ``OCTOPUS_TOOL_SPILL=0`` for ephemeral/stateless deployments. The cap
+defaults to the same budget as the pruner threshold, so when both are on the
+spill replacement (preview + notice, at or under the cap) always fits before
+the pruner runs.
 """
 
 from __future__ import annotations
@@ -38,6 +39,7 @@ import hashlib
 import logging
 import math
 import os
+import stat
 import tempfile
 from contextlib import suppress
 from dataclasses import dataclass
@@ -45,10 +47,10 @@ from pathlib import Path
 
 LOGGER = logging.getLogger(__name__)
 
-# Master switch for the spill policy. Off by default to mirror dsh: the
-# spill-policy plugin ships in the base composition but registers nothing until
-# ``maxInlineBytes`` is configured. Set ``OCTOPUS_TOOL_SPILL=1`` to enable.
-TOOL_RESULT_SPILL_ENABLED = os.environ.get("OCTOPUS_TOOL_SPILL", "0") != "0"
+# Master switch for the spill policy. On by default so eligible oversized
+# results retain a retrievable full-text owner. The storage root is private and
+# session-scoped; set ``OCTOPUS_TOOL_SPILL=0`` to opt out.
+TOOL_RESULT_SPILL_ENABLED = os.environ.get("OCTOPUS_TOOL_SPILL", "1") != "0"
 
 DEFAULT_SPILL_MAX_INLINE_BYTES = 8192
 _SPILL_CAP_ENV = "OCTOPUS_TOOL_SPILL_MAX_INLINE_BYTES"
@@ -125,6 +127,7 @@ def session_spill_dir(root: str | Path, session_key: str) -> Path:
 
 
 _default_root: str | None = None
+_registered_spill_roots: set[str] = set()
 
 
 def default_spill_root() -> str:
@@ -156,7 +159,7 @@ def save_text_spill(
     real storage failure (permissions, ENOSPC); the policy caller decides how
     to degrade (best-effort keeps the inline result).
     """
-    root_path = Path(root or SPILL_ROOT or default_spill_root())
+    root_path = Path(root or SPILL_ROOT or default_spill_root()).resolve(strict=False)
     directory = session_spill_dir(root_path, session_key)
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     safe_name = encode_segment(suggested_name)
@@ -171,11 +174,46 @@ def save_text_spill(
         with suppress(OSError):
             os.unlink(locator)
         raise
+    # Register only roots that actually produced a spill.  The path guard
+    # combines this process-local capability with the active session key, so a
+    # similarly named external file can never widen the project workspace.
+    _registered_spill_roots.add(str(root_path))
     return SpillRef(
         locator=str(locator),
         bytes=len(data),
         retrieval_hint=_RETRIEVAL_HINT,
     )
+
+
+def is_current_session_spill_path(path: str | Path) -> bool:
+    """Return whether ``path`` is an exact spill owned by the active session.
+
+    Spill artifacts intentionally live outside the project workspace, while
+    ordinary file tools are workspace-confined. This is a narrow capability
+    check: the target must be a direct, regular, owner-private child of a root
+    this process wrote to and of the directory derived from the current
+    session key.
+    """
+    session_key = _session_key_from_context()
+    if not session_key:
+        return False
+    try:
+        candidate = Path(path).expanduser().resolve(strict=True)
+        file_stat = candidate.stat()
+    except (OSError, RuntimeError):
+        return False
+    if not stat.S_ISREG(file_stat.st_mode):
+        return False
+    if os.name == "posix" and stat.S_IMODE(file_stat.st_mode) & 0o077:
+        return False
+    for root in tuple(_registered_spill_roots):
+        try:
+            owner_dir = session_spill_dir(root, session_key).resolve(strict=True)
+        except (OSError, RuntimeError):
+            continue
+        if candidate.parent == owner_dir:
+            return True
+    return False
 
 
 def head_tail_preview(text: str, budget_bytes: int) -> tuple[str, int]:
@@ -351,6 +389,7 @@ __all__ = [
     "default_spill_root",
     "encode_segment",
     "head_tail_preview",
+    "is_current_session_spill_path",
     "maybe_spill_text",
     "save_text_spill",
     "session_spill_dir",

@@ -16,8 +16,11 @@ from runtime.core.cerebrum.react_context import (
     _content_to_text,
     _estimate_messages_tokens,
     context_budget_tokens_for_model,
+    context_compaction_message_target_tokens,
+    context_compaction_target_tokens,
 )
 from runtime.core.cerebrum.react_loop import _estimate_context_fullness
+from runtime.core.cerebrum.react_model_stream import _is_context_limit_error
 
 
 @dataclass
@@ -41,6 +44,39 @@ def test_long_context_models_default_to_256k_profile(monkeypatch) -> None:
     assert context_budget_tokens_for_model("glm-5.2") == 230_400
     assert context_budget_tokens_for_model("deepseek-v4-flash") == 230_400
     assert context_budget_tokens_for_model("deepseek-v4-pro") == 230_400
+
+
+def test_chatgpt_subscription_uses_measured_transport_budget(monkeypatch) -> None:
+    from runtime.platform.models import custom_model_flags
+
+    monkeypatch.setattr(custom_model_flags, "model_context_window", lambda _model: None)
+    assert context_budget_tokens_for_model("chatgpt/gpt-5.6-sol") == 64_000
+    assert context_budget_tokens_for_model("gpt-5.6-sol") == 100_000
+
+
+def test_provider_usage_triggers_early_message_compaction() -> None:
+    assert (
+        context_compaction_message_target_tokens(
+            26_000,
+            provider_context_tokens=63_720,
+            capacity_tokens=64_000,
+        )
+        == 15_668
+    )
+    assert (
+        context_compaction_message_target_tokens(
+            20_000,
+            provider_context_tokens=30_000,
+            capacity_tokens=64_000,
+        )
+        == 64_000
+    )
+
+
+def test_context_limit_error_classifier_is_specific() -> None:
+    assert _is_context_limit_error(RuntimeError("context_length_exceeded"))
+    assert _is_context_limit_error(RuntimeError("请求上下文超过当前订阅模型限制"))
+    assert not _is_context_limit_error(RuntimeError("HTTP 400 malformed tool schema"))
 
 
 def test_custom_model_1m_alias_selects_extended_profile(monkeypatch) -> None:
@@ -138,6 +174,12 @@ def test_none_model_treated_as_default_budget() -> None:
     msgs = [_Msg(content="x" * 100_000)]
     ratio = _estimate_context_fullness(msgs, None)
     assert ratio == 1.0
+
+
+def test_proactive_compaction_reserves_post_tool_and_final_answer_runway() -> None:
+    assert context_compaction_target_tokens(79_999, 100_000) == 100_000
+    assert context_compaction_target_tokens(80_000, 100_000) == 60_000
+    assert context_compaction_target_tokens(95_000, 100_000) == 60_000
 
 
 def test_chinese_text_uses_token_proxy_not_raw_chars() -> None:
@@ -265,6 +307,44 @@ def test_code_mode_compression_never_uses_generative_summary() -> None:
 
     assert router.calls == 0
     assert all("hallucinated" not in str(message.content) for message in compressed)
+
+
+def test_code_mode_compaction_builds_deterministic_continuation_state() -> None:
+    messages = [
+        _Msg(role="system", content="system contract"),
+        _Msg(role="user", content="修复长任务，但不要修改无关文件"),
+        *[
+            _Msg(
+                role="user",
+                content=(
+                    f"Observation: read_file runtime/module_{i}.py\n"
+                    + ("implementation details " * 500)
+                    + ("\nexit_code=0 success" if i % 2 == 0 else "\nexit_code=1 failed")
+                ),
+            )
+            for i in range(15)
+        ],
+        _Msg(role="assistant", content="Action: run targeted tests"),
+    ]
+
+    compressed = _compress_context(
+        messages,
+        max_tokens=4_000,
+        router=None,
+        is_code_mode=True,
+        progress_summary="budget split implemented; resume remains",
+        current_phase="verify",
+        working_set={"runtime/core.py": {"path": "runtime/core.py"}},
+    )
+
+    rendered = "\n".join(str(message.content) for message in compressed)
+    assert _estimate_messages_tokens(compressed) <= 4_000
+    assert "<continuation-state>" in rendered
+    assert "修复长任务" in rendered
+    assert "runtime/core.py" in rendered
+    assert "phase: verify" in rendered
+    assert "exit_code" in rendered
+    assert "implementation details " * 100 not in rendered
 
 
 def test_compress_context_trims_oversized_chinese_tail() -> None:

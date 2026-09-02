@@ -11,10 +11,7 @@ test.describe("Chat golden path", () => {
     await page.goto("/");
     await page.waitForLoadState("domcontentloaded");
 
-    await expect(page).toHaveTitle(/(?:^|\s-\s)Octopus$/);
-    await expect(page.locator('a[aria-label="Octopus"]')).toBeVisible({
-      timeout: 10_000,
-    });
+    await expect(page).toHaveTitle(/(?:^|\s-\s)EchoAI$/);
     await expect(
       page.getByRole("button", { name: "New task", exact: true }),
     ).toBeVisible();
@@ -40,10 +37,10 @@ test.describe("Chat golden path", () => {
     await page.waitForLoadState("domcontentloaded");
 
     await expect(page).toHaveURL(/#\/workspace\/realtime\/new/);
-    await expect(page.getByText("Octopus").first()).toBeVisible({
-      timeout: 15_000,
-    });
-    await expect(page.locator("textarea").first()).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /^(新建任务|New task)$/i }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("chat-composer-input")).toBeVisible();
   });
 
   test("new chat page has a message input", async ({ authedPage: page }) => {

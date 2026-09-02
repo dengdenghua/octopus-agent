@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -91,9 +92,7 @@ def _mcp_route_count(app: FastAPI) -> int:
 
     top_level = list(app.routes)
     nested = [child for route in top_level for child in routes_of(route)]
-    return sum(
-        getattr(route, "path", None) == MCP_ENDPOINT for route in [*top_level, *nested]
-    )
+    return sum(getattr(route, "path", None) == MCP_ENDPOINT for route in [*top_level, *nested])
 
 
 def test_mcp_initialize_status_and_candidate_only_tool_allowlist(tmp_path: Path) -> None:
@@ -247,10 +246,15 @@ def test_disable_enable_removes_and_restores_single_mcp_route_and_owned_skills(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "app-data"))
+    # Narrative Studio is delivered as a remotely installable workbench, not
+    # executed from the immutable bundled source tree. Exercise the real
+    # installed-plugin lifecycle instead of bypassing that delivery boundary.
+    external_root = tmp_path / "external-plugins"
+    shutil.copytree(PLUGIN_DIR, external_root / "workbench" / "narrative_studio")
     app = FastAPI()
     registry = SkillRegistry()
     hub = PluginHub(
-        plugin_dir=tmp_path / "external-plugins",
+        plugin_dir=external_root,
         bundled_plugin_dir=PLUGIN_DIR.parent,
         skill_registry=registry,
         fastapi_app=app,
@@ -265,10 +269,13 @@ def test_disable_enable_removes_and_restores_single_mcp_route_and_owned_skills(
 
     disabled = hub.disable_plugin("narrative_studio")
     assert disabled["enabled"] is False
-    assert client.post(
-        MCP_ENDPOINT,
-        json={"jsonrpc": "2.0", "id": 11, "method": "tools/list"},
-    ).status_code == 404
+    assert (
+        client.post(
+            MCP_ENDPOINT,
+            json={"jsonrpc": "2.0", "id": 11, "method": "tools/list"},
+        ).status_code
+        == 404
+    )
     assert PACKAGED_SKILL_NAMES.isdisjoint(set(registry.all_names()))
     assert _mcp_route_count(app) == 0
 

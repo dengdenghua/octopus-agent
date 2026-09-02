@@ -65,7 +65,9 @@
     return (
       '<div class="card" data-id="' + esc(it.id) + '">' +
         '<div class="card-head">' +
-          '<div class="card-avatar avatar-missing">' + (isConnector ? "🔌" : "🧩") + "</div>" +
+          (it.icon
+            ? '<img class="card-avatar" src="data/' + esc(it.icon) + '" alt="">'
+            : '<div class="card-avatar avatar-missing">' + (isConnector ? "🔌" : "🧩") + "</div>") +
           '<div><h3 class="card-name">' + esc(it.name_zh || it.name) + "</h3>" +
           '<p class="card-prof">' + esc(it.name || "") + "</p></div>" +
         "</div>" +
@@ -131,8 +133,10 @@
 
     $("#modal-body").innerHTML =
       '<div class="modal-head">' +
-        '<div class="modal-avatar" style="display:flex;align-items:center;justify-content:center;font-size:34px">' +
-        (isConnector ? "🔌" : "🧩") + "</div>" +
+        (it.icon
+          ? '<img class="modal-avatar" src="data/' + esc(it.icon) + '" alt="">'
+          : '<div class="modal-avatar" style="display:flex;align-items:center;justify-content:center;font-size:34px">' +
+            (isConnector ? "🔌" : "🧩") + "</div>") +
         "<div><h2 class='modal-title'>" + esc(it.name_zh || it.name) + "</h2>" +
         '<p class="modal-prof">' + esc(it.name || "") + "</p>" +
         '<div class="card-badges">' +

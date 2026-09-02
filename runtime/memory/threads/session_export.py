@@ -1,6 +1,6 @@
 """Session export to Markdown.
 
-DSH P2 feature parity: export thread transcripts as markdown.
+Octopus Native Session API v2 export for thread transcripts.
 
 Export format:
 - Frontmatter with metadata (YAML)

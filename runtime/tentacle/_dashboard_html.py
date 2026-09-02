@@ -112,6 +112,10 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
 
   <!-- 右列 -->
   <div>
+    <div class="card" style="margin-bottom:20px">
+      <h2>⚙️ 确定性流程</h2>
+      <div id="procedure-list"><div class="empty">暂无流程</div></div>
+    </div>
     <div class="card">
       <h2>📋 执行日志</h2>
       <div class="log" id="log-list"><div class="empty">暂无任务</div></div>
@@ -139,13 +143,64 @@ function fmtTime(ts) {
   return new Date(ts * 1000).toLocaleTimeString('zh-CN');
 }
 
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+}
+
+function renderProcedures(procedures) {
+  const target = document.getElementById('procedure-list');
+  if (!procedures.length) {
+    target.innerHTML = '<div class="empty">暂无流程</div>';
+    return;
+  }
+  target.innerHTML = procedures.map(p => {
+    const total = p.steps?.length || 0;
+    const pct = total ? Math.round((p.current_step / total) * 100) : 0;
+    const id = escapeHtml(p.procedure_id);
+    const primaryAction = p.status === 'draft' ? 'run' : 'resume';
+    const primaryLabel = p.status === 'draft' ? '运行' : '恢复';
+    const buttons = p.status === 'running'
+      ? `<button class="btn" onclick="procedureAction('${id}','pause')">暂停</button>`
+      : p.status === 'paused' || p.status === 'draft'
+        ? `<button class="btn" onclick="procedureAction('${id}','${primaryAction}')">${primaryLabel}</button>`
+        : '';
+    const simulate = `<button class="btn" style="background:var(--purple)" onclick="dryRunProcedure('${id}')">模拟</button>`;
+    const stop = !['succeeded','cancelled','emergency_stopped'].includes(p.status)
+      ? `<button class="btn" style="background:var(--red)" onclick="procedureAction('${id}','emergency-stop')">急停</button>` : '';
+    return `<div class="device-item" style="display:block">
+      <div style="display:flex;justify-content:space-between;gap:8px">
+        <div><div class="device-id">${id}</div><div class="device-meta">${escapeHtml(p.device_id)} · ${escapeHtml(p.status)} · ${p.current_step}/${total}</div></div>
+        <div style="display:flex;gap:6px">${simulate}${buttons}${stop}</div>
+      </div>
+      <div style="height:4px;background:var(--border);margin-top:8px;border-radius:4px"><div style="height:100%;width:${pct}%;background:var(--accent);border-radius:4px"></div></div>
+      ${p.error ? `<div class="detail" style="color:var(--red)">${escapeHtml(p.error)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+async function procedureAction(id, action) {
+  try {
+    await api('/procedures/' + encodeURIComponent(id) + '/' + action, {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    await refresh();
+  } catch(e) { alert('流程操作失败：' + e.message); }
+}
+
+async function dryRunProcedure(id) {
+  try {
+    const report = await api('/procedures/' + encodeURIComponent(id) + '/dry-run', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    const failed = (report.steps || []).find(s => !s.success);
+    alert(report.success ? `模拟通过：${report.steps.length} 步，未触碰真实设备` : `模拟失败：${failed?.errors?.join('; ') || '未知错误'}`);
+  } catch(e) { alert('模拟失败：' + e.message); }
+}
+
 async function refresh() {
   try {
-    const [stats, devices] = await Promise.all([api('/stats'), api('/devices')]);
+    const [stats, devices, procedures] = await Promise.all([api('/stats'), api('/devices'), api('/procedures')]);
 
-    document.getElementById('stat-total').textContent = stats.total || 0;
-    document.getElementById('stat-online').textContent = stats.online || 0;
-    document.getElementById('stat-busy').textContent = stats.busy || 0;
+    document.getElementById('stat-total').textContent = stats.pool?.total || 0;
+    document.getElementById('stat-online').textContent = stats.pool?.online || 0;
+    document.getElementById('stat-busy').textContent = stats.pool?.busy || 0;
+    renderProcedures(procedures);
 
     const dl = document.getElementById('device-list');
     const sel = document.getElementById('device-select');
@@ -157,7 +212,7 @@ async function refresh() {
           <div class="status-dot ${d.status}"></div>
           <div class="device-info">
             <div class="device-id">${d.tentacle_id}</div>
-            <div class="device-meta">${d.platform} · ${d.total_capabilities} 技能 · ${d.meta?.brand || ''} ${d.meta?.model || ''}</div>
+            <div class="device-meta">${d.platform} · ${d.total_capabilities} 技能 · 健康 ${d.health?.score ?? 0} · ${d.meta?.brand || ''} ${d.meta?.model || ''}</div>
           </div>
         </div>
       `).join('');

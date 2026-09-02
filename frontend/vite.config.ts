@@ -58,7 +58,7 @@ function omitDuplicatePetAssetsFromWebBuild(): Plugin {
 
 const gatewayTarget =
   process.env.OCTOPUS_INTERNAL_GATEWAY_BASE_URL ||
-  `http://127.0.0.1:${process.env.GATEWAY_PORT || "8000"}`;
+  `http://127.0.0.1:${process.env.GATEWAY_PORT || "8888"}`;
 
 function packageNameFromNodeModule(id: string): string | null {
   const normalized = id.replace(/\\/g, "/");
@@ -71,15 +71,6 @@ function packageNameFromNodeModule(id: string): string | null {
     return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : null;
   }
   return parts[0] || null;
-}
-
-function safeChunkName(value: string): string {
-  return value.replace(/[^a-zA-Z0-9_-]/g, "-").replace(/-+/g, "-");
-}
-
-function chunkFileStem(id: string): string {
-  const filename = id.replace(/\\/g, "/").split("/").pop() ?? "chunk";
-  return filename.replace(/\.[cm]?js$/, "");
 }
 
 const proxyConfig = {
@@ -144,6 +135,16 @@ const proxyConfig = {
     target: gatewayTarget,
     changeOrigin: true,
     ws: true,
+  },
+  // Keep aligned with electron/desktop-protocol.cjs BACKEND_ROUTE_PREFIXES;
+  // the bootstrap overlay polls /readyz same-origin relative in dev too.
+  "/readyz": {
+    target: gatewayTarget,
+    changeOrigin: true,
+  },
+  "/livez": {
+    target: gatewayTarget,
+    changeOrigin: true,
   },
   "/media": {
     target: gatewayTarget,
@@ -244,12 +245,12 @@ export default defineConfig({
     // PORT is honoured so a supervisor that assigns a free port (the IDE
     // preview pane) can run alongside a dev server already holding 3000.
     // FRONTEND_PORT stays the explicit override and wins.
-    port: parseInt(process.env.FRONTEND_PORT || process.env.PORT || "3000"),
+    port: parseInt(process.env.FRONTEND_PORT || process.env.PORT || "3888"),
     host: "0.0.0.0",
     proxy: proxyConfig,
   },
   preview: {
-    port: parseInt(process.env.FRONTEND_PORT || process.env.PORT || "3000"),
+    port: parseInt(process.env.FRONTEND_PORT || process.env.PORT || "3888"),
     host: "0.0.0.0",
     proxy: proxyConfig,
   },
@@ -264,7 +265,20 @@ export default defineConfig({
     chunkSizeWarningLimit: 1400,
     rollupOptions: {
       output: {
+        // Rollup otherwise emits hundreds of sub-kilobyte shared chunks for
+        // icons and small helpers. Merge safe automatic fragments while the
+        // explicit heavy-engine boundaries below remain intact.
+        experimentalMinChunkSize: 4_000,
         manualChunks(id) {
+          // Vite's preload helper is imported by the entry and every dynamic
+          // boundary. Without a stable home Rollup can attach it to a large
+          // lazy feature chunk, which then makes that feature an accidental
+          // entry preload (Markdown, CodeMirror and Mermaid have all been
+          // observed here). Keep the tiny runtime independent.
+          if (id === "\0vite/preload-helper.js") {
+            return "vite-runtime";
+          }
+
           const pkg = packageNameFromNodeModule(id);
 
           if (
@@ -277,68 +291,25 @@ export default defineConfig({
           if (id.includes("node_modules/@radix-ui/")) {
             return "ui-radix";
           }
+          // These tiny, shell-wide UI dependencies otherwise become dozens
+          // of shared icon/helper chunks across lazy routes. Keeping them in
+          // one modest foundation chunk also prevents a dynamic renderer's
+          // manual chunk from claiming shared class-name helpers and turning
+          // itself into an entry dependency.
+          if (
+            pkg === "lucide-react" ||
+            pkg === "class-variance-authority" ||
+            pkg === "clsx" ||
+            pkg === "tailwind-merge"
+          ) {
+            return "ui-foundation";
+          }
 
-          if (pkg === "@uiw/react-codemirror") {
-            return "codemirror-react";
-          }
-          if (pkg?.startsWith("@uiw/codemirror-theme-")) {
-            return "codemirror-themes";
-          }
-          if (pkg?.startsWith("@codemirror/lang-")) {
-            return safeChunkName(pkg.replace("@", ""));
-          }
-          if (pkg === "@codemirror/language-data") {
-            return "codemirror-language-data";
-          }
-          if (pkg === "@codemirror/merge") {
-            return "codemirror-merge";
-          }
-          if (pkg?.startsWith("@codemirror/")) {
-            return "codemirror-core";
-          }
-          if (pkg === "codemirror") {
-            return "codemirror-core";
-          }
-          if (pkg?.startsWith("@lezer/")) {
-            return safeChunkName(pkg.replace("@", ""));
-          }
           if (id.includes("node_modules/@tanstack/")) {
             return "query-virtual";
           }
           if (pkg === "lodash-es") {
             return "lodash-es";
-          }
-          if (pkg === "streamdown") {
-            return "markdown-streamdown";
-          }
-          if (
-            pkg?.startsWith("rehype-") ||
-            pkg?.startsWith("remark-") ||
-            pkg === "unified" ||
-            pkg === "hast" ||
-            pkg === "unist-util-visit"
-          ) {
-            return "markdown-plugins";
-          }
-          if (pkg?.startsWith("d3")) {
-            return "mermaid-d3";
-          }
-          if (
-            pkg === "cytoscape" ||
-            pkg === "dagre-d3-es" ||
-            pkg === "elkjs" ||
-            pkg === "khroma"
-          ) {
-            return "mermaid-layout";
-          }
-          if (id.includes("/node_modules/mermaid/dist/chunks/")) {
-            return `mermaid-${safeChunkName(chunkFileStem(id))}`;
-          }
-          if (pkg === "mermaid") {
-            return "mermaid";
-          }
-          if (id.includes("node_modules/katex/")) {
-            return "katex";
           }
         },
       },
@@ -348,7 +319,14 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
-    exclude: ["node_modules/**", "dist/**", "e2e/**"],
+    include: ["src/**/*.{test,spec}.{ts,tsx}", "vite.config.test.ts"],
+    exclude: [
+      "node_modules/**",
+      "dist/**",
+      "release/**",
+      "e2e/**",
+      "src/**/_tmp_*.test.{ts,tsx}",
+    ],
     coverage: {
       provider: "v8",
       // Ratchet thresholds — set slightly below current levels to prevent

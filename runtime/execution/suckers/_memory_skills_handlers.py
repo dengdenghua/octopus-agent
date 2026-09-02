@@ -368,7 +368,7 @@ def register_memory_skills(registry: SkillRegistry) -> int:
                 "change is hurting your scores (after_n ≥ 5 samples · "
                 "delta < -threshold), automatically roll back via "
                 "`revert_soul`. This is the safety counterpart to "
-                "`deep_evolve(dry_run=False)`: apply adds a lesson, "
+                "`deep_evolve(dry_run=False)`: register a governed candidate, "
                 "this path verifies it actually helped. Zero LLM cost "
                 "· defaults dry_run=False so it really reverts when "
                 "triggered. Returns {action: reverted/would_revert/"

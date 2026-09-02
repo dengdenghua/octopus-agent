@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import json
+import sqlite3
+import time
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi import FastAPI, Request
@@ -9,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from runtime.cloud_edge.app import create_cloud_edge_app
 from runtime.cloud_edge.router import create_cloud_edge_router
+from runtime.cloud_edge.shares import normalise_public_snapshot
 from runtime.platform.plugins.bundled.mx2025_viewer.cloud_sync import MXCloudSyncConnector
 from runtime.safety.auth.identity import Identity, IdentityStore
 
@@ -19,7 +25,7 @@ def _b64(value: bytes) -> str:
     return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
 
 
-def _app(tmp_path: Path, *, enabled: bool = True) -> TestClient:
+def _app(tmp_path: Path, *, enabled: bool = True, **router_options: Any) -> TestClient:
     identities = IdentityStore()
     identities.add(
         Identity("alice", roles=("operator",), metadata={"tenant_id": "tenant-a"}),
@@ -36,6 +42,7 @@ def _app(tmp_path: Path, *, enabled: bool = True) -> TestClient:
             token_secret=SECRET if enabled else None,
             identity_store=identities,
             require_auth=True,
+            **router_options,
         )
     )
     return TestClient(app)
@@ -443,3 +450,284 @@ def test_standalone_accounts_points_and_account_scoped_pairing(tmp_path: Path) -
         ).status_code
         == 401
     )
+
+
+def _public_snapshot(content: str = "Public answer") -> dict[str, Any]:
+    return {
+        "title": "Launch review /Users/alice/private/plan.md",
+        "messages": [
+            {"role": "user", "content": "Review api_key=super-private-value"},
+            {"role": "assistant", "content": content},
+        ],
+        "artifacts": [r"C:\Users\Alice\private\release-notes.md"],
+    }
+
+
+def test_cloud_public_share_device_flow_hashes_token_and_revokes(tmp_path: Path) -> None:
+    client = _app(tmp_path, public_share_base_url="https://share.example")
+    _device_id, access_token = _enroll_and_token(client)
+    headers = {"Authorization": f"Bearer {access_token}"}
+    body = {"source_thread_id": "thread-launch", "snapshot": _public_snapshot()}
+
+    assert client.post("/edge/v1/thread-shares", json=body).status_code == 401
+    created = client.post("/edge/v1/thread-shares", headers=headers, json=body)
+    assert created.status_code == 201, created.json()
+    payload = created.json()
+    token = payload["token"]
+    share_id = payload["share_id"]
+    assert payload["share_path"] == f"#/share/{token}"
+    assert payload["share_url"] == f"https://share.example/#/share/{token}"
+
+    with sqlite3.connect(tmp_path / "edge.sqlite3") as conn:
+        row = conn.execute(
+            "SELECT token_hash, snapshot_json FROM public_thread_shares WHERE share_id=?",
+            (share_id,),
+        ).fetchone()
+        columns = {
+            item[1] for item in conn.execute("PRAGMA table_info(public_thread_shares)").fetchall()
+        }
+    assert row is not None
+    assert row[0] == hashlib.sha256(token.encode()).hexdigest()
+    assert token not in row[1]
+    assert "token" not in columns
+    assert all(token.encode() not in path.read_bytes() for path in tmp_path.glob("edge.sqlite3*"))
+    restarted = _app(tmp_path, public_share_base_url="https://share.example")
+    assert (
+        restarted.post("/api/public/thread-shares/resolve", json={"token": token}).status_code
+        == 200
+    )
+
+    listed = client.get("/edge/v1/thread-shares?source_thread_id=thread-launch", headers=headers)
+    assert listed.status_code == 200
+    assert listed.json()["shares"] == [
+        {
+            "share_id": share_id,
+            "source_thread_id": "thread-launch",
+            "created_at": payload["created_at"],
+            "expires_at": payload["expires_at"],
+            "title": "Launch review [local path redacted]",
+            "stats": {"turns": 1, "messages": 2, "artifacts": 1},
+        }
+    ]
+    assert token not in listed.text
+
+    public = client.post("/api/public/thread-shares/resolve", json={"token": token})
+    assert public.status_code == 200
+    assert public.headers["cache-control"] == "no-store"
+    assert public.headers["pragma"] == "no-cache"
+    public_payload = public.json()
+    assert public_payload["artifacts"] == ["release-notes.md"]
+    serialized = json.dumps(public_payload, ensure_ascii=False)
+    assert "super-private-value" not in serialized
+    assert "/Users/alice/private" not in serialized
+    for private_key in (
+        "token",
+        "token_hash",
+        "share_id",
+        "source_thread_id",
+        "tenant_id",
+        "owner_id",
+        "creator_id",
+        "creator_type",
+    ):
+        assert private_key not in public_payload
+    assert (
+        client.post("/api/v1/public/thread-shares/resolve", json={"token": token}).json()
+        == public_payload
+    )
+    legacy = client.get(f"/api/v1/public/thread-shares/{token}")
+    assert legacy.json() == public_payload
+    assert legacy.headers["deprecation"] == "true"
+
+    assert client.delete(f"/edge/v1/thread-shares/{share_id}").status_code == 401
+    assert client.delete(f"/edge/v1/thread-shares/{share_id}", headers=headers).status_code == 204
+    missing = client.post("/api/public/thread-shares/resolve", json={"token": token})
+    assert missing.status_code == 404
+    assert missing.headers["cache-control"] == "no-store"
+
+
+def test_cloud_public_share_account_auth_is_owner_scoped_and_filterable(
+    tmp_path: Path,
+) -> None:
+    client = _app(tmp_path)
+    alice = {"Authorization": "Bearer alice-key"}
+    bob = {"Authorization": "Bearer bob-key"}
+    body = {"source_thread_id": "thread-account", "snapshot": _public_snapshot()}
+
+    created = client.post("/api/cloud-edge/thread-shares", headers=alice, json=body)
+    assert created.status_code == 201, created.json()
+    share_id = created.json()["share_id"]
+    assert client.get("/api/cloud-edge/thread-shares", headers=bob).json() == {"shares": []}
+    assert (
+        client.delete(f"/api/cloud-edge/thread-shares/{share_id}", headers=bob).status_code == 404
+    )
+    listed = client.get(
+        "/api/cloud-edge/thread-shares?source_thread_id=thread-account", headers=alice
+    ).json()["shares"]
+    assert [item["share_id"] for item in listed] == [share_id]
+    assert client.get(
+        "/api/cloud-edge/thread-shares?source_thread_id=another-thread", headers=alice
+    ).json() == {"shares": []}
+    assert (
+        client.delete(f"/api/cloud-edge/thread-shares/{share_id}", headers=alice).status_code == 204
+    )
+
+
+def test_standalone_cloud_share_accepts_account_api_key(tmp_path: Path) -> None:
+    admin_key = "standalone-admin-key-that-is-longer-than-thirty-two-bytes"
+    relay_key = "standalone-share-relay-key-that-is-longer-than-thirty-two-bytes"
+    client = TestClient(
+        create_cloud_edge_app(
+            data_dir=tmp_path,
+            token_secret=SECRET,
+            admin_key=admin_key,
+            registration_code="registration-code-for-tests",
+            share_relay_key=relay_key,
+        )
+    )
+    headers = {
+        "X-API-Key": relay_key,
+        "X-Octopus-Share-Owner-Scope": f"relay_{'a' * 64}",
+    }
+    other_owner_headers = {
+        "X-API-Key": relay_key,
+        "X-Octopus-Share-Owner-Scope": f"relay_{'b' * 64}",
+    }
+    assert (
+        client.post(
+            "/api/cloud-edge/pairing-codes",
+            headers=headers,
+            json={"device_name": "must-not-work"},
+        ).status_code
+        == 401
+    )
+    created = client.post(
+        "/api/cloud-edge/thread-shares",
+        headers=headers,
+        json={"snapshot": _public_snapshot()},
+    )
+    assert created.status_code == 201
+    share_id = created.json()["share_id"]
+    assert client.get("/api/cloud-edge/thread-shares", headers=other_owner_headers).json() == {
+        "shares": []
+    }
+    assert (
+        client.delete(
+            f"/api/cloud-edge/thread-shares/{share_id}", headers=other_owner_headers
+        ).status_code
+        == 404
+    )
+    assert [
+        item["share_id"]
+        for item in client.get("/api/cloud-edge/thread-shares", headers=headers).json()["shares"]
+    ] == [share_id]
+    assert (
+        client.delete(f"/api/cloud-edge/thread-shares/{share_id}", headers=headers).status_code
+        == 204
+    )
+
+    registered = client.post(
+        "/v1/accounts/register",
+        json={
+            "username": "share-user",
+            "password": "correct-horse-battery",
+            "registration_code": "registration-code-for-tests",
+        },
+    )
+    account_headers = {"Authorization": f"Bearer {registered.json()['access_token']}"}
+    account_created = client.post(
+        "/api/cloud-edge/thread-shares",
+        headers=account_headers,
+        json={"source_thread_id": "account-thread", "snapshot": _public_snapshot()},
+    )
+    assert account_created.status_code == 201
+    assert [
+        item["share_id"]
+        for item in client.get(
+            "/api/cloud-edge/thread-shares?source_thread_id=account-thread",
+            headers=account_headers,
+        ).json()["shares"]
+    ] == [account_created.json()["share_id"]]
+
+
+def test_cloud_public_share_enforces_owner_quota_ttl_and_gc(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _app(tmp_path, share_max_per_owner=1, share_ttl_seconds=1)
+    _device_id, access_token = _enroll_and_token(client)
+    headers = {"Authorization": f"Bearer {access_token}"}
+    body = {"snapshot": _public_snapshot()}
+    created = client.post("/edge/v1/thread-shares", headers=headers, json=body)
+    assert created.status_code == 201
+    assert client.post("/edge/v1/thread-shares", headers=headers, json=body).status_code == 409
+
+    token = created.json()["token"]
+    future = int(time.time()) + 2
+    with monkeypatch.context() as patch:
+        patch.setattr("runtime.cloud_edge.store.time.time", lambda: future)
+        expired = client.post("/api/public/thread-shares/resolve", json={"token": token})
+    assert expired.status_code == 404
+    assert expired.headers["cache-control"] == "no-store"
+    with sqlite3.connect(tmp_path / "edge.sqlite3") as conn:
+        assert conn.execute("SELECT COUNT(*) FROM public_thread_shares").fetchone()[0] == 0
+
+
+def test_cloud_public_share_enforces_snapshot_and_global_size_limits(tmp_path: Path) -> None:
+    snapshot = _public_snapshot("bounded content")
+    normalised = normalise_public_snapshot(snapshot)
+    snapshot_bytes = len(
+        json.dumps(
+            normalised,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    )
+
+    too_small = _app(
+        tmp_path / "item-limit",
+        share_max_snapshot_bytes=snapshot_bytes - 1,
+    )
+    _device_id, token = _enroll_and_token(too_small)
+    headers = {"Authorization": f"Bearer {token}"}
+    assert (
+        too_small.post(
+            "/edge/v1/thread-shares", headers=headers, json={"snapshot": snapshot}
+        ).status_code
+        == 413
+    )
+
+    capacity = _app(
+        tmp_path / "total-limit",
+        share_max_snapshot_bytes=snapshot_bytes,
+        share_max_total_bytes=snapshot_bytes * 2 - 1,
+        share_max_per_owner=10,
+    )
+    _device_id, token = _enroll_and_token(capacity)
+    headers = {"Authorization": f"Bearer {token}"}
+    assert (
+        capacity.post(
+            "/edge/v1/thread-shares", headers=headers, json={"snapshot": snapshot}
+        ).status_code
+        == 201
+    )
+    assert (
+        capacity.post(
+            "/edge/v1/thread-shares", headers=headers, json={"snapshot": snapshot}
+        ).status_code
+        == 507
+    )
+
+
+def test_cloud_public_share_base_url_requires_https_off_loopback(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="HTTPS"):
+        _app(tmp_path, public_share_base_url="http://share.example")
+    client = _app(tmp_path / "loopback", public_share_base_url="http://127.0.0.1:3000")
+    _device_id, access_token = _enroll_and_token(client)
+    created = client.post(
+        "/edge/v1/thread-shares",
+        headers={"Authorization": f"Bearer {access_token}"},
+        json={"snapshot": _public_snapshot()},
+    )
+    assert created.json()["share_url"].startswith("http://127.0.0.1:3000/#/share/")

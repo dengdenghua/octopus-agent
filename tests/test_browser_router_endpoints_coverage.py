@@ -169,6 +169,20 @@ def test_session_reset(client) -> None:
     assert c.post("/api/browser/session/reset", json={"session_id": ""}).status_code == 200
 
 
+def test_clear_browser_data_closes_managed_sessions(client, monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    c = _c(client)
+    _ensure(client, "clear-one")
+    _ensure(client, "clear-two")
+
+    response = c.post("/api/browser/data/clear")
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert response.json()["closed_sessions"] == 2
+    assert c.get("/api/browser/sessions").json()["count"] == 0
+
+
 def test_navigate_validation(client) -> None:
     c = _c(client)
     assert c.post("/api/browser/navigate", json={"url": "https://example.com"}).status_code == 400

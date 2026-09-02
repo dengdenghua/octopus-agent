@@ -881,7 +881,7 @@ def _record_react_trace_event(runtime: CerebrumRuntime, turn: Turn, evt: dict[st
                     title=_preview_text(goal, limit=80),
                     goal=goal,
                     mode=_turn_mode(params) or "react",
-                    workspace_path=getattr(params, "cwd", None),
+                    workspace_path=(turn.execution_workspace_path or getattr(params, "cwd", None)),
                     origin_task_id=turn.id,
                     metadata={
                         "objective_id": supervisor_task_id,

@@ -557,6 +557,17 @@ def resolve_execution_scope(session: Session | None) -> ExecutionScope:
             if root == write_scope.primary or not _path_is_same_or_under(root, workspace_path)
         )
 
+    # “完全访问” means exactly what the settings UI promises: local file
+    # operations are not confined to the selected workspace. Keep the normal
+    # task/workspace roots first so relative paths still land in the expected
+    # place, and append the filesystem root for explicitly absolute paths.
+    if permission_mode == "bypassPermissions" and execution_environment == "local":
+        filesystem_root = Path(Path.cwd().anchor or "/").resolve(strict=False)
+        if filesystem_root not in readable_roots:
+            readable_roots = (*readable_roots, filesystem_root)
+        if filesystem_root not in writable_roots:
+            writable_roots = (*writable_roots, filesystem_root)
+
     if permission_mode == "bypassPermissions" or execution_environment == "local":
         shell_policy = "allow"
         network_policy = "allow"

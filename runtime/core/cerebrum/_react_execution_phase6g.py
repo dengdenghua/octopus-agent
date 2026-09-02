@@ -25,8 +25,10 @@ from runtime.core.cerebrum._react_execution_progress import (
 )
 from runtime.core.cerebrum.react_context import (
     _compress_context,
+    _estimate_messages_tokens,
     _serialize_messages_for_checkpoint,
     context_budget_tokens_for_model,
+    context_compaction_message_target_tokens,
 )
 from runtime.core.cerebrum.react_convergence import (
     constrain_explicit_read_scope,
@@ -477,13 +479,52 @@ def _phase_6g_housekeeping(state: _LoopState, *, i: int, max_iterations: int) ->
                 messages.append(Message(role="user", content=_guard_notice))
             _guard_notices.clear()
 
+        _context_capacity = context_budget_tokens_for_model(effective_model)
+        _context_before = _estimate_messages_tokens(messages)
+        # The provider's preceding input usage is the only measurement that
+        # includes native tool schemas.  A long tool turn can therefore be at
+        # 99% upstream pressure while message-only estimation still says 40%.
+        _provider_context_tokens = 0
+        if react_task_id is not None:
+            with contextlib.suppress(Exception):
+                _provider_context_tokens = next(
+                    (
+                        int(task.current_context_tokens or 0)
+                        for task in _pause.list_active()
+                        if task.task_id == str(react_task_id)
+                    ),
+                    0,
+                )
+        # Compact before the request is actually at the provider cliff. At
+        # 80% pressure, target a 60% working set and preserve the remaining
+        # runway for tool schemas, the next observation and final synthesis.
+        _context_target = context_compaction_message_target_tokens(
+            _context_before,
+            provider_context_tokens=_provider_context_tokens,
+            capacity_tokens=_context_capacity,
+        )
         messages = _compress_context(
             messages,
-            max_tokens=context_budget_tokens_for_model(effective_model),
+            max_tokens=_context_target,
             router=router,
             model=effective_model,
             is_code_mode=_is_code_mode,
+            progress_summary=_progress_summary,
+            current_phase=_current_phase,
+            working_set=_working_set,
         )
+        _context_after = _estimate_messages_tokens(messages)
+        if _context_after < _context_before:
+            _logger.info(
+                "react context compacted · iter %d · %d -> %d tokens · "
+                "capacity=%d target=%d strategy=%s",
+                i + 1,
+                _context_before,
+                _context_after,
+                _context_capacity,
+                _context_target,
+                "deterministic_code_state" if _is_code_mode else "summary_or_trim",
+            )
 
         with contextlib.suppress(Exception):
             _pause.update_active_iteration(str(react_task_id), i + 1)

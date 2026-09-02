@@ -420,10 +420,7 @@ def _note_guard_impasse(
         state["global_count"] = state.get("global_count", 0) + 1
     else:
         state.update(global_progress=progress, global_count=1)
-    return (
-        state["count"] >= rejection_limit
-        or state["global_count"] >= global_rejection_limit
-    )
+    return state["count"] >= rejection_limit or state["global_count"] >= global_rejection_limit
 
 
 def guard_stall_kind(steps: list[ReActStep]) -> str:

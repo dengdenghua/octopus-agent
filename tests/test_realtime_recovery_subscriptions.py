@@ -38,6 +38,7 @@ class _RecordingConnection:
         self._gateway = gateway
         self._on_watch = on_watch
         self.notifications: list[tuple[str, dict[str, Any]]] = []
+        self.approval_requests: list[tuple[str, dict[str, Any]]] = []
 
     def watch_thread(self, thread_id: str) -> None:
         self._gateway._watch_thread(thread_id, self)  # type: ignore[arg-type]  # noqa: SLF001
@@ -47,6 +48,18 @@ class _RecordingConnection:
     async def notify(self, method: ServerMethod | str, params: dict[str, Any]) -> None:
         value = method.value if isinstance(method, ServerMethod) else method
         self.notifications.append((value, params))
+
+    async def request_approval(
+        self,
+        method: ServerMethod | str,
+        params: dict[str, Any],
+        *,
+        timeout: float | None = None,
+    ) -> dict[str, str]:
+        del timeout
+        value = method.value if isinstance(method, ServerMethod) else method
+        self.approval_requests.append((value, params))
+        return {"action": "accept"}
 
 
 @pytest.fixture()
@@ -204,6 +217,13 @@ def test_event_resume_watch_is_idempotent_and_receives_live_and_terminal_fanout(
             {"threadId": "thread-a", "turnId": "turn-a", "delta": "live"},
         )
     )
+    approval = asyncio.run(
+        emitter_a.request_approval(
+            "item/commandExecution/requestApproval",
+            {"threadId": "thread-a", "turnId": "turn-a"},
+            timeout=0.1,
+        )
+    )
     asyncio.run(
         gateway._emit_turn_completed(  # noqa: SLF001
             origin,
@@ -215,6 +235,13 @@ def test_event_resume_watch_is_idempotent_and_receives_live_and_terminal_fanout(
     watcher_methods = [method for method, _params in watcher.notifications]
     assert ServerMethod.ITEM_AGENT_MESSAGE_DELTA.value in watcher_methods
     assert ServerMethod.TURN_COMPLETED.value in watcher_methods
+    assert approval == {"action": "accept"}
+    assert watcher.approval_requests == [
+        (
+            "item/commandExecution/requestApproval",
+            {"threadId": "thread-a", "turnId": "turn-a"},
+        )
+    ]
     assert stale_legacy_only.notifications == []
 
     # Disconnect cleanup decrements each unique thread exactly once after any

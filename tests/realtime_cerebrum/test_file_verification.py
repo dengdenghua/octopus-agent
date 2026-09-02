@@ -154,10 +154,12 @@ def test_code_file_change_without_verification_fails_turn(gateway: Any) -> None:
     )
 
 
+@pytest.mark.parametrize("sandbox_type", ["workspaceWrite", "dangerFullAccess"])
 def test_code_file_change_auto_runs_safe_verification(
     gateway: Any,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    sandbox_type: str,
 ) -> None:
     data_dir = tmp_path / "data"
     data_dir.mkdir()
@@ -197,11 +199,11 @@ def test_code_file_change_auto_runs_safe_verification(
         out = _drive(
             ws,
             {
-                "threadId": "th_auto_verified_code_change",
+                "threadId": f"th_auto_verified_code_change_{sandbox_type}",
                 "cwd": str(tmp_path),
                 "input": [{"type": "text", "text": "edit"}],
                 "approvalPolicy": "never",
-                "sandboxPolicy": {"type": "workspaceWrite", "networkAccess": False},
+                "sandboxPolicy": {"type": sandbox_type, "networkAccess": False},
             },
         )
 
@@ -227,10 +229,12 @@ def test_code_file_change_auto_runs_safe_verification(
     assert "no history for ruff" in decisions
 
 
+@pytest.mark.parametrize("sandbox_type", ["workspaceWrite", "dangerFullAccess"])
 def test_failed_auto_verifier_gets_bounded_model_repair_and_fresh_evidence(
     gateway: Any,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    sandbox_type: str,
 ) -> None:
     from runtime.safety.evolution import auto_verifier
     from tests.realtime_cerebrum import _helpers
@@ -284,11 +288,11 @@ def test_failed_auto_verifier_gets_bounded_model_repair_and_fresh_evidence(
         out = _drive(
             ws,
             {
-                "threadId": "th_bounded_verification_repair",
+                "threadId": f"th_bounded_verification_repair_{sandbox_type}",
                 "cwd": str(tmp_path),
                 "input": [{"type": "text", "text": "edit and verify"}],
                 "approvalPolicy": "never",
-                "sandboxPolicy": {"type": "workspaceWrite", "networkAccess": False},
+                "sandboxPolicy": {"type": sandbox_type, "networkAccess": False},
             },
         )
 

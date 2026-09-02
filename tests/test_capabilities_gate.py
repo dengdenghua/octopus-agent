@@ -11,9 +11,15 @@ fails loudly here rather than silently in production.
 from __future__ import annotations
 
 import json
+from uuid import uuid4
 
+from runtime.execution.suckers import Skill, SkillRegistry
+from runtime.execution.tool_engine import ToolExecutor
+from runtime.memory.journal import InMemoryJournal
 from runtime.platform import capabilities as caps_mod
+from runtime.platform.models import ArmId, Budget, BudgetLimits, SkillId, TaskId
 from runtime.platform.runtime_policy.capabilities import Capabilities
+from runtime.safety.auth import TrustEngine
 
 
 def test_defaults_enable_both():
@@ -120,3 +126,66 @@ def test_disabled_groups_match_actual_registrar_keys():
         f"capabilities gate references unknown skill groups: {sorted(unknown)}; "
         f"_GROUP_REGISTRARS keys: {sorted(_GROUP_REGISTRARS)}"
     )
+
+
+def test_executor_gate_applies_browser_opt_out_without_registry_restart(monkeypatch):
+    from runtime.execution.tool_engine.executor import _runtime_automation_gate
+
+    monkeypatch.setattr(
+        "runtime.platform.runtime_policy.capabilities.load",
+        lambda: Capabilities(browser_automation=False, desktop_automation=True),
+    )
+
+    assert _runtime_automation_gate("live_browser_click") == (True, "browser_act")
+    assert _runtime_automation_gate("browser_navigate") == (True, "browser")
+    assert _runtime_automation_gate("mouse_click") == (False, "computer")
+    assert _runtime_automation_gate("read_file") == (False, "builtin")
+
+
+def test_executor_gate_applies_desktop_opt_out_without_registry_restart(monkeypatch):
+    from runtime.execution.tool_engine.executor import _runtime_automation_gate
+
+    monkeypatch.setattr(
+        "runtime.platform.runtime_policy.capabilities.load",
+        lambda: Capabilities(browser_automation=True, desktop_automation=False),
+    )
+
+    assert _runtime_automation_gate("mouse_click") == (True, "computer")
+    assert _runtime_automation_gate("live_browser_click") == (False, "browser_act")
+
+
+def test_executor_rejects_a_registered_automation_handler_after_live_opt_out(monkeypatch):
+    calls: list[dict[str, object]] = []
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="mouse_click",
+            description="test native click",
+            affinity=["computer"],
+            trusted_source="builtin://computer",
+            handler=lambda **kwargs: calls.append(kwargs) or {"ok": True},
+        )
+    )
+    monkeypatch.setattr(
+        "runtime.platform.runtime_policy.capabilities.load",
+        lambda: Capabilities(browser_automation=True, desktop_automation=False),
+    )
+    task_id = TaskId(uuid4())
+    step = ToolExecutor(
+        registry,
+        TrustEngine(trusted_sources=["builtin://*"]),
+        InMemoryJournal(),
+    ).execute_step(
+        step_id=1,
+        node_id="desktop_1",
+        sucker_id=SkillId("mouse_click"),
+        args={"x": 10, "y": 20},
+        caller="test",
+        task_id=task_id,
+        arm_id=ArmId("arm_1"),
+        budget=Budget(task_id=task_id, limits=BudgetLimits(tokens=1000, usd=1)),
+    )
+
+    assert step.result.status == "failed"
+    assert "automation capability disabled: computer" in step.result.stderr_tags
+    assert calls == []

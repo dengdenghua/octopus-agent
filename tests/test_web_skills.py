@@ -14,7 +14,9 @@ from runtime.execution.suckers.web_skills import (
     _ddg_search,
     _doubao_search,
     _fetch_url,
+    _rank_search_results,
     _resolve_backend,
+    _results_look_irrelevant,
     _searxng_search,
     _serper_search,
     _tavily_search,
@@ -73,6 +75,17 @@ class _MockClient:
         return self._post or _MockResponse(text="")
 
 
+class _FlakyTlsClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def get(self, _url: str, **_kw):
+        self.calls += 1
+        if self.calls < 3:
+            raise RuntimeError("SSL: UNEXPECTED_EOF_WHILE_READING")
+        return _MockResponse(status_code=200, text="recovered")
+
+
 @pytest.fixture(autouse=True)
 def _resolve_to_public_ip(monkeypatch):
     """Pin DNS resolution to a public IP for these fetch-logic tests.
@@ -85,7 +98,10 @@ def _resolve_to_public_ip(monkeypatch):
     """
     import socket
 
+    import runtime.execution.suckers.web_skills as _web_skills
     import runtime.safety.auth.url_guard as _guard
+
+    monkeypatch.setattr(_web_skills, "_SEARXNG_UNHEALTHY_UNTIL", 0.0)
 
     def _fake_getaddrinfo(host, *a, **kw):
         return [
@@ -138,6 +154,16 @@ class TestFetchUrl:
         result = _fetch_url(url="https://x.com/", client=client)
         assert "error" in result
         assert "network down" in result["error"]
+
+    def test_retries_transient_tls_eof_before_succeeding(self, monkeypatch):
+        monkeypatch.setattr("runtime.execution.suckers.web_skills.time.sleep", lambda _s: None)
+        client = _FlakyTlsClient()
+
+        result = _fetch_url(url="https://example.com/", client=client)
+
+        assert result["status_code"] == 200
+        assert result["content"] == "recovered"
+        assert client.calls == 3
 
     def test_default_no_extract(self):
         client = _MockClient(
@@ -242,10 +268,61 @@ _DDG_SAMPLE_HTML = """
 
 
 class TestDDGSearch:
+    @pytest.fixture(autouse=True)
+    def _disable_optional_ddgs(self, monkeypatch):
+        import runtime.execution.suckers.web_skills as web_skills
+
+        monkeypatch.setattr(web_skills, "_ddgs_text_search", lambda *_args: None)
+
+    def test_prefers_ddgs_adapter(self, monkeypatch):
+        import runtime.execution.suckers.web_skills as web_skills
+
+        monkeypatch.setattr(
+            web_skills,
+            "_ddgs_text_search",
+            lambda *_args: [
+                {
+                    "title": "DDGS result",
+                    "url": "https://example.com/ddgs",
+                    "snippet": "multi-source",
+                }
+            ],
+        )
+        # The maintained DDGS adapter is enabled for Octopus's ordinary
+        # standard transport.
+        import httpx
+
+        with httpx.Client() as client:
+            result = _ddg_search(client, "test query", max_results=5)
+        assert result["adapter"] == "ddgs"
+        assert result["results"][0]["title"] == "DDGS result"
+
+    def test_injected_client_does_not_bypass_its_transport(self, monkeypatch):
+        import runtime.execution.suckers.web_skills as web_skills
+
+        monkeypatch.setattr(
+            web_skills,
+            "_ddgs_text_search",
+            lambda *_args: [
+                {
+                    "title": "Should not escape through DDGS",
+                    "url": "https://example.com/bypass",
+                    "snippet": "bypass",
+                }
+            ],
+        )
+        client = _MockClient(post_response=_MockResponse(status_code=200, text=_DDG_SAMPLE_HTML))
+
+        result = _ddg_search(client, "test query", max_results=5)
+
+        assert result["adapter"] == "html-fallback"
+        assert result["results"][0]["title"] == "First Result"
+
     def test_parses_results(self):
         client = _MockClient(post_response=_MockResponse(status_code=200, text=_DDG_SAMPLE_HTML))
         result = _ddg_search(client, "test query", max_results=5)
         assert result["backend"] == "ddg"
+        assert result["adapter"] == "html-fallback"
         assert result["query"] == "test query"
         assert len(result["results"]) == 2
         assert result["results"][0]["title"] == "First Result"
@@ -315,6 +392,163 @@ class TestWebSearchRouting:
     def test_empty_query_returns_error(self):
         result = _web_search(query="")
         assert "error" in result
+
+    def test_detects_catastrophically_irrelevant_results(self):
+        results = [
+            {
+                "title": "8 - Wikipedia",
+                "url": "https://en.wikipedia.org/wiki/8",
+                "snippet": "8 is a composite number.",
+            }
+        ]
+        assert _results_look_irrelevant("Eight Sleep Orion Longevity patent complaint", results)
+        assert not _results_look_irrelevant("Wikipedia composite number", results)
+
+    def test_one_valid_hit_buried_in_noise_still_triggers_fallback(self):
+        results = [
+            {
+                "title": "8 - Wikipedia",
+                "url": f"https://noise.example/{index}",
+                "snippet": "Eight is a number.",
+            }
+            for index in range(9)
+        ]
+        results.append(
+            {
+                "title": "Eight Sleep v. Orion Longevity",
+                "url": "https://courtlistener.com/docket/1",
+                "snippet": "Patent infringement complaint",
+            }
+        )
+        assert _results_look_irrelevant("Eight Sleep Orion Longevity patent complaint", results)
+
+    def test_ranking_deduplicates_and_promotes_primary_sources(self):
+        results = [
+            {
+                "title": "Eight Sleep discussion",
+                "url": "https://reddit.com/r/sleep/post?utm_source=x",
+                "snippet": "Orion patent complaint discussion",
+            },
+            {
+                "title": "Eight Sleep discussion duplicate",
+                "url": "https://reddit.com/r/sleep/post?utm_source=y",
+                "snippet": "Orion patent complaint discussion",
+            },
+            {
+                "title": "Eight Sleep Inc. v. Orion Longevity",
+                "url": "https://www.courtlistener.com/docket/1",
+                "snippet": "Patent infringement complaint docket",
+            },
+            {
+                "title": "8 - Wikipedia",
+                "url": "https://wikipedia.org/wiki/8",
+                "snippet": "A composite number",
+            },
+        ]
+
+        ranked = _rank_search_results(
+            "Eight Sleep Orion patent complaint", results, drop_irrelevant=True
+        )
+
+        assert len(ranked) == 2
+        assert ranked[0]["url"].startswith("https://www.courtlistener.com/")
+        assert ranked[0]["source_quality"] == "primary"
+        assert ranked[1]["source_quality"] == "community"
+
+    def test_ranking_drops_a_wholly_drifted_result_page(self):
+        ranked = _rank_search_results(
+            "Eight Sleep Orion patent complaint",
+            [
+                {
+                    "title": "8 - Wikipedia",
+                    "url": "https://wikipedia.org/wiki/8",
+                    "snippet": "Eight is a composite number",
+                },
+                {
+                    "title": "Learn to count to eight",
+                    "url": "https://youtube.com/watch?v=8",
+                    "snippet": "A counting lesson",
+                },
+            ],
+            drop_irrelevant=True,
+        )
+        assert ranked == []
+
+    def test_empty_default_backend_falls_back_before_relaxing(self, monkeypatch):
+        import runtime.execution.suckers.web_skills as web_skills
+
+        monkeypatch.setenv("WEB_SEARCH_BACKEND", "ddg")
+        monkeypatch.setenv("SEARXNG_URL", "https://searx.example")
+
+        def fake_dispatch(_client, chosen, query, _max_results):
+            if chosen == "ddg":
+                return {"query": query, "backend": chosen, "results": []}
+            return {
+                "query": query,
+                "backend": chosen,
+                "results": [
+                    {
+                        "title": "Eight Sleep v. Orion Longevity",
+                        "url": "https://courtlistener.com/docket/1",
+                        "snippet": "Patent infringement complaint",
+                    }
+                ],
+            }
+
+        monkeypatch.setattr(web_skills, "_dispatch_search", fake_dispatch)
+        result = _web_search(query="Eight Sleep Orion patent complaint", client=_MockClient())
+
+        assert result["backend"] == "searxng"
+        assert result["fallback_from"] == "ddg"
+        assert result["fallback_reason"] == "empty_results"
+
+    def test_low_relevance_default_backend_falls_back(self, monkeypatch):
+        import runtime.execution.suckers.web_skills as web_skills
+
+        monkeypatch.setenv("SEARXNG_URL", "https://searx.example")
+        monkeypatch.delenv("WEB_SEARCH_BACKEND", raising=False)
+        # Pin the fallback set: developer machines may carry credentials for
+        # other providers, whose higher-priority fallback would be correct in
+        # production but would make this DDG-specific contract nondeterministic.
+        monkeypatch.delenv("DOUBAO_SEARCH_API_KEY", raising=False)
+        monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+        monkeypatch.delenv("BRAVE_API_KEY", raising=False)
+        monkeypatch.delenv("SERPER_API_KEY", raising=False)
+
+        def fake_dispatch(_client, chosen, query, _max_results):
+            if chosen == "searxng":
+                return {
+                    "query": query,
+                    "backend": chosen,
+                    "results": [
+                        {
+                            "title": "8 - Wikipedia",
+                            "url": "https://en.wikipedia.org/wiki/8",
+                            "snippet": "8 is a number",
+                        }
+                    ],
+                }
+            return {
+                "query": query,
+                "backend": chosen,
+                "results": [
+                    {
+                        "title": "Eight Sleep v. Orion Longevity",
+                        "url": "https://courtlistener.com/docket/1",
+                        "snippet": "Patent infringement complaint",
+                    }
+                ],
+            }
+
+        monkeypatch.setattr(web_skills, "_dispatch_search", fake_dispatch)
+        result = _web_search(
+            query="Eight Sleep Orion Longevity patent complaint",
+            client=_MockClient(),
+        )
+
+        assert result["backend"] == "ddg"
+        assert result["fallback_from"] == "searxng"
+        assert result["fallback_reason"] == "low_relevance"
 
 
 class TestNearMissRetry:
@@ -466,6 +700,31 @@ class TestSearxngSearch:
         method, url, _ = client.calls[0]
         assert url == "https://searx.example/search"
 
+    def test_failure_opens_short_circuit_cooldown(self):
+        import runtime.execution.suckers.web_skills as web_skills
+
+        failing = _MockClient(raise_on_get=TimeoutError("handshake timed out"))
+        first = _searxng_search(
+            failing,
+            "https://searx.example/",
+            "q",
+            max_results=1,
+        )
+        assert "searxng_error" in first["error"]
+
+        untouched = _MockClient(
+            get_response=_MockResponse(status_code=200, json_data={"results": []})
+        )
+        second = _searxng_search(
+            untouched,
+            "https://searx.example/",
+            "q",
+            max_results=1,
+        )
+        assert second["error"] == "searxng_temporarily_unhealthy"
+        assert untouched.calls == []
+        web_skills._SEARXNG_UNHEALTHY_UNTIL = 0.0
+
 
 # ═══════════════════════════════════════════════════════════
 # Snippet cap — the 400-char truncation silently dropped figures
@@ -593,10 +852,24 @@ class TestResolveBackend:
         result = _web_search(query="hi", client=client, backend="brave")
         assert result["backend"] == "brave"
 
-    def test_missing_key_for_chosen_backend(self, monkeypatch):
+    def test_missing_key_for_chosen_backend_falls_back(self, monkeypatch):
         monkeypatch.delenv("BRAVE_API_KEY", raising=False)
-        result = _web_search(query="hi", client=_MockClient(), backend="brave")
-        assert result["error"] == "brave_missing_key"
+        client = _MockClient(post_response=_MockResponse(text=_DDG_SAMPLE_HTML))
+        result = _web_search(query="hi", client=client, backend="brave")
+        assert result["backend"] == "ddg"
+        assert result["fallback_from"] == "brave"
+        assert result["fallback_reason"] == "backend_error"
+
+    def test_configured_backend_failure_falls_back(self, monkeypatch):
+        monkeypatch.setenv("WEB_SEARCH_BACKEND", "brave")
+        monkeypatch.delenv("BRAVE_API_KEY", raising=False)
+        client = _MockClient(post_response=_MockResponse(text=_DDG_SAMPLE_HTML))
+
+        result = _web_search(query="hi", client=client)
+
+        assert result["backend"] == "ddg"
+        assert result["fallback_from"] == "brave"
+        assert len(result["results"]) == 2
 
     def test_unknown_backend_returns_error(self):
         result = _web_search(query="hi", client=_MockClient(), backend="bogus")
@@ -613,7 +886,7 @@ class TestRegistryIntegration:
     def test_register_returns_count(self):
         r = SkillRegistry()
         n = register_web_skills(r)
-        assert n == 3
+        assert n == 8
         for name in WEB_SKILL_NAMES:
             assert r.has(name)
 

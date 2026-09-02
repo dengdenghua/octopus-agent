@@ -25,10 +25,11 @@ if TYPE_CHECKING:
 
 
 _PLAIN_RESUME_RE = re.compile(
-    r"^\s*(?:继续|继续任务|继续执行|接着做|恢复|resume|continue)\s*[。.!！]?\s*$",
+    r"^\s*(?:继续(?:吧|任务|执行)?|接着(?:做)?|然后呢|往下(?:做)?|恢复|resume|continue|[?？]{1,4})\s*[。.!！]?\s*$",
     re.IGNORECASE,
 )
 _DEFAULT_RESUME_ITERATION_GRANT = 15
+_DEFAULT_RESUME_TOKEN_GRANT = 100_000
 
 
 async def _record_pending_resume_intent(
@@ -216,13 +217,22 @@ async def _consume_paused_task_resume_intent(
             controller.set_pending_resume(thread_id, task_id)
         return None
 
-    if not selected_from_banner and getattr(pause_request, "reason", "") == (
-        "iteration_near_limit"
-    ):
-        controller.set_grant(
-            task_id,
-            extra_iterations=_DEFAULT_RESUME_ITERATION_GRANT,
-        )
+    if not selected_from_banner:
+        pause_reason = getattr(pause_request, "reason", "")
+        if pause_reason == "iteration_near_limit":
+            controller.set_grant(
+                task_id,
+                extra_iterations=_DEFAULT_RESUME_ITERATION_GRANT,
+            )
+        elif pause_reason == "budget_near_limit":
+            # A plain Continue is permission to extend cumulative processing
+            # runway, not permission to raise a monetary limit. If cost was the
+            # actual limiting dimension this token grant is harmless and the
+            # explicit USD approval path remains required.
+            controller.set_grant(
+                task_id,
+                extra_tokens=_DEFAULT_RESUME_TOKEN_GRANT,
+            )
 
     # Clean up duplicate system auto-pauses left by the old "继续 creates a
     # new task" bug. User-requested pauses remain independent.
@@ -231,7 +241,7 @@ async def _consume_paused_task_resume_intent(
             stale.thread_id == thread_id
             and stale.task_id != task_id
             and stale.requested_by == "system"
-            and stale.reason == "iteration_near_limit"
+            and stale.reason in {"iteration_near_limit", "budget_near_limit", "model_spinning"}
         ):
             controller.clear(stale.task_id)
 

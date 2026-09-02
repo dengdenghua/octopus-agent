@@ -5,6 +5,9 @@ import math
 from dataclasses import dataclass, field
 from typing import Any
 
+from runtime.safety.auth.scope import TenantScope
+from runtime.safety.recovery.tenant_scope import read_learning_events
+
 _LOG = logging.getLogger("octopus.gepa.variant_eval")
 
 
@@ -59,6 +62,7 @@ def collect_variant_stats(
     journal: Any,
     *,
     base_recipe_id: str | None = None,
+    scope: TenantScope | None = None,
 ) -> list[VariantComparison]:
     """Scan trajectory events · group by (base, variant) · return
     one comparison per base recipe.
@@ -67,7 +71,7 @@ def collect_variant_stats(
     comparison · single-element list (or empty when no data).
     """
     try:
-        evs = journal.read_by_type("trajectory")
+        evs = read_learning_events(journal, "trajectory", scope=scope)
     except (OSError, ValueError, TypeError, AttributeError):
         return []
     # Aggregate.
@@ -90,10 +94,11 @@ def collect_variant_stats(
         bucket = grouped.setdefault(base, {})
         stat = bucket.setdefault(variant, VariantStat(variant_id=variant))
         stat.uses += 1
-        if getattr(traj, "outcome", None) and getattr(
-            traj.outcome,
-            "success",
-            False,
+        outcome = getattr(traj, "outcome", None)
+        if (
+            outcome is not None
+            and getattr(outcome, "success", False)
+            and not getattr(outcome, "degraded", False)
         ):
             stat.successes += 1
         # Step count is cheap to track.
@@ -101,9 +106,7 @@ def collect_variant_stats(
             stat.avg_step_count * (stat.uses - 1) + len(traj.steps or [])
         ) / stat.uses
         # Cost · pull from outcome if available.
-        cost = float(
-            getattr(getattr(traj, "outcome", None), "cost_usd", 0) or 0,
-        )
+        cost = float(getattr(getattr(outcome, "cost", None), "usd", 0) or 0)
         stat.avg_cost_usd = (stat.avg_cost_usd * (stat.uses - 1) + cost) / stat.uses
     # Materialise.
     out: list[VariantComparison] = []

@@ -11,7 +11,12 @@ checkpoint is unsafe.
 import pytest
 
 from runtime.core.cerebrum import checkpoint_integrity, react_resume
+from runtime.core.cerebrum.react_context import (
+    _restore_messages_from_checkpoint,
+    _serialize_messages_for_checkpoint,
+)
 from runtime.core.cerebrum.react_loop import _compute_resume_state, _ResumeState
+from runtime.platform.models.llm import Message
 
 
 class _OkIntegrity:
@@ -22,6 +27,19 @@ class _OkIntegrity:
 class _BadIntegrity:
     resume_safe = False
     errors = ["corrupt step snapshot"]
+
+
+def test_checkpoint_message_roundtrip_preserves_phase() -> None:
+    messages = [
+        Message(role="assistant", content="still working", phase="commentary"),
+        Message(role="assistant", content="done", phase="final_answer"),
+    ]
+
+    restored = _restore_messages_from_checkpoint(
+        _serialize_messages_for_checkpoint(messages),
+    )
+
+    assert [message.phase for message in restored] == ["commentary", "final_answer"]
 
 
 def _snapshot(**overrides):

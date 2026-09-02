@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -141,6 +142,8 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
 def test_sync_counts_and_index_structure(env: dict[str, Path]) -> None:
     result = ar.sync_assets(dest_root=env["dest"])
     assert result["counts"] == {"plugin": 4, "skill": 4, "agent": 3, "team": 1}
+    result["counts"]["plugin"] = 0
+    assert ar.summary(root=env["dest"])["counts"]["plugin"] == 4
 
     idx = json.loads((env["dest"] / "index.json").read_text("utf-8"))
     assert idx["schema"] == "octopus.assets.v1"
@@ -201,6 +204,62 @@ def test_sync_idempotent_and_light_copy(env: dict[str, Path]) -> None:
 def test_summary_none_before_sync(tmp_path: Path) -> None:
     assert ar.summary(root=tmp_path / "missing") is None
     assert ar.list_assets(root=tmp_path / "missing") == []
+
+
+def test_index_cache_reuses_parse_and_invalidates_on_file_mtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "assets"
+    root.mkdir()
+    index_path = root / "index.json"
+
+    def write_index(name: str) -> None:
+        index_path.write_text(
+            json.dumps(
+                {
+                    "schema": "octopus.assets.v1",
+                    "meta": {"title": name, "counts": {"skill": 1}},
+                    "assets": [
+                        {
+                            "id": "writing",
+                            "kind": "skill",
+                            "source": "local",
+                            "name": name,
+                            "nested": {"value": "original"},
+                        }
+                    ],
+                }
+            ),
+            "utf-8",
+        )
+
+    write_index("First")
+    read_calls = 0
+    real_read_json = ar._read_json
+
+    def counted_read_json(path: Path) -> dict[str, object] | None:
+        nonlocal read_calls
+        read_calls += 1
+        return real_read_json(path)
+
+    monkeypatch.setattr(ar, "_read_json", counted_read_json)
+
+    first = ar.list_assets(root=root)
+    first[0]["nested"]["value"] = "caller mutation"
+    assert ar.summary(root=root)["title"] == "First"
+    assert ar.list_assets(root=root)[0]["nested"]["value"] == "original"
+    assert read_calls == 1
+
+    old_stat = index_path.stat()
+    write_index("Updated")
+    os.utime(
+        index_path,
+        ns=(old_stat.st_atime_ns, old_stat.st_mtime_ns + 2_000_000_000),
+    )
+
+    assert ar.list_assets(root=root)[0]["name"] == "Updated"
+    assert read_calls == 2
 
 
 def test_flat_plugins_layout_and_collision_suffix(

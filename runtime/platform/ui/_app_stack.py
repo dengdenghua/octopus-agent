@@ -21,6 +21,19 @@ from runtime.platform.process.paths import app_paths
 from ._app_context import AppContext
 
 
+def _regeneration_scheduler_config() -> Any:
+    """Build scheduler config with a cwd-independent runtime data root."""
+
+    from runtime.safety.recovery.scheduler import SchedulerConfig
+
+    return SchedulerConfig(
+        interval_sec=max(60, int(feature_flags.value("regeneration.interval_sec", 600))),
+        initial_delay_sec=30,
+        output_dir=str(app_paths().data_dir),
+        enabled=feature_flags.is_on("regeneration.enabled"),
+    )
+
+
 def wire_stack(
     ctx: AppContext,
     *,
@@ -29,11 +42,6 @@ def wire_stack(
     agent_registry: Any = None,
 ) -> None:
     """Populate ctx.thread_store / cowork / subagent / mcp-servers."""
-    # ``create_app`` owns the public assembly contract and passes the registry
-    # here before ``mount_agents`` runs.  Keep accepting it even though the
-    # compatibility stack wiring does not consume it yet; otherwise every app
-    # construction fails before any router can be mounted.
-    del agent_registry
     stack = ctx.stack
     state = ctx.state
     _paths = ctx.paths
@@ -80,17 +88,14 @@ def wire_stack(
             feature_flags.configure(app_paths().feature_flags_path)
 
         try:
-            from runtime.safety.recovery.scheduler import (
-                SchedulerConfig,
-                get_scheduler,
-            )
+            from runtime.safety.recovery.scheduler import get_scheduler
 
-            cfg = SchedulerConfig(
-                interval_sec=max(60, int(feature_flags.value("regeneration.interval_sec", 600))),
-                initial_delay_sec=30,
-                enabled=feature_flags.is_on("regeneration.enabled"),
+            cfg = _regeneration_scheduler_config()
+            get_scheduler().start(
+                stack,
+                config=cfg,
+                agent_registry=agent_registry,
             )
-            get_scheduler().start(stack, config=cfg)
         except Exception as exc:  # noqa: BLE001
             logging.getLogger(__name__).warning(
                 "regeneration scheduler failed to start: %s",
@@ -183,6 +188,7 @@ def wire_stack(
                             AutoTriggerConfig(
                                 enabled=feature_flags.is_on("evolution.auto_trigger"),
                             ),
+                            agent_registry=agent_registry,
                         )
                     except Exception as _at_exc:
                         logging.getLogger(__name__).debug(
@@ -205,6 +211,25 @@ def wire_stack(
                         AttributeError,
                         TypeError,
                     ):  # best-effort · skills will return clean "router not wired" error
+                        pass
+                    # web_fetch performs a focused LLM pass over extracted
+                    # page text. Share the active planner router, while using
+                    # separate provider keys so deployments may later select
+                    # a cheaper default model independently.
+                    try:
+                        from runtime.execution.suckers.web_skills import (
+                            set_web_fetch_router,
+                        )
+
+                        set_web_fetch_router(
+                            router,
+                            default_model=default_model,
+                        )
+                    except (
+                        ImportError,
+                        AttributeError,
+                        TypeError,
+                    ):  # best-effort · web_fetch returns a clean error
                         pass
                     # ─── Computer-use vision loop · autonomous desktop ───
                     # register_computer_use_loop needs a VisionPlanner built

@@ -295,6 +295,30 @@ def _goal_requests_code_mutation(goal: str, *, include_colloquial: bool = True) 
         " ",
         lowered,
     )
+    # Todo/checklist bookkeeping mutates the conversation protocol, not the
+    # user's workspace.  A goal such as ``用 todo_write 创建一项已完成清单`` used
+    # to match the bare ``创建`` marker below, so the implementation-write
+    # guard demanded an unrelated file edit after both requested tools had
+    # already succeeded.  Remove only the local verb+noun phrase; a second
+    # mutation clause (``然后创建 README.md``) remains visible.  The negative
+    # lookahead also keeps requests for checklist files/components/pages armed.
+    lowered = re.sub(
+        r"(?:创建|新增|添加|更新|维护|写入|记录|完成)\s*"
+        r"(?:一\s*(?:个|项|份|条|张)?\s*)?"
+        r"(?:(?:已完成|完成状态|未完成|待办)\s*)?(?:的\s*)?"
+        r"(?:任务\s*)?(?:待办(?:事项)?(?:清单)?|任务清单|清单)"
+        r"(?!\s*(?:文件|页面|组件|接口|数据表|模块|功能|系统))",
+        " ",
+        lowered,
+    )
+    lowered = re.sub(
+        r"\b(?:create|add|update|write|maintain|record|complete)\b\s+"
+        r"(?:(?:an?|the)\s+)?(?:(?:completed?|pending)\s+)?"
+        r"(?:todo(?:\s+list)?|checklist|task\s+list)\b"
+        r"(?!\s+(?:file|page|component|api|database|module|feature|app)\b)",
+        " ",
+        lowered,
+    )
     # Match English actions as whole words. Tool/protocol identifiers are not
     # natural-language mutation requests: the old substring check treated the
     # ``write`` part of ``todo_write`` as a request to edit workspace files.

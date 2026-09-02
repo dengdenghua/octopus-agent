@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event
 
 import pytest
 
@@ -78,6 +81,135 @@ def test_create_list_and_reload_team_rooms(tmp_path: Path) -> None:
     reloaded = _client(tmp_path).get("/api/teams").json()
     assert reloaded["count"] == 1
     assert reloaded["teams"][0]["id"] == created["id"]
+
+
+def test_stale_team_router_refreshes_durable_reads_and_project_helpers(tmp_path: Path) -> None:
+    state_path = tmp_path / "team_rooms.json"
+    first = create_team_rooms_router(state_path=state_path)
+    stale = create_team_rooms_router(state_path=state_path)
+    first_app = FastAPI()
+    first_app.include_router(first)
+    stale_app = FastAPI()
+    stale_app.include_router(stale)
+
+    created = TestClient(first_app).post("/api/teams", json=_team_body("Cross worker")).json()
+    stale_client = TestClient(stale_app)
+
+    assert stale_client.get(f"/api/teams/{created['id']}").status_code == 200
+    assert [item["id"] for item in stale_client.get("/api/teams").json()["teams"]] == [
+        created["id"]
+    ]
+    assert stale.team_snapshot(created["id"])["name"] == "Cross worker"
+
+
+def test_legacy_invite_scrub_serializes_with_live_room_create(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import runtime.platform.io.transactional as transactional
+    import runtime.sensing.gateway._team_room_persistence as persistence
+    from runtime.sensing.gateway.team_invitations_router import scrub_legacy_room_invites
+
+    state_path = tmp_path / "team_rooms.json"
+    client = _client(tmp_path)
+    existing = client.post("/api/teams", json=_team_body("Legacy")).json()
+    raw = json.loads(state_path.read_text(encoding="utf-8"))
+    raw["teams"][0]["invite_token"] = "plaintext-secret"
+    raw["teams"][0]["invite_role"] = "member"
+    state_path.write_text(json.dumps(raw), encoding="utf-8")
+
+    scrub_read = Event()
+    release_scrub = Event()
+    create_entered = Event()
+    original_read = transactional._read_json_unlocked
+    original_refresh = persistence.refresh_team_room_state
+
+    def _blocked_read(path: Path, default_factory):
+        value = original_read(path, default_factory)
+        if path == state_path:
+            scrub_read.set()
+            assert release_scrub.wait(timeout=5)
+        return value
+
+    def _observed_refresh(**kwargs):
+        create_entered.set()
+        return original_refresh(**kwargs)
+
+    monkeypatch.setattr(transactional, "_read_json_unlocked", _blocked_read)
+    monkeypatch.setattr(persistence, "refresh_team_room_state", _observed_refresh)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        scrubbed = pool.submit(scrub_legacy_room_invites, state_path)
+        assert scrub_read.wait(timeout=5)
+        created = pool.submit(client.post, "/api/teams", json=_team_body("Concurrent"))
+        try:
+            assert create_entered.wait(timeout=5)
+        finally:
+            release_scrub.set()
+        scrubbed.result(timeout=5)
+        response = created.result(timeout=5)
+
+    assert response.status_code == 200, response.json()
+    durable = json.loads(state_path.read_text(encoding="utf-8"))["teams"]
+    assert {item["id"] for item in durable} == {existing["id"], response.json()["id"]}
+    assert all(
+        field not in item
+        for item in durable
+        for field in ("invite_token", "invite_role", "invite_created_at")
+    )
+
+
+def test_stale_team_router_refreshes_membership_before_acl_decisions(tmp_path: Path) -> None:
+    from runtime.safety.auth import Identity, IdentityStore
+
+    identities = IdentityStore()
+    for actor in ("alice", "bob"):
+        identities.add(
+            Identity(actor_id=actor, metadata={"tenant_id": "tenant-a"}),
+            api_key_plaintext=f"sk-{actor}",
+        )
+    state_path = tmp_path / "team_rooms.json"
+    first = create_team_rooms_router(
+        state_path=state_path,
+        identity_store=identities,
+        require_auth=True,
+    )
+    stale = create_team_rooms_router(
+        state_path=state_path,
+        identity_store=identities,
+        require_auth=True,
+    )
+    first_app = FastAPI()
+    first_app.include_router(first)
+    stale_app = FastAPI()
+    stale_app.include_router(stale)
+    first_client = TestClient(first_app)
+    stale_client = TestClient(stale_app)
+    alice = {"Authorization": "Bearer sk-alice"}
+    bob = {"Authorization": "Bearer sk-bob"}
+
+    created = first_client.post("/api/teams", headers=alice, json=_team_body()).json()
+    invitation = first_client.post(
+        f"/api/teams/{created['id']}/invite",
+        headers=alice,
+        json={"role": "member"},
+    ).json()
+    joined = first_client.post(
+        f"/api/team-invites/{invitation['invite_token']}/join",
+        headers=bob,
+        json={"display_name": "Bob"},
+    ).json()
+    assert stale.can_access_room(created["id"], "bob", "tenant-a") is True
+
+    removed = first_client.delete(
+        f"/api/teams/{created['id']}/participants/{joined['participant']['id']}",
+        headers=alice,
+    )
+    assert removed.status_code == 200, removed.json()
+
+    assert stale.can_access_room(created["id"], "bob", "tenant-a") is False
+    assert stale.get_room_participant(created["id"], "bob", "tenant-a") is None
+    assert "bob" not in stale.list_room_members(created["id"])
+    assert stale_client.get(f"/api/teams/{created['id']}", headers=bob).status_code == 403
 
 
 def test_invite_join_adds_human_participant(tmp_path: Path) -> None:

@@ -244,17 +244,10 @@ def test_realtime_ws_requires_auth_when_enabled(
     ):
         ws.receive_text()
 
-    with (
-        pytest.raises(WebSocketDisconnect),
-        client.websocket_connect("/api/remote-backends/missing/realtime?token=sk-alice") as ws,
-    ):
-        ws.receive_text()
-
     with client.websocket_connect(
         "/api/remote-backends/missing/realtime",
-        subprotocols=["bearer", "sk-alice"],
+        headers={"Authorization": "Bearer sk-alice"},
     ) as ws:
-        assert ws.accepted_subprotocol == "bearer"
         msg = json.loads(ws.receive_text())
         assert msg["method"] == "proxy/error"
         assert "not found" in msg["params"]["message"]

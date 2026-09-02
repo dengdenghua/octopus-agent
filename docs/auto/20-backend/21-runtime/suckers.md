@@ -49,7 +49,7 @@ Suckers = skill pool.
 | `_delegation_skills_agent.py` | ``_call_agent`` · single isolated subagent delegation. |
 | `_delegation_skills_common.py` | Shared leaf helpers for delegation_skills · extracted from delegation_skills.py. |
 | `_delegation_skills_graph.py` | ``call_agent_graph`` · declarative DAG fan-out with server-side fan-in. |
-| `_delegation_skills_judge.py` | ``_run_verdict_repair`` / ``_run_tournament`` / ``_run_cli_team`` · judge panels. |
+| `_delegation_skills_judge.py` | ``_run_verdict_repair`` / ``_run_tournament`` · judge panels. |
 | `_delegation_skills_orchestration.py` | ``_run_orchestration`` · deterministic multi-round discovery loop. |
 | `_delegation_skills_parallel.py` | ``_call_agent_parallel`` · concurrent fan-out + graceful-degradation envelope. |
 | `_delegation_skills_pipeline.py` | ``_run_pipeline`` · ordered per-item stage chains, run concurrently. |
@@ -555,7 +555,7 @@ Suckers = skill pool.
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def register_market_skills(registry, all_skills_dir, respect_enabled_flag, verify_tests)` |  |
+| func | `def register_market_skills(registry, all_skills_dir, respect_enabled_flag, verify_tests, skip_registered_directories)` |  |
 | func | `def immutable_prompt_catalog_required()` | Whether startup must use only the catalog shipped in this build. |
 | func | `def register_prompt_market_skills(registry, resource_dir, bundled_dir, refresh_deadline_s)` | Bootstrap and register the external prompt catalog with a bundled fallback. |
 | func | `def load_single_market_skill(registry, skill_id, all_skills_dir, ignore_frontmatter_enabled, verify_tests)` |  |
@@ -673,6 +673,7 @@ Suckers = skill pool.
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
+| func | `def set_web_fetch_router(router, default_model)` | Install the lightweight LLM route used by ``web_fetch``. |
 | func | `def register_web_skills(registry)` |  |
 
 ### `workflow_skill.py`
@@ -696,7 +697,7 @@ Suckers = skill pool.
 
 ## Who imports this
 
-**88** file(s) reference this package:
+**89** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
@@ -717,24 +718,23 @@ Suckers = skill pool.
   - `runtime/core/cerebrum/_react_prompt_assembly_guidance.py`
   - `runtime/core/cerebrum/capability_router.py`
   - _… and 3 more_
-- **`runtime/execution/`** · 13 file(s)
+- **`runtime/execution/`** · 14 file(s)
   - `runtime/execution/all_skills/__init__.py`
   - `runtime/execution/arms/base.py`
   - `runtime/execution/codex_backend/dynamic_tools.py`
   - `runtime/execution/codex_backend/role_context.py`
   - `runtime/execution/loops/verifiers.py`
-  - _… and 8 more_
-- **`runtime/memory/`** · 3 file(s)
+  - _… and 9 more_
+- **`runtime/memory/`** · 2 file(s)
   - `runtime/memory/cowork/runtime.py`
   - `runtime/memory/hemolymph/composer.py`
-  - `runtime/memory/learning/deep_evolution.py`
-- **`runtime/platform/`** · 23 file(s)
+- **`runtime/platform/`** · 24 file(s)
   - `runtime/platform/config/builder.py`
   - `runtime/platform/lifecycle/demo.py`
   - `runtime/platform/plugins/bundled/clip_studio/__init__.py`
   - `runtime/platform/plugins/bundled/comfyui_bridge/__init__.py`
   - `runtime/platform/plugins/bundled/director_stage/__init__.py`
-  - _… and 18 more_
+  - _… and 19 more_
 - **`runtime/research/`** · 2 file(s)
   - `runtime/research/pipeline.py`
   - `runtime/research/prefetch.py`

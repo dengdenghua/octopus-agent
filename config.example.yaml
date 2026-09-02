@@ -70,6 +70,10 @@ budget:
   max_latency_ms: 600000
   model_iteration_timeout_s: 120
   convergence_max_tokens: 2000
+  # 默认只把累计 token 作为用量统计；它不是当前上下文窗口占用。
+  # 如需用累计 token 作为严格停机线，需同时开启下面两个开关。
+  budget_auto_pause: false
+  cumulative_token_auto_pause: false
 
 # ─────────────── Immunity 免疫系统 ─────────────────
 # 三层信任模型：self_whitelist（无条件放行）→ trusted_sources（签名信任）
@@ -189,32 +193,12 @@ journal_file: null
 enable_web_skills: true
 default_arm_id: code_arm
 
-# ─────────────── Molili 认证集成 ─────────────────
-# 第三方认证平台集成 · 支持短信验证码登录
-#
-# enabled:    是否启用 Molili 集成
-# base_url:   Molili 对话 API 地址
-# info_url:   Molili 用户信息 API 地址
-# jwt_secret: 签发 JWT 的密钥 ⚠️ 生产必须设为 32+ 字符强随机值
-# jwt_expire_seconds: JWT 过期时间（秒），2592000 = 30 天
-# jwt_issuer: JWT 签发者标识
-#
-# auth.mock_mode:   本地 Mock 模式（跳过真实短信发送）
-# auth.mock_code:   本地 Mock 时的固定验证码
-# auth.sms_send_url / auth.sms_verify_url: 短信服务接口地址
-# auth.send_phone_field / verify_phone_field: 请求体中的手机号字段名
-# auth.code_field:      请求体中的验证码字段名
-# auth.sms_type:        SendSmsCmd.smsType 参数（Swagger 标注必填，实际可省略）
-# auth.user_id_path:   响应中 user_id 的 JSONPath
-# auth.token_path:     响应中 token 的 JSONPath
-# auth.mobile_path:    响应中手机号的 JSONPath
-# auth.credits_path:   响应中积分/配额信息的 JSONPath
 # ─────────────── oct 账号网关(推荐)─────────────────
 # octopus 自己的账号网关(octopus-mobile server)
 # 邮箱验证码登录 + 积分/会员/用量/商品/订单 + LLM 中转计费(/v1)
 #
 # enabled:               是否启用(⚠️ 启用时 jwt_secret 必填)
-# base_url:              网关根地址(线上 https://api.octoapk.com;本地测试可指 http://127.0.0.1:8099)
+# base_url:              网关根地址(线上 https://api.echo-age.com;本地测试可指 http://127.0.0.1:8099)
 # default_model:         默认模型 id
 # request_timeout_seconds: 账号/积分请求超时
 # llm_timeout_seconds:   LLM 中转(/v1/chat/completions)超时
@@ -222,7 +206,7 @@ default_arm_id: code_arm
 # jwt_secret:            agent 自有会话 JWT 的 HS256 密钥 ⚠️ 32+ 字符强随机值(启用时必填)
 oct:
   enabled: false   # 改 true 启用 · 同时必须设 jwt_secret(32+ 字符)
-  base_url: https://api.octoapk.com
+  base_url: https://api.echo-age.com
   default_model: qwen3.5-flash
   request_timeout_seconds: 15
   llm_timeout_seconds: 120
@@ -230,7 +214,6 @@ oct:
   jwt_secret: null    # ⚠️ enabled=true 时必须设 32+ 字符强随机值
   jwt_expire_seconds: 2592000
   jwt_issuer: octopus-agent
-
 # ─────────────── Local Auth 本地认证 ─────────────
 # 本地用户名登录 · 不依赖第三方服务
 #

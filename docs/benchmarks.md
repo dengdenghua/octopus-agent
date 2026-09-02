@@ -547,7 +547,7 @@ dry_run 提案无法绕过 safety gate —— 用户必须手动下一轮不加 
 - **Cancel 延迟**:之前实测 170ms,bench 没单独测
 - **Partial recovery**:之前实测可恢复,bench 没单独测  
 - **MCP persistent client 长任务**:bench 用 read_file/write_text_file 不用 mcp_fs(避免之前的子进程泄漏 follow-up)
-- **真实多模型路由**:bench 全用 claude-mirror,没测 Molili / GLM / Kimi 提供商的差异
+- **真实多模型路由**：bench 全用 claude-mirror，没测 Oct / GLM / Kimi 提供商的差异
 - **跨会话(多 turn)**:bench 每个 case 用 new thread,没测同一 thread 多 turn 的累计 context 行为
 - **失败路径**:bench 都成功,没主动诱发 tool error / 超时验证 fail-closed
 - **`sub_tool_end.duration_ms` 都是 0**:捕获时机问题(不影响渲染 status,但时间轴的"XXms"徽章会显示 0)· 单独 follow-up

@@ -14,6 +14,70 @@ _PATHISH_RE = re.compile(
     r"([A-Za-z]:\\|/[\w.-]+|\.{1,2}/|[\w.-]+\.(?:py|ts|tsx|js|jsx|go|rs|md|json|yaml|yml|css|html))"
 )
 
+_BROWSER_TOOL_PREFIXES = ("browser_", "live_browser_")
+_BROWSER_UI_TOOLS = frozenset({"screen_capture", "screen_info"})
+_BROWSER_INTERACTION_RE = re.compile(
+    r"(?:"
+    r"\b(?:click|type|fill|submit|upload|sign[ -]?in|log[ -]?in|navigate|"
+    r"screenshot|visual regression|browser automation)\b"
+    r"|点击|填写|输入|提交|上传|登录|跳转|导航|截图|检查|查看|视觉回归|浏览器操作|浏览器自动化"
+    r")",
+    re.IGNORECASE,
+)
+_EXPLICIT_BROWSER_SURFACE_RE = re.compile(r"@(?:browser|chrome)\b", re.IGNORECASE)
+
+
+def browser_tools_requested(
+    user_context: dict[str, Any] | None,
+    *,
+    goal: str = "",
+) -> bool:
+    """Return whether this turn genuinely needs an interactive browser lane.
+
+    Ordinary research and URL reading stay on ``web_search`` / HTTP extraction.
+    Browser tools are exposed only for an explicit Browser/Chrome surface, UI
+    regression, or a goal containing a concrete interaction verb.  This keeps
+    a generic word such as "page" from opening a visible browser during search.
+    """
+
+    context = user_context if isinstance(user_context, dict) else {}
+    metadata = context.get("metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    surface = (
+        str(context.get("browser_surface") or metadata.get("browser_surface") or "").strip().lower()
+    )
+    runtime_surfaces = context.get("runtime_surfaces") or metadata.get("runtime_surfaces")
+    mode = str(context.get("mode") or metadata.get("mode") or "").strip().lower()
+    capability_mode = (
+        str(context.get("capability_mode") or metadata.get("capability_mode") or "").strip().lower()
+    )
+    surface_names = (
+        {str(item).strip().lower() for item in runtime_surfaces}
+        if isinstance(runtime_surfaces, list)
+        else set()
+    )
+    if bool(
+        context.get("browser_operation_mode")
+        or metadata.get("browser_operation_mode")
+        or context.get("browser_regression_enabled")
+        or metadata.get("browser_regression_enabled")
+        or context.get("chrome_operation_mode")
+        or metadata.get("chrome_operation_mode")
+        or surface in {"browser", "chrome"}
+        or {"browser", "chrome"} & surface_names
+        or mode in {"browser", "chrome"}
+        or capability_mode == "browser"
+    ):
+        return True
+    goal_text = str(goal or "")
+    return bool(
+        _EXPLICIT_BROWSER_SURFACE_RE.search(goal_text) or _BROWSER_INTERACTION_RE.search(goal_text)
+    )
+
+
+def _is_browser_ui_tool(name: str) -> bool:
+    return name.startswith(_BROWSER_TOOL_PREFIXES) or name in _BROWSER_UI_TOOLS
+
 
 def _dedupe(items: Iterable[str]) -> tuple[str, ...]:
     seen: set[str] = set()
@@ -57,10 +121,13 @@ def filter_surface_compatible_skills(
     names: Iterable[str],
     *,
     user_context: dict[str, Any] | None,
+    goal: str = "",
 ) -> list[str]:
-    """Remove tools that are incompatible with the active runtime surface."""
+    """Remove tools that are incompatible with or unnecessary for this turn."""
 
     values = list(names)
+    if not browser_tools_requested(user_context, goal=goal):
+        return [name for name in values if not _is_browser_ui_tool(name)]
     if isolated_code_ui_regression(user_context):
         return [name for name in values if not name.startswith("live_browser_")]
     return values
@@ -685,6 +752,7 @@ def activate_capabilities(
     skills = filter_surface_compatible_skills(
         skills,
         user_context=user_context,
+        goal=goal,
     )
     if skills:
         for name in (
