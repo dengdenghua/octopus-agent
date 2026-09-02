@@ -110,6 +110,12 @@ def test_pid_alive_uses_native_query_instead_of_signal_on_windows(monkeypatch) -
 
 
 def test_pid_alive_handles_permission_and_generic_os_errors(monkeypatch) -> None:
+    from runtime.core.cerebrum import leader as leader_mod
+
+    # This test covers the POSIX probe error branches even when the suite is
+    # hosted on Windows; native Windows behavior has a dedicated test below.
+    monkeypatch.setattr(leader_mod.sys, "platform", "linux")
+
     def permission_denied(_pid: int, _signal: int) -> None:
         raise PermissionError
 
