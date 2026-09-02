@@ -23,6 +23,8 @@ from typing import Any
 from runtime.core.cerebrum.react_final_answer_guards import (
     _final_answer_needs_pre_emit_guard,
     _looks_like_observation_echo,
+    _research_final_answer_guards_active,
+    _text_has_pending_tool_action,
 )
 from runtime.core.cerebrum.react_loop_controls import _emit_assistant_chunk
 from runtime.core.cerebrum.react_loop_state import _LoopControl, _LoopState
@@ -233,6 +235,12 @@ def _phase_6b_model_stream(
     _throughput_interval_s = state.throughput_interval_s
     _is_code_mode = state.is_code_mode
     _browser_operation_mode = state.browser_operation_mode
+    _research_guard_active = _research_final_answer_guards_active(
+        is_code_mode=_is_code_mode,
+        goal=state.goal,
+        steps=steps,
+        tools_active=state.tools_active,
+    )
     # Scalar mailbox — pulled in, pushed back in the finally below.
     effective_model = state.effective_model
     _native_mode = state.native_mode
@@ -326,6 +334,7 @@ def _phase_6b_model_stream(
             _visible_stream_state = {"chars": 0}
             _streamed_final_chars = 0
             _final_stream_guarded = False
+            _final_anchor_action_checked = False
             _final_delta_emitted_this_iteration = False
             # Incremental Thought-streaming state: while the Final Answer
             # is still buffered, the Thought prose already decodes token
@@ -446,6 +455,7 @@ def _phase_6b_model_stream(
                                         answer_so_far,
                                         is_code_mode=_is_code_mode,
                                         browser_operation_mode=_browser_operation_mode,
+                                        research_guard_active=_research_guard_active,
                                     )
                                 )
                             ):
@@ -482,6 +492,15 @@ def _phase_6b_model_stream(
                         # blocking on full response decode.
                         joined = "".join(text_parts)
                         m = _FINAL_RE.search(joined)
+                        if m and not _final_anchor_action_checked:
+                            _final_anchor_action_checked = True
+                            if _text_has_pending_tool_action(joined[: m.start()]):
+                                # A Final Answer emitted beside an Action was
+                                # written before that action's real result was
+                                # available. Keep it private: PHASE 6d executes
+                                # the action and deliberately discards this
+                                # premature candidate before the next round.
+                                _final_stream_guarded = True
                         # TTFT: while the answer is still anchored out,
                         # stream the Thought prose into the thinking
                         # block. Extraction spans only Thought→terminator
@@ -548,11 +567,13 @@ def _phase_6b_model_stream(
                                 pass
                             elif answer_so_far:
                                 if (
-                                    _evidence_convergence_active is not None
+                                    _final_stream_guarded
+                                    or _evidence_convergence_active is not None
                                     or _final_answer_needs_pre_emit_guard(
                                         answer_so_far,
                                         is_code_mode=_is_code_mode,
                                         browser_operation_mode=_browser_operation_mode,
+                                        research_guard_active=_research_guard_active,
                                     )
                                 ):
                                     _final_stream_guarded = True
@@ -611,6 +632,7 @@ def _phase_6b_model_stream(
                                     joined,
                                     is_code_mode=_is_code_mode,
                                     browser_operation_mode=_browser_operation_mode,
+                                    research_guard_active=_research_guard_active,
                                 )
                             ):
                                 _final_stream_guarded = True
@@ -692,6 +714,7 @@ def _phase_6b_model_stream(
                                 answer_so_far,
                                 is_code_mode=_is_code_mode,
                                 browser_operation_mode=_browser_operation_mode,
+                                research_guard_active=_research_guard_active,
                             )
                         ):
                             _final_stream_guarded = True

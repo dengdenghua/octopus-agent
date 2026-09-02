@@ -44,6 +44,8 @@ from runtime.core.cerebrum.react_final_answer_guards import (
     _guard_rejection_outcome,
     _guard_repair_feedback,
     _looks_like_observation_echo,
+    _research_final_answer_guards_active,
+    _step_has_pending_tool_action,
     _try_clean_downgrade,
     _unfinished_implementation_recovery_needed,
 )
@@ -149,6 +151,7 @@ def _phase_6c_parse_and_guard(
     # Reference-typed aliases — mutations propagate to the main loop.
     steps = state.steps
     executed_beak_steps = state.executed_beak_steps
+    final_answer_segments = state.final_answer_segments
     stack = state.stack
     react_task_id = state.react_task_id
     goal = state.goal
@@ -176,6 +179,12 @@ def _phase_6c_parse_and_guard(
     _browser_operation_mode = state.browser_operation_mode
     _file_inspection_tools_visible = state.file_inspection_tools_visible
     tools_active = state.tools_active
+    _research_guard_active = _research_final_answer_guards_active(
+        is_code_mode=_is_code_mode,
+        goal=goal,
+        steps=steps,
+        tools_active=tools_active,
+    )
     _read_only_turn = state.read_only_turn
     _no_tool_turn = state.no_tool_turn
     _final_guard_grounded_source_paths = state.final_guard_grounded_source_paths
@@ -239,6 +248,12 @@ def _phase_6c_parse_and_guard(
                 if reasoning_step is not None:
                     step = reasoning_step
                     maybe_final = None
+        _research_guard_active = _research_final_answer_guards_active(
+            is_code_mode=_is_code_mode,
+            goal=goal,
+            steps=steps + [step],
+            tools_active=tools_active,
+        )
         if _looks_like_special_tool_envelope(text) and not step.actions and not step.action:
             # The provider exposed a private tool sentinel but supplied no
             # structured call.  Make the failure an Observation so the next
@@ -362,11 +377,13 @@ def _phase_6c_parse_and_guard(
         if (
             maybe_final
             and not _final_stream_started
+            and not _step_has_pending_tool_action(step)
             and _evidence_convergence_active is None
             and not _final_answer_needs_pre_emit_guard(
                 maybe_final,
                 is_code_mode=_is_code_mode,
                 browser_operation_mode=_browser_operation_mode,
+                research_guard_active=_research_guard_active,
             )
         ):
             # Fall-through emission for routers that don't actually
@@ -484,7 +501,14 @@ def _phase_6c_parse_and_guard(
                 step.observation = (
                     (((step.observation or "") + "\n\n") if step.observation else "")
                     + f"[{_guard_label}]\n"
-                    + _guard_repair_feedback(_guard_label, _guard_message, steps)
+                    + _guard_repair_feedback(
+                        _guard_label,
+                        _guard_message,
+                        steps,
+                        candidate_was_published=(
+                            _final_stream_started or _final_delta_emitted_this_iteration
+                        ),
+                    )
                 )
                 maybe_final = None
             else:
@@ -521,20 +545,25 @@ def _phase_6c_parse_and_guard(
                 getattr(resp, "finish_reason", "")
             )
             if _is_length_truncated:
-                # Surface the partial text so the user sees streaming
-                # progress; don't count it against bail-at.
+                # Ordinary prose may surface as streaming progress. Research
+                # prose stays private and joins ``final_answer_segments`` so
+                # citation/fact guards see the complete cross-segment report
+                # before any answer item is published.
                 if text and not maybe_final and not _final_stream_started:
-                    _emit_assistant_chunk(
-                        stack,
-                        iteration=i + 1,
-                        delta=text,
-                        task_id=react_task_id,
-                    )
-                    yield {
-                        "type": "text_delta",
-                        "delta": text,
-                        "iteration": i + 1,
-                    }
+                    if _research_guard_active:
+                        final_answer_segments.append(text)
+                    else:
+                        _emit_assistant_chunk(
+                            stack,
+                            iteration=i + 1,
+                            delta=text,
+                            task_id=react_task_id,
+                        )
+                        yield {
+                            "type": "text_delta",
+                            "delta": text,
+                            "iteration": i + 1,
+                        }
                 consecutive_format_violations = 0
             elif _unfinished_implementation_recovery_needed(
                 text,
@@ -601,11 +630,14 @@ def _phase_6c_parse_and_guard(
                     # streamed this text live, skip the duplicate yield —
                     # otherwise the user sees the answer twice.
                     _guard_hit = None
+                    _plain_guard_candidate = text
                     if text and not maybe_final:
+                        if _research_guard_active and final_answer_segments:
+                            _plain_guard_candidate = "".join(final_answer_segments + [text])
                         _guard_hit = _evaluate_final_answer_guards(
                             steps=steps,
                             step=step,
-                            final_answer=text,
+                            final_answer=_plain_guard_candidate,
                             is_code_mode=_is_code_mode,
                             todo_protocol_required=_todo_protocol_required,
                             todo_protocol_visible=_todo_protocol_visible,
@@ -623,9 +655,11 @@ def _phase_6c_parse_and_guard(
                             ),
                         )
                     if _guard_hit is not None:
+                        if _research_guard_active:
+                            final_answer_segments.clear()
                         # Solution-A: leaked-protocol rejection → one-shot
                         # cleaned delivery instead of a retry loop.
-                        _downgrade = _try_clean_downgrade(text)
+                        _downgrade = _try_clean_downgrade(_plain_guard_candidate)
                         if _downgrade is not None:
                             final_answer = _downgrade
                             terminated_reason = "final_answer_with_warning"
@@ -638,7 +672,7 @@ def _phase_6c_parse_and_guard(
                         _guard_label, _guard_message = _guard_hit
                         _auto_inspect_step = _try_auto_project_inspection_salvage(
                             _guard_label,
-                            text,
+                            _plain_guard_candidate,
                             steps,
                             iteration=i + 1,
                             tools_active=tools_active,
@@ -687,7 +721,15 @@ def _phase_6c_parse_and_guard(
                         step.observation = (
                             (((step.observation or "") + "\n\n") if step.observation else "")
                             + f"[{_guard_label}]\n"
-                            + _guard_repair_feedback(_guard_label, _guard_message, steps)
+                            + _guard_repair_feedback(
+                                _guard_label,
+                                _guard_message,
+                                steps,
+                                candidate_was_published=(
+                                    _final_stream_started
+                                    or _final_delta_emitted_this_iteration
+                                ),
+                            )
                         )
                     if _guard_hit is not None:
                         consecutive_format_violations = 0
@@ -702,15 +744,17 @@ def _phase_6c_parse_and_guard(
                             _emit_assistant_chunk(
                                 stack,
                                 iteration=i + 1,
-                                delta=text,
+                                delta=_plain_guard_candidate,
                                 task_id=react_task_id,
                             )
                             yield {
                                 "type": "text_delta",
-                                "delta": text,
+                                "delta": _plain_guard_candidate,
                                 "iteration": i + 1,
                             }
-                        final_answer = text
+                        final_answer = _plain_guard_candidate
+                        if _research_guard_active:
+                            final_answer_segments.clear()
                         final_answer_emitted = True
                         terminated_reason = "final_answer"
                         steps.append(step)

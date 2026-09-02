@@ -736,6 +736,10 @@ def _stream_react_loop_impl(
         state.evidence_convergence_active = _evidence_convergence_active
         state.effective_model = effective_model
         state.force_convergence_next = _force_convergence_next
+        # PHASE 6b decides whether a research candidate may stream before the
+        # response is parsed. Keep live tool availability synchronized here,
+        # including the first iteration and plan-mode transitions.
+        state.tools_active = tools_active
         state.last_public_update_key = _last_public_update_key
         state.throughput_chars = _throughput_chars
         state.throughput_last_emit = _throughput_last_emit

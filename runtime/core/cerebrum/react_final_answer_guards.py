@@ -21,6 +21,7 @@ from runtime.core.cerebrum.react_convergence import evidence_answer_conflicts_wi
 from runtime.core.cerebrum.react_explicit_reads import _explicit_read_only_goal
 from runtime.core.cerebrum.react_guards import (
     _goal_requests_code_mutation,
+    _goal_requests_research_lookup,
     _incomplete_final_answer_guard,
 )
 from runtime.core.cerebrum.react_loop_controls import (
@@ -39,6 +40,7 @@ from runtime.core.cerebrum.react_parsing import (
     _has_code_verification,
     _looks_like_unfinished_work,
     _parse_action,
+    _parse_step,
     _strip_react_protocol_blocks,
 )
 
@@ -169,29 +171,91 @@ _REACT_ACTION_CALL_RE = re.compile(
 _REACT_THOUGHT_LINE_RE = re.compile(r"(?im)^\s*Thought\s*:\s*")
 
 
+def _step_has_pending_tool_action(step: ReActStep) -> bool:
+    """Whether a parsed step contains an executable action, not ``none``."""
+
+    actions = list(step.actions) if step.actions else ([step.action] if step.action else [])
+    for action in actions:
+        parsed = _parse_action(action)
+        if parsed is not None and parsed[0].strip().lower() not in {"none", "n/a", "na"}:
+            return True
+    return False
+
+
+def _text_has_pending_tool_action(text: str) -> bool:
+    """Whether an in-flight ReAct prefix contains any executable action."""
+
+    if not text:
+        return False
+    step, _maybe_final = _parse_step(text, iteration=0)
+    return _step_has_pending_tool_action(step)
+
+
+def _research_final_answer_guards_active(
+    *,
+    is_code_mode: bool,
+    goal: str,
+    steps: list[ReActStep] | None,
+    tools_active: bool,
+) -> bool:
+    """Whether a final candidate can be vetoed by research grounding.
+
+    This predicate runs once per loop phase and intentionally inspects only
+    tool names. The older version reused ``_turn_fetched_external_content``
+    from the per-token streaming path, rebuilding the entire observation blob
+    for every provider delta (``O(chunks × trajectory bytes)`` on long reports).
+    """
+
+    if is_code_mode:
+        return False
+    if tools_active and _goal_requests_research_lookup(goal):
+        return True
+    if not steps:
+        return False
+
+    # Reuse the exact tool-name vocabulary used by citation/fact grounding,
+    # while avoiding its expensive observation concatenation.
+    from runtime.core.cerebrum.react_final_answer_content_guards import (
+        _FETCH_TOOL_HINTS,
+    )
+
+    for step in steps:
+        names = list(step.actions) if step.actions else ([step.action] if step.action else [])
+        names.extend(
+            str(result.get("tool_name") or "")
+            for result in (step.action_results or [])
+            if isinstance(result, dict)
+        )
+        if any(hint in str(name).lower() for name in names for hint in _FETCH_TOOL_HINTS):
+            return True
+    return False
+
+
 def _final_answer_needs_pre_emit_guard(
     text: str,
     *,
     is_code_mode: bool,
     browser_operation_mode: bool = False,
+    research_guard_active: bool = False,
 ) -> bool:
     """Whether user-visible final text must be buffered until guards pass.
 
-    Only genuinely dangerous executable content must force full buffering.
-    ``is_code_mode`` no longer forces buffering by itself: in the realtime
-    workbench ``is_code`` is effectively always true because a workspace is
-    mounted (see ``work_mode.resolve_work_mode``), so treating it as a hard
-    gate made every final report render wholesale instead of streaming.
-    Markdown code fences (`` ``` ``) are likewise not a reason to buffer —
-    a report that quotes code would otherwise never stream. The terminal
-    guard in ``_evaluate_final_answer_guards`` still re-evaluates the full
-    text, so mid-stream preview of non-executable prose is safe.
+    Ordinary chat and code prose may stream progressively, but research text
+    must wait for the citation/fact grounding guards. ``is_code_mode`` does
+    not force buffering by itself: in the realtime workbench ``is_code`` is
+    effectively always true because a workspace is mounted (see
+    ``work_mode.resolve_work_mode``), so treating it as a hard gate made every
+    final report render wholesale instead of streaming. Markdown code fences
+    (`` ``` ``) are likewise not a reason to buffer — a report that quotes
+    code would otherwise never stream.
     """
     if browser_operation_mode:
         return True
     body = text or ""
     if not body:
         return False
+    if research_guard_active:
+        return True
     # A plain chat-style stream can itself be a preparatory placeholder
     # ("I will search...", "我先检查...").  Buffer that shape until the
     # iteration ends so the completeness guard can reject it without first
@@ -314,8 +378,9 @@ def _note_guard_impasse(
     steps: list,
     *,
     rejection_limit: int = 3,
+    global_rejection_limit: int = 5,
 ) -> bool:
-    """Track repeated same-guard rejections; True when the loop is stuck.
+    """Track local and cross-label rejections; True when the loop is stuck.
 
     A guard pushing back is healthy — the model does more work and returns
     with evidence. It stops being healthy when the SAME guard rejects the
@@ -326,7 +391,11 @@ def _note_guard_impasse(
     burns the whole iteration budget and then terminates through the
     auto-pause path, whose "paused — continue from checkpoint" wording
     misreports what actually happened. Three no-progress rejections in a
-    row is the bound: real evidence-gathering always grows the step list.
+    row is the same-label bound: real evidence-gathering always grows the step
+    list. A second, slightly wider bound also counts no-progress rejections
+    across changing labels. Without it a candidate can bounce indefinitely
+    from citation grounding to fact grounding (or another guard) and reset the
+    original same-label counter on every transition.
 
     FAILED executions do not count toward progress: an environmental
     failure (sandbox/network) that the model retries adds a step but no
@@ -347,7 +416,14 @@ def _note_guard_impasse(
         state["count"] = state.get("count", 0) + 1
     else:
         state.update(label=label, progress=progress, count=1)
-    return state["count"] >= rejection_limit
+    if state.get("global_progress") == progress:
+        state["global_count"] = state.get("global_count", 0) + 1
+    else:
+        state.update(global_progress=progress, global_count=1)
+    return (
+        state["count"] >= rejection_limit
+        or state["global_count"] >= global_rejection_limit
+    )
 
 
 def guard_stall_kind(steps: list[ReActStep]) -> str:
@@ -411,7 +487,13 @@ def _trajectory_has_successful_tool_evidence(steps: list[ReActStep]) -> bool:
     return False
 
 
-def _guard_repair_feedback(label: str, message: str, steps: list[ReActStep]) -> str:
+def _guard_repair_feedback(
+    label: str,
+    message: str,
+    steps: list[ReActStep],
+    *,
+    candidate_was_published: bool = True,
+) -> str:
     """Build the next-round instruction without causing redundant tool work."""
 
     if label == "final-answer completeness guard" and _trajectory_has_successful_tool_evidence(
@@ -428,6 +510,16 @@ def _guard_repair_feedback(label: str, message: str, steps: list[ReActStep]) -> 
     # not user content. The model must never quote/acknowledge it in the
     # user-facing answer — a leaked "收到 grounding 检查…" prefix is exactly
     # what surfaced as a broken-layout report (thread txhjBkLKtmrjdfdJp0FQhN).
+    if not candidate_was_published:
+        return (
+            f"{message}\n\n"
+            "This feedback is internal loop machinery, not content for the user. "
+            "The rejected candidate was withheld and the user has not seen any part of it. "
+            "Any wording above about avoiding a repeated full report does not apply to this "
+            "private candidate. Correct the cited defects, then output one complete, "
+            "self-contained Final Answer from beginning to end. Do not output only a patch, "
+            "correction note, apology, or acknowledgement."
+        )
     return (
         f"{message}\n\n"
         "This feedback is internal loop machinery, not content for the user. "
@@ -899,6 +991,7 @@ def _phase_6e_guards_and_step_emit(
     # Reference-typed aliases — mutations propagate to the main loop.
     intent = state.intent
     steps = state.steps
+    final_answer_segments = state.final_answer_segments
     step = state.step
     assert step is not None, "phase 6e requires a parsed ReAct step"
     react_task_id = state.react_task_id
@@ -926,6 +1019,16 @@ def _phase_6e_guards_and_step_emit(
     _current_phase = state.current_phase
     _progress_summary = state.progress_summary
     _public_progress_summary = state.public_progress_summary
+    _research_guard_active = _research_final_answer_guards_active(
+        is_code_mode=_is_code_mode,
+        goal=intent.normalized_goal,
+        steps=steps + [step],
+        tools_active=tools_active,
+    )
+    _length_fragment_pending = state.length_limited and not (
+        bool(getattr(state.resp, "tool_calls", None))
+        or bool(step.observation and step.observation != "N/A")
+    )
     try:
         if (
             maybe_final
@@ -946,6 +1049,8 @@ def _phase_6e_guards_and_step_emit(
                 + "directly from the bounded evidence already supplied."
             )
             maybe_final = None
+            if _research_guard_active:
+                final_answer_segments.clear()
             _force_convergence_next = True
 
         # Close the race where a follow-up arrives while the model is composing
@@ -954,23 +1059,35 @@ def _phase_6e_guards_and_step_emit(
         # model round instead of finalizing over it.
         if maybe_final and _append_pending_live_steering():
             maybe_final = None
+            if _research_guard_active:
+                final_answer_segments.clear()
             _logger.info(
                 "react_loop deferred finalization for a priority user follow-up",
             )
 
-        if maybe_final:
+        # A length-limited research response is only a fragment. PHASE 6g
+        # stores it in ``final_answer_segments`` and the next iteration
+        # continues; guard and publish only after the complete candidate is
+        # available so cross-segment links/facts are checked atomically.
+        if maybe_final and not (_research_guard_active and _length_fragment_pending):
+            _guard_candidate = (
+                "".join(final_answer_segments + [maybe_final])
+                if _research_guard_active and final_answer_segments
+                else maybe_final
+            )
             _deferred_final_emit = not _final_stream_started and (
                 _evidence_convergence_active is not None
                 or _final_answer_needs_pre_emit_guard(
-                    maybe_final,
+                    _guard_candidate,
                     is_code_mode=_is_code_mode,
                     browser_operation_mode=_browser_operation_mode,
+                    research_guard_active=_research_guard_active,
                 )
             )
             _guard_hit = _evaluate_final_answer_guards(
                 steps=steps,
                 step=step,
-                final_answer=maybe_final,
+                final_answer=_guard_candidate,
                 is_code_mode=_is_code_mode,
                 todo_protocol_required=_todo_protocol_required,
                 todo_protocol_visible=_todo_protocol_visible,
@@ -982,11 +1099,13 @@ def _phase_6e_guards_and_step_emit(
                 prior_grounding_text=state.prior_grounding_text,
             )
             if _guard_hit is not None:
+                if _research_guard_active:
+                    final_answer_segments.clear()
                 # Solution-A: a guard rejection that is purely a leaked ReAct
                 # protocol block is downgraded to a one-shot cleaned delivery
                 # rather than retried in a loop. The model usually already did
                 # the work (tools ran); only the answer markup was dirty.
-                _downgrade = _try_clean_downgrade(maybe_final)
+                _downgrade = _try_clean_downgrade(_guard_candidate)
                 if _downgrade is not None:
                     final_answer = _downgrade
                     terminated_reason = "final_answer_with_warning"
@@ -995,7 +1114,7 @@ def _phase_6e_guards_and_step_emit(
                 _guard_label, _guard_message = _guard_hit
                 _auto_inspect_step = _try_auto_project_inspection_salvage(
                     _guard_label,
-                    maybe_final,
+                    _guard_candidate,
                     steps,
                     iteration=i + 1,
                     tools_active=tools_active,
@@ -1045,11 +1164,24 @@ def _phase_6e_guards_and_step_emit(
                 step.observation = (
                     (((step.observation or "") + "\n\n") if step.observation else "")
                     + f"[{_guard_label}]\n"
-                    + _guard_repair_feedback(_guard_label, _guard_message, steps)
+                    + _guard_repair_feedback(
+                        _guard_label,
+                        _guard_message,
+                        steps,
+                        candidate_was_published=(
+                            _final_stream_started or _final_delta_emitted_this_iteration
+                        ),
+                    )
                 )
             elif _deferred_final_emit:
                 _delta = (
-                    maybe_final[_streamed_final_chars:] if _streamed_final_chars else maybe_final
+                    _guard_candidate
+                    if _research_guard_active
+                    else (
+                        _guard_candidate[_streamed_final_chars:]
+                        if _streamed_final_chars
+                        else _guard_candidate
+                    )
                 )
                 _emit_assistant_chunk(
                     state.stack,

@@ -2394,6 +2394,60 @@ def test_research_delivery_does_not_wait_for_checklist_reconciliation() -> None:
     )
 
 
+def test_rejected_research_candidate_is_never_published() -> None:
+    rejected = (
+        "候选报告：事件流使用显式阶段，"
+        "但这里引用了[未抓取来源](https://not-fetched.example/report)。"
+    )
+    accepted = (
+        "最终报告：事件流使用显式阶段，"
+        "来源见[官方说明](https://example.com/octopus-streaming)。"
+    )
+    router = _ScriptedRouter(
+        [
+            (
+                "Thought: fetch the primary source before answering\n"
+                'Action: web_search({"q":"Octopus agent streaming architecture"})'
+            ),
+            f"Final Answer: {rejected}",
+            f"Final Answer: {accepted}",
+        ]
+    )
+    intent = _intent("调研 Octopus agent 的流式架构并给出有来源的结论")
+    intent.user_context["mode"] = "react"
+    stack = _build_stack_with_executor(router)
+    stack.executor.registry.register(
+        Skill(
+            name="web_search",
+            description="Search an external source.",
+            trusted_source="builtin://web_search",
+            handler=lambda q="": {
+                "query": q,
+                "results": [
+                    {
+                        "title": "Octopus streaming architecture",
+                        "url": "https://example.com/octopus-streaming",
+                        "snippet": "Explicit phases and causal progress sequence.",
+                    }
+                ],
+            },
+        ),
+        verify_tests=False,
+    )
+
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=4))
+
+    assert result is not None and result.success
+    assert result.final_answer == accepted
+    assert router.calls == 3
+    visible_answer = "".join(
+        event["delta"] for event in events if event["type"] == "text_delta"
+    )
+    assert visible_answer == accepted
+    assert rejected not in visible_answer
+    assert any("citation-grounding guard" in step.observation for step in result.steps)
+
+
 def test_silent_tool_rounds_do_not_generate_runtime_authored_updates() -> None:
     router = _ScriptedRouter(
         [
@@ -8949,6 +9003,35 @@ def test_guard_impasse_resets_on_different_guard() -> None:
     assert _note_guard_impasse(state, "implementation-write guard", steps) is False
     assert _note_guard_impasse(state, "inspection-evidence guard", steps) is False
     assert _note_guard_impasse(state, "implementation-write guard", steps) is False
+
+
+def test_guard_impasse_bounds_cross_label_repair_loop() -> None:
+    from runtime.core.cerebrum.react_loop import _note_guard_impasse
+
+    state: dict = {}
+    steps = [ReActStep(iteration=1, action='web_search({"q": "latest"})', observation="x")]
+    labels = [
+        "citation-grounding guard",
+        "fact-grounding guard",
+        "research-evidence-quality guard",
+        "answer-item-count guard",
+    ]
+    for label in labels:
+        assert _note_guard_impasse(state, label, steps) is False
+
+    # Switching guard labels no longer resets the total no-progress budget.
+    assert _note_guard_impasse(state, "research-source-display guard", steps) is True
+
+    # A genuinely new successful action resets the cross-label budget.
+    steps.append(
+        ReActStep(
+            iteration=2,
+            action='web_search({"q": "primary source"})',
+            observation="new evidence",
+        )
+    )
+    assert _note_guard_impasse(state, "citation-grounding guard", steps) is False
+    assert state["global_count"] == 1
 
 
 def test_guard_impasse_failed_retries_do_not_count_as_progress() -> None:
