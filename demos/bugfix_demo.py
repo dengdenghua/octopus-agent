@@ -171,6 +171,44 @@ def build_bugfix_graph(proj: Path) -> TaskGraph:
     )
 
 
+def build_safe_observation_graph(proj: Path) -> TaskGraph:
+    """Build a read-only trajectory suitable for autonomous skill forging.
+
+    The real bug-fix graph intentionally contains shell, file mutation, and
+    Git operations. Those primitives must remain behind the forge's dangerous
+    tool gate. The evolution demo uses this separate graph so it can exercise
+    automatic promotion without teaching the system to bypass that gate.
+    """
+    nodes = [
+        TaskNode(
+            node_id="n0",
+            skill_ref=SkillId("list_cwd"),
+            args_template={"path": str(proj)},
+        ),
+        TaskNode(
+            node_id="n1",
+            skill_ref=SkillId("read_file"),
+            args_template={"path": str(proj / "test_add.py")},
+        ),
+        TaskNode(
+            node_id="n2",
+            skill_ref=SkillId("read_file"),
+            args_template={"path": str(proj / "add.py")},
+        ),
+    ]
+    edges = [
+        WorkflowEdge(from_node="n0", to_node="n1", strict=True),
+        WorkflowEdge(from_node="n1", to_node="n2", strict=True),
+    ]
+    return TaskGraph(
+        nodes=nodes,
+        edges=edges,
+        budget=BudgetSpec(tokens=10_000, usd=0.10),
+        task_type="observation",
+        strategy="safe_evolution_demo",
+    )
+
+
 # ═══════════════════════════════════════════════════════════
 # Implementation note.
 # ═══════════════════════════════════════════════════════════

@@ -11,7 +11,6 @@ from typing import Any
 from runtime.core.graph_runtime import GraphRuntime
 from runtime.execution.suckers import SkillRegistry
 from runtime.execution.suckers.builtins import register_all
-from runtime.execution.suckers.write_skills import register_exec_skill
 from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.journal import JSONLJournal
 from runtime.platform.models import (
@@ -25,7 +24,7 @@ from runtime.safety.recovery import (
     SkillForge,
 )
 
-from .bugfix_demo import build_bugfix_graph, setup_buggy_project
+from .bugfix_demo import build_safe_observation_graph, setup_buggy_project
 
 
 class _C:
@@ -63,7 +62,7 @@ def _populate_journal(
 
     for i in range(n):
         proj = setup_buggy_project(root / f"proj_{i}")
-        graph = build_bugfix_graph(proj)
+        graph = build_safe_observation_graph(proj)
         budget = Budget(
             task_id=graph.task_id,
             limits=BudgetLimits(tokens=10_000, usd=0.10),
@@ -164,20 +163,19 @@ def run_demo(
             print(c.bold("╰─────────────────────────────────────────────────╯"))
             print()
             print(c.dim(f"  workdir: {root}"))
-            print(c.dim(f"  bugfix runs: {runs}"))
+            print(c.dim(f"  safe observation runs: {runs}"))
             print()
 
         # Implementation note.
         registry = SkillRegistry()
         register_all(registry)
-        register_exec_skill(registry)
         skills_before = set(registry.all_names())
         if verbose:
             print(c.bold(f"  ▸ before: {len(skills_before)} skills in registry"))
 
         # Implementation note.
         if verbose:
-            print(c.bold(f"  ▸ running bugfix × {runs} ..."))
+            print(c.bold(f"  ▸ recording safe observations × {runs} ..."))
         journal_path = _populate_journal(root, registry, runs)
         journal = JSONLJournal(journal_path)
         total_events = len(journal.read_all())

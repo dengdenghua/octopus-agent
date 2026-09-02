@@ -7,7 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from demos.bugfix_demo import build_safe_observation_graph
 from demos.evolution_demo import run_demo
+from runtime.safety.approval.approval_gate import is_dangerous_tool
 
 pytestmark = [
     pytest.mark.integration,
@@ -18,26 +20,14 @@ pytestmark = [
 ]
 
 
-# The bugfix demo trail used by run_demo includes exec_shell, which the
-# SkillForge danger gate (runtime.safety.approval.approval_gate) refuses to wrap
-# in a forged composite skill. The four "skill was promoted" assertions
-# below therefore conflict with current safety policy. Marked xfail
-# until either the demo is rewritten to use a non-dangerous trail or
-# the danger gate gains an explicit-allowlist for trusted bugfix flows.
-# 2026-07-28: 阻塞原因确认为 forge promotion 被 danger gate 拦截;
-# 待 danger gate 策略(allowlist / demo 改写)明确后清理本 xfail。
-_FORGE_PROMOTION_BLOCKED_BY_DANGER_GATE = pytest.mark.xfail(
-    reason=(
-        "bugfix demo trail includes exec_shell; SkillForge danger "
-        "gate (runtime.safety.approval.approval_gate.is_dangerous_tool) "
-        "refuses promotion. Expected after the danger-gate hardening."
-    ),
-    strict=False,
-    raises=AssertionError,
-)
-
-
 class TestEvolutionDemo:
+    def test_forge_source_trajectory_is_read_only(self, tmp_path: Path):
+        graph = build_safe_observation_graph(tmp_path)
+        skills = [str(node.skill_ref) for node in graph.nodes]
+
+        assert skills == ["list_cwd", "read_file", "read_file"]
+        assert not any(is_dangerous_tool(skill) for skill in skills)
+
     def test_run_succeeds(self, tmp_path: Path):
         result = run_demo(
             workdir=tmp_path,
@@ -56,7 +46,6 @@ class TestEvolutionDemo:
         )
         assert result["forge"]["candidates_total"] >= 1
 
-    @_FORGE_PROMOTION_BLOCKED_BY_DANGER_GATE
     def test_new_skill_in_registry(self, tmp_path: Path):
         """Implementation note."""
         result = run_demo(
@@ -68,7 +57,6 @@ class TestEvolutionDemo:
         assert result["skills_after"] > result["skills_before"]
         assert result["new_skill_count"] >= 1
 
-    @_FORGE_PROMOTION_BLOCKED_BY_DANGER_GATE
     def test_new_skill_name_has_forged_prefix(self, tmp_path: Path):
         result = run_demo(
             workdir=tmp_path,
@@ -82,7 +70,6 @@ class TestEvolutionDemo:
             f"new skill names should indicate forged origin · got {new_names}"
         )
 
-    @_FORGE_PROMOTION_BLOCKED_BY_DANGER_GATE
     def test_promoted_skill_is_callable(self, tmp_path: Path):
         """Implementation note."""
         result = run_demo(
@@ -98,7 +85,6 @@ class TestEvolutionDemo:
             f"forged skill couldn't be invoked · invocations: {result['invocations']}"
         )
 
-    @_FORGE_PROMOTION_BLOCKED_BY_DANGER_GATE
     def test_persisted_md_files(self, tmp_path: Path):
         """Implementation note."""
         result = run_demo(
