@@ -734,6 +734,24 @@ def test_ci_uploads_coverage_data_fail_closed_including_hidden_file() -> None:
     assert upload["with"]["if-no-files-found"] == "error"
 
 
+def test_pr_scale_release_train_exception_is_exact_sha_and_same_repo_only() -> None:
+    path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+    workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["pr-scale-guard"]["steps"]
+    check = next(step for step in steps if step.get("name") == "Check PR size against base")
+
+    assert check["env"]["OCTOPUS_RELEASE_TRAIN_APPROVED_SHA"] == (
+        "${{ vars.OCTOPUS_RELEASE_TRAIN_APPROVED_SHA }}"
+    )
+    script = check["with"]["script"]
+    assert "approvedHead.length === 40" in script
+    assert "approvedHead === head" in script
+    assert "pr.base.ref === 'main'" in script
+    assert "pr.head.ref === 'codex/production-hardening'" in script
+    assert "pr.head.repo.full_name === pr.base.repo.full_name" in script
+    assert "if (releaseTrainApproved)" in script
+
+
 def test_ci_audits_frontend_production_dependencies_fail_closed() -> None:
     path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
     workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
