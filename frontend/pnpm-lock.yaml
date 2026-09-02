@@ -213,8 +213,8 @@ importers:
         specifier: ^19.0.0
         version: 19.2.6(react@19.2.6)
       react-resizable-panels:
-        specifier: ^4.4.1
-        version: 4.11.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+        specifier: ^4.12.2
+        version: 4.12.2(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       react-router-dom:
         specifier: ^7.18.2
         version: 7.18.2(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -2537,6 +2537,7 @@ packages:
   '@xmldom/xmldom@0.8.13':
     resolution: {integrity: sha512-KRYzxepc14G/CEpEGc3Yn+JKaAeT63smlDr+vjB8jRfgTBBI9wRj/nkQEO+ucV8p8I9bfKLWp37uHgFrbntPvw==}
     engines: {node: '>=10.0.0'}
+    deprecated: this version has critical issues, please update to the latest version
 
   '@xterm/addon-fit@0.11.0':
     resolution: {integrity: sha512-jYcgT6xtVYhnhgxh3QgYDnnNMYTcf8ElbxxFzX0IZo+vabQqSPAjC3c1wJrKB5E19VwQei89QCiZZP86DCPF7g==}
@@ -4636,8 +4637,8 @@ packages:
       '@types/react':
         optional: true
 
-  react-resizable-panels@4.11.0:
-    resolution: {integrity: sha512-LPk/AkFDGkg7SsbOyL93ojrE6E7lhrxxDwnYNjfmnSeI6BE7Sje6dB24PXgZk8DeugdeXNk1LO+ohRqIjhxiLw==}
+  react-resizable-panels@4.12.2:
+    resolution: {integrity: sha512-NwY5LCo4WrxVvDh0xoMML6EMLPONP/8ckKcIdpnojxexoatZdjLiRqLJQjQK5CPkd4SYiB/2M5BVrjZBQtOO7Q==}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
@@ -10297,7 +10298,7 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.14
 
-  react-resizable-panels@4.11.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6):
+  react-resizable-panels@4.12.2(react-dom@19.2.6(react@19.2.6))(react@19.2.6):
     dependencies:
       react: 19.2.6
       react-dom: 19.2.6(react@19.2.6)
