@@ -752,6 +752,18 @@ def test_pr_scale_release_train_exception_is_exact_sha_and_same_repo_only() -> N
     assert "if (releaseTrainApproved)" in script
 
 
+def test_ci_grants_gitleaks_read_only_pr_metadata_access() -> None:
+    path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+    workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+    assert workflow["permissions"] == {
+        "contents": "read",
+        "pull-requests": "read",
+    }
+    secret_scan = workflow["jobs"]["secret-scan"]
+    assert "permissions" not in secret_scan
+
+
 def test_ci_audits_frontend_production_dependencies_fail_closed() -> None:
     path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
     workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
