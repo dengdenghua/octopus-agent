@@ -206,6 +206,80 @@ describe("RealtimeClient", () => {
     client.close();
   });
 
+  it("times out a queued request and removes it before the outbox can flush", async () => {
+    vi.useFakeTimers();
+    const client = makeClient({});
+
+    const promise = client.request(
+      "thread/resume",
+      { threadId: "t" },
+      { timeoutMs: 15_000 },
+    );
+    const rejection = expect(promise).rejects.toThrow(
+      /thread\/resume timed out after 15000ms/,
+    );
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    await rejection;
+    expect(
+      (client as unknown as { pending: Map<unknown, unknown> }).pending.size,
+    ).toBe(0);
+
+    client.connect();
+    const ws = FakeWebSocket.lastInstance!;
+    ws.open();
+    expect(ws.sentRaw).toHaveLength(0);
+    client.close();
+  });
+
+  it("ignores a response that arrives after its request timed out", async () => {
+    vi.useFakeTimers();
+    const client = makeClient({});
+    client.connect();
+    const ws = FakeWebSocket.lastInstance!;
+    ws.open();
+
+    const promise = client.request(
+      "thread/events",
+      { threadId: "t" },
+      { timeoutMs: 15_000 },
+    );
+    const rejection = expect(promise).rejects.toThrow(
+      /thread\/events timed out/,
+    );
+    expect(ws.sentRaw).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await rejection;
+
+    expect(() => {
+      ws.receive({ jsonrpc: "2.0", id: 1, result: { events: [] } });
+    }).not.toThrow();
+    expect(
+      (client as unknown as { pending: Map<unknown, unknown> }).pending.size,
+    ).toBe(0);
+    client.close();
+  });
+
+  it("does not impose a default timeout on turn/start", async () => {
+    vi.useFakeTimers();
+    const client = makeClient({});
+    client.connect();
+    const ws = FakeWebSocket.lastInstance!;
+    ws.open();
+
+    const promise = client.request<{ ok: true }>("turn/start", {
+      threadId: "t",
+    });
+    await vi.advanceTimersByTimeAsync(15_001);
+    expect(
+      (client as unknown as { pending: Map<unknown, unknown> }).pending.size,
+    ).toBe(1);
+
+    ws.receive({ jsonrpc: "2.0", id: 1, result: { ok: true } });
+    await expect(promise).resolves.toEqual({ ok: true });
+    client.close();
+  });
+
   it("dispatches notifications to onNotification untouched", async () => {
     const onNotification = vi.fn();
     const client = makeClient({ onNotification });

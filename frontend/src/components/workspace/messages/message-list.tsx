@@ -12,6 +12,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -75,6 +76,7 @@ import { extractClarificationQuestionnaire } from "../clarification-questionnair
 import { hasVisibleMessageGroupContent, MessageGroup } from "./message-group";
 import {
   MessageListItem,
+  messageClipboardText,
   type MessageListProjectActions,
   type ShadowReviewContext,
 } from "./message-list-item";
@@ -173,6 +175,18 @@ export function HistoricalTurnBoundary({
   virtualize: boolean;
 }) {
   const nodeRef = useRef<HTMLDivElement | null>(null);
+  const onNodeRef = useRef(onNode);
+  useLayoutEffect(() => {
+    onNodeRef.current = onNode;
+  }, [onNode]);
+  // MessageList renders once per streamed frame. Keeping the callback ref
+  // stable prevents React from detaching and reattaching every historical
+  // turn's unchanged DOM node on each frame (two registry writes per turn).
+  // The latest owner callback is still used for the real unmount.
+  const setNodeRef = useCallback((node: HTMLDivElement | null) => {
+    nodeRef.current = node;
+    onNodeRef.current?.(node);
+  }, []);
   const [measuredHeight, setMeasuredHeight] = useState(
     () => historicalTurnHeightCache.get(cacheKey) ?? null,
   );
@@ -230,10 +244,7 @@ export function HistoricalTurnBoundary({
   return (
     <div
       {...props}
-      ref={(node) => {
-        nodeRef.current = node;
-        onNode?.(node);
-      }}
+      ref={setNodeRef}
       className={className}
       data-turn-mounted={mounted ? "true" : "false"}
       style={
@@ -1165,6 +1176,19 @@ export function MessageList({
 
   const messages = thread.messages;
   const showConversationActivity = thread.isLoading && !thread.error;
+  // Message objects are immutable and reference-stable for untouched realtime
+  // items. Build the positional lookup once per projected messages array so
+  // rendering N rows does not call Array#indexOf N times.
+  const messageIndexByReference = useMemo(() => {
+    const indexes = new Map<Message, number>();
+    for (let index = 0; index < messages.length; index += 1) {
+      const message = messages[index]!;
+      // Preserve Array#indexOf semantics if a legacy projection happens to
+      // repeat the same Message object.
+      if (!indexes.has(message)) indexes.set(message, index);
+    }
+    return indexes;
+  }, [messages]);
   const latestOutboundDeliveryFailed = useMemo(() => {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
       const message = messages[index];
@@ -1174,39 +1198,81 @@ export function MessageList({
     return false;
   }, [messages]);
 
-  const shadowReviewForMessage = useCallback(
-    (message: Message): ShadowReviewContext | undefined => {
-      if (message.type !== "ai") return undefined;
-      const index = messages.indexOf(message);
-      let goal = "";
-      for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
-        const candidate = messages[cursor];
-        if (candidate?.type === "human") {
-          goal = extractTextFromMessage(candidate).trim();
-          break;
-        }
-      }
-      const primaryOutput = extractTextFromMessage(message).trim();
-      if (!goal || !primaryOutput) return undefined;
-      const metadata = message.additional_kwargs as
-        | Record<string, unknown>
-        | undefined;
-      const metadataEngine = metadata?.execution_engine;
-      const primaryEngine =
-        metadataEngine === "codex" || metadataEngine === "octopus"
-          ? metadataEngine
-          : currentAgent?.execution_engine || "octopus";
-      return {
-        goal,
-        primaryEngine,
-        primaryOutput,
-        threadId,
-        messageId: String(message.id ?? `${threadId}:${index}`),
-        workspacePath: project,
-      };
-    },
-    [currentAgent?.execution_engine, messages, project, threadId],
+  const lastMessage = messages[messages.length - 1];
+  const lastMessageIsLoading = Boolean(
+    thread.isLoading &&
+    lastMessage &&
+    lastMessage.id === thread.streamingMessage?.id,
   );
+  // Keep this eligibility check aligned with MessageListItem's assistant
+  // action bar. Shadow review only appears there, so parsing every historical
+  // answer into a context on each streamed frame is pure wasted work.
+  const shadowReviewMessage = useMemo(() => {
+    if (!lastMessage || lastMessage.type !== "ai" || lastMessageIsLoading) {
+      return null;
+    }
+    const metadata = lastMessage.additional_kwargs as
+      | Record<string, unknown>
+      | undefined;
+    if (
+      metadata?.message_kind === "commentary" ||
+      metadata?.public_progress === true ||
+      metadata?.response_state === "interrupted" ||
+      metadata?.response_state === "failed" ||
+      metadata?.run_status === "streaming"
+    ) {
+      return null;
+    }
+    return messageClipboardText(lastMessage).length > 0 ? lastMessage : null;
+  }, [lastMessage, lastMessageIsLoading]);
+  const shadowReviewGoalMessage = useMemo(() => {
+    if (!shadowReviewMessage) return null;
+    const messageIndex = messageIndexByReference.get(shadowReviewMessage);
+    if (messageIndex === undefined) return null;
+    for (let cursor = messageIndex - 1; cursor >= 0; cursor -= 1) {
+      const candidate = messages[cursor];
+      if (candidate?.type === "human") return candidate;
+    }
+    return null;
+  }, [messageIndexByReference, messages, shadowReviewMessage]);
+  const shadowReviewMessageIndex = shadowReviewMessage
+    ? messageIndexByReference.get(shadowReviewMessage)
+    : undefined;
+  const actionableShadowReview = useMemo<
+    ShadowReviewContext | undefined
+  >(() => {
+    if (!shadowReviewMessage || !shadowReviewGoalMessage) return undefined;
+    const goal = extractTextFromMessage(shadowReviewGoalMessage).trim();
+    const primaryOutput = extractTextFromMessage(shadowReviewMessage).trim();
+    if (!goal || !primaryOutput) return undefined;
+    const metadata = shadowReviewMessage.additional_kwargs as
+      | Record<string, unknown>
+      | undefined;
+    const metadataEngine = metadata?.execution_engine;
+    const primaryEngine =
+      metadataEngine === "codex" || metadataEngine === "octopus"
+        ? metadataEngine
+        : currentAgent?.execution_engine || "octopus";
+    return {
+      goal,
+      primaryEngine,
+      primaryOutput,
+      threadId,
+      messageId: String(
+        shadowReviewMessage.id ??
+          `${threadId}:${shadowReviewMessageIndex ?? messages.length - 1}`,
+      ),
+      workspacePath: project,
+    };
+  }, [
+    currentAgent?.execution_engine,
+    messages.length,
+    project,
+    shadowReviewGoalMessage,
+    shadowReviewMessage,
+    shadowReviewMessageIndex,
+    threadId,
+  ]);
   const hasTimelineContent = messages.length > 0 || timelineEntries.length > 0;
 
   // Structural fingerprint: changes when the message list topology changes
@@ -1935,6 +2001,7 @@ export function MessageList({
     afterContent?: ReactNode,
   ) => {
     const key = `${keyPrefix}/${msg.id}`;
+    const messageIndex = messageIndexByReference.get(msg);
     return (
       <div key={key}>
         {beforeContent}
@@ -1949,10 +2016,12 @@ export function MessageList({
             !thread.isLoading && messages[messages.length - 1] === msg
           }
           isLastMessage={messages[messages.length - 1] === msg}
-          messageIndex={messages.indexOf(msg)}
+          messageIndex={messageIndex}
           afterContent={afterContent}
           projectMessageActions={projectMessageActions}
-          shadowReview={shadowReviewForMessage(msg)}
+          shadowReview={
+            msg === shadowReviewMessage ? actionableShadowReview : undefined
+          }
           allowThreadFork={allowThreadFork}
         />
       </div>
@@ -1967,6 +2036,7 @@ export function MessageList({
     afterContent?: ReactNode,
   ) => {
     const key = `${keyPrefix}/${msg.id}`;
+    const messageIndex = messageIndexByReference.get(msg);
     const content = (
       <>
         {beforeContent}
@@ -1981,10 +2051,12 @@ export function MessageList({
             !thread.isLoading && messages[messages.length - 1] === msg
           }
           isLastMessage={messages[messages.length - 1] === msg}
-          messageIndex={messages.indexOf(msg)}
+          messageIndex={messageIndex}
           afterContent={afterContent}
           projectMessageActions={projectMessageActions}
-          shadowReview={shadowReviewForMessage(msg)}
+          shadowReview={
+            msg === shadowReviewMessage ? actionableShadowReview : undefined
+          }
           allowThreadFork={allowThreadFork}
         />
       </>
@@ -2700,8 +2772,19 @@ export function MessageList({
                       groupAuditNotice={groupAuditNotice}
                       renderGroupContent={renderGroupContent}
                       showAssistantAvatar={showAssistantAvatar}
-                      subagentAgents={subagentRenderInfo?.agents}
-                      subagentEvents={subagentRenderInfo?.events}
+                      // Fresh empty arrays would fail MemoizedGroup's reference
+                      // comparator on every streamed frame and reopen every
+                      // otherwise-settled historical group.
+                      subagentAgents={
+                        subagentRenderInfo?.agents.length
+                          ? subagentRenderInfo.agents
+                          : undefined
+                      }
+                      subagentEvents={
+                        subagentRenderInfo?.events.length
+                          ? subagentRenderInfo.events
+                          : undefined
+                      }
                       subagentMission={subagentRenderInfo?.mission}
                       subagentSettled={subagentRenderInfo?.settled}
                       subagentTurnIndex={turnIndex}

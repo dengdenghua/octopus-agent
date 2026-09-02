@@ -446,6 +446,9 @@ export const zhCN: Translations = {
     send: "发送",
     stop: "停止",
     stopping: "正在停止…",
+    restoringConnection: "正在恢复连接…草稿已保留。",
+    connectionRecoveryFailed: "连接恢复失败。",
+    retryConnection: "重试",
     projectModeLabel: "项目已绑定",
     projectModeHint:
       "已绑定本地目录，当前对话会读取项目上下文并按代码任务执行。",

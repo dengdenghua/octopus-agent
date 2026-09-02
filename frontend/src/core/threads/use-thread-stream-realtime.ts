@@ -17,7 +17,11 @@ import {
 import { swallow } from "@/core/utils/log";
 import { toast } from "sonner";
 import { useI18n } from "@/core/i18n/hooks";
-import { useRealtimeThread, type StreamVitals } from "@/core/realtime";
+import {
+  useRealtimeThread,
+  type StreamVitals,
+  type ThreadConnectionPhase,
+} from "@/core/realtime";
 import { itemStreamText } from "@/core/realtime/reducer";
 import type {
   AgentPhaseSnapshot,
@@ -84,6 +88,8 @@ export interface FileInMessage {
 /** Full BaseStream shape consumed by workspace pages. */
 type ExposedRealtimeThread = Omit<BaseStream<AgentThreadState>, "stop"> & {
   stop: () => Promise<void>;
+  connectionPhase: ThreadConnectionPhase;
+  readyForMutations: boolean;
 };
 
 type SendMessageFn = (
@@ -1158,6 +1164,8 @@ export function useThreadStreamRealtime(
   const {
     state,
     connected,
+    connectionPhase: realtimeConnectionPhase,
+    readyForMutations: realtimeReadyForMutations,
     startTurn,
     steer,
     interrupt,
@@ -1167,6 +1175,13 @@ export function useThreadStreamRealtime(
     loadOlderTurns,
     vitals,
   } = realtime;
+  // Keep the adapter tolerant of older injected realtime implementations and
+  // test doubles while the public readiness contract rolls out.
+  const readyForMutations =
+    realtimeReadyForMutations ?? (connected && state.resumeState === "resumed");
+  const connectionPhase: ThreadConnectionPhase =
+    realtimeConnectionPhase ??
+    (readyForMutations ? "ready" : connected ? "resuming" : "reconnecting");
   // React preserves hook state when the route swaps from one thread id to
   // another. Give every mounted thread incarnation its own synchronous epoch
   // so the very first render for B cannot expose A's optimistic rows, upload
@@ -1295,12 +1310,12 @@ export function useThreadStreamRealtime(
   // unknown/inaccessible historical thread) so reconnecting the socket alone
   // cannot make a still-unsendable conversation look healthy.
   useEffect(() => {
-    if (connected && state.resumeState === "resumed") {
+    if (readyForMutations) {
       setSendErrorForEpoch(threadEpoch, null);
     }
-  }, [connected, setSendErrorForEpoch, state.resumeState, threadEpoch]);
+  }, [readyForMutations, setSendErrorForEpoch, threadEpoch]);
 
-  const transportReady = connected && state.resumeState === "resumed";
+  const transportReady = readyForMutations;
   useEffect(() => {
     // A disconnect can demote an in-flight optimistic row to queued. Becoming
     // ready does not itself mean the row was sent; the delivery effect below
@@ -1588,6 +1603,8 @@ export function useThreadStreamRealtime(
         threadId: activeThreadId || null,
         compact,
         vitals,
+        connectionPhase,
+        readyForMutations,
       }) as ExposedRealtimeThread & {
         compact: typeof compact;
         vitals: typeof vitals;
@@ -1604,6 +1621,8 @@ export function useThreadStreamRealtime(
       activeThreadId,
       vitals,
       compact,
+      connectionPhase,
+      readyForMutations,
     ],
   );
 

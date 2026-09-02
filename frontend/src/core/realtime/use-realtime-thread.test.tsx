@@ -1042,6 +1042,482 @@ describe("useRealtimeThread reconnect reconciliation", () => {
   });
 });
 
+describe("useRealtimeThread resume retry barrier", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const replayCache = {
+    load: vi.fn(async () => null),
+    append: vi.fn(async () => {}),
+    clear: vi.fn(async () => {}),
+  };
+
+  async function flushPromises() {
+    await act(async () => {
+      for (let index = 0; index < 8; index += 1) {
+        await Promise.resolve();
+      }
+    });
+  }
+
+  it("retries a transient resume rejection while the socket stays open", async () => {
+    let resumeCalls = 0;
+    const requestOptions: Array<{ timeoutMs?: number } | undefined> = [];
+    const factory = (deps: { onOpen?: () => void }) => ({
+      connect: () => deps.onOpen?.(),
+      close: () => {},
+      notify: () => {},
+      request: (
+        method: string,
+        _params?: Record<string, unknown>,
+        options?: { timeoutMs?: number },
+      ) => {
+        if (method !== "thread/resume") return Promise.resolve({});
+        requestOptions.push(options);
+        resumeCalls += 1;
+        if (resumeCalls === 1) {
+          return Promise.reject(new Error("server busy"));
+        }
+        return Promise.resolve({
+          thread: { id: "th" },
+          turns: [],
+          incremental: true,
+        });
+      },
+    });
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: replayCache as never,
+      }),
+    );
+    await flushPromises();
+
+    expect(resumeCalls).toBe(1);
+    expect(rendered.result.current.connectionPhase).toBe("resuming");
+    expect(rendered.result.current.readyForMutations).toBe(false);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(499);
+    });
+    expect(resumeCalls).toBe(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    await flushPromises();
+
+    expect(resumeCalls).toBe(2);
+    expect(requestOptions).toEqual([
+      { timeoutMs: 15_000 },
+      { timeoutMs: 15_000 },
+    ]);
+    expect(rendered.result.current.connectionPhase).toBe("ready");
+    expect(rendered.result.current.readyForMutations).toBe(true);
+    rendered.unmount();
+  });
+
+  it("retries transient thread/events catch-up failures behind the same barrier", async () => {
+    let emitOpen!: () => void;
+    let emitClose!: () => void;
+    let resumeCalls = 0;
+    let eventCalls = 0;
+    const eventTimeouts: Array<number | undefined> = [];
+    const factory = (deps: {
+      onOpen?: () => void;
+      onClose?: (code: number, reason: string) => void;
+    }) => {
+      emitOpen = () => deps.onOpen?.();
+      emitClose = () => deps.onClose?.(1006, "offline");
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (
+          method: string,
+          _params?: Record<string, unknown>,
+          options?: { timeoutMs?: number },
+        ) => {
+          if (method === "thread/resume") {
+            resumeCalls += 1;
+            return Promise.resolve({
+              thread: { id: "th" },
+              turns: [],
+              incremental: true,
+              nextEventSequence: 1,
+              eventStreamId: "stream-a",
+            });
+          }
+          if (method !== "thread/events") return Promise.resolve({});
+          eventCalls += 1;
+          eventTimeouts.push(options?.timeoutMs);
+          if (eventCalls === 1) {
+            return Promise.reject(new Error("temporary events failure"));
+          }
+          return Promise.resolve({
+            events: [],
+            cursor: 1,
+            streamId: "stream-a",
+            requiresReset: false,
+            hasMore: false,
+            turnCount: 0,
+            lastTurnId: null,
+            lastTurnStatus: null,
+          });
+        },
+      };
+    };
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: replayCache as never,
+      }),
+    );
+    await flushPromises();
+    expect(rendered.result.current.readyForMutations).toBe(true);
+
+    act(() => {
+      emitClose();
+      emitOpen();
+    });
+    await flushPromises();
+    expect(resumeCalls).toBe(1);
+    expect(eventCalls).toBe(1);
+    expect(rendered.result.current.connectionPhase).toBe("resuming");
+    expect(rendered.result.current.readyForMutations).toBe(false);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    await flushPromises();
+
+    expect(eventCalls).toBe(2);
+    expect(eventTimeouts).toEqual([15_000, 15_000]);
+    expect(rendered.result.current.connectionPhase).toBe("ready");
+    expect(rendered.result.current.readyForMutations).toBe(true);
+    rendered.unmount();
+  });
+
+  it("times out a hung resume before retrying it", async () => {
+    let resumeCalls = 0;
+    const requestTimeouts: Array<number | undefined> = [];
+    const factory = (deps: { onOpen?: () => void }) => ({
+      connect: () => deps.onOpen?.(),
+      close: () => {},
+      notify: () => {},
+      request: (
+        method: string,
+        _params?: Record<string, unknown>,
+        options?: { timeoutMs?: number },
+      ) => {
+        if (method !== "thread/resume") return Promise.resolve({});
+        resumeCalls += 1;
+        requestTimeouts.push(options?.timeoutMs);
+        if (resumeCalls === 1) {
+          return new Promise((_resolve, reject) => {
+            setTimeout(
+              () => reject(new Error("simulated request timeout")),
+              options?.timeoutMs,
+            );
+          });
+        }
+        return Promise.resolve({
+          thread: { id: "th" },
+          turns: [],
+          incremental: true,
+        });
+      },
+    });
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: replayCache as never,
+      }),
+    );
+    await flushPromises();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(14_999);
+    });
+    expect(resumeCalls).toBe(1);
+    expect(rendered.result.current.readyForMutations).toBe(false);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(501);
+    });
+    await flushPromises();
+
+    expect(resumeCalls).toBe(2);
+    expect(requestTimeouts).toEqual([15_000, 15_000]);
+    expect(rendered.result.current.connectionPhase).toBe("ready");
+    expect(rendered.result.current.readyForMutations).toBe(true);
+    rendered.unmount();
+  });
+
+  it("cancels a pending retry on close and resumes once on the next open", async () => {
+    let emitOpen!: () => void;
+    let emitClose!: () => void;
+    let resumeCalls = 0;
+    const factory = (deps: {
+      onOpen?: () => void;
+      onClose?: (code: number, reason: string) => void;
+    }) => {
+      emitOpen = () => deps.onOpen?.();
+      emitClose = () => deps.onClose?.(1006, "offline");
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string) => {
+          if (method !== "thread/resume") return Promise.resolve({});
+          resumeCalls += 1;
+          return resumeCalls === 1
+            ? Promise.reject(new Error("server busy"))
+            : Promise.resolve({
+                thread: { id: "th" },
+                turns: [],
+                incremental: true,
+              });
+        },
+      };
+    };
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: replayCache as never,
+      }),
+    );
+    await flushPromises();
+    expect(resumeCalls).toBe(1);
+
+    act(() => emitClose());
+    expect(rendered.result.current.connectionPhase).toBe("reconnecting");
+    expect(rendered.result.current.readyForMutations).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(resumeCalls).toBe(1);
+
+    act(() => emitOpen());
+    await flushPromises();
+    expect(resumeCalls).toBe(2);
+    expect(rendered.result.current.connectionPhase).toBe("ready");
+    expect(rendered.result.current.readyForMutations).toBe(true);
+    rendered.unmount();
+  });
+
+  it("does not retry permanent JSON-RPC recovery errors", async () => {
+    let resumeCalls = 0;
+    const factory = (deps: { onOpen?: () => void }) => ({
+      connect: () => deps.onOpen?.(),
+      close: () => {},
+      notify: () => {},
+      request: (method: string) => {
+        if (method !== "thread/resume") return Promise.resolve({});
+        resumeCalls += 1;
+        return Promise.reject({ code: -32020, message: "unauthorized" });
+      },
+    });
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: replayCache as never,
+      }),
+    );
+    await flushPromises();
+
+    expect(rendered.result.current.connectionPhase).toBe("recovery_error");
+    expect(rendered.result.current.readyForMutations).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(resumeCalls).toBe(1);
+    rendered.unmount();
+  });
+
+  it("lets the user recover from a permanent error through public resume", async () => {
+    let emitOpen!: () => void;
+    let resolveManualResume!: (value: Record<string, unknown>) => void;
+    let resumeCalls = 0;
+    const factory = (deps: { onOpen?: () => void }) => {
+      emitOpen = () => deps.onOpen?.();
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string) => {
+          if (method !== "thread/resume") return Promise.resolve({});
+          resumeCalls += 1;
+          if (resumeCalls === 1) {
+            return Promise.reject({ code: -32020, message: "unauthorized" });
+          }
+          return new Promise<Record<string, unknown>>((resolve) => {
+            resolveManualResume = resolve;
+          });
+        },
+      };
+    };
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: replayCache as never,
+      }),
+    );
+    await flushPromises();
+    expect(rendered.result.current.connectionPhase).toBe("recovery_error");
+    expect(rendered.result.current.readyForMutations).toBe(false);
+
+    let manualResume!: Promise<void>;
+    act(() => {
+      manualResume = rendered.result.current.resume();
+    });
+    await flushPromises();
+    expect(resumeCalls).toBe(2);
+    expect(rendered.result.current.connectionPhase).toBe("resuming");
+    expect(rendered.result.current.readyForMutations).toBe(false);
+
+    // Even a duplicate open callback cannot overlap the user-owned recovery.
+    act(() => emitOpen());
+    await flushPromises();
+    expect(resumeCalls).toBe(2);
+
+    await act(async () => {
+      resolveManualResume({
+        thread: { id: "th" },
+        turns: [],
+        incremental: true,
+      });
+      await manualResume;
+    });
+
+    expect(rendered.result.current.state.resumeState).toBe("resumed");
+    expect(rendered.result.current.connectionPhase).toBe("ready");
+    expect(rendered.result.current.readyForMutations).toBe(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(resumeCalls).toBe(2);
+    rendered.unmount();
+  });
+
+  it("restarts durable tail polling after manual resume recovers active work", async () => {
+    let resumeCalls = 0;
+    let eventCalls = 0;
+    const factory = (deps: { onOpen?: () => void }) => ({
+      connect: () => deps.onOpen?.(),
+      close: () => {},
+      notify: () => {},
+      request: (method: string) => {
+        if (method === "thread/resume") {
+          resumeCalls += 1;
+          if (resumeCalls === 1) {
+            return Promise.reject({ code: -32020, message: "unauthorized" });
+          }
+          return Promise.resolve({
+            thread: { id: "th" },
+            turns: [
+              {
+                id: "turn-live",
+                threadId: "th",
+                status: "inProgress",
+                items: [],
+                startedAt: "2026-01-01T00:00:00.000Z",
+                completedAt: null,
+                error: null,
+              },
+            ],
+            hasMore: false,
+            incremental: false,
+            nextEventSequence: 10,
+            eventStreamId: "stream-a",
+          });
+        }
+        if (method !== "thread/events") return Promise.resolve({});
+        eventCalls += 1;
+        return Promise.resolve(
+          eventCalls === 1
+            ? {
+                events: [
+                  {
+                    sequence: 11,
+                    event: "turn_completed",
+                    eventId: "terminal-event",
+                    threadId: "th",
+                    turnId: "turn-live",
+                    ts: "2026-01-01T00:00:05.000Z",
+                    payload: { status: "completed", error: null },
+                  },
+                ],
+                cursor: 11,
+                streamId: "stream-a",
+                requiresReset: false,
+                hasMore: false,
+                turnCount: 1,
+                lastTurnId: "turn-live",
+                lastTurnStatus: "completed",
+              }
+            : {
+                events: [],
+                cursor: 11,
+                streamId: "stream-a",
+                requiresReset: false,
+                hasMore: false,
+                turnCount: 1,
+                lastTurnId: "turn-live",
+                lastTurnStatus: "completed",
+              },
+        );
+      },
+    });
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: replayCache as never,
+      }),
+    );
+    await flushPromises();
+    expect(rendered.result.current.connectionPhase).toBe("recovery_error");
+
+    await act(async () => {
+      await rendered.result.current.resume();
+    });
+    expect(rendered.result.current.state.turns[0]?.status).toBe("inProgress");
+    expect(rendered.result.current.readyForMutations).toBe(true);
+
+    act(() => vi.advanceTimersByTime(749));
+    expect(eventCalls).toBe(0);
+    act(() => vi.advanceTimersByTime(1));
+    await flushPromises();
+
+    expect(eventCalls).toBe(1);
+    expect(rendered.result.current.state.turns[0]?.status).toBe("completed");
+    // The existing tail state machine performs one terminal drain after the
+    // completion event so it cannot miss a same-tick durable suffix.
+    act(() => vi.advanceTimersByTime(0));
+    await flushPromises();
+    expect(eventCalls).toBe(2);
+    rendered.unmount();
+  });
+});
+
 describe("useRealtimeThread cross-worker tail recovery", () => {
   beforeEach(() => {
     vi.useFakeTimers();

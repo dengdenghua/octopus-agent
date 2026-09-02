@@ -22,7 +22,11 @@ import type { ReasoningEffort } from "@/core/threads";
 import { swallow } from "@/core/utils/log";
 
 import { createDefaultClient, type RealtimeClient } from "./client";
-import type { JsonRpcRequest, Notification } from "./envelope";
+import {
+  JsonRpcErrorCode,
+  type JsonRpcRequest,
+  type Notification,
+} from "./envelope";
 import {
   type Conversation,
   emptyConversation,
@@ -81,6 +85,17 @@ interface PreparedLiveNotification {
 interface ThreadEpoch {
   threadId: string;
   generation: number;
+}
+
+interface ManualResumeBridge {
+  epoch: ThreadEpoch;
+  client: RealtimeClient;
+  /** Claims the shared recovery single-flight slot. Null means another
+   * recovery owns it or this thread is no longer online/current. */
+  begin: () => Promise<number | null>;
+  isCurrent: (sequence: number) => boolean;
+  complete: (sequence: number, recoveredActive: boolean) => void;
+  fail: (sequence: number, error: unknown) => void;
 }
 
 function isSameThreadEpoch(left: ThreadEpoch, right: ThreadEpoch): boolean {
@@ -210,6 +225,13 @@ export interface UseRealtimeThreadArgs {
   }) => RealtimeClient;
 }
 
+export type ThreadConnectionPhase =
+  | "connecting"
+  | "reconnecting"
+  | "resuming"
+  | "ready"
+  | "recovery_error";
+
 export function visibleConversationForThread(
   state: Conversation,
   threadId: string,
@@ -219,7 +241,15 @@ export function visibleConversationForThread(
 
 export interface UseRealtimeThreadValue {
   state: Conversation;
+  /** Physical websocket state kept for backwards compatibility. Consumers
+   * should gate thread mutations on ``readyForMutations`` instead. */
   connected: boolean;
+  /** Thread-scoped transport/recovery phase. A socket being open is only
+   * ``resuming`` until authoritative history reconciliation succeeds. */
+  connectionPhase: ThreadConnectionPhase;
+  /** True only after this thread's current socket is open and its resume
+   * barrier has completed successfully. */
+  readyForMutations: boolean;
   startTurn: (params: {
     input: string;
     /** Explicit local project directory. The backend validates/rewrites this
@@ -317,6 +347,27 @@ interface ThreadEventsResponse {
 // bounded for threads with huge logs; the client loops until hasMore.
 const EVENTS_PAGE_LIMIT = 5000;
 
+// Recovery requests must not hold the resume barrier forever on a live but
+// wedged socket. Unlike turn/start, these bounded read requests are safe to
+// time out and retry.
+const RECOVERY_REQUEST_TIMEOUT_MS = 15_000;
+const RESUME_RETRY_INITIAL_MS = 500;
+const RESUME_RETRY_MAX_MS = 8_000;
+
+function isPermanentRecoveryError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return false;
+  }
+  const code = (error as { code?: unknown }).code;
+  return (
+    code === JsonRpcErrorCode.INVALID_REQUEST ||
+    code === JsonRpcErrorCode.METHOD_NOT_FOUND ||
+    code === JsonRpcErrorCode.INVALID_PARAMS ||
+    code === JsonRpcErrorCode.THREAD_NOT_FOUND ||
+    code === JsonRpcErrorCode.UNAUTHORIZED
+  );
+}
+
 // A recovered in-flight turn may be owned by a different gateway worker,
 // which means this socket cannot rely on that worker's in-memory live fanout.
 // Poll the durable log while such a tail is active. The loop self-schedules
@@ -394,6 +445,10 @@ export function useRealtimeThread(
     emptyConversation(args.threadId),
   );
   const [connected, setConnected] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<{
+    threadId: string;
+    phase: ThreadConnectionPhase;
+  }>(() => ({ threadId: args.threadId, phase: "connecting" }));
 
   // Pending approvals are surfaced through state, but the resolution
   // map (requestId → resolver) lives here so we can reply on the
@@ -411,6 +466,11 @@ export function useRealtimeThread(
     Map<string | number, ReturnType<typeof setTimeout>>
   >(new Map());
   const clientRef = useRef<RealtimeClient | null>(null);
+  // Public `resume()` lives outside the client lifecycle effect, while the
+  // recovery coordinator's timers and single-flight flags must stay scoped to
+  // that exact effect epoch. This bridge lets manual retries join the same
+  // state machine without exposing mutable coordinator internals.
+  const manualResumeBridgeRef = useRef<ManualResumeBridge | null>(null);
   // Streaming-vitals timestamps, mutated off the notification stream (no
   // re-render) and read by a ticking hook. A ref so the ``onNotification``
   // closure sees the live object across reconnects.
@@ -583,6 +643,7 @@ export function useRealtimeThread(
   useEffect(() => {
     setState(emptyConversation(args.threadId));
     stateRef.current = emptyConversation(args.threadId);
+    setConnectionStatus({ threadId: args.threadId, phase: "connecting" });
     resumeCursorRef.current = null;
     resumeStreamIdRef.current = null;
     vitalsMarksRef.current = emptyVitalsMarks();
@@ -649,6 +710,25 @@ export function useRealtimeThread(
     let online = false;
     let resumeSeq = 0;
     let resumeInFlight = false;
+    let resumeRetryTimer: ReturnType<typeof setTimeout> | null = null;
+    let resumeRetryAttempts = 0;
+    let resumePermanentlyFailed = false;
+
+    const setConnectionPhase = (phase: ThreadConnectionPhase): void => {
+      setConnectionStatus((current) =>
+        current.threadId === args.threadId && current.phase === phase
+          ? current
+          : { threadId: args.threadId, phase },
+      );
+    };
+
+    const clearResumeRetry = (resetAttempts = false): void => {
+      if (resumeRetryTimer !== null) {
+        clearTimeout(resumeRetryTimer);
+        resumeRetryTimer = null;
+      }
+      if (resetAttempts) resumeRetryAttempts = 0;
+    };
 
     // The confirmed ledger is safe to bound only because every id in it has
     // been observed in a fetched log slice. Keep live-only ids separate until
@@ -671,12 +751,16 @@ export function useRealtimeThread(
       eventStreamId: string | null,
     ): Promise<EventFetchOutcome> => {
       const fetchPage = (after: number): Promise<ThreadEventsResponse> =>
-        client.request<ThreadEventsResponse>("thread/events", {
-          threadId: args.threadId,
-          afterSequence: after,
-          ...(eventStreamId ? { eventStreamId } : {}),
-          limit: EVENTS_PAGE_LIMIT,
-        });
+        client.request<ThreadEventsResponse>(
+          "thread/events",
+          {
+            threadId: args.threadId,
+            afterSequence: after,
+            ...(eventStreamId ? { eventStreamId } : {}),
+            limit: EVENTS_PAGE_LIMIT,
+          },
+          { timeoutMs: RECOVERY_REQUEST_TIMEOUT_MS },
+        );
       let page = await fetchPage(afterSequence);
       if (page.requiresReset === true) return { reset: true };
       const events = [...(page.events ?? [])];
@@ -840,10 +924,13 @@ export function useRealtimeThread(
       client: RealtimeClient,
       mode: "preserve-live" | "replace",
     ): void => {
+      if (cancelled || resumeInFlight || resumePermanentlyFailed) return;
+      clearResumeRetry();
       const pendingTailPoll = tailPollSettlement;
       stopTailPolling();
       const seq = ++resumeSeq;
       resumeInFlight = true;
+      if (online) setConnectionPhase("resuming");
       setState((prev) => {
         if (prev.resumeState === "resuming") return prev;
         const next: Conversation = { ...prev, resumeState: "resuming" };
@@ -859,7 +946,7 @@ export function useRealtimeThread(
       if (afterSequence !== null) {
         const beginEventResume = (): void => {
           if (cancelled || seq !== resumeSeq) return;
-          runEventResume(client, seq, afterSequence, eventStreamId);
+          runEventResume(client, seq, afterSequence, eventStreamId, mode);
         };
         // A transport can report close/open before a mocked or unusual
         // request implementation rejects its old poll. Preserve strict
@@ -874,13 +961,19 @@ export function useRealtimeThread(
       }
       const liveIdsBeforeSnapshot = new Set(unconfirmedLiveEventIdsRef.current);
       void client
-        .request<ResumeResponse>("thread/resume", {
-          threadId: args.threadId,
-          limit: RESUME_TURN_LIMIT,
-        })
+        .request<ResumeResponse>(
+          "thread/resume",
+          {
+            threadId: args.threadId,
+            limit: RESUME_TURN_LIMIT,
+          },
+          { timeoutMs: RECOVERY_REQUEST_TIMEOUT_MS },
+        )
         .then((result) => {
           if (cancelled || seq !== resumeSeq) return;
           resumeInFlight = false;
+          resumePermanentlyFailed = false;
+          clearResumeRetry(true);
           if (
             typeof result.nextEventSequence === "number" &&
             Number.isFinite(result.nextEventSequence) &&
@@ -961,19 +1054,64 @@ export function useRealtimeThread(
             stateRef.current = next;
             return next;
           });
+          if (online) setConnectionPhase("ready");
           if (projectedTurns.at(-1)?.status === "inProgress") {
             startTailPolling(client, true);
           }
         })
-        .catch(() => {
-          if (cancelled || seq !== resumeSeq) return;
-          resumeInFlight = false;
-          setState((prev) => {
-            const next: Conversation = { ...prev, resumeState: "needsResume" };
-            stateRef.current = next;
-            return next;
-          });
+        .catch((error: unknown) => {
+          handleRecoveryFailure(error, client, mode, seq);
         });
+    };
+
+    const scheduleResumeRetry = (
+      client: RealtimeClient,
+      mode: "preserve-live" | "replace",
+    ): void => {
+      if (
+        cancelled ||
+        !online ||
+        resumeInFlight ||
+        resumePermanentlyFailed ||
+        resumeRetryTimer !== null
+      ) {
+        return;
+      }
+      const exponent = Math.min(resumeRetryAttempts, 10);
+      const delayMs = Math.min(
+        RESUME_RETRY_INITIAL_MS * 2 ** exponent,
+        RESUME_RETRY_MAX_MS,
+      );
+      resumeRetryAttempts += 1;
+      resumeRetryTimer = setTimeout(() => {
+        resumeRetryTimer = null;
+        if (cancelled || !online || resumePermanentlyFailed) return;
+        requestResume(client, mode);
+      }, delayMs);
+    };
+
+    const handleRecoveryFailure = (
+      error: unknown,
+      client: RealtimeClient,
+      mode: "preserve-live" | "replace",
+      seq: number,
+    ): void => {
+      if (cancelled || seq !== resumeSeq) return;
+      resumeInFlight = false;
+      setState((prev) => {
+        const next: Conversation = { ...prev, resumeState: "needsResume" };
+        stateRef.current = next;
+        return next;
+      });
+      if (isPermanentRecoveryError(error)) {
+        resumePermanentlyFailed = true;
+        clearResumeRetry(true);
+        if (online) setConnectionPhase("recovery_error");
+        return;
+      }
+      if (!online) return;
+      setConnectionPhase("resuming");
+      scheduleResumeRetry(client, mode);
     };
 
     /**
@@ -996,6 +1134,7 @@ export function useRealtimeThread(
       seq: number,
       afterSequence: number,
       eventStreamId: string | null,
+      mode: "preserve-live" | "replace",
     ): void => {
       const fallbackToSnapshot = (): void => {
         stopTailPolling();
@@ -1032,19 +1171,13 @@ export function useRealtimeThread(
             return;
           }
           resumeInFlight = false;
+          resumePermanentlyFailed = false;
+          clearResumeRetry(true);
+          if (online) setConnectionPhase("ready");
           if (tailStatus === "inProgress") startTailPolling(client, true);
         })
-        .catch(() => {
-          if (cancelled || seq !== resumeSeq) return;
-          resumeInFlight = false;
-          setState((prev) => {
-            const next: Conversation = { ...prev, resumeState: "needsResume" };
-            stateRef.current = next;
-            return next;
-          });
-          // The cursor remains valid after a transient fetch error. Let the
-          // recovered-tail loop retry with bounded backoff if work is live.
-          startTailPolling(client);
+        .catch((error: unknown) => {
+          handleRecoveryFailure(error, client, mode, seq);
         });
     };
 
@@ -1130,7 +1263,7 @@ export function useRealtimeThread(
           return;
         }
         scheduleTailPoll(client, ACTIVE_TAIL_POLL_INTERVAL_MS);
-      } catch {
+      } catch (error) {
         releasePhysicalRequest();
         if (
           cancelled ||
@@ -1141,6 +1274,20 @@ export function useRealtimeThread(
           if (tailPollActive && online) {
             scheduleTailPoll(client, ACTIVE_TAIL_POLL_INTERVAL_MS);
           }
+          return;
+        }
+        if (isPermanentRecoveryError(error)) {
+          stopTailPolling();
+          resumePermanentlyFailed = true;
+          setState((prev) => {
+            const next: Conversation = {
+              ...prev,
+              resumeState: "needsResume",
+            };
+            stateRef.current = next;
+            return next;
+          });
+          setConnectionPhase("recovery_error");
           return;
         }
         if (isFinalDrain) terminalDrainStarted = false;
@@ -1184,6 +1331,7 @@ export function useRealtimeThread(
               limit: EVENTS_PAGE_LIMIT,
               mode: "coalesce",
             },
+            { timeoutMs: RECOVERY_REQUEST_TIMEOUT_MS },
           );
           if (cancelled) return;
           if (result.requiresReset === true) {
@@ -1361,12 +1509,16 @@ export function useRealtimeThread(
     const onClose = (_code: number, _reason: string): void => {
       if (cancelled) return;
       online = false;
+      resumeSeq += 1;
+      resumeInFlight = false;
+      clearResumeRetry(true);
       stopTailPolling();
       // The socket is gone — flip ``connected`` to false so the UI
       // can show a "reconnecting..." pill. The auto-reconnect logic
       // inside ``RealtimeClient`` will call onOpen again when the
       // new socket is up.
       setConnected(false);
+      setConnectionPhase("reconnecting");
       // The server cancels every pending approval future when the
       // connection drops (ApprovalManager.cancel_all), so the request
       // ids are dead. Drop the dialogs and timers now — replying after
@@ -1400,12 +1552,13 @@ export function useRealtimeThread(
       // queueing in the outbox. Drive the flag from the actual
       // socket open event instead.
       setConnected(true);
+      if (resumePermanentlyFailed) {
+        setConnectionPhase("recovery_error");
+        return;
+      }
+      setConnectionPhase("resuming");
       const client = clientRef.current;
-      if (
-        client &&
-        (openedOnce ||
-          (stateRef.current.resumeState !== "resumed" && !resumeInFlight))
-      ) {
+      if (client && (openedOnce || !resumeInFlight)) {
         requestResume(client, "replace");
       } else {
         openedOnce = true;
@@ -1440,6 +1593,70 @@ export function useRealtimeThread(
       onClose,
     });
     clientRef.current = client;
+    const manualResumeBridge: ManualResumeBridge = {
+      epoch: threadEpoch,
+      client,
+      begin: async () => {
+        if (
+          cancelled ||
+          !online ||
+          resumeInFlight ||
+          clientRef.current !== client ||
+          !isSameThreadEpoch(threadEpoch, threadEpochRef.current)
+        ) {
+          return null;
+        }
+        const pendingTailPoll = tailPollSettlement;
+        stopTailPolling();
+        // A user action is an explicit new recovery attempt, so it may clear
+        // the automatic retry suppression left by a permanent RPC error.
+        resumePermanentlyFailed = false;
+        clearResumeRetry(true);
+        const seq = ++resumeSeq;
+        resumeInFlight = true;
+        setConnectionPhase("resuming");
+        setState((prev) => {
+          if (prev.resumeState === "resuming") return prev;
+          const next: Conversation = { ...prev, resumeState: "resuming" };
+          stateRef.current = next;
+          return next;
+        });
+        // Do not overlap a manual snapshot request with a physical tail poll
+        // that was already on the wire. Its 15s request deadline bounds this
+        // wait even when the transport stays open but stops responding.
+        if (pendingTailPoll) await pendingTailPoll;
+        if (
+          cancelled ||
+          !online ||
+          seq !== resumeSeq ||
+          !resumeInFlight ||
+          clientRef.current !== client ||
+          !isSameThreadEpoch(threadEpoch, threadEpochRef.current)
+        ) {
+          return null;
+        }
+        return seq;
+      },
+      isCurrent: (seq) =>
+        !cancelled &&
+        online &&
+        resumeInFlight &&
+        seq === resumeSeq &&
+        clientRef.current === client &&
+        isSameThreadEpoch(threadEpoch, threadEpochRef.current),
+      complete: (seq, recoveredActive) => {
+        if (!manualResumeBridge.isCurrent(seq)) return;
+        resumeInFlight = false;
+        resumePermanentlyFailed = false;
+        clearResumeRetry(true);
+        setConnectionPhase("ready");
+        if (recoveredActive) startTailPolling(client, true);
+      },
+      fail: (seq, error) => {
+        handleRecoveryFailure(error, client, "replace", seq);
+      },
+    };
+    manualResumeBridgeRef.current = manualResumeBridge;
     // Cold start: hydrate from the local replay cache BEFORE the first
     // resume goes out. A hydrated cursor routes the initial resume into
     // event mode (fetch only what changed since the cache was written);
@@ -1485,7 +1702,13 @@ export function useRealtimeThread(
     return () => {
       cancelled = true;
       online = false;
+      resumeSeq += 1;
+      resumeInFlight = false;
+      clearResumeRetry(true);
       stopTailPolling();
+      if (manualResumeBridgeRef.current === manualResumeBridge) {
+        manualResumeBridgeRef.current = null;
+      }
       // A turn is server-resident and survives its originating WebSocket.
       // Release this invisible route's connection immediately so a visible,
       // reconnected watcher can receive live events and approval requests.
@@ -1610,29 +1833,63 @@ export function useRealtimeThread(
   const resume = useCallback(async () => {
     const client = clientRef.current;
     const operationEpoch = threadEpoch;
-    if (!client || !isCurrentThreadClient(operationEpoch, client)) return;
+    const bridge = manualResumeBridgeRef.current;
+    if (
+      !client ||
+      !bridge ||
+      bridge.client !== client ||
+      !isSameThreadEpoch(bridge.epoch, operationEpoch) ||
+      !isCurrentThreadClient(operationEpoch, client)
+    ) {
+      return;
+    }
+    const recoverySeq = await bridge.begin();
+    if (recoverySeq === null) return;
     const afterSequence = resumeCursorRef.current;
     const eventStreamId = resumeStreamIdRef.current;
     let result: ResumeResponse;
     try {
-      result = await client.request<ResumeResponse>("thread/resume", {
-        threadId: operationEpoch.threadId,
-        limit: RESUME_TURN_LIMIT,
-        ...(afterSequence !== null ? { afterSequence } : {}),
-        ...(afterSequence !== null && eventStreamId ? { eventStreamId } : {}),
-      });
+      result = await client.request<ResumeResponse>(
+        "thread/resume",
+        {
+          threadId: operationEpoch.threadId,
+          limit: RESUME_TURN_LIMIT,
+          ...(afterSequence !== null ? { afterSequence } : {}),
+          ...(afterSequence !== null && eventStreamId ? { eventStreamId } : {}),
+        },
+        { timeoutMs: RECOVERY_REQUEST_TIMEOUT_MS },
+      );
     } catch (error) {
       // A rejected request from a retired route is just cancellation. Do not
       // leak it into the new thread's retry/error flow.
-      if (!isCurrentThreadClient(operationEpoch, client)) return;
+      if (
+        !isCurrentThreadClient(operationEpoch, client) ||
+        manualResumeBridgeRef.current !== bridge
+      ) {
+        return;
+      }
+      bridge.fail(recoverySeq, error);
       throw error;
     }
     if (
       !isCurrentThreadClient(operationEpoch, client) ||
-      (result.thread?.id && result.thread.id !== operationEpoch.threadId)
+      manualResumeBridgeRef.current !== bridge
     ) {
       return;
     }
+    if (result.thread?.id && result.thread.id !== operationEpoch.threadId) {
+      bridge.fail(recoverySeq, {
+        code: JsonRpcErrorCode.INVALID_REQUEST,
+        message: "thread/resume returned a different thread",
+      });
+      return;
+    }
+    if (!bridge.isCurrent(recoverySeq)) return;
+    const serverTurns = result.turns ?? [];
+    const projectedTurns =
+      result.incremental === true
+        ? mergeTurnSnapshots(stateRef.current.turns, serverTurns)
+        : serverTurns;
     if (
       typeof result.nextEventSequence === "number" &&
       Number.isFinite(result.nextEventSequence) &&
@@ -1652,8 +1909,8 @@ export function useRealtimeThread(
       }
       const turns =
         result.incremental === true
-          ? mergeTurnSnapshots(prev.turns, result.turns ?? [])
-          : (result.turns ?? []);
+          ? mergeTurnSnapshots(prev.turns, serverTurns)
+          : serverTurns;
       const next: Conversation = {
         ...prev,
         turns,
@@ -1674,6 +1931,10 @@ export function useRealtimeThread(
       stateRef.current = next;
       return next;
     });
+    bridge.complete(
+      recoverySeq,
+      projectedTurns.at(-1)?.status === "inProgress",
+    );
   }, [isCurrentThreadClient, threadEpoch]);
 
   // Guards concurrent backwards-pagination; a ref (not state) because
@@ -1707,11 +1968,15 @@ export function useRealtimeThread(
         turns: Conversation["turns"];
         hasMore?: boolean;
       };
-      const result = await client.request<ResumeResponse>("thread/resume", {
-        threadId: operationEpoch.threadId,
-        limit: RESUME_TURN_LIMIT,
-        beforeTurnId: oldest.id,
-      });
+      const result = await client.request<ResumeResponse>(
+        "thread/resume",
+        {
+          threadId: operationEpoch.threadId,
+          limit: RESUME_TURN_LIMIT,
+          beforeTurnId: oldest.id,
+        },
+        { timeoutMs: RECOVERY_REQUEST_TIMEOUT_MS },
+      );
       if (
         !isCurrentThreadClient(operationEpoch, client) ||
         (result.thread?.id && result.thread.id !== operationEpoch.threadId)
@@ -1822,6 +2087,14 @@ export function useRealtimeThread(
     () => visibleConversationForThread(state, args.threadId),
     [args.threadId, state],
   );
+  const connectionPhase: ThreadConnectionPhase =
+    connectionStatus.threadId === args.threadId
+      ? connectionStatus.phase
+      : "connecting";
+  const readyForMutations =
+    connected &&
+    connectionPhase === "ready" &&
+    visibleState.resumeState === "resumed";
 
   // Derive the two state-dependent inputs the vitals classifier needs.
   const activeTurn = visibleState.turns[visibleState.turns.length - 1];
@@ -1835,7 +2108,10 @@ export function useRealtimeThread(
 
   const vitals = useStreamVitals({
     marksRef: vitalsMarksRef,
-    connected,
+    // An open socket that is still reconciling history is not yet a healthy
+    // stream. Surface it as reconnecting instead of mislabelling silence as
+    // ordinary model work or a model stall.
+    connected: readyForMutations,
     turnActive,
     hasRunningWork,
   });
@@ -1844,6 +2120,8 @@ export function useRealtimeThread(
     () => ({
       state: visibleState,
       connected,
+      connectionPhase,
+      readyForMutations,
       vitals,
       startTurn,
       steer,
@@ -1857,6 +2135,8 @@ export function useRealtimeThread(
     [
       visibleState,
       connected,
+      connectionPhase,
+      readyForMutations,
       vitals,
       startTurn,
       steer,

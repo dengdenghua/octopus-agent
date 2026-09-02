@@ -460,6 +460,9 @@ export const koKR: Translations = {
     send: "보내기",
     stop: "중지",
     stopping: "중지 중…",
+    restoringConnection: "연결을 복구 중… 초안은 안전하게 보관됩니다.",
+    connectionRecoveryFailed: "연결을 복구하지 못했습니다.",
+    retryConnection: "다시 시도",
     projectModeLabel: "프로젝트 연결됨",
     projectModeHint:
       "로컬 폴더가 연결되어 있습니다. 이 스레드는 코드 작업에 프로젝트 컨텍스트를 사용합니다.",

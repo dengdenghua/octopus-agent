@@ -387,6 +387,9 @@ export interface Translations {
     send: string;
     stop: string;
     stopping: string;
+    restoringConnection: string;
+    connectionRecoveryFailed: string;
+    retryConnection: string;
     projectModeLabel: string;
     projectModeHint: string;
     projectStatusTitle: string;

@@ -51,6 +51,7 @@ export interface RealtimeClientOptions {
 interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (reason: JsonRpcError | Error) => void;
+  timeoutTimer?: ReturnType<typeof setTimeout>;
 }
 
 interface OutboxEntry {
@@ -58,6 +59,12 @@ interface OutboxEntry {
   // Only caller-originated JSON-RPC requests participate in ``pending``.
   // Notifications and replies can be dropped without a Promise to settle.
   requestId?: JsonRpcId;
+}
+
+export interface RealtimeRequestOptions {
+  /** Optional caller-owned deadline. Long-running requests such as
+   * ``turn/start`` deliberately have no default timeout. */
+  timeoutMs?: number;
 }
 
 const DEFAULT_INITIAL_BACKOFF = 500;
@@ -235,6 +242,7 @@ export class RealtimeClient {
   request<R = unknown>(
     method: string,
     params: Record<string, unknown> = {},
+    options: RealtimeRequestOptions = {},
   ): Promise<R> {
     if (this.closed) {
       return Promise.reject(new Error("client closed"));
@@ -242,10 +250,31 @@ export class RealtimeClient {
     const id = this.nextId++;
     const envelope: JsonRpcRequest = { jsonrpc: "2.0", id, method, params };
     return new Promise<R>((resolve, reject) => {
-      this.pending.set(id, {
+      const pending: PendingRequest = {
         resolve: (v: unknown) => resolve(v as R),
         reject,
-      });
+      };
+      const timeoutMs = options.timeoutMs;
+      if (
+        typeof timeoutMs === "number" &&
+        Number.isFinite(timeoutMs) &&
+        timeoutMs > 0
+      ) {
+        pending.timeoutTimer = setTimeout(() => {
+          // A response/close may already have settled this id. Identity-check
+          // the handler as well as the key so a future id-reuse change cannot
+          // let an old timer reject a newer request.
+          if (this.pending.get(id) !== pending) return;
+          this.pending.delete(id);
+          this.removeQueuedRequest(id);
+          pending.reject(
+            new Error(
+              `realtime request ${method} timed out after ${timeoutMs}ms`,
+            ),
+          );
+        }, timeoutMs);
+      }
+      this.pending.set(id, pending);
       this.send(envelope);
     });
   }
@@ -293,6 +322,7 @@ export class RealtimeClient {
         const handler = this.pending.get(evicted.requestId);
         if (handler) {
           this.pending.delete(evicted.requestId);
+          this.clearPendingTimeout(handler);
           handler.reject(
             new Error(
               "realtime backpressure: outbox capacity exceeded; request dropped before send",
@@ -315,6 +345,19 @@ export class RealtimeClient {
     }
   }
 
+  private removeQueuedRequest(requestId: JsonRpcId): void {
+    const index = this.outbox.findIndex(
+      (entry) => entry.requestId === requestId,
+    );
+    if (index >= 0) this.outbox.splice(index, 1);
+  }
+
+  private clearPendingTimeout(handler: PendingRequest): void {
+    if (handler.timeoutTimer === undefined) return;
+    clearTimeout(handler.timeoutTimer);
+    handler.timeoutTimer = undefined;
+  }
+
   private dispatch(text: string, sourceSocket: WebSocket): void {
     if (!text) return;
     let env: unknown;
@@ -328,6 +371,7 @@ export class RealtimeClient {
       const handler = this.pending.get(env.id);
       if (!handler) return;
       this.pending.delete(env.id);
+      this.clearPendingTimeout(handler);
       if (env.error) {
         handler.reject(env.error);
       } else {
@@ -514,6 +558,7 @@ export class RealtimeClient {
   private failPending(reason: Error): void {
     if (this.pending.size === 0) return;
     for (const handler of this.pending.values()) {
+      this.clearPendingTimeout(handler);
       handler.reject(reason);
     }
     this.pending.clear();

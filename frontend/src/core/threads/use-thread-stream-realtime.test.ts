@@ -1100,16 +1100,17 @@ describe("useThreadStreamRealtime permissions", () => {
     });
   });
 
-  it("marks optimistic delivery queued until websocket resume is authoritative", async () => {
+  it("keeps delivery queued until thread readiness is authoritative", async () => {
     const startTurn = vi.fn(() => new Promise<void>(() => undefined));
-    let connected = false;
-    let state: Conversation = {
-      ...makeConversation([]),
-      resumeState: "resuming",
-    };
+    let readyForMutations = false;
+    let connectionPhase: "resuming" | "ready" = "resuming";
     vi.mocked(useRealtimeThread).mockImplementation(() => ({
-      state,
-      connected,
+      state: makeConversation([]),
+      // A physically open socket is not enough: history reconciliation still
+      // owns the mutation barrier.
+      connected: true,
+      connectionPhase,
+      readyForMutations,
       startTurn,
       steer: vi.fn().mockResolvedValue(undefined),
       resolveApproval: vi.fn(),
@@ -1128,16 +1129,20 @@ describe("useThreadStreamRealtime permissions", () => {
     expect(
       result.current[0].messages[0]?.additional_kwargs?.delivery_state,
     ).toBe("queued");
+    expect(result.current[0].connectionPhase).toBe("resuming");
+    expect(result.current[0].readyForMutations).toBe(false);
     expect(startTurn).not.toHaveBeenCalled();
 
-    connected = true;
-    state = makeConversation([]);
+    readyForMutations = true;
+    connectionPhase = "ready";
     rerender();
     await waitFor(() =>
       expect(
         result.current[0].messages[0]?.additional_kwargs?.delivery_state,
       ).toBe("sending"),
     );
+    expect(result.current[0].connectionPhase).toBe("ready");
+    expect(result.current[0].readyForMutations).toBe(true);
     expect(startTurn).toHaveBeenCalledTimes(1);
   });
 

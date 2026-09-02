@@ -470,6 +470,9 @@ export const enUS: Translations = {
     send: "Send",
     stop: "Stop",
     stopping: "Stopping…",
+    restoringConnection: "Restoring connection… Your draft is safe.",
+    connectionRecoveryFailed: "Couldn't restore the connection.",
+    retryConnection: "Retry",
     projectModeLabel: "Project attached",
     projectModeHint:
       "A local folder is bound; this thread will use project context for code tasks.",

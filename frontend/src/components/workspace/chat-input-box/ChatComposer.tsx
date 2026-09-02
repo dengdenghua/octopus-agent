@@ -13,6 +13,7 @@ import {
   SearchIcon,
   SendHorizontalIcon,
   Settings2Icon,
+  WifiOffIcon,
   ZapIcon,
   MapIcon,
   PaperclipIcon,
@@ -111,6 +112,9 @@ import { FileTree } from "../file-tree";
 export function ChatComposer({
   status,
   disabled,
+  readyForMutations = true,
+  connectionPhase = "ready",
+  onRetryConnection,
   modelName,
   mode = "react",
   threadId,
@@ -381,6 +385,11 @@ export function ChatComposer({
     isUploading ||
     attachmentUploads.isUploading ||
     attachmentUploads.hasFailed;
+  const submissionBlocked = !readyForMutations;
+  const connectionBlockedLabel =
+    connectionPhase === "recovery_error"
+      ? t.chatInputBox.connectionRecoveryFailed
+      : t.chatInputBox.restoringConnection;
   const sendLabel = t.chatInputBox.send;
   const stopLabel = t.chatInputBox.stop;
   const activeStopLabel = isStopping ? t.chatInputBox.stopping : stopLabel;
@@ -548,6 +557,7 @@ export function ChatComposer({
     const hasFiles = pendingFiles.length > 0;
     if (
       (!sendableText && !hasImages && !hasFiles) ||
+      submissionBlocked ||
       isBusy ||
       (status === "streaming" && (hasImages || hasFiles))
     ) {
@@ -665,8 +675,9 @@ export function ChatComposer({
       .map((file) => file.file)
       .filter((file): file is File => file instanceof File);
     const completedUploads = attachmentUploads.completed();
+    let accepted: void | boolean;
     try {
-      onSubmit?.({
+      accepted = onSubmit?.({
         text: appendReferencedFiles(text, pendingFiles),
         images: pendingImages.length > 0 ? pendingImages : undefined,
         files: browserUploadFiles.length > 0 ? browserUploadFiles : undefined,
@@ -677,6 +688,10 @@ export function ChatComposer({
     } finally {
       releaseSubmitLock();
     }
+    // The page performs the same readiness check at the mutation boundary.
+    // If transport readiness changed between render and click, keep every
+    // part of the draft instead of optimistically clearing an unsent message.
+    if (accepted === false) return;
     setDraft(
       activeLongTaskMode
         ? serializeComposerDraft({
@@ -697,6 +712,7 @@ export function ChatComposer({
     }
   }, [
     draft,
+    submissionBlocked,
     isBusy,
     status,
     isDeepResearchMode,
@@ -1240,6 +1256,46 @@ export function ChatComposer({
         className,
       )}
     >
+      {submissionBlocked ? (
+        <div
+          data-testid="chat-connection-status"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className={cn(
+            "mx-2 mt-2 flex min-h-7 items-center gap-2 rounded-lg px-2 py-1 text-xs",
+            connectionPhase === "recovery_error"
+              ? "bg-destructive/8 text-destructive"
+              : "bg-muted/50 text-muted-foreground",
+          )}
+        >
+          {connectionPhase === "recovery_error" ? (
+            <WifiOffIcon className="size-3.5 shrink-0" aria-hidden="true" />
+          ) : (
+            <Loader2Icon
+              className="size-3.5 shrink-0 animate-spin"
+              aria-hidden="true"
+            />
+          )}
+          <span className="min-w-0 flex-1">{connectionBlockedLabel}</span>
+          {connectionPhase === "recovery_error" && onRetryConnection ? (
+            <button
+              type="button"
+              data-testid="chat-connection-retry"
+              className="shrink-0 rounded-md px-1.5 py-0.5 font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current/30"
+              onClick={() => {
+                try {
+                  void Promise.resolve(onRetryConnection()).catch(swallow);
+                } catch (error) {
+                  swallow(error);
+                }
+              }}
+            >
+              {t.chatInputBox.retryConnection}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <div className="relative">
         {slashPicker}
         <MentionPicker
@@ -1934,9 +1990,9 @@ export function ChatComposer({
                 type="button"
                 onClick={handleSubmit}
                 data-testid="chat-steer-button"
-                disabled={isBusy}
+                disabled={isBusy || submissionBlocked}
                 className="flex size-[42px] items-center justify-center rounded-lg bg-foreground text-background transition-all duration-base hover:bg-foreground/90 active:scale-95 disabled:cursor-wait disabled:opacity-70 sm:size-8"
-                title={sendLabel}
+                title={submissionBlocked ? connectionBlockedLabel : sendLabel}
                 aria-label={sendLabel}
               >
                 <SendHorizontalIcon className="size-3.5" />
@@ -1996,7 +2052,8 @@ export function ChatComposer({
                 (!sendableDraftText &&
                   pendingImages.length === 0 &&
                   pendingFiles.length === 0) ||
-                isBusy
+                isBusy ||
+                submissionBlocked
               }
               className={cn(
                 "flex size-[42px] items-center justify-center rounded-lg transition-all duration-base sm:size-8",
@@ -2011,7 +2068,9 @@ export function ChatComposer({
                   ? t.uploads.waitingForUpload
                   : attachmentUploads.hasFailed
                     ? t.uploads.uploadFailed
-                    : sendLabel
+                    : submissionBlocked
+                      ? connectionBlockedLabel
+                      : sendLabel
               }
               aria-label={sendLabel}
             >

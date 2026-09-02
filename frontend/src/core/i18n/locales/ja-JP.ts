@@ -463,6 +463,9 @@ export const jaJP: Translations = {
     send: "送信",
     stop: "停止",
     stopping: "停止中…",
+    restoringConnection: "接続を復旧中… 下書きは保存されています。",
+    connectionRecoveryFailed: "接続を復旧できませんでした。",
+    retryConnection: "再試行",
     projectModeLabel: "プロジェクトがバインド済み",
     projectModeHint:
       "ローカルフォルダーがバインドされています。このスレッドはコードタスクにプロジェクトコンテキストを使用します。",

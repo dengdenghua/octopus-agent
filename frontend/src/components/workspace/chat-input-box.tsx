@@ -15,6 +15,7 @@ import type {
   ResearchSourceKind,
 } from "@/core/research/api";
 import type { ReasoningEffort } from "@/core/threads";
+import type { ThreadConnectionPhase } from "@/core/realtime";
 import type { UploadedFileInfo } from "@/core/uploads";
 import type { ReasoningMode } from "./reasoning-mode";
 import {
@@ -44,6 +45,12 @@ import type { AutomationTarget } from "@/core/computer/api";
 export interface ChatInputBoxProps {
   status?: ChatStatus;
   disabled?: boolean;
+  /** Thread mutations are safe only after the socket has reopened and the
+   * server-owned history has been reconciled. Draft editing remains available
+   * while this is false. */
+  readyForMutations?: boolean;
+  connectionPhase?: ThreadConnectionPhase;
+  onRetryConnection?: () => void | Promise<void>;
   model?: string;
   modelName?: string;
   mode?: ReasoningMode;
@@ -140,7 +147,7 @@ export interface ChatInputBoxProps {
     files?: File[];
     /** Server-side info for attachments already uploaded on attach. */
     uploaded?: UploadedFileInfo[];
-  }) => void;
+  }) => void | boolean;
   onStop?: () => void | Promise<void>;
   /** Prevent repeated stop requests while the server acknowledges one. */
   isStopping?: boolean;

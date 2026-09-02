@@ -3371,6 +3371,10 @@ function RealtimePageContent({
       files?: File[];
       uploaded?: UploadedFileInfo[];
     }) => {
+      // The socket may have dropped after the composer rendered but before
+      // this click reached the mutation boundary. Returning false tells the
+      // composer to preserve the complete draft for the recovered session.
+      if (!thread.readyForMutations) return false;
       const images = message.images ?? [];
       const attachedFiles = message.files ?? [];
       const browserFiles = [...attachedFiles, ...images];
@@ -3459,56 +3463,24 @@ function RealtimePageContent({
       const uploadedByName = new Map(
         (message.uploaded ?? []).map((info) => [info.filename, info]),
       );
-      // Read each image into a data URL so PromptInputFilePart has the
-      // `url` field FileUIPart requires; the original File is also
-      // attached so the upload path can re-use the bytes without
-      // re-decoding.
-      void Promise.all(
-        browserFiles.map(
-          (file) =>
-            new Promise<PromptInputFilePart>((resolve, reject) => {
-              const mediaType = file.type || "application/octet-stream";
-              const uploaded = uploadedByName.get(file.name);
-              if (!mediaType.toLowerCase().startsWith("image/")) {
-                resolve({
-                  type: "file",
-                  mediaType,
-                  filename: file.name,
-                  url: "",
-                  file,
-                  uploaded,
-                });
-                return;
-              }
-              const reader = new FileReader();
-              reader.onload = () => {
-                const url =
-                  typeof reader.result === "string" ? reader.result : "";
-                resolve({
-                  type: "file",
-                  mediaType,
-                  filename: file.name,
-                  url,
-                  file,
-                  uploaded,
-                });
-              };
-              reader.onerror = () =>
-                reject(reader.error ?? new Error("FileReader failed"));
-              reader.readAsDataURL(file);
-            }),
-        ),
-      )
-        .then((files) => {
-          void sendMessage(threadId, { text: message.text, files });
-          if (isGroupConversation) {
-            setGroupTaskStrategy(groupTaskStrategyAfterSubmit());
-          }
-        })
-        .catch((err) => {
-          swallow(err);
-          toast.error(t.chatInputBox.attachmentReadFailed);
-        });
+      // Keep submit synchronous and hand the original File objects to the
+      // realtime adapter. It owns upload/base64 enrichment already; eagerly
+      // reading images here created a gap where the composer cleared its
+      // attachments before the message had even entered the outbound ledger.
+      const files: PromptInputFilePart[] = browserFiles.map((file) => ({
+        type: "file",
+        mediaType: file.type || "application/octet-stream",
+        filename: file.name,
+        // FileUIPart requires a URL, but the adapter deliberately prefers the
+        // attached browser File and generates image data URLs when needed.
+        url: "",
+        file,
+        uploaded: uploadedByName.get(file.name),
+      }));
+      void sendMessage(threadId, { text: message.text, files });
+      if (isGroupConversation) {
+        setGroupTaskStrategy(groupTaskStrategyAfterSubmit());
+      }
     },
     [
       isOctopusAssistant,
@@ -3521,6 +3493,7 @@ function RealtimePageContent({
       sendMessage,
       t,
       thread.messages,
+      thread.readyForMutations,
       threadId,
       activeAgentId,
       navigate,
@@ -3541,24 +3514,33 @@ function RealtimePageContent({
       return;
     }
     if (pendingNewSessionSentRef.current) return;
-    const pendingText = consumePendingNewSession();
-    if (!pendingText) return;
-    pendingNewSessionSentRef.current = true;
+    // Do not consume the one-shot hand-off until this thread has crossed its
+    // resume barrier. It stays in session storage across reconnects/reloads.
+    if (!thread.readyForMutations) return;
     const timer = window.setTimeout(() => {
+      // Consumption happens inside the cancellable ready-state window. If the
+      // connection drops during this short hand-off delay, effect cleanup
+      // leaves the prompt durable for the next successful resume.
+      const pendingText = consumePendingNewSession();
+      if (!pendingText || pendingNewSessionSentRef.current) return;
+      pendingNewSessionSentRef.current = true;
       markSidebarThreadRunning(threadId);
-      // sendMessage returns void (fire-and-forget). If the connection isn't
-      // ready yet the composer still shows the prompt, so the user can retry
-      // by pressing Enter.
       void sendMessage(threadId, { text: pendingText, files: [] });
     }, 200);
     return () => window.clearTimeout(timer);
-  }, [isNewThread, threadId, sendMessage, markSidebarThreadRunning]);
+  }, [
+    isNewThread,
+    threadId,
+    sendMessage,
+    markSidebarThreadRunning,
+    thread.readyForMutations,
+  ]);
 
   useEffect(() => {
     const handleQuickReply = (event: Event) => {
       const detail = (event as CustomEvent<QuickReplyDetail>).detail;
       const text = quickReplyTextForThread(detail, threadId);
-      if (!text || thread.isLoading) return;
+      if (!text || thread.isLoading || !thread.readyForMutations) return;
       event.preventDefault();
       markSidebarThreadRunning(threadId);
       void sendMessage(threadId, { text, files: [] });
@@ -3567,17 +3549,29 @@ function RealtimePageContent({
     return () => {
       window.removeEventListener(QUICK_REPLY_EVENT, handleQuickReply);
     };
-  }, [markSidebarThreadRunning, sendMessage, thread.isLoading, threadId]);
+  }, [
+    markSidebarThreadRunning,
+    sendMessage,
+    thread.isLoading,
+    thread.readyForMutations,
+    threadId,
+  ]);
 
   // Follow-up suggestion chips: send the picked prompt as if the user typed it.
   const handleSendFollowUp = useCallback(
     (prompt: string) => {
       const text = prompt.trim();
-      if (!text || thread.isLoading) return;
+      if (!text || thread.isLoading || !thread.readyForMutations) return;
       markSidebarThreadRunning(threadId);
       void sendMessage(threadId, { text, files: [] });
     },
-    [markSidebarThreadRunning, sendMessage, thread.isLoading, threadId],
+    [
+      markSidebarThreadRunning,
+      sendMessage,
+      thread.isLoading,
+      thread.readyForMutations,
+      threadId,
+    ],
   );
   const retryDispatchGuardRef = useRef<{ key: string; at: number } | null>(
     null,
@@ -3585,7 +3579,7 @@ function RealtimePageContent({
   const handleRetryTask = useCallback(
     (prompt: string) => {
       const text = prompt.trim();
-      if (!text || thread.isLoading) return;
+      if (!text || thread.isLoading || !thread.readyForMutations) return;
       // React updates the loading flag after this click returns. Guard the
       // short gap so a double click cannot enqueue a second optimistic row
       // before the eager outbound ledger becomes visible to the page.
@@ -3600,7 +3594,13 @@ function RealtimePageContent({
       markSidebarThreadRunning(threadId);
       void sendMessage(threadId, { text, files: [] });
     },
-    [markSidebarThreadRunning, sendMessage, thread.isLoading, threadId],
+    [
+      markSidebarThreadRunning,
+      sendMessage,
+      thread.isLoading,
+      thread.readyForMutations,
+      threadId,
+    ],
   );
   const handleModeChange = useCallback(
     (mode: ReasoningMode, draft?: string) => {
@@ -3637,7 +3637,7 @@ function RealtimePageContent({
     async (topic: string, options?: DeepResearchComposerOptions) => {
       const extracted = extractResearchUrls(topic);
       const clean = extracted.topic.trim();
-      if (!clean || researchLoading) return false;
+      if (!clean || researchLoading || !thread.readyForMutations) return false;
       const requestThreadId = threadId;
       const operation = {};
       researchOperationRef.current = operation;
@@ -3720,6 +3720,7 @@ function RealtimePageContent({
       setResearchJob,
       setResearchLoading,
       setShowResearch,
+      thread.readyForMutations,
       threadId,
     ],
   );
@@ -4425,6 +4426,9 @@ function RealtimePageContent({
                                 ? "streaming"
                                 : "ready"
                           }
+                          readyForMutations={thread.readyForMutations}
+                          connectionPhase={thread.connectionPhase}
+                          onRetryConnection={thread.refresh}
                           modelName={settings.context.model_name}
                           // Keep one selector, but project model ownership by
                           // engine: Codex roles use the server-owned profile;

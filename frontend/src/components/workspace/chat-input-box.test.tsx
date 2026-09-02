@@ -1549,6 +1549,116 @@ describe("<ChatInputBox /> live steering", () => {
   });
 });
 
+describe("<ChatInputBox /> connection recovery", () => {
+  it("keeps the draft editable and unsent until the thread is ready", () => {
+    const onSubmit = vi.fn();
+    const { rerender } = renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-recovering"
+        readyForMutations={false}
+        connectionPhase="resuming"
+        onSubmit={onSubmit}
+      />,
+    );
+
+    const input = screen.getByTestId("chat-composer-input");
+    fireEvent.change(input, { target: { value: "keep this draft" } });
+
+    expect(input).not.toBeDisabled();
+    expect(screen.getByTestId("chat-connection-status")).toHaveTextContent(
+      "Restoring connection… Your draft is safe.",
+    );
+    expect(screen.getByTestId("chat-send-button")).toBeDisabled();
+    fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(input).toHaveValue("keep this draft");
+
+    rerender(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-recovering"
+        readyForMutations
+        connectionPhase="ready"
+        onSubmit={onSubmit}
+      />,
+    );
+
+    expect(screen.queryByTestId("chat-connection-status")).toBeNull();
+    expect(screen.getByTestId("chat-send-button")).toBeEnabled();
+    fireEvent.click(screen.getByTestId("chat-send-button"));
+    expect(onSubmit).toHaveBeenCalledWith({
+      text: "keep this draft",
+      images: undefined,
+      files: undefined,
+    });
+    expect(input).toHaveValue("");
+  });
+
+  it("keeps the draft when the mutation boundary detects a reconnect race", () => {
+    const onSubmit = vi.fn(() => false);
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-reconnect-race"
+        readyForMutations
+        connectionPhase="ready"
+        onSubmit={onSubmit}
+      />,
+    );
+
+    const input = screen.getByTestId("chat-composer-input");
+    fireEvent.change(input, { target: { value: "do not lose this" } });
+    fireEvent.click(screen.getByTestId("chat-send-button"));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(input).toHaveValue("do not lose this");
+  });
+
+  it("offers a retry after recovery fails without clearing the draft", () => {
+    const onRetryConnection = vi.fn();
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-recovery-error"
+        readyForMutations={false}
+        connectionPhase="recovery_error"
+        onRetryConnection={onRetryConnection}
+      />,
+    );
+
+    const input = screen.getByTestId("chat-composer-input");
+    fireEvent.change(input, { target: { value: "still here" } });
+    expect(screen.getByTestId("chat-connection-status")).toHaveTextContent(
+      "Couldn't restore the connection.",
+    );
+    fireEvent.click(screen.getByTestId("chat-connection-retry"));
+
+    expect(onRetryConnection).toHaveBeenCalledTimes(1);
+    expect(input).toHaveValue("still here");
+  });
+
+  it("contains synchronous retry failures", () => {
+    const onRetryConnection = vi.fn(() => {
+      throw new Error("retry failed");
+    });
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-recovery-error"
+        readyForMutations={false}
+        connectionPhase="recovery_error"
+        onRetryConnection={onRetryConnection}
+      />,
+    );
+
+    expect(() =>
+      fireEvent.click(screen.getByTestId("chat-connection-retry")),
+    ).not.toThrow();
+    expect(onRetryConnection).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("<ChatInputBox /> thread-scoped composer state", () => {
   it("flushes the previous draft before a sub-300ms thread switch", async () => {
     const { rerender } = renderWithProviders(
