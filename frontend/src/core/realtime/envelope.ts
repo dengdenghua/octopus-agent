@@ -51,18 +51,67 @@ export const JsonRpcErrorCode = {
 export type JsonRpcErrorCode =
   (typeof JsonRpcErrorCode)[keyof typeof JsonRpcErrorCode];
 
-// Type guards.
+// Type guards. Wire data is untrusted: JSON.parse can return null, a scalar,
+// or an array, so these predicates deliberately accept ``unknown`` and fully
+// establish the minimum shape promised by their return type.
 
-export function isResponse(msg: Envelope): msg is JsonRpcResponse {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isJsonRpcId(value: unknown): value is JsonRpcId {
   return (
-    "id" in msg && ("result" in msg || "error" in msg) && !("method" in msg)
+    typeof value === "string" ||
+    (typeof value === "number" && Number.isFinite(value))
   );
 }
 
-export function isRequest(msg: Envelope): msg is JsonRpcRequest {
-  return "id" in msg && "method" in msg;
+function hasBaseEnvelopeShape(
+  msg: unknown,
+): msg is Record<string, unknown> & { jsonrpc: "2.0" } {
+  return isRecord(msg) && msg.jsonrpc === "2.0";
 }
 
-export function isNotification(msg: Envelope): msg is Notification {
-  return "method" in msg && !("id" in msg);
+function hasParamsObject(
+  msg: Record<string, unknown>,
+): msg is Record<string, unknown> & { params: Record<string, unknown> } {
+  return isRecord(msg.params);
+}
+
+function isJsonRpcError(value: unknown): value is JsonRpcError {
+  return (
+    isRecord(value) &&
+    typeof value.code === "number" &&
+    Number.isFinite(value.code) &&
+    typeof value.message === "string"
+  );
+}
+
+export function isResponse(msg: unknown): msg is JsonRpcResponse {
+  if (!hasBaseEnvelopeShape(msg) || !isJsonRpcId(msg.id) || "method" in msg) {
+    return false;
+  }
+  const hasResult = Object.prototype.hasOwnProperty.call(msg, "result");
+  const hasError = Object.prototype.hasOwnProperty.call(msg, "error");
+  return hasResult !== hasError && (hasResult || isJsonRpcError(msg.error));
+}
+
+export function isRequest(msg: unknown): msg is JsonRpcRequest {
+  return (
+    hasBaseEnvelopeShape(msg) &&
+    isJsonRpcId(msg.id) &&
+    typeof msg.method === "string" &&
+    msg.method.length > 0 &&
+    hasParamsObject(msg)
+  );
+}
+
+export function isNotification(msg: unknown): msg is Notification {
+  return (
+    hasBaseEnvelopeShape(msg) &&
+    !("id" in msg) &&
+    typeof msg.method === "string" &&
+    msg.method.length > 0 &&
+    hasParamsObject(msg)
+  );
 }

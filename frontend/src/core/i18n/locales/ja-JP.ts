@@ -274,6 +274,7 @@ export const jaJP: Translations = {
     makeSimilar: "同じものを作る",
     makeSimilarHint: "同じプロンプトで新規タスクを開始",
     retryTask: "再試行",
+    retryingTask: "再試行中…",
     retryTaskHint: "同じプロンプトで新しいタスクを開始",
     taskFailedReason: "失敗理由",
     resultUrl: "結果リンク",
@@ -461,6 +462,7 @@ export const jaJP: Translations = {
     seedWorkflow: "ワークフローを作成または実行：",
     send: "送信",
     stop: "停止",
+    stopping: "停止中…",
     projectModeLabel: "プロジェクトがバインド済み",
     projectModeHint:
       "ローカルフォルダーがバインドされています。このスレッドはコードタスクにプロジェクトコンテキストを使用します。",
@@ -3192,6 +3194,7 @@ export const jaJP: Translations = {
 
   // Conversation
   conversation: {
+    messageLog: "会話メッセージ",
     noMessages: "メッセージはまだありません",
     startConversation: "会話を開始すると、ここにメッセージが表示されます",
     noArtifactSelected: "アーティファクトが選択されていません",

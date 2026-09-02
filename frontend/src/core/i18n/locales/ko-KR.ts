@@ -274,6 +274,7 @@ export const koKR: Translations = {
     makeSimilar: "비슷한 것 만들기",
     makeSimilarHint: "같은 프롬프트로 새 작업 시작",
     retryTask: "재시도",
+    retryingTask: "다시 시도 중…",
     retryTaskHint: "같은 프롬프트로 새 작업 시작",
     taskFailedReason: "실패 사유",
     resultUrl: "결과 링크",
@@ -458,6 +459,7 @@ export const koKR: Translations = {
     seedWorkflow: "워크플로를 생성하거나 실행하세요: ",
     send: "보내기",
     stop: "중지",
+    stopping: "중지 중…",
     projectModeLabel: "프로젝트 연결됨",
     projectModeHint:
       "로컬 폴더가 연결되어 있습니다. 이 스레드는 코드 작업에 프로젝트 컨텍스트를 사용합니다.",
@@ -3135,6 +3137,7 @@ export const koKR: Translations = {
 
   // Conversation
   conversation: {
+    messageLog: "대화 메시지",
     noMessages: "아직 메시지 없음",
     startConversation: "대화를 시작하면 여기에 메시지가 표시됩니다",
     noArtifactSelected: "선택된 아티팩트 없음",

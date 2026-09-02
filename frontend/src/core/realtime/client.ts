@@ -167,14 +167,17 @@ export class RealtimeClient {
     try {
       ws = new WebSocket(url, protocols);
     } catch (err) {
-      swallow(err);
-      this.opts.onError?.(err as Error);
+      this.reportError(err instanceof Error ? err : new Error(String(err)));
       this.scheduleReconnect();
       return;
     }
     this.ws = ws;
 
     ws.onopen = () => {
+      if (this.closed || this.ws !== ws) {
+        ws.close();
+        return;
+      }
       this.reconnectAttempts = 0;
       this.lastPongAt = Date.now();
       this.flushOutbox();
@@ -182,12 +185,19 @@ export class RealtimeClient {
       this.opts.onOpen?.();
     };
     ws.onmessage = (ev) => {
+      if (this.closed || this.ws !== ws) return;
       this.dispatch(typeof ev.data === "string" ? ev.data : "", ws);
     };
     ws.onerror = (ev) => {
-      this.opts.onError?.(ev);
+      if (this.closed || this.ws !== ws) return;
+      this.reportError(ev);
     };
     ws.onclose = (ev) => {
+      // Browser event delivery is asynchronous. A delayed close from an old
+      // transport epoch must not tear down the replacement socket, fail its
+      // pending requests, or schedule a second reconnect.
+      if (this.ws !== ws) return;
+      this.ws = null;
       this.stopHeartbeat();
       this.flushDeltaBuffer();
       this.opts.onClose?.(ev.code, ev.reason);
@@ -199,7 +209,6 @@ export class RealtimeClient {
       // transport epoch. Replaying any of them after reconnect could start
       // duplicate work or deliver stale control messages.
       this.outbox.length = 0;
-      this.ws = null;
       if (!this.closed) {
         this.scheduleReconnect();
       }
@@ -308,12 +317,11 @@ export class RealtimeClient {
 
   private dispatch(text: string, sourceSocket: WebSocket): void {
     if (!text) return;
-    let env: Envelope;
+    let env: unknown;
     try {
-      env = JSON.parse(text) as Envelope;
+      env = JSON.parse(text) as unknown;
     } catch (err) {
-      swallow(err);
-      this.opts.onError?.(err as Error);
+      this.reportError(err instanceof Error ? err : new Error(String(err)));
       return;
     }
     if (isResponse(env)) {
@@ -334,8 +342,18 @@ export class RealtimeClient {
       // this exact transport epoch: if the handler settles after the socket
       // closes, never enqueue it for a later connection (the request id is
       // scoped to the dead server session).
-      this.opts
-        .onIncomingRequest(env)
+      let requestResult: Promise<unknown>;
+      try {
+        requestResult = this.opts.onIncomingRequest(env);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.replyOnSocket(sourceSocket, env.id, null, {
+          code: -32603,
+          message,
+        });
+        return;
+      }
+      requestResult
         .then((result) => this.replyOnSocket(sourceSocket, env.id, result))
         .catch((err: unknown) => {
           const message = err instanceof Error ? err.message : String(err);
@@ -372,9 +390,15 @@ export class RealtimeClient {
         // scheduled rAF/setTimeout callback sees an empty buffer and
         // returns without re-dispatching.
         this.flushDeltaBuffer();
-        this.opts.onNotification(env);
+        try {
+          this.opts.onNotification(env);
+        } catch (err) {
+          this.reportError(err instanceof Error ? err : new Error(String(err)));
+        }
       }
+      return;
     }
+    this.reportError(new Error("invalid JSON-RPC 2.0 websocket envelope"));
   }
 
   // Foreground: coalesce on the next animation frame (caps React
@@ -400,8 +424,7 @@ export class RealtimeClient {
       try {
         this.opts.onNotificationBatch(batch);
       } catch (err) {
-        swallow(err);
-        this.opts.onError?.(err as Error);
+        this.reportError(err instanceof Error ? err : new Error(String(err)));
       }
       return;
     }
@@ -414,9 +437,19 @@ export class RealtimeClient {
       try {
         this.opts.onNotification(note);
       } catch (err) {
-        swallow(err);
-        this.opts.onError?.(err as Error);
+        this.reportError(err instanceof Error ? err : new Error(String(err)));
       }
+    }
+  }
+
+  private reportError(error: Event | Error): void {
+    swallow(error);
+    try {
+      this.opts.onError?.(error);
+    } catch (callbackError) {
+      // Error reporting is observational. A faulty observer must never make
+      // WebSocket event dispatch throw back into the browser.
+      swallow(callbackError);
     }
   }
 

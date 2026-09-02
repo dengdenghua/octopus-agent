@@ -13,6 +13,7 @@ import { renderWithProviders } from "@/test/harness";
 import { queueComposerImageEntry } from "@/core/composer-image-inbox";
 
 import type * as UploadsApiModule from "@/core/uploads/api";
+import type * as ComputerApiModule from "@/core/computer/api";
 
 import { ChatInputBox } from "./chat-input-box";
 import type { GroupTaskStrategy } from "./group-task-strategy";
@@ -20,6 +21,7 @@ import type { AgentModeName } from "./mode-selector";
 
 const uploadFilesMock = vi.fn();
 const uploadWithProgressMock = vi.fn();
+const captureComputerAppshotMock = vi.hoisted(() => vi.fn());
 const modelCatalog = vi.hoisted(() => ({
   current: [] as Array<Record<string, unknown>>,
 }));
@@ -69,6 +71,14 @@ vi.mock("@/core/uploads/api", async (importOriginal) => {
     uploadFiles: (...args: unknown[]) => uploadFilesMock(...args),
     uploadFilesWithProgress: (...args: unknown[]) =>
       uploadWithProgressMock(...args),
+  };
+});
+
+vi.mock("@/core/computer/api", async (importOriginal) => {
+  const actual = await importOriginal<ComputerApiModule>();
+  return {
+    ...actual,
+    captureComputerAppshot: captureComputerAppshotMock,
   };
 });
 
@@ -228,6 +238,7 @@ beforeEach(() => {
   // independent tests. A full-suite predecessor may otherwise leave a draft
   // under a reused thread id and make send-failure isolation assertions flaky.
   window.localStorage.clear();
+  window.sessionStorage.clear();
   modelCatalog.current = [
     {
       id: "test-model",
@@ -238,6 +249,7 @@ beforeEach(() => {
   ];
   uploadFilesMock.mockReset();
   uploadWithProgressMock.mockReset();
+  captureComputerAppshotMock.mockReset();
   capabilityCatalog.pluginOptions = [];
   capabilityCatalog.skillOptions = [];
   // Attaching now uploads immediately, so every test needs a transport.
@@ -1238,6 +1250,21 @@ describe("<ChatInputBox /> cowork materials", () => {
       target: { value: "Users care about backup." },
     });
     fireEvent.click(screen.getByRole("button", { name: /^Text$/i }));
+    fireEvent.change(
+      screen.getByPlaceholderText("https://example.com, https://..."),
+      {
+        target: { value: "https://old-thread.example/research" },
+      },
+    );
+    fireEvent.change(screen.getByPlaceholderText("Text Title"), {
+      target: { value: "old thread title" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Paste text material"), {
+      target: { value: "unsaved old thread material" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Material Note"), {
+      target: { value: "old thread note" },
+    });
 
     fireEvent.click(screen.getAllByTitle("Toggle Material")[0]);
     fireEvent.click(screen.getByTitle("Send"));
@@ -1308,6 +1335,100 @@ describe("<ChatInputBox /> cowork materials", () => {
         title: "brief.md",
         path: "F:/uploads/thread-1/brief.md",
       }),
+    ]);
+  });
+
+  it("ignores an old research upload when the same filename is added in a new thread", async () => {
+    const uploadResult = (owner: string) => ({
+      success: true,
+      message: owner,
+      files: [
+        {
+          filename: "same.md",
+          path: `/${owner}/same.md`,
+          virtual_path: `/uploads/${owner}/same.md`,
+          artifact_url: `/api/artifacts/${owner}/same.md`,
+          size: 4,
+          modified: 1,
+          extension: ".md",
+        },
+      ],
+    });
+    type UploadResult = ReturnType<typeof uploadResult>;
+    let finishOld!: (result: UploadResult) => void;
+    let finishNew!: (result: UploadResult) => void;
+    uploadFilesMock
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishOld = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishNew = resolve;
+          }),
+      );
+    const onDeepResearch = vi.fn().mockResolvedValue(true);
+    const renderComposer = (threadId: string) => (
+      <ChatInputBox
+        mode="deep"
+        threadId={threadId}
+        allowAgentModes
+        onDeepResearch={onDeepResearch}
+      />
+    );
+    const { rerender } = renderWithProviders(
+      renderComposer("research-thread-a"),
+    );
+
+    await openAgentSettings();
+    const materialInput = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+    fireEvent.change(materialInput, {
+      target: {
+        files: [new File(["same"], "same.md", { type: "text/markdown" })],
+      },
+    });
+    await waitFor(() => expect(uploadFilesMock).toHaveBeenCalledTimes(1));
+
+    rerender(renderComposer("research-thread-b"));
+    await openAgentSettings();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /^Add files$/i }),
+      ).toBeEnabled(),
+    );
+    const newMaterialInput = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+    fireEvent.change(newMaterialInput, {
+      target: {
+        files: [new File(["same"], "same.md", { type: "text/markdown" })],
+      },
+    });
+    await waitFor(() => expect(uploadFilesMock).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      finishOld(uploadResult("old-thread"));
+      await Promise.resolve();
+    });
+    expect(screen.queryByText("same.md")).toBeNull();
+    expect(screen.getByRole("button", { name: /^Add files$/i })).toBeDisabled();
+
+    await act(async () => {
+      finishNew(uploadResult("new-thread"));
+      await Promise.resolve();
+    });
+    expect(await screen.findByText("same.md")).toBeInTheDocument();
+
+    fireEvent.change(textarea(), { target: { value: "Research new thread" } });
+    fireEvent.click(screen.getByTitle("Send"));
+    await waitFor(() => expect(onDeepResearch).toHaveBeenCalledTimes(1));
+    expect(onDeepResearch.mock.calls[0][1].materials).toEqual([
+      expect.objectContaining({ path: "/new-thread/same.md" }),
     ]);
   });
 
@@ -1389,22 +1510,212 @@ describe("<ChatInputBox /> live steering", () => {
   });
 
   it("disables the stop action while a stop request is pending", () => {
+    const onSubmit = vi.fn();
     const onStop = vi.fn();
-    renderWithProviders(
+    const { rerender } = renderWithProviders(
       <ChatInputBox
         mode="react"
         threadId="thread-live"
         status="streaming"
+        onSubmit={onSubmit}
+        onStop={onStop}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId("chat-composer-input"), {
+      target: { value: "do not steer after stop starts" },
+    });
+    rerender(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-live"
+        status="streaming"
+        onSubmit={onSubmit}
         onStop={onStop}
         isStopping
       />,
     );
+    const steerButton = screen.getByTestId("chat-steer-button");
+    expect(steerButton).toBeDisabled();
+    expect(steerButton).not.toHaveAttribute("aria-busy");
+    fireEvent.click(steerButton);
+    expect(onSubmit).not.toHaveBeenCalled();
 
-    const stopButton = screen.getByTitle("Stop");
+    const stopButton = screen.getByTitle("Stopping…");
     expect(stopButton).toBeDisabled();
     expect(stopButton).toHaveAttribute("aria-busy", "true");
     fireEvent.click(stopButton);
     expect(onStop).not.toHaveBeenCalled();
+  });
+});
+
+describe("<ChatInputBox /> thread-scoped composer state", () => {
+  it("flushes the previous draft before a sub-300ms thread switch", async () => {
+    const { rerender } = renderWithProviders(
+      <ChatInputBox mode="react" threadId="draft-thread-a" />,
+    );
+
+    fireEvent.change(textarea(), {
+      target: { value: "unsaved final keystrokes" },
+    });
+    rerender(<ChatInputBox mode="react" threadId="draft-thread-b" />);
+    await waitFor(() => expect(textarea()).toHaveValue(""));
+
+    rerender(<ChatInputBox mode="react" threadId="draft-thread-a" />);
+    await waitFor(() =>
+      expect(textarea()).toHaveValue("unsaved final keystrokes"),
+    );
+  });
+
+  it("clears images, files, and research materials when the thread changes", async () => {
+    const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL");
+    const { rerender } = renderWithProviders(
+      <ChatInputBox
+        mode="deep"
+        threadId="attachment-thread-a"
+        allowAgentModes
+        onDeepResearch={vi.fn()}
+      />,
+    );
+
+    const image = new File(["image"], "thread-a.png", { type: "image/png" });
+    fireEvent.paste(textarea(), {
+      clipboardData: {
+        items: [
+          {
+            kind: "file",
+            type: "image/png",
+            getAsFile: () => image,
+          },
+        ],
+      },
+    });
+    const contextFile = new File(["notes"], "thread-a.md", {
+      type: "text/markdown",
+    });
+    fireEvent.change(screen.getByTestId("chat-device-file-input"), {
+      target: { files: [contextFile] },
+    });
+    await openAgentSettings();
+    fireEvent.change(screen.getByPlaceholderText("Paste text material"), {
+      target: { value: "thread A research context" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Text$/i }));
+
+    expect(document.querySelector('img[alt="thread-a.png"]')).toBeTruthy();
+    expect(screen.getByText("thread-a.md")).toBeInTheDocument();
+    expect(screen.getByText("thread A research context")).toBeInTheDocument();
+
+    rerender(
+      <ChatInputBox
+        mode="deep"
+        threadId="attachment-thread-b"
+        allowAgentModes
+        onDeepResearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(document.querySelector('img[alt="thread-a.png"]')).toBeNull();
+      expect(screen.queryByText("thread-a.md")).toBeNull();
+      expect(screen.queryByText("thread A research context")).toBeNull();
+    });
+    await openAgentSettings();
+    expect(
+      screen.getByPlaceholderText("https://example.com, https://..."),
+    ).toHaveValue("");
+    expect(screen.getByPlaceholderText("Text Title")).toHaveValue("");
+    expect(screen.getByPlaceholderText("Paste text material")).toHaveValue("");
+    expect(screen.getByPlaceholderText("Material Note")).toHaveValue("");
+    expect(revokeObjectURL).toHaveBeenCalled();
+    revokeObjectURL.mockRestore();
+  });
+
+  it("does not attach an appshot that finishes after switching threads", async () => {
+    let finishCapture!: (value: ComputerApiModule.ComputerAppshot) => void;
+    captureComputerAppshotMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishCapture = resolve;
+        }),
+    );
+    const { rerender } = renderWithProviders(
+      <ChatInputBox mode="react" threadId="appshot-thread-a" />,
+    );
+
+    await openToolsMenu();
+    fireEvent.click(screen.getByTestId("chat-add-appshot"));
+    await waitFor(() =>
+      expect(captureComputerAppshotMock).toHaveBeenCalledWith({
+        controlSessionId: "thread:appshot-thread-a",
+      }),
+    );
+
+    rerender(<ChatInputBox mode="react" threadId="appshot-thread-b" />);
+    await act(async () => {
+      finishCapture({
+        schema: "octopus.appshot.v1",
+        ok: true,
+        snapshot_id: "old-snapshot",
+        created_at: 1,
+        target: {
+          kind: "desktop_window",
+          source: "computer",
+          id: "window-1",
+          title: "Old window",
+          app_name: "OldApp",
+        },
+        screenshot: {
+          ok: true,
+          data_url: "data:image/png;base64,aW1n",
+        },
+        accessibility: { available: true },
+      });
+      await Promise.resolve();
+    });
+
+    expect(document.querySelector('img[alt^="Appshot-"]')).toBeNull();
+    expect(uploadWithProgressMock).not.toHaveBeenCalled();
+  });
+
+  it("does not attach a queued image decoded after switching threads", async () => {
+    const dataUrl = "data:image/png;base64,cXVldWVkLW9sZC10aHJlYWQ=";
+    let finishDecode!: (response: Response) => void;
+    const realFetch = globalThis.fetch;
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation((input, init) => {
+        if (String(input) === dataUrl) {
+          return new Promise((resolve) => {
+            finishDecode = resolve;
+          });
+        }
+        return realFetch(input, init);
+      });
+    queueComposerImageEntry({
+      threadId: "queue-thread-a",
+      dataUrl,
+      filename: "queued-old-thread.png",
+      sourceLabel: "Old browser capture",
+    });
+    const { rerender } = renderWithProviders(
+      <ChatInputBox mode="react" threadId="queue-thread-a" />,
+    );
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith(dataUrl));
+
+    rerender(<ChatInputBox mode="react" threadId="queue-thread-b" />);
+    await act(async () => {
+      finishDecode({
+        blob: async () => new Blob(["image"], { type: "image/png" }),
+      } as Response);
+      await Promise.resolve();
+    });
+
+    expect(
+      document.querySelector('img[alt="queued-old-thread.png"]'),
+    ).toBeNull();
+    expect(uploadWithProgressMock).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 });
 

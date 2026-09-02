@@ -19,6 +19,7 @@ import { getBackendTransportBaseURL } from "@/core/config";
 import { getToken } from "@/core/auth/api";
 import type { SandboxPolicy } from "@/core/permissions";
 import type { ReasoningEffort } from "@/core/threads";
+import { swallow } from "@/core/utils/log";
 
 import { createDefaultClient, type RealtimeClient } from "./client";
 import type { JsonRpcRequest, Notification } from "./envelope";
@@ -69,6 +70,25 @@ const WORK_ITEM_TYPES = new Set<string>([
 
 type WireNotification = Notification<Record<string, unknown>>;
 
+interface PreparedLiveNotification {
+  notification: WireNotification;
+  epoch: ThreadEpoch;
+  /** IDs reserved in the live-only dedupe ledger while this notification was
+   * prepared. They become unconfirmed only after the reducer applies them. */
+  registeredEventIds: string[];
+}
+
+interface ThreadEpoch {
+  threadId: string;
+  generation: number;
+}
+
+function isSameThreadEpoch(left: ThreadEpoch, right: ThreadEpoch): boolean {
+  return (
+    left.threadId === right.threadId && left.generation === right.generation
+  );
+}
+
 const LIVE_DELTA_METHODS = new Set([
   "item/agentMessage/delta",
   "item/reasoning/textDelta",
@@ -76,13 +96,38 @@ const LIVE_DELTA_METHODS = new Set([
   "item/commandExecution/outputDelta",
 ]);
 
+// These notifications are only useful when their referenced turn/item was
+// present. A reducer no-op therefore means the live delivery was not applied
+// (usually because an earlier start in the same frame was malformed). Keep
+// its id replayable so the durable ordered log can repair the dependency.
+const LIVE_EVENTS_REQUIRING_STATE_CHANGE = new Set([
+  "turn/started",
+  "turn/completed",
+  "turn/interrupted",
+  "turn/diff/updated",
+  "turn/plan/updated",
+  "workbench/snapshot",
+  "turn/metaSkill/hint",
+  "turn/grounding",
+  "item/started",
+  "item/completed",
+  "item/agentMessage/delta",
+  "item/reasoning/textDelta",
+  "item/plan/delta",
+  "item/commandExecution/outputDelta",
+  "item/fileChange/hunkDelta",
+  "item/mcpToolCall/progress",
+  "item/fileChange/hunkDecision",
+  "error",
+]);
+
 /** Coalesce only after every durable id and per-envelope side effect has been
  * observed. At this point folding adjacent text deltas together is safe: the
  * replay ledger already remembers every constituent envelope. */
 function coalesceAcceptedLiveDeltas(
-  notifications: WireNotification[],
-): WireNotification[] {
-  const merged: WireNotification[] = [];
+  notifications: PreparedLiveNotification[],
+): PreparedLiveNotification[] {
+  const merged: PreparedLiveNotification[] = [];
   let runParts: string[] = [];
   const closeRun = (): void => {
     if (runParts.length <= 1) {
@@ -93,26 +138,37 @@ function coalesceAcceptedLiveDeltas(
     if (seed) {
       merged[merged.length - 1] = {
         ...seed,
-        params: { ...seed.params, delta: runParts.join("") },
+        notification: {
+          ...seed.notification,
+          params: {
+            ...seed.notification.params,
+            delta: runParts.join(""),
+          },
+        },
       };
     }
     runParts = [];
   };
 
-  for (const notification of notifications) {
+  for (const prepared of notifications) {
     const previous = merged[merged.length - 1];
     if (
       previous &&
       runParts.length > 0 &&
-      canMergeAcceptedLiveDelta(previous, notification)
+      canMergeAcceptedLiveDelta(previous.notification, prepared.notification)
     ) {
-      runParts.push(String(notification.params.delta ?? ""));
+      runParts.push(String(prepared.notification.params.delta ?? ""));
+      previous.registeredEventIds.push(...prepared.registeredEventIds);
       continue;
     }
     closeRun();
-    merged.push(notification);
-    if (LIVE_DELTA_METHODS.has(notification.method)) {
-      runParts = [String(notification.params.delta ?? "")];
+    merged.push({
+      notification: prepared.notification,
+      epoch: prepared.epoch,
+      registeredEventIds: [...prepared.registeredEventIds],
+    });
+    if (LIVE_DELTA_METHODS.has(prepared.notification.method)) {
+      runParts = [String(prepared.notification.params.delta ?? "")];
     }
   }
   closeRun();
@@ -320,6 +376,20 @@ function mergeTurnSnapshots(
 export function useRealtimeThread(
   args: UseRealtimeThreadArgs,
 ): UseRealtimeThreadValue {
+  // React keeps this hook instance alive while the route swaps threads. A
+  // synchronous generation invalidates public async operations on the first
+  // render of B (and distinguishes A -> B -> A), before effect cleanup runs.
+  const threadEpochRef = useRef<ThreadEpoch>({
+    threadId: args.threadId,
+    generation: 0,
+  });
+  if (threadEpochRef.current.threadId !== args.threadId) {
+    threadEpochRef.current = {
+      threadId: args.threadId,
+      generation: threadEpochRef.current.generation + 1,
+    };
+  }
+  const threadEpoch = threadEpochRef.current;
   const [state, setState] = useState<Conversation>(() =>
     emptyConversation(args.threadId),
   );
@@ -364,6 +434,17 @@ export function useRealtimeThread(
   // a slow/cross-worker poll may fetch the matching delta much later. A
   // fetched page moves the id into ``seenEventIdsRef``.
   const unconfirmedLiveEventIdsRef = useRef<Set<string>>(new Set());
+  // IDs accepted from the socket but not yet committed by the React state
+  // reducer. Durable polling must not treat these as applied: whichever path
+  // folds first wins and the other observes the confirmed/applied ledger.
+  const pendingLiveEventIdsRef = useRef<Set<string>>(new Set());
+  const isCurrentThreadClient = useCallback(
+    (epoch: ThreadEpoch, client: RealtimeClient): boolean =>
+      isSameThreadEpoch(epoch, threadEpochRef.current) &&
+      clientRef.current === client &&
+      stateRef.current.threadId === epoch.threadId,
+    [],
+  );
   // Lazily created default replay cache (IndexedDB where available).
   // Explicit ``args.replayCache`` wins; ``null`` here means "not yet
   // created", so tests injecting their own store never pay for one.
@@ -414,32 +495,82 @@ export function useRealtimeThread(
   );
 
   const applyNotificationEvents = useCallback(
-    (notifications: WireNotification[]) => {
+    (notifications: PreparedLiveNotification[]) => {
       if (notifications.length === 0) return;
       setState((prev) => {
         let next = prev;
-        for (const notification of notifications) {
-          // Second line of defense: reject events that belong to a different
-          // thread than the one currently held in state. This guards against
-          // any in-flight notifications from a previous thread's WebSocket
-          // that slip through between cleanup and the socket actually closing.
-          const nestedThread = notification.params.thread as
-            | { id?: unknown }
-            | undefined;
-          const eventThreadId =
-            notification.params.threadId ?? nestedThread?.id;
-          if (
-            typeof eventThreadId === "string" &&
-            eventThreadId !== next.threadId
-          ) {
+        for (const prepared of notifications) {
+          if (!isSameThreadEpoch(prepared.epoch, threadEpochRef.current)) {
             continue;
           }
-          const reduced = reduce(
-            next,
-            notification as unknown as ConversationEvent,
-            onReducerDiagnostic,
-          );
-          next = reduced.next;
+          const releaseEventIds = (): void => {
+            for (const eventId of prepared.registeredEventIds) {
+              pendingLiveEventIdsRef.current.delete(eventId);
+            }
+          };
+          const commitEventIds = (): void => {
+            for (const eventId of prepared.registeredEventIds) {
+              pendingLiveEventIdsRef.current.delete(eventId);
+              if (!seenEventIdsRef.current.has(eventId)) {
+                unconfirmedLiveEventIdsRef.current.add(eventId);
+              }
+            }
+          };
+          try {
+            const { notification } = prepared;
+            // A durable poll may have folded this event while the live state
+            // update was waiting for React. In that case the log path won;
+            // never apply the same bytes a second time.
+            if (
+              prepared.registeredEventIds.some(
+                (eventId) =>
+                  seenEventIdsRef.current.has(eventId) ||
+                  unconfirmedLiveEventIdsRef.current.has(eventId),
+              )
+            ) {
+              releaseEventIds();
+              continue;
+            }
+            // Second line of defense: reject events that belong to a different
+            // thread than the one currently held in state. This guards against
+            // any in-flight notifications from a previous thread's WebSocket
+            // that slip through between cleanup and the socket actually closing.
+            const nestedThread = notification.params.thread as
+              | { id?: unknown }
+              | undefined;
+            const eventThreadId =
+              notification.params.threadId ?? nestedThread?.id;
+            if (
+              typeof eventThreadId === "string" &&
+              eventThreadId !== next.threadId
+            ) {
+              releaseEventIds();
+              continue;
+            }
+            const reduced = reduce(
+              next,
+              notification as unknown as ConversationEvent,
+              onReducerDiagnostic,
+            );
+            if (
+              reduced.next === next &&
+              LIVE_EVENTS_REQUIRING_STATE_CHANGE.has(notification.method)
+            ) {
+              // The event parsed, but its referenced state was absent. This
+              // is not a successful application: retaining the id would make
+              // a later durable dependency repair skip it permanently.
+              releaseEventIds();
+              continue;
+            }
+            next = reduced.next;
+            commitEventIds();
+          } catch (error) {
+            // One malformed event must not abort the rest of a transport
+            // frame. Its reserved ids are transactional with the reducer:
+            // releasing them lets thread/events replay the durable copy.
+            releaseEventIds();
+            swallow(error, "realtime-notification-reducer");
+          }
         }
         stateRef.current = next;
         return next;
@@ -524,6 +655,7 @@ export function useRealtimeThread(
     // a slice supplies their durable position.
     seenEventIdsRef.current.clear();
     unconfirmedLiveEventIdsRef.current.clear();
+    pendingLiveEventIdsRef.current.clear();
 
     type EventFetchOutcome =
       | { reset: true }
@@ -607,6 +739,7 @@ export function useRealtimeThread(
       // live duplicate cannot append the same delta twice.
       for (const event of events) {
         if (typeof event.eventId !== "string") continue;
+        pendingLiveEventIdsRef.current.delete(event.eventId);
         liveUnconfirmed.delete(event.eventId);
         markSeenEventId(confirmed, event.eventId);
       }
@@ -870,6 +1003,7 @@ export function useRealtimeThread(
         resumeStreamIdRef.current = null;
         seenEventIdsRef.current.clear();
         unconfirmedLiveEventIdsRef.current.clear();
+        pendingLiveEventIdsRef.current.clear();
         resumeInFlight = false;
         // The stream was replaced or the window is unsafe — the cached
         // prefix is no longer interpretable either. Refilled by the
@@ -967,6 +1101,7 @@ export function useRealtimeThread(
           resumeStreamIdRef.current = null;
           seenEventIdsRef.current.clear();
           unconfirmedLiveEventIdsRef.current.clear();
+          pendingLiveEventIdsRef.current.clear();
           void replayCache.clear(args.threadId).catch(() => {});
           requestResume(client, "replace");
           return;
@@ -978,6 +1113,7 @@ export function useRealtimeThread(
           resumeStreamIdRef.current = null;
           seenEventIdsRef.current.clear();
           unconfirmedLiveEventIdsRef.current.clear();
+          pendingLiveEventIdsRef.current.clear();
           void replayCache.clear(args.threadId).catch(() => {});
           requestResume(client, "replace");
           return;
@@ -1079,9 +1215,10 @@ export function useRealtimeThread(
 
     const prepareNotification = (
       note: WireNotification,
-    ): WireNotification | null => {
+    ): PreparedLiveNotification | null => {
       if (cancelled) return null;
       const belongsToThread = note.params?.threadId === args.threadId;
+      const registeredEventIds: string[] = [];
       // Live-first ids stay unconfirmed until a fetched cursor includes the
       // same persisted event. This prevents a long recovered turn from
       // FIFO-evicting an id and then double-appending its delta via polling.
@@ -1089,13 +1226,16 @@ export function useRealtimeThread(
       if (belongsToThread && typeof eventId === "string") {
         if (
           seenEventIdsRef.current.has(eventId) ||
-          unconfirmedLiveEventIdsRef.current.has(eventId)
+          unconfirmedLiveEventIdsRef.current.has(eventId) ||
+          pendingLiveEventIdsRef.current.has(eventId)
         ) {
           return null;
         }
-        unconfirmedLiveEventIdsRef.current.add(eventId);
+        pendingLiveEventIdsRef.current.add(eventId);
+        registeredEventIds.push(eventId);
         if (
-          unconfirmedLiveEventIdsRef.current.size >=
+          unconfirmedLiveEventIdsRef.current.size +
+            pendingLiveEventIdsRef.current.size >=
           UNCONFIRMED_LIVE_EVENT_ID_POLL_THRESHOLD
         ) {
           const activeClient = clientRef.current;
@@ -1179,19 +1319,40 @@ export function useRealtimeThread(
         const activeClient = clientRef.current;
         if (activeClient) observeTailTerminal(activeClient);
       }
-      return note;
+      return { notification: note, epoch: threadEpoch, registeredEventIds };
+    };
+
+    const safelyPrepareNotification = (
+      note: WireNotification,
+    ): PreparedLiveNotification | null => {
+      try {
+        return prepareNotification(note);
+      } catch (error) {
+        // Preparation also performs per-envelope telemetry/delivery side
+        // effects. Undo an id that may already have entered the live-only
+        // ledger so a durable replay can still repair this event.
+        const eventId = note.params?.eventId;
+        if (
+          note.params?.threadId === args.threadId &&
+          typeof eventId === "string"
+        ) {
+          pendingLiveEventIdsRef.current.delete(eventId);
+        }
+        swallow(error, "realtime-notification-prepare");
+        return null;
+      }
     };
 
     const onNotification = (note: WireNotification): void => {
-      const accepted = prepareNotification(note);
+      const accepted = safelyPrepareNotification(note);
       if (accepted) applyNotificationEvents([accepted]);
     };
 
     const onNotificationBatch = (notifications: WireNotification[]): void => {
       if (cancelled || notifications.length === 0) return;
-      const accepted: WireNotification[] = [];
+      const accepted: PreparedLiveNotification[] = [];
       for (const notification of notifications) {
-        const prepared = prepareNotification(notification);
+        const prepared = safelyPrepareNotification(notification);
         if (prepared) accepted.push(prepared);
       }
       applyNotificationEvents(coalesceAcceptedLiveDeltas(accepted));
@@ -1352,6 +1513,7 @@ export function useRealtimeThread(
     replayCache,
     applyNotificationEvents,
     persistTurnTelemetry,
+    threadEpoch,
   ]);
 
   const startTurn = useCallback<UseRealtimeThreadValue["startTurn"]>(
@@ -1447,15 +1609,30 @@ export function useRealtimeThread(
 
   const resume = useCallback(async () => {
     const client = clientRef.current;
-    if (!client) return;
+    const operationEpoch = threadEpoch;
+    if (!client || !isCurrentThreadClient(operationEpoch, client)) return;
     const afterSequence = resumeCursorRef.current;
     const eventStreamId = resumeStreamIdRef.current;
-    const result = await client.request<ResumeResponse>("thread/resume", {
-      threadId: args.threadId,
-      limit: RESUME_TURN_LIMIT,
-      ...(afterSequence !== null ? { afterSequence } : {}),
-      ...(afterSequence !== null && eventStreamId ? { eventStreamId } : {}),
-    });
+    let result: ResumeResponse;
+    try {
+      result = await client.request<ResumeResponse>("thread/resume", {
+        threadId: operationEpoch.threadId,
+        limit: RESUME_TURN_LIMIT,
+        ...(afterSequence !== null ? { afterSequence } : {}),
+        ...(afterSequence !== null && eventStreamId ? { eventStreamId } : {}),
+      });
+    } catch (error) {
+      // A rejected request from a retired route is just cancellation. Do not
+      // leak it into the new thread's retry/error flow.
+      if (!isCurrentThreadClient(operationEpoch, client)) return;
+      throw error;
+    }
+    if (
+      !isCurrentThreadClient(operationEpoch, client) ||
+      (result.thread?.id && result.thread.id !== operationEpoch.threadId)
+    ) {
+      return;
+    }
     if (
       typeof result.nextEventSequence === "number" &&
       Number.isFinite(result.nextEventSequence) &&
@@ -1467,6 +1644,12 @@ export function useRealtimeThread(
       resumeStreamIdRef.current = result.eventStreamId;
     }
     setState((prev) => {
+      if (
+        !isCurrentThreadClient(operationEpoch, client) ||
+        prev.threadId !== operationEpoch.threadId
+      ) {
+        return prev;
+      }
       const turns =
         result.incremental === true
           ? mergeTurnSnapshots(prev.turns, result.turns ?? [])
@@ -1491,32 +1674,57 @@ export function useRealtimeThread(
       stateRef.current = next;
       return next;
     });
-  }, [args.threadId]);
+  }, [isCurrentThreadClient, threadEpoch]);
 
   // Guards concurrent backwards-pagination; a ref (not state) because
   // double-invocation protection must be synchronous.
-  const loadingOlderRef = useRef(false);
+  const loadingOlderRef = useRef<{
+    epoch: ThreadEpoch;
+    client: RealtimeClient;
+  } | null>(null);
 
   const loadOlderTurns = useCallback(async () => {
     const client = clientRef.current;
-    if (!client) return;
-    if (loadingOlderRef.current) return;
+    const operationEpoch = threadEpoch;
+    if (!client || !isCurrentThreadClient(operationEpoch, client)) return;
+    const activeLoad = loadingOlderRef.current;
+    if (
+      activeLoad &&
+      activeLoad.client === client &&
+      isSameThreadEpoch(activeLoad.epoch, operationEpoch)
+    ) {
+      return;
+    }
     const current = stateRef.current;
     if (!current.hasMoreTurns) return;
     const oldest = current.turns[0];
     if (!oldest) return;
-    loadingOlderRef.current = true;
+    const operation = { epoch: operationEpoch, client };
+    loadingOlderRef.current = operation;
     try {
       type ResumeResponse = {
+        thread?: { id: string };
         turns: Conversation["turns"];
         hasMore?: boolean;
       };
       const result = await client.request<ResumeResponse>("thread/resume", {
-        threadId: args.threadId,
+        threadId: operationEpoch.threadId,
         limit: RESUME_TURN_LIMIT,
         beforeTurnId: oldest.id,
       });
+      if (
+        !isCurrentThreadClient(operationEpoch, client) ||
+        (result.thread?.id && result.thread.id !== operationEpoch.threadId)
+      ) {
+        return;
+      }
       setState((prev) => {
+        if (
+          !isCurrentThreadClient(operationEpoch, client) ||
+          prev.threadId !== operationEpoch.threadId
+        ) {
+          return prev;
+        }
         // Drop any overlap defensively (the cursor is exclusive, but a
         // concurrent full resume may have already prepended them).
         const known = new Set(prev.turns.map((t) => t.id));
@@ -1530,9 +1738,11 @@ export function useRealtimeThread(
         return next;
       });
     } finally {
-      loadingOlderRef.current = false;
+      if (loadingOlderRef.current === operation) {
+        loadingOlderRef.current = null;
+      }
     }
-  }, [args.threadId]);
+  }, [isCurrentThreadClient, threadEpoch]);
 
   const interrupt = useCallback<
     UseRealtimeThreadValue["interrupt"]

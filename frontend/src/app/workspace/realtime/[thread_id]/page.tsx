@@ -1,5 +1,12 @@
 import { Settings2Icon, XIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { FinalArtifactCompletionNotice } from "@/components/workspace/realtime/final-artifact-completion-notice";
 import {
@@ -162,6 +169,7 @@ import {
   usePlanActionHandler,
   useRegenerateHandler,
 } from "@/components/workspace/use-thread-page";
+import { useThreadStopController } from "@/components/workspace/use-thread-stop-controller";
 import { swallow } from "@/core/utils/log";
 import { getRecordingStatus } from "@/core/teach-repeat/api";
 import { SubtasksProvider } from "@/core/tasks/context";
@@ -511,6 +519,26 @@ export default function RealtimePage() {
   );
 }
 
+interface ThreadResearchViewState {
+  threadId: string;
+  job: ResearchJob | null;
+  loading: boolean;
+  error: string | null;
+  visible: boolean;
+}
+
+function emptyThreadResearchViewState(
+  threadId: string,
+): ThreadResearchViewState {
+  return {
+    threadId,
+    job: null,
+    loading: false,
+    error: null,
+    visible: false,
+  };
+}
+
 function RealtimePageContent({
   chatState,
 }: {
@@ -519,6 +547,10 @@ function RealtimePageContent({
   const { t } = useI18n();
   const { authStatus, user } = useAuth();
   const { threadId, isNewThread, setIsNewThread } = chatState;
+  const activeThreadIdRef = useRef(threadId);
+  useLayoutEffect(() => {
+    activeThreadIdRef.current = threadId;
+  }, [threadId]);
   const isMobile = useIsMobile();
   const {
     artifacts,
@@ -530,10 +562,58 @@ function RealtimePageContent({
   const [settings, setSettings] = useThreadSettings(threadId);
   const [mounted, setMounted] = useState(false);
   const [, setShowPreview] = useState(false);
-  const [researchJob, setResearchJob] = useState<ResearchJob | null>(null);
-  const [researchLoading, setResearchLoading] = useState(false);
-  const [researchError, setResearchError] = useState<string | null>(null);
-  const [showResearch, setShowResearch] = useState(false);
+  const [researchViewState, setResearchViewState] =
+    useState<ThreadResearchViewState>(() =>
+      emptyThreadResearchViewState(threadId),
+    );
+  const currentResearchView =
+    researchViewState.threadId === threadId
+      ? researchViewState
+      : emptyThreadResearchViewState(threadId);
+  const researchJob = currentResearchView.job;
+  const researchLoading = currentResearchView.loading;
+  const researchError = currentResearchView.error;
+  const showResearch = currentResearchView.visible;
+  const updateResearchView = useCallback(
+    (patch: Partial<Omit<ThreadResearchViewState, "threadId">>) => {
+      const ownerThreadId = activeThreadIdRef.current;
+      setResearchViewState((current) => ({
+        ...(current.threadId === ownerThreadId
+          ? current
+          : emptyThreadResearchViewState(ownerThreadId)),
+        ...patch,
+      }));
+    },
+    [],
+  );
+  const setResearchJob = useCallback(
+    (job: ResearchJob | null) => updateResearchView({ job }),
+    [updateResearchView],
+  );
+  const setResearchLoading = useCallback(
+    (loading: boolean) => updateResearchView({ loading }),
+    [updateResearchView],
+  );
+  const setResearchError = useCallback(
+    (error: string | null) => updateResearchView({ error }),
+    [updateResearchView],
+  );
+  const setShowResearch = useCallback(
+    (visible: boolean) => updateResearchView({ visible }),
+    [updateResearchView],
+  );
+  const researchOperationRef = useRef<object | null>(null);
+  useEffect(() => {
+    // Route changes reuse this component. Invalidate any request started by
+    // the previous conversation and replace its transient research UI state,
+    // so returning later cannot resurrect a permanently loading panel.
+    researchOperationRef.current = null;
+    setResearchViewState((current) =>
+      current.threadId === threadId
+        ? current
+        : emptyThreadResearchViewState(threadId),
+    );
+  }, [threadId]);
   const [showResearchHistory, setShowResearchHistory] = useState(false);
   const [showAgentPlan, setShowAgentPlan] = useState(false);
   const [agentWorkbenchTab, setAgentWorkbenchTab] =
@@ -911,6 +991,7 @@ function RealtimePageContent({
     closeSpecialUtilityPanels,
     routeState?.openProjectWorkbench,
     setArtifactsOpen,
+    setShowResearch,
     threadId,
   ]);
   const params = useParams<{ agentName?: string }>();
@@ -1925,6 +2006,7 @@ function RealtimePageContent({
       boundProjectState?.project.id,
       closeSpecialUtilityPanels,
       setArtifactsOpen,
+      setShowResearch,
     ],
   );
   const handleDetachProjectCapability = useCallback(async () => {
@@ -2598,22 +2680,38 @@ function RealtimePageContent({
 
   // 「环境受限」横幅授权：点「授权并重试」先写线程级 network_access，等它落到
   // settings.context 后再触发既有 regenerate —— 否则 sendMessage 的闭包仍拿着旧档。
-  const [pendingNetworkRegen, setPendingNetworkRegen] = useState<
-    "common" | "full" | null
-  >(null);
+  const [pendingNetworkRegen, setPendingNetworkRegen] = useState<{
+    threadId: string;
+    tier: "common" | "full";
+  } | null>(null);
+  const pendingNetworkRegenRef = useRef(pendingNetworkRegen);
+  pendingNetworkRegenRef.current = pendingNetworkRegen;
   const handleAuthorizeNetwork = useCallback(
     (tier: "common" | "full") => {
-      setPendingNetworkRegen(tier);
+      if (pendingNetworkRegenRef.current?.threadId === threadId) return;
+      const pending = { threadId, tier };
+      pendingNetworkRegenRef.current = pending;
+      setPendingNetworkRegen(pending);
       setSettings("context", {
         ...settings.context,
         network_access: tier,
       });
     },
-    [setSettings, settings.context],
+    [setSettings, settings.context, threadId],
   );
   useEffect(() => {
-    if (!pendingNetworkRegen) return;
-    if (settings.context.network_access !== pendingNetworkRegen) return;
+    const pending = pendingNetworkRegenRef.current;
+    if (!pending || pending.threadId === threadId) return;
+    pendingNetworkRegenRef.current = null;
+    setPendingNetworkRegen((current) => (current === pending ? null : current));
+  }, [threadId]);
+  useEffect(() => {
+    if (!pendingNetworkRegen || pendingNetworkRegen.threadId !== threadId) {
+      return;
+    }
+    if (settings.context.network_access !== pendingNetworkRegen.tier) return;
+    if (pendingNetworkRegenRef.current !== pendingNetworkRegen) return;
+    pendingNetworkRegenRef.current = null;
     setPendingNetworkRegen(null);
     window.dispatchEvent(
       new CustomEvent("octopus:regenerate", { detail: { threadId } }),
@@ -3134,6 +3232,7 @@ function RealtimePageContent({
     latestWorkspaceFocusTab,
     selectArtifact,
     setArtifactsOpen,
+    setShowResearch,
     showAgentWorkbench,
     thread.isLoading,
   ]);
@@ -3168,6 +3267,7 @@ function RealtimePageContent({
     thread.isLoading,
     hasCompletedAgentOutput,
     setArtifactsOpen,
+    setShowResearch,
   ]);
 
   useEffect(() => {
@@ -3202,7 +3302,7 @@ function RealtimePageContent({
     window.addEventListener(AGENT_WORKBENCH_FOCUS_EVENT, handleAgentFocus);
     return () =>
       window.removeEventListener(AGENT_WORKBENCH_FOCUS_EVENT, handleAgentFocus);
-  }, [closeSpecialUtilityPanels, setArtifactsOpen]);
+  }, [closeSpecialUtilityPanels, setArtifactsOpen, setShowResearch]);
 
   useEffect(() => {
     const handleOpenWorkbench = (event: Event) => {
@@ -3236,7 +3336,7 @@ function RealtimePageContent({
         AGENT_WORKBENCH_OPEN_EVENT,
         handleOpenWorkbench,
       );
-  }, [closeSpecialUtilityPanels, setArtifactsOpen]);
+  }, [closeSpecialUtilityPanels, setArtifactsOpen, setShowResearch]);
 
   const handleAcceptModeIntent = useCallback(
     async (mode: AgentModeName) => {
@@ -3538,6 +3638,9 @@ function RealtimePageContent({
       const extracted = extractResearchUrls(topic);
       const clean = extracted.topic.trim();
       if (!clean || researchLoading) return false;
+      const requestThreadId = threadId;
+      const operation = {};
+      researchOperationRef.current = operation;
       const urls = Array.from(
         new Set([
           ...extracted.urls,
@@ -3579,19 +3682,46 @@ function RealtimePageContent({
             "uploaded_file",
           ],
         });
+        if (
+          researchOperationRef.current !== operation ||
+          activeThreadIdRef.current !== requestThreadId
+        ) {
+          return false;
+        }
         setResearchJob(job);
         return true;
       } catch (err) {
         swallow(err);
+        if (
+          researchOperationRef.current !== operation ||
+          activeThreadIdRef.current !== requestThreadId
+        ) {
+          return false;
+        }
         setResearchError(
           err instanceof Error ? err.message : "Failed to start agent run",
         );
         return false;
       } finally {
-        setResearchLoading(false);
+        if (
+          researchOperationRef.current === operation &&
+          activeThreadIdRef.current === requestThreadId
+        ) {
+          researchOperationRef.current = null;
+          setResearchLoading(false);
+        }
       }
     },
-    [closeSpecialUtilityPanels, effectiveAgentId, researchLoading, threadId],
+    [
+      closeSpecialUtilityPanels,
+      effectiveAgentId,
+      researchLoading,
+      setResearchError,
+      setResearchJob,
+      setResearchLoading,
+      setShowResearch,
+      threadId,
+    ],
   );
 
   // Implementation note.
@@ -3599,55 +3729,30 @@ function RealtimePageContent({
   // Implementation note.
   // Implementation note.
   const pauseTask = usePauseTask();
-  const activeThreadIdRef = useRef(threadId);
-  activeThreadIdRef.current = threadId;
-  const stoppingRef = useRef<{ threadId: string } | null>(null);
-  const [stoppingThreadId, setStoppingThreadId] = useState<string | null>(null);
-  const handleStop = useCallback(async () => {
-    if (stoppingRef.current?.threadId === threadId) return;
-    const stopOperation = { threadId };
-    stoppingRef.current = stopOperation;
-    setStoppingThreadId(threadId);
-    const activeForThread = (tasks.data?.active ?? []).find(
-      (t) => t.thread_id === threadId,
-    );
-    try {
-      await thread.stop();
-      if (activeForThread) {
-        try {
-          await pauseTask.mutateAsync({
-            taskId: activeForThread.task_id,
-            reason: "user_request",
-            note: t.chatPage.stopNote,
-          });
-        } catch (error) {
-          swallow(error);
-        }
-      }
-    } catch (error) {
-      if (
-        stoppingRef.current === stopOperation &&
-        activeThreadIdRef.current === threadId
-      ) {
-        toast.error(t.chatPage.stopFailed);
-      }
-      swallow(error);
-    } finally {
-      // A route-param change reuses this page component. Do not let a late
-      // completion from the previous thread clear a newer thread's stop state.
-      if (stoppingRef.current === stopOperation) {
-        stoppingRef.current = null;
-        setStoppingThreadId(null);
-      }
-    }
-  }, [
-    thread,
+  const activeTaskId = useMemo(
+    () =>
+      (tasks.data?.active ?? []).find((task) => task.thread_id === threadId)
+        ?.task_id ?? null,
+    [tasks.data?.active, threadId],
+  );
+  const pauseActiveTask = useCallback(async () => {
+    if (!activeTaskId) return;
+    await pauseTask.mutateAsync({
+      taskId: activeTaskId,
+      reason: "user_request",
+      note: t.chatPage.stopNote,
+    });
+  }, [activeTaskId, pauseTask, t.chatPage.stopNote]);
+  const reportStopFailure = useCallback(() => {
+    toast.error(t.chatPage.stopFailed);
+  }, [t.chatPage.stopFailed]);
+  const { stop: handleStop, isStopping } = useThreadStopController({
     threadId,
-    tasks.data,
-    pauseTask,
-    t.chatPage.stopNote,
-    t.chatPage.stopFailed,
-  ]);
+    stopThread: thread.stop,
+    pauseActiveTask: activeTaskId ? pauseActiveTask : undefined,
+    isRunning: thread.isLoading,
+    onFailure: reportStopFailure,
+  });
 
   const hasResearchPanel = showResearch && (!!researchJob || !!researchError);
   const hasSpecialUtilityPanel =
@@ -3683,7 +3788,7 @@ function RealtimePageContent({
     setShowPreview(false);
     setAgentWorkbenchTab("agent");
     setAgentWorkbenchTabTouched(true);
-  }, [closeSpecialUtilityPanels, setArtifactsOpen]);
+  }, [closeSpecialUtilityPanels, setArtifactsOpen, setShowResearch]);
 
   const openArtifactsPanel = useCallback(() => {
     closeSpecialUtilityPanels();
@@ -3698,7 +3803,7 @@ function RealtimePageContent({
     setShowPreview(false);
     setAgentWorkbenchTab("artifacts");
     setAgentWorkbenchTabTouched(true);
-  }, [closeSpecialUtilityPanels, setArtifactsOpen]);
+  }, [closeSpecialUtilityPanels, setArtifactsOpen, setShowResearch]);
 
   const openWorkbenchArtifact = useCallback(
     (path: string) => {
@@ -3729,6 +3834,7 @@ function RealtimePageContent({
       selectArtifact,
       setArtifactsOpen,
       setArtifacts,
+      setShowResearch,
       threadId,
     ],
   );
@@ -3758,7 +3864,7 @@ function RealtimePageContent({
     setShowResearchHistory(false);
     setShowResearch(false);
     setShowPreview(false);
-  }, [closeSpecialUtilityPanels, setArtifactsOpen]);
+  }, [closeSpecialUtilityPanels, setArtifactsOpen, setShowResearch]);
 
   const openPreviewPanel = useCallback(() => {
     closeSpecialUtilityPanels();
@@ -3771,7 +3877,7 @@ function RealtimePageContent({
     setShowPreview(false);
     setAgentWorkbenchTab("browser");
     setAgentWorkbenchTabTouched(true);
-  }, [closeSpecialUtilityPanels, setArtifactsOpen]);
+  }, [closeSpecialUtilityPanels, setArtifactsOpen, setShowResearch]);
 
   const openResearchPanel = useCallback(() => {
     closeSpecialUtilityPanels();
@@ -3780,7 +3886,7 @@ function RealtimePageContent({
     setShowResearchHistory(false);
     setShowResearch(true);
     setShowPreview(false);
-  }, [closeSpecialUtilityPanels, setArtifactsOpen]);
+  }, [closeSpecialUtilityPanels, setArtifactsOpen, setShowResearch]);
 
   const openResearchHistoryPanel = useCallback(() => {
     closeSpecialUtilityPanels();
@@ -3789,7 +3895,7 @@ function RealtimePageContent({
     setShowResearchHistory(true);
     setShowResearch(false);
     setShowPreview(false);
-  }, [closeSpecialUtilityPanels, setArtifactsOpen]);
+  }, [closeSpecialUtilityPanels, setArtifactsOpen, setShowResearch]);
 
   const closeAgentWorkbenchPanel = useCallback(() => {
     setArtifactsOpen(false);
@@ -3826,6 +3932,7 @@ function RealtimePageContent({
     closeAgentWorkbenchPanel,
     hasResearchPanel,
     isOctopusAssistant,
+    setShowResearch,
     showAgentPlan,
     showAutomationPanel,
     showResearchHistory,
@@ -3858,6 +3965,7 @@ function RealtimePageContent({
       effectiveAgentId,
       openAgentPlanPanel,
       setArtifactsOpen,
+      setShowResearch,
     ],
   );
 
@@ -4194,14 +4302,22 @@ function RealtimePageContent({
               }
               messageList={
                 <MessageList
+                  key={threadId}
                   className="size-full"
                   threadId={threadId}
                   thread={thread}
+                  onStop={handleStop}
+                  isStopping={isStopping}
                   onOpenArtifact={openWorkbenchArtifact}
                   project={projectWorkspacePath || null}
                   onSendFollowUp={handleSendFollowUp}
                   onRetryTask={handleRetryTask}
                   onAuthorizeNetwork={handleAuthorizeNetwork}
+                  authorizingNetworkTier={
+                    pendingNetworkRegen?.threadId === threadId
+                      ? pendingNetworkRegen.tier
+                      : null
+                  }
                   header={
                     realtimeApprovals.hasMoreTurns ? (
                       <LoadOlderTurnsBanner
@@ -4414,7 +4530,7 @@ function RealtimePageContent({
                           showInspirationToggle={!embeddedDesignChat}
                           allowAgentModes={!embeddedDesignChat}
                           onStop={handleStop}
-                          isStopping={stoppingThreadId === threadId}
+                          isStopping={isStopping}
                           isUploading={isUploading}
                           autoFocus={isNewThread}
                           defaultValue={composerSeed}

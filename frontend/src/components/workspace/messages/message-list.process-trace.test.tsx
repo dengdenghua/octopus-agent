@@ -100,6 +100,8 @@ function messageListTree({
   completedAgentOutput = false,
   showSenderName = false,
   onAuthorizeNetwork,
+  onStop,
+  isStopping = false,
 }: {
   thread: BaseStream<AgentThreadState>;
   liveToolEvents?: LiveToolEvent[];
@@ -122,6 +124,8 @@ function messageListTree({
   }>;
   showSenderName?: boolean;
   onAuthorizeNetwork?: (tier: "common" | "full") => void;
+  onStop?: () => void | Promise<void>;
+  isStopping?: boolean;
 }) {
   return (
     <SubtasksProvider>
@@ -138,6 +142,8 @@ function messageListTree({
           agentRoster={agentRoster}
           showSenderName={showSenderName}
           onAuthorizeNetwork={onAuthorizeNetwork}
+          onStop={onStop}
+          isStopping={isStopping}
         />
       </ThreadProviders>
     </SubtasksProvider>
@@ -167,6 +173,8 @@ function renderMessageList(args: {
   showSenderName?: boolean;
   completedAgentOutput?: boolean;
   onAuthorizeNetwork?: (tier: "common" | "full") => void;
+  onStop?: () => void | Promise<void>;
+  isStopping?: boolean;
 }) {
   return renderWithProviders(messageListTree(args), {
     locale: args.locale ?? "en-US",
@@ -770,7 +778,10 @@ describe("MessageList process trace lifecycle", () => {
     expect(
       screen.getByTestId("conversation-activity-pulse"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("log")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("log", { name: "对话消息" })).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
     expect(screen.getByRole("log")).toHaveAttribute(
       "aria-relevant",
       "additions",
@@ -2271,7 +2282,7 @@ describe("MessageList stalled-run warning", () => {
     expect(screen.queryByAltText("Octopus")).not.toBeInTheDocument();
   });
 
-  test("warns only after a loading run stops making visible progress", () => {
+  test("warns only after a loading run stops making visible progress", async () => {
     vi.useFakeTimers();
     try {
       const messages = [
@@ -2284,7 +2295,8 @@ describe("MessageList stalled-run warning", () => {
         isLoading: true,
       });
 
-      renderMessageList({ thread });
+      const onStop = vi.fn(() => new Promise<void>(() => undefined));
+      const { rerender } = renderMessageList({ thread, onStop });
 
       act(() => {
         vi.advanceTimersByTime(MESSAGE_LIST_TIMEOUT_WARNING_MS - 1_000);
@@ -2295,6 +2307,17 @@ describe("MessageList stalled-run warning", () => {
         vi.advanceTimersByTime(2_000);
       });
       expect(screen.getByText(/No progress for/)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+      await act(async () => Promise.resolve());
+      expect(onStop).toHaveBeenCalledTimes(1);
+
+      rerender(messageListTree({ thread, onStop, isStopping: true }));
+      const stoppingButton = screen.getByRole("button", {
+        name: "Stopping…",
+      });
+      expect(stoppingButton).toBeDisabled();
+      expect(stoppingButton).toHaveAttribute("aria-busy", "true");
     } finally {
       vi.useRealTimers();
     }

@@ -677,6 +677,92 @@ describe("extractResultUrl", () => {
       screen.queryByRole("link", { name: "打开结果" }),
     ).not.toBeInTheDocument();
   });
+
+  it("keeps network authorization actions on an environment-blocked change receipt", () => {
+    const onAuthorizeNetwork = vi.fn();
+    const human: Message = {
+      id: "user-environment",
+      type: "human",
+      content: "安装依赖并完成改动",
+    };
+    const changed: AIMessage = {
+      id: "ai-environment",
+      type: "ai",
+      content: "",
+      tool_calls: [
+        {
+          id: "change-environment",
+          name: "file_change",
+          args: {
+            changes: [
+              {
+                path: "src/config.ts",
+                op: "update",
+                diff: "--- a/src/config.ts\n+++ b/src/config.ts\n@@\n-old\n+new",
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    renderWithProviders(
+      <MessageOutputSummary
+        messages={[changed]}
+        turnMessages={[human, changed]}
+        failure={{
+          message: "环境受限",
+          detail: "网络访问未授权",
+          kind: "environment",
+        }}
+        onAuthorizeNetwork={onAuthorizeNetwork}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    fireEvent.click(screen.getByText("授权「常用域名」并重试"));
+    fireEvent.click(screen.getByText("授权完整网络并重试"));
+
+    expect(onAuthorizeNetwork).toHaveBeenNthCalledWith(1, "common");
+    expect(onAuthorizeNetwork).toHaveBeenNthCalledWith(2, "full");
+    expect(
+      screen.queryByRole("button", { name: "重试" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("locks both network grants while authorization is being persisted", () => {
+    const onAuthorizeNetwork = vi.fn();
+    renderWithProviders(
+      <MessageOutputSummary
+        messages={[]}
+        turnMessages={[
+          { id: "user-environment-busy", type: "human", content: "run" },
+        ]}
+        failure={{
+          message: "Environment blocked",
+          detail: "Network access is not authorized",
+          kind: "environment",
+        }}
+        onAuthorizeNetwork={onAuthorizeNetwork}
+        authorizingNetworkTier="common"
+      />,
+      { locale: "en-US" },
+    );
+
+    const common = screen.getByRole("button", {
+      name: 'Authorize "common domains" and retry',
+    });
+    const full = screen.getByRole("button", {
+      name: "Authorize full network and retry",
+    });
+    expect(common).toBeDisabled();
+    expect(common).toHaveAttribute("aria-busy", "true");
+    expect(full).toBeDisabled();
+    expect(full).toHaveAttribute("aria-busy", "false");
+    fireEvent.click(common);
+    fireEvent.click(full);
+    expect(onAuthorizeNetwork).not.toHaveBeenCalled();
+  });
 });
 
 describe("MessageList receipt wiring", () => {
@@ -817,6 +903,36 @@ describe("MessageList failure visibility", () => {
     expect(banner).toHaveTextContent("模型连接中断");
     fireEvent.click(screen.getByRole("button", { name: "重试" }));
     expect(onRetryTask).toHaveBeenCalledWith("继续审计项目");
+  });
+
+  it("keeps a failed attachment send on its lossless message retry path", () => {
+    const onRetryTask = vi.fn();
+    const messages: Message[] = [
+      {
+        id: "user-upload-failed",
+        type: "human",
+        content: "分析这个附件",
+        additional_kwargs: {
+          delivery_state: "failed",
+          delivery_error: "upload failed",
+        },
+      },
+    ];
+
+    renderMessageList(
+      mockThread({ messages, error: new Error("upload failed") }),
+      "zh-CN",
+      onRetryTask,
+    );
+
+    const retryButtons = screen.getAllByRole("button", { name: "重试" });
+    expect(retryButtons).toHaveLength(1);
+    expect(retryButtons[0]).toHaveAttribute(
+      "data-testid",
+      "retry-pending-message",
+    );
+    fireEvent.click(retryButtons[0]!);
+    expect(onRetryTask).not.toHaveBeenCalled();
   });
 
   it("shows a structured terminal handoff instead of replacing it with a generic failure", () => {

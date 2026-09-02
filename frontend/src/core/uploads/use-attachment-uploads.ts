@@ -8,7 +8,14 @@
  * itself can show progress and the send button can wait for it.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { uploadFilesWithProgress, type UploadedFileInfo } from "./api";
 
@@ -39,6 +46,13 @@ export interface AttachmentUploadsApi {
   completed: () => UploadedFileInfo[];
 }
 
+interface AttachmentUploadState {
+  threadId: string | undefined | null;
+  uploads: Map<string, AttachmentUpload>;
+}
+
+const EMPTY_UPLOADS = new Map<string, AttachmentUpload>();
+
 /**
  * ``threadId`` may be a client-minted UUID for a thread the server has never
  * seen. That is fine: the upload endpoint runs with ``allow_create=True`` and
@@ -48,70 +62,105 @@ export interface AttachmentUploadsApi {
 export function useAttachmentUploads(
   threadId: string | undefined | null,
 ): AttachmentUploadsApi {
-  const [uploads, setUploads] = useState<Map<string, AttachmentUpload>>(
-    () => new Map(),
-  );
+  const [state, setState] = useState<AttachmentUploadState>(() => ({
+    threadId,
+    uploads: new Map(),
+  }));
   // Files are kept out of state-dependency chains so ``retry`` never needs a
   // fresh closure over the map.
   const filesRef = useRef<Map<string, File>>(new Map());
+  const attemptsRef = useRef<Map<string, symbol>>(new Map());
+  const generationRef = useRef(0);
   const threadIdRef = useRef(threadId);
-  threadIdRef.current = threadId;
+  useLayoutEffect(() => {
+    if (Object.is(threadIdRef.current, threadId)) return;
+    threadIdRef.current = threadId;
+    generationRef.current += 1;
+    filesRef.current.clear();
+    attemptsRef.current.clear();
+  }, [threadId]);
   const disposedRef = useRef(false);
 
+  // Never expose the previous thread's ledger for even the render before the
+  // reset effect commits. This also keeps a still-pending old upload from
+  // blocking the new thread's send button.
+  const uploads = Object.is(state.threadId, threadId)
+    ? state.uploads
+    : EMPTY_UPLOADS;
+
   useEffect(() => {
+    const attempts = attemptsRef.current;
+    const files = filesRef.current;
     disposedRef.current = false;
     return () => {
       disposedRef.current = true;
+      generationRef.current += 1;
+      attempts.clear();
+      files.clear();
     };
   }, []);
 
-  const patch = useCallback(
-    (key: string, changes: Partial<AttachmentUpload>) => {
-      if (disposedRef.current) return;
-      setUploads((current) => {
-        const existing = current.get(key);
-        if (!existing) return current;
-        const next = new Map(current);
-        next.set(key, { ...existing, ...changes });
-        return next;
-      });
-    },
-    [],
-  );
+  useLayoutEffect(() => {
+    setState((current) => {
+      // A caller may start a new-thread upload from a layout effect before
+      // this layout reset runs. In that case `start` has already moved the
+      // state owner to this thread, so preserve its fresh ledger.
+      if (Object.is(current.threadId, threadId)) return current;
+      return { threadId, uploads: new Map() };
+    });
+  }, [threadId]);
 
-  const run = useCallback(
-    (key: string, file: File) => {
-      const tid = threadIdRef.current;
-      if (!tid) {
-        patch(key, {
-          status: "error",
-          error: "No conversation to upload into",
-        });
+  const run = useCallback((key: string, file: File) => {
+    const tid = threadIdRef.current;
+    const generation = generationRef.current;
+    const attempt = Symbol(key);
+    attemptsRef.current.set(key, attempt);
+    const patch = (changes: Partial<AttachmentUpload>) => {
+      if (
+        disposedRef.current ||
+        generationRef.current !== generation ||
+        !Object.is(threadIdRef.current, tid) ||
+        attemptsRef.current.get(key) !== attempt
+      ) {
         return;
       }
-      void uploadFilesWithProgress(tid, [file], {
-        onProgress: (percent) => patch(key, { progress: percent }),
-      })
-        .then((response) => {
-          const uploaded = response.files?.[0];
-          if (!uploaded) {
-            patch(key, {
-              status: "error",
-              error: "Upload returned no file metadata",
-            });
-            return;
-          }
-          patch(key, { status: "done", progress: 100, uploaded });
-        })
-        .catch((error: unknown) => {
-          patch(key, {
+      setState((current) => {
+        if (!Object.is(current.threadId, tid)) return current;
+        const existing = current.uploads.get(key);
+        if (!existing) return current;
+        const uploads = new Map(current.uploads);
+        uploads.set(key, { ...existing, ...changes });
+        return { ...current, uploads };
+      });
+    };
+    if (!tid) {
+      patch({
+        status: "error",
+        error: "No conversation to upload into",
+      });
+      return;
+    }
+    void uploadFilesWithProgress(tid, [file], {
+      onProgress: (percent) => patch({ progress: percent }),
+    })
+      .then((response) => {
+        const uploaded = response.files?.[0];
+        if (!uploaded) {
+          patch({
             status: "error",
-            error: error instanceof Error ? error.message : "Upload failed",
+            error: "Upload returned no file metadata",
           });
+          return;
+        }
+        patch({ status: "done", progress: 100, uploaded });
+      })
+      .catch((error: unknown) => {
+        patch({
+          status: "error",
+          error: error instanceof Error ? error.message : "Upload failed",
         });
-    },
-    [patch],
-  );
+      });
+  }, []);
 
   const start = useCallback(
     (entries: { key: string; file: File }[]) => {
@@ -119,12 +168,15 @@ export function useAttachmentUploads(
       const fresh = entries.filter(({ key }) => !filesRef.current.has(key));
       if (fresh.length === 0) return;
       for (const { key, file } of fresh) filesRef.current.set(key, file);
-      setUploads((current) => {
-        const next = new Map(current);
+      const tid = threadIdRef.current;
+      setState((current) => {
+        const next = Object.is(current.threadId, tid)
+          ? new Map(current.uploads)
+          : new Map<string, AttachmentUpload>();
         for (const { key, file } of fresh) {
           next.set(key, { key, file, status: "uploading", progress: 0 });
         }
-        return next;
+        return { threadId: tid, uploads: next };
       });
       // Parallel is fine here: the composer caps attachment count and each
       // upload is a single small request.
@@ -137,25 +189,49 @@ export function useAttachmentUploads(
     (key: string) => {
       const file = filesRef.current.get(key);
       if (!file) return;
-      patch(key, { status: "uploading", progress: 0, error: undefined });
+      const tid = threadIdRef.current;
+      setState((current) => {
+        if (!Object.is(current.threadId, tid)) return current;
+        const existing = current.uploads.get(key);
+        if (!existing) return current;
+        const uploads = new Map(current.uploads);
+        uploads.set(key, {
+          ...existing,
+          status: "uploading",
+          progress: 0,
+          error: undefined,
+        });
+        return { ...current, uploads };
+      });
       run(key, file);
     },
-    [patch, run],
+    [run],
   );
 
   const remove = useCallback((key: string) => {
     filesRef.current.delete(key);
-    setUploads((current) => {
-      if (!current.has(key)) return current;
-      const next = new Map(current);
+    attemptsRef.current.delete(key);
+    const tid = threadIdRef.current;
+    setState((current) => {
+      if (!Object.is(current.threadId, tid) || !current.uploads.has(key)) {
+        return current;
+      }
+      const next = new Map(current.uploads);
       next.delete(key);
-      return next;
+      return { ...current, uploads: next };
     });
   }, []);
 
   const reset = useCallback(() => {
+    generationRef.current += 1;
     filesRef.current.clear();
-    setUploads((current) => (current.size === 0 ? current : new Map()));
+    attemptsRef.current.clear();
+    const tid = threadIdRef.current;
+    setState((current) =>
+      Object.is(current.threadId, tid) && current.uploads.size === 0
+        ? current
+        : { threadId: tid, uploads: new Map() },
+    );
   }, []);
 
   const completed = useCallback(() => {
@@ -187,15 +263,6 @@ export function useAttachmentUploads(
       reset,
       completed,
     }),
-    [
-      uploads,
-      isUploading,
-      hasFailed,
-      start,
-      retry,
-      remove,
-      reset,
-      completed,
-    ],
+    [uploads, isUploading, hasFailed, start, retry, remove, reset, completed],
   );
 }

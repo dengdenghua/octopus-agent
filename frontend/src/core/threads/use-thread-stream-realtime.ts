@@ -6,14 +6,7 @@
  * live tool events derived from realtime items.
  */
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   conversationIsLoading,
@@ -98,6 +91,25 @@ type SendMessageFn = (
   message: PromptInputMessage,
   ...args: unknown[]
 ) => void;
+
+interface ThreadEpoch {
+  threadId: string;
+  generation: number;
+}
+
+interface ScopedValue<T> extends ThreadEpoch {
+  value: T;
+}
+
+interface ScopedOptimisticMessages extends ThreadEpoch {
+  messages: PendingOutboundMessage[];
+}
+
+function isSameThreadEpoch(left: ThreadEpoch, right: ThreadEpoch): boolean {
+  return (
+    left.threadId === right.threadId && left.generation === right.generation
+  );
+}
 
 function newClientMessageId(): string {
   const suffix =
@@ -1155,25 +1167,108 @@ export function useThreadStreamRealtime(
     loadOlderTurns,
     vitals,
   } = realtime;
-  const [isUploading, setIsUploading] = useState(false);
-  const [sendError, setSendError] = useState<string | null>(null);
-  const [pendingOutboundMessages, dispatchOptimisticMessage] = useReducer(
-    optimisticMessageReducer,
+  // React preserves hook state when the route swaps from one thread id to
+  // another. Give every mounted thread incarnation its own synchronous epoch
+  // so the very first render for B cannot expose A's optimistic rows, upload
+  // spinner, or local send error while effects are still being cleaned up.
+  // The generation also distinguishes A -> B -> A: late work from the first A
+  // must not become current merely because the string id matches again.
+  const threadEpochRef = useRef<ThreadEpoch>({
+    threadId,
+    generation: 0,
+  });
+  if (threadEpochRef.current.threadId !== threadId) {
+    threadEpochRef.current = {
+      threadId,
+      generation: threadEpochRef.current.generation + 1,
+    };
+  }
+  const threadEpoch = threadEpochRef.current;
+  const isCurrentThreadEpoch = useCallback(
+    (epoch: ThreadEpoch) => isSameThreadEpoch(epoch, threadEpochRef.current),
     [],
   );
-  const pendingOutboundRef = useRef<PendingOutboundMessage[]>([]);
-  pendingOutboundRef.current = pendingOutboundMessages;
+  const [uploadingState, setUploadingState] = useState<ScopedValue<boolean>>(
+    () => ({ ...threadEpoch, value: false }),
+  );
+  const [sendErrorState, setSendErrorState] = useState<
+    ScopedValue<string | null>
+  >(() => ({ ...threadEpoch, value: null }));
+  const [optimisticState, setOptimisticState] =
+    useState<ScopedOptimisticMessages>(() => ({
+      ...threadEpoch,
+      messages: [],
+    }));
+  const isUploading = isSameThreadEpoch(uploadingState, threadEpoch)
+    ? uploadingState.value
+    : false;
+  const sendError = isSameThreadEpoch(sendErrorState, threadEpoch)
+    ? sendErrorState.value
+    : null;
+  const pendingOutboundMessages = useMemo(
+    () =>
+      isSameThreadEpoch(optimisticState, threadEpoch)
+        ? optimisticState.messages
+        : [],
+    [optimisticState, threadEpoch],
+  );
+  const pendingOutboundRef = useRef<ScopedOptimisticMessages>({
+    ...threadEpoch,
+    messages: pendingOutboundMessages,
+  });
+  pendingOutboundRef.current = {
+    ...threadEpoch,
+    messages: pendingOutboundMessages,
+  };
+  const setUploadingForEpoch = useCallback(
+    (epoch: ThreadEpoch, value: boolean) => {
+      if (!isCurrentThreadEpoch(epoch)) return;
+      setUploadingState((current) => {
+        if (!isCurrentThreadEpoch(epoch)) return current;
+        return isSameThreadEpoch(current, epoch) && current.value === value
+          ? current
+          : { ...epoch, value };
+      });
+    },
+    [isCurrentThreadEpoch],
+  );
+  const setSendErrorForEpoch = useCallback(
+    (epoch: ThreadEpoch, value: string | null) => {
+      if (!isCurrentThreadEpoch(epoch)) return;
+      setSendErrorState((current) => {
+        if (!isCurrentThreadEpoch(epoch)) return current;
+        return isSameThreadEpoch(current, epoch) && current.value === value
+          ? current
+          : { ...epoch, value };
+      });
+    },
+    [isCurrentThreadEpoch],
+  );
   const updateOptimisticMessages = useCallback(
-    (action: OptimisticMessageAction) => {
+    (epoch: ThreadEpoch, action: OptimisticMessageAction) => {
+      if (!isCurrentThreadEpoch(epoch)) return;
       // Keep an eager mirror so two submits in the same render frame cannot
       // both believe they are the first unacknowledged turn/start.
-      pendingOutboundRef.current = optimisticMessageReducer(
-        pendingOutboundRef.current,
-        action,
-      );
-      dispatchOptimisticMessage(action);
+      const current = pendingOutboundRef.current;
+      const base = isSameThreadEpoch(current, epoch) ? current.messages : [];
+      const messages = optimisticMessageReducer(base, action);
+      pendingOutboundRef.current = { ...epoch, messages };
+      setOptimisticState((previous) => {
+        if (!isCurrentThreadEpoch(epoch)) return previous;
+        const previousMessages = isSameThreadEpoch(previous, epoch)
+          ? previous.messages
+          : [];
+        const nextMessages = optimisticMessageReducer(previousMessages, action);
+        if (
+          isSameThreadEpoch(previous, epoch) &&
+          nextMessages === previous.messages
+        ) {
+          return previous;
+        }
+        return { ...epoch, messages: nextMessages };
+      });
     },
-    [],
+    [isCurrentThreadEpoch],
   );
   const { t } = useI18n();
 
@@ -1183,9 +1278,15 @@ export function useThreadStreamRealtime(
   // lives here and would otherwise keep the red failure banner alive in the
   // fresh workspace until the next send.
   useEffect(() => {
-    setSendError(null);
-    updateOptimisticMessages({ type: "reset" });
-  }, [threadId, updateOptimisticMessages]);
+    setSendErrorForEpoch(threadEpoch, null);
+    setUploadingForEpoch(threadEpoch, false);
+    updateOptimisticMessages(threadEpoch, { type: "reset" });
+  }, [
+    setSendErrorForEpoch,
+    setUploadingForEpoch,
+    threadEpoch,
+    updateOptimisticMessages,
+  ]);
 
   // A transport failure belongs to the broken connection, not the recovered
   // session. Clear its banner only after both layers are authoritative again:
@@ -1195,9 +1296,9 @@ export function useThreadStreamRealtime(
   // cannot make a still-unsendable conversation look healthy.
   useEffect(() => {
     if (connected && state.resumeState === "resumed") {
-      setSendError(null);
+      setSendErrorForEpoch(threadEpoch, null);
     }
-  }, [connected, state.resumeState]);
+  }, [connected, setSendErrorForEpoch, state.resumeState, threadEpoch]);
 
   const transportReady = connected && state.resumeState === "resumed";
   useEffect(() => {
@@ -1205,9 +1306,12 @@ export function useThreadStreamRealtime(
     // ready does not itself mean the row was sent; the delivery effect below
     // promotes it only when startTurn is actually invoked.
     if (!transportReady) {
-      updateOptimisticMessages({ type: "transport-ready", ready: false });
+      updateOptimisticMessages(threadEpoch, {
+        type: "transport-ready",
+        ready: false,
+      });
     }
-  }, [transportReady, updateOptimisticMessages]);
+  }, [threadEpoch, transportReady, updateOptimisticMessages]);
   const permissionRuntime = useMemo(
     () =>
       permissionRuntimeConfig(
@@ -1238,11 +1342,11 @@ export function useThreadStreamRealtime(
     [mapped.messages],
   );
   useEffect(() => {
-    updateOptimisticMessages({
+    updateOptimisticMessages(threadEpoch, {
       type: "acknowledge",
       clientMessageIds: acknowledgedOutboundIds,
     });
-  }, [acknowledgedOutboundIds, updateOptimisticMessages]);
+  }, [acknowledgedOutboundIds, threadEpoch, updateOptimisticMessages]);
   const visibleMessages = useMemo(
     () =>
       mergeOptimisticHumanMessages(mapped.messages, pendingOutboundMessages),
@@ -1309,21 +1413,45 @@ export function useThreadStreamRealtime(
   );
 
   // Lifecycle callbacks (onStart / onFinish / onToolEnd).
-  const wasLoadingRef = useRef(false);
-  const seenToolIdsRef = useRef<Set<string>>(new Set());
+  const loadingLifecycleRef = useRef<
+    (ThreadEpoch & { isLoading: boolean }) | null
+  >(null);
+  const toolStatusesRef = useRef<
+    | (ThreadEpoch & {
+        statuses: Map<string, Item["status"]>;
+        callbacksArmed: boolean;
+      })
+    | null
+  >(null);
   const callbacksRef = useRef({ onStart, onFinish, onToolEnd });
   useEffect(() => {
     callbacksRef.current = { onStart, onFinish, onToolEnd };
   }, [onStart, onFinish, onToolEnd]);
 
   useEffect(() => {
+    if (!isCurrentThreadEpoch(threadEpoch)) return;
+    const previous = loadingLifecycleRef.current;
+    // Thread identity is part of the lifecycle state. In particular, an
+    // active A followed by an idle B is not a busy -> idle edge for B.
+    if (!previous || !isSameThreadEpoch(previous, threadEpoch)) {
+      loadingLifecycleRef.current = { ...threadEpoch, isLoading };
+      if (isLoading) {
+        setSendErrorForEpoch(threadEpoch, null);
+        try {
+          callbacksRef.current.onStart?.(activeThreadId || "");
+        } catch (e) {
+          swallow(e);
+        }
+      }
+      return;
+    }
     // Edge: idle -> busy -> call onStart with the active thread id.
-    if (!wasLoadingRef.current && isLoading) {
+    if (!previous.isLoading && isLoading) {
       // A live turn supersedes any stale send-failure banner (the flag
       // is otherwise only cleared by the next manual send): the turn
       // either belongs to a delivered-after-all send or to a newer
       // attempt, so keeping the old error up would be misleading.
-      setSendError(null);
+      setSendErrorForEpoch(threadEpoch, null);
       try {
         callbacksRef.current.onStart?.(activeThreadId || "");
       } catch (e) {
@@ -1331,45 +1459,78 @@ export function useThreadStreamRealtime(
       }
     }
     // Edge: busy -> idle -> call onFinish with the final state.
-    if (wasLoadingRef.current && !isLoading) {
+    if (previous.isLoading && !isLoading) {
       try {
         callbacksRef.current.onFinish?.(mapped);
       } catch (e) {
         swallow(e);
       }
     }
-    wasLoadingRef.current = isLoading;
-  }, [isLoading, activeThreadId, mapped]);
+    loadingLifecycleRef.current = { ...threadEpoch, isLoading };
+  }, [
+    activeThreadId,
+    isCurrentThreadEpoch,
+    isLoading,
+    mapped,
+    setSendErrorForEpoch,
+    threadEpoch,
+  ]);
 
   useEffect(() => {
-    // Walk all items; when we see a just-completed tool we haven't
-    // surfaced yet, fire onToolEnd. Cheap because the reducer keeps
-    // object identity stable for items that didn't change.
-    const cb = callbacksRef.current.onToolEnd;
-    if (!cb) return;
+    if (!isCurrentThreadEpoch(threadEpoch)) return;
+    const nextStatuses = new Map<string, Item["status"]>();
     for (const turn of state.turns) {
       for (const item of turn.items) {
-        if (
-          (item.type === "commandExecution" || item.type === "mcpToolCall") &&
-          item.status !== "inProgress" &&
-          !seenToolIdsRef.current.has(item.id)
-        ) {
-          seenToolIdsRef.current.add(item.id);
-          try {
-            cb({
-              name:
-                item.type === "commandExecution"
-                  ? commandExecutionToolName(item)
-                  : "mcp",
-              data: item,
-            });
-          } catch (e) {
-            swallow(e);
+        if (item.type !== "commandExecution" && item.type !== "mcpToolCall") {
+          continue;
+        }
+        nextStatuses.set(item.id, item.status);
+      }
+    }
+    const previous = toolStatusesRef.current;
+    const previousForEpoch =
+      previous && isSameThreadEpoch(previous, threadEpoch) ? previous : null;
+    // Arm only after the first resumed snapshot for this epoch has been
+    // observed. That snapshot is hydration, while later absent -> terminal
+    // items can be real quick tools whose started/completed events were folded
+    // into one animation-frame batch.
+    if (previousForEpoch?.callbacksArmed) {
+      const cb = callbacksRef.current.onToolEnd;
+      if (cb) {
+        for (const turn of state.turns) {
+          for (const item of turn.items) {
+            const priorStatus = previousForEpoch.statuses.get(item.id);
+            if (
+              (item.type === "commandExecution" ||
+                item.type === "mcpToolCall") &&
+              item.status !== "inProgress" &&
+              (priorStatus === "inProgress" ||
+                (priorStatus === undefined && turn.status === "inProgress"))
+            ) {
+              try {
+                cb({
+                  name:
+                    item.type === "commandExecution"
+                      ? commandExecutionToolName(item)
+                      : "mcp",
+                  data: item,
+                });
+              } catch (e) {
+                swallow(e);
+              }
+            }
           }
         }
       }
     }
-  }, [state]);
+    toolStatusesRef.current = {
+      ...threadEpoch,
+      statuses: nextStatuses,
+      callbacksArmed:
+        Boolean(previousForEpoch?.callbacksArmed) ||
+        state.resumeState === "resumed",
+    };
+  }, [isCurrentThreadEpoch, state, threadEpoch]);
 
   // Stable `stop` ref so callers can `useRef(thread.stop)` without tearing on
   // every render. Preserve the interrupt promise so callers can await and
@@ -1448,18 +1609,21 @@ export function useThreadStreamRealtime(
 
   const deliverOutbound = useCallback(
     (outbound: PendingOutboundMessage) => {
+      const deliveryEpoch = threadEpoch;
+      if (!isCurrentThreadEpoch(deliveryEpoch)) return;
       const rawText = outbound.message.text.trim();
       const parsedComposerMode = parseCodexComposerModeMarker(rawText);
       const text = parsedComposerMode.text.trim();
       const files = outbound.message.files;
       const hasFileUploads = files.length > 0;
-      updateOptimisticMessages({
+      updateOptimisticMessages(deliveryEpoch, {
         type: "set-delivery",
         clientMessageId: outbound.clientMessageId,
         deliveryState: transportReady ? "sending" : "queued",
       });
       void (async () => {
-        setSendError(null);
+        if (!isCurrentThreadEpoch(deliveryEpoch)) return;
+        setSendErrorForEpoch(deliveryEpoch, null);
         if (outbound.intent === "steer") {
           if (!runningTurnId || runningTurnId !== outbound.targetTurnId) {
             throw new Error(t.conversation.steeringTurnUnavailable);
@@ -1469,18 +1633,23 @@ export function useThreadStreamRealtime(
               "Files cannot be added while the current task is running; send a text correction or stop first.",
             );
           }
+          if (!isCurrentThreadEpoch(deliveryEpoch)) return;
           await steer({ input: text, itemId: outbound.clientMessageId });
+          if (!isCurrentThreadEpoch(deliveryEpoch)) return;
           return;
         }
         if (isLoading) {
           throw new Error(t.conversation.previousMessagePending);
         }
-        setIsUploading(hasFileUploads);
+        setUploadingForEpoch(deliveryEpoch, hasFileUploads);
         try {
           const attachments =
             outbound.threadId && outbound.threadId !== "new"
               ? await uploadPromptInputFiles(outbound.threadId, files)
               : await fallbackFileAttachmentsAsync(files);
+          // Uploads can outlive a route switch. Never let an A upload resume
+          // through useRealtimeThread's now-current B client.
+          if (!isCurrentThreadEpoch(deliveryEpoch)) return;
           // No upload toast here: the composer chip owns that signal now. A
           // floating "uploaded 1 file" popup fired at send time told the user
           // about work they had already watched finish, and it appeared
@@ -1521,7 +1690,8 @@ export function useThreadStreamRealtime(
             ? { ...runtimeContext, reasoning_effort: reasoningEffort }
             : runtimeContext;
           const projectCwd = stringValue(metadataContext.workspace_path);
-          setIsUploading(false);
+          setUploadingForEpoch(deliveryEpoch, false);
+          if (!isCurrentThreadEpoch(deliveryEpoch)) return;
           await startTurn({
             input: text,
             ...(projectCwd ? { cwd: projectCwd } : {}),
@@ -1541,10 +1711,12 @@ export function useThreadStreamRealtime(
               context: metadataContext,
             } as Record<string, unknown>,
           });
+          if (!isCurrentThreadEpoch(deliveryEpoch)) return;
         } finally {
-          setIsUploading(false);
+          setUploadingForEpoch(deliveryEpoch, false);
         }
       })().catch((err) => {
+        if (!isCurrentThreadEpoch(deliveryEpoch)) return;
         // Reaching here means the turn was never delivered: startTurn
         // resolves (not rejects) when a socket drop happens after the
         // turn/started notification was observed, so mid-turn
@@ -1556,8 +1728,8 @@ export function useThreadStreamRealtime(
           err,
           t.streaming?.networkLost ?? "Connection unavailable.",
         );
-        setSendError(errorMessage);
-        updateOptimisticMessages({
+        setSendErrorForEpoch(deliveryEpoch, errorMessage);
+        updateOptimisticMessages(deliveryEpoch, {
           type: "set-delivery",
           clientMessageId: outbound.clientMessageId,
           deliveryState: "failed",
@@ -1572,6 +1744,7 @@ export function useThreadStreamRealtime(
           void extractImageFiles(files)
             .catch(() => [])
             .then((images) => {
+              if (!isCurrentThreadEpoch(deliveryEpoch)) return;
               window.dispatchEvent(
                 new CustomEvent("octopus:send-failed", {
                   detail: {
@@ -1589,12 +1762,14 @@ export function useThreadStreamRealtime(
     [
       startTurn,
       steer,
+      isCurrentThreadEpoch,
       isLoading,
       runningTurnId,
       effectiveApprovalPolicy,
       effectiveSandboxPolicy,
       model,
       context,
+      threadEpoch,
       permissionRuntime.mode,
       permissionRuntime.planningMode,
       permissionRuntime.sandbox_mode,
@@ -1604,13 +1779,18 @@ export function useThreadStreamRealtime(
       t.conversation.previousMessagePending,
       t.conversation.steeringTurnUnavailable,
       t.streaming?.networkLost,
+      setSendErrorForEpoch,
+      setUploadingForEpoch,
       updateOptimisticMessages,
     ],
   );
 
   useEffect(() => {
     if (!transportReady) return;
-    const queued = pendingOutboundRef.current.filter(
+    if (!isCurrentThreadEpoch(threadEpoch)) return;
+    const pending = pendingOutboundRef.current;
+    if (!isSameThreadEpoch(pending, threadEpoch)) return;
+    const queued = pending.messages.filter(
       (message) => message.deliveryState === "queued",
     );
     // Normal UI flow permits only one unacknowledged start. Keep this loop so
@@ -1618,7 +1798,7 @@ export function useThreadStreamRealtime(
     for (const outbound of queued) {
       deliverOutbound(outbound);
     }
-  }, [deliverOutbound, transportReady]);
+  }, [deliverOutbound, isCurrentThreadEpoch, threadEpoch, transportReady]);
 
   useEffect(() => {
     const handleRetry = (
@@ -1628,33 +1808,45 @@ export function useThreadStreamRealtime(
       }>,
     ) => {
       const detail = event.detail;
+      if (!isCurrentThreadEpoch(threadEpoch)) return;
       if (detail?.threadId && detail.threadId !== threadId) return;
       const clientMessageId = detail?.clientMessageId;
       if (!clientMessageId) return;
-      const pending = pendingOutboundRef.current.find(
+      const currentPending = pendingOutboundRef.current;
+      if (!isSameThreadEpoch(currentPending, threadEpoch)) return;
+      const pending = currentPending.messages.find(
         (message) =>
           message.clientMessageId === clientMessageId &&
           message.deliveryState === "failed",
       );
       if (!pending) return;
-      const waitingForFirstTurnReceipt = pendingOutboundRef.current.some(
+      const waitingForFirstTurnReceipt = currentPending.messages.some(
         (message) =>
           message.clientMessageId !== clientMessageId &&
           message.deliveryState !== "failed",
       );
       if (waitingForFirstTurnReceipt) {
-        setSendError(t.conversation.previousMessagePending);
+        setSendErrorForEpoch(
+          threadEpoch,
+          t.conversation.previousMessagePending,
+        );
         return;
       }
       if (pending.intent === "start" && isLoading) {
-        setSendError(t.conversation.previousMessagePending);
+        setSendErrorForEpoch(
+          threadEpoch,
+          t.conversation.previousMessagePending,
+        );
         return;
       }
       if (
         pending.intent === "steer" &&
         (!runningTurnId || runningTurnId !== pending.targetTurnId)
       ) {
-        setSendError(t.conversation.steeringTurnUnavailable);
+        setSendErrorForEpoch(
+          threadEpoch,
+          t.conversation.steeringTurnUnavailable,
+        );
         return;
       }
       deliverOutbound(pending);
@@ -1671,15 +1863,20 @@ export function useThreadStreamRealtime(
     };
   }, [
     deliverOutbound,
+    isCurrentThreadEpoch,
     isLoading,
     runningTurnId,
+    setSendErrorForEpoch,
     t.conversation.previousMessagePending,
     t.conversation.steeringTurnUnavailable,
+    threadEpoch,
     threadId,
   ]);
 
   const sendMessage = useCallback<SendMessageFn>(
     (_threadId, message) => {
+      const sendEpoch = threadEpoch;
+      if (!isCurrentThreadEpoch(sendEpoch)) return;
       const rawText = (message?.text ?? "").trim();
       const parsedComposerMode = parseCodexComposerModeMarker(rawText);
       const displayText = parsedComposerMode.text.trim();
@@ -1697,11 +1894,13 @@ export function useThreadStreamRealtime(
         createdAt: new Date().toISOString(),
         deliveryState: transportReady ? "sending" : "queued",
       };
+      const currentPending = pendingOutboundRef.current;
+      const pendingMessages = isSameThreadEpoch(currentPending, sendEpoch)
+        ? currentPending.messages
+        : [];
       const waitingForFirstTurnReceipt =
         !isLoading &&
-        pendingOutboundRef.current.some(
-          (pending) => pending.deliveryState !== "failed",
-        );
+        pendingMessages.some((pending) => pending.deliveryState !== "failed");
       if (waitingForFirstTurnReceipt) {
         const errorMessage = t.conversation.previousMessagePending;
         const failed = {
@@ -1709,8 +1908,11 @@ export function useThreadStreamRealtime(
           deliveryState: "failed" as const,
           error: errorMessage,
         };
-        updateOptimisticMessages({ type: "enqueue", message: failed });
-        setSendError(errorMessage);
+        updateOptimisticMessages(sendEpoch, {
+          type: "enqueue",
+          message: failed,
+        });
+        setSendErrorForEpoch(sendEpoch, errorMessage);
         if (typeof window !== "undefined") {
           window.dispatchEvent(
             new CustomEvent("octopus:send-failed", {
@@ -1725,16 +1927,22 @@ export function useThreadStreamRealtime(
         }
         return;
       }
-      updateOptimisticMessages({ type: "enqueue", message: outbound });
+      updateOptimisticMessages(sendEpoch, {
+        type: "enqueue",
+        message: outbound,
+      });
       if (transportReady) {
         deliverOutbound(outbound);
       }
     },
     [
       deliverOutbound,
+      isCurrentThreadEpoch,
       isLoading,
       runningTurnId,
+      setSendErrorForEpoch,
       t.conversation.previousMessagePending,
+      threadEpoch,
       threadId,
       transportReady,
       updateOptimisticMessages,

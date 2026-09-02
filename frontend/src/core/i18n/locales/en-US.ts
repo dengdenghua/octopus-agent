@@ -278,6 +278,7 @@ export const enUS: Translations = {
     makeSimilar: "Make similar",
     makeSimilarHint: "Start a new task with the same prompt",
     retryTask: "Retry",
+    retryingTask: "Retrying…",
     retryTaskHint: "Start a new task with the same prompt",
     taskFailedReason: "Failure reason",
     resultUrl: "Result URL",
@@ -468,6 +469,7 @@ export const enUS: Translations = {
     seedWorkflow: "Create or run a workflow: ",
     send: "Send",
     stop: "Stop",
+    stopping: "Stopping…",
     projectModeLabel: "Project attached",
     projectModeHint:
       "A local folder is bound; this thread will use project context for code tasks.",
@@ -3209,6 +3211,7 @@ export const enUS: Translations = {
 
   // Conversation
   conversation: {
+    messageLog: "Conversation messages",
     noMessages: "No messages yet",
     startConversation: "Start a conversation to see messages here",
     noArtifactSelected: "No artifact selected",

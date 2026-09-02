@@ -5,6 +5,7 @@ import {
   AlertTriangleIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  Loader2Icon,
   XCircleIcon,
 } from "lucide-react";
 import {
@@ -1079,6 +1080,9 @@ export function MessageList({
   onSendFollowUp,
   onRetryTask,
   onAuthorizeNetwork,
+  authorizingNetworkTier = null,
+  onStop,
+  isStopping = false,
   projectMessageActions,
   timelineEntries = [],
   allowThreadFork = true,
@@ -1117,9 +1121,13 @@ export function MessageList({
   onSendFollowUp?: (prompt: string) => void;
   /** Retry a failed task while preserving its conversation context. */
   onRetryTask?: (prompt: string) => void;
+  /** Use the page-level stop controller so every stop entry point shares state. */
+  onStop?: () => void | Promise<void>;
+  isStopping?: boolean;
   /** Callback when the user authorizes network access from the
    *  environment-blocked banner ("common domains" or "full"). */
   onAuthorizeNetwork?: (tier: "common" | "full") => void;
+  authorizingNetworkTier?: "common" | "full" | null;
   /** Quick actions shown on human bubbles in a bound project group. */
   projectMessageActions?: MessageListProjectActions;
   /** Prevent a legacy non-persona owner from being copied into a new thread. */
@@ -1156,6 +1164,15 @@ export function MessageList({
     combinedAgentRoster.length === 1 ? combinedAgentRoster[0] : undefined;
 
   const messages = thread.messages;
+  const showConversationActivity = thread.isLoading && !thread.error;
+  const latestOutboundDeliveryFailed = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message?.type !== "human") continue;
+      return message.additional_kwargs?.delivery_state === "failed";
+    }
+    return false;
+  }, [messages]);
 
   const shadowReviewForMessage = useCallback(
     (message: Message): ShadowReviewContext | undefined => {
@@ -1549,6 +1566,7 @@ export function MessageList({
     if (!latestGroup || latestGroup.type !== "assistant") return false;
     const turnMessages = turnMessagesForGroup(groupedMessages, latestGroup);
     return (
+      Boolean(structuredFailureFromMessages(turnMessages)) ||
       !hasVisibleAssistantText(latestGroup) ||
       hasMessageOutputSummary(turnMessages)
     );
@@ -2101,6 +2119,9 @@ export function MessageList({
             threadId={threadId}
             onOpenArtifact={onOpenArtifact}
             onRetryTask={onRetryTask}
+            onAuthorizeNetwork={onAuthorizeNetwork}
+            authorizingNetworkTier={authorizingNetworkTier}
+            isRetrying={showConversationActivity}
             failure={failure}
           />
         ) : isProcessChangeGroup ? (
@@ -2110,6 +2131,9 @@ export function MessageList({
             threadId={threadId}
             onOpenArtifact={onOpenArtifact}
             onRetryTask={onRetryTask}
+            onAuthorizeNetwork={onAuthorizeNetwork}
+            authorizingNetworkTier={authorizingNetworkTier}
+            isRetrying={showConversationActivity}
             presentation="process"
           />
         ) : null;
@@ -2450,7 +2474,6 @@ export function MessageList({
   // A terminal/send error and an active pulse must never be visible at the
   // same time. If the transport still reports loading while an error is
   // already authoritative, prefer the recoverable error receipt.
-  const showConversationActivity = thread.isLoading && !thread.error;
   const showEmptyPendingAssistantFrame =
     messageTurns.length === 0 &&
     showConversationActivity &&
@@ -2483,6 +2506,7 @@ export function MessageList({
         scrollClassName={TURN_SCROLL_VIEWPORT_CLASS}
         data-density={showSenderName ? "compact" : "comfortable"}
         role="log"
+        aria-label={t.conversation.messageLog}
         aria-busy={showConversationActivity}
         aria-relevant="additions"
         className={cn(
@@ -2785,15 +2809,37 @@ export function MessageList({
                       <button
                         type="button"
                         onClick={() => onAuthorizeNetwork("common")}
-                        className="rounded-md border border-warning/80 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/20 dark:border-warning/60 dark:hover:bg-warning/70"
+                        disabled={
+                          authorizingNetworkTier !== null ||
+                          showConversationActivity
+                        }
+                        aria-busy={authorizingNetworkTier === "common"}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-warning/80 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/20 disabled:cursor-wait disabled:opacity-70 dark:border-warning/60 dark:hover:bg-warning/70"
                       >
+                        {authorizingNetworkTier === "common" ? (
+                          <Loader2Icon
+                            className="size-3 animate-spin"
+                            aria-hidden="true"
+                          />
+                        ) : null}
                         {t.streaming.environmentBlockedAuthorizeCommon}
                       </button>
                       <button
                         type="button"
                         onClick={() => onAuthorizeNetwork("full")}
-                        className="rounded-md border border-warning/40 px-2.5 py-1 text-xs font-medium text-warning/90 transition-colors hover:bg-warning/10 dark:border-warning/50"
+                        disabled={
+                          authorizingNetworkTier !== null ||
+                          showConversationActivity
+                        }
+                        aria-busy={authorizingNetworkTier === "full"}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-warning/40 px-2.5 py-1 text-xs font-medium text-warning/90 transition-colors hover:bg-warning/10 disabled:cursor-wait disabled:opacity-70 dark:border-warning/50"
                       >
+                        {authorizingNetworkTier === "full" ? (
+                          <Loader2Icon
+                            className="size-3 animate-spin"
+                            aria-hidden="true"
+                          />
+                        ) : null}
                         {t.streaming.environmentBlockedAuthorizeFull}
                       </button>
                     </div>
@@ -2810,13 +2856,24 @@ export function MessageList({
                     </button>
                     {failureReceipt.kind === "rate-limit" &&
                       fallbackRetryPrompt &&
-                      onRetryTask && (
+                      onRetryTask &&
+                      !latestOutboundDeliveryFailed && (
                         <button
                           type="button"
                           onClick={() => onRetryTask(fallbackRetryPrompt)}
-                          className="rounded-md border border-warning/40 px-2.5 py-1 text-xs font-medium text-warning/90 transition-colors hover:bg-warning/10 dark:border-warning/50"
+                          disabled={showConversationActivity}
+                          aria-busy={showConversationActivity}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-warning/40 px-2.5 py-1 text-xs font-medium text-warning/90 transition-colors hover:bg-warning/10 disabled:cursor-wait disabled:opacity-70 dark:border-warning/50"
                         >
-                          {t.message.retryTask}
+                          {showConversationActivity ? (
+                            <Loader2Icon
+                              className="size-3 animate-spin"
+                              aria-hidden="true"
+                            />
+                          ) : null}
+                          {showConversationActivity
+                            ? t.message.retryingTask
+                            : t.message.retryTask}
                         </button>
                       )}
                   </div>
@@ -2825,20 +2882,31 @@ export function MessageList({
                   failureReceipt?.kind === "network" ||
                   failureReceipt?.kind === "error") &&
                   fallbackRetryPrompt &&
-                  onRetryTask && (
+                  onRetryTask &&
+                  !latestOutboundDeliveryFailed && (
                     <div className="mt-2">
                       <button
                         type="button"
                         onClick={() => onRetryTask(fallbackRetryPrompt)}
+                        disabled={showConversationActivity}
+                        aria-busy={showConversationActivity}
                         title={t.message.retryTaskHint}
                         className={cn(
-                          "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+                          "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-wait disabled:opacity-70",
                           isWarningFailure
                             ? "border-warning/80 bg-warning/10 text-warning hover:bg-warning/20 dark:border-warning/60"
                             : "border-destructive/40 bg-destructive/8 text-destructive hover:border-destructive/55 hover:bg-destructive/15 dark:border-destructive/50",
                         )}
                       >
-                        {t.message.retryTask}
+                        {showConversationActivity ? (
+                          <Loader2Icon
+                            className="size-3 animate-spin"
+                            aria-hidden="true"
+                          />
+                        ) : null}
+                        {showConversationActivity
+                          ? t.message.retryingTask
+                          : t.message.retryTask}
                       </button>
                     </div>
                   )}
@@ -2891,28 +2959,33 @@ export function MessageList({
       </ConversationScrollButton>
 
       {showTimeoutWarning && !thread.error && (
-        <div className="absolute top-4 left-[50%] z-10 -translate-x-1/2 flex items-center gap-3 rounded-lg border border-warning/70 bg-warning/5 px-4 py-2 text-xs text-warning shadow-[var(--shadow-xs)] dark:border-warning/50">
+        <div
+          role="status"
+          aria-live="polite"
+          className="absolute top-4 left-[50%] z-10 -translate-x-1/2 flex items-center gap-3 rounded-lg border border-warning/70 bg-warning/5 px-4 py-2 text-xs text-warning shadow-[var(--shadow-xs)] dark:border-warning/50"
+        >
           <AlertTriangleIcon className="size-4 shrink-0 text-warning" />
           <span>
             {t.message.timeoutWarning(Math.floor(loadingAgeMs / 1000))}
           </span>
           <button
             type="button"
+            disabled={isStopping}
+            aria-busy={isStopping}
             onClick={() => {
-              // `stop` can reject when the active worker does not accept the
-              // interrupt. Consume the Promise here so this secondary stop
-              // entry point has the same recoverable feedback as the composer.
-              void (async () => {
-                try {
-                  await thread.stop();
-                } catch {
-                  toast.error(t.chatPage.stopFailed);
-                }
-              })();
+              // The main page supplies its unified interrupt + durable-pause
+              // controller. Standalone MessageList consumers fall back to the
+              // stream stop method and still surface a rejected interrupt.
+              void Promise.resolve()
+                .then(onStop ?? thread.stop)
+                .catch(() => toast.error(t.chatPage.stopFailed));
             }}
-            className="rounded-md border border-warning/80 px-2 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/10 dark:border-warning/60 dark:hover:bg-warning/70"
+            className="inline-flex items-center gap-1.5 rounded-md border border-warning/80 px-2 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/10 disabled:cursor-wait disabled:opacity-70 dark:border-warning/60 dark:hover:bg-warning/70"
           >
-            {t.common.stop}
+            {isStopping ? (
+              <Loader2Icon className="size-3 animate-spin" aria-hidden="true" />
+            ) : null}
+            {isStopping ? t.chatInputBox.stopping : t.common.stop}
           </button>
         </div>
       )}

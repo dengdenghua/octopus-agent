@@ -744,6 +744,167 @@ describe("useRealtimeThread reconnect reconciliation", () => {
     });
   });
 
+  it("isolates a bad batched event and lets durable replay repair its id", async () => {
+    const handles: FakeClientHandles[] = [];
+    let emitBatch:
+      | ((
+          notes: Array<{ method: string; params: Record<string, unknown> }>,
+        ) => void)
+      | undefined;
+    let incrementalEventCalls = 0;
+    const validLiveItem = {
+      id: "i-live-good",
+      type: "agentMessage",
+      status: "inProgress",
+      createdAt: "2026-01-01T00:00:01.000Z",
+      text: "",
+    };
+    const repairedItem = {
+      id: "i-durable-repair",
+      type: "agentMessage",
+      status: "inProgress",
+      createdAt: "2026-01-01T00:00:02.000Z",
+      text: "",
+    };
+    const factory = (deps: {
+      onIncomingRequest: IncomingRequestFn;
+      onNotificationBatch?: (
+        notes: Array<{ method: string; params: Record<string, unknown> }>,
+      ) => void;
+      onOpen?: () => void;
+      onClose?: (code: number, reason: string) => void;
+    }) => {
+      emitBatch = deps.onNotificationBatch;
+      handles.push({
+        emitRequest: (req) => deps.onIncomingRequest(req),
+        emitOpen: () => deps.onOpen?.(),
+        emitClose: (code, reason) => deps.onClose?.(code, reason),
+      });
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string, params?: Record<string, unknown>) => {
+          if (method === "thread/events") {
+            if (params?.afterSequence === 10 && params?.mode === undefined) {
+              incrementalEventCalls += 1;
+              return Promise.resolve({
+                thread: { id: "th" },
+                events: [
+                  {
+                    sequence: 11,
+                    event: "item_started",
+                    eventId: "e-needs-repair-start",
+                    threadId: "th",
+                    turnId: "t-live",
+                    ts: "2026-01-01T00:00:02.000Z",
+                    payload: { item: repairedItem },
+                  },
+                  {
+                    sequence: 12,
+                    event: "item_delta",
+                    eventId: "e-needs-repair-delta",
+                    threadId: "th",
+                    turnId: "t-live",
+                    ts: "2026-01-01T00:00:03.000Z",
+                    payload: {
+                      itemId: repairedItem.id,
+                      kind: "agentMessage",
+                      delta: "repaired",
+                    },
+                  },
+                ],
+                cursor: 12,
+                streamId: "stream-a",
+                requiresReset: false,
+                hasMore: false,
+                turnCount: 1,
+                lastTurnId: "t-live",
+                lastTurnStatus: "inProgress",
+              });
+            }
+            // Initial cache backfill is unrelated to the reconnect repair.
+            return Promise.resolve({
+              thread: { id: "th" },
+              events: [],
+              cursor: 10,
+              streamId: "stream-a",
+              requiresReset: false,
+              hasMore: false,
+            });
+          }
+          if (method !== "thread/resume") return Promise.resolve({});
+          return Promise.resolve({
+            thread: { id: "th" },
+            turns: [turn("t-live", "inProgress")],
+            hasMore: false,
+            incremental: false,
+            nextEventSequence: 10,
+            eventStreamId: "stream-a",
+          });
+        },
+      };
+    };
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({ threadId: "th", clientFactory: factory as never }),
+    );
+    await waitFor(() =>
+      expect(rendered.result.current.state.resumeState).toBe("resumed"),
+    );
+
+    act(() => {
+      emitBatch?.([
+        {
+          method: "item/started",
+          params: {
+            threadId: "th",
+            turnId: "t-live",
+            eventId: "e-needs-repair-start",
+            // Valid JSON-RPC envelope, malformed reducer payload.
+            item: null,
+          },
+        },
+        {
+          method: "item/agentMessage/delta",
+          params: {
+            threadId: "th",
+            turnId: "t-live",
+            itemId: repairedItem.id,
+            eventId: "e-needs-repair-delta",
+            delta: "repaired",
+          },
+        },
+        {
+          method: "item/started",
+          params: {
+            threadId: "th",
+            turnId: "t-live",
+            eventId: "e-live-good",
+            item: validLiveItem,
+          },
+        },
+      ]);
+    });
+
+    // The bad first event must not abort the rest of its transport frame.
+    expect(rendered.result.current.state.turns[0]?.items).toEqual([
+      validLiveItem,
+    ]);
+
+    act(() => {
+      handles[0]!.emitClose(1006, "network lost");
+      handles[0]!.emitOpen();
+    });
+    await waitFor(() => expect(incrementalEventCalls).toBe(1));
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.items).toEqual([
+        validLiveItem,
+        { ...repairedItem, text: "repaired" },
+      ]),
+    );
+  });
+
   it("falls back to a snapshot resume when the event fold diverges", async () => {
     const handles: FakeClientHandles[] = [];
     let resumeCount = 0;
@@ -1132,6 +1293,128 @@ describe("useRealtimeThread cross-worker tail recovery", () => {
     });
     expect(eventCalls).toBe(3);
     expect(maxEventRequestsInFlight).toBe(1);
+    rendered.unmount();
+  });
+
+  it("lets an in-flight tail poll repair a bad start and its dependent live delta", async () => {
+    let emitBatch!: (
+      notes: Array<{ method: string; params: Record<string, unknown> }>,
+    ) => void;
+    let resolvePoll!: (value: Record<string, unknown>) => void;
+    let eventCalls = 0;
+    const repairedItem = {
+      id: "message-repaired",
+      type: "agentMessage",
+      status: "inProgress",
+      createdAt: TS,
+      text: "",
+    };
+    const factory = (deps: {
+      onNotificationBatch?: (
+        notes: Array<{ method: string; params: Record<string, unknown> }>,
+      ) => void;
+      onOpen?: () => void;
+    }) => {
+      emitBatch = (notes) => deps.onNotificationBatch?.(notes);
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string) => {
+          if (method === "thread/resume") {
+            return Promise.resolve({
+              thread: { id: "th" },
+              turns: [activeTurn()],
+              hasMore: false,
+              incremental: false,
+              nextEventSequence: 10,
+              eventStreamId: "stream-a",
+            });
+          }
+          if (method === "thread/events") {
+            eventCalls += 1;
+            return new Promise<Record<string, unknown>>((resolve) => {
+              resolvePoll = resolve;
+            });
+          }
+          return Promise.resolve({});
+        },
+      };
+    };
+    const replayCache = cacheThatSkipsBackgroundBackfill();
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: replayCache as never,
+      }),
+    );
+    await flushPromises();
+    act(() => vi.advanceTimersByTime(750));
+    expect(eventCalls).toBe(1);
+
+    act(() => {
+      emitBatch([
+        {
+          method: "item/started",
+          params: {
+            threadId: "th",
+            turnId: "turn-live",
+            eventId: "repair-start",
+            item: null,
+          },
+        },
+        {
+          method: "item/agentMessage/delta",
+          params: {
+            threadId: "th",
+            turnId: "turn-live",
+            itemId: repairedItem.id,
+            eventId: "repair-delta",
+            delta: "repaired",
+          },
+        },
+      ]);
+    });
+    expect(rendered.result.current.state.turns[0]?.items).toEqual([]);
+
+    resolvePoll({
+      events: [
+        {
+          sequence: 11,
+          event: "item_started",
+          eventId: "repair-start",
+          threadId: "th",
+          turnId: "turn-live",
+          ts: TS,
+          payload: { item: repairedItem },
+        },
+        {
+          sequence: 12,
+          event: "item_delta",
+          eventId: "repair-delta",
+          threadId: "th",
+          turnId: "turn-live",
+          ts: TS,
+          payload: {
+            itemId: repairedItem.id,
+            kind: "agentMessage",
+            delta: "repaired",
+          },
+        },
+      ],
+      cursor: 12,
+      streamId: "stream-a",
+      requiresReset: false,
+      hasMore: false,
+      turnCount: 1,
+      lastTurnId: "turn-live",
+      lastTurnStatus: "inProgress",
+    });
+    await flushPromises();
+    expect(rendered.result.current.state.turns[0]?.items).toEqual([
+      { ...repairedItem, text: "repaired" },
+    ]);
     rendered.unmount();
   });
 
@@ -1959,6 +2242,182 @@ describe("useRealtimeThread backwards pagination", () => {
       await rendered.result.current.loadOlderTurns();
     });
     expect(requests.length).toBe(callCount);
+  });
+});
+
+describe("useRealtimeThread public request thread isolation", () => {
+  const TS = "2026-01-01T00:00:00.000Z";
+
+  function threadTurn(threadId: string, id: string) {
+    return {
+      id,
+      threadId,
+      status: "completed",
+      items: [],
+      startedAt: TS,
+      completedAt: TS,
+      error: null,
+    };
+  }
+
+  it("drops a retired public resume result without leaking its cursor across A -> B -> A", async () => {
+    let resolveLateA!: (value: Record<string, unknown>) => void;
+    const resumeRequests: Record<string, unknown>[] = [];
+    const calls = new Map<string, number>();
+    const factory = (deps: { onOpen?: () => void }) => ({
+      connect: () => deps.onOpen?.(),
+      close: () => {},
+      notify: () => {},
+      request: (method: string, params: Record<string, unknown>) => {
+        if (method !== "thread/resume") return Promise.resolve({});
+        resumeRequests.push(params);
+        const threadId = String(params.threadId);
+        const call = (calls.get(threadId) ?? 0) + 1;
+        calls.set(threadId, call);
+        if (threadId === "thread-a" && call === 2) {
+          return new Promise<Record<string, unknown>>((resolve) => {
+            resolveLateA = resolve;
+          });
+        }
+        const suffix = threadId === "thread-a" ? "a" : "b";
+        return Promise.resolve({
+          thread: { id: threadId },
+          turns: [threadTurn(threadId, `${suffix}-${call}`)],
+          hasMore: false,
+          incremental: call > 1,
+          nextEventSequence: threadId === "thread-a" ? 10 : 20,
+          eventStreamId: `stream-${suffix}`,
+        });
+      },
+    });
+    const rendered = renderHook(
+      ({ threadId }) =>
+        useRealtimeThread({ threadId, clientFactory: factory as never }),
+      { initialProps: { threadId: "thread-a" } },
+    );
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.id).toBe("a-1"),
+    );
+
+    let retiredResume!: Promise<void>;
+    act(() => {
+      retiredResume = rendered.result.current.resume();
+    });
+    await waitFor(() => expect(resolveLateA).toBeTypeOf("function"));
+
+    rendered.rerender({ threadId: "thread-b" });
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.id).toBe("b-1"),
+    );
+    await act(async () => {
+      resolveLateA({
+        thread: { id: "thread-a" },
+        turns: [threadTurn("thread-a", "a-late")],
+        hasMore: true,
+        incremental: false,
+        nextEventSequence: 999,
+        eventStreamId: "stream-a-late",
+      });
+      await retiredResume;
+    });
+    expect(rendered.result.current.state.turns.map((turn) => turn.id)).toEqual([
+      "b-1",
+    ]);
+
+    await act(async () => {
+      await rendered.result.current.resume();
+    });
+    const latestBRequest = [...resumeRequests]
+      .reverse()
+      .find((request) => request.threadId === "thread-b");
+    expect(latestBRequest).toMatchObject({
+      afterSequence: 20,
+      eventStreamId: "stream-b",
+    });
+
+    // Returning to the same string id creates a new generation; the first A
+    // result above must remain retired rather than becoming current again.
+    rendered.rerender({ threadId: "thread-a" });
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.id).toBe("a-3"),
+    );
+    expect(rendered.result.current.state.turns[0]?.id).not.toBe("a-late");
+  });
+
+  it("lets B page while A is pending and ignores A's late older turns", async () => {
+    let resolveOlderA!: (value: Record<string, unknown>) => void;
+    const pagingRequests: Record<string, unknown>[] = [];
+    const factory = (deps: { onOpen?: () => void }) => ({
+      connect: () => deps.onOpen?.(),
+      close: () => {},
+      notify: () => {},
+      request: (method: string, params: Record<string, unknown>) => {
+        if (method !== "thread/resume") return Promise.resolve({});
+        const threadId = String(params.threadId);
+        if (params.beforeTurnId) {
+          pagingRequests.push(params);
+          if (threadId === "thread-a") {
+            return new Promise<Record<string, unknown>>((resolve) => {
+              resolveOlderA = resolve;
+            });
+          }
+          return Promise.resolve({
+            thread: { id: threadId },
+            turns: [threadTurn(threadId, "b-older")],
+            hasMore: false,
+          });
+        }
+        const suffix = threadId === "thread-a" ? "a" : "b";
+        return Promise.resolve({
+          thread: { id: threadId },
+          turns: [threadTurn(threadId, `${suffix}-newest`)],
+          hasMore: true,
+        });
+      },
+    });
+    const rendered = renderHook(
+      ({ threadId }) =>
+        useRealtimeThread({ threadId, clientFactory: factory as never }),
+      { initialProps: { threadId: "thread-a" } },
+    );
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.id).toBe("a-newest"),
+    );
+
+    let olderA!: Promise<void>;
+    act(() => {
+      olderA = rendered.result.current.loadOlderTurns();
+    });
+    await waitFor(() => expect(resolveOlderA).toBeTypeOf("function"));
+
+    rendered.rerender({ threadId: "thread-b" });
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.id).toBe("b-newest"),
+    );
+    await act(async () => {
+      await rendered.result.current.loadOlderTurns();
+    });
+    expect(rendered.result.current.state.turns.map((turn) => turn.id)).toEqual([
+      "b-older",
+      "b-newest",
+    ]);
+
+    await act(async () => {
+      resolveOlderA({
+        thread: { id: "thread-a" },
+        turns: [threadTurn("thread-a", "a-older-late")],
+        hasMore: false,
+      });
+      await olderA;
+    });
+    expect(rendered.result.current.state.turns.map((turn) => turn.id)).toEqual([
+      "b-older",
+      "b-newest",
+    ]);
+    expect(pagingRequests.map((request) => request.threadId)).toEqual([
+      "thread-a",
+      "thread-b",
+    ]);
   });
 });
 

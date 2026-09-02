@@ -212,6 +212,7 @@ export interface Translations {
     makeSimilar: string;
     makeSimilarHint: string;
     retryTask: string;
+    retryingTask: string;
     retryTaskHint: string;
     taskFailedReason: string;
     resultUrl: string;
@@ -385,6 +386,7 @@ export interface Translations {
     seedWorkflow: string;
     send: string;
     stop: string;
+    stopping: string;
     projectModeLabel: string;
     projectModeHint: string;
     projectStatusTitle: string;
@@ -2570,6 +2572,7 @@ export interface Translations {
 
   // Conversation
   conversation: {
+    messageLog: string;
     noMessages: string;
     startConversation: string;
     noArtifactSelected: string;

@@ -103,6 +103,7 @@ function makeClient(opts: {
   onNotificationBatch?: (notes: any[]) => void;
   onOpen?: () => void;
   onClose?: () => void;
+  onError?: (error: Event | Error) => void;
 }) {
   return new RealtimeClient({
     url: "ws://test/api/realtime",
@@ -111,6 +112,7 @@ function makeClient(opts: {
     onNotificationBatch: opts.onNotificationBatch,
     onOpen: opts.onOpen,
     onClose: opts.onClose,
+    onError: opts.onError,
     initialBackoffMs: 10,
     maxBackoffMs: 50,
   });
@@ -225,6 +227,68 @@ describe("RealtimeClient", () => {
     expect(onNotification.mock.calls[0]![0].method).toBe(
       "item/agentMessage/delta",
     );
+    client.close();
+  });
+
+  it("reports malformed websocket frames without throwing or dispatching them", () => {
+    const onNotification = vi.fn();
+    const onIncomingRequest = vi.fn(async () => null);
+    const onError = vi.fn();
+    const client = makeClient({
+      onNotification,
+      onIncomingRequest,
+      onError,
+    });
+    client.connect();
+    const ws = FakeWebSocket.lastInstance!;
+    ws.open();
+
+    const malformedFrames = [
+      "{",
+      "null",
+      "42",
+      "[]",
+      "{}",
+      JSON.stringify({ jsonrpc: "1.0", method: "turn/heartbeat", params: {} }),
+      JSON.stringify({ jsonrpc: "2.0", method: 7, params: {} }),
+      JSON.stringify({ jsonrpc: "2.0", method: "turn/heartbeat" }),
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "turn/heartbeat",
+        params: [],
+      }),
+      JSON.stringify({ jsonrpc: "2.0", id: 1, error: "not-an-error" }),
+    ];
+
+    for (const frame of malformedFrames) {
+      expect(() => ws.receive(frame)).not.toThrow();
+    }
+
+    expect(onError).toHaveBeenCalledTimes(malformedFrames.length);
+    expect(onNotification).not.toHaveBeenCalled();
+    expect(onIncomingRequest).not.toHaveBeenCalled();
+
+    // A bad frame must not poison the socket for later valid traffic.
+    ws.receive({
+      jsonrpc: "2.0",
+      method: "turn/heartbeat",
+      params: { threadId: "t", turnId: "turn" },
+    });
+    expect(onNotification).toHaveBeenCalledTimes(1);
+    client.close();
+  });
+
+  it("contains errors thrown by the malformed-frame observer", () => {
+    const client = makeClient({
+      onError: () => {
+        throw new Error("observer failed");
+      },
+    });
+    client.connect();
+    const ws = FakeWebSocket.lastInstance!;
+    ws.open();
+
+    expect(() => ws.receive("null")).not.toThrow();
     client.close();
   });
 
@@ -735,6 +799,40 @@ describe("RealtimeClient", () => {
 
     expect(oldSocket.sentRaw).toHaveLength(0);
     expect(newSocket.sentRaw).toHaveLength(0);
+    client.close();
+  });
+
+  it("ignores delayed message and close callbacks from an old socket epoch", async () => {
+    vi.useFakeTimers();
+    const onNotification = vi.fn();
+    const onClose = vi.fn();
+    const client = makeClient({ onNotification, onClose });
+    client.connect();
+    const oldSocket = FakeWebSocket.lastInstance!;
+    oldSocket.open();
+
+    oldSocket.serverClose(1006, "network lost");
+    await vi.advanceTimersByTimeAsync(10);
+    const newSocket = FakeWebSocket.lastInstance!;
+    newSocket.open();
+
+    // Browsers can still drain callbacks already queued for the dead
+    // WebSocket. Neither callback may affect the replacement connection.
+    oldSocket.receive({
+      jsonrpc: "2.0",
+      method: "turn/heartbeat",
+      params: { threadId: "t", turnId: "old" },
+    });
+    oldSocket.serverClose(1006, "late duplicate close");
+
+    expect(onNotification).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
+    client.notify("client/say", { text: "new epoch" });
+    expect(newSocket.sentRaw).toHaveLength(1);
+    expect(newSocket.parseSent(0)).toMatchObject({
+      method: "client/say",
+      params: { text: "new epoch" },
+    });
     client.close();
   });
 

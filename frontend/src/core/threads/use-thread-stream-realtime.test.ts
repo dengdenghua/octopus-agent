@@ -46,6 +46,16 @@ vi.mock("@/core/i18n/hooks", () => ({
 const BASE_TS = "2026-05-09T00:00:00.000Z";
 const DONE_TS = "2026-05-09T00:00:02.000Z";
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -2162,6 +2172,480 @@ describe("useThreadStreamRealtime permissions", () => {
             execution_environment: "sandbox",
           }),
         },
+      }),
+    );
+  });
+
+  it("isolates an in-flight upload from the first render of the next thread", async () => {
+    const uploadResponse = deferred<{
+      ok: boolean;
+      json: () => Promise<Record<string, unknown>>;
+    }>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => uploadResponse.promise),
+    );
+    const startTurnA = vi.fn().mockResolvedValue(undefined);
+    const startTurnB = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(useRealtimeThread).mockImplementation(({ threadId }) => ({
+      state: { ...makeConversation([]), threadId },
+      connected: true,
+      startTurn: threadId === "thread-a" ? startTurnA : startTurnB,
+      steer: vi.fn().mockResolvedValue(undefined),
+      resolveApproval: vi.fn(),
+      resume: vi.fn().mockResolvedValue(undefined),
+      interrupt: vi.fn().mockResolvedValue(undefined),
+      compact: vi.fn().mockResolvedValue({ compacted: false }),
+      decideHunk: vi.fn().mockResolvedValue(undefined),
+    }));
+    const file = new File(["draft"], "draft.txt", { type: "text/plain" });
+    const renderFrames: Array<{
+      threadId: string;
+      messageCount: number;
+      isLoading: boolean;
+      isUploading: boolean;
+      error?: string;
+    }> = [];
+    const { result, rerender } = renderHook(
+      ({ threadId }) => {
+        const value = useThreadStreamRealtime({ threadId });
+        renderFrames.push({
+          threadId,
+          messageCount: value[0].messages.length,
+          isLoading: value[0].isLoading,
+          isUploading: value[2],
+          error: value[0].error?.message,
+        });
+        return value;
+      },
+      { initialProps: { threadId: "thread-a" } },
+    );
+
+    act(() => {
+      result.current[1]("thread-a", {
+        text: "send A",
+        files: [
+          {
+            type: "file",
+            mediaType: file.type,
+            filename: file.name,
+            url: "blob:draft",
+            file,
+          },
+        ],
+      });
+    });
+    await waitFor(() => expect(result.current[2]).toBe(true));
+    expect(result.current[0].messages).toHaveLength(1);
+
+    rerender({ threadId: "thread-b" });
+
+    // Capture inside render so a reset effect and its follow-up render cannot
+    // hide a one-frame flash of A's state.
+    const firstBFrame = renderFrames.find(
+      (frame) => frame.threadId === "thread-b",
+    );
+    expect(firstBFrame).toEqual({
+      threadId: "thread-b",
+      messageCount: 0,
+      isLoading: false,
+      isUploading: false,
+      error: undefined,
+    });
+    expect(result.current[0].messages).toEqual([]);
+    expect(result.current[0].isLoading).toBe(false);
+    expect(result.current[0].error).toBeUndefined();
+    expect(result.current[2]).toBe(false);
+
+    await act(async () => {
+      uploadResponse.resolve({
+        ok: true,
+        json: async () => ({
+          success: true,
+          files: [
+            {
+              filename: "draft.txt",
+              size: file.size,
+              path: "/managed/thread-a/draft.txt",
+              virtual_path: "upload/draft.txt",
+              artifact_url: "/api/threads/thread-a/artifacts/draft.txt",
+              extension: "txt",
+              modified: 1,
+            },
+          ],
+        }),
+      });
+      await uploadResponse.promise;
+      await Promise.resolve();
+    });
+
+    expect(startTurnA).not.toHaveBeenCalled();
+    expect(startTurnB).not.toHaveBeenCalled();
+    expect(result.current[0].messages).toEqual([]);
+    expect(result.current[2]).toBe(false);
+  });
+
+  it("does not flash an existing send failure in the next thread", async () => {
+    const startTurnA = vi.fn().mockRejectedValue(new Error("A failed"));
+    vi.mocked(useRealtimeThread).mockImplementation(({ threadId }) => ({
+      state: { ...makeConversation([]), threadId },
+      connected: true,
+      startTurn:
+        threadId === "thread-a"
+          ? startTurnA
+          : vi.fn().mockResolvedValue(undefined),
+      steer: vi.fn().mockResolvedValue(undefined),
+      resolveApproval: vi.fn(),
+      resume: vi.fn().mockResolvedValue(undefined),
+      interrupt: vi.fn().mockResolvedValue(undefined),
+      compact: vi.fn().mockResolvedValue({ compacted: false }),
+      decideHunk: vi.fn().mockResolvedValue(undefined),
+    }));
+    const renderFrames: Array<{
+      threadId: string;
+      messages: string[];
+      error?: string;
+    }> = [];
+    const { result, rerender } = renderHook(
+      ({ threadId }) => {
+        const value = useThreadStreamRealtime({ threadId });
+        renderFrames.push({
+          threadId,
+          messages: value[0].messages.map((message) => String(message.content)),
+          error: value[0].error?.message,
+        });
+        return value;
+      },
+      { initialProps: { threadId: "thread-a" } },
+    );
+
+    act(() => {
+      result.current[1]("thread-a", { text: "failed A", files: [] });
+    });
+    await waitFor(() =>
+      expect(result.current[0].error?.message).toBe("A failed"),
+    );
+
+    rerender({ threadId: "thread-b" });
+
+    expect(renderFrames.find((frame) => frame.threadId === "thread-b")).toEqual(
+      {
+        threadId: "thread-b",
+        messages: [],
+        error: undefined,
+      },
+    );
+  });
+
+  it("ignores an old start rejection after switching threads", async () => {
+    const turnA = deferred<void>();
+    const startTurnA = vi.fn(() => turnA.promise);
+    const startTurnB = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(useRealtimeThread).mockImplementation(({ threadId }) => ({
+      state: { ...makeConversation([]), threadId },
+      connected: true,
+      startTurn: threadId === "thread-a" ? startTurnA : startTurnB,
+      steer: vi.fn().mockResolvedValue(undefined),
+      resolveApproval: vi.fn(),
+      resume: vi.fn().mockResolvedValue(undefined),
+      interrupt: vi.fn().mockResolvedValue(undefined),
+      compact: vi.fn().mockResolvedValue({ compacted: false }),
+      decideHunk: vi.fn().mockResolvedValue(undefined),
+    }));
+    const failedEventSpy = vi.spyOn(window, "dispatchEvent");
+    const { result, rerender } = renderHook(
+      ({ threadId }) => useThreadStreamRealtime({ threadId }),
+      { initialProps: { threadId: "thread-a" } },
+    );
+
+    act(() => {
+      result.current[1]("thread-a", { text: "pending A", files: [] });
+    });
+    await waitFor(() => expect(startTurnA).toHaveBeenCalledTimes(1));
+
+    rerender({ threadId: "thread-b" });
+    expect(result.current[0].messages).toEqual([]);
+    expect(result.current[0].error).toBeUndefined();
+
+    await act(async () => {
+      turnA.reject(new Error("late A failure"));
+      await turnA.promise.catch(() => undefined);
+      await Promise.resolve();
+    });
+
+    expect(result.current[0].messages).toEqual([]);
+    expect(result.current[0].error).toBeUndefined();
+    expect(
+      failedEventSpy.mock.calls.some(
+        ([event]) =>
+          event instanceof Event && event.type === "octopus:send-failed",
+      ),
+    ).toBe(false);
+
+    act(() => {
+      result.current[1]("thread-b", { text: "fresh B", files: [] });
+    });
+    await waitFor(() => expect(startTurnB).toHaveBeenCalledTimes(1));
+    expect(result.current[0].messages).toEqual([
+      expect.objectContaining({ content: "fresh B" }),
+    ]);
+    failedEventSpy.mockRestore();
+  });
+
+  it("does not revive first-generation work after switching A to B to A", async () => {
+    const firstTurnA = deferred<void>();
+    const startTurnA = vi
+      .fn()
+      .mockImplementationOnce(() => firstTurnA.promise)
+      .mockResolvedValue(undefined);
+    vi.mocked(useRealtimeThread).mockImplementation(({ threadId }) => ({
+      state: { ...makeConversation([]), threadId },
+      connected: true,
+      startTurn:
+        threadId === "thread-a"
+          ? startTurnA
+          : vi.fn().mockResolvedValue(undefined),
+      steer: vi.fn().mockResolvedValue(undefined),
+      resolveApproval: vi.fn(),
+      resume: vi.fn().mockResolvedValue(undefined),
+      interrupt: vi.fn().mockResolvedValue(undefined),
+      compact: vi.fn().mockResolvedValue({ compacted: false }),
+      decideHunk: vi.fn().mockResolvedValue(undefined),
+    }));
+    const { result, rerender } = renderHook(
+      ({ threadId }) => useThreadStreamRealtime({ threadId }),
+      { initialProps: { threadId: "thread-a" } },
+    );
+
+    act(() => {
+      result.current[1]("thread-a", { text: "first A", files: [] });
+    });
+    await waitFor(() => expect(startTurnA).toHaveBeenCalledTimes(1));
+
+    rerender({ threadId: "thread-b" });
+    rerender({ threadId: "thread-a" });
+    expect(result.current[0].messages).toEqual([]);
+
+    await act(async () => {
+      firstTurnA.reject(new Error("first generation failed late"));
+      await firstTurnA.promise.catch(() => undefined);
+      await Promise.resolve();
+    });
+    expect(result.current[0].messages).toEqual([]);
+    expect(result.current[0].error).toBeUndefined();
+
+    act(() => {
+      result.current[1]("thread-a", { text: "second A", files: [] });
+    });
+    await waitFor(() => expect(startTurnA).toHaveBeenCalledTimes(2));
+    expect(result.current[0].messages).toEqual([
+      expect.objectContaining({ content: "second A" }),
+    ]);
+  });
+
+  it("ignores an old steering rejection after switching threads", async () => {
+    const steerAResult = deferred<void>();
+    const steerA = vi.fn(() => steerAResult.promise);
+    const activeA: Conversation = {
+      ...makeConversation([
+        {
+          ...makeTurn([], "turn-a"),
+          threadId: "thread-a",
+          status: "inProgress",
+          completedAt: null,
+        },
+      ]),
+      threadId: "thread-a",
+    };
+    vi.mocked(useRealtimeThread).mockImplementation(({ threadId }) => ({
+      state:
+        threadId === "thread-a"
+          ? activeA
+          : { ...makeConversation([]), threadId: "thread-b" },
+      connected: true,
+      startTurn: vi.fn().mockResolvedValue(undefined),
+      steer:
+        threadId === "thread-a" ? steerA : vi.fn().mockResolvedValue(undefined),
+      resolveApproval: vi.fn(),
+      resume: vi.fn().mockResolvedValue(undefined),
+      interrupt: vi.fn().mockResolvedValue(undefined),
+      compact: vi.fn().mockResolvedValue({ compacted: false }),
+      decideHunk: vi.fn().mockResolvedValue(undefined),
+    }));
+    const { result, rerender } = renderHook(
+      ({ threadId }) => useThreadStreamRealtime({ threadId }),
+      { initialProps: { threadId: "thread-a" } },
+    );
+
+    act(() => {
+      result.current[1]("thread-a", { text: "correct A", files: [] });
+    });
+    await waitFor(() => expect(steerA).toHaveBeenCalledTimes(1));
+
+    rerender({ threadId: "thread-b" });
+    await act(async () => {
+      steerAResult.reject(new Error("late steering failure"));
+      await steerAResult.promise.catch(() => undefined);
+      await Promise.resolve();
+    });
+
+    expect(result.current[0].messages).toEqual([]);
+    expect(result.current[0].error).toBeUndefined();
+  });
+
+  it("keeps busy lifecycle edges bound to their owning thread", async () => {
+    const onStart = vi.fn();
+    const onFinish = vi.fn();
+    const activeTurn = (threadId: string, turnId: string): Turn => ({
+      ...makeTurn([], turnId),
+      threadId,
+      status: "inProgress",
+      completedAt: null,
+    });
+    const stateA: Conversation = {
+      ...makeConversation([activeTurn("thread-a", "turn-a")]),
+      threadId: "thread-a",
+    };
+    let stateB: Conversation = {
+      ...makeConversation([]),
+      threadId: "thread-b",
+    };
+    vi.mocked(useRealtimeThread).mockImplementation(({ threadId }) => ({
+      state: threadId === "thread-a" ? stateA : stateB,
+      connected: true,
+      startTurn: vi.fn().mockResolvedValue(undefined),
+      steer: vi.fn().mockResolvedValue(undefined),
+      resolveApproval: vi.fn(),
+      resume: vi.fn().mockResolvedValue(undefined),
+      interrupt: vi.fn().mockResolvedValue(undefined),
+      compact: vi.fn().mockResolvedValue({ compacted: false }),
+      decideHunk: vi.fn().mockResolvedValue(undefined),
+    }));
+    const { rerender } = renderHook(
+      ({ threadId }) =>
+        useThreadStreamRealtime({ threadId, onStart, onFinish }),
+      { initialProps: { threadId: "thread-a" } },
+    );
+    await waitFor(() => expect(onStart).toHaveBeenCalledWith("thread-a"));
+
+    rerender({ threadId: "thread-b" });
+    await act(async () => undefined);
+    expect(onFinish).not.toHaveBeenCalled();
+
+    stateB = {
+      ...makeConversation([activeTurn("thread-b", "turn-b")]),
+      threadId: "thread-b",
+    };
+    rerender({ threadId: "thread-b" });
+    await waitFor(() => expect(onStart).toHaveBeenCalledWith("thread-b"));
+    expect(onStart).toHaveBeenCalledTimes(2);
+    expect(onFinish).not.toHaveBeenCalled();
+
+    stateB = { ...makeConversation([]), threadId: "thread-b" };
+    rerender({ threadId: "thread-b" });
+    await waitFor(() => expect(onFinish).toHaveBeenCalledTimes(1));
+  });
+
+  it("emits tool-end only for live transitions within the same thread", async () => {
+    const onToolEnd = vi.fn();
+    const withTool = (
+      threadId: string,
+      status: CommandExecutionItem["status"],
+    ): Conversation => ({
+      ...makeConversation([
+        {
+          ...makeTurn([commandItem({ id: "shared-tool", status })]),
+          threadId,
+        },
+      ]),
+      threadId,
+    });
+    let stateA = withTool("thread-a", "completed");
+    let stateB = withTool("thread-b", "completed");
+    vi.mocked(useRealtimeThread).mockImplementation(({ threadId }) => ({
+      state: threadId === "thread-a" ? stateA : stateB,
+      connected: true,
+      startTurn: vi.fn().mockResolvedValue(undefined),
+      steer: vi.fn().mockResolvedValue(undefined),
+      resolveApproval: vi.fn(),
+      resume: vi.fn().mockResolvedValue(undefined),
+      interrupt: vi.fn().mockResolvedValue(undefined),
+      compact: vi.fn().mockResolvedValue({ compacted: false }),
+      decideHunk: vi.fn().mockResolvedValue(undefined),
+    }));
+    const { rerender } = renderHook(
+      ({ threadId }) => useThreadStreamRealtime({ threadId, onToolEnd }),
+      { initialProps: { threadId: "thread-a" } },
+    );
+    await act(async () => undefined);
+    expect(onToolEnd).not.toHaveBeenCalled();
+
+    stateA = withTool("thread-a", "inProgress");
+    rerender({ threadId: "thread-a" });
+    await act(async () => undefined);
+    expect(onToolEnd).not.toHaveBeenCalled();
+
+    stateA = withTool("thread-a", "completed");
+    rerender({ threadId: "thread-a" });
+    await waitFor(() => expect(onToolEnd).toHaveBeenCalledTimes(1));
+
+    // Historical completion in B must neither be suppressed forever by A's
+    // id nor emitted during B's hydration.
+    rerender({ threadId: "thread-b" });
+    await act(async () => undefined);
+    expect(onToolEnd).toHaveBeenCalledTimes(1);
+
+    stateB = withTool("thread-b", "inProgress");
+    rerender({ threadId: "thread-b" });
+    await act(async () => undefined);
+    stateB = withTool("thread-b", "failed");
+    rerender({ threadId: "thread-b" });
+    await waitFor(() => expect(onToolEnd).toHaveBeenCalledTimes(2));
+    expect(onToolEnd.mock.calls[1]?.[0]).toMatchObject({
+      name: "list_cwd",
+      data: { id: "shared-tool", status: "failed" },
+    });
+  });
+
+  it("emits tool-end when a quick tool starts and completes in one render batch", async () => {
+    const onToolEnd = vi.fn();
+    let state = makeConversation([]);
+    vi.mocked(useRealtimeThread).mockImplementation(() => ({
+      state,
+      connected: true,
+      startTurn: vi.fn().mockResolvedValue(undefined),
+      steer: vi.fn().mockResolvedValue(undefined),
+      resolveApproval: vi.fn(),
+      resume: vi.fn().mockResolvedValue(undefined),
+      interrupt: vi.fn().mockResolvedValue(undefined),
+      compact: vi.fn().mockResolvedValue({ compacted: false }),
+      decideHunk: vi.fn().mockResolvedValue(undefined),
+    }));
+    const { rerender } = renderHook(() =>
+      useThreadStreamRealtime({ threadId: "thread-a", onToolEnd }),
+    );
+    await act(async () => undefined);
+
+    state = {
+      ...makeConversation([
+        {
+          ...makeTurn([commandItem({ id: "quick-tool", status: "completed" })]),
+          status: "inProgress",
+          completedAt: null,
+        },
+      ]),
+      threadId: "thread-a",
+    };
+    rerender();
+
+    await waitFor(() => expect(onToolEnd).toHaveBeenCalledTimes(1));
+    expect(onToolEnd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "list_cwd",
+        data: expect.objectContaining({
+          id: "quick-tool",
+          status: "completed",
+        }),
       }),
     );
   });

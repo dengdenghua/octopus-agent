@@ -268,6 +268,7 @@ export const zhCN: Translations = {
     makeSimilar: "做同款",
     makeSimilarHint: "用相同诉求开启新任务",
     retryTask: "重试",
+    retryingTask: "正在重试…",
     retryTaskHint: "用相同诉求重新发起任务",
     taskFailedReason: "失败原因",
     resultUrl: "结果链接",
@@ -444,6 +445,7 @@ export const zhCN: Translations = {
     seedWorkflow: "创建或运行一个工作流：",
     send: "发送",
     stop: "停止",
+    stopping: "正在停止…",
     projectModeLabel: "项目已绑定",
     projectModeHint:
       "已绑定本地目录，当前对话会读取项目上下文并按代码任务执行。",
@@ -2970,6 +2972,7 @@ export const zhCN: Translations = {
 
   // Conversation
   conversation: {
+    messageLog: "对话消息",
     noMessages: "还没有消息",
     startConversation: "开始一段新的对话吧",
     noArtifactSelected: "未选择产物",
