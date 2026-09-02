@@ -441,7 +441,7 @@ class QuoteSubscription:
         try:
             self._queue.put_nowait(event)
             return
-        except queue.Full:
+        except queue.Full:  # expected: slow clients drop the oldest quote below
             pass
         # Quotes are state, not an audit log: retain the newest event and drop
         # the oldest one for a slow client.  The counter remains observable.

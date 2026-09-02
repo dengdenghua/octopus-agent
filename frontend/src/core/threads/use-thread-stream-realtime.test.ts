@@ -1131,6 +1131,10 @@ describe("useThreadStreamRealtime permissions", () => {
     ).toBe("queued");
     expect(result.current[0].connectionPhase).toBe("resuming");
     expect(result.current[0].readyForMutations).toBe(false);
+    // The new-thread page must be able to distinguish this local optimistic
+    // row from a durable server receipt. Otherwise it can navigate away and
+    // tear down the socket before the queue reaches turn/start.
+    expect(result.current[0].values.messages).toEqual([]);
     expect(startTurn).not.toHaveBeenCalled();
 
     readyForMutations = true;

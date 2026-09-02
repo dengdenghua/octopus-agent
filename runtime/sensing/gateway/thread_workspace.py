@@ -154,7 +154,7 @@ def discard_staged_managed_workspace(token: ManagedWorkspaceDeletion) -> None:
         raise RuntimeError("managed workspace deletion left residual data")
     try:
         token.container.rmdir()
-    except FileNotFoundError:
+    except FileNotFoundError:  # expected: another cleanup worker removed the empty tombstone
         pass
     except OSError as exc:
         raise RuntimeError("managed workspace deletion tombstone is not empty") from exc

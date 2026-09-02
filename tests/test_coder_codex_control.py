@@ -951,8 +951,38 @@ async def test_state_root_env_is_shared_by_config_login_and_execution_auth(
 
     bundle = create_config_router(codex_preferences_path=tmp_path / "config-profile.json")
     assert bundle.codex_accounts.account_home(scope) == source
-    await service.close_all()
     await bundle.codex_accounts.close_all()
+    await service.close_all()
+
+
+def test_config_router_starts_without_desktop_codex_bundle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unavailable() -> str:
+        raise RuntimeError("bundled Codex version is unavailable")
+
+    monkeypatch.setattr(
+        "runtime.execution.codex_backend.upstream_update.resolve_bundled_codex_version",
+        unavailable,
+    )
+    bundle = create_config_router(
+        codex_state_root=tmp_path / "codex",
+        codex_preferences_path=tmp_path / "profile.json",
+        deployment_mode="production",
+    )
+    app = FastAPI()
+    app.include_router(bundle.router)
+
+    with TestClient(app) as client:
+        status = client.get("/api/coder/codex/upstream-update")
+        check = client.post("/api/coder/codex/upstream-update/check")
+
+    assert status.status_code == 200
+    assert status.json()["available"] is False
+    assert status.json()["current_version"] is None
+    assert check.status_code == 200
+    assert check.json()["error"] == "bundled Codex version is unavailable"
 
 
 def test_default_codex_state_root_stays_outside_source_checkout(

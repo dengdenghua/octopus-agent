@@ -1,8 +1,8 @@
 """Forbid new god files (≥ a configured line count) under runtime/.
 
-Current state has 15 files ≥1000 lines. Splitting them is risky and
-takes time, so we don't block the project on that — but we DO want to
-prevent NEW god files from sneaking in. This linter:
+The repository still has legacy files ≥1000 lines. Splitting all of them in
+one release is risky, so the ratchet records the current debt while preventing
+new god files or any growth in an existing one. This linter:
 
   * Captures the existing list in ``god_files_baseline.txt``.
   * On each run, reports any file ≥ THRESHOLD that's not on the
@@ -34,12 +34,11 @@ _BASELINE_PATH = REPO_ROOT / "tools" / "lint" / "god_files_baseline.txt"
 # core protocol files) push 1000-1500 without being unmanageable.
 THRESHOLD_LINES = 1000
 
-# ESCROW threshold: files already ≥ this size cannot grow any further.
-# Any line increase is a regression. Targets realtime_cerebrum.py (~4k
-# lines) and other 3k+ monsters to prevent unbounded sprawl. Files in
-# this range MUST either shrink (split into modules) or stay flat —
-# they can't grow until they're back under the threshold.
-ESCROW_THRESHOLD = 4000
+# Every baseline god file is in escrow: any line increase is a regression.
+# Files must shrink, split into focused modules, or stay flat until they fall
+# below the ordinary threshold. Keeping this equal to THRESHOLD_LINES makes
+# accepting legacy debt a one-time act instead of permission for more growth.
+ESCROW_THRESHOLD = THRESHOLD_LINES
 
 # Skip generated / vendored / scaffolded code.
 _EXCLUDE_PARTS: tuple[str, ...] = (

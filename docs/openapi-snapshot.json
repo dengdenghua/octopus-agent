@@ -1755,6 +1755,11 @@
             ],
             "title": "Approved Version"
           },
+          "available": {
+            "default": true,
+            "title": "Available",
+            "type": "boolean"
+          },
           "checked_at": {
             "anyOf": [
               {
@@ -1767,8 +1772,15 @@
             "title": "Checked At"
           },
           "current_version": {
-            "title": "Current Version",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Version"
           },
           "error": {
             "anyOf": [

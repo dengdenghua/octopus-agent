@@ -395,6 +395,7 @@ class TestProcessBackendSelection:
     ) -> None:
         monkeypatch.setenv("OCTOPUS_PROCESS_SANDBOX", "strict")
         monkeypatch.setattr(BubblewrapBackend, "available", staticmethod(lambda: False))
+        monkeypatch.setattr(LandlockBackend, "available", staticmethod(lambda: False))
         monkeypatch.setattr(SeatbeltBackend, "available", staticmethod(lambda: False))
 
         with pytest.raises(SandboxViolation):
@@ -702,6 +703,11 @@ class TestLandlockBackend:
         )
         assert argv[0] == sys.executable
         assert argv[1] == "-c"
+        wrapper = argv[2]
+        assert "PR_SET_NO_NEW_PRIVS = 38" in wrapper
+        assert wrapper.index("libc.prctl(PR_SET_NO_NEW_PRIVS") < wrapper.index(
+            "rc = libc.syscall(SYS_LANDLOCK_RESTRICT_SELF"
+        )
         assert "--" in argv
         assert argv[argv.index("--") + 1 :] == ["python", "-V"]
         spec = json.loads(env["OCTOPUS_LANDLOCK_SPEC"])
@@ -824,12 +830,14 @@ class TestResolvedPosture:
         from runtime.safety.sandboxing import sandbox as sandbox_mod
         from runtime.safety.sandboxing.sandbox import (
             BubblewrapBackend,
+            LandlockBackend,
             SandboxViolation,
             SeatbeltBackend,
             resolve_process_backend,
         )
 
         monkeypatch.setattr(BubblewrapBackend, "available", staticmethod(lambda: False))
+        monkeypatch.setattr(LandlockBackend, "available", staticmethod(lambda: False))
         monkeypatch.setattr(SeatbeltBackend, "available", staticmethod(lambda: False))
         monkeypatch.setattr(sandbox_mod, "probe_backend_runs", lambda _b: True)
 
@@ -844,11 +852,13 @@ class TestResolvedPosture:
         from runtime.safety.sandboxing.sandbox import (
             BubblewrapBackend,
             DirectBackend,
+            LandlockBackend,
             SeatbeltBackend,
             resolve_process_backend,
         )
 
         monkeypatch.setattr(BubblewrapBackend, "available", staticmethod(lambda: False))
+        monkeypatch.setattr(LandlockBackend, "available", staticmethod(lambda: False))
         monkeypatch.setattr(SeatbeltBackend, "available", staticmethod(lambda: False))
         monkeypatch.setattr(sandbox_mod, "probe_backend_runs", lambda _b: True)
 

@@ -274,8 +274,8 @@ tier: "core"
 | class | `class LeaderNotRunning(LeaderError)` | No leader process is reachable on the socket. |
 | class | `class LeaderAlreadyRunning(LeaderError)` | Another live leader owns the socket. |
 | class | `class LeaderState` | In-memory state the leader exposes to clients. |
-| class | `class LeaderProcess` | Single-owner supervisor serving JSON-RPC over UDS. |
-| class | `class LeaderClient` | Thin JSON-RPC client over UDS. |
+| class | `class LeaderProcess` | Single-owner supervisor serving JSON-RPC over local IPC. |
+| class | `class LeaderClient` | Thin JSON-RPC client over local IPC. |
 | func | `def ensure_leader(socket_path, pid_path)` | Connect to the running leader, starting it first if needed. |
 | func | `def main(argv)` | CLI entry: ``python -m runtime.core.cerebrum.leader serve``. |
 

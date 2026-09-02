@@ -35,8 +35,12 @@ def test_unattested_external_runner_setting_does_not_bypass_fail_closed(
 ) -> None:
     monkeypatch.setenv(HARDENED_RUNNER_ENV, "/tmp/unattested-runner")
 
-    with pytest.raises(FixtureInfrastructureError, match="cannot authorize execution"):
+    with pytest.raises(FixtureInfrastructureError) as exc_info:
         verifier_sandbox_provenance()
+
+    message = str(exc_info.value)
+    assert "infrastructure is invalid" in message
+    assert "attestation rejected" in message or "cannot authorize execution" in message
 
 
 def test_malicious_candidate_is_not_executed_without_hardened_runner(

@@ -38,6 +38,7 @@ from runtime.memory.control_sessions_codec import (
     _session_status,
     _surface,
 )
+from runtime.platform.io.sqlite import connect_closing
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS control_sessions (
@@ -142,7 +143,7 @@ class ControlSessionStore:
 
     def _connect(self) -> sqlite3.Connection:
         self._dir.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(self._db), timeout=10.0)
+        conn = connect_closing(str(self._db), timeout=10.0)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.executescript(_SCHEMA)
         return conn

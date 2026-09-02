@@ -14,6 +14,8 @@ from typing import Any, cast
 
 import pytest
 
+pytest.importorskip("fcntl", reason="the hardened verifier requires POSIX file locking")
+
 from benchmarks import linux_hardened_verifier as hardened
 
 

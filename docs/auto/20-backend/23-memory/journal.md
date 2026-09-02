@@ -178,7 +178,7 @@ tier: "core"
 | class | `class JournalTransactionError(RuntimeError)` | A durable journal transaction could not be established or verified. |
 | class | `class TrajectoryConflictError(JournalTransactionError)` | One idempotency key was reused for a different terminal payload. |
 | class | `class InMemoryJournal(Journal)` |  |
-| class | `class JSONLJournal(Journal)` |  |
+| class | `class JSONLJournal(_StructuredJournalRedaction, Journal)` |  |
 
 ### `journal_context.py`
 

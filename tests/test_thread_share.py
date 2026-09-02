@@ -104,14 +104,16 @@ def test_share_store_enforces_quota_size_and_physically_cleans_expired_records(
 
 
 def test_public_snapshot_redacts_secrets_and_strips_both_path_styles() -> None:
+    # These user-shaped paths are deliberate fixtures for cross-platform path redaction.
+    credential_fixture = "sk-" + "abcdefghijklmnopqrstuvwxyz123456"
     values = {
-        "title": "Review /Users/alice/private/launch.md",
+        "title": "Review /Users/alice/private/launch.md",  # lint: allow-user-path
         "messages": [
             {"type": "system", "content": "never publish this system prompt"},
             {
                 "type": "human",
                 "content": (
-                    r"Open C:\Users\Alice\private\plan.md and "
+                    r"Open C:\Users\Alice\private\plan.md and "  # lint: allow-user-path
                     "api_key=top-secret-value"
                 ),
             },
@@ -124,7 +126,7 @@ def test_public_snapshot_redacts_secrets_and_strips_both_path_styles() -> None:
                     },
                     {
                         "type": "text",
-                        "text": "Done with sk-abcdefghijklmnopqrstuvwxyz123456",
+                        "text": f"Done with {credential_fixture}",
                     },
                     {
                         "type": "tool_result",
@@ -136,10 +138,13 @@ def test_public_snapshot_redacts_secrets_and_strips_both_path_styles() -> None:
             {"type": "tool", "content": "raw command output"},
         ],
         "artifacts": [
-            r"C:\Users\Alice\private\report-final.pdf",
-            "/Users/alice/private/result.csv",
+            r"C:\Users\Alice\private\report-final.pdf",  # lint: allow-user-path
+            "/Users/alice/private/result.csv",  # lint: allow-user-path
             r"\\server\share\preview.png",
-            {"path": r"C:\Users\Alice\private\structured.docx", "secret": "ignore"},
+            {
+                "path": r"C:\Users\Alice\private\structured.docx",  # lint: allow-user-path
+                "secret": "ignore",
+            },
             {"secret": "not-an-artifact"},
         ],
     }
@@ -163,9 +168,9 @@ def test_public_snapshot_redacts_secrets_and_strips_both_path_styles() -> None:
     assert "hidden structured tool result" not in serialized
     assert "not-an-artifact" not in serialized
     assert "top-secret-value" not in serialized
-    assert "sk-abcdefghijklmnopqrstuvwxyz123456" not in serialized
-    assert "/Users/alice/private" not in serialized
-    assert r"C:\Users\Alice\private" not in serialized
+    assert credential_fixture not in serialized
+    assert "/Users/alice/private" not in serialized  # lint: allow-user-path
+    assert r"C:\Users\Alice\private" not in serialized  # lint: allow-user-path
     assert "[已隐藏]" in serialized
     assert "[本地路径已隐藏]" in serialized
 

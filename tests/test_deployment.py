@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 import pytest
+
+from runtime.platform.config import load_from_yaml
 
 REPO = Path(__file__).parent.parent
 
@@ -18,8 +21,42 @@ class TestDockerfile:
     def test_dockerfile_exists(self):
         assert (REPO / "Dockerfile").exists()
 
+    def test_frontend_install_uses_supported_locked_pnpm_flags(self):
+        text = (REPO / "Dockerfile").read_text(encoding="utf-8")
+
+        assert "pnpm install --frozen-lockfile" in text
+        assert "--no-fund" not in text
+        assert "frontend/pnpm-workspace.yaml" in text
+        assert (
+            "COPY pet-sidecar/models/octopus/octopus.fbx /pet-sidecar/models/octopus/octopus.fbx"
+        ) in text
+        assert (
+            "COPY pet-sidecar/models/character_rigged_clean.glb "
+            "/pet-sidecar/models/character_rigged_clean.glb"
+        ) in text
+
+    def test_full_stack_state_cleanup_runs_once_before_backend_start(self):
+        config = (REPO / "frontend/playwright.full.config.ts").read_text(encoding="utf-8")
+        preparer = REPO / "frontend/e2e/prepare-full-stack-state.mjs"
+
+        assert preparer.is_file()
+        assert "rmSync(e2eStateRoot" not in config
+        assert "prepare-full-stack-state.mjs" in config
+        assert "Refusing to reset E2E state outside" in preparer.read_text(encoding="utf-8")
+
     def test_dockerignore_exists(self):
         assert (REPO / ".dockerignore").exists()
+
+    def test_desktop_quickstart_matches_linux_build_status(self):
+        quickstart = (REPO / "docs" / "DEPLOYMENT_QUICKSTART.md").read_text(encoding="utf-8")
+        linux_workflow = (REPO / ".github" / "workflows" / "build-linux.yml").read_text(
+            encoding="utf-8"
+        )
+
+        assert "Build Linux AppImage" in linux_workflow
+        assert "Linux AppImage builds are also" in quickstart
+        assert "verified CI artifact rather than a public" in quickstart
+        assert "macOS/Linux desktop releases\nare disabled" not in quickstart
 
     def test_multi_stage_build(self):
         text = (REPO / "Dockerfile").read_text(encoding="utf-8")
@@ -89,6 +126,11 @@ class TestDockerfile:
         # Implementation note.
         for pattern in ["data/", "*.jsonl", "*.sqlite", ".env"]:
             assert pattern in text, f"missing .dockerignore entry: {pattern}"
+        # Runtime state is only the repository-root data directory. An
+        # unanchored rule also removes product assets such as
+        # extensions/*/storefront/data/icons from the build context.
+        assert all(line != "data/" for line in text.splitlines())
+        assert "/data/" in text.splitlines()
         assert "agents/*/sessions/" in text
         assert "agents/*/workspace/" in text
         for local_state in (
@@ -112,13 +154,26 @@ class TestDockerfile:
         steps = workflow["jobs"]["docker-build"]["steps"]
         named = {step.get("name"): step for step in steps if step.get("name")}
         smoke = named["Smoke installed image and bundled skill catalog"]["run"]
-        assert "/etc/octopus/config.example.yaml" in smoke
+        assert "/etc/octopus/docker-smoke.yaml" in smoke
+        assert "tests/fixtures/docker_smoke_config.yaml" in smoke
         assert "/readyz" in smoke
         assert "/api/health" in smoke
         assert "payload['skills'] >= 3" in smoke
         assert "resolve_process_backend('strict')" in smoke
         assert "assert choice.hard" in smoke
+        assert "docker inspect --format '{{json .State}}'" in smoke
+        assert "production container exited before readiness" in smoke
         assert "docker rm --force" in smoke
+
+    def test_docker_smoke_config_is_offline_and_production_strict(self):
+        cfg = load_from_yaml(REPO / "tests" / "fixtures" / "docker_smoke_config.yaml")
+
+        assert cfg.execution.deployment_mode == "production"
+        assert cfg.execution.process_sandbox == "strict"
+        assert cfg.planner.model.startswith("mock/")
+        assert cfg.intel_sources == []
+        assert cfg.enable_web_skills is False
+        assert cfg.tentacle.enabled is False
 
 
 # ═══════════════════════════════════════════════════════════
@@ -280,6 +335,27 @@ class TestDockerCompose:
 
 
 class TestPyproject:
+    def test_release_coverage_gate_measures_shippable_runtime(self):
+        project = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
+
+        assert project["tool"]["coverage"]["run"]["source"] == ["runtime"]
+        assert project["tool"]["coverage"]["report"]["fail_under"] == 77.5
+
+    def test_dev_extra_covers_unconditionally_collected_optional_surfaces(self):
+        project = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
+        dev = "\n".join(project["project"]["optional-dependencies"]["dev"])
+
+        for dependency in (
+            "a2a-sdk",
+            "av",
+            "bcrypt",
+            "mcp",
+            "opentelemetry-api",
+            "opentelemetry-sdk",
+            "playwright",
+        ):
+            assert dependency in dev
+
     def test_octopus_agent_script_registered(self):
         text = (REPO / "pyproject.toml").read_text(encoding="utf-8")
         assert 'octopus-agent = "runtime.cli:main"' in text

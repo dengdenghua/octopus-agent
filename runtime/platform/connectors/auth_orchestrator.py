@@ -135,7 +135,7 @@ def _reap_device_process(proc: Any) -> None:
     try:
         proc.wait(timeout=_DEVICE_PROCESS_WAIT_SECONDS)
         return
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired:  # expected: escalate an unresponsive process to kill
         pass
     except Exception:  # noqa: BLE001 - cleanup is best effort after handle failure
         return

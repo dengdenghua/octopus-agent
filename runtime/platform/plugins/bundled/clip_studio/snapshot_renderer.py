@@ -541,7 +541,7 @@ def _rgba(value: str, default_alpha: int) -> tuple[int, int, int, int]:
         if len(raw) == 6:
             rgb = tuple(int(raw[index : index + 2], 16) for index in range(0, 6, 2))
             return (*rgb, default_alpha)
-    except ValueError:
+    except ValueError:  # expected: malformed colours use the safe transparent fallback
         pass
     return (0, 0, 0, default_alpha)
 

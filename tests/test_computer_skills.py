@@ -355,7 +355,7 @@ class TestRegistration:
         for name in COMPUTER_SKILL_NAMES:
             assert reg.has(name)
 
-    def test_register_returns_0_when_not_installed(self, monkeypatch):
+    def test_register_keeps_graceful_tools_when_pyautogui_is_not_installed(self, monkeypatch):
         monkeypatch.setattr(computer_skills, "PYAUTOGUI_AVAILABLE", False)
         monkeypatch.setattr(computer_skills.computer_macos, "MACOS_NATIVE_AVAILABLE", False)
         from runtime.execution.suckers import SkillRegistry
@@ -364,4 +364,23 @@ class TestRegistration:
         )
 
         reg = SkillRegistry()
-        assert register_computer_skills(reg) == 0
+        assert register_computer_skills(reg) == 7
+        for name in (
+            "computer_observe",
+            "computer_plan_next",
+            "computer_preview_action",
+            "computer_execute_token",
+            "computer_uia_status",
+            "computer_uia_tree",
+            "computer_uia_find",
+        ):
+            assert reg.has(name)
+        for name in (
+            "screen_capture",
+            "screen_info",
+            "mouse_click",
+            "mouse_move",
+            "keyboard_type",
+            "keyboard_press",
+        ):
+            assert not reg.has(name)

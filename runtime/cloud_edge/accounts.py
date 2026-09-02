@@ -17,6 +17,8 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from runtime.platform.io.sqlite import connect_closing
+
 from .security import (
     TokenError,
     decode_token,
@@ -91,7 +93,7 @@ class AccountStore:
         self._init_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path, timeout=10)
+        conn = connect_closing(self.path, timeout=10)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")

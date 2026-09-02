@@ -200,7 +200,7 @@ class PdfPlugin(ModulePlugin):
             try:
                 pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
                 font_name = "STSong-Light"
-            except Exception:  # pragma: no cover - host font fallback
+            except Exception:  # pragma: no cover  # expected: host font fallback
                 pass
             styles = getSampleStyleSheet()
             body_style = ParagraphStyle(

@@ -1,14 +1,14 @@
 """Leader Process · single-owner supervisor for long-running tasks.
 
 Inspired by Grok Build's Leader Process model (``xai-grok-shell/src/
-leader/mod.rs``): one Unix Domain Socket server owns the Agent
+leader/mod.rs``): one local IPC server owns the Agent
 session lifecycle so that UI / Headless / IPC clients can come and
 go without killing long tasks. A crashed UI reconnects to the same
 leader and picks up where it left off.
 
 This is the **minimum viable** surface: it does NOT replace the
 existing FastAPI/SSE server. It runs alongside it as an optional
-supervisor reachable via a UDS. The FastAPI server stays the primary
+supervisor reachable via a local IPC endpoint. The FastAPI server stays the primary
 HTTP surface; the Leader Process handles three things the HTTP server
 can't:
 
@@ -23,9 +23,9 @@ can't:
 
 Design rules
 ------------
-* Single-instance per ``~/.octopus/leader.sock`` path enforced by PID
-  file + ``SO_REUSEADDR`` + atomic PID write.
-* JSON-RPC 2.0 over UDS frames (length-prefixed ndjson). Same
+* Single-instance per ``~/.octopus/leader.sock`` endpoint enforced by a
+  PID file. Stale endpoints are reclaimed after their owner exits.
+* JSON-RPC 2.0 over local IPC frames (length-prefixed ndjson). Same
   envelope as the WebSocket transport — no new wire format.
 * All long-running work runs in **the leader's process**; clients
   only receive notifications.
@@ -49,16 +49,19 @@ What this module deliberately does NOT do
 -----------------------------------------
 * No leader election across machines — single-host only. The
   existing ``checkpoint_mirror`` (Redis-backed) handles multi-host.
-* No transport-level auth — UDS filesystem permissions are the gate.
+* Local-only authentication — Unix socket permissions gate POSIX clients;
+  Windows loopback clients authenticate with a random per-start token.
 * No protocol breaking changes — existing SSE/HTTP endpoints stay.
 """
 
 from __future__ import annotations
 
 import contextlib
+import hmac
 import json
 import logging
 import os
+import secrets
 import signal
 import socket
 import sys
@@ -89,6 +92,7 @@ DEFAULT_SOCKET_PATH = Path(
 DEFAULT_PID_PATH = DEFAULT_SOCKET_PATH.with_suffix(".pid")
 PROTOCOL_VERSION = 1
 HEARTBEAT_SECONDS = 30.0
+_LOOPBACK_HOST = "127.0.0.1"
 
 
 # ── Errors ───────────────────────────────────────────────────
@@ -160,6 +164,12 @@ def _recv_until(sock: socket.socket, delimiter: bytes) -> bytes | None:
             raise LeaderError("frame header too long")
 
 
+def _uses_loopback_transport() -> bool:
+    """Use authenticated loopback TCP where Unix sockets are unavailable."""
+
+    return sys.platform == "win32" or not hasattr(socket, "AF_UNIX")
+
+
 # ── LeaderProcess (server side) ──────────────────────────────
 
 
@@ -216,7 +226,7 @@ class LeaderState:
 
 
 class LeaderProcess:
-    """Single-owner supervisor serving JSON-RPC over UDS."""
+    """Single-owner supervisor serving JSON-RPC over local IPC."""
 
     def __init__(
         self,
@@ -229,6 +239,8 @@ class LeaderProcess:
         self.pid_path = Path(pid_path)
         self.state = state or LeaderState()
         self._server_sock: socket.socket | None = None
+        self._auth_token: str | None = None
+        self._owns_endpoint = False
         self._stop = threading.Event()
         self._handlers: dict[str, Callable[[dict[str, Any]], Any]] = {
             "status": self._handle_status,
@@ -241,23 +253,42 @@ class LeaderProcess:
     # ── Lifecycle ────────────────────────────────────────────
 
     def start(self, *, blocking: bool = True) -> None:
-        """Bind the UDS, write the PID file, and serve.
+        """Bind local IPC, write the PID file, and serve.
 
         Raises :class:`LeaderAlreadyRunning` if another live process
         owns the PID file. Stale PID files (dead owner) are reclaimed.
         """
         self._claim_pid_file()
-        self.socket_path.parent.mkdir(parents=True, exist_ok=True)
-        # Remove a stale socket from a crashed leader.
-        if self.socket_path.exists():
-            self.socket_path.unlink()
-        server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        server.bind(str(self.socket_path))
-        # Lock down to the current user — no other-user tampering.
-        os.chmod(self.socket_path, 0o600)
-        server.listen(16)
-        server.settimeout(0.5)
-        self._server_sock = server
+        self._owns_endpoint = True
+        try:
+            self.socket_path.parent.mkdir(parents=True, exist_ok=True)
+            # Remove a stale endpoint from a crashed leader.
+            if self.socket_path.exists():
+                self.socket_path.unlink()
+            if _uses_loopback_transport():
+                server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                server.bind((_LOOPBACK_HOST, 0))
+                self._auth_token = secrets.token_urlsafe(32)
+                host, port = server.getsockname()[:2]
+                self.socket_path.write_text(
+                    json.dumps({"host": host, "port": port, "token": self._auth_token}),
+                    encoding="utf-8",
+                )
+            else:
+                server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                server.bind(str(self.socket_path))
+            # Restrict the endpoint descriptor/socket wherever the platform
+            # honors mode bits. Loopback clients must also present a token.
+            with contextlib.suppress(OSError):
+                os.chmod(self.socket_path, 0o600)
+            server.listen(16)
+            server.settimeout(0.5)
+            self._server_sock = server
+        except BaseException:
+            with contextlib.suppress(UnboundLocalError, OSError):
+                server.close()
+            self.stop()
+            raise
         _LOG.info("leader listening on %s (pid=%d)", self.socket_path, os.getpid())
 
         if blocking:
@@ -276,16 +307,18 @@ class LeaderProcess:
             with contextlib.suppress(OSError):
                 self._server_sock.close()
             self._server_sock = None
-        try:
-            if self.socket_path.exists():
-                self.socket_path.unlink()
-        except OSError:
-            _LOG.debug("failed to remove leader socket %s", self.socket_path, exc_info=True)
-        try:
-            if self.pid_path.exists():
-                self.pid_path.unlink()
-        except OSError:
-            _LOG.debug("failed to remove leader PID file %s", self.pid_path, exc_info=True)
+        if self._owns_endpoint:
+            try:
+                if self.socket_path.exists():
+                    self.socket_path.unlink()
+            except OSError:
+                _LOG.debug("failed to remove leader socket %s", self.socket_path, exc_info=True)
+            try:
+                if self.pid_path.exists():
+                    self.pid_path.unlink()
+            except OSError:
+                _LOG.debug("failed to remove leader PID file %s", self.pid_path, exc_info=True)
+            self._owns_endpoint = False
         _LOG.info("leader stopped")
 
     # ── Server loop ──────────────────────────────────────────
@@ -315,6 +348,11 @@ class LeaderProcess:
     def _serve_client(self, client: socket.socket) -> None:
         self.state.attach_client(client)
         try:
+            if self._auth_token is not None:
+                client.settimeout(5.0)
+                if not self._authenticate_loopback_client(client):
+                    return
+                client.settimeout(None)
             while not self._stop.is_set():
                 try:
                     raw = _read_frame(client)
@@ -330,6 +368,17 @@ class LeaderProcess:
             self.state.detach_client(client)
             with contextlib.suppress(OSError):
                 client.close()
+
+    def _authenticate_loopback_client(self, client: socket.socket) -> bool:
+        try:
+            raw = _read_frame(client)
+            payload = json.loads(raw or "null")
+            supplied = payload.get("token") if isinstance(payload, dict) else None
+            return isinstance(supplied, str) and hmac.compare_digest(
+                supplied, self._auth_token or ""
+            )
+        except (LeaderError, OSError, ValueError, TypeError, json.JSONDecodeError):
+            return False
 
     def _handle_message(self, client: socket.socket, raw: str) -> None:
         try:
@@ -438,10 +487,45 @@ class LeaderProcess:
         self.pid_path.write_text(str(os.getpid()))
 
 
+def _pid_alive_windows(pid: int) -> bool:
+    """Query a Windows process without sending it a console control event."""
+
+    import ctypes
+    from ctypes import wintypes
+
+    process_query_limited_information = 0x1000
+    still_active = 259
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+    if not handle:
+        # Access denied still proves that the process exists. Invalid or stale
+        # PIDs return a different error and are treated as dead.
+        return ctypes.get_last_error() == 5  # type: ignore[attr-defined]
+    try:
+        exit_code = wintypes.DWORD()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+            return True
+        return exit_code.value == still_active
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def _pid_alive(pid: int) -> bool:
-    """Return True if ``pid`` is a live process we can signal."""
+    """Return True if ``pid`` is a live process without changing its state."""
     if pid <= 0:
         return False
+    if sys.platform == "win32":
+        # ``os.kill(pid, 0)`` is not a harmless existence probe on Windows;
+        # depending on the runtime it can become a console control event and
+        # interrupt the pytest/leader process itself.
+        return _pid_alive_windows(pid)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -458,7 +542,7 @@ def _pid_alive(pid: int) -> bool:
 
 
 class LeaderClient:
-    """Thin JSON-RPC client over UDS.
+    """Thin JSON-RPC client over local IPC.
 
     Use as a context manager to ensure the socket is closed::
 
@@ -482,10 +566,34 @@ class LeaderClient:
         path = Path(socket_path)
         if not path.exists():
             raise LeaderNotRunning(f"leader socket not found: {path}")
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        token: str | None = None
+        address: str | tuple[str, int]
+        if _uses_loopback_transport():
+            try:
+                endpoint = json.loads(path.read_text(encoding="utf-8"))
+                host = endpoint["host"]
+                port = endpoint["port"]
+                token = endpoint["token"]
+                if (
+                    host != _LOOPBACK_HOST
+                    or not isinstance(port, int)
+                    or not 0 < port < 65536
+                    or not isinstance(token, str)
+                    or len(token) < 32
+                ):
+                    raise ValueError("invalid endpoint descriptor")
+            except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise LeaderNotRunning(f"invalid leader endpoint {path}: {exc}") from exc
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            address = (host, port)
+        else:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            address = str(path)
         sock.settimeout(timeout)
         try:
-            sock.connect(str(path))
+            sock.connect(address)
+            if token is not None:
+                _write_frame(sock, json.dumps({"token": token}))
         except OSError as exc:
             sock.close()
             raise LeaderNotRunning(f"failed to connect to {path}: {exc}") from exc

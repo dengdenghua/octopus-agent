@@ -49,13 +49,16 @@ export function CodexUpdateRadar() {
     onSuccess: (next) => replaceStatus(queryClient, next),
   });
   const data = status.data;
+  const available = data?.available !== false;
   const mutationError = check.error ?? approve.error;
   const error =
     mutationError instanceof Error
       ? mutationError.message
       : status.error instanceof Error
         ? status.error.message
-        : data?.error;
+        : available
+          ? data?.error
+          : null;
   const isApproved = data?.approval_status === "approved_for_next_release";
   const canApprove = Boolean(
     user?.roles?.some((role) => role === "admin" || role === "operator"),
@@ -91,7 +94,7 @@ export function CodexUpdateRadar() {
           type="button"
           variant="outline"
           size="sm"
-          disabled={check.isPending}
+          disabled={check.isPending || !available}
           onClick={() => check.mutate()}
         >
           <RefreshCw
@@ -114,7 +117,11 @@ export function CodexUpdateRadar() {
             {zh ? "当前内置" : "Bundled"}
           </dt>
           <dd className="mt-1 font-mono text-xs">
-            {data?.current_version ?? "—"}
+            {available
+              ? (data?.current_version ?? "—")
+              : zh
+                ? "未内置"
+                : "Not bundled"}
           </dd>
         </div>
         <div className="rounded-md bg-muted/45 px-3 py-2">
@@ -135,7 +142,15 @@ export function CodexUpdateRadar() {
         </div>
       </dl>
 
-      {data?.update_available ? (
+      {!available ? (
+        <p className="mt-3 text-xs text-muted-foreground">
+          {zh
+            ? "此服务形态未内置 Codex 桌面引擎，更新雷达不可用；不影响后端服务。"
+            : "This service distribution does not bundle the Codex desktop engine, so the update radar is unavailable. Backend service is unaffected."}
+        </p>
+      ) : null}
+
+      {available && data?.update_available ? (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/25 bg-primary/5 px-3 py-2.5">
           <p className="text-xs">
             {isApproved
@@ -163,7 +178,7 @@ export function CodexUpdateRadar() {
             </Button>
           ) : null}
         </div>
-      ) : data?.checked_at && !data.error ? (
+      ) : available && data?.checked_at && !data.error ? (
         <p className="mt-3 text-xs text-muted-foreground">
           {zh ? "当前已是最新内置版本。" : "The bundled engine is up to date."}
         </p>

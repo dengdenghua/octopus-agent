@@ -126,7 +126,7 @@ def scoped_path_denial(path: Path, *, write: bool) -> str | None:
             if not verdict.allow:
                 return str(verdict.reason or "file safety denied the target")
         except (ImportError, AttributeError):
-            pass
+            return "file safety policy unavailable"
     try:
         from runtime.platform.process.scope import resolve_execution_scope
         from runtime.platform.process.session import current_session

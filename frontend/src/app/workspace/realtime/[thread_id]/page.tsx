@@ -2641,11 +2641,13 @@ function RealtimePageContent({
   }, [compactThread, isCompressingContext, t.contextCompressor]);
 
   // If the first stream fails before onStart fires, isNewThread stays
-  // true while messages already rendered, producing a Welcome overlay
-  // on top of the live conversation. Second source of truth: once any
-  // messages arrive, treat the thread as established.
+  // true while a server receipt already rendered, producing a Welcome overlay
+  // on top of the live conversation. Only the mapped server state is an
+  // authoritative receipt here: `thread.messages` also contains locally queued
+  // optimistic rows. Promoting one of those rows would commit the UUID route,
+  // unmount this `/new` connection, and discard the not-yet-delivered message.
   useEffect(() => {
-    if (isNewThread && thread.messages.length > 0) {
+    if (isNewThread && thread.values.messages.length > 0) {
       setIsNewThread(false);
       const targetPath = threadRouteFor(threadId);
       // Same deferred route commit as onStart. This fallback can run before
@@ -2667,7 +2669,7 @@ function RealtimePageContent({
   }, [
     commitThreadRoute,
     isNewThread,
-    thread.messages.length,
+    thread.values.messages.length,
     thread.isLoading,
     setIsNewThread,
     stageThreadRoute,
@@ -4637,74 +4639,76 @@ function RealtimePageContent({
                     <div className="flex min-h-0 flex-1">
                       <AgentWorkbenchPanel
                         activeTab={agentWorkbenchTab}
-                    personaId={effectiveAgentId}
-                    events={workbenchDisplayEvents}
-                    progressOutline={progressOutline}
-                    userInput={
-                      focusedWorkbenchTurnIndex === null
-                        ? lastTurnUserInput
-                        : {
-                            text: focusedWorkbenchAgentSnapshot?.task ?? "",
-                            uploadedFiles: [],
-                            attachments: [],
-                          }
-                    }
-                    groundingSources={thread.values.latest_grounding ?? []}
-                    focusedAgentId={focusedWorkbenchAgentId}
-                    focusedAgentView={focusedWorkbenchAgentView}
-                    focusedAgentSnapshot={focusedWorkbenchAgentSnapshot}
-                    focusedAgentNonce={focusedWorkbenchAgentNonce}
-                    focusedEventId={focusedWorkbenchEventId}
-                    focusedEventKind={focusedWorkbenchEventKind}
-                    focusedEventView={focusedWorkbenchEventView}
-                    focusedEventNonce={focusedWorkbenchEventNonce}
-                    focusedProcessEvent={focusedWorkbenchProcessEvent}
-                    focusedEffectKey={focusedWorkbenchEffectKey}
-                    hasAnswer={
-                      focusedWorkbenchTurnIndex === null
-                        ? hasCompletedAgentOutput
-                        : true
-                    }
-                    isLoading={
-                      focusedWorkbenchTurnIndex === null
-                        ? thread.isLoading
-                        : false
-                    }
-                    runSettled={
-                      focusedWorkbenchTurnIndex === null
-                        ? agentRunSettled
-                        : true
-                    }
-                    runFailed={
-                      focusedWorkbenchTurnIndex === null
-                        ? agentRunFailed
-                        : focusedWorkbenchAgentSnapshot?.status === "error"
-                    }
-                    runInterrupted={agentRunInterrupted}
-                    runBlocked={agentRunBlocked}
-                    paused={hasPausedOrPendingBackgroundTask}
-                    threadId={threadId}
-                    workDir={workDir}
-                    browserPreviewBlocks={previewBlocks}
-                    resultPreviewUrl={resultPreviewUrl}
-                    mainAgentName={
-                      displayAgent?.display_name || effectiveAgentId
-                    }
-                    contextTokens={contextTokens}
-                    maxContextTokens={maxContextTokens}
-                    isCompressingContext={isCompressingContext}
-                    onCompressContext={handleCompressContext}
-                    rosterSeats={collaborationRosterSeats}
-                    showMachineRosterRail={false}
-                    groupTitle={
-                      isGroupConversation ? collaborationTeamName : null
-                    }
-                    currentThreadTitle={headerThreadTitle || null}
-                    onInvitePeople={
-                      canManageHumanInvites ? handleOpenHumanInvite : undefined
-                    }
-                    onClose={closeAgentWorkbenchPanel}
-                    onSelectTab={selectAgentWorkbenchTab}
+                        personaId={effectiveAgentId}
+                        events={workbenchDisplayEvents}
+                        progressOutline={progressOutline}
+                        userInput={
+                          focusedWorkbenchTurnIndex === null
+                            ? lastTurnUserInput
+                            : {
+                                text: focusedWorkbenchAgentSnapshot?.task ?? "",
+                                uploadedFiles: [],
+                                attachments: [],
+                              }
+                        }
+                        groundingSources={thread.values.latest_grounding ?? []}
+                        focusedAgentId={focusedWorkbenchAgentId}
+                        focusedAgentView={focusedWorkbenchAgentView}
+                        focusedAgentSnapshot={focusedWorkbenchAgentSnapshot}
+                        focusedAgentNonce={focusedWorkbenchAgentNonce}
+                        focusedEventId={focusedWorkbenchEventId}
+                        focusedEventKind={focusedWorkbenchEventKind}
+                        focusedEventView={focusedWorkbenchEventView}
+                        focusedEventNonce={focusedWorkbenchEventNonce}
+                        focusedProcessEvent={focusedWorkbenchProcessEvent}
+                        focusedEffectKey={focusedWorkbenchEffectKey}
+                        hasAnswer={
+                          focusedWorkbenchTurnIndex === null
+                            ? hasCompletedAgentOutput
+                            : true
+                        }
+                        isLoading={
+                          focusedWorkbenchTurnIndex === null
+                            ? thread.isLoading
+                            : false
+                        }
+                        runSettled={
+                          focusedWorkbenchTurnIndex === null
+                            ? agentRunSettled
+                            : true
+                        }
+                        runFailed={
+                          focusedWorkbenchTurnIndex === null
+                            ? agentRunFailed
+                            : focusedWorkbenchAgentSnapshot?.status === "error"
+                        }
+                        runInterrupted={agentRunInterrupted}
+                        runBlocked={agentRunBlocked}
+                        paused={hasPausedOrPendingBackgroundTask}
+                        threadId={threadId}
+                        workDir={workDir}
+                        browserPreviewBlocks={previewBlocks}
+                        resultPreviewUrl={resultPreviewUrl}
+                        mainAgentName={
+                          displayAgent?.display_name || effectiveAgentId
+                        }
+                        contextTokens={contextTokens}
+                        maxContextTokens={maxContextTokens}
+                        isCompressingContext={isCompressingContext}
+                        onCompressContext={handleCompressContext}
+                        rosterSeats={collaborationRosterSeats}
+                        showMachineRosterRail={false}
+                        groupTitle={
+                          isGroupConversation ? collaborationTeamName : null
+                        }
+                        currentThreadTitle={headerThreadTitle || null}
+                        onInvitePeople={
+                          canManageHumanInvites
+                            ? handleOpenHumanInvite
+                            : undefined
+                        }
+                        onClose={closeAgentWorkbenchPanel}
+                        onSelectTab={selectAgentWorkbenchTab}
                         onOpenArtifact={openWorkbenchArtifact}
                       />
                     </div>

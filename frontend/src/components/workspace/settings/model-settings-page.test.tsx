@@ -119,6 +119,47 @@ function mockModelSettingsFetch({
   });
 }
 
+describe("ModelSettingsPage · optional local vision service", () => {
+  it("does not request models when octopus-storage is not installed", async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/local-brain/storage/start")) {
+        return jsonOk({
+          ok: false,
+          status: "not_found",
+          base_url: "/api/storage",
+          auth_token: null,
+        });
+      }
+      if (url.includes("/api/config/custom-models/compat-diagnostics")) {
+        return jsonOk({
+          schema: "octopus.openai_compat_diagnostics.v1",
+          diagnostics: [],
+        });
+      }
+      if (url.includes("/api/config/openai-compat-profiles")) {
+        return jsonOk({
+          schema: "octopus.openai_compat_profile_catalog.v1",
+          diagnostics: [],
+        });
+      }
+      return jsonOk({ default: "", models: [] });
+    });
+
+    renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
+
+    expect(
+      await screen.findByText(/本地图片理解服务尚未安装/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新检查" })).toBeEnabled();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("/api/storage/v1/models"),
+      ),
+    ).toBe(false);
+  });
+});
+
 describe("custom model selection identity", () => {
   const model = {
     id: "provider-entry",
@@ -857,7 +898,9 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
     );
 
     renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
-    expect((await screen.findAllByText("Disposable")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Disposable")).length).toBeGreaterThan(
+      0,
+    );
     expect(screen.getByText("系统默认")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "删除: Disposable" }));

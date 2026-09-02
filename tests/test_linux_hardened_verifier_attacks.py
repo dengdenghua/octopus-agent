@@ -24,6 +24,8 @@ from typing import Any
 
 import pytest
 
+pytest.importorskip("fcntl", reason="the hardened verifier requires POSIX file locking")
+
 from benchmarks import linux_hardened_verifier as hardened
 from benchmarks.trusted_verifier_contract import (
     CLI_JSON_ENV,

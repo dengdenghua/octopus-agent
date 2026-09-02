@@ -14,6 +14,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from runtime.platform.io.sqlite import connect_closing
+
 DEFAULT_SHARE_TTL_SECONDS = 30 * 24 * 60 * 60
 MAX_SHARE_TTL_SECONDS = 365 * 24 * 60 * 60
 DEFAULT_SHARE_MAX_PER_OWNER = 50
@@ -66,7 +68,7 @@ class CloudEdgeStore:
         return parsed
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path, timeout=10)
+        conn = connect_closing(self.path, timeout=10)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
@@ -185,11 +187,22 @@ class CloudEdgeStore:
         now = int(time.time())
         code_hash = self._hash_secret(pairing_code)
         with self._lock, self._connect() as conn:
+            # The process-local lock does not coordinate multiple workers.
+            # Take SQLite's writer reservation before reading so claiming the
+            # single-use code and creating the device form one transaction.
+            conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
                 "SELECT * FROM pairing_codes WHERE code_hash=?",
                 (code_hash,),
             ).fetchone()
             if row is None or row["used_at"] is not None or int(row["expires_at"]) < now:
+                return None
+            claimed = conn.execute(
+                """UPDATE pairing_codes SET used_at=?
+                WHERE code_hash=? AND used_at IS NULL AND expires_at>=?""",
+                (now, code_hash, now),
+            )
+            if claimed.rowcount != 1:
                 return None
             device_id = "dev_" + uuid.uuid4().hex
             conn.execute(
@@ -205,7 +218,6 @@ class CloudEdgeStore:
                     now,
                 ),
             )
-            conn.execute("UPDATE pairing_codes SET used_at=? WHERE code_hash=?", (now, code_hash))
         return {
             "device_id": device_id,
             "tenant_id": str(row["tenant_id"]),
@@ -251,14 +263,14 @@ class CloudEdgeStore:
         now = int(time.time())
         digest = self._hash_secret(challenge)
         with self._lock, self._connect() as conn:
-            row = conn.execute(
-                "SELECT * FROM challenges WHERE challenge_hash=? AND device_id=?",
-                (digest, device_id),
-            ).fetchone()
-            if row is None or row["used_at"] is not None or int(row["expires_at"]) < now:
-                return False
-            conn.execute("UPDATE challenges SET used_at=? WHERE challenge_hash=?", (now, digest))
-        return True
+            conn.execute("BEGIN IMMEDIATE")
+            claimed = conn.execute(
+                """UPDATE challenges SET used_at=?
+                WHERE challenge_hash=? AND device_id=?
+                AND used_at IS NULL AND expires_at>=?""",
+                (now, digest, device_id, now),
+            )
+        return claimed.rowcount == 1
 
     def touch_device(self, device_id: str) -> None:
         with self._lock, self._connect() as conn:

@@ -48,7 +48,7 @@ test.describe("Visual regression · workspace surfaces", () => {
       )
       .toBeDefined();
     await expect(
-      page.getByRole("heading", { name: /Hello, I am .+|你好，我是/ }),
+      page.getByRole("heading", { name: /Hello, I am|你好，我是/ }),
     ).toBeVisible({
       timeout: 15_000,
     });
@@ -62,7 +62,7 @@ test.describe("Visual regression · workspace surfaces", () => {
     });
   });
 
-  test("missing deep-linked thread settles into recoverable empty state", async ({
+  test("missing deep-linked thread settles into recoverable composer state", async ({
     authedPage: page,
   }) => {
     await page.goto("/#/workspace/realtime/does-not-exist-thread");
@@ -77,7 +77,8 @@ test.describe("Visual regression · workspace surfaces", () => {
     await expect(page.getByText(/还没有消息|No messages yet/i)).toBeVisible({
       timeout: 15_000,
     });
-    await expect(page.getByTestId("chat-composer-input")).toBeVisible();
+    await expect(page.getByTestId("chat-composer-input")).toBeEditable();
+    await expect(page.getByTestId("chat-send-button")).toBeDisabled();
 
     await expect(page).toHaveScreenshot("recoverable-empty-state.png", {
       maxDiffPixelRatio: 0.02,
@@ -91,10 +92,10 @@ test.describe("Visual regression · workspace surfaces", () => {
     await page.goto("/#/workspace/realtime/new");
     await page.waitForLoadState("domcontentloaded");
 
-    await expect(
-      page.getByRole("button", { name: /^(新建任务|New task)$/i }),
-    ).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId("chat-composer-input")).toBeVisible();
+    await expect(page.getByRole("tab", { name: "EchoAI" })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.locator("textarea").first()).toBeVisible();
 
     await expect(page).toHaveScreenshot("workspace-shell.png", {
       maxDiffPixelRatio: 0.02,
@@ -102,7 +103,7 @@ test.describe("Visual regression · workspace surfaces", () => {
     });
   });
 
-  test("agent workbench uses a right drawer at 1024px", async ({
+  test("agent workbench uses a fitted desktop drawer at 1024px", async ({
     authedPage: page,
   }) => {
     await page.setViewportSize({ width: 1024, height: 720 });
@@ -122,6 +123,9 @@ test.describe("Visual regression · workspace surfaces", () => {
       "data-secondary-panel-presentation",
       "desktop-drawer",
     );
+    await expect(
+      page.getByRole("button", { name: "Close workbench" }),
+    ).toBeVisible();
 
     await expect(page).toHaveScreenshot("workbench-drawer-1024.png", {
       maxDiffPixelRatio: 0.02,

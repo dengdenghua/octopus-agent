@@ -40,7 +40,7 @@ Thumbs.db
 .marvis_static/
 
 # Local runtime artifacts
-data/
+/data/
 logs/
 .runtime-logs/
 test-results/

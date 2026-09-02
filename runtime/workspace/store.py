@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from runtime.platform.io.sqlite import connect_closing
 from runtime.safety.auth.scope import TenantScope
 from runtime.workspace.crypto import decrypt_options, encrypt_options
 from runtime.workspace.model import (
@@ -157,7 +158,7 @@ class WorkspaceStore:
         return row if self._workspace_allowed(ws, self._effective_scope(scope)) else None
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self._db), timeout=10.0)
+        conn = connect_closing(str(self._db), timeout=10.0)
         conn.execute("PRAGMA journal_mode=WAL")
         return conn
 

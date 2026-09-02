@@ -15295,10 +15295,15 @@ export interface components {
             approved_at?: string | null;
             /** Approved Version */
             approved_version?: string | null;
+            /**
+             * Available
+             * @default true
+             */
+            available: boolean;
             /** Checked At */
             checked_at?: string | null;
             /** Current Version */
-            current_version: string;
+            current_version: string | null;
             /** Error */
             error?: string | null;
             /** Integrity */

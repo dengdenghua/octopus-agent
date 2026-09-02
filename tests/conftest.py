@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import functools
+import os
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -22,6 +24,40 @@ from runtime.platform.models import (
     Trajectory,
     TrajectoryOutcome,
 )
+
+
+@pytest.fixture(autouse=True)
+def _restore_working_directory():
+    """Prevent one test's raw ``os.chdir`` from poisoning later subprocesses.
+
+    ``monkeypatch.chdir`` already restores itself, but a deleted-cwd regression
+    test must use ``os.chdir`` directly.  A prior version restored to the
+    ``tests/`` directory instead of the session's original root; child Python
+    processes then imported ``tests/runtime`` as a namespace package and could
+    no longer find the installed ``runtime.execution`` modules.
+    """
+    starting_directory = Path.cwd()
+    yield
+    os.chdir(starting_directory)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_execution_security_environment():
+    """Keep deployment/sandbox overrides from leaking across tests.
+
+    Some low-level tests intentionally call the serve security preparer
+    directly.  That preparer applies environment variables for the lifetime
+    of a server and returns a restoration token to its caller; an assertion
+    failure before restoration must not silently turn the rest of the suite
+    into a commercial deployment.
+    """
+
+    keys = ("OCTOPUS_DEPLOYMENT_MODE", "OCTOPUS_PROCESS_SANDBOX")
+    for key in keys:
+        os.environ.pop(key, None)
+    yield
+    for key in keys:
+        os.environ.pop(key, None)
 
 
 @pytest.fixture

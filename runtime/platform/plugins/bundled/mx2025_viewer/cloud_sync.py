@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from runtime.platform.io import atomic_write_json
+from runtime.platform.io.sqlite import connect_closing
 
 
 def _b64(data: bytes) -> str:
@@ -50,7 +51,7 @@ class MXCloudSyncConnector:
         self._init_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, timeout=10)
+        conn = connect_closing(self.db_path, timeout=10)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         return conn
@@ -245,7 +246,8 @@ class MXCloudSyncConnector:
             placeholders = ",".join("?" for _ in ids)
             with self._lock, self._connect() as conn:
                 conn.execute(
-                    f"UPDATE outbox SET sent_at=? WHERE id IN ({placeholders})",  # noqa: S608
+                    # Placeholder count is derived from server-owned row IDs; values stay bound.
+                    f"UPDATE outbox SET sent_at=? WHERE id IN ({placeholders})",  # noqa: S608  # nosec B608
                     (now, *ids),
                 )
             self._last_sync_at = now

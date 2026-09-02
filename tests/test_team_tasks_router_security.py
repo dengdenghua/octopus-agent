@@ -654,28 +654,33 @@ def test_concurrency_cap_lock_holds_under_burst(tmp_path: Path) -> None:
     running{} insert."""
     import concurrent.futures
 
-    client, _, keys = _build_app(tmp_path, _SlowRunner, max_concurrent_runs=2)
-    _create_room(client, keys, "room-alpha", owner="alice")
+    _BlockingRunner.reset()
+    try:
+        client, _, keys = _build_app(tmp_path, _BlockingRunner, max_concurrent_runs=2)
+        _create_room(client, keys, "room-alpha", owner="alice")
 
-    task_ids = []
-    for i in range(6):
-        create = client.post(
-            "/api/team-tasks",
-            json={"room_id": "room-alpha", "title": f"burst-{i}"},
-            headers=_auth_header(keys["alice"]),
-        )
-        task_ids.append(create.json()["id"])
+        task_ids = []
+        for i in range(6):
+            create = client.post(
+                "/api/team-tasks",
+                json={"room_id": "room-alpha", "title": f"burst-{i}"},
+                headers=_auth_header(keys["alice"]),
+            )
+            task_ids.append(create.json()["id"])
 
-    def _fire(tid: str) -> int:
-        return client.post(
-            f"/api/team-tasks/{tid}/run",
-            headers=_auth_header(keys["alice"]),
-        ).status_code
+        def _fire(tid: str) -> int:
+            return client.post(
+                f"/api/team-tasks/{tid}/run",
+                headers=_auth_header(keys["alice"]),
+            ).status_code
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
-        statuses = list(pool.map(_fire, task_ids))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+            statuses = list(pool.map(_fire, task_ids))
 
-    accepted = sum(1 for s in statuses if s == 200)
-    rejected = sum(1 for s in statuses if s == 429)
-    assert accepted == 2, f"expected exactly 2 accepted, got {accepted}: {statuses}"
+        accepted = sum(1 for s in statuses if s == 200)
+        rejected = sum(1 for s in statuses if s == 429)
+        assert accepted == 2, f"expected exactly 2 accepted, got {accepted}: {statuses}"
+        assert rejected == 4, f"expected exactly 4 rejected, got {rejected}: {statuses}"
+    finally:
+        _BlockingRunner.release()
     assert rejected == 4, f"expected exactly 4 rejected, got {rejected}: {statuses}"

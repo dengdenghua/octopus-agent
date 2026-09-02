@@ -103,7 +103,8 @@ def test_capacity_marks_kimi_scale_rosters_without_hiding_dispatch_limit() -> No
 
     assert out["count"] == 32
     assert len(called) == 32
-    assert called == [f"a{i}" for i in range(32)]
+    assert set(called) == {f"a{i}" for i in range(32)}
+    assert [reply["agent_id"] for reply in out["replies"]] == [f"a{i}" for i in range(32)]
     assert out["dropped"] == 268
     assert out["capacity"]["schema"] == "octopus.group_fanout_capacity.v1"
     assert out["capacity"]["requested_members"] == 300
@@ -134,8 +135,8 @@ def test_full_scale_mode_dispatches_kimi_scale_roster_with_bounded_workers() -> 
     assert out["count"] == 320
     assert out["spoke"] == 320
     assert len(called) == 320
-    assert called[0] == "a0"
-    assert called[-1] == "a319"
+    assert set(called) == {f"a{i}" for i in range(320)}
+    assert [reply["agent_id"] for reply in out["replies"]] == [f"a{i}" for i in range(320)]
     assert out["dropped"] == 0
     assert out["capacity"] == {
         "schema": "octopus.group_fanout_capacity.v1",

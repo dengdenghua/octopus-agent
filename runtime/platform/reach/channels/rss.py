@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from typing import Any
-from xml.etree import ElementTree
+
+from defusedxml import ElementTree
 
 try:
     import feedparser  # type: ignore[import-untyped]

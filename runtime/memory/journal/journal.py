@@ -305,22 +305,209 @@ def _trajectory_payload_digest(event: TrajectoryEvent) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+class _StructuredJournalRedaction:
+    """Structured, identity-preserving redaction shared by file journals."""
+
+    _redactor: Any
+
+    @staticmethod
+    def _scope_digest(value: str, *, field: str) -> str:
+        """Return a deterministic storage identifier outside PII patterns."""
+
+        digest = hashlib.sha256(f"octopus-journal-scope-v1\0{field}\0{value}".encode()).hexdigest()
+        letters_only = digest.translate(str.maketrans("0123456789", "ghijklmnop"))
+        return f"octopus-scope-{field}-vone-{letters_only}"
+
+    def _storage_scope_value(self, value: str | None, *, field: str) -> str | None:
+        if value is None or self._redactor is None:
+            return value
+        text = str(value)
+        if text.startswith(f"octopus-scope-{field}-vone-"):
+            return text
+        try:
+            redacted = self._redactor.redact(text)
+        except Exception:  # noqa: BLE001 - a broken optional redactor is best-effort
+            return text
+        if redacted == text:
+            return text
+        return self._scope_digest(text, field=field)
+
+    def _storage_scoped_event(self, event: JournalEvent) -> JournalEvent:
+        tenant_id = self._storage_scope_value(event.tenant_id, field="tenant")
+        owner_actor_id = self._storage_scope_value(event.owner_actor_id, field="owner")
+        if tenant_id == event.tenant_id and owner_actor_id == event.owner_actor_id:
+            return event
+        return event.model_copy(update={"tenant_id": tenant_id, "owner_actor_id": owner_actor_id})
+
+    @staticmethod
+    def _is_redaction_protected_model_field(field_name: str, field_value: Any) -> bool:
+        if field_name in {"tenant_id", "owner_actor_id"}:
+            return False
+        return bool(
+            field_name in {"schema_version", "event_type", "effect_key", "args_fingerprint"}
+            or field_name.endswith(("_fingerprint", "_hash"))
+            or isinstance(field_value, (UUID, date, datetime, Enum))
+        )
+
+    @classmethod
+    def _restore_redaction_protected_model_fields(
+        cls,
+        model: Any,
+        original: Any,
+        redacted: Any,
+    ) -> Any:
+        if isinstance(model, BaseModel):
+            if not isinstance(original, dict) or not isinstance(redacted, dict):
+                return redacted
+            restored = dict(redacted)
+            for field_name in type(model).model_fields:
+                if field_name not in original:
+                    continue
+                field_value = getattr(model, field_name, None)
+                if cls._is_redaction_protected_model_field(field_name, field_value):
+                    restored[field_name] = original[field_name]
+                elif field_name in redacted:
+                    restored[field_name] = cls._restore_redaction_protected_model_fields(
+                        field_value,
+                        original[field_name],
+                        redacted[field_name],
+                    )
+            return restored
+        if isinstance(model, (list, tuple)):
+            if not isinstance(original, list) or not isinstance(redacted, list):
+                return redacted
+            return [
+                cls._restore_redaction_protected_model_fields(item, original_item, redacted_item)
+                for item, original_item, redacted_item in zip(
+                    model, original, redacted, strict=False
+                )
+            ]
+        if isinstance(model, dict):
+            if not isinstance(original, dict) or not isinstance(redacted, dict):
+                return redacted
+            restored = dict(redacted)
+            for key, item in model.items():
+                if key in original and key in redacted:
+                    restored[key] = cls._restore_redaction_protected_model_fields(
+                        item, original[key], redacted[key]
+                    )
+            return restored
+        return redacted
+
+    def _redact_json_string_values(self, value: Any) -> Any:
+        if self._redactor is None:
+            return value
+        if isinstance(value, str):
+            try:
+                redacted = self._redactor.redact(value)
+            except Exception:  # noqa: BLE001 - optional redaction remains best-effort
+                return value
+            return redacted if isinstance(redacted, str) else value
+        if isinstance(value, list):
+            return [self._redact_json_string_values(item) for item in value]
+        if isinstance(value, dict):
+            return {key: self._redact_json_string_values(item) for key, item in value.items()}
+        return value
+
+    @classmethod
+    def _string_redaction_changes(
+        cls,
+        original: Any,
+        redacted: Any,
+        path: tuple[str | int, ...] = (),
+    ) -> list[tuple[tuple[str | int, ...], str]]:
+        if isinstance(original, str) and isinstance(redacted, str):
+            return [] if original == redacted else [(path, redacted)]
+        if isinstance(original, list) and isinstance(redacted, list):
+            changes: list[tuple[tuple[str | int, ...], str]] = []
+            for index, (original_item, redacted_item) in enumerate(
+                zip(original, redacted, strict=False)
+            ):
+                changes.extend(
+                    cls._string_redaction_changes(original_item, redacted_item, (*path, index))
+                )
+            return changes
+        if isinstance(original, dict) and isinstance(redacted, dict):
+            changes = []
+            for key, original_item in original.items():
+                if key in redacted:
+                    changes.extend(
+                        cls._string_redaction_changes(original_item, redacted[key], (*path, key))
+                    )
+            return changes
+        return []
+
+    @classmethod
+    def _replace_json_path(
+        cls,
+        value: Any,
+        path: tuple[str | int, ...],
+        replacement: str,
+    ) -> Any:
+        if not path:
+            return replacement
+        head, *tail = path
+        if isinstance(head, int) and isinstance(value, list):
+            updated_list = list(value)
+            updated_list[head] = cls._replace_json_path(
+                updated_list[head], tuple(tail), replacement
+            )
+            return updated_list
+        if isinstance(head, str) and isinstance(value, dict):
+            updated_dict = dict(value)
+            updated_dict[head] = cls._replace_json_path(
+                updated_dict[head], tuple(tail), replacement
+            )
+            return updated_dict
+        return value
+
+    @staticmethod
+    def _dump_json_payload(payload: Any) -> str:
+        return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+    @staticmethod
+    def _serialized_event_keeps_structure(event: JournalEvent, line: str) -> bool:
+        try:
+            durable_event = _parse_event(line)
+        except (TypeError, ValueError):
+            return False
+        return bool(
+            durable_event.event_id == event.event_id
+            and durable_event.event_type == event.event_type
+            and durable_event.task_id == event.task_id
+            and durable_event.arm_id == event.arm_id
+            and durable_event.tenant_id == event.tenant_id
+            and durable_event.owner_actor_id == event.owner_actor_id
+            and durable_event.ts == event.ts
+            and durable_event.source == event.source
+        )
+
+    def _visible(self, event: JournalEvent, scope: TenantScope | None) -> bool:
+        if scope is None or scope.allow_cross_tenant:
+            return True
+        tenant_ids = {
+            scope.tenant_id,
+            self._storage_scope_value(scope.tenant_id, field="tenant"),
+        }
+        owner_actor_ids = {
+            scope.actor_id,
+            self._storage_scope_value(scope.actor_id, field="owner"),
+        }
+        return bool(
+            event.tenant_id
+            and event.owner_actor_id
+            and event.tenant_id in tenant_ids
+            and event.owner_actor_id in owner_actor_ids
+        )
+
+
 class InMemoryJournal(Journal):
     def __init__(self, max_events: int = 0) -> None:
-        """In-memory journal.
+        """In-memory journal with an optional oldest-event eviction cap."""
 
-        ``max_events`` (audit R-04): ring-buffer cap. ``0`` keeps the old
-        unbounded behaviour; a positive value drops the OLDEST events once
-        the cap is reached so a long-running process's journal cannot grow
-        without limit. ``CC-5`` continues to guard each append as a pure
-        append (no in-place mutation); capacity eviction is an explicit
-        ring policy applied outside the guarded call.
-        """
         self._events = AppendOnlyList[JournalEvent](rule_id="CC-5")
         self._max_events = max(0, int(max_events))
         self._lock = Lock()
-        # Audit P-04: incremental per-session index so projections consume
-        # only a session's rows instead of re-scanning the whole log.
         self._session_index: dict[str, list[JournalEvent]] = {}
         self._session_index_upto = 0
 
@@ -391,7 +578,7 @@ class InMemoryJournal(Journal):
 # ═══════════════════════════════════════════════════════════
 
 
-class JSONLJournal(Journal):
+class JSONLJournal(_StructuredJournalRedaction, Journal):
     def __init__(
         self,
         path: Path | str,
@@ -830,9 +1017,9 @@ class JSONLJournal(Journal):
         Caller must hold ``self._lock`` (the interprocess lock is taken
         inside ``_append_raw_locked``).
         """
-        line = self._serialize_event_locked(event)
+        durable_event, line = self._canonicalize_event_locked(event)
         self._append_raw_locked(line + "\n")
-        self._mirror_event_effects(event)
+        self._mirror_event_effects(durable_event)
 
     def _serialize_event_locked(self, event: JournalEvent) -> str:
         """Serialize and redact an event without touching journal storage."""
@@ -1409,11 +1596,7 @@ class JSONLJournal(Journal):
             durable_events: list[JournalEvent] = []
             durable_entries: list[dict[str, Any]] = []
             for _entry, event in run:
-                line = self._serialize_event_locked(event)
-                try:
-                    durable_event = _parse_event(line)
-                except (TypeError, ValueError):
-                    durable_event = event
+                durable_event, _line = self._canonicalize_event_locked(event)
                 durable_entry = classify_chunk(durable_event)
                 if durable_entry is None or (
                     durable_entries and not continues_chunk_run(durable_entries[-1], durable_entry)

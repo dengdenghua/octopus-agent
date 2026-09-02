@@ -67,7 +67,14 @@ vi.mock("@/core/sharing/public-thread-share", () => ({
 vi.mock("@/core/clipboard", () => ({ copyTextToClipboard }));
 
 vi.mock("qrcode.react", () => ({
-  QRCodeSVG: ({ value, ...props }: { value: string }) => (
+  QRCodeSVG: ({
+    value,
+    marginSize: _marginSize,
+    ...props
+  }: {
+    value: string;
+    marginSize?: number;
+  }) => (
     <svg data-testid="share-qr" data-value={value} {...props} />
   ),
 }));

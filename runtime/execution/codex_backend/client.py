@@ -1054,7 +1054,11 @@ class CodexAppServerClient:
             if process_group == process.pid and process_group != os.getpgrp():
                 os.killpg(process_group, sig)
                 return
-        except (ProcessLookupError, PermissionError, OSError):
+        except (
+            ProcessLookupError,
+            PermissionError,
+            OSError,
+        ):  # expected: signal the child directly
             pass
         with contextlib.suppress(ProcessLookupError, OSError):
             process.kill() if hard else process.terminate()

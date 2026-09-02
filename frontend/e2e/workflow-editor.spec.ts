@@ -15,10 +15,10 @@ test.describe("Legacy workflow route", () => {
     await expect(page).toHaveURL(
       /#\/workspace\/agents\?surface=chat&tab=skills/,
     );
-    await expect(
-      page.getByPlaceholder(
-        /搜索角色、应用或 Skills|Search roles, apps or Skills/i,
-      ),
-    ).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Skills" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(page.getByRole("textbox").first()).toBeVisible();
   });
 });

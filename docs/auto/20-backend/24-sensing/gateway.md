@@ -51,6 +51,7 @@ tier: "standard"
 | `_config_endpoints_system.py` | System / runtime-config endpoints for the config router. |
 | `_config_helpers.py` | Pure helper functions for the config router. |
 | `_config_models.py` | Pydantic response models for the config router. |
+| `_conversation_error_diagnostics.py` | Privacy-bounded diagnostics for errors persisted in conversation snapshots. |
 | `_cowork_group_access.py` | Authorization helpers for the cowork group HTTP router. |
 | `_cowork_group_models.py` | Pydantic request bodies for the cowork group HTTP API. |
 | `_cowork_group_room_ensure.py` | Atomic ensure-room workflow for collaboration sessions. |
@@ -318,6 +319,13 @@ tier: "standard"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def register_computer_appshot_routes(router, state, screenshot, preview_action, auth_dependency)` | Register screenshot-grounded semantic target routes on ``router``. |
+
+### `_conversation_error_diagnostics.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def classify_conversation_error(code, message)` | Return a stable category, operator action, and retryability hint. |
+| func | `def build_conversation_error_diagnostics(threads, message_limit, sample_limit)` | Summarize bounded thread snapshots without exposing error details. |
 
 ### `_cowork_group_access.py`
 

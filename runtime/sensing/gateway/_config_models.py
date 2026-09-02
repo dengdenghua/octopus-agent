@@ -254,7 +254,8 @@ if FASTAPI_AVAILABLE:
 
     class CodexUpdateStatusResponse(BaseModel):
         package: str
-        current_version: str
+        current_version: str | None
+        available: bool = True
         latest_version: str | None = None
         update_available: bool = False
         checked_at: str | None = None

@@ -94,7 +94,7 @@ def _reap_process(proc: Any) -> None:
     try:
         proc.wait(timeout=_PROCESS_WAIT_SECONDS)
         return
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired:  # expected: escalate an unresponsive process to kill
         pass
     except Exception:  # noqa: BLE001
         return

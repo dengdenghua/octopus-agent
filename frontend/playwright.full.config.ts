@@ -64,10 +64,9 @@ if (!reuseServers && !e2eStateRootIsDisposable) {
   );
 }
 
-// Playwright loads its config in both the runner and worker processes. State
-// cleanup must therefore happen in the single backend web-server command, not
-// as a module side effect here; otherwise a worker can delete SQLite's parent
-// directory after the backend has already opened.
+// Playwright loads this config in both the runner and worker processes. State
+// cleanup must happen once in the backend web-server command; doing it as a
+// module side effect can delete SQLite's parent directory after startup.
 const prepareStateCommand = reuseServers
   ? ""
   : `${backendEnv} node frontend/e2e/prepare-full-stack-state.mjs && `;

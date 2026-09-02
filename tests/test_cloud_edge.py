@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import base64
+import concurrent.futures
 import hashlib
 import json
 import sqlite3
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -15,6 +17,7 @@ from fastapi.testclient import TestClient
 from runtime.cloud_edge.app import create_cloud_edge_app
 from runtime.cloud_edge.router import create_cloud_edge_router
 from runtime.cloud_edge.shares import normalise_public_snapshot
+from runtime.cloud_edge.store import CloudEdgeStore
 from runtime.platform.plugins.bundled.mx2025_viewer.cloud_sync import MXCloudSyncConnector
 from runtime.safety.auth.identity import Identity, IdentityStore
 
@@ -166,6 +169,48 @@ def test_pairing_and_challenge_are_single_use_and_revocation_is_immediate(tmp_pa
     )
     assert denied.status_code == 401
     assert client.post(f"/edge/v1/challenge/{device_id}").status_code == 404
+
+
+def test_pairing_and_challenge_are_atomic_across_store_instances(tmp_path: Path) -> None:
+    db_path = tmp_path / "edge.sqlite3"
+    owner_store = CloudEdgeStore(db_path)
+    pairing = owner_store.create_pairing_code(
+        tenant_id="tenant-a",
+        owner_id="alice",
+        device_name="Concurrent Mac",
+    )["pairing_code"]
+    stores = [CloudEdgeStore(db_path) for _ in range(8)]
+    enroll_barrier = threading.Barrier(len(stores))
+
+    def enroll(index: int):
+        enroll_barrier.wait()
+        return stores[index].enroll(
+            pairing_code=pairing,
+            public_key=f"public-key-{index}",
+            device_name=f"Concurrent Mac {index}",
+        )
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(stores)) as executor:
+        enrollments = list(executor.map(enroll, range(len(stores))))
+
+    accepted = [result for result in enrollments if result is not None]
+    assert len(accepted) == 1
+    devices = owner_store.list_devices(tenant_id="tenant-a", owner_id="alice")
+    assert [device["device_id"] for device in devices] == [accepted[0]["device_id"]]
+
+    device_id = accepted[0]["device_id"]
+    challenge = owner_store.create_challenge(device_id)
+    assert challenge is not None
+    challenge_barrier = threading.Barrier(len(stores))
+
+    def consume(index: int) -> bool:
+        challenge_barrier.wait()
+        return stores[index].consume_challenge(device_id=device_id, challenge=challenge)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(stores)) as executor:
+        consumptions = list(executor.map(consume, range(len(stores))))
+
+    assert consumptions.count(True) == 1
 
 
 def test_management_is_authenticated_and_disabled_surface_fails_closed(tmp_path: Path) -> None:

@@ -467,7 +467,7 @@ def create_design_studio_router(
         path = _canvas_path(project_id)
         with _CANVAS_LOCK:
             current = _read_canvas(path)
-            current_revision = int((current or {}).get("revision") or 0)
+            current_revision = int(current.get("revision") or 0) if isinstance(current, dict) else 0
             if body.expected_revision != current_revision:
                 raise HTTPException(
                     409,
@@ -1210,7 +1210,7 @@ def create_design_studio_router(
                     "state": "already_running",
                     "process": comfyui_process_status(),
                 }
-        except (RuntimeError, httpx.HTTPError):
+        except (RuntimeError, httpx.HTTPError):  # expected: start the unavailable service below
             pass
         state = start_comfyui()
         return {
@@ -1249,8 +1249,8 @@ def create_design_studio_router(
             if not isinstance(class_type, str) or not isinstance(raw, dict):
                 continue
             inputs: list[dict[str, Any]] = []
-            input_value = raw.get("input")
-            input_groups: dict[str, Any] = input_value if isinstance(input_value, dict) else {}
+            raw_input_groups = raw.get("input")
+            input_groups = raw_input_groups if isinstance(raw_input_groups, dict) else {}
             for group in ("required", "optional"):
                 definitions = input_groups.get(group)
                 if not isinstance(definitions, dict):
@@ -1393,7 +1393,7 @@ def create_design_studio_router(
             raise HTTPException(404, "workflow not found")
         target = _workflow_dir() / f"{safe_id}.json"
         current = _workflow_payload(target)
-        current_revision = int((current or {}).get("revision") or 0)
+        current_revision = int(current.get("revision") or 0) if isinstance(current, dict) else 0
         if body.expected_revision != current_revision:
             raise HTTPException(
                 409,
@@ -1488,8 +1488,8 @@ def create_design_studio_router(
                             "url": f"{base_url}/view?{query}",
                         }
                     )
-        status_value = record.get("status")
-        status: dict[str, Any] = status_value if isinstance(status_value, dict) else {}
+        raw_status = record.get("status")
+        status = raw_status if isinstance(raw_status, dict) else {}
         completed = bool(status.get("completed", outputs))
         return {
             "ok": True,

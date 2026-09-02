@@ -33,6 +33,7 @@ from runtime.memory.cowork.ids import (
     normalize_actor_id,
     require_cowork_id,
 )
+from runtime.platform.io.sqlite import connect_closing
 
 _STATUSES = ("pending", "working", "done", "failed")
 _ASYNC_TEXT_MAX_LENGTH = MAX_COWORK_MESSAGE_TEXT_LENGTH
@@ -110,7 +111,7 @@ class AsyncWorkStore:
         if not self._groups.board_db_path.exists():
             board = self._groups.blackboard("async-schema")
             board.close()
-        conn = sqlite3.connect(str(self._db), timeout=10.0)
+        conn = connect_closing(str(self._db), timeout=10.0)
         # Keep every attached participant in DELETE mode; see GroupStore's
         # cross-database thread-deletion transaction invariant.
         conn.execute("PRAGMA journal_mode=DELETE")

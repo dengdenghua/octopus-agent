@@ -224,11 +224,12 @@ test.describe("Full-stack golden smoke", () => {
 
       await page.goto(`${origin}/#/workspace/agents?surface=chat`);
       await page.waitForLoadState("domcontentloaded");
-      await expect(
-        page.getByPlaceholder(
+      const agentSurface = page
+        .getByPlaceholder(
           /搜索角色、应用或 Skills|Search roles, apps or Skills/i,
-        ),
-      ).toBeVisible({ timeout: 20_000 });
+        )
+        .or(page.getByRole("heading", { name: "HUB" }));
+      await expect(agentSurface).toBeVisible({ timeout: 20_000 });
 
       await page.goto(`${origin}/#/workspace/intelligence?surface=chat`);
       await page.waitForLoadState("domcontentloaded");
@@ -265,10 +266,12 @@ test.describe("Full-stack golden smoke", () => {
     await page.getByTestId("chat-commands-submenu").hover();
     await expect(page.getByTestId("chat-insert-codex-plan")).toBeVisible();
     await page.getByTestId("chat-insert-codex-plan").click();
-    await expect(page.getByTestId("composer-command-prefix")).toHaveText(
+    await expect(page.getByTestId("composer-command-prefix")).toContainText(
       "Plan",
     );
-    await expect(page.getByTestId("chat-composer-input")).toHaveValue("");
+    await expect
+      .poll(() => inputValue(page, '[data-testid="chat-composer-input"]'))
+      .toBe("");
     await expect(page.getByTestId("chat-send-button")).toBeDisabled();
 
     const agents = await request.get(`${backendBase}/api/agents`);

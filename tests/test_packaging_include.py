@@ -60,6 +60,7 @@ _REQUIRED_RUNTIME_WHEEL_FILES = {
     "runtime/platform/process/thread_turn_claim.py",
     "runtime/platform/models/custom_model_selection.py",
     "runtime/platform/io/transactional.py",
+    "runtime/platform/io/sqlite.py",
     "runtime/platform/connectors/_token_refresher.py",
     "runtime/platform/plugins/_secure_fetch.py",
     "runtime/platform/plugins/contribution_registry.py",

@@ -344,7 +344,7 @@ class CapabilityRegistry:
             return record
         try:
             return self._permissions.stage_principal(capability_id)
-        except KeyError:
+        except KeyError:  # expected: first install falls through to capability staging
             pass
         kind = "connector" if item.get("source") == "connector" else "codex"
         return self._permissions.stage(
@@ -477,7 +477,7 @@ class CapabilityRegistry:
                         load_marketplace_package_manifest(root, package_kind="codex")
                     )
                 )
-            except (OSError, ValueError):
+            except (OSError, ValueError):  # best-effort: optional package metadata is invalid
                 pass
             raw_icon = str(iface.get("logo") or iface.get("composerIcon") or "")
             icon_path = (root / raw_icon).resolve() if raw_icon else None

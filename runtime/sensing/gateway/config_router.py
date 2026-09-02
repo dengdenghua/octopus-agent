@@ -272,6 +272,10 @@ def create_config_router(
         initial_check_delay_seconds=float(
             os.environ.get("OCTOPUS_CODEX_UPDATE_INITIAL_DELAY_SECONDS") or 15
         ),
+        # Backend-only distributions intentionally do not bundle the desktop
+        # Codex runtime.  The update radar is optional and must not prevent the
+        # control plane from starting in those images.
+        allow_unavailable=True,
     )
 
     @asynccontextmanager
